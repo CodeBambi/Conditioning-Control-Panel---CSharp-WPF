@@ -325,7 +325,7 @@ public sealed class AiProviderLab : IDisposable
 
     public void Dispose()
     {
-        _cts.Cancel();
+        try { _cts.Cancel(); } catch { } // never skip the registry removal below (a false leak report would fail the suite loud on a lie)
         try { _listener.Close(); } catch { } // aborts in-flight requests; their handlers fault into their own catches (abandon-by-abort)
         try { _loop.Wait(TimeSpan.FromSeconds(2)); } catch { }
         LivePrefixes.TryRemove(Port, out _);

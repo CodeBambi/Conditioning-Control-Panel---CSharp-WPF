@@ -84,7 +84,10 @@ the SP-039/T-7 precedent); route pin = Opus 5 main. Substance applied:
    Dispose runs during exception unwinding — if the test body already threw, a Dispose throw
    MASKS the real failure, converting a genuine product red into a harness red (honesty framing
    (a) violation). The port-release-probe-in-Dispose idea was dropped entirely (it also detects
-   the rare class — Close failing to release — not the dominant one).
+   the rare class — Close failing to release — not the dominant one). (Two layers named: the
+   self-check validates THIS process's lab-disposal discipline; the fresh-instance retry is what
+   tolerates OTHER processes' zombie-port collisions. The self-check cannot see zombies from
+   earlier runs — it never claimed to.)
 2. **Primary self-check = static registry + assembly fixture** (adopted): assembly-fixture
    Dispose runs after all collections (non-racy under xUnit parallelism) and adds zero test
    cases — the 516 floor is load-bearing, any new `[Fact]` would break it.
@@ -99,6 +102,29 @@ the SP-039/T-7 precedent); route pin = Opus 5 main. Substance applied:
    fix in place.
 7. **Assembly-fixture-Dispose failure semantics must be verified empirically** (xUnit-version
    dependent) — Step 2/3 does this with the throwaway leak injection before relying on it.
+
+## 3b. Pre-completion consult (Step 3) — verdict + dispositions
+
+**Actual answering model:** not identifiable from tool output (same precedent); route pin =
+Opus 5 main. Verdict: the diff is correct and the evidence honest — done is defensible.
+Substance applied:
+
+1. **Name the two mitigation layers explicitly** (adopted — added to §3 point 1): the
+   self-check validates THIS process's lab-disposal discipline; the fresh-instance retry
+   tolerates OTHER processes' zombie-port collisions. The self-check cannot see earlier-run
+   zombies and never claimed to.
+2. **Strengthen the run-4 independence argument with the load point** (adopted — §6): the
+   diff changes no code the DTRH test touches AND does not change the suite's load profile
+   (same handler shapes/delays; registry ops O(1)).
+3. **`_cts.Cancel()` must be try/caught in `Dispose`** (adopted — applied): an uncaught
+   Cancel throw would skip `TryRemove`, making the self-check fail the suite LOUD on a lie
+   (false leak report). One-line hardening, consult-caught.
+4. **Do NOT burn more runs trying to reproduce the DTRH flake** (adopted): an isolated-class
+   loop lacks the parallel load that triggers it (weak evidence); the honest record stands
+   with "cause not root-analyzed — OUT OF SCOPE" and the profile-match phrasing (never "the
+   same flake" — wave-4's name was uncaptured).
+5. **Assembly-fixture construction is eager, not lazy** (verified empirically by the
+   throwaway demo — the fixture fired on a run that injected nothing).
 
 ## 4. Per-change justifications (honesty framing (a))
 
@@ -115,6 +141,8 @@ the SP-039/T-7 precedent); route pin = Opus 5 main. Substance applied:
 |------|------|--------|
 | 1 | `spine_review_step --step 1 --type plan` | **SKIPPED** (SP-195: nested reviewer spawn blocked in worker session; engine runs reviews after .DONE). Artifact `.reviews/1-20260804T164721.md` |
 | 2 | `spine_review_step --step 2 --type plan` | **SKIPPED** (SP-195, same). Artifact `.reviews/2-20260804T165340.md` |
+| 3 | `spine_review_step --step 3 --type plan` | **SKIPPED** (SP-195, same). Artifact `.reviews/3-20260804T171227.md` |
+| 4 | `spine_review_step --step 4 --type plan` | **SKIPPED** (SP-195, same). Artifact `.reviews/4-20260804T171236.md` |
 
 ## 6. Stability proof (Step 3) — transcripts in `evidence/`
 
@@ -124,7 +152,8 @@ went green/green/green/**RED**/green. The run-4 red was
 (`DtrhNativeEffectsTests.cs:277`: `Assert.Equal(1, video.StopCalls)`, actual 0 — a 0.05s
 cap-timer + 5s wall-clock poll exhausted under parallel load). Forensics: (a) **zero shared
 code with this task's diff** — the task changes only `AiProviderLab.cs`; grep of
-`DtrhNativeEffectsTests.cs` finds no `Ai` references at all; (b) the profile matches the
+`DtrhNativeEffectsTests.cs` finds no `Ai` references at all — and the diff does not change the
+suite's LOAD profile either (same handler shapes, same delays, registry ops are O(1)); (b) the profile matches the
 wave-4 T-3 precedent verbatim ("attempt-1 flake — one timing-bound test red on a loaded
 box, name uncaptured, re-run green on identical content ×2", task-board gate history
 2026-08-04); (c) re-run on identical content (run 5) green. **Cause not root-analyzed —
@@ -168,4 +197,15 @@ attempt 1 bound and SURVIVED (`evidence/after-state-repro.txt`).
 
 ## 7. Completion-criteria disposition
 
-(to fill)
+| Criterion | Disposition |
+|-----------|-------------|
+| Listener lifecycle hardened (in-flight disposal tolerated; fresh instance per bind; teardown-class exceptions classified as harness, never product) | **DISCHARGED** — fresh `HttpListener` per attempt (failed candidate `Close()`d; `Prefixes.Clear()` deleted); `ServeLoop` + `Handle` classify `ObjectDisposedException` as harness teardown (`ctx.Request`/`Response` access moved inside try, `res?.Abort()`); loud diagnostic after 25 failed binds naming the zombie class |
+| Host-exit discipline; leaked-listener self-check fails loud with port named | **DISCHARGED** — static live-instance registry + `[assembly: AssemblyFixture]` teardown check; throwaway leak injection PROVED: exit 1, "Test Run Failed.", port/prefix named (`evidence/self-check-leak-demo.txt`); committed suite leak-free; zero leaked test hosts after every stability run (final probe ZERO) |
+| 5 consecutive full-suite runs green with hosts reaped (transcripts) | **DISCHARGED** — runs 5–9, 516/516 + 29/29 each (`evidence/stability-run-{5..9}-*.txt`); run-4 DTRH flake interruption recorded with forensics in §6 (out-of-scope, pre-existing class, wave-4 precedent) |
+| Lab semantics unchanged; zero product change; contract green (516/29 exact) | **DISCHARGED** — all SP-019 failure shapes behave identically (every green run exercises the full lab matrix: hit counts, client-gone/completed records, Retry-After ≥900ms gaps, SlowOk arrival, stale-discard exactly 1); diff outside `spine-tasks/` = ONLY `AiProviderLab.cs` (+56/−9); contract chain: verify.mjs exit 0, build 0W/0E, 516/516 + 29/29 EXACT |
+| record.md carries before-state, justifications, consult verdicts + actual models, engine-review presence | **DISCHARGED** — §1 (before-state + deterministic repro), §3 (both consults, actual-model honesty per SP-039 precedent), §4 (zero assertion changes), §5 (review presence per call) |
+
+**Durable-lesson candidates (orchestrator reconciles into port-lessons.md — enabler 2):**
+1. **The SP-023 fresh-instance rule must be APPLIED, not just known** — the c2 lab's retry loop was written after the lesson was recorded and still reused the disposed instance; when a lesson names a mechanism, grep the repo for the mechanism's other call sites at lesson-recording time. (Class: lesson-application gap.)
+2. **Never throw a self-check from `Dispose`** — a `using` Dispose runs during exception unwinding and would mask the real test failure; assembly-fixture teardown is the loud-and-safe hook (xUnit v3, zero test-count cost). (Class: harness honesty; consult-caught.)
+3. **The DTRH cap-timer tests are the remaining timing-bound flake class** (`DtrhNativeEffectsTests.FirePayload_Video_*`, 0.05s cap + wall-clock poll; red once in 10 full-suite runs here, wave-4 precedent) — tooling-row candidate now that the lab ODE class is killed. (Class: flake inventory.)

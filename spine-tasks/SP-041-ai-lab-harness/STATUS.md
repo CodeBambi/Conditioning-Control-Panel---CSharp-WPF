@@ -1,6 +1,6 @@
-## STATUS: SP-041 — T-15: c2 AI lab harness hardening
-**Current Step:** Step 3 — stability proof + evidence + pre-completion consult (in progress)
-**Last Updated:** 2026-08-04 (worker, Step 2 complete — 516/516 green, self-check demoed loud, after-state collision proof)
+## STATUS: SP-041 — T-15: c2 AI lab harness hardening — **COMPLETE**
+**Current Step:** done (all 4 steps complete; .DONE created)
+**Last Updated:** 2026-08-04 (worker, final — contract green 516/29 EXACT, 5 consecutive greens, zero leaked hosts)
 **Blockers:** none
 
 ### Step 1: archaeology + fix design + pre-approach consult
@@ -17,11 +17,11 @@
 ### Step 3: stability proof + evidence + pre-completion consult
 - [x] 5 consecutive full-suite runs green (transcripts; hosts reaped; no leaked dotnet test hosts)
 - [x] Self-check demonstrated (throwaway leak injection fails loud; committed suite leak-free)
-- [ ] record.md (before-state, design, justifications, transcripts, consults, review presence)
-- [ ] Pre-completion solo consult (verdict + actual model in record.md)
-- [ ] STATUS.md accurate before .DONE
+- [x] record.md (before-state, design, justifications, transcripts, consults, review presence)
+- [x] Pre-completion solo consult (verdict + actual model in record.md)
+- [x] STATUS.md accurate before .DONE
 
-### Step 4: Testing & Verification
-- [ ] Contract testCommand passes (verify.mjs + build 0W/0E + counts EXACTLY 516/29)
-- [ ] git diff --check clean
-- [ ] git status --short shows only File Scope paths
+### Step 4: Testing & Verification — COMPLETE
+- [x] Contract testCommand passes (verify.mjs + build 0W/0E + counts EXACTLY 516/29)
+- [x] git diff --check clean
+- [x] git status --short shows only File Scope paths
