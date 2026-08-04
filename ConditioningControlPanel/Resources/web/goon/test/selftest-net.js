@@ -7,6 +7,8 @@
 // kept thin over the shared base: everything asserted below lives in transportBase/signaling/
 // session, and the browser leg is a play-test item.
 
+import fs from 'node:fs';
+
 import { GoonSignalingClient, GoonSignalError, normalizeCode } from '../net/signaling.js';
 import { GoonFakeSignalingServer } from '../net/fakeSignaling.js';
 import { createLoopbackPair, loopbackOptions, loopbackPresets } from '../net/loopbackTransport.js';
@@ -23,6 +25,9 @@ function ok(cond, label, extra = '') {
 }
 const quiet = { info() {}, warn() {}, error() {}, log() {} };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// LF-normalized: the worktree is CRLF (core.autocrlf) and every source pin below
+// is written against \n.
+const readSource = (rel) => fs.readFileSync(new URL(rel, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
 async function until(fn, ms = 4000, step = 25) {
   const deadline = Date.now() + ms;
@@ -763,6 +768,147 @@ async function testPeerCardVer() {
   guestSig.dispose(); hostSig2.dispose(); guestSig2.dispose();
 }
 
+/* ==================================================================================
+ * 9. THE GUEST BOUNCE — "briefly shows the page of the setup before game then
+ *    bounces me back to homepage" (owner's phone test, 2026-08-04).
+ *
+ * The phone runs this page STANDALONE and joins a match the PC app hosts. The
+ * join lands, the lobby paints, and a moment later the player is on the title
+ * with nothing said. There is exactly one mechanism in the page that can do that
+ * SILENTLY: GoonSession tears the match down internally, boot.js hears
+ * onCurrentMatchChanged(null) and jumps to the title — while the EXPLANATION
+ * (onConnectFailed) is still one turn behind it.
+ *
+ * Three things are pinned here:
+ *   a) a guest that connects raises neither of the two events that can evict it;
+ *   b) every internal fold raises connectFailed in the SAME macrotask turn as the
+ *      teardown, which is what makes boot's deferred jump correct rather than
+ *      lucky (a setTimeout(0) armed when the match goes null still runs after);
+ *   c) a P2P attempt that died in a way the BROWSER owns — an SDP the phone's
+ *      stack refuses — is flagged for the RELAY, not folded. The room is live and
+ *      the weekly pass is burned; folding it is the eviction above.
+ * ================================================================================*/
+async function testGuestFold() {
+  /** A guest transport shaped like GoonWebRtcTransport, with the outcome dialled in. */
+  class GuestLeg {
+    constructor(outcome) {
+      this.isHost = false;
+      this.code = null; this.token = null;
+      this.iceFailed = false; this.lastError = null;
+      this.closed = false; this.disposed = false;
+      this._outcome = outcome;
+    }
+    async join(code) { this.code = code; this.token = 'tok-guest'; return true; }
+    async waitForChannel() {
+      await sleep(10);
+      if (this._outcome === 'connected') return true;
+      // 'sdp_rejected' is the fixed shape: a browser-level refusal that still
+      // leaves a live room behind, so it flags for fallback like ice_timeout.
+      this.iceFailed = this._outcome !== 'signaling';
+      this.lastError = this._outcome === 'signaling' ? 'signaling_failed' : 'sdp_rejected';
+      return false;
+    }
+    async close() { this.closed = true; }
+    dispose() { this.disposed = true; }
+  }
+  class RelayLeg {
+    constructor() { this.adopted = null; this.lastError = null; }
+    adoptRoom(code, token) { this.adopted = { code, token }; }
+    async waitForChannel() { return true; }
+    async close() { /* nothing to close */ }
+    dispose() { /* nothing to drop */ }
+  }
+  class FoldMatch {
+    constructor(transport, isHost) {
+      this.transport = transport; this.isHost = isHost;
+      this.adoptedLobby = false; this.disposed = false;
+    }
+    join(c) { return this.transport.join(c); }
+    adoptLobby() { this.adoptedLobby = true; return true; }
+    cancelMatch() { /* the user path, not exercised here */ }
+    dispose() { this.disposed = true; }
+  }
+  const build = (outcome) => {
+    const legs = []; const relays = []; const events = [];
+    const s = new GoonSession({
+      logger: quiet,
+      createMatch: (t, isHost) => new FoldMatch(t, isHost),
+      createSignaling: () => ({ dispose() {} }),
+      createWebrtc: () => { const l = new GuestLeg(outcome); legs.push(l); return l; },
+      createRelay: () => { const r = new RelayLeg(); relays.push(r); return r; },
+    });
+    s.onCurrentMatchChanged((m) => events.push(m ? 'match' : 'null'));
+    s.onConnectFailed((r) => events.push('failed:' + r));
+    return { s, legs, relays, events };
+  };
+
+  // --- a) the healthy guest: nothing that can evict it ever fires ----------------
+  {
+    const g = build('connected');
+    ok(await g.s.join('ABC123') === true, 'a guest that connects reports a successful join');
+    await sleep(120);
+    ok(g.events.join(',') === 'match', 'no teardown and no connectFailed on a healthy join', g.events.join(','));
+    ok(g.s.currentMatch !== null, 'the match is still live — the lobby has something to render');
+    await g.s.leave();
+  }
+
+  // --- b) the ordering boot.js's deferred fold depends on -----------------------
+  {
+    const g = build('signaling');
+    let foldRanAt = -1;
+    g.s.onCurrentMatchChanged((m) => {
+      if (m) return;
+      setTimeout(() => { foldRanAt = g.events.length; }, 0);
+    });
+    await g.s.join('ABC123');
+    ok(await until(() => foldRanAt >= 0, 3000), 'the deferred fold ran');
+    ok(g.events.join(',') === 'match,null,failed:signaling_failed',
+      'an internal fold raises teardown THEN connectFailed', g.events.join(','));
+    ok(foldRanAt === 3, 'and both land before a setTimeout(0) armed at teardown', String(foldRanAt));
+    ok(g.relays.length === 0, 'a signaling-level failure still refuses to try a relay');
+  }
+
+  // --- c) an SDP the phone refused is a relay case, not an eviction -------------
+  {
+    const g = build('sdp_rejected');
+    await g.s.join('ABC123');
+    ok(await until(() => g.relays.length === 1 && !!g.relays[0].adopted, 3000),
+      'a transport that flags iceFailed adopts the SAME room over the relay');
+    ok(g.relays[0].adopted.code === 'ABC123', 'the code the player already typed is reused',
+      String(g.relays[0].adopted && g.relays[0].adopted.code));
+    ok(g.events.indexOf('null') < 0, 'and the guest is never torn down — no bounce to the title',
+      g.events.join(','));
+    ok(g.s.currentMatch !== null && g.s.currentMatch.adoptedLobby === true,
+      'the rebuilt match adopts the lobby instead of re-joining');
+    await g.s.leave();
+  }
+
+  // --- and the transport half of (c), which needs a browser to run for real -----
+  {
+    const src = readSource('../net/webrtcTransport.js');
+    const i = src.indexOf('setRemoteDescription(offer) rejected');
+    ok(i > 0, 'webrtcTransport still handles a rejected inbound offer');
+    const arm = src.slice(i, i + 400);
+    ok(/_iceFailed\s*=\s*true/.test(arm),
+      'a guest whose stack refuses the offer flags iceFailed — session.js relays it instead of folding');
+    ok(/_setState\(GoonTransportState\.Disconnected, 'sdp_rejected'\)/.test(arm),
+      'and it still surfaces promptly rather than burning the ICE budget');
+  }
+
+  // --- the boot.js half: the jump is deferred and cancellable -------------------
+  {
+    const boot = readSource('../boot.js');
+    ok(/function foldToTitle\(\)/.test(boot) && /function cancelFoldToTitle\(\)/.test(boot),
+      'boot.js routes the silent teardown through foldToTitle/cancelFoldToTitle');
+    ok(/if \(!soloPair\) foldToTitle\(\);/.test(boot),
+      'onCurrentMatchChanged(null) no longer calls router.show(\'title\') directly');
+    const cf = boot.indexOf('onConnectFailed((reason)');
+    ok(cf > 0 && /cancelFoldToTitle\(\);/.test(boot.slice(cf, cf + 900)),
+      'the connect-failure sheet cancels the fold so it opens over the screen it is about');
+    ok(/setTimeout\(go, 0\)/.test(boot), 'and the fold really is deferred by a macrotask');
+  }
+}
+
 // ============================================================ run
 const main = async () => {
   await testSignaling();
@@ -773,6 +919,7 @@ const main = async () => {
   await testVwinTick();
   await testBlocklist();
   await testPeerCardVer();
+  await testGuestFold();
 
   console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);
   process.exit(failures === 0 ? 0 : 1);

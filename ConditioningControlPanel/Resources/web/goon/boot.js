@@ -161,12 +161,69 @@ const el = (id) => (hasDom() ? document.getElementById(id) : null);
  * payload, every phase) and the C# log is 400 chars per line — flooding it
  * would push the useful lines out.
  * -------------------------------------------------------------------------- */
+/**
+ * THE THIRD SINK (ui/debugOverlay.js, `?debug=1` only). warn/error already go to
+ * the console and down the C# tunnel; neither of those exists on a phone running
+ * this page standalone, which is where the failures nobody can read happen. The
+ * tee is null until the overlay lands, and `debugPrelog` holds what was said
+ * before that — losing the sibling-load warnings, the first thing to go wrong in
+ * a broken boot, would defeat the point.
+ */
+let debugOverlay = null;
+let debugArming = false;
+const debugPrelog = [];
+
+function teeDebug(level, m) {
+  if (debugOverlay) { debugOverlay.push(level, m); return; }
+  if (debugArming && debugPrelog.length < 50) debugPrelog.push([level, m]);
+}
+
 const logger = {
   debug: (m) => { try { console.debug('[gg]', m); } catch (_e) { /* ignore */ } },
   info: (m) => { try { console.info('[gg]', m); } catch (_e) { /* ignore */ } },
-  warn: (m) => { try { console.warn('[gg]', m); } catch (_e) { /* ignore */ } bridge.log('warn: ' + m); },
-  error: (m) => { try { console.error('[gg]', m); } catch (_e) { /* ignore */ } bridge.log('error: ' + m); },
+  warn: (m) => { try { console.warn('[gg]', m); } catch (_e) { /* ignore */ } bridge.log('warn: ' + m); teeDebug('warn', m); },
+  error: (m) => { try { console.error('[gg]', m); } catch (_e) { /* ignore */ } bridge.log('error: ' + m); teeDebug('error', m); },
 };
+
+/**
+ * Cheap pre-check, so the module is not even FETCHED unless somebody asked for
+ * it — hosted especially, where a debug strip must never appear because a
+ * browser tab once had one. The module owns the authoritative answer
+ * (debugRequested); this only decides whether to go and ask it.
+ */
+function wantsDebugHint() {
+  try {
+    const s = (typeof location !== 'undefined' && location.search) || '';
+    if (/[?&]debug\b/.test(s)) return true;
+    if (bridge.isHosted) return false;          // standalone remembers, hosted never does
+    const p = bridge.storedPrefs();
+    return !!(p && p.debug);
+  } catch (_e) { return false; }
+}
+
+/** Loaded dynamically and optionally, exactly like the sibling waves. */
+function initDebugOverlay() {
+  if (!hasDom() || !wantsDebugHint()) return;
+  debugArming = true;
+  try {
+    import('./ui/debugOverlay.js')
+      .then((mod) => {
+        if (!mod || typeof mod.createDebugOverlay !== 'function') return;
+        const want = mod.debugRequested({
+          search: (typeof location !== 'undefined' && location.search) || '',
+          prefs: bridge.storedPrefs(),
+          hosted: bridge.isHosted,
+        });
+        if (!want) { debugArming = false; debugPrelog.length = 0; return; }
+        debugOverlay = mod.createDebugOverlay({});
+        mod.captureGlobalErrors(debugOverlay);
+        debugOverlay.push('warn', 'debug on — ' + (bridge.isHosted ? 'hosted' : 'standalone')
+          + ' protocol v' + bridge.PROTOCOL);
+        for (const [lvl, m] of debugPrelog.splice(0)) debugOverlay.push(lvl, m);
+      })
+      .catch(() => { debugArming = false; });
+  } catch (_e) { debugArming = false; }
+}
 
 /* ----------------------------------------------------------------------------
  * SIBLING WAVES — loaded dynamically so a wave that has not merged yet is a
@@ -1092,6 +1149,47 @@ function onPhase(phase) {
  * ACTIONS — everything a screen is allowed to DO. Screens never touch
  * GoonSession, the transports or the match factory directly.
  * -------------------------------------------------------------------------- */
+/* ----------------------------------------------------------------------------
+ * FOLDING TO THE TITLE — deferred by one macrotask, and that is the whole fix.
+ *
+ * THE BUG THIS EXISTS FOR (owner's phone test, 2026-08-04): "when i accept the
+ * invite briefly shows the page of the setup before game then bounces me back to
+ * homepage." Every internal teardown inside net/session.js — a signaling pump
+ * that gave up, a relay that never answered, a P2P attempt that failed in a way
+ * nothing flagged for fallback — raises onCurrentMatchChanged(null), and this
+ * file used to answer that with a bare `router.show('title')`. That is a SILENT
+ * eviction: the lobby vanishes and nothing anywhere tells the player a single
+ * thing about why. The explanation always exists (GoonSession raises
+ * connectFailed immediately afterwards, and the entry screens render their own
+ * errors) — it just arrived AFTER the screen was already gone.
+ *
+ * So the jump waits one turn of the event loop. The paths that own an
+ * explanation (onConnectFailed above, actions.leave, the exit handshake) cancel
+ * it and route the player themselves; a teardown nobody claims still lands on
+ * the title, exactly as before, one tick later and with a line in the log.
+ * -------------------------------------------------------------------------- */
+let foldTimer = 0;
+
+function foldToTitle() {
+  cancelFoldToTitle();
+  const go = () => {
+    foldTimer = 0;
+    // A session that came back (a relay rebuild lands a new match on the very
+    // next tick) has nothing to fold, and neither does a screen that already
+    // moved on under its own power.
+    if (currentMatch || soloPair || !router) return;
+    logger.warn('session folded with no explanation — returning to the title');
+    router.show('title');
+  };
+  try { foldTimer = setTimeout(go, 0); } catch (_e) { go(); }
+}
+
+function cancelFoldToTitle() {
+  if (!foldTimer) return;
+  try { clearTimeout(foldTimer); } catch (_e) { /* ignore */ }
+  foldTimer = 0;
+}
+
 function ensureSession() {
   if (goonSession) return goonSession;
   goonSession = new GoonSession({
@@ -1108,12 +1206,17 @@ function ensureSession() {
       attachMatch(match, goonSession.transport);
     } else {
       detachMatch();
-      if (!soloPair) router.show('title');
+      if (!soloPair) foldToTitle();
     }
   });
   goonSession.onConnectFailed((reason) => {
     lastConnectFailed = reason;
     logger.warn('connect failed: ' + reason);
+    // THE FOLD IS SPOKEN FOR. GoonSession tears the match down and THEN raises
+    // this, so without the cancel the deferred jump would land first and the
+    // sheet would open over a title screen — telling the player "we could not
+    // connect" about a screen they were already yanked off.
+    cancelFoldToTitle();
     if (awaitingEntry) return;      // the entry screen renders it
     sheets?.showSignalError?.(errorInfo(reason)).then(() => router.show('title'));
   });
@@ -1201,6 +1304,7 @@ const actions = {
     if (s) { try { await s.leave(); } catch (e) { logger.warn('leave threw: ' + ((e && e.message) || e)); } }
     else if (currentMatch) { try { currentMatch.cancelMatch('left'); } catch (_e) { /* ignore */ } }
     await teardownEverything();
+    cancelFoldToTitle();      // leaving is an explanation of its own
     router.show('title');
   },
 };
@@ -1461,6 +1565,7 @@ function requestExit(why) {
 function finishExit(why) {
   try { clearTimeout(exitTimer); } catch (_e) { /* ignore */ }
   exiting = true;
+  cancelFoldToTitle();      // the page is leaving; there is no title to fold to
   // BEFORE teardownEverything, which is async: the page may be seconds from
   // gone and `rp-state off` is the frame the host needs to clear (or restore)
   // the presence. teardownEverything posts it again and the second one is a
@@ -1628,6 +1733,9 @@ function startHeartbeat() {
  * skipped, so every module stays provably side-effect free.
  * -------------------------------------------------------------------------- */
 if (hasDom()) {
+  // FIRST, before anything can go wrong: the strip is only useful if it is
+  // already listening when the boot it is meant to explain fails.
+  initDebugOverlay();
   try {
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);

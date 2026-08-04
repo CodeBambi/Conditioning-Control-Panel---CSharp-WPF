@@ -190,6 +190,13 @@ function readPrefs() {
   } catch (_e) { return {}; }
 }
 
+/**
+ * The stored standalone blob, for anything that has to decide something BEFORE
+ * the `init` frame is built (ui/debugOverlay.js asks whether the debug strip was
+ * turned on in an earlier launch). Always an object; `{}` hosted or unreadable.
+ */
+export function storedPrefs() { return isHosted ? {} : readPrefs(); }
+
 /** Persist standalone prefs (so a reload keeps your picks). No-op hosted. */
 export function savePrefs(partial) {
   if (isHosted) return;
@@ -272,6 +279,10 @@ if (!isHosted && typeof document !== 'undefined') {
         if (q.get('token')) keep.authToken = q.get('token');
         if (q.get('uid')) keep.unifiedId = q.get('uid');
         if (q.get('name')) keep.name = q.get('name');
+        // `?debug=1` sticks: a phone that reloads (or was pinned to the home
+        // screen without the query) keeps the one surface that can explain what
+        // just happened. `?debug=0` is how it comes back off.
+        if (q.has('debug')) keep.debug = /^(1|true|on|yes)$/i.test(q.get('debug') || '1');
         if (Object.keys(keep).length) savePrefs(keep);
       } catch (_e) { /* prefs are a convenience, never load-bearing */ }
       dispatch(standaloneInit());

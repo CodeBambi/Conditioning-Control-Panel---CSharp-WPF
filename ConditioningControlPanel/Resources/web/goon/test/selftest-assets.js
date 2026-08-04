@@ -188,11 +188,13 @@ const routerMod = await import('../ui/router.js');
 const stringsMod = await import('../ui/strings.js');
 const sheetsMod = await import('../ui/sheets.js');
 const zipMod = await import('../ui/zipReader.js');
+const compressMod = await import('../ui/localCompress.js');
 
 const {
   createAssetsStore, probeEncode, clampCapBytes, capGb, formatBytes, formatUsage,
-  etaMinutes, matchesFilter, normalizeState, pendingInputBytes,
+  etaMinutes, matchesFilter, normalizeState, pendingInputBytes, classifyLocalSize,
   CAP_MIN_BYTES, CAP_MAX_BYTES, CAP_DEFAULT_BYTES, MAX_COMPRESS_IDS, FILTERS, GB,
+  LOCAL_MAX_BYTES, LOCAL_ARTIFACT_MAX_BYTES, LOCAL_DECODE_MAX_BYTES, LOCAL_ZIP_MAX_ENTRIES,
 } = storeMod;
 const { S } = stringsMod;
 
@@ -592,10 +594,12 @@ function fakeSheets() {
     file('b.mp4', 2000, 'video/mp4'),
     file('typed-by-ext.GIF', 500, ''),                    // empty type — the extension decides
     file('evil.exe', 100, 'application/x-msdownload'),    // wire would refuse: rejected here
-    file('huge.png', 9 * 1024 * 1024, 'image/png'),       // over the exempt cap
+    // Past the DECODE cap, so it is refused without a compressor being asked —
+    // and without 90 MB being allocated: the gate is on `size`, before the read.
+    file('monster.png', 90 * 1024 * 1024, 'image/png'),
   ]);
   ok(r1.added === 3, 'three files adopted', JSON.stringify(r1));
-  ok(r1.badType === 1 && r1.tooBig === 1, 'the exe and the 9MB file were refused');
+  ok(r1.badType === 1 && r1.tooBig === 1, 'the exe and the 90MB source were refused');
   const locals = store.items.filter((it) => it.id.indexOf('local:') === 0);
   ok(locals.length === 3, 'they surface through store.items');
   ok(locals.every((it) => it.state === 'exempt' && /^[0-9a-f]{64}$/.test(it.sha)), 'as exempt items with a real sha');
@@ -635,6 +639,18 @@ function fakeSheets() {
   };
   const enc = new TextEncoder();
 
+  /**
+   * Per entry, optionally:
+   *   localExtra   — bytes in the LOCAL header's extra field that the central
+   *                  record does NOT mirror. Real writers pad these two
+   *                  differently all the time (zip64 placeholders, unix
+   *                  timestamps, alignment), and a reader that computes the
+   *                  data offset from the central copy lands inside the data.
+   *   declaredSize — the originalSize written into both headers, regardless of
+   *                  how many bytes are really there. Lets a 100 MB claim be
+   *                  tested without 100 MB of anything.
+   *   method       — the compression method id written into both headers.
+   */
   function storedZip(entries) {
     const locals = [];
     const central = [];
@@ -643,18 +659,23 @@ function fakeSheets() {
       const name = enc.encode(e.name);
       const data = e.bytes || new Uint8Array(0);
       const crc = crc32(data);
-      const lh = new Uint8Array(30 + name.length);
+      const lex = e.localExtra || new Uint8Array(0);
+      const oSize = (e.declaredSize === undefined) ? data.length : e.declaredSize;
+      const method = (e.method === undefined) ? 0 : e.method;
+      const lh = new Uint8Array(30 + name.length + lex.length);
       const lv = new DataView(lh.buffer);
       lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true);
+      lv.setUint16(8, method, true);
       lv.setUint32(14, crc, true);
-      lv.setUint32(18, data.length, true); lv.setUint32(22, data.length, true);
-      lv.setUint16(26, name.length, true);
-      lh.set(name, 30);
+      lv.setUint32(18, data.length, true); lv.setUint32(22, oSize, true);
+      lv.setUint16(26, name.length, true); lv.setUint16(28, lex.length, true);
+      lh.set(name, 30); lh.set(lex, 30 + name.length);
       const ch = new Uint8Array(46 + name.length);
       const cv = new DataView(ch.buffer);
       cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true);
+      cv.setUint16(10, method, true);
       cv.setUint32(16, crc, true);
-      cv.setUint32(20, data.length, true); cv.setUint32(24, data.length, true);
+      cv.setUint32(20, data.length, true); cv.setUint32(24, oSize, true);
       cv.setUint16(28, name.length, true); cv.setUint32(42, offset, true);
       ch.set(name, 46);
       locals.push(lh, data); central.push(ch);
@@ -677,10 +698,12 @@ function fakeSheets() {
     for (let i = 0; i < n; i++) u[i] = (i * 7 + seed) % 251;
     return u;
   };
-  const asFile = (name, bytes, type) => ({
-    name, type: type || '', size: bytes.length,
-    arrayBuffer: () => Promise.resolve(bytes.slice().buffer),
-  });
+  /**
+   * A REAL File, because the reader now takes the pick itself and slices it.
+   * Node has had File (with Blob.slice().arrayBuffer()) since 20, so the same
+   * object the browser hands over is the object under test here.
+   */
+  const asFile = (name, bytes, type) => new File([bytes], name, { type: type || '' });
   const zipOf = (name, entries) => asFile(name, storedZip(entries), 'application/zip');
 
   const b = fakeBridge({ hosted: false });
@@ -695,13 +718,15 @@ function fakeSheets() {
     { name: '__MACOSX/._a.png', bytes: fill(32, 4) },                   // resource fork
     { name: '.hidden.png', bytes: fill(48, 5) },                        // dotfile
     { name: 'inner.zip', bytes: storedZip([{ name: 'c.png', bytes: fill(100, 6) }]) },
-    { name: 'huge.png', bytes: fill(9 * 1024 * 1024, 7) },              // over the exempt cap
+    // 90 MB DECLARED, ten bytes present: past the decode cap, so the directory
+    // pass refuses it and the bytes are never touched.
+    { name: 'monster.png', bytes: fill(10, 7), declaredSize: 90 * 1024 * 1024 },
   ]);
 
   const r1 = await store.addLocalFiles([library]);
   ok(r1.zips === 1, 'the picked archive was EXPANDED, not adopted', JSON.stringify(r1));
   ok(r1.added === 2, 'both eligible entries came out of it', JSON.stringify(r1));
-  ok(r1.tooBig === 1, 'and the 9 MB entry hit the very same exempt cap a hand-picked file would');
+  ok(r1.tooBig === 1, 'and the 90 MB entry hit the very same decode cap a hand-picked file would');
   const locals = store.items.filter((it) => it.id.indexOf('local:') === 0);
   ok(locals.length === 2, 'they surface through store.items like any other pick');
   ok(locals.every((it) => it.state === 'exempt' && /^[0-9a-f]{64}$/.test(it.sha)),
@@ -725,8 +750,9 @@ function fakeSheets() {
 
   const junk = fill(64, 13);
   const r4 = await store.addLocalFiles([asFile('broken.zip', junk, 'application/zip')]);
-  ok(r4.failed === 1 && r4.added === 0 && r4.zips === 0,
-    'a corrupt archive is ONE failed pick — it never throws and never empties the screen', JSON.stringify(r4));
+  ok(r4.zipBad === 1 && r4.added === 0 && r4.zips === 0 && r4.tooBig === 0,
+    'a corrupt archive is ONE zipBad — it never throws, never empties the screen, and NEVER lands in tooBig '
+    + '(the per-file 8 MB line on an archive failure is the whole bug this path had)', JSON.stringify(r4));
 
   const r5 = await store.addLocalFiles([
     zipOf('more.zip', [{ name: 'd.webp', bytes: fill(700, 8) }]),
@@ -744,18 +770,109 @@ function fakeSheets() {
     'and it lands at its ORIGINAL size, not its packed one');
 
   // The ceilings, driven straight — the store passes only the per-entry cap.
-  const four = storedZip([1, 2, 3, 4].map((i) => ({ name: 'p' + i + '.png', bytes: fill(500, 20 + i) })));
+  const four = asFile('four.zip',
+    storedZip([1, 2, 3, 4].map((i) => ({ name: 'p' + i + '.png', bytes: fill(500, 20 + i) }))),
+    'application/zip');
   const cut = await zipMod.readZipMedia(four, { maxEntries: 2 });
-  ok(cut.ok && cut.entries.length === 2 && cut.truncated === true && cut.failed === 2,
-    'the entry ceiling truncates and counts the rest as failed', JSON.stringify({ n: cut.entries.length, f: cut.failed }));
+  ok(cut.ok && cut.entries.length === 2 && cut.truncated === true && cut.trimmed === 2 && cut.failed === 0,
+    'the entry ceiling truncates and counts the rest as TRIMMED, never as failed — "took the first N" of a '
+    + 'real library is not the same news as "unreadable"',
+    JSON.stringify({ n: cut.entries.length, trimmed: cut.trimmed, failed: cut.failed }));
   const bomb = await zipMod.readZipMedia(four, { maxTotalBytes: 900 });
   ok(bomb.ok && bomb.entries.length === 1 && bomb.truncated === true,
     'and the zip-bomb guard stops on the DECLARED size, before a byte is inflated',
     JSON.stringify({ n: bomb.entries.length }));
-  const garbage = await zipMod.readZipMedia(junk);
+  const garbage = await zipMod.readZipMedia(asFile('junk.zip', junk, 'application/zip'));
   ok(garbage.ok === false && garbage.entries.length === 0,
     'readZipMedia answers ok:false for garbage instead of throwing', garbage.reason);
-  ok((await zipMod.readZipMedia(new Uint8Array(4))).ok === false, 'a buffer too short to hold an EOCD is refused early');
+  ok((await zipMod.readZipMedia(asFile('tiny.zip', new Uint8Array(4), ''))).ok === false,
+    'a file too short to hold an EOCD is refused early');
+
+  /* --- the local header's extra field is NOT the central one ---------------
+   * The classic offset bug: compute the data start from the central record's
+   * extraLen and every byte read is shifted. STORED entries make it silent —
+   * the slice is still the right LENGTH — so this compares the bytes. */
+  {
+    const want = fill(600, 41);
+    const skew = asFile('skew.zip', storedZip([
+      { name: 'front-padded.png', bytes: want, localExtra: fill(37, 99) },
+      { name: 'plain.png', bytes: fill(240, 42) },
+    ]), 'application/zip');
+    const r = await zipMod.readZipMedia(skew);
+    const got = r.entries.find((e) => e.name === 'front-padded.png');
+    ok(r.ok && !!got && got.bytes.length === want.length && got.bytes.every((b, i) => b === want[i]),
+      'an entry whose LOCAL extra field is longer than its central record still reads byte-exact '
+      + '— the data offset comes from the local header, never the directory',
+      JSON.stringify({ ok: r.ok, n: r.entries.length, failed: r.failed }));
+    ok(r.entries.length === 2 && r.failed === 0, 'and the entry after it is still found', JSON.stringify(r.failed));
+  }
+
+  /* --- a fat DECLARED size is refused without being touched --------------- */
+  {
+    // 100 MB claimed, ten bytes of junk present, method 8. Anything that tried
+    // to inflate this would count `failed`; the ceiling must catch it first,
+    // from the directory alone.
+    const liar = asFile('liar.zip', storedZip([
+      { name: 'whopper.png', bytes: fill(10, 3), declaredSize: 100 * 1024 * 1024, method: 8 },
+      { name: 'ok.png', bytes: fill(120, 4) },
+    ]), 'application/zip');
+    const r = await zipMod.readZipMedia(liar, { maxEntryBytes: 8 * 1024 * 1024 });
+    ok(r.ok && r.tooBig === 1 && r.failed === 0 && r.entries.length === 1,
+      'an entry declaring more than the per-entry cap is counted tooBig from the DIRECTORY — '
+      + 'never sliced, never inflated (a bogus deflate stream would have failed loudly)',
+      JSON.stringify({ tooBig: r.tooBig, failed: r.failed, n: r.entries.length }));
+  }
+
+  /* --- a corrupt EOCD is an archive-level answer, not an exception -------- */
+  {
+    const good = storedZip([{ name: 'x.png', bytes: fill(300, 51) }]);
+    const noSig = good.slice();
+    noSig[noSig.length - 22] ^= 0xFF;                       // murder the EOCD signature
+    const a = await zipMod.readZipMedia(asFile('nosig.zip', noSig, 'application/zip'));
+    ok(a.ok === false && a.reason === 'not-a-zip' && a.entries.length === 0,
+      'an EOCD with a broken signature answers ok:false, and says which kind of broken', a.reason);
+
+    const badOff = good.slice();
+    new DataView(badOff.buffer).setUint32(badOff.length - 22 + 16, 0x7FFFFFF0, true);  // cd offset past EOF
+    const b2 = await zipMod.readZipMedia(asFile('badoff.zip', badOff, 'application/zip'));
+    ok(b2.ok === false && b2.reason === 'unreadable' && b2.entries.length === 0,
+      'and an EOCD pointing its central directory past the end of the file does too', b2.reason);
+
+    const r5b = await store.addLocalFiles([asFile('nosig2.zip', noSig, 'application/zip')]);
+    ok(r5b.zipBad === 1 && r5b.tooBig === 0 && r5b.failed === 0,
+      'the store reports that as zipBad — the ONE counter the 8 MB copy never reads', JSON.stringify(r5b));
+  }
+
+  /* --- the memory profile, measured -------------------------------------
+   * The whole point of the rework: a big archive must cost its tail, its
+   * directory and one entry — never its size. This wraps a real File in a
+   * counter and checks the bytes actually pulled. */
+  {
+    const big = storedZip([1, 2, 3, 4, 5, 6].map((i) => ({ name: 'm' + i + '.png', bytes: fill(64 * 1024, i) })));
+    const real = asFile('big.zip', big, 'application/zip');
+    let sliced = 0;
+    let wholeReads = 0;
+    const watched = {
+      name: real.name, type: real.type, size: real.size,
+      slice(a, b) { sliced += (b - a); return real.slice(a, b); },
+      arrayBuffer() { wholeReads++; return real.arrayBuffer(); },
+    };
+    const r = await zipMod.readZipMedia(watched, { isEligible: (n) => n === 'm3.png' });
+    ok(r.ok && r.entries.length === 1, 'a selective read still finds its one entry', JSON.stringify(r.entries.length));
+    ok(wholeReads === 0, 'and NOTHING on the path called arrayBuffer() on the archive itself');
+    ok(sliced < real.size / 2,
+      'the bytes actually pulled are a fraction of the archive — tail + directory + one entry',
+      sliced + ' of ' + real.size);
+
+    // ...and the caller can refuse to let the extracted bytes pile up at all.
+    const seen = [];
+    const streamed = await zipMod.readZipMedia(real, { onEntry: (e) => { seen.push(e.name); } });
+    ok(streamed.ok && streamed.took === 6 && seen.length === 6 && streamed.entries.length === 0,
+      'onEntry streams each entry out and the result array stays EMPTY — 500 photos are never in the heap together',
+      JSON.stringify({ took: streamed.took, held: streamed.entries.length }));
+    ok(/onEntry/.test(await read('../ui/assetsStore.js')),
+      'and the store is what uses it: entries are adopted one at a time, not collected first');
+  }
   ok(zipMod.isZipFile({ name: 'x.ZIP', type: '' }) === true
     && zipMod.isZipFile({ name: 'x', type: 'application/x-zip-compressed' }) === true
     && zipMod.isZipFile({ name: 'x.png', type: 'image/png' }) === false,
@@ -768,14 +885,485 @@ function fakeSheets() {
   ok(store.localCount === 0, 'dispose clears everything the archives added, too');
 }
 
+/* ===========================================================================
+ * THE ADOPTION POLICY — what standalone does with media that is TOO BIG TO SEND
+ * AS-IS.
+ *
+ * The wire has two rails, not one: MAX_EXEMPT_BYTES (8 MB) for an untouched
+ * original and MAX_ARTIFACT_BYTES (24 MB) for a compressed product. Everything
+ * over the first used to be skipped, which meant a 1 GB zip of real photos
+ * adopted nothing and said "over 8 MB" — a limit invented by the picker, not by
+ * the protocol.
+ *
+ * The compressor is INJECTED here. There is no canvas, no createImageBitmap and
+ * no WebCodecs under node, so what these checks pin is the POLICY — which lane a
+ * file is routed to, which counter it lands in, what identity it ends up with —
+ * and never the pixels. The real lanes are exercised in a browser.
+ * ======================================================================== */
+{
+  const MB = 1024 * 1024;
+  const hexOf = (buf) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
+  const sha256 = async (u8) => hexOf(await crypto.subtle.digest('SHA-256', u8));
+  const fill = (n, seed) => {
+    const u = new Uint8Array(n);
+    for (let i = 0; i < n; i++) u[i] = (i * 31 + seed) % 251;
+    return u;
+  };
+  const realFile = (name, bytes, type) => new File([bytes], name, { type: type || '' });
+
+  /**
+   * The stub. It records what it was handed and answers with bytes of a size
+   * the test chose, so "did the policy pick the still lane or the animated one"
+   * and "whose bytes became the wire identity" are both directly observable.
+   */
+  function makeStub(o = {}) {
+    const calls = { image: [], gif: [] };
+    const imgOut = o.imageOut || fill(600 * 1024, 7);
+    const gifOut = o.gifOut || fill(900 * 1024, 9);
+    return {
+      calls, imgOut, gifOut,
+      compressImage(src, mime) {
+        calls.image.push({ mime, bytes: src.byteLength });
+        if (o.throwOnImage) return Promise.reject(new Error('stub-refused'));
+        return Promise.resolve({
+          blob: new Blob([imgOut], { type: 'image/webp' }), mime: 'image/webp', w: 1920, h: 1080, kind: 'image',
+        });
+      },
+      compressGif(src, mime) {
+        calls.gif.push({ mime, bytes: src.byteLength });
+        return Promise.resolve({
+          blob: new Blob([gifOut], { type: 'video/mp4' }), mime: 'video/mp4', w: 720, h: 720, durMs: 3200, kind: 'video',
+        });
+      },
+    };
+  }
+
+  const chan = await import('../net/mediaChannel.js');
+  ok(LOCAL_MAX_BYTES === chan.MAX_EXEMPT_BYTES && LOCAL_ARTIFACT_MAX_BYTES === chan.MAX_ARTIFACT_BYTES,
+    'the two local rails ARE the wire\'s two rails, imported — a copy of 8/24 would drift the day either moves',
+    LOCAL_MAX_BYTES + ' / ' + LOCAL_ARTIFACT_MAX_BYTES);
+
+  /* --- the routing table, as a pure function ----------------------------- */
+  ok(classifyLocalSize('image/png', 1000) === 'take'
+    && classifyLocalSize('image/png', 12 * MB) === 'take'
+    && classifyLocalSize('image/png', 90 * MB) === 'too-big'
+    && classifyLocalSize('video/mp4', 2 * MB) === 'take'
+    && classifyLocalSize('video/mp4', 20 * MB) === 'take'
+    && classifyLocalSize('video/mp4', 30 * MB) === 'too-big-video'
+    && classifyLocalSize('image/gif', 0) === 'too-big',
+    'classifyLocalSize routes by family AND size: a still is compressible to the decode cap, a clip only to '
+    + 'the artifact cap, and past that it is its own answer');
+
+  /* --- a 12 MB still becomes an artifact, identified by the OUTPUT bytes -- */
+  {
+    const stub = makeStub();
+    const b = fakeBridge({ hosted: false });
+    const store = createAssetsStore({ bridge: b, logger: null, compressor: stub });
+    await sleep(5);
+
+    const png = fill(12 * MB, 3);
+    const r = await store.addLocalFiles([realFile('holiday.png', png, 'image/png')]);
+    ok(r.added === 1 && r.compressed === 1 && r.tooBig === 0 && r.failed === 0,
+      'a 12 MB png is COMPRESSED and adopted, not refused — the whole bug, in one line', JSON.stringify(r));
+    ok(stub.calls.image.length === 1 && stub.calls.gif.length === 0,
+      'it went down the still lane', JSON.stringify(stub.calls.image));
+    ok(stub.calls.image[0].bytes === 12 * MB, 'with the SOURCE bytes, whole', String(stub.calls.image[0].bytes));
+
+    const it = store.items.find((x) => x.name === 'holiday.png');
+    ok(!!it && it.state === 'ready', 'it lands as a READY artifact, not as exempt — exempt means "sent as-is", '
+      + 'and this is not the file the player picked', it && it.state);
+    ok(!!it && it.bytes === stub.imgOut.length && it.srcBytes === 12 * MB,
+      'bytes is what TRAVELS and srcBytes what it came from', it && (it.bytes + '/' + it.srcBytes));
+    ok(!!it && it.sha === await sha256(stub.imgOut),
+      'and the sha is the sha of the COMPRESSED bytes — the artifact is the thing with the wire identity, '
+      + 'and the receiver re-hashes exactly these');
+    ok(!!it && it.mime === 'image/webp' && it.kind === 'image',
+      'the mime is the OUTPUT mime and the kind agrees with it (mediaChannel declines any offer where they do not)',
+      it && (it.mime + '/' + it.kind));
+    ok(!!it && it.artUrl !== '' && it.srcUrl === '',
+      'the bytes hang off artUrl, which is where boot.js listSendable() looks for a non-exempt item');
+
+    // Picking it again must not pay for the compression a second time.
+    const again = await store.addLocalFiles([realFile('holiday-copy.png', png, 'image/png')]);
+    ok(again.dupes === 1 && again.added === 0 && stub.calls.image.length === 1,
+      'the SOURCE sha is remembered, so the same photo is never compressed twice', JSON.stringify(again));
+    store.dispose();
+  }
+
+  /* --- 8..24 MB of video rides as-is; past that it is said out loud ------- */
+  {
+    const stub = makeStub();
+    const b = fakeBridge({ hosted: false });
+    const store = createAssetsStore({ bridge: b, logger: null, compressor: stub });
+    await sleep(5);
+
+    const clip = fill(20 * MB, 5);
+    const r = await store.addLocalFiles([realFile('clip.mp4', clip, 'video/mp4')]);
+    ok(r.added === 1 && r.compressed === 0 && r.tooBigVideo === 0,
+      'a 20 MB mp4 is adopted AS-IS — there is no browser transcode and it does not need one', JSON.stringify(r));
+    const it = store.items.find((x) => x.name === 'clip.mp4');
+    ok(!!it && it.state === 'ready' && it.kind === 'video' && it.mime === 'video/mp4',
+      'as a non-exempt READY artifact (exempt is capped at 8 MB — this would never be offered)',
+      it && (it.state + '/' + it.kind));
+    ok(!!it && it.bytes === 20 * MB && it.sha === await sha256(clip),
+      'carrying its OWN bytes and its own sha — nothing was re-encoded');
+    ok(!!it && it.artUrl !== '', 'behind artUrl, like every other artifact');
+    ok(stub.calls.image.length === 0 && stub.calls.gif.length === 0, 'and the compressor was never asked');
+
+    const big = await store.addLocalFiles([realFile('feature.mp4', fill(30 * MB, 6), 'video/mp4')]);
+    ok(big.tooBigVideo === 1 && big.added === 0 && big.tooBig === 0 && big.failed === 0,
+      'a 30 MB clip lands in tooBigVideo — its OWN counter, because "too big to send" and "over the 8 MB '
+      + 'as-is limit" are different sentences and only one of them is true here', JSON.stringify(big));
+    store.dispose();
+  }
+
+  /* --- animated vs still, decided by the BYTES ---------------------------- */
+  {
+    // A minimal but structurally real GIF: header, no global colour table, then
+    // graphic-control-extension + image-descriptor pairs, then the trailer.
+    const gifOf = (frames) => {
+      const out = [0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 2, 0, 2, 0, 0x00, 0, 0];
+      for (let i = 0; i < frames; i++) {
+        out.push(0x21, 0xF9, 0x04, 0x00, 0x0A, 0x00, 0x00, 0x00);        // GCE + sub-block terminator
+        out.push(0x2C, 0, 0, 0, 0, 2, 0, 2, 0, 0x00);                    // image descriptor
+        out.push(0x02, 0x01, 0x00, 0x00);                                // LZW size + one sub-block
+      }
+      out.push(0x3B);
+      return new Uint8Array(out);
+    };
+    ok(compressMod.gifFrameCount(gifOf(1), 2) === 1 && compressMod.gifFrameCount(gifOf(3), 2) === 2,
+      'gifFrameCount walks the block structure and stops at the limit',
+      compressMod.gifFrameCount(gifOf(1), 2) + '/' + compressMod.gifFrameCount(gifOf(3), 2));
+    ok(compressMod.gifFrameCount(new Uint8Array([1, 2, 3]), 2) === -1,
+      'and answers -1 rather than guessing when the walk hits something it does not know');
+    ok(compressMod.sniffAnimated(gifOf(4), 'image/gif') === 'animated'
+      && compressMod.sniffAnimated(gifOf(1), 'image/gif') === 'still',
+      'so a one-frame GIF takes the STILL lane and a four-frame one does not');
+
+    const webpHead = (flags, fourcc) => {
+      const u = new Uint8Array(24);
+      u.set([0x52, 0x49, 0x46, 0x46], 0);                                 // RIFF
+      u.set([0x57, 0x45, 0x42, 0x50], 8);                                 // WEBP
+      u.set(fourcc, 12);
+      u[20] = flags;
+      return u;
+    };
+    ok(compressMod.webpIsAnimated(webpHead(0x02, [0x56, 0x50, 0x38, 0x58])) === 'animated'
+      && compressMod.webpIsAnimated(webpHead(0x00, [0x56, 0x50, 0x38, 0x58])) === 'still'
+      && compressMod.webpIsAnimated(webpHead(0x00, [0x56, 0x50, 0x38, 0x20])) === 'still',
+      'and an animated WebP is read from the VP8X flag byte — a plain VP8 chunk is one frame by construction');
+
+    const stub = makeStub();
+    const b = fakeBridge({ hosted: false });
+    const store = createAssetsStore({ bridge: b, logger: null, compressor: stub });
+    await sleep(5);
+
+    // A 9 MB animated gif: over the exempt cap, so it must be encoded.
+    const anim = new Uint8Array(9 * MB);
+    anim.set(gifOf(6), 0);
+    const r = await store.addLocalFiles([realFile('loop.gif', anim, 'image/gif')]);
+    ok(r.added === 1 && r.compressed === 1 && stub.calls.gif.length === 1 && stub.calls.image.length === 0,
+      'a 9 MB ANIMATED gif goes to the animated lane — lane B\'s own worker, not the canvas',
+      JSON.stringify({ r, gif: stub.calls.gif.length, img: stub.calls.image.length }));
+    const it = store.items.find((x) => x.name === 'loop.gif');
+    ok(!!it && it.mime === 'video/mp4' && it.kind === 'video',
+      'and it changes FAMILY on the way: the artifact is an mp4, so the kind must say video or the offer gate '
+      + 'declines it as bad_mime', it && (it.mime + '/' + it.kind));
+    ok(!!it && it.ext === 'mp4' && it.durMs === 3200, 'the extension and duration come off the encode, not the source');
+
+    // ...and a still one of the same size does not.
+    const still = new Uint8Array(9 * MB);
+    still.set(gifOf(1), 0);
+    const r2 = await store.addLocalFiles([realFile('static.gif', still, 'image/gif')]);
+    ok(r2.added === 1 && stub.calls.image.length === 1 && stub.calls.gif.length === 1,
+      'a single-frame gif of the same size takes the STILL lane — an mp4 of one frame is nobody\'s idea of a photo',
+      JSON.stringify({ img: stub.calls.image.length, gif: stub.calls.gif.length }));
+    store.dispose();
+  }
+
+  /* --- every adopted local item satisfies the offer gate's own rules ------ */
+  {
+    const stub = makeStub();
+    const b = fakeBridge({ hosted: false });
+    const store = createAssetsStore({ bridge: b, logger: null, compressor: stub });
+    await sleep(5);
+    await store.addLocalFiles([
+      realFile('small.png', fill(2000, 1), 'image/png'),
+      realFile('mid.mp4', fill(12 * MB, 2), 'video/mp4'),
+      realFile('big.jpg', fill(30 * MB, 3), 'image/jpeg'),
+    ]);
+    const locals = store.items.filter((x) => String(x.id).indexOf('local:') === 0);
+    ok(locals.length === 3, 'three picks, three adoption roads, three items', String(locals.length));
+    const family = (m) => (String(m).indexOf('video/') === 0 ? 'video' : 'image');
+    ok(locals.every((x) => chan.ACCEPT_MIME.has(x.mime)), 'every adopted mime is one the wire carries');
+    ok(locals.every((x) => family(x.mime) === x.kind),
+      'every adopted kind agrees with its mime — mediaChannel.familyOf is the rule and it declines the pair '
+      + 'when they disagree, so an item that fails this is un-sendable and invisible about it');
+    ok(locals.every((x) => x.bytes > 0 && x.bytes <= LOCAL_ARTIFACT_MAX_BYTES),
+      'and nothing adopted is past the 24 MB rail the transfer queue enforces');
+    ok(locals.every((x) => (x.state === 'exempt' ? x.bytes <= LOCAL_MAX_BYTES : x.state === 'ready' && !!x.artUrl)),
+      'exempt items are the small ones; everything else is ready + artUrl, which is what listSendable reads');
+    store.dispose();
+  }
+
+  /* --- a pathological output, and a compressor that refuses --------------- */
+  {
+    const stub = makeStub({ imageOut: fill(1024, 2) });
+    // 25 MB of "compressed" output: past the wire cap, so there is nothing to
+    // adopt. Adopting it anyway would put a row on the screen that can never be
+    // offered, which is a worse lie than "that one did not work".
+    const fat = makeStub({ imageOut: new Uint8Array(25 * MB) });
+    const b = fakeBridge({ hosted: false });
+    const store = createAssetsStore({ bridge: b, logger: null, compressor: fat });
+    await sleep(5);
+    const r = await store.addLocalFiles([realFile('vast.png', fill(20 * MB, 4), 'image/png')]);
+    ok(r.failed === 1 && r.added === 0 && r.compressed === 0,
+      'an output past the 24 MB artifact cap is counted failed, never adopted', JSON.stringify(r));
+    store.dispose();
+
+    const cross = makeStub({ throwOnImage: true });
+    const b2 = fakeBridge({ hosted: false });
+    const store2 = createAssetsStore({ bridge: b2, logger: null, compressor: cross });
+    await sleep(5);
+    const src = fill(11 * MB, 8);
+    const r2 = await store2.addLocalFiles([realFile('bad.png', src, 'image/png')]);
+    ok(r2.failed === 1 && r2.added === 0, 'a compressor that throws is one failed file, not a dead picker',
+      JSON.stringify(r2));
+    const r3 = await store2.addLocalFiles([realFile('bad-again.png', src, 'image/png')]);
+    ok(r3.dupes === 1 && cross.calls.image.length === 1,
+      'and the same bytes are not put through it again — a refusal is remembered for the session too');
+    store2.dispose();
+    ok(stub.imgOut.length === 1024, 'the unused stub is untouched');   // keeps the linter honest
+  }
+
+  /* --- the zip ceilings trim a real library, and SAY so ------------------- */
+  {
+    const enc = new TextEncoder();
+    const CRC = (() => {
+      const t = new Uint32Array(256);
+      for (let i = 0; i < 256; i++) {
+        let c = i;
+        for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        t[i] = c >>> 0;
+      }
+      return t;
+    })();
+    const crc32 = (u8) => {
+      let c = 0xFFFFFFFF;
+      for (let i = 0; i < u8.length; i++) c = CRC[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
+      return (c ^ 0xFFFFFFFF) >>> 0;
+    };
+    function storedZip(entries) {
+      const locals = [];
+      const central = [];
+      let offset = 0;
+      for (const e of entries) {
+        const name = enc.encode(e.name);
+        const data = e.bytes || new Uint8Array(0);
+        const crc = crc32(data);
+        const oSize = (e.declaredSize === undefined) ? data.length : e.declaredSize;
+        const lh = new Uint8Array(30 + name.length);
+        const lv = new DataView(lh.buffer);
+        lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true);
+        lv.setUint32(14, crc, true);
+        lv.setUint32(18, data.length, true); lv.setUint32(22, oSize, true);
+        lv.setUint16(26, name.length, true);
+        lh.set(name, 30);
+        const ch = new Uint8Array(46 + name.length);
+        const cv = new DataView(ch.buffer);
+        cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true);
+        cv.setUint32(16, crc, true);
+        cv.setUint32(20, data.length, true); cv.setUint32(24, oSize, true);
+        cv.setUint16(28, name.length, true); cv.setUint32(42, offset, true);
+        ch.set(name, 46);
+        locals.push(lh, data); central.push(ch);
+        offset += lh.length + data.length;
+      }
+      const cdSize = central.reduce((a, c) => a + c.length, 0);
+      const eocd = new Uint8Array(22);
+      const ev = new DataView(eocd.buffer);
+      ev.setUint32(0, 0x06054b50, true);
+      ev.setUint16(8, entries.length & 0xFFFF, true); ev.setUint16(10, entries.length & 0xFFFF, true);
+      ev.setUint32(12, cdSize, true); ev.setUint32(16, offset, true);
+      const all = locals.concat(central, [eocd]);
+      const out = new Uint8Array(all.reduce((a, c) => a + c.length, 0));
+      let p = 0;
+      for (const c of all) { out.set(c, p); p += c.length; }
+      return out;
+    }
+
+    const stub = makeStub();
+    const b = fakeBridge({ hosted: false });
+    const store = createAssetsStore({ bridge: b, logger: null, compressor: stub });
+    await sleep(5);
+
+    // Byte-unique per entry: `fill` repeats every 251 seeds, and 500 photos that
+    // dedup down to 251 would make this measure the wrong ceiling entirely.
+    const uniq = (i) => { const u = fill(40, i % 251); new DataView(u.buffer).setUint32(0, i, true); return u; };
+    const many = [];
+    for (let i = 0; i < LOCAL_ZIP_MAX_ENTRIES + 3; i++) many.push({ name: 'p' + i + '.png', bytes: uniq(i) });
+    const huge = new File([storedZip(many)], 'library.zip', { type: 'application/zip' });
+    const r = await store.addLocalFiles([huge]);
+    ok(r.added === LOCAL_ZIP_MAX_ENTRIES && r.trimmed === 3,
+      'a zip past the entry ceiling adopts the first ' + LOCAL_ZIP_MAX_ENTRIES + ' and TRIMS the rest',
+      JSON.stringify({ added: r.added, trimmed: r.trimmed, failed: r.failed }));
+    ok(r.failed === 0 && r.zipBad === 0 && r.tooBig === 0,
+      'and none of that is failed, zipBad or tooBig — the archive was fine, the ceiling is ours to admit to',
+      JSON.stringify(r));
+    ok(typeof S.assets.local.trimmed === 'function'
+      && !/unreadable|couldn't|broken/i.test(S.assets.local.trimmed(3, LOCAL_ZIP_MAX_ENTRIES)),
+      'and the string says what happened without calling a good library broken',
+      S.assets.local.trimmed(3, LOCAL_ZIP_MAX_ENTRIES));
+    store.dispose();
+  }
+
+  /* --- the progress seam: a long add is not a silent one ------------------ */
+  {
+    const stub = makeStub();
+    const b = fakeBridge({ hosted: false });
+    const store = createAssetsStore({ bridge: b, logger: null, compressor: stub });
+    await sleep(5);
+    const seen = [];
+    const off = store.onLocalProgress((p) => seen.push({ running: p.running, done: p.done, total: p.total }));
+    ok(seen.length === 1 && seen[0].running === false,
+      'onLocalProgress answers immediately — a subscriber never waits for the first pick');
+    await store.addLocalFiles([
+      realFile('one.png', fill(1000, 1), 'image/png'),
+      realFile('two.png', fill(1000, 2), 'image/png'),
+      realFile('three.png', fill(1000, 3), 'image/png'),
+    ]);
+    ok(seen.some((p) => p.running && p.total === 3), 'it reports the denominator up front', JSON.stringify(seen[1]));
+    ok(seen.some((p) => p.running && p.done === 2), 'and counts up as each pick lands');
+    const last = seen[seen.length - 1];
+    ok(last.running === false && last.done === 3 && last.total === 3,
+      'and finishes at done === total with running false, so the line can hide itself',
+      JSON.stringify(last));
+    off();
+    store.dispose();
+  }
+
+  /* --- the LOCAL encode driver: lane B's worker, without lane B's protocol -
+   * The hosted driver answers a host `encode-request` and base64-chunks the
+   * result back over the bridge. This one is called directly and hands the
+   * bytes to its caller — same worker, same messages, no bridge in sight, which
+   * is exactly why the hosted path cannot regress from any of it. */
+  {
+    function fakeWorker() {
+      const w = {
+        posted: [], killed: false, onmessage: null, onerror: null,
+        postMessage(m, transfer) { w.posted.push({ m, transfer }); },
+        terminate() { w.killed = true; },
+        reply(m) { if (w.onmessage) w.onmessage({ data: m }); },
+      };
+      return w;
+    }
+
+    let made = null;
+    const driver = compressMod.createLocalEncodeDriver({ workerFactory: () => (made = fakeWorker()) });
+    const src = new Uint8Array(64).fill(9).buffer;
+    const pcts = [];
+    const p = driver.encode(src, 'image/gif', { maxBox: 720 }, (pct) => pcts.push(pct));
+    await sleep(2);
+    ok(!!made && made.posted.length === 1 && made.posted[0].m.kind === 'encode',
+      'the local driver posts an `encode` to the same worker lane B uses');
+    ok(made.posted[0].transfer && made.posted[0].transfer[0] === src,
+      'with the source bytes TRANSFERRED, not copied — a 40 MB gif is not cloned onto the worker heap');
+    ok(made.posted[0].m.cfg.maxBox === 720, 'and the caller\'s config, verbatim');
+    ok(!/jobId/.test(JSON.stringify(made.posted[0].m)) === false && String(made.posted[0].m.jobId).length > 0,
+      'the job carries its own id, minted here — the host never hears about it');
+
+    const id = made.posted[0].m.jobId;
+    made.reply({ kind: 'progress', jobId: id, pct: 42 });
+    made.reply({ kind: 'done', jobId: id, art: new Uint8Array(96).fill(1).buffer, w: 480, h: 270, durMs: 1500 });
+    const out = await p;
+    ok(pcts.length === 1 && pcts[0] === 42, 'progress is forwarded to the caller, not to a bridge', JSON.stringify(pcts));
+    ok(out && out.art.byteLength === 96 && out.w === 480 && out.durMs === 1500,
+      'and the finished mp4 comes back as BYTES — there is no cache to put it in');
+
+    const p2 = driver.encode(new Uint8Array(8).buffer, 'image/webp', {}, null);
+    await sleep(2);
+    const id2 = made.posted[1].m.jobId;
+    ok(made.posted[1].m.mime === 'image/webp', 'an animated WebP asks the decoder for image/webp, not gif');
+    made.reply({ kind: 'fail', jobId: id2, reason: 'unsupported' });
+    let threw = '';
+    try { await p2; } catch (e) { threw = String(e.message || e); }
+    ok(threw === 'unsupported', 'a worker failure rejects with the worker\'s own reason', threw);
+    driver.dispose();
+    ok(made.killed === true, 'and dispose terminates the worker — an encoder thread must not outlive the store');
+
+    // The blob wrapper, end to end, through the same seam the store calls.
+    const w2 = fakeWorker();
+    const d2 = compressMod.createLocalEncodeDriver({ workerFactory: () => w2 });
+    const gifP = compressMod.compressGif(new Uint8Array(32).buffer, 'image/gif', { driver: d2 });
+    await sleep(2);
+    w2.reply({ kind: 'done', jobId: w2.posted[0].m.jobId, art: new Uint8Array(64).fill(2).buffer, w: 300, h: 300, durMs: 900 });
+    const gifOut = await gifP;
+    ok(w2.posted[0].m.cfg.wantPrev === false,
+      'compressGif asks for NO micro-preview: the preview is a hosted concept (a second cache-put stream on the '
+      + 'bridge) and standalone has nowhere to put one');
+    ok(gifOut.mime === 'video/mp4' && gifOut.kind === 'video' && gifOut.blob.size === 64,
+      'compressGif answers with an mp4 Blob and the VIDEO kind — the store copies both onto the item, and the '
+      + 'offer gate declines any pair that disagrees', gifOut.mime + '/' + gifOut.kind);
+    d2.dispose();
+
+    ok(compressMod.fitDown(4000, 3000, 1920).w === 1920 && compressMod.fitDown(4000, 3000, 1920).h === 1440,
+      'fitDown scales the long edge to the box and keeps the ratio',
+      JSON.stringify(compressMod.fitDown(4000, 3000, 1920)));
+    ok(compressMod.fitDown(800, 600, 1920).scaled === false && compressMod.fitDown(800, 600, 1920).w === 800,
+      'and never scales a small image UP');
+    ok(compressMod.canEncodeAnimated() === false,
+      'canEncodeAnimated is a SYNCHRONOUS call-time probe — node has no WebCodecs and says so without '
+      + 'building a worker or transferring a 40 MB buffer into it first');
+    const real = compressMod.createLocalCompressor();
+    let refused = '';
+    try { await real.compressGif(new Uint8Array(8).buffer, 'image/gif'); } catch (e) { refused = String(e.message || e); }
+    ok(refused === 'no-encoder',
+      'so the real compressor refuses the animated lane honestly here — which is exactly what a Safari without '
+      + 'WebCodecs gets, and the store counts it as one failed file');
+    real.dispose();
+
+    ok(compressMod.extForMime('video/mp4') === 'mp4' && compressMod.extForMime('image/webp') === 'webp'
+      && compressMod.extForMime('image/jpeg') === 'jpg' && compressMod.extForMime('application/zip') === '',
+      'and the artifact extension comes from the OUTPUT mime');
+  }
+
+  /* --- the card says all of it ------------------------------------------- */
+  {
+    const src = await read('../ui/screens/assets.js');
+    ok(/r\.compressed[\s\S]{0,120}L\.compressed/.test(src), 'the summary line reports what was compressed');
+    ok(/r\.tooBigVideo[\s\S]{0,160}L\.skipBigVideo/.test(src),
+      'and gives an un-sendable video its own sentence, with the ARTIFACT cap in it');
+    ok(/r\.trimmed[\s\S]{0,120}L\.trimmed/.test(src), 'and admits to a trimmed library');
+    ok(/onLocalProgress/.test(src) && /ledger\.sub\(store\.onLocalProgress/.test(src),
+      'the progress line is a LEDGER subscription — an add that outlives the screen must not write to a dead node');
+    ok(/role: 'status'[\s\S]{0,200}gg-local-progress|gg-local-progress[\s\S]{0,200}role: 'status'/.test(src),
+      'and it is a role=status, so a screen reader hears the wait too');
+    for (const k of ['adding', 'addingOne', 'compressing', 'compressed', 'skipBigVideo', 'trimmed', 'sizeShrunk']) {
+      ok(S.assets.local[k] !== undefined, 'S.assets.local.' + k + ' exists');
+    }
+    ok(/24 MB/.test(S.assets.local.skipBigVideo(2, formatBytes(LOCAL_ARTIFACT_MAX_BYTES))),
+      'the video refusal quotes the 24 MB rail, not the 8 MB one',
+      S.assets.local.skipBigVideo(2, formatBytes(LOCAL_ARTIFACT_MAX_BYTES)));
+  }
+}
+
 {
   // --- the picker and the copy both admit that zips are allowed ----------
   const src = await read('../ui/screens/assets.js');
   ok(/const LOCAL_ACCEPT[\s\S]{0,300}\.zip/.test(src), 'the device picker offers .zip to the OS file sheet');
   ok(/application\/zip/.test(src), 'by mime as well as by extension (android hands over one or the other)');
-  ok(/zip/.test(S.assets.local.limits('8 MB')), 'and the limits line says so out loud', S.assets.local.limits('8 MB'));
+  ok(/zip/.test(S.assets.local.limits('8 MB', '24 MB')), 'and the limits line says so out loud',
+    S.assets.local.limits('8 MB', '24 MB'));
   ok(typeof S.assets.local.zipNone === 'string',
     'S.assets.local.zipNone exists — an archive holding nothing sendable must still answer');
+  ok(typeof S.assets.local.zipBad === 'function'
+    && !/\bMB\b/.test(S.assets.local.zipBad(1) + S.assets.local.zipBad(3)),
+    'S.assets.local.zipBad speaks about the ARCHIVE and never quotes a per-file size',
+    S.assets.local.zipBad(1) + ' / ' + S.assets.local.zipBad(3));
+  ok(/r\.zipBad[\s\S]{0,80}L\.zipBad/.test(src),
+    'and the summary line renders it on its own, instead of folding an archive failure into skipBig');
+  ok(!/LOCAL_ZIP_MAX_BYTES|too big to open/.test(await read('../ui/assetsStore.js')),
+    'the archive-SIZE refusal is gone entirely — a 1 GB library is the use case, not an edge case');
 }
 
 {
