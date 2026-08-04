@@ -1,12 +1,12 @@
 ## STATUS: SP-045 — DtrhFxRouterTests ManualClock hygiene
-**Current Step:** Step 1 — verify + inject + consult
-**Last Updated:** 2026-08-04 (worker, Step 1 in progress)
+**Current Step:** Step 2 — green + zero-wall-clock grep + evidence + pre-completion consult
+**Last Updated:** 2026-08-04 (worker, Step 1 complete — review skipped SP-195, engine-owned)
 **Blockers:** none
 
-### Step 1: verify + inject + consult
+### Step 1: verify + inject + consult — COMPLETE
 - [x] Update STATUS.md before starting work
-- [ ] Verify every construction in the file; inject ManualClock class-wide (SP-043 shape)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Verify every construction in the file; inject ManualClock class-wide (SP-043 shape)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: green + zero-wall-clock grep + evidence + pre-completion consult
 - [ ] Full DTRH test classes green; zero assertion changes (grep-proven)
