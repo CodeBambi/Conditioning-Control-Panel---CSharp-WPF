@@ -80,6 +80,11 @@ namespace ConditioningControlPanel.Services.GoonGame
             ["image/webp"] = "webp",
             ["video/mp4"] = "mp4",
             ["video/webm"] = "webm",
+            // iPhone camera captures are QuickTime containers whatever the codec
+            // ("Most Compatible" only swaps HEVC for H.264 inside the same
+            // wrapper). Same ISO-BMFF sniff family as mp4 — the "qt  " brand
+            // below is what actually admits them.
+            ["video/quicktime"] = "mp4",
         };
 
         /// <summary>format id -&gt; the extension the file gets. SNIFFED, never claimed.</summary>
@@ -98,6 +103,7 @@ namespace ConditioningControlPanel.Services.GoonGame
         private static readonly HashSet<string> Mp4Brands = new(StringComparer.Ordinal)
         {
             "isom", "mp42", "avc1", "iso2", "mp41", "M4V ", "dash", "msnv", "iso4", "iso5", "iso6", "mp71",
+            "qt  ",     // QuickTime — every iPhone camera capture
         };
 
         private readonly object _lock = new();

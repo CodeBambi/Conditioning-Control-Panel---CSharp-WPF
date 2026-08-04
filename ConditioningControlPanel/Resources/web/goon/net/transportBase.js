@@ -46,8 +46,16 @@ export class GoonTransportBase {
    * @param {object} [o.logger] console-shaped
    * @param {number} [o.clockTestSkewMs] TEST ONLY — fake local skew handed to the MatchClock
    * @param {boolean} [o.autoClockSync] run clock sync automatically on the first connected state
+   * @param {number} [o.clockPingTimeoutMs] pong window handed to the MatchClock — a transport
+   *   that KNOWS it is slow (the relay's mailbox cadence) must widen it or the sync never
+   *   converges and the host never proposes a start (core/clock.js has the full story)
+   * @param {number} [o.clockPingSpacingMs] ping burst spacing, same ownership
+   * @param {number} [o.clockSyncRetries] extra sync attempts after a failed first one. The
+   *   old behavior (one retry) is the default; the relay asks for more, because its early
+   *   attempts routinely race the peer's arrival on the mailbox.
    */
-  constructor({ isHost = false, tag = 'GoonTransport', logger = null, clockTestSkewMs = 0, autoClockSync = true } = {}) {
+  constructor({ isHost = false, tag = 'GoonTransport', logger = null, clockTestSkewMs = 0, autoClockSync = true,
+    clockPingTimeoutMs = 0, clockPingSpacingMs = 0, clockSyncRetries = 1 } = {}) {
     this._isHost = !!isHost;
     this._tag = tag;
     this._log = logger || (typeof console !== 'undefined' ? console : null);
@@ -56,6 +64,7 @@ export class GoonTransportBase {
     this._disposed = false;
     this._autoClockSync = autoClockSync !== false;
     this._clockSyncRunning = false;
+    this._clockSyncRetries = Math.max(0, Number(clockSyncRetries) || 0);
 
     this._messageListeners = new Set();
     this._stateListeners = new Set();
@@ -66,6 +75,8 @@ export class GoonTransportBase {
       tag,
       logger: this._log,
       testSkewMs: clockTestSkewMs,
+      ...(clockPingTimeoutMs > 0 ? { pingTimeoutMs: clockPingTimeoutMs } : {}),
+      ...(clockPingSpacingMs > 0 ? { pingSpacingMs: clockPingSpacingMs } : {}),
     });
     // The clock's pings ride the same guarded send path as everything else.
     this._clock.attach((msg) => this.send(msg));
@@ -213,20 +224,23 @@ export class GoonTransportBase {
   _setLastError(err) { this._lastError = err || null; }
 
   /**
-   * Runs the clock's ping rounds once the channel is usable. Fire-and-forget safe; one retry,
-   * same as GoonTransportBase.BeginClockSync.
+   * Runs the clock's ping rounds once the channel is usable. Fire-and-forget safe. The retry
+   * budget is the transport's (`clockSyncRetries`): one for a data channel, more for the relay
+   * — whose first attempt routinely fires before the peer's loop has even reached the mailbox,
+   * and whose sync failing forever is a match that never leaves Draft.
    */
   _beginClockSync() {
     if (this._disposed || this._clockSyncRunning) return;
     this._clockSyncRunning = true;
     (async () => {
       try {
-        const ok = await this._clock.sync();
-        if (ok) return;
-        this._warn('Initial clock sync did not converge — retrying once');
-        await new Promise((r) => setTimeout(r, 1000));
-        if (this._disposed) return;
-        await this._clock.sync();
+        if (await this._clock.sync()) return;
+        for (let i = 0; i < this._clockSyncRetries; i++) {
+          this._warn(`Initial clock sync did not converge — retry ${i + 1}/${this._clockSyncRetries}`);
+          await new Promise((r) => setTimeout(r, 2000));
+          if (this._disposed || !this.isConnected) return;
+          if (await this._clock.sync()) return;
+        }
       } catch (e) {
         this._error(`Clock sync threw: ${(e && e.message) || e}`);
       } finally {

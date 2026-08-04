@@ -375,7 +375,11 @@ async function readEntryBytes(blob, w, flate) {
  *   assetsStore streams; the tests read the array.
  * @returns {Promise<{ok:boolean, reason:string, entries:Array<{name:string, bytes:Uint8Array}>,
  *   tooBig:number, tooBigVideo:number, failed:number, trimmed:number, skipped:number,
- *   truncated:boolean}>}
+ *   ineligible:number, truncated:boolean}>}
+ *   `ineligible` is the slice of `skipped` that was REAL media of a format the
+ *   mime table refuses (a zip of .avi files) — junk sidecars and nested zips
+ *   stay in `skipped` alone, so the caller can name refused formats without
+ *   accusing a .DS_Store of being one.
  *   `reason` on failure is one of: 'not-a-zip' | 'unreadable' | 'zip64' | 'no-zip-lib'.
  *   `trimmed` is the count the CEILINGS left behind — a legitimate library that
  *   ran past 500 entries or the inflated total. It is deliberately not `failed`:
@@ -384,7 +388,8 @@ async function readEntryBytes(blob, w, flate) {
 export async function readZipMedia(src, o = {}) {
   const out = {
     ok: false, reason: '', entries: [], took: 0,
-    tooBig: 0, tooBigVideo: 0, failed: 0, trimmed: 0, skipped: 0, truncated: false,
+    tooBig: 0, tooBigVideo: 0, failed: 0, trimmed: 0, skipped: 0, ineligible: 0,
+    truncated: false,
   };
   const eligible = typeof o.isEligible === 'function' ? o.isEligible : () => true;
   const classify = typeof o.classify === 'function' ? o.classify : null;
@@ -425,7 +430,7 @@ export async function readZipMedia(src, o = {}) {
     const name = String(rec.name || '');
     if (isJunkEntry(name)) { out.skipped++; continue; }
     if (isZipName(name)) { out.skipped++; continue; }             // no recursion, ever
-    if (!eligible(baseName(name))) { out.skipped++; continue; }
+    if (!eligible(baseName(name))) { out.skipped++; out.ineligible++; continue; }
     if (rec.flags & 0x0001) { out.failed++; continue; }           // encrypted — unreadable, honestly
     const size = Math.max(0, Number(rec.oSize) || 0);
     if (!size) { out.tooBig++; continue; }

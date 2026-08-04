@@ -79,9 +79,15 @@ export const XFER_TAGS_MAX = 3;
  *  that never finishes, and 50 ms of polling is cheaper than that failure mode. */
 export const PUMP_WATCHDOG_MS = 50;
 
-/** The only media types either side will carry. */
+/** The only media types either side will carry. `video/quicktime` is here for
+ *  the iPhone: EVERY camera capture is a .mov container ("Most Compatible"
+ *  included — that setting only swaps HEVC for H.264 inside the same wrapper),
+ *  so refusing the container refused the whole camera roll (2026-08-04
+ *  play-test). Whether THIS device can actually decode what is inside is a
+ *  separate question the adopter answers with a real probe (ui/assetsStore.js
+ *  probeVideoDecodable), not a string compare. */
 export const ACCEPT_MIME = Object.freeze(new Set([
-  'video/mp4', 'video/webm',
+  'video/mp4', 'video/webm', 'video/quicktime',
   'image/png', 'image/jpeg', 'image/gif', 'image/webp',
 ]));
 

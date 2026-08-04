@@ -117,6 +117,9 @@ export class GoonWebRtcTransport extends GoonTransportBase {
   /** Display name the server reported for the opponent (guest side, from /join). */
   get peerDisplayName() { return this._peerDisplayName; }
 
+  /** Wake the signal pump NOW — see GoonRelayTransport.nudge for who calls this and why. */
+  nudge() { this._wake(); }
+
   // ------------------------------------------------------------------ setup
 
   async createInvite() {

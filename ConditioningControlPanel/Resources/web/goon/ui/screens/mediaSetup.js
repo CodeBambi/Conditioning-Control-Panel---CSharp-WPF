@@ -31,6 +31,15 @@
  * images plus a few clips is what makes a match feel like a match, and the copy
  * says so, but a hard gate on a stranger's first thirty seconds is how you lose
  * the player instead of the match.
+ *
+ * …AND ADDING MORE IS THE DEFAULT, not the fine print (owner play-test,
+ * 2026-08-04). A phone's photo sheet is one-shot per visit: pick from one
+ * album, confirm, back here. The first cut of this screen left "I'm set" as
+ * the only primary action after that first batch, and people took it — into a
+ * duel armed with six photos from one folder. So after anything lands the ADD
+ * button is the primary one and says "add more", the lock wears the exact
+ * count it would commit, and NOTHING advances this screen except that lock
+ * (or Leave): not a batch finishing, not the tally clearing the suggestion.
  * ==========================================================================*/
 
 import { createLedger, el, button } from '../router.js';
@@ -47,8 +56,8 @@ export const SUGGESTED_ITEMS = 20;
  * the two lists are the same list, and a divergence would mean the onboarding
  * step accepted a file the library screen would refuse.
  */
-export const LOCAL_ACCEPT = '.png,.jpg,.jpeg,.gif,.webp,.mp4,.m4v,.webm,.zip,'
-  + 'image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,'
+export const LOCAL_ACCEPT = '.png,.jpg,.jpeg,.gif,.webp,.mp4,.m4v,.webm,.mov,.zip,'
+  + 'image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,video/quicktime,'
   + 'application/zip,application/x-zip-compressed';
 
 /**
@@ -128,6 +137,8 @@ export function mount(container, ctx) {
   const lockBtn = button(ledger, L.lock, () => lockIn(), { variant: 'primary', audio, sfx: 'lamp-confirm' });
   lockBtn.disabled = true;
   lockBtn.title = L.lockNeed;
+  /** A batch mid-decode: the lock waits for it. Painted by the progress sub. */
+  let adding = false;
   const leaveBtn = button(ledger, L.leave, () => { void actions?.leave?.('media-setup'); },
     { variant: 'ghost', audio, sfx: 'ui-back' });
 
@@ -197,13 +208,25 @@ export function mount(container, ctx) {
     tally.textContent = n ? L.count(n) : L.countNone;
     tallyNote.textContent = n >= SUGGESTED_ITEMS ? L.enough : L.suggest(SUGGESTED_ITEMS);
 
-    // ONE item unlocks it. The suggestion above is a suggestion (see header).
-    lockBtn.disabled = n < 1;
-    lockBtn.title = n < 1 ? L.lockNeed : '';
+    /* THE ROLES SWAP once something is in (see header): adding more becomes the
+     * primary move and says so, locking becomes the explicit commitment wearing
+     * its count. Classes, not new buttons — the ledger already owns these. */
+    addBtn.textContent = n ? L.addMore : L.add;
+    lockBtn.classList.toggle('gg-btn--primary', n > 0);
+    lockBtn.textContent = n ? L.lockN(n) : L.lock;
+
+    // ONE item unlocks it. The suggestion above is a suggestion (see header) —
+    // but never mid-batch: locking in "6 picks" while a zip is still unpacking
+    // its other two hundred is a commitment nobody meant to make.
+    lockBtn.disabled = n < 1 || adding;
+    lockBtn.title = adding ? L.lockBusy : (n < 1 ? L.lockNeed : '');
   }
 
   if (store && typeof store.onLocalProgress === 'function') {
     ledger.sub(store.onLocalProgress((p) => {
+      const wasAdding = adding;
+      adding = !!(p && p.running);
+      if (adding !== wasAdding) paint();
       if (!p || !p.running) { progress.hidden = true; progress.textContent = ''; return; }
       progress.hidden = false;
       if (p.pct > 0 && p.name) progress.textContent = AL.compressing(p.name, p.pct);
@@ -231,6 +254,7 @@ export function mount(container, ctx) {
       if (r.tooBig) bits.push(AL.skipBig(r.tooBig, maxText));
       if (r.tooBigVideo) bits.push(AL.skipBigVideo(r.tooBigVideo, artMaxText));
       if (r.badType) bits.push(AL.skipType(r.badType));
+      if (r.badCodec) bits.push(AL.skipCodec(r.badCodec));
       if (r.failed) bits.push(AL.skipFailed(r.failed));
       if (r.trimmed) bits.push(AL.trimmed(r.trimmed, LOCAL_ZIP_MAX_ENTRIES));
       if (r.zipBad) bits.push(AL.zipBad(r.zipBad));

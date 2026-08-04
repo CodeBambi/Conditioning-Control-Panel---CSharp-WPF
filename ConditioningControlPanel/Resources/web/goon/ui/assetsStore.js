@@ -115,6 +115,7 @@ export const LOCAL_ZIP_MAX_ENTRIES = ZIP_MAX_ENTRIES;
 export const LOCAL_MIME_BY_EXT = Object.freeze({
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
   webp: 'image/webp', mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm',
+  mov: 'video/quicktime',
 });
 
 /**
@@ -182,6 +183,54 @@ export function localMimeOf(file) {
   const m = /\.([a-z0-9]{2,5})$/i.exec(String((file && file.name) || ''));
   const byExt = m ? (LOCAL_MIME_BY_EXT[m[1].toLowerCase()] || '') : '';
   return ACCEPT_MIME.has(byExt) ? byExt : '';
+}
+
+/** Metadata that has not arrived by now is a busy device, not a verdict. */
+export const VIDEO_PROBE_TIMEOUT_MS = 4000;
+
+/**
+ * Can THIS device actually decode this video? A real probe — load the blob into
+ * an off-DOM <video> and wait for metadata — because with `video/quicktime` on
+ * the accept list a string compare stops being an answer: the container says
+ * nothing about whether the codec inside (HEVC, mostly, on an iPhone) has a
+ * decoder here. `false` only on the element's own error/zero-size verdict;
+ * anything ambiguous (no DOM under node, createObjectURL refused, the timeout)
+ * answers `true`, because a wrongly-refused good clip is this feature's
+ * founding bug and a wrongly-adopted bad one just plays black for its slot.
+ *
+ * KNOWN GAP, on purpose: the probe is LOCAL. Safari happily decodes its own
+ * HEVC and will still ship it to a Windows peer that may not — a
+ * peer-capability handshake is the real fix and is out of scope here.
+ */
+export function probeVideoDecodable(blob) {
+  if (typeof document === 'undefined' || typeof URL === 'undefined'
+    || typeof URL.createObjectURL !== 'function') return Promise.resolve(true);
+  let url = '';
+  try { url = URL.createObjectURL(blob); } catch (_e) { return Promise.resolve(true); }
+  return new Promise((resolve) => {
+    let v = null;
+    let timer = 0;
+    let done = false;
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      try { clearTimeout(timer); } catch (_e) { /* ignore */ }
+      // Detach before revoking, or Safari keeps the decode session alive.
+      try { if (v) { v.removeAttribute('src'); v.load(); } } catch (_e) { /* ignore */ }
+      try { URL.revokeObjectURL(url); } catch (_e) { /* ignore */ }
+      v = null;
+      resolve(ok);
+    };
+    timer = setTimeout(() => finish(true), VIDEO_PROBE_TIMEOUT_MS);
+    try {
+      v = document.createElement('video');
+      v.preload = 'metadata';
+      v.muted = true;
+      v.onloadedmetadata = () => finish((v.videoWidth | 0) > 0);
+      v.onerror = () => finish(false);
+      v.src = url;
+    } catch (_e) { finish(true); }
+  });
 }
 
 /* -------------------------------------------------------- pure helpers
@@ -1157,13 +1206,14 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
    *
    * THE POLICY, in the order it is applied:
    *   1. not a mime the wire carries        -> badType
-   *   2. ≤ 8 MB                             -> EXEMPT, as-is, untouched
-   *   3. video 8..64 MB                     -> non-exempt artifact, as-is (no transcode)
-   *   4. video > 64 MB                      -> tooBigVideo (its own sentence)
-   *   5. still/animated > 80 MB source      -> tooBig (we will not decode that)
-   *   6. animated gif/awebp > 8 MB          -> mp4 artifact, via lane B's worker
-   *   7. still > 8 MB                       -> WebP (or JPEG) artifact
-   *   8. any compressed output > 64 MB      -> failed (pathological; nothing to send)
+   *   2. video this device cannot decode    -> badCodec (probeVideoDecodable)
+   *   3. ≤ 8 MB                             -> EXEMPT, as-is, untouched
+   *   4. video 8..64 MB                     -> non-exempt artifact, as-is (no transcode)
+   *   5. video > 64 MB                      -> tooBigVideo (its own sentence)
+   *   6. still/animated > 80 MB source      -> tooBig (we will not decode that)
+   *   7. animated gif/awebp > 8 MB          -> mp4 artifact, via lane B's worker
+   *   8. still > 8 MB                       -> WebP (or JPEG) artifact
+   *   9. any compressed output > 64 MB      -> failed (pathological; nothing to send)
    */
   async function adoptLocalFile(f, report) {
     if (!f || typeof f.arrayBuffer !== 'function') { report.failed++; return; }
@@ -1177,6 +1227,13 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
 
   /** The original travels untouched. This is the path that has always existed. */
   async function adoptExempt(f, mime, bytes, report) {
+    // The probe sits BEFORE the hash: refusing after paying for the sha would
+    // only make the refusal slower. Images skip it — decode failures there
+    // surface in the compressor lanes that already own them.
+    if (kindForMime(mime) === 'video' && !(await probeVideoDecodable(f))) {
+      report.badCodec++; return;
+    }
+    if (disposed) return;
     let sha = '';
     try {
       sha = await shaOfBytes(await f.arrayBuffer());
@@ -1217,6 +1274,8 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
      * COUNTED AND NAMED rather than quietly dropped. */
     if (kindForMime(mime) === 'video') {
       if (bytes > LOCAL_ARTIFACT_MAX_BYTES) { report.tooBigVideo++; return; }
+      if (!(await probeVideoDecodable(f))) { report.badCodec++; return; }
+      if (disposed) return;
       let buf = null;
       try { buf = await f.arrayBuffer(); } catch (e) {
         warn('could not read "' + name + '": ' + ((e && e.message) || e));
@@ -1417,6 +1476,11 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
     report.tooBig += res.tooBig;
     report.tooBigVideo += res.tooBigVideo || 0;
     report.failed += res.failed;
+    // Entries the mime table refused are NAMED, not vanished: a zip of nothing
+    // but foreign formats used to read "no media in that zip", which renders as
+    // a broken button to the person who just watched their library go in.
+    // `ineligible`, not `skipped` — junk sidecars and nested zips stay silent.
+    report.badType += res.ineligible || 0;
     // NOT `failed`: entry 501, or the inflated-total backstop, means we TOOK THE
     // FIRST N of a real library. Rendering that as "unreadable" is the same
     // class of lie the per-file cap text was on an archive failure.
@@ -1441,13 +1505,13 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
    *
    * @param {ArrayLike<File>} files
    * @returns {Promise<{added:number, compressed:number, dupes:number, tooBig:number,
-   *   tooBigVideo:number, trimmed:number, badType:number, failed:number,
-   *   zips:number, zipBad:number}>}
+   *   tooBigVideo:number, trimmed:number, badType:number, badCodec:number,
+   *   failed:number, zips:number, zipBad:number}>}
    */
   async function addLocalFiles(files) {
     const report = {
       added: 0, compressed: 0, dupes: 0, tooBig: 0, tooBigVideo: 0, trimmed: 0,
-      badType: 0, failed: 0, zips: 0, zipBad: 0,
+      badType: 0, badCodec: 0, failed: 0, zips: 0, zipBad: 0,
     };
     const list = Array.from(files || []);
     // Re-entrant adds (the player picks again while a zip is still expanding)
