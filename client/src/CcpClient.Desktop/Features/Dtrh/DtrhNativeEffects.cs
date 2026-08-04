@@ -1,3 +1,5 @@
+using CcpClient.Desktop.Audio;
+
 namespace CcpClient.Desktop.Features.Dtrh;
 
 /// <summary>
@@ -30,18 +32,25 @@ public sealed class DtrhNativeEffects : IDisposable
     private bool _vnSpeaking;
     private bool _tornDown;
     private int _videoActive;
-    private Timer? _videoCapTimer;
+    private readonly ISoundClock _clock;
+    private IDisposable? _videoCapTimer;
 
     public DtrhNativeEffects(
         IDtrhAudioBackend audio,
         IDtrhVideoBackend video,
         DtrhNativeEffectsOptions options,
-        Action<string> log)
+        Action<string> log,
+        ISoundClock? clock = null)
     {
         _audio = audio;
         _video = video;
         _options = options;
         _log = log;
+        // Injectable clock/timer seam (SP-043, additive-only): the segment-cap timer is the
+        // one wall-clock element in this class; tests drive it deterministically. The
+        // default is the REAL clock (SystemSoundClock = System.Threading.Timer) — product
+        // behavior unchanged.
+        _clock = clock ?? new SystemSoundClock();
         _video.PlaybackEnded += OnVideoEnded;
         _video.EncounteredError += OnVideoError;
     }
@@ -229,15 +238,13 @@ public sealed class DtrhNativeEffects : IDisposable
         VideoStarted?.Invoke(this, EventArgs.Empty);
         _log($"dtrh-fx: video playing ({DescribeMedia(path)}, cap {_options.VideoSegmentCapSec:0}s)");
         _videoCapTimer?.Dispose();
-        _videoCapTimer = new Timer(
-            _ =>
+        _videoCapTimer = _clock.Schedule(
+            TimeSpan.FromSeconds(_options.VideoSegmentCapSec),
+            () =>
             {
                 _log("dtrh-fx: video segment cap reached — stopping");
                 StopVideo();
-            },
-            null,
-            TimeSpan.FromSeconds(_options.VideoSegmentCapSec),
-            Timeout.InfiniteTimeSpan);
+            });
     }
 
     /// <summary>Media-description for logs (packet framing c, SP-018 V5 class): files

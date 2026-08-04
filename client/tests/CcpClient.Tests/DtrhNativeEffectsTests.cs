@@ -1,4 +1,5 @@
 using Avalonia.Media.Imaging;
+using CcpClient.Desktop.Audio;
 using CcpClient.Desktop.Features.Dtrh;
 using Xunit;
 
@@ -32,10 +33,15 @@ public sealed class DtrhNativeEffectsTests : IDisposable
 
     private string TouchVideo(string name) { var p = Path.Combine(_root, "videos", name); File.WriteAllBytes(p, [1]); return p; }
 
-    private (DtrhNativeEffects fx, FakeAudio audio, FakeVideo video) Make(int maxSfx = 8, double capSec = 15)
+    private (DtrhNativeEffects fx, FakeAudio audio, FakeVideo video) Make(int maxSfx = 8, double capSec = 15, ManualClock? clock = null)
     {
         var audio = new FakeAudio();
         var video = new FakeVideo();
+        // SP-043: every test in this class drives the segment-cap timer through an
+        // injected ManualClock — no real System.Threading.Timer is ever armed here
+        // (deterministic under parallel load; the 0.05s-cap + wall-clock-poll flake
+        // class, SP-041 run-4 red, is closed structurally, never by wider windows).
+        clock ??= new ManualClock();
         var fx = new DtrhNativeEffects(audio, video, new DtrhNativeEffectsOptions
         {
             SfxRoots = [Path.Combine(_root, "sfx")],
@@ -44,7 +50,7 @@ public sealed class DtrhNativeEffectsTests : IDisposable
             MasterVolume = 80,
             MaxSfxVoices = maxSfx,
             VideoSegmentCapSec = capSec,
-        }, _log.Add);
+        }, _log.Add, clock);
         return (fx, audio, video);
     }
 
@@ -257,7 +263,10 @@ public sealed class DtrhNativeEffectsTests : IDisposable
     public void FirePayload_Video_PlaysFromPool_RaisesStarted_CapsAtSegment()
     {
         var clip = TouchVideo("clip.mp4");
-        var (fx, _, video) = Make(capSec: 0.05);
+        var clock = new ManualClock();
+        // The REAL SEGMENT_SEC=15 parity value — the fake clock makes the cap instant to
+        // reach, so the toy 0.05s cap (and its wall-clock poll) is gone for good.
+        var (fx, _, video) = Make(capSec: 15, clock: clock);
         var started = 0;
         var ended = 0;
         fx.VideoStarted += (_, _) => started++;
@@ -271,8 +280,12 @@ public sealed class DtrhNativeEffectsTests : IDisposable
 
         // SEGMENT_SEC parity: the cap stops the tape (EffectPayload.cs:148-153), and the
         // stop raises VideoEnded (payload-state off rides the video CLOSING, WPF parity).
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-        while (video.StopCalls == 0 && DateTime.UtcNow < deadline) Thread.Sleep(20);
+        // Deterministic: the injected clock drives the cap — a wrongly-scheduled cap can
+        // never fire inside this exact-15s advance window.
+        Assert.Equal(0, video.StopCalls); // the cap is time-driven, never immediate
+        clock.Advance(TimeSpan.FromSeconds(14.9));
+        Assert.Equal(0, video.StopCalls); // and never early
+        clock.Advance(TimeSpan.FromSeconds(0.1)); // the segment cap arrives
         Assert.Equal(1, video.StopCalls);
         Assert.Equal(1, ended);
     }
@@ -316,6 +329,55 @@ public sealed class DtrhNativeEffectsTests : IDisposable
 
     // ---------- fakes ----------
 
+    /// <summary>Manual <see cref="ISoundClock"/> (SP-043; the SoundArbitrationTests.cs:551
+    /// pattern): Schedule captures due+fire, Advance fires due timers in due order,
+    /// Dispose cancels (the ISoundClock contract). Zero wall-clock.</summary>
+    private sealed class ManualClock : ISoundClock
+    {
+        private sealed class Entry
+        {
+            public DateTimeOffset Due;
+            public required Action Fire;
+            public bool Cancelled;
+        }
+
+        private readonly List<Entry> _timers = [];
+
+        public DateTimeOffset UtcNow { get; private set; } = new DateTimeOffset(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
+
+        public IDisposable Schedule(TimeSpan due, Action fire)
+        {
+            var entry = new Entry { Due = UtcNow + due, Fire = fire };
+            _timers.Add(entry);
+            return new CancelHandle(entry);
+        }
+
+        public void Advance(TimeSpan by)
+        {
+            UtcNow += by;
+            // Fire due timers in due order; timers scheduled by callbacks fire in the same pass.
+            while (true)
+            {
+                var next = _timers
+                    .Where(t => !t.Cancelled && t.Due <= UtcNow)
+                    .OrderBy(t => t.Due)
+                    .FirstOrDefault();
+                if (next is null)
+                {
+                    return;
+                }
+
+                _timers.Remove(next);
+                next.Fire();
+            }
+        }
+
+        private sealed class CancelHandle(Entry entry) : IDisposable
+        {
+            public void Dispose() => entry.Cancelled = true;
+        }
+    }
+
     // ---------- b4 media-logging gate (SP-026) ----------
 
     [Fact]
@@ -336,7 +398,7 @@ public sealed class DtrhNativeEffectsTests : IDisposable
             WhisperRoots = [Path.Combine(_root, "voices")],
             PresenceOnlyRoots = [Path.Combine(_root, "usermedia")],
             MasterVolume = 80,
-        }, _log.Add);
+        }, _log.Add, new ManualClock());
 
         fx.FireVideoFromPool("secret-user-clip.mp4");
         Assert.Contains(_log, l => l.Contains("user pool (123 bytes, .mp4 class)"));
