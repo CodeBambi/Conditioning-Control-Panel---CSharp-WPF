@@ -53,7 +53,7 @@ public sealed record AiExecutionGates(
     /// WPF baseline (contract §8 rule 6; CompanionPromptSettings.cs:106-110) has master OFF
     /// but bubbles/subliminal/bounce ON; the greenfield pipeline executes only the
     /// owner-admitted subset, default NONE (conservative pending-owner posture —
-    /// admission §8 c6 row acknowledgment, verbatim).
+    /// admission §8 c6 row; the row's verbatim text is recorded in SP-044 record.md §2.1).
     /// </summary>
     public static AiExecutionGates NoneAdmitted(int generation, Func<int, bool> isGenerationLive) =>
         new(false, _ => false, generation, isGenerationLive);
@@ -101,7 +101,14 @@ public sealed class AiCommandExecutor
     /// stale generation → NotExecuted(SupersededGeneration) (SP-019 limit 7 — checked PER
     /// COMMAND, so a mid-dispatch flip supersedes the rest); master off → ConsentGated("master");
     /// effect not allowed → ConsentGated(kind); no handler → NotExecuted(EffectUnavailable);
-    /// else dispatch → Valid. Handler exceptions propagate (never swallowed).
+    /// else dispatch → Valid. Dispatch is all-or-nothing at the execution layer
+    /// (pre-completion consult, SP-044 record.md §3.2.3): a faulting handler faults
+    /// <see cref="Execute"/> — commands after the fault are NEVER dispatched (no partial
+    /// silent application), and the caller gets no execution result at all. Contract §9's
+    /// per-command verdict guarantee lives at the ENVELOPE layer (validation already gave
+    /// every submitted command exactly one verdict); a faulted execution forfeits its own
+    /// result rather than issuing partial or invented verdicts. Handler exceptions
+    /// propagate (never swallowed).
     /// </summary>
     public AiCommandExecution Execute(AiExecutionPlan plan, AiExecutionGates gates)
     {

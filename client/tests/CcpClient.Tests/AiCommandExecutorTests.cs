@@ -317,6 +317,32 @@ public class AiCommandExecutorTests
         Assert.Equal(3, canary.Invocations.Count);
     }
 
+    // ---- fault semantics: all-or-nothing at the execution layer ----
+
+    [Fact]
+    public void FaultingHandler_ExecuteFaults_CommandsAfterFaultNeverDispatched()
+    {
+        var (owner, generation) = LiveGeneration();
+        var result = Validate(TwoCommandJson, Policy(master: true));
+        Assert.True(result.Accepted);
+
+        var canary = new Canary { OnExecute = () => throw new InvalidOperationException("canary fault") };
+        var executor = new AiCommandExecutor(new Dictionary<AiCommandKind, IAiEffectHandler>
+        {
+            [AiCommandKind.Bubbles] = canary,
+            [AiCommandKind.Subliminal] = canary,
+        });
+
+        // A faulting handler faults the dispatch (never swallowed): NO execution result is
+        // returned — the caller gets an exception, not partial/invented verdicts. Commands
+        // after the fault are never dispatched. The envelope-layer verdicts (one per
+        // submitted command) already exist from validation — contract §9 stands there.
+        Assert.Throws<InvalidOperationException>(() =>
+            executor.Execute(result.Plan!, new AiExecutionGates(true, _ => true, generation, owner.IsLive)));
+        Assert.Equal([AiCommandKind.Bubbles], canary.Invocations);
+        Assert.All(result.Verdicts, v => Assert.IsType<AiCommandVerdict.Valid>(v));
+    }
+
     // ---- verdict round-trip: envelope JSON → validation verdicts → execution verdicts ----
 
     [Fact]

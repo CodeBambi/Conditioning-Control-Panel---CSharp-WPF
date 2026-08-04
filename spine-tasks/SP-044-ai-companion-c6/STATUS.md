@@ -1,5 +1,5 @@
 ## STATUS: SP-044 — AI companion slice c6: command execution
-**Current Step:** Step 4 — evidence consolidation + pre-completion consult
+**Current Step:** Step 5 — Testing & Verification
 **Last Updated:** 2026-08-04 (worker)
 **Blockers:** none
 
@@ -21,9 +21,9 @@
 - [x] Reserved→Wired flip (counts 6/5 + arm); bool-door retirement if clean
 
 ### Step 4: evidence consolidation + pre-completion consult
-- [ ] record.md (archaeology, design, canary shapes, consults, review presence)
-- [ ] Pre-completion solo consult (verdict + actual model in record.md)
-- [ ] STATUS.md accurate before .DONE
+- [x] record.md (archaeology, design, canary shapes, consults, review presence)
+- [x] Pre-completion solo consult (verdict + actual model in record.md)
+- [x] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification
 - [ ] Contract testCommand passes (verify.mjs + build 0W/0E + ≥564/29 floor)
