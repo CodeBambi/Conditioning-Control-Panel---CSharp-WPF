@@ -291,6 +291,8 @@
   "tooltip_open_assets_folder_images_videos_sounds": "Открыть папку ассетов (изображения, видео, звуки)",
   "tooltip_show_content_on_all_connected_monitors_2_3_or": "Использовать все мониторы для показа контента (два, три и более).",
   "setting_multi_mon": "Мульти мон.",
+  "setting_browser_video_engine": "Браузерный видеодвижок (бета)",
+  "tooltip_browser_video_engine": "Воспроизводить обязательные видео через встроенный браузер вместо классического плеера - гораздо стабильнее. Файлы, которые браузер не может декодировать, автоматически переключаются на классический плеер. Требуется среда выполнения WebView2 (уже установлена в Windows 11 и в Windows 10 с Edge).",
   "tooltip_launch_automatically_when_windows_starts": "Запускать автоматически при старте Windows",
   "setting_win_start": "Автозапуск",
   "tooltip_play_a_mandatory_video_when_app_opens": "Воспроизвести обязательное видео при открытии приложения",

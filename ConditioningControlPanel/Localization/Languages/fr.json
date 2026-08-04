@@ -291,6 +291,8 @@
   "tooltip_open_assets_folder_images_videos_sounds": "Ouvrir le dossier de ressources (images, vidéos, sons)",
   "tooltip_show_content_on_all_connected_monitors_2_3_or": "Afficher le contenu sur tous les moniteurs connectés (2, 3, ou plus)",
   "setting_multi_mon": "Multi Mon",
+  "setting_browser_video_engine": "Moteur vidéo du navigateur (bêta)",
+  "tooltip_browser_video_engine": "Lire les vidéos obligatoires via le navigateur intégré plutôt qu'avec le lecteur classique : bien plus stable. Les fichiers que le navigateur ne peut pas décoder repassent automatiquement au lecteur classique. Nécessite le runtime WebView2 (déjà installé sur Windows 11 et sur Windows 10 avec Edge).",
   "tooltip_launch_automatically_when_windows_starts": "Lancer automatiquement au démarrage de Windows",
   "setting_win_start": "Dém. Win",
   "tooltip_play_a_mandatory_video_when_app_opens": "Lancer une vidéo obligatoire à l'ouverture de l'appli",

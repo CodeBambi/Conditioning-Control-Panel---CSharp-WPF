@@ -1063,6 +1063,8 @@
   "setting_multi_mon": "Multi Mon",
   "setting_fill_all_monitors_video": "Fill all monitors with video",
   "tooltip_fill_all_monitors_video": "On 3+ monitors, give every screen its own video (heavier). Off by default on 3+ monitors to avoid lag; 1–2 monitor setups always fill.",
+  "setting_browser_video_engine": "Browser video engine (beta)",
+  "tooltip_browser_video_engine": "Play mandatory videos through the built-in browser instead of the classic player - much better stability. Files the browser can't decode automatically fall back to the classic player. Requires the WebView2 runtime (preinstalled on Windows 11, and on Windows 10 with Edge).",
   "tooltip_launch_automatically_when_windows_starts": "Launch automatically when Windows starts",
   "setting_win_start": "Win Start",
   "tooltip_play_a_mandatory_video_when_app_opens": "Play a mandatory video when app opens",
