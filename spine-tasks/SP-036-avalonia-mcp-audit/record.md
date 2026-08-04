@@ -93,7 +93,7 @@ avalonia-docs: outbound is made by Pi itself over HTTPS to `docs-mcp.avaloniaui.
 
 ### avalonia-live (UNVERIFIED — provisional seat)
 
-Gateway metadata lists 19 tools but the seat was not live-probed (requires the app running with `CCP_MCP=1`). Admission is provisional pending live enumeration (§7).
+Tool inventory **NEVER ENUMERATED in this audit** — the gateway reported the seat `not connected` throughout; live enumeration requires launching the desktop app with `CCP_MCP=1`, out of scope for this headless audit. (The Pi session-start server metadata lists 19 tool names for this seat — harness-claimed metadata, not a live enumeration; recorded as UNVERIFIED either way.) Admission is provisional pending live enumeration (§7).
 
 ### avalonia-ui (53 tools, live — method `tools.search`, 2026-08-04)
 
@@ -125,13 +125,15 @@ All probes run live 2026-08-04 through the gateway against `ValidateXaml` at `va
 
 **Matrix tally:** false positives **0** (seed A clean). False negatives **5 defect classes across 4 seeds** (B, C×2, E, F). True negative 1 (D). Consistent with the pilot §5 (0 FP, all semantic defects FN): `ValidateXaml` is XML well-formedness + namespace/root-shape checks only — heuristic parsing pinned to Avalonia 11.3.1, never the v12 compiler.
 
+**Seed defect-status provenance:** seeds B and E are defective by construction (invented identifiers — self-evident). Seeds C and F assert "does not exist in Avalonia" / "x:DataType required for compiled bindings" — defect status for C and F is asserted from the 2026-07-18 pilot §5 and the run's WPF-vs-Avalonia construct knowledge; **not re-fetched from official v12 docs in this session and not compiled here**.
+
 **Redaction posture (seed G + §5):** the tool's RESPONSE does not echo input secret values (output-side safe). BUT every tool argument lands in a process holding a LIVE ESTABLISHED Sentry socket with `AttachStacktrace=true` and `MaxBreadcrumbs=100` — arguments can egress inside Sentry breadcrumbs/error events, and TLS payload content is not observable from here. **Binding rule: redact BEFORE calling, never after; synthetic or redacted fragments only.** This run's own probes complied (all seeds synthetic).
 
 ## 8. Pre-approach solo consult (Step 1 gate)
 
 - **Route requested:** solo, per the 2026-08-04 rewire (Opus 5 main / Fable 5 fallback). An earlier consult call in this session returned "STOP — no transcript was provided" (harness did not forward the transcript); re-issued with the inventory + plan inlined in the question.
 - **Answering model provenance:** the configured solo model is `anthropic/claude-fable-5` per `C:\Users\Micha\.pi\agent\bpx-consult.json` (`modes.solo.model`, read 2026-08-04) — config-file evidence, cited because the answering model itself **refused to self-identify**, correctly citing the T-7 silent-substitution finding (a self-report is non-evidence). Note: the packet text says "Opus 5 main / Fable 5 fallback"; the on-disk config says `claude-fable-5` for solo — empirical config recorded, divergence noted, not resolved.
-- **Verdict text (first consult, verbatim):** "structure is sound, but it has two honesty gaps that would fail this packet's own rules, plus four cheap additions. Do not write record.md yet." Corrections ordered and EXECUTED: (1) `avalonia-docs` live-probed (was cached-only) and `avalonia-live` labeled PROVISIONAL with the `CCP_MCP=1` gate as a binding admission condition; (2) FN rows rephrased to "defect the validator did not flag" — no uncompiled compiler claims; (3) DLL hashed (`42DAE31D…CC24`) + clone porcelain checked (clean) with the pilot mismatch recorded; (4) tool count resolved mechanically (53 via `tools.search`; packet's 46 stale); (5) Sentry finding reframed as *de-facto option 3, not by choice* + unresolved owner question; (6) redaction made a precondition of admission.
+- **Verdict text (first consult):** verbatim first line — "structure is sound, but it has two honesty gaps that would fail this packet's own rules, plus four cheap additions. Do not write record.md yet." — followed by an itemized summary of the six corrections, all EXECUTED: (1) `avalonia-docs` live-probed (was cached-only) and `avalonia-live` labeled PROVISIONAL with the `CCP_MCP=1` gate as a binding admission condition; (2) FN rows rephrased to "defect the validator did not flag" — no uncompiled compiler claims; (3) DLL hashed (`42DAE31D…CC24`) + clone porcelain checked (clean) with the pilot mismatch recorded; (4) tool count resolved mechanically (53 via `tools.search`; packet's 46 stale); (5) Sentry finding reframed as *de-facto option 3, not by choice* + unresolved owner question; (6) redaction made a precondition of admission.
 - **Verdict text (second consult, model-provenance request, verbatim summary):** "I cannot reliably know my own model identity… Record it this way instead: route requested solo per the rewire; answering model not empirically verifiable from inside the worker; get provenance from outside the model (router config/logs), one cheap check." The cheap check found `bpx-consult.json` (above).
 
 ## 9. Engine-review presence per `spine_review_step` call (T-2 heading)
@@ -139,8 +141,55 @@ All probes run live 2026-08-04 through the gateway against `ValidateXaml` at `va
 | Call | Step | Type | Result |
 |---|---|---|---|
 | 1 | 1 | plan | **SKIPPED in-worker by design (SP-195)** — "Nested reviewer spawn blocked inside pi worker session"; reviewLevel echoed 2; spawnFailed=false; artifact `.reviews/1-20260804T133704.md`; engine runs reviews after .DONE |
+| 2 | 2 | plan | **SKIPPED in-worker by design (SP-195)** — same feedback; reviewLevel 2; spawnFailed=false; artifact `.reviews/2-20260804T133753.md` |
+| 3 | 3 | plan | **SKIPPED in-worker by design (SP-195)** — same feedback; reviewLevel 2; spawnFailed=false; artifact `.reviews/3-20260804T133753.md` |
 
-<!-- admission record + pre-completion consult appended in Step 4 -->
+<!-- end -->
+
+## 11. The bounded admission record (Step 4 deliverable)
+
+**Decree (verbatim, source `client/docs/task-board.md` owner-decision ledger 2026-07-21, all-gates-lifted decision):** "Avalonia MCP admission (Sentry-mitigation decision made — proceed per the conditional recommendation)". This packet records the admission per that decree; it does not re-decide it (honesty framing a).
+
+### 11.1 Audit findings per acceptance item
+
+| Acceptance item | Finding | Evidence |
+|---|---|---|
+| Installation verified (version/commit/hash) | avalonia-ui: HEAD `974ec59b…` == upstream HEAD (live ls-remote), clean porcelain, DLL ProductVersion embeds HEAD, SHA256 `42DAE31D…CC24` (differs from pilot's E:\ hash — rebuild, recorded). avalonia-live: Keincheck 0.11.0 MIT (cached nuspec), env-gated seam Program.cs:238-243. avalonia-docs: hosted URL identity. | §2, §3 |
+| Startup health | avalonia-ui spawns via gateway, GetServerInfo + PerformHealthCheck respond; DEGRADED only on the server's own internal TelemetryService (console-exporter OTel), distinct from Sentry. | §4 |
+| Outbound + Sentry posture | Exactly one outbound socket from the server process: ESTABLISHED TLS to the hardcoded DSN's org endpoint `o4509369388761088.ingest.us.sentry.io`. No hosts block, unpatched upstream build, no disable path. **Sentry LIVE; mitigation = de-facto option 3 (redacted fragments only), not by recorded choice. Owner question surfaced, unresolved (§5).** | §5 |
+| Tool inventory classified | avalonia-ui 53 tools (mechanical count), avalonia-docs 8 (live), avalonia-live NEVER ENUMERATED (seat not connected; provisional). Classification per advisory-only criterion. | §6 |
+| Probe matrix | 0 false positives; 5 FN defect classes across 4 invalid seeds; 1 true negative (malformed XML). ValidateXaml = syntax-only heuristic. | §7 |
+| Redaction | Output-side safe (no echo of secret-shaped seeds); transport-side unsafe by posture (live Sentry socket + AttachStacktrace + 100 breadcrumbs) → redact BEFORE calling is a binding precondition. | §7 |
+
+### 11.2 Admitted tool subset (bounded admission, per seat)
+
+- **avalonia-docs — ADMITTED (advisory):** all 8 tools as a docs-search/API-lookup convenience. Its output is the vendor's documentation index but remains advisory: it never substitutes for the run's own `avalonia-research` docs pass.
+- **avalonia-live — ADMITTED PROVISIONALLY (advisory):** live-UI inspection tools when (and only when) the app is launched with `CCP_MCP=1`. **Binding admission condition:** the env gate at `client/src/CcpClient.Desktop/Program.cs:238-243` must remain — any change that binds port 3001 unconditionally (tests/normal runs binding the port) VOIDS this seat's admission. Tool inventory UNVERIFIED; first live enumeration refines this admission (or rejects tools) without a new decree.
+- **avalonia-ui — ADMITTED (advisory, redacted/synthetic fragments only):** `ValidateXaml` (syntax-only), `DiagnoseCommonIssues`, `PerformHealthCheck`, `GetServerInfo`, `GetServerMetrics`, and the 7 `read_get*` reference readers (loose orientation only).
+
+### 11.3 Rejected / not admitted
+
+- **avalonia-ui `AnalyzePerformance` + `GetPerformanceRecommendations` — REJECTED.** Two recorded self-contradictory/failure verdicts in this run's history (SP-013 record.md:143 — "Invalid XAML syntax - cannot analyze performance" AND "Score: 90/100 Excellent" in ONE response, the second occurrence of SP-007's failure mode; SP-014 record.md:151-152 — rejected by rule) plus this packet's probe-matrix demonstration that the server's XAML analysis is heuristic-only. Heuristic performance prose can never be cited as evidence about client code.
+- **avalonia-ui `ConvertWpfXamlToAvalonia`, `CreateAvaloniaProject`, all 33 `Generate*` tools — REJECTED.** WPF-conversion authority is a prohibited role (WPF = behavioral evidence only); generators emit 11.3.1-era or generic .NET codegen that never compiles against the client v12 toolchain (authority-masquerade risk, pilot §2 re-confirmed).
+- **avalonia-ui `Echo`, `TestLogging`, `ForceGarbageCollection` — REJECTED** (server self-tests; no evidence value).
+- **Official Avalonia DevTools MCP — REJECTED 2026-08-04** (paid Avalonia Plus feature; violates the free-OSS constraint; recorded from the packet context).
+
+### 11.4 The advisory boundary rule (structural, binding on every future packet)
+
+1. MCP output may **ADVISE** — a second opinion to accept or reject **with reasons recorded** in the using packet's record.md (the two AnalyzePerformance rejections are the standing examples). It may never **SUBSTITUTE** for the run's verification layers: official-docs research (`avalonia-research` skill), real compilation with the client toolchain, K3 rendered-image review, and headed Windows/Linux gates.
+2. **ValidateXaml PASS is never API-validity proof** (0 FP / 5 FN classes: it is XML well-formedness + namespace/root-shape checks, pinned to 11.3.1 heuristics).
+3. **Redact BEFORE calling, never after** — synthetic or redacted fragments only; never secrets, user data, camera data, private URLs, absolute local paths, sensitive logs, or proprietary code beyond minimal redacted fragments. Rationale is empirical this time: a live ESTABLISHED Sentry socket (§5), not just a config read.
+4. MCP unavailability never blocks a task — skip and continue with official sources.
+5. Only concise accepted/rejected findings are recorded in client docs — never full transcripts.
+
+### 11.5 Non-bypass proof for THIS packet (the row's final acceptance clause)
+
+(a) This packet's MCP usage was **probe-only** (GetServerInfo, PerformHealthCheck, 7 synthetic ValidateXaml seeds, gateway metadata). (b) **Zero MCP output entered product code, tests, or client docs** — the only file written is `spine-tasks/SP-036-avalonia-mcp-audit/record.md` (+ STATUS/evidence). (c) The mechanical guarantee is the contract itself: `fileScopeMustNotChange` covers `client/src/**`, `client/tests/**`, `client/docs/task-board.md`, `client/docs/port-lessons.md`; Step 5's `git status --short` demonstrates only `spine-tasks/SP-036-avalonia-mcp-audit/**` changed (§13).
+
+## 12. Pre-completion solo consult (Step 4 gate)
+
+- **Route:** solo; answering model per `bpx-consult.json` config evidence (`anthropic/claude-fable-5`), same provenance caveat as §8.
+- **Verdict (verbatim first line + itemized summary):** "CORRECTION first — one fabricated number will fail this packet's own thesis." Four corrections ordered and EXECUTED before .DONE: (1) the "19 tools" avalonia-live figure was never live-enumerated — replaced with NEVER ENUMERATED + harness-metadata caveat (§6, §11.1); (2) §8 "verbatim" label on a paraphrase — relabeled to verbatim-first-line + summary; (3) the row's final clause ("prove no MCP output bypasses…") was asserted, not proven — §11.5 non-bypass proof added (probe-only usage, zero MCP output in product/tests/docs, contract `fileScopeMustNotChange` + Step 5 `git status` as the artifact); (4) seeds C/F defect-status provenance clause added (§7). Everything else judged sound: the Sentry de-facto-option-3 framing with the owner question open = "the strongest thing in the packet"; the `CCP_MCP=1` binding condition = "the right shape"; the per-seat admitted/rejected split matches the probe evidence.
 
 ## 10. Step 2/3 note
 
