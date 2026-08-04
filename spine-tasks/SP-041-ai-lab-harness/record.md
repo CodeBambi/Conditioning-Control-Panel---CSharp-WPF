@@ -114,10 +114,57 @@ the SP-039/T-7 precedent); route pin = Opus 5 main. Substance applied:
 | Step | Call | Result |
 |------|------|--------|
 | 1 | `spine_review_step --step 1 --type plan` | **SKIPPED** (SP-195: nested reviewer spawn blocked in worker session; engine runs reviews after .DONE). Artifact `.reviews/1-20260804T164721.md` |
+| 2 | `spine_review_step --step 2 --type plan` | **SKIPPED** (SP-195, same). Artifact `.reviews/2-20260804T165340.md` |
 
 ## 6. Stability proof (Step 3) — transcripts in `evidence/`
 
-(to fill)
+**Run 4 interruption (recorded, not hidden — honesty framing):** the first chain (runs 1–5)
+went green/green/green/**RED**/green. The run-4 red was
+`DtrhNativeEffectsTests.FirePayload_Video_PlaysFromPool_RaisesStarted_CapsAtSegment`
+(`DtrhNativeEffectsTests.cs:277`: `Assert.Equal(1, video.StopCalls)`, actual 0 — a 0.05s
+cap-timer + 5s wall-clock poll exhausted under parallel load). Forensics: (a) **zero shared
+code with this task's diff** — the task changes only `AiProviderLab.cs`; grep of
+`DtrhNativeEffectsTests.cs` finds no `Ai` references at all; (b) the profile matches the
+wave-4 T-3 precedent verbatim ("attempt-1 flake — one timing-bound test red on a loaded
+box, name uncaptured, re-run green on identical content ×2", task-board gate history
+2026-08-04); (c) re-run on identical content (run 5) green. **Cause not root-analyzed —
+OUT OF SCOPE** (`DtrhNativeEffectsTests.cs` is not in File Scope). Durable-lesson/
+tooling-row candidate for the orchestrator: the DTRH cap-timer tests are the remaining
+timing-bound flake class now that the lab ODE class is killed. Chain restarted from run 5.
+
+| Chain run | Main | Headless | Leaked test hosts after run |
+|-----------|------|----------|------------------------------|
+| 1 (16:54Z) | 516/516 | 29/29 | 0 |
+| 2 (16:55Z) | 516/516 | 29/29 | 0 |
+| 3 (16:56Z) | 516/516 | 29/29 | 0 |
+| 4 (16:58Z) | **515/516 — DtrhNativeEffects cap-timer flake (above)** | 29/29 | 0 |
+| 5 (16:59Z) | 516/516 | 29/29 | 0 |
+| 6 (17:02Z) | 516/516 | 29/29 | 0 |
+| 7 (17:03Z) | 516/516 | 29/29 | 0 |
+| 8 (17:05Z) | 516/516 | 29/29 | 0 |
+| 9 (17:06Z) | 516/516 | 29/29 | 1 transient (below) |
+
+**ACCEPTANCE MET: runs 5–9 = 5 consecutive full-suite runs green** (516/516 + 29/29 each,
+transcripts `evidence/stability-run-{5..9}-{main,headless}.txt`). **Post-run-9 host check
+transient (recorded honestly):** the immediate post-run-9 probe counted 1 process matching the
+testhost filter; a precise re-query ~90s later shows **ZERO leaked test hosts** — the match
+was a late-exiting host still in teardown, not the zombie class (zombies persist across
+runs/hours per the wave-5 forensics; this one reaped itself). Final state after the final
+run: zero leaked `dotnet.exe`/`testhost.exe` test hosts (probe: Win32_Process, Name in
+{testhost.exe, dotnet.exe} AND CommandLine ~ 'testhost').
+
+**Self-check demonstrated (Step 3, throwaway — never committed):** a deliberate leak
+(`new AiProviderLab()` undisposed, file `ThrowawayLeakDemo.cs`, deleted after the demo)
+made the assembly fixture fail the run LOUD: exit code 1, "Test Run Failed.",
+`Assembly fixture type 'CcpClient.Tests.AiLabLeakSelfCheck' threw in Dispose` →
+`System.InvalidOperationException : AiProviderLab leaked listener(s) holding loopback
+port(s): http://127.0.0.1:59317/ (port 59317)` — port/prefix NAMED (transcript
+`evidence/self-check-leak-demo.txt`). The committed suite is leak-free (fixture disposes
+clean on every green run above).
+
+**After-state collision proof (throwaway):** the hardened constructor shape (fresh instance
+per attempt) replayed against a forced port collision — attempt 0 `HttpListenerException`,
+attempt 1 bound and SURVIVED (`evidence/after-state-repro.txt`).
 
 ## 7. Completion-criteria disposition
 

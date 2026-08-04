@@ -15,8 +15,8 @@
 - [x] Full matrix green with identical lab semantics
 
 ### Step 3: stability proof + evidence + pre-completion consult
-- [ ] 5 consecutive full-suite runs green (transcripts; hosts reaped; no leaked dotnet test hosts)
-- [ ] Self-check demonstrated (throwaway leak injection fails loud; committed suite leak-free)
+- [x] 5 consecutive full-suite runs green (transcripts; hosts reaped; no leaked dotnet test hosts)
+- [x] Self-check demonstrated (throwaway leak injection fails loud; committed suite leak-free)
 - [ ] record.md (before-state, design, justifications, transcripts, consults, review presence)
 - [ ] Pre-completion solo consult (verdict + actual model in record.md)
 - [ ] STATUS.md accurate before .DONE
