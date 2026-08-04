@@ -18,6 +18,7 @@ import { GoonConsts } from '../core/contracts.js';
 export const GOON_PATHS = Object.freeze({
   invite: '/v2/goon/invite',
   join: '/v2/goon/join',
+  leave: '/v2/goon/leave',
   signal: '/v2/goon/signal',
   relay: '/v2/goon/relay',
 });
@@ -29,6 +30,8 @@ export const GoonSignalError = Object.freeze({
   NoPass: 'no_pass',
   UnknownCode: 'unknown_code',
   AlreadyJoined: 'already_joined',
+  /** The code you typed is your OWN room — one account cannot sit on both seats. */
+  SelfJoin: 'self_join',
   Expired: 'expired',
   Unauthorized: 'unauthorized',
   RateLimited: 'rate_limited',
@@ -169,7 +172,7 @@ export class GoonSignalingClient {
     };
   }
 
-  /** @returns {Promise<{token, expiresInSec, peerDisplayName, peerAppVersion, pass, relayAllowed}|null>} */
+  /** @returns {Promise<{token, expiresInSec, peerDisplayName, peerAppVersion, pass, relayAllowed, rejoin, selfDuel}|null>} */
   async join(code, displayName = null) {
     const json = await this._call(GOON_PATHS.join, {
       unified_id: this.unifiedId,
@@ -195,7 +198,48 @@ export class GoonSignalingClient {
       relayAllowed: json.relay_allowed === undefined ? true : !!json.relay_allowed,
       /** §3: the guest learns the host's card version on the join response. */
       peerCardVer: this._notePeerCard(json),
+      /** True when the server handed back a seat this uid already held. */
+      rejoin: json.rejoin === true,
+      /**
+       * True when this account is sitting in BOTH seats — the whitelist-only
+       * self-duel affordance (one account, two devices, the owner's play-test).
+       * Advisory only: the server put the guest seat under a shadow identity, so
+       * nothing about the match, the transports or the recap differs. Surfaced
+       * because a client that cannot SAY "you are duelling yourself" would leave
+       * the tester guessing which device is which.
+       */
+      selfDuel: json.self_duel === true,
     };
+  }
+
+  /**
+   * Best-effort seat release. A guest hands its seat back so a retry is not met
+   * by its own GHOST ("that room already has two players" for the rest of the
+   * room TTL); a host folds the lobby it is walking away from.
+   *
+   * FIRE-AND-FORGET BY CONTRACT. It resolves true/false and never throws, the
+   * caller must not await it on a teardown path, and the server treats it as
+   * advisory — the room TTL was always the real backstop and still is. It is
+   * also refused (409 match_started) once the match has reached the ledger,
+   * because releasing the seat invalidates the very token the result row needs;
+   * callers must only send it for a room that never connected.
+   * @returns {Promise<boolean>} true if the server acknowledged the release
+   */
+  async leave(code, token, role) {
+    // A goodbye must never overwrite the diagnosis the lobby is about to render:
+    // this runs on teardown paths that are ALREADY holding the reason they folded
+    // (`ice_timeout`, `already_joined`, …) in exactly these three fields.
+    const prev = { e: this.lastError, d: this.lastErrorDetail, r: this.retryAfterSeconds };
+    const json = await this._call(GOON_PATHS.leave, {
+      unified_id: this.unifiedId,
+      code: normalizeCode(code),
+      token: token || '',
+      role,
+    });
+    this.lastError = prev.e;
+    this.lastErrorDetail = prev.d;
+    this.retryAfterSeconds = prev.r;
+    return !!json;
   }
 
   /**

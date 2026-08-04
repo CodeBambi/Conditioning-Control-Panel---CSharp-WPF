@@ -58,7 +58,7 @@ import { createToasts } from './ui/toasts.js';
 import { createSheets } from './ui/sheets.js';
 import { createOptions } from './ui/options.js';
 import { createSoloDriver } from './ui/soloDriver.js';
-import { createAssetsStore } from './ui/assetsStore.js';
+import { createAssetsStore, localPlayableEntries } from './ui/assetsStore.js';
 import { createDiscord, confirmOpenDm } from './ui/discord.js';
 import { emitAva, mountVsSplash } from './ui/avatar.js';
 import { S } from './ui/strings.js';
@@ -161,12 +161,69 @@ const el = (id) => (hasDom() ? document.getElementById(id) : null);
  * payload, every phase) and the C# log is 400 chars per line — flooding it
  * would push the useful lines out.
  * -------------------------------------------------------------------------- */
+/**
+ * THE THIRD SINK (ui/debugOverlay.js, `?debug=1` only). warn/error already go to
+ * the console and down the C# tunnel; neither of those exists on a phone running
+ * this page standalone, which is where the failures nobody can read happen. The
+ * tee is null until the overlay lands, and `debugPrelog` holds what was said
+ * before that — losing the sibling-load warnings, the first thing to go wrong in
+ * a broken boot, would defeat the point.
+ */
+let debugOverlay = null;
+let debugArming = false;
+const debugPrelog = [];
+
+function teeDebug(level, m) {
+  if (debugOverlay) { debugOverlay.push(level, m); return; }
+  if (debugArming && debugPrelog.length < 50) debugPrelog.push([level, m]);
+}
+
 const logger = {
   debug: (m) => { try { console.debug('[gg]', m); } catch (_e) { /* ignore */ } },
   info: (m) => { try { console.info('[gg]', m); } catch (_e) { /* ignore */ } },
-  warn: (m) => { try { console.warn('[gg]', m); } catch (_e) { /* ignore */ } bridge.log('warn: ' + m); },
-  error: (m) => { try { console.error('[gg]', m); } catch (_e) { /* ignore */ } bridge.log('error: ' + m); },
+  warn: (m) => { try { console.warn('[gg]', m); } catch (_e) { /* ignore */ } bridge.log('warn: ' + m); teeDebug('warn', m); },
+  error: (m) => { try { console.error('[gg]', m); } catch (_e) { /* ignore */ } bridge.log('error: ' + m); teeDebug('error', m); },
 };
+
+/**
+ * Cheap pre-check, so the module is not even FETCHED unless somebody asked for
+ * it — hosted especially, where a debug strip must never appear because a
+ * browser tab once had one. The module owns the authoritative answer
+ * (debugRequested); this only decides whether to go and ask it.
+ */
+function wantsDebugHint() {
+  try {
+    const s = (typeof location !== 'undefined' && location.search) || '';
+    if (/[?&]debug\b/.test(s)) return true;
+    if (bridge.isHosted) return false;          // standalone remembers, hosted never does
+    const p = bridge.storedPrefs();
+    return !!(p && p.debug);
+  } catch (_e) { return false; }
+}
+
+/** Loaded dynamically and optionally, exactly like the sibling waves. */
+function initDebugOverlay() {
+  if (!hasDom() || !wantsDebugHint()) return;
+  debugArming = true;
+  try {
+    import('./ui/debugOverlay.js')
+      .then((mod) => {
+        if (!mod || typeof mod.createDebugOverlay !== 'function') return;
+        const want = mod.debugRequested({
+          search: (typeof location !== 'undefined' && location.search) || '',
+          prefs: bridge.storedPrefs(),
+          hosted: bridge.isHosted,
+        });
+        if (!want) { debugArming = false; debugPrelog.length = 0; return; }
+        debugOverlay = mod.createDebugOverlay({});
+        mod.captureGlobalErrors(debugOverlay);
+        debugOverlay.push('warn', 'debug on — ' + (bridge.isHosted ? 'hosted' : 'standalone')
+          + ' protocol v' + bridge.PROTOCOL);
+        for (const [lvl, m] of debugPrelog.splice(0)) debugOverlay.push(lvl, m);
+      })
+      .catch(() => { debugArming = false; });
+  } catch (_e) { debugArming = false; }
+}
 
 /* ----------------------------------------------------------------------------
  * SIBLING WAVES — loaded dynamically so a wave that has not merged yet is a
@@ -510,6 +567,58 @@ function createArtifactSource() {
   };
 }
 
+/* ----------------------------------------------------------------------------
+ * THE LOCAL LIBRARY IS A PLAYABLE LIBRARY.
+ *
+ * Standalone there is no host and bridge.js synthesizes an EMPTY manifest, so
+ * exec/media.js's deck starts (and used to stay) empty: the files a player picks
+ * on the assets screen only ever reached the SEND path (listSendable above).
+ * A practice session on a phone therefore fired every flash, bubble and video
+ * against nothing — the effects ran, the screen stayed blank. This is the other
+ * half: the picks go into the deck too, so the player's OWN effects — in
+ * practice AND in a duel — draw from the library they just loaded.
+ *
+ * Hosted this is inert (the picker only exists when there is no host cache, and
+ * an empty list sets an empty local half) — the host's manifest still owns the
+ * deck, exactly as before.
+ * -------------------------------------------------------------------------- */
+let syncedLocalVersion = -1;
+let loggedLocalDeck = -1;
+
+/**
+ * @param {boolean} [force] re-feed the pool even when `localVersion` has not
+ *   moved. The version guard is an optimisation against hosted `cache-list`
+ *   churn, and it is the ONE thing that can turn a missed `onItems` emit into a
+ *   permanently empty deck — so every road INTO a match (attachMatch, startSolo)
+ *   forces one, which costs one array map and closes the hole for good.
+ */
+function syncLocalDeck(force) {
+  if (!assets) return;
+  const v = Number(assets.localVersion) || 0;
+  if (v === syncedLocalVersion && !force) return;   // a hosted cache-list, not a pick
+  syncedLocalVersion = v;
+  try {
+    const list = localPlayableEntries(assets.localItems);
+    const c = media.setLocalLibrary(list);
+    if (list.length !== loggedLocalDeck) {
+      loggedLocalDeck = list.length;
+      logger.info('local library: ' + list.length + ' playable item(s) — pool now '
+        + c.images + ' images, ' + c.videos + ' videos');
+    }
+    // THE ONE CASE WORTH A WARN, and it has to be a warn: `logger.info` does not
+    // reach the ?debug=1 overlay (see teeDebug — only warn/error do), so on a
+    // phone an info line is a line nobody can read. Picks that produce no
+    // playable entry means the store adopted rows with no URL or no kind, which
+    // looks exactly like "my uploads do nothing" and is otherwise invisible.
+    if (!list.length && (assets.localCount | 0) > 0) {
+      logger.warn('local library: ' + assets.localCount + ' pick(s) but NOTHING playable — '
+        + 'no url/kind survived adoption, so every effect will draw from an empty deck');
+    }
+  } catch (e) {
+    logger.warn('could not fold the local library into the media pool: ' + ((e && e.message) || e));
+  }
+}
+
 /**
  * Fold the received inbox into the store, the blocklist and the media pool.
  * A no-op until buildApp() has built them, which is why the `manifest` handler
@@ -714,6 +823,14 @@ function attachMatch(match, transport) {
   currentMatch = match;
   currentTransport = transport || (goonSession ? goonSession.transport : null);
   escMercied = false;
+
+  // EVERY match starts with the player's picks in the deck, proven rather than
+  // assumed. `onItems` is the reactive path and it is the one that normally does
+  // this; forcing it here is the belt to its braces, because "the effects ran and
+  // the screen stayed blank" is the failure mode with no symptom of its own.
+  // Hosted this is a no-op: there are no local picks, and setLocalLibrary([])
+  // leaves the host's manifest half of the deck exactly where it was.
+  syncLocalDeck(true);
 
   try { executor?.attach?.(match); } catch (e) { logger.error('executor.attach threw: ' + ((e && e.stack) || e)); }
   try { matchLog.attach(match); } catch (e) { logger.error('matchLog.attach threw: ' + ((e && e.stack) || e)); }
@@ -1092,6 +1209,47 @@ function onPhase(phase) {
  * ACTIONS — everything a screen is allowed to DO. Screens never touch
  * GoonSession, the transports or the match factory directly.
  * -------------------------------------------------------------------------- */
+/* ----------------------------------------------------------------------------
+ * FOLDING TO THE TITLE — deferred by one macrotask, and that is the whole fix.
+ *
+ * THE BUG THIS EXISTS FOR (owner's phone test, 2026-08-04): "when i accept the
+ * invite briefly shows the page of the setup before game then bounces me back to
+ * homepage." Every internal teardown inside net/session.js — a signaling pump
+ * that gave up, a relay that never answered, a P2P attempt that failed in a way
+ * nothing flagged for fallback — raises onCurrentMatchChanged(null), and this
+ * file used to answer that with a bare `router.show('title')`. That is a SILENT
+ * eviction: the lobby vanishes and nothing anywhere tells the player a single
+ * thing about why. The explanation always exists (GoonSession raises
+ * connectFailed immediately afterwards, and the entry screens render their own
+ * errors) — it just arrived AFTER the screen was already gone.
+ *
+ * So the jump waits one turn of the event loop. The paths that own an
+ * explanation (onConnectFailed above, actions.leave, the exit handshake) cancel
+ * it and route the player themselves; a teardown nobody claims still lands on
+ * the title, exactly as before, one tick later and with a line in the log.
+ * -------------------------------------------------------------------------- */
+let foldTimer = 0;
+
+function foldToTitle() {
+  cancelFoldToTitle();
+  const go = () => {
+    foldTimer = 0;
+    // A session that came back (a relay rebuild lands a new match on the very
+    // next tick) has nothing to fold, and neither does a screen that already
+    // moved on under its own power.
+    if (currentMatch || soloPair || !router) return;
+    logger.warn('session folded with no explanation — returning to the title');
+    router.show('title');
+  };
+  try { foldTimer = setTimeout(go, 0); } catch (_e) { go(); }
+}
+
+function cancelFoldToTitle() {
+  if (!foldTimer) return;
+  try { clearTimeout(foldTimer); } catch (_e) { /* ignore */ }
+  foldTimer = 0;
+}
+
 function ensureSession() {
   if (goonSession) return goonSession;
   goonSession = new GoonSession({
@@ -1108,12 +1266,17 @@ function ensureSession() {
       attachMatch(match, goonSession.transport);
     } else {
       detachMatch();
-      if (!soloPair) router.show('title');
+      if (!soloPair) foldToTitle();
     }
   });
   goonSession.onConnectFailed((reason) => {
     lastConnectFailed = reason;
     logger.warn('connect failed: ' + reason);
+    // THE FOLD IS SPOKEN FOR. GoonSession tears the match down and THEN raises
+    // this, so without the cancel the deferred jump would land first and the
+    // sheet would open over a title screen — telling the player "we could not
+    // connect" about a screen they were already yanked off.
+    cancelFoldToTitle();
     if (awaitingEntry) return;      // the entry screen renders it
     sheets?.showSignalError?.(errorInfo(reason)).then(() => router.show('title'));
   });
@@ -1201,9 +1364,72 @@ const actions = {
     if (s) { try { await s.leave(); } catch (e) { logger.warn('leave threw: ' + ((e && e.message) || e)); } }
     else if (currentMatch) { try { currentMatch.cancelMatch('left'); } catch (_e) { /* ignore */ } }
     await teardownEverything();
+    cancelFoldToTitle();      // leaving is an explanation of its own
     router.show('title');
   },
 };
+
+/**
+ * ONE LINE THAT SAYS WHAT THE DECK IS, and it is a WARN on purpose.
+ *
+ * `logger.info` goes to console.info and to the C# tunnel — neither of which
+ * exists on a phone running this page standalone. Only warn/error reach the
+ * ?debug=1 overlay (see teeDebug above), which is the only console an owner with
+ * an iPhone has. Two blind round-trips on "practice fires no assets" were spent
+ * guessing at exactly this number; do not demote it to info.
+ *
+ * It separates the three things that were indistinguishable from a screenshot:
+ * what the HOST's preset gave us, what the PLAYER picked in this browser, and
+ * how much of what they picked was actually playable.
+ */
+function logDeck(why) {
+  try {
+    const c = media.counts();
+    const local = media.localCount();
+    const host = Math.max(0, (c.images + c.videos) - local);
+    const picked = assets ? (assets.localCount | 0) : 0;
+    logger.warn(why + ' deck: ' + host + ' host + ' + local + ' local'
+      + ' (' + c.images + ' img / ' + c.videos + ' vid)'
+      + ' from ' + picked + ' pick(s), ' + media.receivedCount() + ' received');
+  } catch (_e) { /* a diagnostic can never be the thing that breaks practice */ }
+}
+
+/* ----------------------------------------------------------------------------
+ * THE PRACTICE SEED — the media-carrying slots start ARMED, in practice only.
+ *
+ * Owner report, 2026-08-04: "from mobile it's not triggering any asset even if I
+ * uploaded them and went to practice", with every arsenal chip reading `locked`.
+ * That reading was correct and the economy was working as designed: a slot is
+ * earned by popping bubbles (ui/drops.js), and on a fresh match nothing is
+ * earned yet. In a DUEL that ramp is the game. In PRACTICE it is a wall in front
+ * of the one question practice exists to answer — "does my library work?" — so
+ * practice hands over the two slots that draw from the library, plus the charges
+ * to spend them, and lets the player find out in the first ten seconds.
+ *
+ * DUEL GATING IS UNTOUCHED: this is reached from startSolo's own phase
+ * subscription and from nowhere else, and it goes through the public seams
+ * ui/drops.js already uses (creditCharges then armDrop), so the wire truth and
+ * the local truth cannot disagree.
+ * -------------------------------------------------------------------------- */
+const PRACTICE_SEED = Object.freeze([
+  Object.freeze({ id: 'flash', cost: 1 }),    // images, the cheap one
+  Object.freeze({ id: 'video', cost: 2 }),    // a clip, in a floating window
+]);
+
+function seedPracticeArsenal(match) {
+  const arsenal = hudHandle && hudHandle.parts && hudHandle.parts.arsenal;
+  if (!arsenal || typeof arsenal.armDrop !== 'function') return;
+  let charges = 0;
+  let armed = 0;
+  for (const seed of PRACTICE_SEED) {
+    // `silent` — the drop flourish is a reward animation and this is a gift, not
+    // a reward. It would also fire before the HUD has finished its entrance.
+    if (arsenal.armDrop(seed.id, { count: 1, silent: true })) { armed++; charges += seed.cost; }
+  }
+  if (!armed) return;
+  try { match.creditCharges(charges, 'practice-seed'); } catch (_e) { /* the slot still lights */ }
+  logger.info('practice: seeded ' + armed + ' arsenal slot(s) and ' + charges + ' charge(s)');
+}
 
 /* ----------------------------------------------------------------------------
  * PRACTICE — a loopback pair and a scripted opponent (ui/soloDriver.js).
@@ -1231,6 +1457,12 @@ async function startSolo() {
   soloDriver = createSoloDriver({ match: soloOpponent, logger });
 
   attachMatch(local, soloPair.host);
+  /* THE PRACTICE SEED — see seedPracticeArsenal. Registered AFTER attachMatch so
+   * it runs after boot's own phase handler, i.e. after mountHudNow() has built
+   * the arsenal it seeds. On phaseUnsubs so it dies with the match. */
+  phaseUnsubs.push(local.onPhaseChanged((p) => {
+    if (p === GoonMatchPhase.Live) seedPracticeArsenal(local);
+  }));
   /* PRACTICE HAS A FACE TOO — a tile, a name and dm:false (contract §6). It is
    * set AFTER attachMatch, which clears the peer, and it is the only way the
    * splash, the HUD minis and the recap plates are exercisable with no server
@@ -1241,6 +1473,7 @@ async function startSolo() {
   soloDriver.start();
 
   logger.info('practice: loopback "' + profile + '" latency ' + opts.latencyMs + 'ms skew ' + opts.guestClockSkewMs + 'ms');
+  logDeck('practice');
   try {
     const ok = await soloPair.connect();
     if (!ok) logger.warn('practice: clock sync did not converge');
@@ -1265,6 +1498,11 @@ function buildApp() {
   // cache-* handler (bridge.on throws on a duplicate and the assets screen
   // mounts many times per session).
   assets = createAssetsStore({ session, logger });
+  // Every pick the player adopts (and every one they remove) re-feeds the media
+  // deck — see syncLocalDeck above. `onItems` is the store's one change signal;
+  // the version guard is what keeps a hosted cache-list out of the pool.
+  assets.onItems(() => syncLocalDeck());
+  syncLocalDeck();
 
   /* --- DISCORD. Built once, like the store above and for the same reason: it
    * registers the `discord` and `peer-card` handlers and bridge.on throws on a
@@ -1461,6 +1699,7 @@ function requestExit(why) {
 function finishExit(why) {
   try { clearTimeout(exitTimer); } catch (_e) { /* ignore */ }
   exiting = true;
+  cancelFoldToTitle();      // the page is leaving; there is no title to fold to
   // BEFORE teardownEverything, which is async: the page may be seconds from
   // gone and `rp-state off` is the frame the host needs to clear (or restore)
   // the presence. teardownEverything posts it again and the second one is a
@@ -1628,6 +1867,9 @@ function startHeartbeat() {
  * skipped, so every module stays provably side-effect free.
  * -------------------------------------------------------------------------- */
 if (hasDom()) {
+  // FIRST, before anything can go wrong: the strip is only useful if it is
+  // already listening when the boot it is meant to explain fails.
+  initDebugOverlay();
   try {
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);

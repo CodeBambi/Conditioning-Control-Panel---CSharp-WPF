@@ -29,6 +29,19 @@
 // LEAVE vs TEARDOWN: leave() is user-initiated and routes through match.cancelMatch (in Live that
 // is a Mercy). Every internal path — fallback, failure, dispose — uses dispose() only, which sends
 // nothing. Getting that backwards would turn a transport hiccup into a forfeit.
+//
+// THE SEAT IS HANDED BACK (2026-08-04). Every teardown of a room that never connected fires a
+// best-effort /v2/goon/leave (_releaseRoom). Without it, a guest whose handshake died left its uid
+// sitting in the room's guest slot for the whole 30-minute TTL, and the retry it obviously makes
+// next was answered with "that room already has two players" — by its own ghost. The server also
+// reclaims a same-uid seat on /join now, so the two fixes cover each other: the goodbye can be
+// lost (offline, closed tab, old server) and the rejoin still works.
+//
+// ONE /join PER USER ACTION: the entry points refuse to start while `currentMatch` is set
+// (_beginSession returns null), the relay fallback re-uses the room via adoptRoom instead of
+// re-joining, and the join screen holds a `busy` latch across the await. There is no path that
+// issues two concurrent redemptions for one tap, and that is load-bearing — the second one would
+// be answered by the first one's seat.
 
 import { GoonSignalingClient } from './signaling.js';
 import { GoonWebRtcTransport } from './webrtcTransport.js';
@@ -85,6 +98,12 @@ export class GoonSession {
     this._transport = null;
     this._cancelled = false;
     this._disposed = false;
+    /**
+     * Did any transport in this session ever hand us an open channel? It gates the
+     * goodbye in _teardown: a room that never connected can safely be handed back,
+     * a room that DID is a live match whose room token the ledger still needs.
+     */
+    this._everConnected = false;
 
     /** The live match, or null when idle. REPLACED on relay fallback. */
     this.currentMatch = null;
@@ -185,6 +204,7 @@ export class GoonSession {
     if (this.currentMatch) return null;
 
     this._cancelled = false;
+    this._everConnected = false;   // per ATTEMPT, not per session object
     this._signaling = this._createSignaling();
     const webrtc = this._createWebrtc(isHost, this._signaling);
     this._transport = webrtc;
@@ -206,6 +226,7 @@ export class GoonSession {
     (async () => {
       try {
         const ok = await webrtc.waitForChannel();
+        if (ok) this._noteConnected(webrtc);
         if (ok || this._cancelled || this._disposed) return;
 
         if (!webrtc.iceFailed || !webrtc.code || !webrtc.token) {
@@ -252,6 +273,7 @@ export class GoonSession {
     this._raiseMatchChanged();
 
     const ok = await relay.waitForChannel();
+    if (ok) this._noteConnected(relay);
     if (!ok && !this._cancelled && !this._disposed) {
       const reason = relay.lastError || 'relay_failed';
       await this._teardown();
@@ -269,6 +291,14 @@ export class GoonSession {
     this._signaling = null;
     this._cancelled = true;
 
+    // THE GOODBYE. Hand the seat back before anything is disposed, so the room we
+    // are abandoning does not sit there as a GHOST for the rest of its TTL —
+    // which is what turns "join again" into "that room already has two players"
+    // (owner play-test, 2026-08-04). Strictly best-effort: not awaited, never
+    // throws, and skipped entirely once a channel came up, because past that
+    // point the room token belongs to a live match and the ledger still needs it.
+    this._releaseRoom(transport, signaling);
+
     if (match) {
       try { match.dispose(); }
       catch (e) { this._warn(`match dispose threw: ${(e && e.message) || e}`); }
@@ -281,6 +311,37 @@ export class GoonSession {
     if (signaling) { try { signaling.dispose(); } catch (_e) { /* already gone */ } }
 
     this._raiseMatchChanged();
+  }
+
+  /**
+   * A transport reported an open channel. Ignored unless it is still THE transport
+   * of THIS attempt: a watchdog for a torn-down leg resolving late must not mark
+   * the next attempt's room as connected — that would silently stop the goodbye.
+   */
+  _noteConnected(transport) {
+    if (this._cancelled || this._disposed) return;
+    if (this._transport !== transport) return;
+    this._everConnected = true;
+  }
+
+  /**
+   * Fire-and-forget /v2/goon/leave for a room that never connected. Deliberately
+   * NOT awaited: a teardown must complete at the same speed whether the server
+   * answers, 404s (route not deployed) or never replies at all.
+   */
+  _releaseRoom(transport, signaling) {
+    if (this._everConnected) return;
+    if (!signaling || typeof signaling.leave !== 'function') return;
+    const code = transport && transport.code;
+    const token = transport && transport.token;
+    if (!code || !token) return;    // never got a room; there is nothing to hand back
+    const role = transport.isHost ? 'host' : 'guest';
+    try {
+      const p = signaling.leave(code, token, role);
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch (e) {
+      this._warn(`leave threw: ${(e && e.message) || e}`);
+    }
   }
 
   // ------------------------------------------------------------------ events

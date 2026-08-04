@@ -402,7 +402,15 @@ export class GoonWebRtcTransport extends GoonTransportBase {
         try {
           await pc.setRemoteDescription(remoteOffer);
         } catch (e) {
+          // SAME REMEDY AS webrtc_unavailable ABOVE, and for the same reason: the
+          // room is live and the pass is burned, so this has to be flagged for
+          // the relay or session.js reads it as a signaling-level failure and
+          // FOLDS THE LOBBY — which is a guest being evicted to the title screen
+          // with nothing said, the 2026-08-04 phone report. An offer this browser
+          // will not take is precisely a case a relay carries fine: the SDP never
+          // has to be understood by anything but the two peers' own stacks.
           this._warn(`setRemoteDescription(offer) rejected: ${(e && e.message) || e}`);
+          this._iceFailed = true;
           this._setLastError('sdp_rejected');
           this._setState(GoonTransportState.Disconnected, 'sdp_rejected');
           return;

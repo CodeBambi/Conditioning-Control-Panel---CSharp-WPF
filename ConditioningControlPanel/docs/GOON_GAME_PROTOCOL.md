@@ -45,13 +45,55 @@ with all error cases lives at the top of `GoonSignalingClient.cs` — summary:
 | Endpoint | Purpose | Key semantics |
 |---|---|---|
 | `/v2/goon/invite` | host mints room | server checks premium OR burns weekly free pass (`pass:"premium"\|"weekly_free"`; 402 `no_pass` + `next_pass_utc`); crockford32 code, ~5 min TTL |
-| `/v2/goon/join` | guest redeems code | 404 `unknown_code`, 409 `already_joined`; returns peer display name/version |
+| `/v2/goon/join` | guest redeems code | 404 `unknown_code`; 409 `already_joined` (a DIFFERENT uid holds the seat) or `self_join` (the code is your own room — one account cannot hold both seats); the SAME uid **reclaims** its seat instead of being refused: fresh token, `rejoin:true`, no second pass burned, stale SDP dropped; **whitelisted** accounts are the one exception to `self_join` and get a **self-duel** instead (`self_duel:true`, `pass:"self_duel"`) — see below; returns peer display name/version |
+| `/v2/goon/leave` | release the seat | best-effort, fire-and-forget, `{code, token, role}`; a guest hands the seat back and the ROOM stays up, a host folds the room outright; 409 `match_started` once the ledger has a row (releasing the seat invalidates the token that row is written with). Optional by design — the room TTL is still the backstop, and a client treats any failure as "never mind" |
 | `/v2/goon/signal` | SDP/ICE mailbox | post-and-drain in ONE call, ~2 s short-poll, setup only; `data` is opaque (browser-identical `toJSON()` blobs — JS does `JSON.parse` straight into `setRemoteDescription`/`addIceCandidate`); append-only list, exclusive `since` cursor, callers never receive their own messages |
 | `/v2/goon/relay` | fallback transport | same shape; `data` = whole GoonMessage frame; `wait_ms` long-poll hint; own rate budget (~1 call/2 s per player, match-length TTL), 16 KB/frame, 128-frame ring; server MUST NOT inspect or persist `data` |
 | `/v2/goon/ledger` | end-of-match write | both clients post their signed result; server stores the pair under both unified_ids, flags mismatches as disputed; private to the two players |
 
 A bare 404 (no error body) on any route = "server not deployed" → clients show a
 warming-up message, never "bad code".
+
+### Self-duel (whitelist only, 2026-08-04)
+
+One account may hold **both** seats of its own room, but only if it is **whitelisted**
+(`patreon_is_whitelisted` / `substar_is_whitelisted` on the user record — the same
+fields `computeEffectiveTier` folds into its permanent-tier-2 override). It is a
+testing affordance: the owner play-tests with one account on two devices (the desktop
+app hosts, the phone joins the standalone web build through a link that passes the
+same `uid`), and `self_join` otherwise refuses the whole run. **Tier is deliberately
+not enough** — a paying tier-2 patron is still refused, because a self-duel would
+otherwise be a ledger-farming and self-report surface.
+
+Everyone else's `self_join` 409 is unchanged, byte for byte.
+
+The guest seat of a self-duel is stored under a **shadow identity**, `<uid>#self`.
+Unified ids are `u_[a-z0-9]{8,24}`, so a shadow can never collide with — or be spelled
+by — a real caller, and every uid-keyed structure keeps seeing two identities:
+
+- `goon:pair:<code>` records `guest_uid: "<uid>#self"`, so a self-report accuses an
+  account that does not exist instead of the reporter;
+- the ledger **skips** shadow seats entirely — one recap row per match, under the real
+  uid, never two;
+- `goon:lookup:<uid>` stays the host's room-by-uid mapping; the shadow writes none;
+- `/peercard` for a shadow peer answers `not_shared` (`user:<uid>#self` cannot exist);
+- room auth resolves the shadow back to its base uid, so the device holding the seat
+  authenticates as the real account on `/signal`, `/relay`, `/ledger` and `/leave`;
+- a self-duel guest **reclaims the shadow seat** on rejoin (never a second shadow), and
+  `/leave` frees it like any other seat.
+
+A self-duel costs no pass at all (`pass:"self_duel"`): the account already paid at
+`/invite`, and whitelist is permanent tier 2 anyway.
+
+> **Seat identity, `/leave` and self-duel (2026-08-04)** are implemented on the server
+> and in the **web** client (`Resources/web/goon/net/`). The C# client
+> (`Services/GoonGame/GoonSignalingClient.cs` and its `GoonFakeSignalingServer`) has
+> not been taught any of the three: it never sends `/leave`, its fake server still
+> models the seat as a bare `joined` flag, and it neither knows a shadow id nor reads
+> `self_duel`. None of it is a break — the additions are backward-compatible and the
+> desktop app is the HOST in the owner's setup, which needs no client-side change —
+> but the C# fake no longer models everything the real server does, so port it before
+> trusting it for a rejoin or self-duel case.
 
 ## 3. Transport
 - Primary: WebRTC **data channel**, ordered + reliable, one channel, no media tracks.
@@ -199,7 +241,7 @@ Everything here is additive: a client without it interoperates unchanged.
   `xfer_cancel {tid, why: peer_gone|match_over|superseded|timeout|user|stray}`.
 - **Receiver offer gate, in order, before any byte flows**: feature off → mime/kind allowlist
   (`video/mp4`, `video/webm`, `image/png`, `image/jpeg`, `image/gif`, `image/webp`) → sha
-  shape → size (24 MiB artifact / 8 MiB un-transcoded original; 192 MiB per match per
+  shape → size (64 MiB artifact / 8 MiB un-transcoded original; 512 MiB per match per
   direction) → locally-known blocklist → already-have (`decline:'have'` — the cross-session
   reuse SUCCESS path) → concurrency (1 in / 1 out) → session quota → accept.
 - **Integrity is receiver-side**: the offered sha256 is a claim. The receiver hashes the
@@ -229,3 +271,6 @@ Everything here is additive: a client without it interoperates unchanged.
   data channel); `caps.transfer` + `consent.media_transfer` (append-only, absent = false);
   `payload.tags` `xfer:` namespace for Video/FlashBurst; §11 exception carved for
   hash-named, receiver-verified transferred content.
+- v1.2 (2026-08-04): §2 seat identity (`self_join`, same-uid reclaim), `/v2/goon/leave`,
+  and the whitelist-only **self-duel** on a `<uid>#self` shadow seat. Server + web client
+  only; the C# client and its fake server are unported (see the note in §2).

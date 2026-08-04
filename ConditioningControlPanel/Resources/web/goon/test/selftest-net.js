@@ -7,8 +7,10 @@
 // kept thin over the shared base: everything asserted below lives in transportBase/signaling/
 // session, and the browser leg is a play-test item.
 
+import fs from 'node:fs';
+
 import { GoonSignalingClient, GoonSignalError, normalizeCode } from '../net/signaling.js';
-import { GoonFakeSignalingServer } from '../net/fakeSignaling.js';
+import { GoonFakeSignalingServer, shadowGuestUid, isShadowUid } from '../net/fakeSignaling.js';
 import { createLoopbackPair, loopbackOptions, loopbackPresets } from '../net/loopbackTransport.js';
 import { GoonRelayTransport } from '../net/relayTransport.js';
 import { GoonSession } from '../net/session.js';
@@ -23,6 +25,9 @@ function ok(cond, label, extra = '') {
 }
 const quiet = { info() {}, warn() {}, error() {}, log() {} };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// LF-normalized: the worktree is CRLF (core.autocrlf) and every source pin below
+// is written against \n.
+const readSource = (rel) => fs.readFileSync(new URL(rel, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
 async function until(fn, ms = 4000, step = 25) {
   const deadline = Date.now() + ms;
@@ -52,8 +57,23 @@ async function testSignaling() {
   ok(joined.token !== invite.token, 'guest gets its own room token');
   ok(joined.peerDisplayName === 'host', 'join reports the peer display name');
 
-  const dup = await guest.join(invite.code, 'Circe');
-  ok(dup === null && guest.lastError === GoonSignalError.AlreadyJoined, 'second join -> already_joined', String(guest.lastError));
+  /* --- THE SEAT BELONGS TO A UID (ghost-slot fix, 2026-08-04) ------------------
+   * The owner's phone was told "that room already has two players" by its OWN
+   * earlier attempt. Three outcomes have to stay separable here, because the
+   * lobby renders three different sentences from them. */
+  const stranger = new GoonSignalingClient({ post: fake.post, unifiedId: 'u_third', appVersion: 'test', logger: quiet });
+  const taken = await stranger.join(invite.code, 'Stranger');
+  ok(taken === null && stranger.lastError === GoonSignalError.AlreadyJoined,
+    'a DIFFERENT uid on an occupied room -> already_joined', String(stranger.lastError));
+
+  const selfJoin = await host.join(invite.code, 'Bambi');
+  ok(selfJoin === null && host.lastError === GoonSignalError.SelfJoin,
+    'the host redeeming its own code -> self_join, not "full"', String(host.lastError));
+
+  const again = await guest.join(invite.code, 'Circe');
+  ok(!!again && again.rejoin === true, 'the SAME uid reclaims its seat instead of being refused');
+  ok(!!again && again.token && again.token !== joined.token, 'a reclaimed seat gets a fresh room token');
+  const reclaimedToken = again.token;
 
   // --- post-and-drain round trip ------------------------------------------------
   const h1 = await host.signal(invite.code, invite.token, 'host', 0, [{ kind: 'offer', data: 'OFFER' }]);
@@ -61,7 +81,7 @@ async function testSignaling() {
   ok(h1 && h1.cursor === 1, 'cursor advances PAST our own message', String(h1 && h1.cursor));
   ok(h1 && h1.peerJoined === true, 'peer_joined true after the guest redeemed');
 
-  const g1 = await guest.signal(invite.code, joined.token, 'guest', 0, [{ kind: 'answer', data: 'ANSWER' }]);
+  const g1 = await guest.signal(invite.code, reclaimedToken, 'guest', 0, [{ kind: 'answer', data: 'ANSWER' }]);
   ok(g1 && g1.messages.length === 1 && g1.messages[0].kind === 'offer', 'guest drains the offer');
   ok(g1 && g1.messages[0].from === 'host' && g1.messages[0].seq === 1, 'drained message carries seq + from');
   ok(g1 && g1.cursor === 2, 'guest cursor covers its own answer too', String(g1 && g1.cursor));
@@ -74,7 +94,7 @@ async function testSignaling() {
   // --- relay mailbox is a separate ring -----------------------------------------
   const r1 = await host.relay(invite.code, invite.token, 'host', 0, ['{"t":"tick"}'], 10);
   ok(r1 && r1.frames.length === 0 && r1.cursor === 1, 'relay: no self-echo, cursor advances');
-  const r2 = await guest.relay(invite.code, joined.token, 'guest', 0, [], 10);
+  const r2 = await guest.relay(invite.code, reclaimedToken, 'guest', 0, [], 10);
   ok(r2 && r2.frames.length === 1 && r2.frames[0] === '{"t":"tick"}', 'relay: peer drains the frame');
   ok(r2 && r2.peerOnline === true, 'relay reports peer_online');
 
@@ -763,6 +783,403 @@ async function testPeerCardVer() {
   guestSig.dispose(); hostSig2.dispose(); guestSig2.dispose();
 }
 
+/* ==================================================================================
+ * 9. THE GUEST BOUNCE — "briefly shows the page of the setup before game then
+ *    bounces me back to homepage" (owner's phone test, 2026-08-04).
+ *
+ * The phone runs this page STANDALONE and joins a match the PC app hosts. The
+ * join lands, the lobby paints, and a moment later the player is on the title
+ * with nothing said. There is exactly one mechanism in the page that can do that
+ * SILENTLY: GoonSession tears the match down internally, boot.js hears
+ * onCurrentMatchChanged(null) and jumps to the title — while the EXPLANATION
+ * (onConnectFailed) is still one turn behind it.
+ *
+ * Three things are pinned here:
+ *   a) a guest that connects raises neither of the two events that can evict it;
+ *   b) every internal fold raises connectFailed in the SAME macrotask turn as the
+ *      teardown, which is what makes boot's deferred jump correct rather than
+ *      lucky (a setTimeout(0) armed when the match goes null still runs after);
+ *   c) a P2P attempt that died in a way the BROWSER owns — an SDP the phone's
+ *      stack refuses — is flagged for the RELAY, not folded. The room is live and
+ *      the weekly pass is burned; folding it is the eviction above.
+ * ================================================================================*/
+async function testGuestFold() {
+  /** A guest transport shaped like GoonWebRtcTransport, with the outcome dialled in. */
+  class GuestLeg {
+    constructor(outcome) {
+      this.isHost = false;
+      this.code = null; this.token = null;
+      this.iceFailed = false; this.lastError = null;
+      this.closed = false; this.disposed = false;
+      this._outcome = outcome;
+    }
+    async join(code) { this.code = code; this.token = 'tok-guest'; return true; }
+    async waitForChannel() {
+      await sleep(10);
+      if (this._outcome === 'connected') return true;
+      // 'sdp_rejected' is the fixed shape: a browser-level refusal that still
+      // leaves a live room behind, so it flags for fallback like ice_timeout.
+      this.iceFailed = this._outcome !== 'signaling';
+      this.lastError = this._outcome === 'signaling' ? 'signaling_failed' : 'sdp_rejected';
+      return false;
+    }
+    async close() { this.closed = true; }
+    dispose() { this.disposed = true; }
+  }
+  class RelayLeg {
+    constructor() { this.adopted = null; this.lastError = null; }
+    adoptRoom(code, token) { this.adopted = { code, token }; }
+    async waitForChannel() { return true; }
+    async close() { /* nothing to close */ }
+    dispose() { /* nothing to drop */ }
+  }
+  class FoldMatch {
+    constructor(transport, isHost) {
+      this.transport = transport; this.isHost = isHost;
+      this.adoptedLobby = false; this.disposed = false;
+    }
+    join(c) { return this.transport.join(c); }
+    adoptLobby() { this.adoptedLobby = true; return true; }
+    cancelMatch() { /* the user path, not exercised here */ }
+    dispose() { this.disposed = true; }
+  }
+  const build = (outcome) => {
+    const legs = []; const relays = []; const events = [];
+    const s = new GoonSession({
+      logger: quiet,
+      createMatch: (t, isHost) => new FoldMatch(t, isHost),
+      createSignaling: () => ({ dispose() {} }),
+      createWebrtc: () => { const l = new GuestLeg(outcome); legs.push(l); return l; },
+      createRelay: () => { const r = new RelayLeg(); relays.push(r); return r; },
+    });
+    s.onCurrentMatchChanged((m) => events.push(m ? 'match' : 'null'));
+    s.onConnectFailed((r) => events.push('failed:' + r));
+    return { s, legs, relays, events };
+  };
+
+  // --- a) the healthy guest: nothing that can evict it ever fires ----------------
+  {
+    const g = build('connected');
+    ok(await g.s.join('ABC123') === true, 'a guest that connects reports a successful join');
+    await sleep(120);
+    ok(g.events.join(',') === 'match', 'no teardown and no connectFailed on a healthy join', g.events.join(','));
+    ok(g.s.currentMatch !== null, 'the match is still live — the lobby has something to render');
+    await g.s.leave();
+  }
+
+  // --- b) the ordering boot.js's deferred fold depends on -----------------------
+  {
+    const g = build('signaling');
+    let foldRanAt = -1;
+    g.s.onCurrentMatchChanged((m) => {
+      if (m) return;
+      setTimeout(() => { foldRanAt = g.events.length; }, 0);
+    });
+    await g.s.join('ABC123');
+    ok(await until(() => foldRanAt >= 0, 3000), 'the deferred fold ran');
+    ok(g.events.join(',') === 'match,null,failed:signaling_failed',
+      'an internal fold raises teardown THEN connectFailed', g.events.join(','));
+    ok(foldRanAt === 3, 'and both land before a setTimeout(0) armed at teardown', String(foldRanAt));
+    ok(g.relays.length === 0, 'a signaling-level failure still refuses to try a relay');
+  }
+
+  // --- c) an SDP the phone refused is a relay case, not an eviction -------------
+  {
+    const g = build('sdp_rejected');
+    await g.s.join('ABC123');
+    ok(await until(() => g.relays.length === 1 && !!g.relays[0].adopted, 3000),
+      'a transport that flags iceFailed adopts the SAME room over the relay');
+    ok(g.relays[0].adopted.code === 'ABC123', 'the code the player already typed is reused',
+      String(g.relays[0].adopted && g.relays[0].adopted.code));
+    ok(g.events.indexOf('null') < 0, 'and the guest is never torn down — no bounce to the title',
+      g.events.join(','));
+    ok(g.s.currentMatch !== null && g.s.currentMatch.adoptedLobby === true,
+      'the rebuilt match adopts the lobby instead of re-joining');
+    await g.s.leave();
+  }
+
+  // --- and the transport half of (c), which needs a browser to run for real -----
+  {
+    const src = readSource('../net/webrtcTransport.js');
+    const i = src.indexOf('setRemoteDescription(offer) rejected');
+    ok(i > 0, 'webrtcTransport still handles a rejected inbound offer');
+    const arm = src.slice(i, i + 400);
+    ok(/_iceFailed\s*=\s*true/.test(arm),
+      'a guest whose stack refuses the offer flags iceFailed — session.js relays it instead of folding');
+    ok(/_setState\(GoonTransportState\.Disconnected, 'sdp_rejected'\)/.test(arm),
+      'and it still surfaces promptly rather than burning the ICE budget');
+  }
+
+  // --- the boot.js half: the jump is deferred and cancellable -------------------
+  {
+    const boot = readSource('../boot.js');
+    ok(/function foldToTitle\(\)/.test(boot) && /function cancelFoldToTitle\(\)/.test(boot),
+      'boot.js routes the silent teardown through foldToTitle/cancelFoldToTitle');
+    ok(/if \(!soloPair\) foldToTitle\(\);/.test(boot),
+      'onCurrentMatchChanged(null) no longer calls router.show(\'title\') directly');
+    const cf = boot.indexOf('onConnectFailed((reason)');
+    ok(cf > 0 && /cancelFoldToTitle\(\);/.test(boot.slice(cf, cf + 900)),
+      'the connect-failure sheet cancels the fold so it opens over the screen it is about');
+    ok(/setTimeout\(go, 0\)/.test(boot), 'and the fold really is deferred by a macrotask');
+  }
+}
+
+/* ================================================================================
+ * 10. THE GHOST SEAT (owner play-test, 2026-08-04)
+ *
+ * The phone was refused with "that room already has two players" by a room whose
+ * second player WAS the phone: an earlier attempt had registered the seat and then
+ * folded without telling anyone, and nothing but the 30-minute room TTL could
+ * clear it. Two independent halves fix it, and both are pinned here because either
+ * one alone still leaves a hole:
+ *
+ *   a) the SERVER reclaims a seat for the uid that already holds it, so the retry
+ *      works even when the goodbye never arrives (closed tab, dead network, a
+ *      server that predates /leave);
+ *   b) the CLIENT hands the seat back on any teardown of a room that never
+ *      connected, so the ghost does not exist in the first place — and does NOT
+ *      hand it back once a channel came up, because past that point the room token
+ *      is what the ledger writes with.
+ * ==============================================================================*/
+async function testSeatRelease() {
+  // --- a) the fake server's seat semantics, end to end -------------------------
+  {
+    const fake = new GoonFakeSignalingServer();
+    const host = new GoonSignalingClient({ post: fake.post, unifiedId: 'u_h', logger: quiet });
+    const phone = new GoonSignalingClient({ post: fake.post, unifiedId: 'u_p', logger: quiet });
+    const other = new GoonSignalingClient({ post: fake.post, unifiedId: 'u_o', logger: quiet });
+
+    const inv = await host.createInvite('Host');
+    const first = await phone.join(inv.code, 'Phone');
+    ok(!!first && first.rejoin === false, 'a first join is not a rejoin');
+
+    // The bounce: the phone hands the seat back on its way out.
+    ok(await phone.leave(inv.code, first.token, 'guest') === true, 'guest /leave is acknowledged');
+    ok(fake.room(inv.code) && fake.room(inv.code).joined === false, 'the seat is free again');
+
+    const back = await phone.join(inv.code, 'Phone');
+    ok(!!back && back.rejoin === false, 'a released seat is a clean join, not a reclaim');
+    ok(fake.room(inv.code).guestUid === 'u_p', 'and the room knows whose seat it is');
+
+    // …and the belt-and-braces half: even WITHOUT the goodbye, the same uid gets in.
+    const reclaim = await phone.join(inv.code, 'Phone');
+    ok(!!reclaim && reclaim.rejoin === true, 'a ghost seat is reclaimed by its own uid');
+    ok(fake.room(inv.code).guestEpoch === 3, 'each claim is a new seat epoch', String(fake.room(inv.code).guestEpoch));
+
+    ok(await other.join(inv.code, 'Other') === null && other.lastError === GoonSignalError.AlreadyJoined,
+      'a genuinely occupied room still refuses a stranger — the message was only a lie about the OWNER');
+
+    // The host walking away takes the code with it.
+    ok(await host.leave(inv.code, inv.token, 'host') === true, 'host /leave is acknowledged');
+    ok(fake.room(inv.code) === null, 'a host fold deletes the room');
+    ok(await phone.join(inv.code, 'Phone') === null && phone.lastError === GoonSignalError.UnknownCode,
+      'and the folded code is gone for everyone');
+  }
+
+  // --- b) leave() never disturbs the error the lobby is about to render ---------
+  {
+    const c = new GoonSignalingClient({ post: () => Promise.resolve({ status: 500, body: '' }), logger: quiet });
+    c.lastError = GoonSignalError.AlreadyJoined;
+    c.lastErrorDetail = 'keep-me';
+    await c.leave('ABC123', 'tok', 'guest');
+    ok(c.lastError === GoonSignalError.AlreadyJoined && c.lastErrorDetail === 'keep-me',
+      'a failed goodbye does not overwrite lastError');
+  }
+
+  // --- c) which teardowns send it ----------------------------------------------
+  const leaves = [];
+  const sig = () => ({
+    dispose() {},
+    leave: (code, token, role) => { leaves.push({ code, token, role }); return Promise.resolve(true); },
+  });
+  class Leg {
+    constructor(isHost, outcome) {
+      this.isHost = isHost; this._outcome = outcome;
+      this.code = null; this.token = null; this.iceFailed = false; this.lastError = null;
+    }
+    async createInvite() { this.code = 'ROOM99'; this.token = 'tok-host'; return this.code; }
+    async join(c) { this.code = c; this.token = 'tok-guest'; return true; }
+    async waitForChannel() {
+      await sleep(5);
+      if (this._outcome === 'connected') return true;
+      this.iceFailed = false;                    // signaling-level: no relay, straight fold
+      this.lastError = 'signaling_failed';
+      return false;
+    }
+    async close() {}
+    dispose() {}
+  }
+  const mk = (outcome) => new GoonSession({
+    logger: quiet,
+    createMatch: (t, isHost) => ({
+      transport: t, isHost,
+      createInvite: () => t.createInvite(), join: (c) => t.join(c),
+      adoptLobby: () => true, cancelMatch: () => {}, dispose: () => {},
+    }),
+    createSignaling: sig,
+    createWebrtc: (isHost) => new Leg(isHost, outcome),
+    createRelay: (isHost) => new Leg(isHost, outcome),
+  });
+
+  {
+    const s = mk('fold');
+    await s.join('ABC123');
+    ok(await until(() => leaves.length === 1, 3000), 'a guest fold hands the seat back');
+    ok(leaves[0] && leaves[0].role === 'guest' && leaves[0].code === 'ABC123' && leaves[0].token === 'tok-guest',
+      'with the room it actually held', JSON.stringify(leaves[0]));
+  }
+  {
+    leaves.length = 0;
+    const s = mk('fold');
+    await s.host();
+    await s.leave();
+    ok(leaves.length === 1 && leaves[0].role === 'host', 'a host that never connected folds its lobby',
+      JSON.stringify(leaves));
+  }
+  {
+    leaves.length = 0;
+    const s = mk('connected');
+    await s.join('ABC123');
+    await sleep(40);
+    await s.leave();
+    ok(leaves.length === 0,
+      'a room that CONNECTED is never released — the ledger still needs that token', JSON.stringify(leaves));
+  }
+  {
+    leaves.length = 0;
+    const s = mk('fold');
+    await s.dispose();
+    ok(leaves.length === 0, 'a session that never got a room has nothing to hand back');
+  }
+  {
+    // …and the flag is per ATTEMPT. A session object outlives one match here, so a
+    // sticky "we connected once" would silently disable the goodbye for every room
+    // after the first — the exact ghost, one match later.
+    leaves.length = 0;
+    let leg = 0;
+    const s = new GoonSession({
+      logger: quiet,
+      createMatch: (t, isHost) => ({
+        transport: t, isHost, join: (c) => t.join(c),
+        adoptLobby: () => true, cancelMatch: () => {}, dispose: () => {},
+      }),
+      createSignaling: sig,
+      createWebrtc: () => new Leg(false, ++leg === 1 ? 'connected' : 'fold'),
+      createRelay: () => new Leg(false, 'fold'),
+    });
+    await s.join('AAA111');
+    await sleep(40);
+    await s.leave();
+    ok(leaves.length === 0, 'the connected attempt still sends nothing');
+    await s.join('BBB222');
+    ok(await until(() => leaves.length === 1 && leaves[0].code === 'BBB222', 3000),
+      'a LATER attempt on the same session still hands its seat back', JSON.stringify(leaves));
+  }
+
+  // --- d) the server half, pinned by source (it lives in another repo) ----------
+  {
+    const src = readSource('../net/session.js');
+    ok(/_releaseRoom\(transport, signaling\);/.test(src) && src.indexOf('_releaseRoom(transport, signaling);') < src.indexOf('signaling.dispose()'),
+      'the goodbye is issued BEFORE the signaling client is disposed');
+    const sess = src.slice(src.indexOf('_releaseRoom(transport, signaling) {'));
+    ok(/if \(this\._everConnected\) return;/.test(sess.slice(0, 400)),
+      'and it is gated on never having connected');
+  }
+}
+
+/* ================================================================================
+ * 11. SELF-DUEL — one whitelisted account in both seats
+ *
+ * The owner play-tests GG with ONE account on two devices: the PC app hosts, the
+ * phone opens the standalone web build through a link that carries the same
+ * `?uid=`, so §10's `self_join` guard — correct for everyone else — refused the
+ * entire e2e run. Whitelisted accounts may therefore hold both seats, with the
+ * guest seat under the SHADOW id `<uid>#self`.
+ *
+ * The shadow is the whole safety argument, and it is a SERVER-side one (single
+ * ledger row, a self-report that names nobody, an intact room-by-uid lookup).
+ * What is pinned HERE is the half the client can be wrong about: the fake server
+ * models the same rule, and nothing in the client stack cares that the two seats
+ * are one account — no uid comparison, no ledger de-dup, no peercard assumption.
+ * ==============================================================================*/
+async function testSelfDuel() {
+  const OWNER = 'u_owner', OUTSIDER = 'u_outsider';
+  const SHADOW = shadowGuestUid(OWNER);
+  ok(isShadowUid(SHADOW) && !isShadowUid(OWNER) && SHADOW === `${OWNER}#self`,
+    'the shadow id is the uid plus a suffix a real unified_id can never contain');
+
+  // --- a non-whitelisted account is refused exactly as before -------------------
+  {
+    const fake = new GoonFakeSignalingServer();
+    const plain = new GoonSignalingClient({ post: fake.post, unifiedId: OWNER, logger: quiet });
+    const inv = await plain.createInvite('Owner');
+    const self = await plain.join(inv.code, 'Owner');
+    ok(self === null && plain.lastError === GoonSignalError.SelfJoin,
+      'without the whitelist the host still gets self_join', String(plain.lastError));
+    ok(fake.room(inv.code).joined === false, 'and the refusal did not take the seat');
+  }
+
+  // --- the affordance ----------------------------------------------------------
+  const fake = new GoonFakeSignalingServer();
+  fake.setWhitelisted(OWNER);
+  const pc = new GoonSignalingClient({ post: fake.post, unifiedId: OWNER, logger: quiet });
+  const phone = new GoonSignalingClient({ post: fake.post, unifiedId: OWNER, logger: quiet });
+  const other = new GoonSignalingClient({ post: fake.post, unifiedId: OUTSIDER, logger: quiet });
+
+  const inv = await pc.createInvite('Owner PC');
+  const seat = await phone.join(inv.code, 'Owner Phone');
+  ok(!!seat && !!seat.token, 'a whitelisted account may redeem its own code');
+  ok(seat.selfDuel === true && seat.rejoin === false, 'and the response says so', JSON.stringify(seat));
+  ok(fake.room(inv.code).guestUid === SHADOW,
+    'the guest seat is the SHADOW id, never the real uid', String(fake.room(inv.code).guestUid));
+  ok(fake.room(inv.code).hostUid === OWNER, 'the host seat is untouched');
+
+  // The two seats are still two peers as far as every mailbox is concerned.
+  const h = await pc.signal(inv.code, inv.token, 'host', 0, [{ kind: 'offer', data: 'OFFER' }]);
+  ok(h && h.messages.length === 0 && h.peerJoined === true, 'the host sees a joined peer and no self-echo');
+  const g = await phone.signal(inv.code, seat.token, 'guest', 0, [{ kind: 'answer', data: 'ANSWER' }]);
+  ok(g && g.messages.length === 1 && g.messages[0].data === 'OFFER', 'the shadow seat drains the offer');
+  const h2 = await pc.signal(inv.code, inv.token, 'host', h.cursor, []);
+  ok(h2 && h2.messages.length === 1 && h2.messages[0].data === 'ANSWER', 'and the host drains the answer back');
+  const r = await pc.relay(inv.code, inv.token, 'host', 0, ['{"t":"tick"}'], 10);
+  const r2 = await phone.relay(inv.code, seat.token, 'guest', 0, [], 10);
+  ok(r && r2 && r2.frames.length === 1 && r2.peerOnline === true, 'the relay ring works across the two seats');
+
+  // --- reclaim lands on the shadow, never on a second shadow -------------------
+  const back = await phone.join(inv.code, 'Owner Phone');
+  ok(!!back && back.rejoin === true && back.selfDuel === true, 'the self-duel guest reclaims its own seat');
+  ok(fake.room(inv.code).guestUid === SHADOW, 'still ONE shadow deep (never <uid>#self#self)',
+    String(fake.room(inv.code).guestUid));
+  ok(fake.room(inv.code).guestEpoch === 2, 'the reclaim is a new seat epoch', String(fake.room(inv.code).guestEpoch));
+  ok(back.token !== seat.token, 'and it gets a fresh room token');
+
+  // --- /leave frees the shadow seat -------------------------------------------
+  ok(await phone.leave(inv.code, back.token, 'guest') === true, 'the shadow seat can be handed back');
+  ok(fake.room(inv.code).joined === false && fake.room(inv.code).guestUid === null, 'the seat is free again');
+  const again = await phone.join(inv.code, 'Owner Phone');
+  ok(!!again && again.selfDuel === true && again.rejoin === false, 'and the owner walks straight back in');
+  ok(fake.room(inv.code).guestUid === SHADOW, 'on the same shadow id');
+
+  // --- the guard it is an exception to still holds -----------------------------
+  ok(await other.join(inv.code, 'Outsider') === null && other.lastError === GoonSignalError.AlreadyJoined,
+    'a stranger is still refused an occupied room');
+  const inv2 = await pc.createInvite('Owner PC');
+  ok((await other.join(inv2.code, 'Outsider')) !== null, 'a real second player joins a whitelisted host normally');
+  ok(fake.room(inv2.code).guestUid === OUTSIDER, 'and takes the seat under its OWN uid');
+  const late = await phone.join(inv2.code, 'Owner Phone');
+  ok(late === null && phone.lastError === GoonSignalError.AlreadyJoined,
+    'a whitelisted host cannot self-duel into an occupied room', String(phone.lastError));
+
+  // --- nothing in the client stack compares the two identities -----------------
+  // If any of these ever grow a uid comparison, a self-duel becomes a silent
+  // "you are your own opponent" bug rather than a working test rig.
+  for (const rel of ['../net/session.js', '../net/webrtcTransport.js', '../net/relayTransport.js',
+    '../net/transportBase.js', '../core/match.js']) {
+    ok(!/unified_?[Ii]d\s*[=!]==?/.test(readSource(rel)), `${rel} never compares unified ids`);
+  }
+  ok(/self_duel/.test(readSource('../net/signaling.js')), 'the client reads the self_duel flag off /join');
+}
+
 // ============================================================ run
 const main = async () => {
   await testSignaling();
@@ -773,6 +1190,9 @@ const main = async () => {
   await testVwinTick();
   await testBlocklist();
   await testPeerCardVer();
+  await testGuestFold();
+  await testSeatRelease();
+  await testSelfDuel();
 
   console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);
   process.exit(failures === 0 ? 0 : 1);

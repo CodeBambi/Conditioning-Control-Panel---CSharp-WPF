@@ -863,5 +863,233 @@ function mountRecap(result) {
     'discord-open-dm carries WHICH and nothing else');
 }
 
+/* ============================================================================
+ * 7. THE DEBUG OVERLAY (ui/debugOverlay.js) — the console a phone does not have.
+ *
+ * Added for the 2026-08-04 phone report: a guest was evicted from the lobby back
+ * to the title and there was nowhere ON THE DEVICE for the reason to be written.
+ * Hosted, warn/error tunnel to the C# log; standalone they went to a console
+ * nobody can open.
+ *
+ * What must hold, or it is worse than not having it:
+ *   · it never renders unless asked (and hosted, never implicitly);
+ *   · push() cannot throw — it sits inside logger.warn/error;
+ *   · the ring is bounded, so a warning storm cannot eat the page;
+ *   · it is ONE node on <body> with pointer-events on itself: no gameplay.
+ * ==========================================================================*/
+{
+  const overlay = await import('../ui/debugOverlay.js');
+  const { debugRequested, debugInSearch, createDebugOverlay, captureGlobalErrors, MAX_LINES } = overlay;
+
+  // ---- the gate
+  ok(debugInSearch('?debug=1') && debugInSearch('?a=b&debug=true') && debugInSearch('?debug'),
+    '?debug=1 / =true / bare all count');
+  ok(!debugInSearch('?debug=0') && !debugInSearch('?solo=0') && !debugInSearch(''),
+    '?debug=0 and an unrelated query do not');
+  ok(debugRequested({ search: '?debug=1', hosted: true }) === true,
+    'hosted CAN be asked explicitly on the querystring');
+  ok(debugRequested({ search: '', prefs: { debug: true }, hosted: true }) === false,
+    'but a hosted session never inherits a stored flag — a WebView2 duel keeps its chrome');
+  ok(debugRequested({ search: '', prefs: { debug: true }, hosted: false }) === true,
+    'standalone remembers it, so a reload (or a home-screen pin) keeps the strip');
+  ok(debugRequested({ search: '', prefs: { debug: false }, hosted: false }) === false,
+    'and ?debug=0 writes the flag back off');
+  ok(debugRequested({}) === false, 'nothing asked for it -> nothing');
+
+  // ---- the strip itself, over the stub DOM
+  const panel = createDebugOverlay({ doc: dom.doc, max: 4, now: () => 0 });
+  ok(!!panel.node && panel.node.id === 'gg-debug', 'it mounts exactly one node');
+  ok(dom.doc.body.childNodes.indexOf(panel.node) >= 0, 'appended to <body>, not into a screen');
+  const css = String(panel.node.getAttribute('style') || '');
+  ok(/position:fixed/.test(css) && /z-index:2147483000/.test(css),
+    'fixed and above every layer the page owns (#gg-modal is z70)', css.slice(0, 60));
+  ok(/pointer-events:auto/.test(css), 'it takes taps on itself only — nothing else is touched');
+
+  panel.push('warn', 'one');
+  panel.push('error', new Error('two'));
+  ok(panel.lines().length === 2, 'lines land', String(panel.lines().length));
+  ok(/warn one/.test(panel.lines()[0]), 'with the level in the line', panel.lines()[0]);
+  ok(/error two/.test(panel.lines()[1]), 'an Error is flattened to its message', panel.lines()[1]);
+  for (let i = 0; i < 20; i++) panel.push('warn', 'flood ' + i);
+  ok(panel.lines().length === 4, 'the ring is bounded — a storm cannot eat the page', String(panel.lines().length));
+  ok(/flood 19/.test(panel.lines()[3]), 'and it keeps the NEWEST lines', panel.lines()[3]);
+
+  // push() is inside logger.warn: it may never be the thing that throws.
+  let threw = false;
+  try {
+    const circular = {}; circular.self = circular;
+    panel.push('warn', circular);
+    panel.push(null, undefined);
+  } catch (_e) { threw = true; }
+  ok(!threw, 'push() survives a circular object and a null level');
+
+  // tap-to-collapse: one gesture, the whole strip is the target
+  ok(panel.collapsed() === false, 'it starts open — an empty badge explains nothing');
+  panel.node.dispatchEvent({ type: 'click' });
+  ok(panel.collapsed() === true, 'tapping anywhere on it collapses it');
+  panel.node.dispatchEvent({ type: 'click' });
+  ok(panel.collapsed() === false, 'and back');
+
+  // the two seams a logger never sees
+  const fakeWin = (() => {
+    const map = new Map();
+    return {
+      addEventListener(t, f) { if (!map.has(t)) map.set(t, new Set()); map.get(t).add(f); },
+      removeEventListener(t, f) { const s = map.get(t); if (s) s.delete(f); },
+      fire(t, e) { for (const f of Array.from(map.get(t) || [])) f(e); },
+      count(t) { return (map.get(t) || new Set()).size; },
+    };
+  })();
+  const off = captureGlobalErrors(panel, fakeWin);
+  fakeWin.fire('error', { message: 'boom', filename: 'https://x/goon/ui/lobby.js', lineno: 12 });
+  fakeWin.fire('unhandledrejection', { reason: new Error('nope') });
+  ok(/boom @ lobby\.js:12/.test(panel.lines().join('\n')), 'window.onerror is captured with a location',
+    panel.lines().join(' | '));
+  ok(/promise: nope/.test(panel.lines().join('\n')), 'so is an unhandled rejection');
+  off();
+  ok(fakeWin.count('error') === 0 && fakeWin.count('unhandledrejection') === 0, 'and it unsubscribes cleanly');
+
+  panel.dispose();
+  ok(dom.doc.body.childNodes.indexOf(panel.node) < 0, 'dispose removes the node');
+  panel.push('warn', 'after dispose');
+  ok(panel.lines().length === 4, 'and a disposed strip stops collecting', String(panel.lines().length));
+
+  // no usable DOM (the node import sweep) -> a handle whose every method is a no-op
+  const headless = createDebugOverlay({ doc: {} });
+  ok(headless.node === null && headless.lines().length === 0, 'no document -> an inert handle, never a throw');
+  headless.push('warn', 'x'); headless.toggle(); headless.dispose();
+
+  ok(MAX_LINES === 50, 'the default ring is the last 50 lines', String(MAX_LINES));
+
+  // ---- and that boot.js actually wires it, behind the flag and nowhere else
+  const boot = read('boot.js');
+  ok(/teeDebug\('warn', m\)/.test(boot) && /teeDebug\('error', m\)/.test(boot),
+    'boot tees warn AND error into the strip (info/debug stay out — the engine is chatty)');
+  ok(!/teeDebug\('info'/.test(boot), 'and info is NOT teed');
+  ok(/function wantsDebugHint\(\)/.test(boot), 'the module is not even imported unless something asked for it');
+  ok(/if \(bridge\.isHosted\) return false;/.test(boot),
+    'hosted never picks the flag up from stored prefs');
+  ok(/import\('\.\/ui\/debugOverlay\.js'\)/.test(boot),
+    'it is loaded dynamically, like the sibling waves — a missing file is not a white page');
+  ok(boot.indexOf('initDebugOverlay();') < boot.indexOf("window.addEventListener('keydown'"),
+    'and it is armed FIRST, so it is listening before the boot it explains can fail');
+  const bridgeSrc = read('bridge.js');
+  ok(/keep\.debug = /.test(bridgeSrc), 'bridge persists the flag next to server/token/uid/name');
+  ok(/export function storedPrefs\(\)/.test(bridgeSrc), 'and exposes the stored blob for the pre-init decision');
+}
+
+/* ============================================================================
+ * 8. PRACTICE SHOWS YOU YOUR OWN LIBRARY (the phone bug, round 4, 2026-08-04).
+ *
+ * Owner report, twice: "from mobile it's not triggering any asset even if I
+ * uploaded them and went to practice", with every arsenal chip reading `locked`.
+ *
+ * THE SHAPE OF IT. In a duel your arsenal shot lands on THEIR screen. In practice
+ * the opponent is ui/soloDriver.js, which has no exec/ renderer at all — so a
+ * payload the practice player fires is a payload nobody ever sees, and the only
+ * media that reaches their own screen is the element ramp plus whatever the bot
+ * throws BACK. An inbound payload resolves against the RECEIVER's library
+ * (exec/media.js drawFor -> drawKind), so the bot's flash burst is drawn from the
+ * player's own uploads — that is the loop, and it used to wait on the bot's
+ * economy (PAYLOAD_TRY_MS, a 35% skip, and charges it has not earned yet).
+ *
+ * Two fixes, both practice-only:
+ *   · the bot opens with a scheduled salvo of the two MEDIA-CARRYING kinds;
+ *   · boot seeds the practice arsenal, so the slots that draw from the library
+ *     are not locked behind a bubble-drop grind.
+ *
+ * THE REGRESSION THIS BLOCK EXISTS FOR: the receiver validates the SENDER's
+ * charges off the last state TICK, not off the payload frame, so crediting and
+ * firing in the same turn is rejected with "claimed 0 < cost 1". The first cut
+ * did exactly that and the salvo never landed.
+ * ==========================================================================*/
+{
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const { createSoloDriver, SALVO, SALVO_CREDIT_LEAD_MS } = await import('../ui/soloDriver.js');
+  const { GoonConsts, GoonPayloadKind, costOf } = await import('../core/contracts.js');
+
+  // ---- the shape of the salvo
+  ok(Array.isArray(SALVO) && SALVO.length >= 2, 'the practice bot has an opening salvo', String(SALVO.length));
+  const salvoKinds = SALVO.map((s) => s.kind);
+  ok(salvoKinds.includes(GoonPayloadKind.FlashBurst) && salvoKinds.includes(GoonPayloadKind.Video),
+    'and it is the two MEDIA-CARRYING kinds — the ones that draw off the deck', JSON.stringify(salvoKinds));
+  ok(SALVO[0].atMs <= 10000, 'the first shot lands in the first ten seconds, not after a grind',
+    String(SALVO[0].atMs));
+  ok(SALVO_CREDIT_LEAD_MS > GoonConsts.TickIntervalMs,
+    'the charges are credited more than one state tick ahead of the shot — the receiver reads the '
+    + 'wallet off the tick, so credit-and-fire in one turn is rejected',
+    SALVO_CREDIT_LEAD_MS + 'ms vs ' + GoonConsts.TickIntervalMs + 'ms');
+  ok(SALVO.every((s) => s.atMs - SALVO_CREDIT_LEAD_MS >= 0),
+    'every shot has room for its own credit lead');
+  const soloSrc = stripComments(read('ui/soloDriver.js'));
+  ok(/if \(salvoArmed > 0\) return;/.test(soloSrc),
+    'and the ordinary cadence cannot spend a salvo shot\'s charges out from under it');
+  ok(/match\.creditCharges\(cost - have, 'practice-salvo'\)/.test(soloSrc),
+    'the charges go through the engine, so the wire truth stays the truth (no back door)');
+  ok(/match\.tryFirePayload\(\{/.test(soloSrc),
+    'and the shot goes through the same public API a human uses — every engine gate still applies');
+
+  // ---- the real thing: two engines, a real loopback, the real driver
+  const pair = createLoopbackPair(loopbackOptions({
+    latencyMs: 0, jitterMs: 0, guestClockSkewMs: 0, logger: quiet,
+  }));
+  const me = new GoonMatchService(pair.host, true, { logger: quiet, displayName: 'Me', tag: 'GG:me' });
+  const bot = new GoonMatchService(pair.guest, false, { logger: quiet, displayName: 'Practice', tag: 'GG:bot' });
+  const driver = createSoloDriver({ match: bot, logger: quiet });
+
+  const inbound = [];
+  me.onPayloadAccepted((e) => inbound.push(e.payload));
+
+  me.adoptLobby();
+  bot.adoptLobby();
+  driver.start();
+  await pair.connect();
+  await wait(80);
+  me.proposeConsent(60, 0, 30000);
+  await wait(60);
+  me.confirmConsent();
+  await wait(400);
+  for (let i = 0; i < 40 && me.phase === GoonMatchPhase.Draft; i++) { me.confirmDraft(); await wait(120); }
+  ok(me.phase === GoonMatchPhase.Countdown || me.phase === GoonMatchPhase.Live,
+    'practice reaches the countdown with the bot signed', String(me.phase));
+
+  // Countdown + the first salvo's own clock, plus slack for the schedule buffer.
+  const deadline = Date.now() + SALVO[0].atMs + 12000;
+  while (Date.now() < deadline && inbound.length === 0) await wait(200);
+
+  ok(inbound.length > 0,
+    'THE FIX: the practice player receives the bot\'s opening payload — the thing that puts their own '
+    + 'library on their own screen', String(inbound.length));
+  ok(inbound.length > 0 && inbound[0].kind === SALVO[0].kind,
+    'and it is the flash burst, i.e. the images', inbound.length ? String(inbound[0].kind) : 'none');
+  ok(inbound.length > 0 && costOf(inbound[0].kind) > 0,
+    'a real, costed payload — not a special case the renderer has to know about');
+
+  driver.stop();
+  me.dispose();
+  bot.dispose();
+  pair.dispose();
+
+  // ---- boot seeds the practice arsenal, and ONLY the practice arsenal
+  const bootSeed = stripComments(read('boot.js'));
+  ok(/function seedPracticeArsenal\(match\)/.test(bootSeed), 'boot.js has seedPracticeArsenal()');
+  ok(/const PRACTICE_SEED = Object\.freeze\(\[[\s\S]{0,300}?id: 'flash'[\s\S]{0,200}?id: 'video'/.test(bootSeed),
+    'and it seeds the two slots that draw from the library (flash + video)');
+  ok(/arsenal\.armDrop\(seed\.id, \{ count: 1, silent: true \}\)/.test(bootSeed)
+    && /match\.creditCharges\(charges, 'practice-seed'\)/.test(bootSeed),
+    'through the same two public seams ui/drops.js uses — armDrop, and the charges that back it');
+  const seedCalls = (bootSeed.match(/seedPracticeArsenal\(/g) || []).length;
+  ok(seedCalls === 2, 'seedPracticeArsenal is defined once and called once', String(seedCalls));
+  ok(/async function startSolo\(\)[\s\S]*?seedPracticeArsenal\(local\)/.test(bootSeed)
+    || /seedPracticeArsenal\(local\)[\s\S]*?async function startSolo\(\)/.test(bootSeed),
+    'and that one call is wired from startSolo — practice only, duel gating untouched');
+  const arsenalSrc = stripComments(read('ui/arsenal.js'));
+  const armDropAt = arsenalSrc.indexOf('function armDrop');
+  ok(/function armDrop\(id, \{ count = DROP_STACK/.test(arsenalSrc),
+    'ui/arsenal.js still owns armDrop — nothing reached past it to poke a tile');
+  ok(armDropAt > 0 && !/practice|solo/i.test(arsenalSrc.slice(armDropAt, armDropAt + 600)),
+    'and armDrop knows nothing about practice: the mode lives in boot, the slot logic does not');
+}
+
 console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);
 process.exit(failures === 0 ? 0 : 1);

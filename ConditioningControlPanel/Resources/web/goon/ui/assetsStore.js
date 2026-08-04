@@ -12,7 +12,12 @@
  *      `hello` that carries it;
  *   4. a STANDALONE answer. In a plain browser there is no host and therefore no
  *      cache, and the screen must say so immediately — a spinner that can never
- *      resolve is the worst of the three possible outcomes.
+ *      resolve is the worst of the three possible outcomes;
+ *   5. the STANDALONE LIBRARY itself — files the player picks (or a zip of
+ *      them), adopted here and sent straight from this page. Anything over the
+ *      wire's exempt cap is COMPRESSED IN THE PAGE (ui/localCompress.js) into an
+ *      artifact that fits, exactly as the C# app would have; see the adoption
+ *      policy on adoptLocalFile.
  *
  * NOTHING here touches the DOM, and nothing throws at import: the module is
  * imported by the node selftests with a fake bridge injected.
@@ -28,8 +33,9 @@
 
 import * as defaultBridge from '../bridge.js';
 import { decodeFilmstrip, closeFilmstrip, mimeForKind, fitBox } from '../encode/gifDecode.js';
-import { ACCEPT_MIME, MAX_EXEMPT_BYTES } from '../net/mediaChannel.js';
-import { isZipFile, readZipMedia, ZIP_MAX_TOTAL_BYTES } from './zipReader.js';
+import { ACCEPT_MIME, MAX_ARTIFACT_BYTES, MAX_EXEMPT_BYTES } from '../net/mediaChannel.js';
+import { isZipFile, readZipMedia, ZIP_MAX_ENTRIES, ZIP_MAX_TOTAL_BYTES } from './zipReader.js';
+import { createLocalCompressor, extForMime, sniffAnimated, MAX_DECODE_BYTES } from './localCompress.js';
 
 /* ----------------------------------------------------------------- units */
 
@@ -59,28 +65,115 @@ export const FILTERS = Object.freeze(['all', 'needs', 'ready', 'failed', 'exempt
 export const NEEDS_STATES = Object.freeze(['pending', 'queued', 'working']);
 
 /* ------------------------------------------------------- local (browser) files
- * Standalone has no host library, so the page can adopt files the player picks
- * by hand. They ride the EXEMPT path: sent as-is, so they obey the exempt cap
- * and the wire's mime allowlist — both imported from mediaChannel so this can
- * never drift from what the receiver's offer gate will actually accept.
+ * Standalone has no host library, so the page adopts what the player picks. The
+ * caps below are the wire's own (imported from mediaChannel, so they can never
+ * drift from what the receiver's offer gate will actually accept) and there are
+ * TWO of them, which is the whole shape of this tier:
+ *
+ *   ≤ MAX_EXEMPT_BYTES (8 MB)    sent AS-IS, on the exempt path. Never
+ *                                recompressed: it already fits, and re-encoding
+ *                                something that fits only loses quality.
+ *   ≤ MAX_ARTIFACT_BYTES (64 MB) the ceiling for a NON-exempt artifact — what
+ *                                the transfer queue allows once an item is a
+ *                                compressed product rather than an original.
+ *
+ * Everything between those two, and everything above the second, used to be
+ * "too big" and was skipped. That was wrong: a 1 GB zip of photos is the USE
+ * CASE, and the page can put a 12 MB photo through a canvas the same way the C#
+ * app puts it through its still lane. See ui/localCompress.js.
  * ------------------------------------------------------------------------- */
 
 export const LOCAL_MAX_BYTES = MAX_EXEMPT_BYTES;
+
+/** The wire ceiling for a COMPRESSED (non-exempt) artifact. */
+export const LOCAL_ARTIFACT_MAX_BYTES = MAX_ARTIFACT_BYTES;
+
+/**
+ * The biggest SOURCE we will decode. A decode costs width*height*4 bytes of
+ * RGBA no matter what the file weighs, so this is a phone-memory guard, not a
+ * wire limit — past it a still is counted `tooBig` rather than attempted.
+ */
+export const LOCAL_DECODE_MAX_BYTES = MAX_DECODE_BYTES;
 
 /**
  * A .zip is a pick too: phones cannot hand over a folder, so an archive is the
  * only way a player on a phone gives us a library. It is expanded INLINE by
  * ui/zipReader.js and every eligible entry walks the same adoption road as a
  * hand-picked file — same mime gate, same per-file cap, same sha, same dedup.
- * The archive is read into memory whole, so past this size we do not try.
+ *
+ * THIS IS NOT AN ARCHIVE-SIZE LIMIT. There is none: zipReader reads a zip by
+ * Blob range and never holds more than one entry, so a 1 GB library costs a
+ * directory plus one photo. This is the ceiling on the INFLATED total taken out
+ * of one archive — the zip-bomb guard, checked against declared sizes.
  */
-export const LOCAL_ZIP_MAX_BYTES = ZIP_MAX_TOTAL_BYTES;
+export const LOCAL_ZIP_MAX_INFLATED_BYTES = ZIP_MAX_TOTAL_BYTES;
+
+/** Entries taken from one archive before the rest is `trimmed` (and said so). */
+export const LOCAL_ZIP_MAX_ENTRIES = ZIP_MAX_ENTRIES;
 
 /** Phones love to hand over files with an empty `type`; the extension decides. */
 export const LOCAL_MIME_BY_EXT = Object.freeze({
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
   webp: 'image/webp', mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm',
 });
+
+/**
+ * Which road a file of this mime and this size takes, judged on SIZE ALONE.
+ *
+ * Exported and pure because it is applied in TWO places that must not disagree:
+ * adoptLocalFile (on the real bytes) and the zip reader's directory pass (on the
+ * declared size, before anything is inflated).
+ *
+ * @returns {'take'|'too-big'|'too-big-video'} 'take' means "the store has a road
+ *   for this" — exempt, as-is artifact, or compressed artifact; which one is
+ *   adoptLocalFile's business.
+ */
+export function classifyLocalSize(mime, bytes) {
+  const size = Math.max(0, Number(bytes) || 0);
+  if (!size) return 'too-big';
+  if (size <= LOCAL_MAX_BYTES) return 'take';
+  if (String(mime || '').indexOf('video/') === 0) {
+    return size <= LOCAL_ARTIFACT_MAX_BYTES ? 'take' : 'too-big-video';
+  }
+  return size <= LOCAL_DECODE_MAX_BYTES ? 'take' : 'too-big';
+}
+
+/**
+ * The local library as exec/media.js DECK ENTRIES — `{kind, name, url}`.
+ *
+ * Standalone this is the player's whole library, and it is the ONLY thing the
+ * media pool can draw from: bridge.js synthesizes an empty `manifest` frame out
+ * here, so without this the practice session fires every effect against an empty
+ * deck (which is exactly what it did). Pure, exported and driven by the selftest
+ * because it is the join between two tiers that must not learn about each other.
+ *
+ *   - `kind` is TAKEN, not re-derived. A pick lives behind a blob: URL with no
+ *     extension to sniff; the store decided image/video from the mime at
+ *     adoption time (kindForMime) and that answer is the right one. The mime is
+ *     only a fallback for a row that somehow carries none.
+ *   - the URL follows the same rule the send path uses: an EXEMPT original IS
+ *     the file (srcUrl), a compressed pick's bytes are the artifact (artUrl).
+ *   - a row with no URL at all (node, where there is no createObjectURL) is
+ *     skipped rather than pushed as an entry that can only fail to load.
+ */
+export function localPlayableEntries(items) {
+  const out = [];
+  for (const it of items || []) {
+    if (!it) continue;
+    const url = normalizeState(it.state) === 'exempt'
+      ? (it.srcUrl || it.artUrl || '')
+      : (it.artUrl || it.srcUrl || '');
+    if (!url) continue;
+    let kind = it.kind === 'video' ? 'video' : (it.kind === 'image' ? 'image' : '');
+    if (!kind && it.mime) kind = kindOfMime(it.mime);
+    if (!kind) continue;
+    out.push({ kind, name: String(it.name || ''), url: String(url) });
+  }
+  return out;
+}
+
+/** The mime family the wire insists a `kind` agrees with (mediaChannel familyOf). */
+function kindOfMime(mime) { return String(mime || '').indexOf('video/') === 0 ? 'video' : 'image'; }
 
 /** The wire mime for a picked file, or '' when the wire would refuse it. */
 export function localMimeOf(file) {
@@ -257,7 +350,7 @@ export async function probeEncode() {
 
 /** GoonCacheBridge.MaxPutB64Chars — base64 CHARACTERS, not bytes. */
 export const PUT_MAX_B64_CHARS = 4 * 1024 * 1024;
-/** GoonCacheBridge.MaxPutParts. 16 x 3 MB is far past the 24 MiB wire cap. */
+/** GoonCacheBridge.MaxPutParts. 16 x 3 MB = 48 MB — plenty for lane B's ~2 MB mp4s (raw sends never ride this put path). */
 export const PUT_MAX_PARTS = 16;
 /** Bytes per part: base64 is 4 chars per 3 bytes, and parts must not straddle. */
 export const PUT_PART_BYTES = Math.floor(PUT_MAX_B64_CHARS / 4) * 3;
@@ -755,9 +848,15 @@ function normalizeItem(raw) {
  * @param {boolean} [o.autoEncoder] build the lane-B driver when the probe says
  *   this runtime can encode (default true). Off, the seam stays empty and the
  *   host's encode-requests are dropped with one log line, exactly as before.
+ * @param {{compressImage:Function, compressGif:Function}} [o.compressor] the
+ *   standalone compression lanes. Injectable so the node selftest can drive the
+ *   ADOPTION POLICY (which lane, which counter, which sha) with a stub — there
+ *   is no canvas, no createImageBitmap and no WebCodecs under node, so the real
+ *   one is only ever exercised in a browser. Default: ui/localCompress.js,
+ *   built lazily on the first file that actually needs it.
  */
 export function createAssetsStore({ bridge = defaultBridge, session = null, logger = null,
-  autoHello = true, autoEncoder = true } = {}) {
+  autoHello = true, autoEncoder = true, compressor: injectedCompressor = null } = {}) {
   const state = blankState();
   /** id -> item */
   const items = new Map();
@@ -765,6 +864,10 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
    * purpose: every hosted `cache-list` commit REPLACES `items` wholesale, and
    * local picks must survive that. Merged into `itemsArr` by rebuildArr(). */
   const localItems = new Map();
+  /** Bumped on every MEMBERSHIP change of `localItems`. boot.js re-feeds the
+   * media deck off this, so a hosted `cache-list` (which fires the same
+   * `onItems` subscribers) cannot make it re-deal the pool for nothing. */
+  let localVersion = 0;
   let itemsArr = [];
   let listLoaded = false;
   let listRequested = false;
@@ -963,20 +1066,120 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
 
   const hex = (buf) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
 
+  /* --------------------------------------------------- the adoption progress
+   * Adding used to be instant, because adopting meant hashing. It is not any
+   * more: a zip of 200 photos is 200 decodes and 200 encodes, and a card that
+   * says nothing for four minutes reads as a broken button. This is the seam
+   * the standalone card watches — one object, mutated in place, emitted on
+   * every step. `total` grows when a zip's plan lands (an archive counts as one
+   * pick until we know how many entries survived pass 1).
+   * ---------------------------------------------------------------------- */
+
+  const localProgress = { running: false, done: 0, total: 0, name: '', pct: 0 };
+  const localProgressSubs = new Set();
+
+  function emitLocalProgress() {
+    for (const fn of Array.from(localProgressSubs)) {
+      try { fn(localProgress); } catch (e) { warn('local-progress subscriber threw: ' + ((e && e.message) || e)); }
+    }
+  }
+
+  /** One pick (or one zip entry) is finished, whatever the verdict. */
+  function noteStep(name) {
+    localProgress.done += 1;
+    localProgress.name = String(name || '');
+    localProgress.pct = 0;
+    emitLocalProgress();
+  }
+
+  /** A long compression is talking. Only the percentage moves. */
+  function noteWorking(name, pct) {
+    if (!localProgress.running) return;
+    localProgress.name = String(name || '');
+    localProgress.pct = Math.min(100, Math.max(0, Math.round(Number(pct) || 0)));
+    emitLocalProgress();
+  }
+
+  /* Items are emitted AS THEY LAND, so a long zip fills the list instead of
+   * appearing all at once at the end — but coalesced, because a 500-entry
+   * archive that repainted the list 500 times would spend longer in layout than
+   * in the encoder. The final emit in addLocalFiles is unconditional, so the
+   * last few always land. */
+  const LOCAL_EMIT_MS = 200;
+  let lastLocalEmit = 0;
+  function noteItemLanded() {
+    const now = Date.now();
+    if (now - lastLocalEmit < LOCAL_EMIT_MS) return;
+    lastLocalEmit = now;
+    rebuildArr();
+    emitItems();
+  }
+
+  /** Every object URL one local item owns, released. */
+  function revokeLocal(it) {
+    for (const u of [it && it.srcUrl, it && it.artUrl]) {
+      try { if (u) URL.revokeObjectURL(u); } catch (_e) { /* ignore */ }
+    }
+  }
+
+  /** sha-256 of a File/Blob's bytes, or '' when it could not be read. */
+  async function shaOfBytes(buf) {
+    return hex(await crypto.subtle.digest('SHA-256', buf));
+  }
+
+  /** The mime family the wire insists a `kind` agrees with (mediaChannel familyOf). */
+  const kindForMime = kindOfMime;
+
+  /**
+   * Source shas already adopted (or already refused) this session. The OUTPUT of
+   * a compression is what carries the wire identity, so dedup on the output sha
+   * alone would still re-compress the same 40 MB photo every time the player
+   * picked the same zip — minutes of a phone's CPU to arrive back at a dupe.
+   */
+  const localSrcShas = new Set();
+
+  /** The compressor. Injectable — the node selftest drives the POLICY with a stub. */
+  let compressor = injectedCompressor;
+  function ensureCompressor() {
+    if (!compressor) {
+      try { compressor = createLocalCompressor({ logger }); } catch (e) {
+        warn('no local compressor: ' + ((e && e.message) || e));
+        compressor = null;
+      }
+    }
+    return compressor;
+  }
+
   /**
    * ONE file (picked by hand, or lifted out of a zip) down the ONE adoption
    * road. Every counter the summary line reads is written here, so a zip entry
    * and a hand-picked file can never be judged by two different rules.
+   *
+   * THE POLICY, in the order it is applied:
+   *   1. not a mime the wire carries        -> badType
+   *   2. ≤ 8 MB                             -> EXEMPT, as-is, untouched
+   *   3. video 8..64 MB                     -> non-exempt artifact, as-is (no transcode)
+   *   4. video > 64 MB                      -> tooBigVideo (its own sentence)
+   *   5. still/animated > 80 MB source      -> tooBig (we will not decode that)
+   *   6. animated gif/awebp > 8 MB          -> mp4 artifact, via lane B's worker
+   *   7. still > 8 MB                       -> WebP (or JPEG) artifact
+   *   8. any compressed output > 64 MB      -> failed (pathological; nothing to send)
    */
   async function adoptLocalFile(f, report) {
     if (!f || typeof f.arrayBuffer !== 'function') { report.failed++; return; }
     const mime = localMimeOf(f);
     if (!mime) { report.badType++; return; }
     const bytes = Math.max(0, Number(f.size) || 0);
-    if (!bytes || bytes > LOCAL_MAX_BYTES) { report.tooBig++; return; }
+    if (!bytes) { report.tooBig++; return; }
+    if (bytes <= LOCAL_MAX_BYTES) return await adoptExempt(f, mime, bytes, report);
+    return await adoptOversize(f, mime, bytes, report);
+  }
+
+  /** The original travels untouched. This is the path that has always existed. */
+  async function adoptExempt(f, mime, bytes, report) {
     let sha = '';
     try {
-      sha = hex(await crypto.subtle.digest('SHA-256', await f.arrayBuffer()));
+      sha = await shaOfBytes(await f.arrayBuffer());
     } catch (e) {
       warn('could not hash "' + String(f.name || '?') + '": ' + ((e && e.message) || e));
       report.failed++; return;
@@ -988,11 +1191,141 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
     try { srcUrl = URL.createObjectURL(f); } catch (_e) { /* node selftest — no object URLs */ }
     const m = /\.([a-z0-9]{2,5})$/i.exec(String(f.name || ''));
     localItems.set(id, normalizeItem({
-      id, name: String(f.name || sha.slice(0, 8)), kind: mime.startsWith('video/') ? 'video' : 'image',
+      id, name: String(f.name || sha.slice(0, 8)), kind: kindForMime(mime),
       state: 'exempt', srcUrl, sha, ext: m ? m[1].toLowerCase() : '', mime,
       bytes, srcBytes: bytes,
     }));
+    localVersion++;
+    localSrcShas.add(sha);
     report.added++;
+    noteItemLanded();
+  }
+
+  /**
+   * Everything over the exempt cap. What lands is a NON-EXEMPT ARTIFACT: state
+   * 'ready' with an `artUrl`, which is exactly the shape boot.js listSendable()
+   * offers under the 64 MB rail (`bytes <= MAX_ARTIFACT_BYTES`), and exactly the
+   * shape the host's own compressed items have.
+   */
+  async function adoptOversize(f, mime, bytes, report) {
+    const name = String(f.name || 'file');
+
+    /* --- video: as-is up to the artifact cap, and honest above it ----------
+     * A browser cannot re-encode an mp4 without decoding every frame through
+     * WebCodecs, at a cost we cannot promise on a phone. So an 8..64 MB clip
+     * rides the wire as the artifact it already is, and anything bigger is
+     * COUNTED AND NAMED rather than quietly dropped. */
+    if (kindForMime(mime) === 'video') {
+      if (bytes > LOCAL_ARTIFACT_MAX_BYTES) { report.tooBigVideo++; return; }
+      let buf = null;
+      try { buf = await f.arrayBuffer(); } catch (e) {
+        warn('could not read "' + name + '": ' + ((e && e.message) || e));
+        report.failed++; return;
+      }
+      let sha = '';
+      try { sha = await shaOfBytes(buf); } catch (_e) { report.failed++; return; }
+      if (disposed) return;
+      landArtifact({ name, blob: f, sha, mime, bytes, srcBytes: bytes, report });
+      return;
+    }
+
+    if (bytes > LOCAL_DECODE_MAX_BYTES) { report.tooBig++; return; }
+
+    let buf = null;
+    try { buf = await f.arrayBuffer(); } catch (e) {
+      warn('could not read "' + name + '": ' + ((e && e.message) || e));
+      report.failed++; return;
+    }
+    if (disposed) return;
+
+    // The SOURCE sha, so picking the same archive twice does not pay for the
+    // same compression twice. The wire identity is still the OUTPUT's sha.
+    let srcSha = '';
+    try { srcSha = await shaOfBytes(buf); } catch (_e) { srcSha = ''; }
+    if (disposed) return;
+    if (srcSha && localSrcShas.has(srcSha)) { report.dupes++; return; }
+
+    const comp = ensureCompressor();
+    if (!comp) { report.failed++; return; }
+
+    // GIF and WebP are both "maybe animated", and the answer decides the lane:
+    // an animated file put through the still lane loses every frame but one.
+    // 'unknown' is read as animated on purpose — a one-frame mp4 costs bytes, a
+    // one-frame GIF costs the file.
+    const animated = mime === 'image/gif' || mime === 'image/webp'
+      ? sniffAnimated(new Uint8Array(buf), mime) !== 'still'
+      : false;
+
+    let out = null;
+    try {
+      out = animated
+        ? await comp.compressGif(buf, mime, { onProgress: (pct) => noteWorking(name, pct) })
+        : await comp.compressImage(buf, mime, {});
+    } catch (e) {
+      warn('could not compress "' + name + '" (' + mime + ', ' + formatBytes(bytes) + '): '
+        + ((e && e.message) || e));
+      if (srcSha) localSrcShas.add(srcSha);          // do not try it again this session
+      report.failed++;
+      return;
+    }
+    if (disposed) return;
+    if (!out || !out.blob || !(Number(out.blob.size) > 0)) { report.failed++; return; }
+
+    const outMime = String(out.mime || out.blob.type || '');
+    if (!ACCEPT_MIME.has(outMime)) {
+      warn('compressor produced "' + outMime + '" for "' + name + '", which the wire will not carry');
+      report.failed++; return;
+    }
+    const outBytes = Number(out.blob.size) || 0;
+    // The 64 MB rail is the transfer queue's, and an artifact past it is simply
+    // un-offerable — adopting it would put an item on the screen that can never
+    // be sent, which is worse than saying it did not work.
+    if (outBytes > LOCAL_ARTIFACT_MAX_BYTES) {
+      warn('"' + name + '" compressed to ' + formatBytes(outBytes) + ', past the '
+        + formatBytes(LOCAL_ARTIFACT_MAX_BYTES) + ' wire cap');
+      if (srcSha) localSrcShas.add(srcSha);
+      report.failed++; return;
+    }
+
+    let sha = '';
+    try { sha = await shaOfBytes(await out.blob.arrayBuffer()); } catch (e) {
+      warn('could not hash the compressed "' + name + '": ' + ((e && e.message) || e));
+      report.failed++; return;
+    }
+    if (disposed) return;
+    if (srcSha) localSrcShas.add(srcSha);
+    landArtifact({
+      name, blob: out.blob, sha, mime: outMime, bytes: outBytes, srcBytes: bytes,
+      w: out.w, h: out.h, durMs: out.durMs, compressed: true, report,
+    });
+  }
+
+  /**
+   * Commit one non-exempt artifact.
+   *
+   * `state: 'ready'` + `artUrl` is not decoration: listSendable() reads `artUrl`
+   * for anything that is not exempt, and `bytes` must be the ARTIFACT's length
+   * because that is the number the receiver's offer gate checks against its own
+   * 64 MB cap. `kind` is derived from the OUTPUT mime, never carried over from
+   * the source — the offer gate declines any offer whose kind and mime disagree,
+   * and a GIF that became an mp4 changes family.
+   */
+  function landArtifact({ name, blob, sha, mime, bytes, srcBytes, w, h, durMs, compressed, report }) {
+    const id = 'local:' + sha;
+    if (localItems.has(id)) { report.dupes++; return; }
+    let artUrl = '';
+    try { artUrl = URL.createObjectURL(blob); } catch (_e) { /* node selftest — no object URLs */ }
+    localItems.set(id, normalizeItem({
+      id, name, kind: kindForMime(mime), state: 'ready',
+      artUrl, sha, ext: extForMime(mime), mime,
+      bytes, srcBytes: Math.max(bytes, Number(srcBytes) || 0),
+      w: w || 0, h: h || 0, durMs: durMs || 0,
+    }));
+    localVersion++;
+    localSrcShas.add(sha);
+    report.added++;
+    if (compressed) report.compressed++;
+    noteItemLanded();
   }
 
   /**
@@ -1017,62 +1350,138 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
   }
 
   /**
-   * Expand one picked archive. Everything the reader refuses lands in the same
-   * counters a hand-picked refusal would (an entry over the exempt cap is
-   * `tooBig`, a bomb-guard truncation and a corrupt archive are `failed`), so
-   * the summary line needs no zip-shaped vocabulary to stay honest.
+   * Expand one picked archive.
+   *
+   * THE FILE ITSELF GOES TO THE READER, never its bytes: readZipMedia slices
+   * the ranges it needs, so nothing on this path ever calls arrayBuffer() on a
+   * multi-gigabyte pick. (addLocalFiles routes on isZipFile BEFORE
+   * adoptLocalFile, which is the only other place a pick gets read whole — it
+   * hashes what it adopts.)
+   *
+   * PER-ENTRY refusals land in the same counters a hand-picked refusal would
+   * (an entry over the exempt cap is `tooBig`, a bomb-guard truncation is
+   * `failed`). An ARCHIVE-level failure gets its own counter and its own line,
+   * because rendering it as `tooBig` is exactly how a 1 GB library once got
+   * told "1 over 8 MB".
    */
   async function expandLocalZip(file, report) {
-    if (!file || typeof file.arrayBuffer !== 'function') { report.failed++; return; }
-    const size = Math.max(0, Number(file.size) || 0);
-    if (size > LOCAL_ZIP_MAX_BYTES) {
-      warn('zip "' + String(file.name || '?') + '" is ' + formatBytes(size) + ' — too big to open');
-      report.tooBig++; return;
-    }
+    if (!file || typeof file.slice !== 'function') { report.zipBad++; noteStep(file && file.name); return; }
     let res = null;
+    let planned = 0;
     try {
-      res = await readZipMedia(await file.arrayBuffer(), {
+      res = await readZipMedia(file, {
         // The mime table stays owned by this module: what the picker accepts,
         // what the zip adopts and what the wire allows are ONE decision.
         isEligible: (name) => !!localMimeOf({ name, type: '' }),
-        maxEntryBytes: LOCAL_MAX_BYTES,
+        // ...and so is the SIZE policy. This mirrors adoptLocalFile exactly,
+        // from the DECLARED size in the directory, so an entry the store could
+        // never use is never sliced, never inflated and never decoded — and the
+        // two refusals stay distinguishable ("compressible" vs "un-sendable").
+        classify: (name, size) => classifyLocalSize(localMimeOf({ name, type: '' }), size),
+        maxEntryBytes: LOCAL_DECODE_MAX_BYTES,
+        onPlan: (n) => {
+          planned = Math.max(0, Number(n) || 0);
+          // The archive counted as ONE pick until now; it is really `planned`.
+          localProgress.total += Math.max(0, planned - 1);
+          emitLocalProgress();
+        },
+        // STREAMED, not collected: each entry is adopted (hashed, compressed if
+        // it must be, turned into a blob URL) and dropped before the next is
+        // inflated, so an archive of five hundred photos never has five hundred
+        // photos in the heap at once.
+        onEntry: async (e) => {
+          if (disposed) return;
+          const emime = localMimeOf({ name: e.name, type: '' });
+          noteWorking(e.name, 0);
+          await adoptLocalFile(fileFromBytes(e.name, e.bytes, emime), report);
+          noteStep(e.name);
+        },
       });
     } catch (e) {
       warn('zip "' + String(file.name || '?') + '" threw: ' + ((e && e.message) || e));
       res = null;
     }
-    if (!res || !res.ok) { report.failed++; return; }
+    if (!res || !res.ok) {
+      warn('zip "' + String(file.name || '?') + '" (' + formatBytes(file.size) + ') could not be opened: '
+        + String((res && res.reason) || 'threw'));
+      // The plan's entries never happened; give the denominator back, then take
+      // the archive's own one step.
+      if (planned > 1) localProgress.total -= (planned - 1);
+      report.zipBad++;
+      noteStep(file.name);
+      return;
+    }
+    // An archive that planned nothing still consumed a pick's worth of the bar.
+    if (planned <= 0) noteStep(file.name);
     report.zips++;
     report.tooBig += res.tooBig;
+    report.tooBigVideo += res.tooBigVideo || 0;
     report.failed += res.failed;
-    info('zip "' + String(file.name || '?') + '": ' + res.entries.length + ' media entr(ies), '
-      + res.skipped + ' skipped' + (res.truncated ? ' (truncated — the archive is past the ceilings)' : ''));
-    for (const e of res.entries) {
-      if (disposed) return;
-      await adoptLocalFile(fileFromBytes(e.name, e.bytes, localMimeOf({ name: e.name, type: '' })), report);
-    }
+    // NOT `failed`: entry 501, or the inflated-total backstop, means we TOOK THE
+    // FIRST N of a real library. Rendering that as "unreadable" is the same
+    // class of lie the per-file cap text was on an archive failure.
+    report.trimmed += res.trimmed || 0;
+    info('zip "' + String(file.name || '?') + '" (' + formatBytes(file.size) + '): ' + res.took
+      + ' media entr(ies), ' + res.skipped + ' skipped'
+      + (res.truncated ? ' (trimmed — the archive is past the ceilings)' : ''));
   }
 
   /**
-   * Adopt player-picked files as sendable EXEMPT items. The sha-256 computed
-   * here is only the OFFER identity — the receiving host re-hashes what actually
+   * Adopt player-picked files as sendable items. The sha-256 computed here is
+   * only the OFFER identity — the receiving host re-hashes what actually
    * arrives, so lying about it buys nothing but a declined transfer.
    * Session-only: blob URLs do not survive a reload, and neither do these.
    *
    * A picked .zip is EXPANDED, not adopted: its eligible media becomes items,
    * one entry at a time, and the archive itself never becomes a sendable thing.
    *
+   * SERIAL, deliberately. Compression is CPU, not IO: two encodes racing on a
+   * phone finish later than the same two in a row and make the page unusable in
+   * between. Progress is surfaced through `onLocalProgress` as each one lands.
+   *
    * @param {ArrayLike<File>} files
-   * @returns {Promise<{added:number, dupes:number, tooBig:number, badType:number, failed:number, zips:number}>}
+   * @returns {Promise<{added:number, compressed:number, dupes:number, tooBig:number,
+   *   tooBigVideo:number, trimmed:number, badType:number, failed:number,
+   *   zips:number, zipBad:number}>}
    */
   async function addLocalFiles(files) {
-    const report = { added: 0, dupes: 0, tooBig: 0, badType: 0, failed: 0, zips: 0 };
-    for (const f of Array.from(files || [])) {
-      if (disposed) break;
-      if (isZipFile(f)) { await expandLocalZip(f, report); continue; }
-      await adoptLocalFile(f, report);
+    const report = {
+      added: 0, compressed: 0, dupes: 0, tooBig: 0, tooBigVideo: 0, trimmed: 0,
+      badType: 0, failed: 0, zips: 0, zipBad: 0,
+    };
+    const list = Array.from(files || []);
+    // Re-entrant adds (the player picks again while a zip is still expanding)
+    // extend the same run rather than resetting the denominator under it.
+    localProgress.total = (localProgress.running ? localProgress.total : 0) + list.length;
+    if (!localProgress.running) { localProgress.running = true; localProgress.done = 0; }
+    localProgress.name = '';
+    localProgress.pct = 0;
+    emitLocalProgress();
+    try {
+      for (const f of list) {
+        if (disposed) break;
+        if (isZipFile(f)) {
+          // A zip's step accounting is its OWN: it counted as one pick until its
+          // plan landed, and after that its entries are the steps. Stepping here
+          // as well would push `done` past `total` on every archive.
+          noteWorking(String(f.name || ''), 0);
+          await expandLocalZip(f, report);
+          continue;
+        }
+        noteWorking(String(f.name || ''), 0);
+        await adoptLocalFile(f, report);
+        noteStep(String(f.name || ''));
+      }
+    } finally {
+      localProgress.running = false;
+      localProgress.name = '';
+      localProgress.pct = 0;
+      emitLocalProgress();
     }
-    if (report.added) { rebuildArr(); emitItems(); }
+    // Unconditional: the coalescer may be holding the last few items back, and
+    // "added 40" with 37 rows on screen is a bug report.
+    rebuildArr();
+    emitItems();
     return report;
   }
 
@@ -1080,7 +1489,10 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
     const it = localItems.get(String(id));
     if (!it) return false;
     localItems.delete(String(id));
-    try { if (it.srcUrl) URL.revokeObjectURL(it.srcUrl); } catch (_e) { /* ignore */ }
+    localVersion++;
+    // A compressed pick's bytes live behind `artUrl`, not `srcUrl` — revoking
+    // only the latter leaks the whole artifact for the life of the page.
+    revokeLocal(it);
     rebuildArr();
     emitItems();
     return true;
@@ -1169,6 +1581,35 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
     /** Files the player picked in the browser (standalone's whole library). */
     get localCount() { return localItems.size; },
 
+    /** Those files, as an array. A snapshot — mutating it changes nothing. */
+    get localItems() { return Array.from(localItems.values()); },
+
+    /**
+     * Bumped whenever a local item is added or removed, and NEVER by a hosted
+     * `cache-list`. boot.js watches it so the media deck is only re-dealt when
+     * the player's own library actually moved (see localPlayableEntries above).
+     */
+    get localVersion() { return localVersion; },
+
+    /** The local library as exec/media.js deck entries. Convenience over the pure fn. */
+    localDeck() { return localPlayableEntries(Array.from(localItems.values())); },
+
+    /**
+     * ADOPTION PROGRESS — fires immediately with the current value, then on
+     * every step of an `addLocalFiles` run. `{running, done, total, name, pct}`,
+     * where `pct` is only meaningful during a compression. Read it, never mutate
+     * it (the same contract as `state`).
+     */
+    onLocalProgress(fn) {
+      if (typeof fn !== 'function') return () => {};
+      localProgressSubs.add(fn);
+      try { fn(localProgress); } catch (e) { warn('local-progress subscriber threw: ' + ((e && e.message) || e)); }
+      return () => localProgressSubs.delete(fn);
+    },
+
+    /** Live adoption progress. Same object every time — do not keep a copy. */
+    get localProgress() { return localProgress; },
+
     requestList, compressAll, compress, cancel, pause, resume, deleteOne, deleteAll, setCap,
     addLocalFiles, removeLocal,
 
@@ -1186,12 +1627,18 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
       disposed = true;
       stateSubs.clear();
       itemSubs.clear();
-      for (const it of localItems.values()) {
-        try { if (it.srcUrl) URL.revokeObjectURL(it.srcUrl); } catch (_e) { /* ignore */ }
-      }
+      localProgressSubs.clear();
+      for (const it of localItems.values()) revokeLocal(it);
       localItems.clear();
+      localSrcShas.clear();
       encodeHandler = null;
       if (encoder) { try { encoder.dispose(); } catch (_e) { /* ignore */ } encoder = null; }
+      // The compressor owns a Worker when the page ever built one; a disposed
+      // store that leaves it running keeps a whole encoder thread alive.
+      if (compressor && compressor !== injectedCompressor) {
+        try { compressor.dispose?.(); } catch (_e) { /* ignore */ }
+      }
+      compressor = null;
       for (const t of OWNED_TYPES) { try { bridge.off(t); } catch (_e) { /* ignore */ } }
     },
   };

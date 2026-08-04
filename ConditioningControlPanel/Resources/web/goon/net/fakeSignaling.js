@@ -12,6 +12,18 @@
 //   * a caller never receives its own messages back (no self-echo) — but the cursor still advances
 //     PAST them, so the next poll doesn't re-walk the whole list;
 //   * /join marks the room joined, which is what the host's next /signal sees as peer_joined;
+//   * SEAT IDENTITY: the seat belongs to a uid. The same uid rejoining RECLAIMS it (fresh token,
+//     stale SDP dropped), a different uid is refused `already_joined`, and the host's own uid is
+//     refused `self_join`. This is not auth — it is the rule that decides whether a client can get
+//     back into the room it just fell out of, and a fake that got it wrong would teach the client
+//     that a ghost seat is normal;
+//   * SELF-DUEL: a WHITELISTED uid is the one exception to `self_join` — it may hold both seats, and
+//     its guest seat is stored under the shadow id `<uid>#self`. Modelled because it is seat
+//     identity, and because a fake that refused it would make the owner's two-device play-test
+//     (one account, PC hosts, phone joins) look like a client bug. `whitelist`/`setWhitelisted`
+//     stand in for the server's user record — the fake models WHO may, never HOW it is proven;
+//   * /leave hands the seat back (guest) or folds the room (host), so a fold is testable without
+//     waiting out a TTL;
 //   * room TTL (the C# fake has no clock; this one does, so an "expired" path is testable).
 //
 // Long-poll: the fake answers instantly and the caller's cadence timer paces it, same as C#.
@@ -19,6 +31,15 @@
 import { GoonSignalError } from './signaling.js';
 
 const DEFAULT_TTL_MS = 300000;   // ~5 min, the documented room TTL
+
+/**
+ * A self-duel's guest seat id. Unified ids are `u_[a-z0-9]{8,24}` server-side, so the '#' can never
+ * collide with — or be mistaken for — a real account, which is the whole point: every uid-keyed
+ * thing the real server writes (pair record, ledger, report attribution) then sees two identities.
+ */
+const SELF_SUFFIX = '#self';
+export const shadowGuestUid = (uid) => `${uid}${SELF_SUFFIX}`;
+export const isShadowUid = (uid) => typeof uid === 'string' && uid.endsWith(SELF_SUFFIX);
 
 function ok(body) { return Promise.resolve({ status: 200, body: JSON.stringify(body) }); }
 function fail(status, error) { return Promise.resolve({ status, body: JSON.stringify({ error }) }); }
@@ -41,13 +62,22 @@ export class GoonFakeSignalingServer {
    * @param {number} [o.ttlMs] room lifetime
    * @param {() => number} [o.now] injectable clock (ms) — tests expire rooms without waiting
    * @param {string} [o.codePrefix]
+   * @param {string[]} [o.whitelist] uids allowed to self-duel (see setWhitelisted)
    */
-  constructor({ ttlMs = DEFAULT_TTL_MS, now = () => Date.now(), codePrefix = 'LOOP' } = {}) {
+  constructor({ ttlMs = DEFAULT_TTL_MS, now = () => Date.now(), codePrefix = 'LOOP', whitelist = [] } = {}) {
     this._rooms = new Map();
     this._ttlMs = ttlMs;
     this._now = now;
     this._codePrefix = codePrefix;
     this._codeCounter = 0;
+    /**
+     * Uids that may hold BOTH seats of their own room. The real server reads this off the user
+     * record (`patreon_is_whitelisted` / `substar_is_whitelisted` — whitelist, NOT tier: a paying
+     * tier-2 patron is refused, because a self-duel is a ledger/self-report surface and only the
+     * hand-maintained list is trusted with it). Here it is just a set a test can fill.
+     * @type {Set<string>}
+     */
+    this._whitelist = new Set(Array.isArray(whitelist) ? whitelist.map(String) : []);
     /** Every request the server saw — handy in an assertion. */
     this.requests = [];
     /**
@@ -74,6 +104,18 @@ export class GoonFakeSignalingServer {
     const v = (typeof ver === 'string' && ver) ? ver : null;
     if (role === 'guest') this.guestCardVer = v; else this.hostCardVer = v;
     return v;
+  }
+
+  /**
+   * Test hook: mark a uid privileged (or not), i.e. allowed to self-duel.
+   * @param {string} uid
+   * @param {boolean} [on]
+   */
+  setWhitelisted(uid, on = true) {
+    const u = String(uid || '');
+    if (!u) return this;
+    if (on) this._whitelist.add(u); else this._whitelist.delete(u);
+    return this;
   }
 
   /** Hand this to GoonSignalingClient's `post` option. */
@@ -111,6 +153,9 @@ export class GoonFakeSignalingServer {
           code: `${this._codePrefix}${String(this._codeCounter).padStart(2, '0')}`,
           hostToken: newToken(),
           guestToken: newToken(),
+          hostUid: typeof req.unified_id === 'string' ? req.unified_id : '',
+          guestUid: null,
+          guestEpoch: 0,
           joined: false,
           signals: [],          // {seq, kind, data, from}
           relay: [],            // {seq, from, data}
@@ -134,10 +179,32 @@ export class GoonFakeSignalingServer {
         const room = this._live(req.code);
         // A bad code and an expired code are indistinguishable to a joiner, by design.
         if (!room) return fail(404, GoonSignalError.UnknownCode);
-        if (room.joined) return fail(409, GoonSignalError.AlreadyJoined);
+        const uid = typeof req.unified_id === 'string' ? req.unified_id : '';
+        // Your own room is not a full room. One account cannot hold both seats:
+        // the ledger, the pair record and the peer card are all "the other uid".
+        // …unless the account is WHITELISTED, which is the owner's two-device
+        // play-test. Then it takes the SHADOW seat, so those three stay pointed at
+        // two distinct identities and the exception costs the guard nothing.
+        const selfDuel = !!uid && uid === room.hostUid;
+        if (selfDuel && !this._whitelist.has(uid)) return fail(409, GoonSignalError.SelfJoin);
+        // Which seat this caller is entitled to reclaim. A self-duel guest must match
+        // the SHADOW seat, or every rejoin would re-enter the fresh-claim path.
+        const seatUid = selfDuel ? shadowGuestUid(uid) : uid;
+        const rejoin = room.joined && !!uid && room.guestUid === seatUid;
+        if (room.joined && !rejoin) return fail(409, GoonSignalError.AlreadyJoined);
         room.joined = true;
+        room.guestUid = seatUid;
+        room.guestEpoch++;
+        room.guestToken = newToken();     // every claim gets a fresh token
+        // A reclaimed seat starts on a clean mailbox: the dead attempt's SDP would
+        // otherwise be handed to the fresh peer connection as if it were live. The
+        // SEQ counter deliberately keeps counting — the host's cursor is past it.
+        if (rejoin) room.signals = [];
         return ok({
           ok: true,
+          rejoin,
+          // Advisory: both seats are one account. Nothing in the match depends on it.
+          self_duel: selfDuel,
           token: room.guestToken,
           role: 'guest',
           expires_in_sec: Math.max(0, Math.round((room.expiresAt - this._now()) / 1000)),
@@ -148,6 +215,28 @@ export class GoonFakeSignalingServer {
           // The joiner is the GUEST, so the peer whose card it learns is the host.
           peer_card_ver: this.hostCardVer,
         });
+      }
+
+      case '/v2/goon/leave': {
+        const room = this._live(req.code);
+        if (!room) return fail(404, GoonSignalError.Expired);
+        const role = typeof req.role === 'string' ? req.role : 'guest';
+        const token = typeof req.token === 'string' ? req.token : '';
+        if (token !== (role === 'host' ? room.hostToken : room.guestToken)) {
+          return fail(401, GoonSignalError.Unauthorized);
+        }
+        if (role === 'host') {
+          // The code dies with the person holding it.
+          this._rooms.delete(room.code);
+          return ok({ ok: true, folded: true });
+        }
+        // The seat goes back on the market; the ROOM stays up, so the same player
+        // can retry (or anyone else can join) without a second code and a second
+        // burned pass. This is the anti-ghost half of the 2026-08-04 fix.
+        room.joined = false;
+        room.guestUid = null;
+        room.signals = [];
+        return ok({ ok: true, folded: false });
       }
 
       case '/v2/goon/signal': {

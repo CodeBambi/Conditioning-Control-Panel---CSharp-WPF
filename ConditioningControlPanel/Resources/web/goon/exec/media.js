@@ -14,9 +14,20 @@
  * swap stays a one-file change.
  *
  *   setManifest({images,videos,skipped,truncated})
+ *   setLocalLibrary([{kind,name,url}])                 (see below)
  *   draw() / drawKind('image'|'video') -> {kind, name, url, acquire} | null
  *   acquire(entry) -> {url, release(), provenance}
  *   counts() -> {images, videos, skipped, truncated}   hasMedia() -> bool
+ *
+ * THE LOCAL LIBRARY (standalone). In a plain browser there is no host and
+ * therefore no manifest frame worth the name — bridge.js synthesizes an EMPTY
+ * one — so the only library a phone has is what the player picked on the assets
+ * screen (ui/assetsStore.js `localItems`). Those picks used to reach the SEND
+ * path only, which meant a practice session on a phone drew from an empty deck
+ * and every effect fired with no media. `setLocalLibrary` is the other half:
+ * the deck is `hostEntries + localEntries`, and the two are set INDEPENDENTLY —
+ * a late manifest cannot wipe the player's picks and a new pick cannot wipe the
+ * host's preset. Both re-deal; neither touches `received`.
  *
  * RECEIVED ARTIFACTS (P2P media transfer, spec §4.3) live in a SECOND map that
  * the deck never sees:
@@ -43,7 +54,9 @@ export const XFER_TAG_PREFIX = 'xfer:';
 const SHA_RE = /^[0-9a-f]{64}$/;
 
 export function createGoonMediaPool() {
-  let entries = [];   // { kind: 'image'|'video', name, url }
+  let hostEntries = [];   // the host's manifest — the user's active preset
+  let localEntries = [];  // standalone: files the player picked in this browser
+  let entries = [];       // hostEntries + localEntries — what the deck indexes
   let skipped = 0;    // reported by the host (browser-undecodable formats etc.)
   let truncated = false;
   let deck = [];      // shuffled indices into entries, drawn from the end
@@ -65,6 +78,24 @@ export function createGoonMediaPool() {
     for (const e of entries) (e.kind === 'image' ? images++ : videos++);
     return { images, videos, skipped, truncated };
   };
+
+  /**
+   * The deck's view of the two sources, re-dealt. Called by BOTH setters, which
+   * is what makes them independent: whichever moved, the other survives.
+   */
+  function rebuildEntries() {
+    entries = localEntries.length ? hostEntries.concat(localEntries) : hostEntries.slice();
+    deck = [];          // re-deal with the new entries in the mix
+    recent.length = 0;
+  }
+
+  /** One {kind,name,url} normalized, or null when it is not something to draw. */
+  function toEntry(e) {
+    if (!e || !e.url) return null;
+    const kind = e.kind === 'video' ? 'video' : (e.kind === 'image' ? 'image' : '');
+    if (!kind) return null;
+    return { kind, name: String(e.name || ''), url: String(e.url) };
+  }
 
   function reshuffle() {
     deck = entries.map((_, i) => i);
@@ -173,18 +204,41 @@ export function createGoonMediaPool() {
     /** Swap in a manifest: {images:[{name,url}], videos:[...], skipped, truncated}. */
     setManifest(m) {
       const src = m || {};
-      entries = [];
-      for (const e of (src.images || [])) if (e && e.url) entries.push({ kind: 'image', name: e.name || '', url: e.url });
-      for (const e of (src.videos || [])) if (e && e.url) entries.push({ kind: 'video', name: e.name || '', url: e.url });
+      hostEntries = [];
+      for (const e of (src.images || [])) { const v = toEntry({ kind: 'image', name: e && e.name, url: e && e.url }); if (v) hostEntries.push(v); }
+      for (const e of (src.videos || [])) { const v = toEntry({ kind: 'video', name: e && e.name, url: e && e.url }); if (v) hostEntries.push(v); }
       skipped = src.skipped | 0;
       truncated = !!src.truncated;
-      deck = [];          // re-deal with the new entries in the mix
-      recent.length = 0;
+      rebuildEntries();
       // NOTE: `received` is deliberately NOT touched. The deck reset is about the
       // user's own preset changing; what a duel partner sent is keyed by hash and
       // has nothing to do with it (spec §4.3, trap register #5/#7).
+      // NOTE 2: `localEntries` is not touched either — a manifest frame that lands
+      // after the player has picked files (a host that re-scans its preset, or the
+      // synthesized standalone frame arriving late) must not empty their library.
       return counts();
     },
+
+    /**
+     * Swap in the LOCAL library — the whole list, every time, because that is
+     * what ui/assetsStore.js can hand over cheaply and a diff would only buy a
+     * reshuffle we do not mind paying for. Entries are `{kind,name,url}` with
+     * `kind` ALREADY DECIDED by the store (a blob: URL has no extension to sniff,
+     * so re-deriving it here would classify every pick as an image).
+     *
+     * URLs are the store's to own: acquire() hands them out with a no-op
+     * release(), so nothing here ever revokes a blob the assets screen is still
+     * rendering a thumbnail from.
+     */
+    setLocalLibrary(list) {
+      localEntries = [];
+      for (const e of (list || [])) { const v = toEntry(e); if (v) localEntries.push(v); }
+      rebuildEntries();
+      return counts();
+    },
+
+    /** How many of the deck's entries came from the player's own picks. */
+    localCount: () => localEntries.length,
 
     hasMedia: () => entries.length > 0,
     counts,

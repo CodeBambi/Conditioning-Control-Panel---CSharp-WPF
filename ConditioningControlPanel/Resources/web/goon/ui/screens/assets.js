@@ -28,7 +28,8 @@
 import { createLedger, el, button } from '../router.js';
 import { S } from '../strings.js';
 import {
-  CONFIRM_ETA_MS, CONFIRM_INPUT_BYTES, FILTERS, GB, LOCAL_MAX_BYTES, NEEDS_STATES,
+  CONFIRM_ETA_MS, CONFIRM_INPUT_BYTES, FILTERS, GB, LOCAL_ARTIFACT_MAX_BYTES, LOCAL_MAX_BYTES,
+  LOCAL_ZIP_MAX_ENTRIES, NEEDS_STATES,
   capGb, etaMinutes, formatBytes, formatUsage, matchesFilter, normalizeState, pendingInputBytes,
 } from '../assetsStore.js';
 
@@ -606,25 +607,54 @@ function unavailableCard(onBack, ledger, audio) {
 function localMediaCard({ store, ledger, audio, actions, logger }) {
   const L = S.assets.local;
   const maxText = formatBytes(LOCAL_MAX_BYTES);
+  const artMaxText = formatBytes(LOCAL_ARTIFACT_MAX_BYTES);
 
   const input = el('input', { type: 'file', class: 'gg-sr-only', multiple: true, accept: LOCAL_ACCEPT, 'aria-hidden': 'true', tabindex: '-1' });
   const addBtn = button(ledger, L.add, () => { try { input.click(); } catch (_e) { /* ignore */ } }, { variant: 'primary', audio });
   const status = el('p', { class: 'gg-assets-eta', text: '', role: 'status', hidden: true });
+  /* A SECOND status line, and not the same one as the summary: the summary is
+   * the answer and this is the wait. Folding them together means the last run's
+   * result is what the player stares at while the next one runs. */
+  const progress = el('p', { class: 'gg-assets-eta gg-local-progress', text: '', role: 'status', hidden: true });
   const list = el('div', { class: 'gg-local-list', role: 'list' });
+
+  /* Adding a big zip is minutes of decoding and encoding now, so the card says
+   * so while it happens. Through the ledger, like every other subscription. */
+  if (typeof store.onLocalProgress === 'function') ledger.sub(store.onLocalProgress((p) => {
+    if (!p || !p.running) { progress.hidden = true; progress.textContent = ''; return; }
+    progress.hidden = false;
+    if (p.pct > 0 && p.name) progress.textContent = L.compressing(p.name, p.pct);
+    else if (p.total > 1) progress.textContent = L.adding(Math.min(p.done + 1, p.total), p.total);
+    else progress.textContent = p.name ? L.addingOne(p.name) : L.adding(p.done, Math.max(1, p.total));
+  }));
 
   ledger.listen(input, 'change', () => {
     const files = input.files;
     if (!files || !files.length) return;
     addBtn.disabled = true;
+    status.hidden = true;
     store.addLocalFiles(files).then((r) => {
       addBtn.disabled = false;
       try { input.value = ''; } catch (_e) { /* ignore */ }
       const bits = [];
       if (r.added) bits.push(L.added(r.added));
+      // Worth its own clause: the whole point of the compression lanes is that
+      // files which used to be refused are now sendable, and the player should
+      // be told that is what happened to them.
+      if (r.compressed) bits.push(L.compressed(r.compressed));
       if (r.dupes) bits.push(L.skipDupe(r.dupes));
       if (r.tooBig) bits.push(L.skipBig(r.tooBig, maxText));
+      // Video is the one family the page cannot re-encode, so it gets the
+      // ARTIFACT cap in its own sentence rather than the exempt one.
+      if (r.tooBigVideo) bits.push(L.skipBigVideo(r.tooBigVideo, artMaxText));
       if (r.badType) bits.push(L.skipType(r.badType));
       if (r.failed) bits.push(L.skipFailed(r.failed));
+      // "Took the first 500" is not a failure and must never read as one.
+      if (r.trimmed) bits.push(L.trimmed(r.trimmed, LOCAL_ZIP_MAX_ENTRIES));
+      // An archive we could not OPEN is its own sentence. It must never be
+      // folded into skipBig: the per-file cap text on an archive failure is how
+      // a 1 GB library got reported as "1 over 8 MB".
+      if (r.zipBad) bits.push(L.zipBad(r.zipBad));
       // An archive that opened and held nothing sendable would otherwise say
       // nothing at all, which reads as "the button is broken".
       if (!bits.length && r.zips) bits.push(L.zipNone);
@@ -639,15 +669,25 @@ function localMediaCard({ store, ledger, audio, actions, logger }) {
 
   function row(it) {
     const thumb = el('div', { class: 'gg-local-thumb' });
-    if (it.srcUrl && it.kind === 'image') {
-      thumb.appendChild(el('img', { src: it.srcUrl, alt: '', decoding: 'async', loading: 'lazy' }));
+    // A COMPRESSED pick has no srcUrl — its bytes are the artifact, behind
+    // artUrl. Reading only srcUrl here is how a compressed photo renders as the
+    // word "image" next to a perfectly good thumbnail.
+    const previewUrl = it.srcUrl || it.artUrl || '';
+    if (previewUrl && it.kind === 'image') {
+      thumb.appendChild(el('img', { src: previewUrl, alt: '', decoding: 'async', loading: 'lazy' }));
     } else {
       thumb.appendChild(el('span', { class: 'gg-local-thumb-kind', text: it.kind === 'video' ? 'video' : 'image' }));
     }
     const name = el('span', { class: 'gg-local-name' });
     name.textContent = String(it.name || '');          // user data — text, always
     name.title = String(it.name || '');
-    const size = el('span', { class: 'gg-local-size', text: formatBytes(it.bytes) });
+    // What it weighs ON THE WIRE, and what it weighed before — a compressed pick
+    // showing only its new size looks like the picker lied about the file.
+    const shrunk = it.srcBytes > it.bytes;
+    const size = el('span', {
+      class: 'gg-local-size',
+      text: shrunk ? L.sizeShrunk(formatBytes(it.srcBytes), formatBytes(it.bytes)) : formatBytes(it.bytes),
+    });
     const rm = el('button', { type: 'button', class: 'gg-asset-act', text: L.remove });
     ledger.listen(rm, 'click', () => {
       try { audio?.sfx?.('ui-back'); } catch (_e) { /* stub bus */ }
@@ -673,7 +713,8 @@ function localMediaCard({ store, ledger, audio, actions, logger }) {
     el('h2', { class: 'gg-assets-standalone-head', text: L.headline }),
     el('p', { class: 'gg-lead', text: L.line }),
     el('div', { class: 'gg-assets-tools-row gg-local-tools' }, [addBtn, input]),
-    el('p', { class: 'gg-assets-note', text: L.limits(maxText) }),
+    el('p', { class: 'gg-assets-note', text: L.limits(maxText, artMaxText) }),
+    progress,
     status,
     list,
     el('p', { class: 'gg-assets-note', text: L.note }),

@@ -135,6 +135,13 @@ export function createSheets({ root = null, audio = null, logger = null } = {}) 
         });
       case 'unauthorized':
         return open({ icon: S.sheets.unauthorized.icon, headline: S.sheets.unauthorized.headline, line: S.sheets.unauthorized.line });
+      // The join SCREEN renders these two inline; they only reach a sheet from a
+      // path with no red line to put them on. Either way they must not fall through
+      // to the network sheet — the room answered fine, it just said no.
+      case 'already_joined':
+        return open({ icon: S.sheets.seatTaken.icon, headline: S.sheets.seatTaken.headline, line: S.sheets.seatTaken.line });
+      case 'self_join':
+        return open({ icon: S.sheets.selfJoin.icon, headline: S.sheets.selfJoin.headline, line: S.sheets.selfJoin.line });
       case 'ice_timeout':
       case 'relay_failed':
       case 'signaling_failed':

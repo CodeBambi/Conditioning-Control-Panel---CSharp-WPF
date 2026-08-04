@@ -81,6 +81,9 @@ export const S = Object.freeze({
     back: 'Back',
     errUnknown: 'No room with that code. Check the last character?',
     errFull: 'That room already has two players.',
+    // NOT "full": the other seat is yours. Sending a player off to re-read a code
+    // they typed correctly is the worst thing this screen can do.
+    errSelf: 'That is your own room — the other player has to be on a different account.',
     errExpired: 'That code expired. Ask for a fresh one.',
     errShort: 'six characters, please.',
   },
@@ -354,7 +357,8 @@ export const S = Object.freeze({
       headline: 'add media to send',
       line: 'pick files from this device and they can travel to your opponent mid-duel, straight from you to them. nothing is uploaded anywhere.',
       add: 'add files',
-      limits: (max) => 'up to ' + max + ' each · jpg, png, gif, webp, mp4, webm · or a zip of them',
+      limits: (max, vmax) => 'jpg, png, gif, webp, mp4, webm · or a zip of them · up to ' + max
+        + ' travels as-is, bigger photos and gifs are compressed to fit, clips up to ' + vmax,
       empty: 'nothing added yet.',
       note: 'your picks last until this page closes — add them again next visit.',
       remove: 'remove',
@@ -363,8 +367,41 @@ export const S = Object.freeze({
       skipType: (n) => n + ' of an unsupported type',
       skipFailed: (n) => n + ' unreadable',
       added: (n) => n + ' added',
+      /**
+       * Adding is no longer instant — a zip of two hundred photos is two hundred
+       * decodes and two hundred encodes. This line is the whole difference
+       * between "working" and "the button is broken"; it lives on a role=status.
+       */
+      adding: (done, total) => 'adding ' + done + ' / ' + total + '…',
+      addingOne: (name) => 'adding ' + name + '…',
+      /** Mid-compression, when the encoder is actually reporting a percentage. */
+      compressing: (name, pct) => 'compressing ' + name + '… ' + pct + '%',
+      /** The good news in the summary: these were too big, and now they are not. */
+      compressed: (n) => n + ' compressed to fit',
+      /**
+       * A clip past the wire's artifact cap. Its OWN sentence, carrying the
+       * VIDEO number: a browser cannot transcode video, so this is the one
+       * refusal the player can act on (trim it, or send a gif instead).
+       */
+      skipBigVideo: (n, max) => n + (n === 1 ? ' video' : ' videos') + ' too big to send (' + max + ' max)',
+      /**
+       * The ceilings trimmed a REAL library. Never "unreadable", never a
+       * per-file size: what happened is that we took the first N of something
+       * legitimate, and the player is owed exactly that sentence.
+       */
+      trimmed: (n, max) => n + ' more left out — one zip adds its first ' + max + ' files',
+      /** A compressed row: what it weighed, and what actually travels. */
+      sizeShrunk: (from, to) => from + ' → ' + to,
       /** A zip opened fine and held nothing we can send — say so, never stay silent. */
       zipNone: 'no media in that zip',
+      /**
+       * The ARCHIVE itself could not be opened (corrupt, truncated, a format we
+       * cannot walk). Its own line on purpose: the size of a zip is no longer a
+       * reason to refuse one, and reporting an archive failure with the
+       * per-file cap text is what told a player with a 1 GB library that it was
+       * "1 over 8 MB".
+       */
+      zipBad: (n) => (n === 1 ? "couldn't open that zip" : n + " zips couldn't be opened"),
     },
 
     statReady: (n) => n + ' ready',
@@ -471,6 +508,19 @@ export const S = Object.freeze({
       headline: 'Could not connect',
       line: 'Neither a direct nor a relayed link came up. Try again.',
     },
+    // A seat problem is never a connection problem, and the fall-through sheet
+    // ("could not reach the server") would tell the player to check their wifi
+    // about a room that answered perfectly.
+    seatTaken: {
+      icon: '👥',
+      headline: 'That room is taken',
+      line: 'Someone else is already in there. Ask for a fresh code.',
+    },
+    selfJoin: {
+      icon: '🪞',
+      headline: 'That is your own room',
+      line: 'You are the host of that code. The other player has to be on a different account.',
+    },
     lobbyFailed: {
       icon: '⚙',
       headline: 'This pairing will not work',
@@ -479,6 +529,25 @@ export const S = Object.freeze({
     ok: 'OK',
     cancel: 'Cancel',
     retry: 'Try again',
+  },
+
+  /* ------------------------------------------------------ the desk's chrome
+   * The zen toggle (ui/hud.js): ONE button that clears the desk down to the
+   * opponent monitor and the arsenal — the score, the risk multiplier, the
+   * closeness dial and the mercy button all step off together.
+   *
+   * A glyph, because it sits in the top-right corner beside the gear where a
+   * word would not fit, so the label travels in aria-label + title instead and
+   * the pressed state travels in aria-pressed. The "escape still ends the
+   * match" half is not decoration: while the panels are away it is the only
+   * place that says so. */
+  hud: {
+    zenHide: 'hide panels',
+    zenShow: 'show panels',
+    /** ⊟ collapse / ⊞ expand — a box that loses and regains its contents. */
+    zenHideGlyph: '⊟',
+    zenShowGlyph: '⊞',
+    zenShowTitle: 'show panels · escape still ends the match',
   },
 
   /* ------------------------------------------------- the opponent monitor */

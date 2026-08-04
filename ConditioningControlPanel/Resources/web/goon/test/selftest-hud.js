@@ -2751,6 +2751,316 @@ const audioMod = await import('../ui/audio.js');
   dmDc.dispose();
 }
 
+/* ===========================================================================
+ * 13. THE ZEN TOGGLE — one button, four panels (owner, 2026-08-04).
+ *
+ * "add a button that hides the ui": the score, the risk multiplier, the
+ * closeness dial ("you're telling them") and MERCY step off together; the
+ * opponent monitor and the arsenal stay. The whole feature is one bit, so this
+ * pins the bit, both of its names, and the CSS that reads them — a toggle that
+ * flips a class no stylesheet mentions is an invisible feature.
+ * ======================================================================== */
+{
+  const { S: S13 } = await import('../ui/strings.js');
+  const prefsMod13 = await import('../ui/prefs.js');
+
+  ok(typeof hudMod.HUD_ZEN_CLASS === 'string' && hudMod.HUD_ZEN_CLASS.length > 0,
+    'ui/hud.js exports the zen class name');
+  ok(typeof hudMod.HUD_ZEN_ATTR === 'string' && hudMod.HUD_ZEN_ATTR.length > 0,
+    'ui/hud.js exports the <html> attribute MERCY is hidden from');
+
+  // every user-facing word goes through ui/strings.js
+  ok(!!(S13.hud && S13.hud.zenHide && S13.hud.zenShow),
+    'strings.js carries both labels for the toggle');
+  ok(!!(S13.hud.zenHideGlyph && S13.hud.zenShowGlyph && S13.hud.zenHideGlyph !== S13.hud.zenShowGlyph),
+    'and two DIFFERENT glyphs — the state is never only a colour');
+  ok(/escape/i.test(String(S13.hud.zenShowTitle || '')),
+    'the hidden state says out loud that escape still ends the match');
+
+  const match13 = makeFakeMatch();
+  const store13 = { hudZen: false };
+  const prefs13 = { get: (k) => store13[k], set: (k, v) => { store13[k] = v; } };
+  const hud13 = hudMod.mountHud({ match: match13, audio: { sfx() {} }, prefs: prefs13 });
+  const hudHost13 = dom.byId.get('gg-hud');
+  const root13 = findOne(hudHost13, 'gg-hud-frame');
+  const zen13 = findOne(hudHost13, 'gg-zen');
+  const html13 = dom.doc.documentElement;
+
+  ok(!!zen13, 'the live HUD carries exactly one zen toggle');
+  ok(findAll(hudHost13, 'gg-zen').length === 1, 'exactly one',
+    String(findAll(hudHost13, 'gg-zen').length));
+  ok(zen13 && zen13.tagName === 'BUTTON', 'it is a real button');
+  ok(zen13 && zen13.getAttribute('aria-pressed') === 'false', 'unpressed to start');
+  ok(zen13 && zen13.getAttribute('aria-label') === S13.hud.zenHide,
+    'labelled from strings.js', zen13 && String(zen13.getAttribute('aria-label')));
+  ok(!hasClass(root13, hudMod.HUD_ZEN_CLASS), 'the desk starts whole');
+  ok(html13.getAttribute(hudMod.HUD_ZEN_ATTR) === null, 'and MERCY starts visible');
+
+  zen13.dispatchEvent({ type: 'click' });
+  ok(hasClass(root13, hudMod.HUD_ZEN_CLASS), 'one press puts the modifier on the frame');
+  ok(html13.getAttribute(hudMod.HUD_ZEN_ATTR) === 'on',
+    'and mirrors the same bit onto <html>, which is the only way to reach #gg-mercy');
+  ok(zen13.getAttribute('aria-pressed') === 'true', 'aria-pressed follows');
+  ok(zen13.getAttribute('aria-label') === S13.hud.zenShow, 'and so does the label');
+  ok(zen13.textContent === S13.hud.zenShowGlyph, 'the glyph flips to the way back');
+  ok(store13.hudZen === true, 'the pick is remembered');
+  ok(hudHost13.children.length > 0 && !!findOne(hudHost13, 'gg-mon-host'),
+    'the monitor and the rest of the desk are untouched — CSS does the hiding, not JS');
+
+  zen13.dispatchEvent({ type: 'click' });
+  ok(!hasClass(root13, hudMod.HUD_ZEN_CLASS), 'a second press gives everything back');
+  ok(html13.getAttribute(hudMod.HUD_ZEN_ATTR) === null, 'including MERCY');
+  ok(zen13.getAttribute('aria-pressed') === 'false', 'and the button says so');
+  ok(store13.hudZen === false, 'the pref follows it back');
+
+  // the handle a play-test driver uses instead of synthesising a click
+  hud13.parts.zen.set(true);
+  ok(hud13.parts.zen.on === true && hasClass(root13, hudMod.HUD_ZEN_CLASS),
+    'parts.zen drives the same one bit');
+
+  /* THE UNWIND. The class dies with the node; the attribute does not, and a
+   * leftover one would hide the mercy button of the NEXT match with no button
+   * left on screen to bring it back. */
+  hud13.unmount();
+  ok(html13.getAttribute(hudMod.HUD_ZEN_ATTR) === null,
+    'unmount clears the <html> bit — a stale one would hide the next match\'s MERCY');
+  ok(match13._subs.released === match13._subs.taken,
+    'and the toggle leaks no subscriptions', `${match13._subs.released}/${match13._subs.taken}`);
+
+  // remembered across mounts
+  const match13b = makeFakeMatch();
+  const hud13b = hudMod.mountHud({ match: match13b, audio: { sfx() {} }, prefs: { get: () => true, set() {} } });
+  const root13b = findOne(dom.byId.get('gg-hud'), 'gg-hud-frame');
+  ok(hasClass(root13b, hudMod.HUD_ZEN_CLASS) && html13.getAttribute(hudMod.HUD_ZEN_ATTR) === 'on',
+    'a remembered zen is applied at mount, not on the first click');
+  hud13b.unmount();
+  ok(html13.getAttribute(hudMod.HUD_ZEN_ATTR) === null, 'and unwound the same way');
+
+  ok(prefsMod13.PREF_DEFAULTS.hudZen === false,
+    'the pref exists and defaults OFF — a desk you cannot read your score in is a choice',
+    String(prefsMod13.PREF_DEFAULTS.hudZen));
+
+  // a HUD with no pref store at all must still toggle
+  const match13c = makeFakeMatch();
+  const hud13c = hudMod.mountHud({ match: match13c, audio: { sfx() {} } });
+  const zen13c = findOne(dom.byId.get('gg-hud'), 'gg-zen');
+  zen13c.dispatchEvent({ type: 'click' });
+  ok(hasClass(findOne(dom.byId.get('gg-hud'), 'gg-hud-frame'), hudMod.HUD_ZEN_CLASS),
+    'the toggle works with no prefs object — persistence is a nicety, not the state');
+  hud13c.unmount();
+
+  /* ---- the CSS half ----------------------------------------------------- */
+  const fs13 = await import('node:fs/promises');
+  const url13 = await import('node:url');
+  const hudCss13 = await fs13.readFile(url13.fileURLToPath(new URL('../ui/hud.css', import.meta.url)), 'utf8');
+  const goonCss13 = await fs13.readFile(url13.fileURLToPath(new URL('../goon.css', import.meta.url)), 'utf8');
+
+  const zenBlocks = hudCss13.match(/[^{}]*\.gg-hud--zen[^{}]*\{[^}]*\}/g) || [];
+  ok(zenBlocks.length > 0, 'hud.css reads the modifier class at all');
+  const zenText = zenBlocks.join('\n');
+  for (const sel of ['.gg-score', '.gg-risk', '.gg-dial-host']) {
+    ok(zenText.includes(sel), `zen hides ${sel}`);
+  }
+  ok(/\.gg-hud--zen[^{}]*\{[^}]*display:\s*none/.test(zenText),
+    'and it hides them with display, so the layout closes up instead of leaving holes');
+
+  // what must SURVIVE the toggle: their monitor and the effects you can send
+  for (const sel of ['.gg-mon-host', '.gg-rail', '.gg-item', '.gg-zen']) {
+    ok(!new RegExp('\\.gg-hud--zen[^{}]*' + sel.replace('.', '\\.') + '[^{}]*\\{[^}]*display:\\s*none').test(hudCss13),
+      `zen never hides ${sel}`);
+  }
+
+  ok(/html\[data-gg-zen="on"\]\s*#gg-mercy[^{]*\{[^}]*display:\s*none/.test(hudCss13),
+    'MERCY is reached from <html>, because it is not a descendant of the HUD');
+  const mercyZen = (hudCss13.match(/html\[data-gg-zen="on"\][^{]*\{[^}]*\}/g) || []).join('\n');
+  ok(!/opacity|filter|transform|animation/.test(mercyZen),
+    'and only display: the isolation contract in goon.css is not being dimmed, filtered or moved');
+  ok(/filter:\s*none\s*!important/.test(goonCss13) && /opacity:\s*1\s*!important/.test(goonCss13),
+    'goon.css still owns the mercy isolation block, untouched');
+
+  // the button is the only way back on a phone: hit area, and no parked animation
+  const zenBtnBlock = (hudCss13.match(/\.gg-zen\s*\{[^}]*\}/g) || [])[0] || '';
+  ok(/width:\s*48px/.test(zenBtnBlock) && /height:\s*48px/.test(zenBtnBlock),
+    'the toggle keeps a 48px hit area', zenBtnBlock);
+  ok(!/animation/.test(zenBtnBlock),
+    'and no animation — it would need pinning against the --gg-deco-play park');
+
+  /* ---- the size pass (independent of the toggle) ------------------------- */
+  const mercyBlock = (hudCss13.match(/\.gg-mercy-btn\s*\{[^}]*\}/g) || [])[0] || '';
+  const mercyH = Number((mercyBlock.match(/height:\s*(\d+)px/) || [])[1] || 0);
+  ok(mercyH >= 48 && mercyH <= 64, 'MERCY is smaller than it was, and still a finger tall', String(mercyH));
+  const dialBlock = (hudCss13.match(/\.gg-dial\s*\{[^}]*\}/g) || [])[0] || '';
+  const dialMin = Number((dialBlock.match(/min-width:\s*([\d.]+)rem/) || [])[1] || 99);
+  ok(dialMin < 15, 'the closeness dial is narrower than the 15rem it shipped at', String(dialMin));
+  ok(/\.gg-dial-stop\s*\{[^}]*min-height:\s*48px/.test(hudCss13),
+    'but its four stops keep their 48px touch target — the plate shrank, the targets did not');
+}
+
+/* ===========================================================================
+ * 16. THE PHONE PASS (owner, 2026-08-04, with two screenshots).
+ *
+ * "this mess is waaaaay too cluttered, we need space to see the animations and
+ * effects." Two separate faults, and this section pins the fix for each so a
+ * later tidy cannot quietly reintroduce either:
+ *
+ *   A. THE RIGHT EDGE. `.gg-hud-frame` is a grid with ONE implicit column, and
+ *      an `auto` track takes the largest min-content contribution among its
+ *      items as its base size — it may exceed the container. `.gg-hud-top` is
+ *      `1fr auto 1fr` (each `1fr` is `minmax(auto, 1fr)`, i.e. floored at
+ *      min-content) plus a `min-width` on the timer, so on a 428pt phone the
+ *      row's floor came to ~442px against a 408px content box. The whole
+ *      column took that width, so EVERY row did, and the monitor, the "they
+ *      claim" panel, the receipt strip and the closeness dial were all laid out
+ *      ~34px past the right edge of the screen. `minmax(0, 1fr)` is the fix.
+ *
+ *   B. THE BOTTOM THIRD. Two tall arsenal rows, the dial UNDER them in the
+ *      flow (so it landed on top of them), the effect chips in a third corner,
+ *      and a MERCY button the portrait rule had quietly inflated back to 20rem.
+ *
+ * Everything below is asserted off the stylesheet: these are layout facts with
+ * no JS to observe them, and a HUD whose CSS says nothing is an invisible bug.
+ * ======================================================================== */
+{
+  const fs16 = await import('node:fs/promises');
+  const url16 = await import('node:url');
+  // Comments come out FIRST and stay out: this tier's comments carry both
+  // braces and commas (they quote selectors at each other), and either one
+  // derails a brace-counting or a selector-list parse.
+  const css16 = (await fs16.readFile(url16.fileURLToPath(new URL('../ui/hud.css', import.meta.url)), 'utf8'))
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+
+  /** Pull one balanced `@media …{ … }` body out of the sheet by a marker inside it. */
+  function mediaBlock(src, marker) {
+    let at = 0;
+    for (;;) {
+      const open = src.indexOf('@media', at);
+      if (open < 0) return '';
+      const brace = src.indexOf('{', open);
+      if (brace < 0) return '';
+      let depth = 0;
+      let i = brace;
+      for (; i < src.length; i++) {
+        if (src[i] === '{') depth++;
+        else if (src[i] === '}') { depth--; if (depth === 0) break; }
+      }
+      const body = src.slice(brace + 1, i);
+      if (body.includes(marker)) return body;
+      at = i + 1;
+    }
+  }
+  /** The declarations of every rule whose selector list contains EXACTLY `sel`.
+   *  Exact, not substring: `.gg-hud-frame` must not pick up the
+   *  `#gg-hud > .gg-hud-frame` pointer-events opt-out that sits above it. */
+  function ruleFor(src, sel) {
+    const out = [];
+    const re = /([^{}]+)\{([^{}]*)\}/g;
+    let m;
+    while ((m = re.exec(src))) {
+      const list = m[1].split(',').map((s) => s.replace(/\/\*[\s\S]*?\*\//g, '').trim());
+      if (list.includes(sel)) out.push(m[2]);
+    }
+    return out.join(';');
+  }
+  const num = (s, re, dflt) => { const m = String(s).match(re); return m ? Number(m[1]) : dflt; };
+
+  const phone = mediaBlock(css16, '--gg-mon-w');
+  ok(phone.length > 0, 'hud.css still carries the portrait/narrow block');
+
+  /* ---- A. the right edge ------------------------------------------------ */
+  const frame16 = ruleFor(css16, '.gg-hud-frame');
+  ok(/grid-template-columns:\s*minmax\(\s*0\s*,\s*1fr\s*\)/.test(frame16),
+    'the frame pins its one column to minmax(0, 1fr) — an auto track floors at min-content and takes every row off the right edge with it',
+    frame16);
+  ok(/min-width:\s*0/.test(ruleFor(css16, '.gg-hud-bottom')) || /\.gg-hud-top[^{}]*,[\s\S]{0,120}\.gg-hud-bottom\s*\{[^}]*min-width:\s*0/.test(css16),
+    'and the three rows may be narrower than their own contents want to be');
+  for (const side of ['left', 'right', 'bottom']) {
+    ok(new RegExp('padding-' + side + ':[^;]*env\\(safe-area-inset-' + side).test(frame16),
+      `the frame respects safe-area-inset-${side}`);
+  }
+  // the monitor column: capped, never a hard width that can outgrow its host
+  ok(/max-width:\s*var\(--gg-mon-w\)/.test(ruleFor(css16, '.gg-mon')),
+    'the monitor is capped by --gg-mon-w rather than hard-sized to it');
+  ok(/\.gg-mon-name\s*\{[^}]*min-width:\s*0/.test(css16),
+    'and their name may ellipsise instead of shoving the score and pips off the end');
+  const monW = num(phone, /--gg-mon-w:\s*min\([^,]+,\s*(\d+)px\)/, 999);
+  ok(monW <= 200, 'on a phone the monitor is at most 200px wide — it was half off-screen at 220', String(monW));
+
+  /* ---- B. the bottom third ---------------------------------------------- */
+  const item16 = num(phone, /--gg-item:\s*(\d+)px/, 0);
+  ok(item16 >= 48, 'an arsenal tile keeps a 48px finger even after the compression pass', String(item16));
+  ok(/\.gg-item-state\s*\{[^}]*min-height:\s*0/.test(phone),
+    'the state line stops reserving a row when it has nothing to say');
+  const lockedState = ruleFor(phone, '.gg-item.is-locked .gg-item-state');
+  ok(/clip-path:\s*inset\(50%\)/.test(lockedState) && !/display:\s*none/.test(lockedState),
+    'and "locked" leaves the LAYOUT, not the DOM — colour never travels alone in this tier',
+    lockedState);
+
+  const railRight = ruleFor(phone, '.gg-rail--right');
+  const railLeft = ruleFor(phone, '.gg-rail--left');
+  const deck16 = ruleFor(phone, '.gg-hud-bottom');
+  const bRight = num(railRight, /bottom:\s*([\d.]+)rem/, 0);
+  const bLeft = num(railLeft, /bottom:\s*([\d.]+)rem/, 0);
+  const deckPad = num(deck16, /padding-bottom:\s*([\d.]+)rem/, 0);
+  ok(bRight >= deckPad, 'the lower arsenal band starts at or above the deck floor', `${bRight} vs ${deckPad}`);
+  ok(bLeft >= bRight + 3.5, 'and the upper band clears the lower one by a whole tile', `${bLeft} vs ${bRight}`);
+  ok(/right:\s*auto/.test(railRight) && /max-width:\s*calc\(100% - [\d.]+rem\)/.test(railRight),
+    'the lower band comes in from the LEFT and is capped, so it shares its row with the dial instead of being buried under it',
+    railRight);
+  const dialW = num(ruleFor(phone, '.gg-dial'), /width:\s*min\([^,]+,\s*([\d.]+)rem\)/, 99);
+  const railCap = num(railRight, /max-width:\s*calc\(100% - ([\d.]+)rem\)/, 0);
+  ok(railCap >= dialW + 1, 'and the cap leaves the dial its own width plus daylight', `${railCap} vs ${dialW}`);
+  ok(/flex-direction:\s*row/.test(deck16),
+    'the deck is one row on a phone — the dial stacked under the chips is what pushed it onto the rails');
+
+  // the live-effect chips move out of the bottom-left corner entirely…
+  const fxrail16 = ruleFor(phone, '.gg-fxrail');
+  ok(/position:\s*absolute/.test(fxrail16) && /top:\s*[\d.]+rem/.test(fxrail16),
+    'the effect chips leave the mercy strip for the top-left, under the score column', fxrail16);
+  // …but stay INSIDE the deck in the DOM, which is how .is-sd and zen still reach them
+  {
+    const match16 = makeFakeMatch();
+    const hud16 = hudMod.mountHud({ match: match16, audio: { sfx() {} } });
+    const host16 = dom.byId.get('gg-hud');
+    const rail16 = findOne(host16, 'gg-fxrail');
+    ok(!!rail16 && hasClass(rail16.parentNode, 'gg-hud-bottom'),
+      'the chip rail is still a child of the bottom deck — .is-sd and zen both reach it through the parent');
+    hud16.unmount();
+  }
+
+  // MERCY: the portrait rule used to INFLATE it back to 20rem on a 428pt phone
+  const mercy16 = ruleFor(phone, '.gg-mercy-btn');
+  const mercyRem = num(mercy16, /width:\s*min\([^,]+,\s*([\d.]+)rem\)/, 99);
+  const mercyH16 = num(mercy16, /height:\s*(\d+)px/, 0);
+  ok(mercyRem <= 15, 'the phone MERCY is no wider than 15rem — the old rule blew it back up to 20', String(mercyRem));
+  ok(mercyH16 >= 48 && mercyH16 <= 56, 'and it is still a finger tall', String(mercyH16));
+  ok(!/animation/.test(mercy16), 'and the isolation contract is untouched — no motion is added to it here');
+
+  /* ---- the top bar cannot overflow either -------------------------------- */
+  const top16 = ruleFor(phone, '.gg-hud-top');
+  ok(/grid-template-columns:\s*minmax\(\s*0\s*,\s*1fr\s*\)\s+auto\s+auto/.test(top16),
+    'on a phone only the score column is compressible; the timer and the attention/zen/gear cluster are content-sized',
+    top16);
+  ok(num(ruleFor(phone, '.gg-timer'), /min-width:\s*(\d+)px/, 999) <= 104,
+    'and the timer gives back part of its desktop min-width');
+  ok(/\.gg-zen\s*\{[^}]*width:\s*48px/.test(css16) && !/\.gg-zen\s*\{[^}]*width/.test(phone),
+    'the zen toggle is never one of the things that shrinks — it is the only way back');
+
+  /* ---- zen, extended (owner: hide the claim panel and the chips too) ------ */
+  const zenText16 = (css16.match(/[^{}]*\.gg-hud--zen[^{}]*\{[^}]*\}/g) || []).join('\n');
+  for (const sel of ['.gg-mon-close', '.gg-fxrail']) {
+    ok(zenText16.includes(sel), `zen also hides ${sel}`);
+  }
+  ok(!/\.gg-hud--zen[^{}]*\.gg-mon-close[^{}]*\{[^}]*(opacity|filter|transform|animation)/.test(css16),
+    'and it hides them with display only, like everything else the toggle takes away');
+  // the claim panel and the dial are the two halves of one readout: never split
+  ok(zenText16.includes('.gg-dial-host') && zenText16.includes('.gg-mon-close'),
+    'both halves of the closeness readout leave together — hiding one and keeping the other reads as a bug');
+  // what still must survive zen on a phone: the rails drop, they do not vanish
+  const zenRail = ruleFor(phone, '.gg-hud-frame.gg-hud--zen .gg-rail--left');
+  ok(/bottom:\s*[\d.]+rem/.test(zenRail) && !/display:\s*none/.test(zenRail),
+    'zen moves the arsenal down into the freed space rather than taking it away', zenRail);
+}
+
 await sleep(60);
 console.log(`\nselftest-hud: ${n - failures}/${n} checks passed`);
 if (failures > 0) {
