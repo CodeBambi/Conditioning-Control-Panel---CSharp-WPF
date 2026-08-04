@@ -63,15 +63,10 @@ namespace ConditioningControlPanel
         private const double StatusPulseBlurSmall = 10;
         private const double StatusPulseBlurLarge = 26;
 
-        /// <summary>The Bureau folder's arrival: a stamp, not a bounce. One overshoot, 260ms.</summary>
-        private const double BureauStampScale = 1.15;
-        private const int BureauStampMs = 260;
-
         // ---- state -----------------------------------------------------------------
 
         private bool _pr4aFxInitialized;
         private bool _labFxInitialized;
-        private bool _bureauStampPlayed;
 
         /// <summary>Every status dot currently asking for a pulse, and how it wants to look. The
         /// dictionary is the single record of intent; <see cref="ApplyPr4aStatusPulses"/> is the
@@ -218,51 +213,14 @@ namespace ConditioningControlPanel
                         RegisterTabFx("lab", canvas);
                     }
                 }
-                // One dispatcher hop at Normal priority (never Loaded - that queue is starved in
-                // this window and the callback would simply never run): IsVisibleChanged fires on
-                // the tab before the flag has finished propagating down to the folder art, so
-                // checking art.IsVisible synchronously here would read false on the very first
-                // visit and spend nothing.
-                Dispatcher.BeginInvoke(new Action(PlayBureauStamp),
-                                       System.Windows.Threading.DispatcherPriority.Normal);
+                // PlayBureauStamp was dispatched from here (Normal priority, never Loaded - that
+                // queue is starved in this window). It animated the Bureau placeholder's folder art,
+                // which left the Lab with that card on 0804; the whole stamp went with it rather
+                // than being left pointing at a control that no longer exists. Restore both from
+                // git history (this file + LabTabView.xaml prior to that change) when the Bureau
+                // card comes back.
             }
             catch (Exception ex) { App.Logger?.Debug("OnLabTabShown: {E}", ex.Message); }
-        }
-
-        /// <summary>
-        /// The Bureau placeholder's folder lands with a thunk the first time it is seen in a
-        /// session: one 1.15 overshoot settling to 1.0 with a fade, on the RenderTransform only, so
-        /// nothing around it moves. Once per session, and skipped entirely under MotionLevel.Off.
-        /// </summary>
-        private void PlayBureauStamp()
-        {
-            if (_bureauStampPlayed) return;
-            try
-            {
-                var art = LabTab?.BureauFolderArt;
-                if (art == null || !art.IsVisible) return;
-                _bureauStampPlayed = true;
-                if (!MotionFx.AllowTransitions) return;
-
-                var scale = new ScaleTransform(BureauStampScale, BureauStampScale);
-                art.RenderTransformOrigin = new Point(0.5, 0.5);
-                art.RenderTransform = scale;
-
-                var settle = new DoubleAnimation(BureauStampScale, 1.0,
-                                                 TimeSpan.FromMilliseconds(BureauStampMs))
-                {
-                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
-                };
-                scale.BeginAnimation(ScaleTransform.ScaleXProperty, settle);
-                scale.BeginAnimation(ScaleTransform.ScaleYProperty, settle);
-
-                var fade = new DoubleAnimation(0.35, 1.0, TimeSpan.FromMilliseconds(BureauStampMs))
-                {
-                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
-                };
-                art.BeginAnimation(UIElement.OpacityProperty, fade);
-            }
-            catch (Exception ex) { App.Logger?.Debug("PlayBureauStamp: {E}", ex.Message); }
         }
 
         // ============================== 2. status pulses ==============================

@@ -174,73 +174,35 @@
                 </Grid>
     
                 <UniformGrid Rows="1" Columns="2">
-                    <!-- Coming-soon placeholder for the Inspection Bureau.
-                         This slot used to hold the Graded Intake card; the intake graduated to its
-                         own Exclusives page (Views/Tabs/GradedIntakeTabView.xaml) and every control
-                         moved there verbatim. Deliberately vague — the game is not announced yet, so
-                         no name, no mechanics, no screenshots. BtnStartBureau below is the real entry
-                         point and is currently COLLAPSED (the doors are shut); clear its Visibility
-                         to open them again without disturbing the placeholder. -->
+                    <!-- The Bureau SOON spoiler card lived in this slot until 0804 and will come
+                         back in a different one; restore its XAML from git history (LabTabView.xaml
+                         prior to this change) rather than rewriting it. Its handler,
+                         BtnStartBureau_Click in MainWindow.Lab.cs, is retained and untouched.
+                         Literal English below on purpose, like the FOR YOU hero above: Lab cards are
+                         deliberately not localized. -->
                     <Border Style="{StaticResource LabCard}">
-                        <StackPanel>
-                            <Grid Margin="0,0,0,6">
+                        <StackPanel VerticalAlignment="Center">
+                            <Grid Margin="0,0,0,10">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <Border Width="34" Height="34" CornerRadius="10" Margin="0,0,11,0"
                                             Background="{DynamicResource AccentTintedBgBrush}" BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
-                                        <Image Width="18" Height="18" Source="{Binding Source='📋', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <Image Width="18" Height="18" Source="{Binding Source='⚔️', Converter={StaticResource EmojiToImageSource}}"/>
                                     </Border>
-                                    <TextBlock Text="Something is being filed" Style="{StaticResource LabCardTitle}"/>
+                                    <TextBlock Text="Goon Game" Style="{StaticResource LabCardTitle}"/>
                                     <Border Background="{DynamicResource TransparentPink20Brush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
                                             CornerRadius="6" Padding="6,2" Margin="9,0,0,0" VerticalAlignment="Center">
-                                        <TextBlock Text="SOON" Foreground="{DynamicResource PinkBrush}" FontFamily="Consolas" FontWeight="Bold" FontSize="9.5"/>
+                                        <TextBlock Text="BETA" Foreground="{DynamicResource PinkBrush}" FontFamily="Consolas" FontWeight="Bold" FontSize="9.5"/>
                                     </Border>
                                 </StackPanel>
                             </Grid>
-                            <TextBlock Text="A new little something is in the works for this corner of the Lab. Paperwork pending."
-                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,18"/>
+                            <TextBlock Text="a 1v1 endurance duel. trade flashes, videos and lock cards in real time. outlast them - or break first."
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,22"/>
 
-                            <!-- Manila folder, redrawn from the game's own CSS art (bureau.css:241-252)
-                                 as vectors so it stays crisp at any DPI. Same palette: paper #E9DFC6,
-                                 paper-dark #D8CBA8, sheets #F4ECD8 with #C9BC9C edges. -->
-                            <Viewbox x:Name="BureauFolderArt" x:FieldModifier="internal" Width="132" Height="96" HorizontalAlignment="Center" Margin="0,0,0,16" RenderTransformOrigin="0.5,0.5">
-                                <Canvas Width="52" Height="38">
-                                    <!-- back panel -->
-                                    <Border Canvas.Left="0" Canvas.Top="10" Width="52" Height="28" CornerRadius="3" Background="#D8CBA8"/>
-                                    <!-- tab -->
-                                    <Border Canvas.Left="0" Canvas.Top="6" Width="22" Height="8" CornerRadius="3,3,0,0" Background="#D8CBA8"/>
-                                    <!-- sheets peeking out, slightly askew -->
-                                    <Border Canvas.Left="7" Canvas.Top="6" Width="38" Height="4" Background="#F4ECD8" BorderBrush="#C9BC9C" BorderThickness="1,1,1,0">
-                                        <Border.RenderTransform>
-                                            <RotateTransform Angle="-1.5"/>
-                                        </Border.RenderTransform>
-                                    </Border>
-                                    <Border Canvas.Left="10" Canvas.Top="8" Width="37" Height="4" Background="#F4ECD8" BorderBrush="#C9BC9C" BorderThickness="1,1,1,0">
-                                        <Border.RenderTransform>
-                                            <RotateTransform Angle="1"/>
-                                        </Border.RenderTransform>
-                                    </Border>
-                                    <!-- front panel -->
-                                    <Border Canvas.Left="0" Canvas.Top="10" Width="52" Height="28" CornerRadius="3">
-                                        <Border.Background>
-                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                                <GradientStop Color="#E9DFC6" Offset="0"/>
-                                                <GradientStop Color="#D8CBA8" Offset="1"/>
-                                            </LinearGradientBrush>
-                                        </Border.Background>
-                                    </Border>
-                                </Canvas>
-                            </Viewbox>
-
-                            <!-- The real entry point, sitting under the placeholder. COLLAPSED as of
-                                 v6.5.1: the Bureau is not ready to be shown yet, so the Lab shows only
-                                 the "SOON" placeholder above. Drop the Visibility below to re-open the
-                                 door; nothing else needs to change. -->
-                            <Button x:Name="BtnStartBureau" x:FieldModifier="internal" Content="🔍 Inspection Bureau" Cursor="Hand"
-                                    Visibility="Collapsed"
+                            <Button x:Name="BtnStartGoon" x:FieldModifier="internal" Content="⚔️ Enter the Duel" Cursor="Hand"
                                     Background="Transparent" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold" FontSize="12"
-                                    BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="12,8" HorizontalAlignment="Left"
-                                    ToolTip="Clock in at the Beta Inspection Bureau - stamp dossiers, earn commendations, help train the censor (Beta)."
-                                    Click="BtnStartBureau_Click">
+                                    BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="14,9" HorizontalAlignment="Left"
+                                    ToolTip="go head to head - first to break loses."
+                                    Click="BtnStartGoon_Click">
                                 <Button.Resources>
                                     <Style TargetType="Border">
                                         <Setter Property="CornerRadius" Value="8"/>

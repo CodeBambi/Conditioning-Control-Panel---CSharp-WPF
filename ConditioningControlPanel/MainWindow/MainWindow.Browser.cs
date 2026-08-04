@@ -1294,6 +1294,11 @@ namespace ConditioningControlPanel
                 if (DiscordTab.ChkDiscordTabAllowDm != null) DiscordTab.ChkDiscordTabAllowDm.IsChecked = s.AllowDiscordDm;
                 if (DiscordTab.ChkDiscordTabSharePfp != null) DiscordTab.ChkDiscordTabSharePfp.IsChecked = s.ShareProfilePicture;
                 if (DiscordTab.ChkDiscordTabShowOnline != null) DiscordTab.ChkDiscordTabShowOnline.IsChecked = s.ShowOnlineStatus;
+                // Goon Game sharing (all default off). The handlers no-op when the value is
+                // unchanged, so these programmatic assignments never trigger a sync push.
+                if (DiscordTab.ChkGoonShareAvatar != null) DiscordTab.ChkGoonShareAvatar.IsChecked = s.GoonShareAvatar;
+                if (DiscordTab.ChkGoonShareDiscordDm != null) DiscordTab.ChkGoonShareDiscordDm.IsChecked = s.GoonShareDiscordDm;
+                if (DiscordTab.ChkGoonRichPresence != null) DiscordTab.ChkGoonRichPresence.IsChecked = s.GoonRichPresence;
             }
 
             // Pre-fill search bar with user's unified display name (V2 auth) or fallback

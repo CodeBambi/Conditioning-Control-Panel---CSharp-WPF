@@ -1668,6 +1668,43 @@ namespace ConditioningControlPanel.Models
             set { _currentAssetPresetId = value; OnPropertyChanged(); }
         }
 
+        private long _transferCacheCapBytes = 8L * 1024 * 1024 * 1024;
+        /// <summary>
+        /// Disk budget for the Goon Game transfer cache (compressed copies of the active pool).
+        /// Clamped to 1-64 GB by TransferCacheStore - the settings file is never trusted.
+        /// </summary>
+        [JsonProperty]
+        public long TransferCacheCapBytes
+        {
+            get => _transferCacheCapBytes;
+            set { _transferCacheCapBytes = value; OnPropertyChanged(); }
+        }
+
+        private bool _transferCacheAutoCompress = false;
+        /// <summary>
+        /// When true, the compression queue starts itself instead of waiting for the user to press
+        /// "Compress everything". Off by default: this is hours of GPU time on a big library.
+        /// </summary>
+        [JsonProperty]
+        public bool TransferCacheAutoCompress
+        {
+            get => _transferCacheAutoCompress;
+            set { _transferCacheAutoCompress = value; OnPropertyChanged(); }
+        }
+
+        private string? _lastSeenAssetPresetId = null;
+        /// <summary>
+        /// The preset the transfer cache last planned against. When this drifts from
+        /// <see cref="CurrentAssetPresetId"/> the user gets the "your preset changed - N assets need
+        /// compressing" nudge exactly once.
+        /// </summary>
+        [JsonProperty]
+        public string? LastSeenAssetPresetId
+        {
+            get => _lastSeenAssetPresetId;
+            set { _lastSeenAssetPresetId = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         private string _marqueeMessage = "GOOD GIRLS CONDITION DAILY     ❤️🔒";
@@ -3047,6 +3084,19 @@ namespace ConditioningControlPanel.Models
         {
             get => _intakeFullscreen;
             set { _intakeFullscreen = value; OnPropertyChanged(); }
+        }
+
+        private bool _goonFullscreen = false;
+        /// <summary>Launch the Goon Game (1v1 duel) web client borderless-fullscreen. Same contract
+        /// as <see cref="IntakeFullscreen"/>: C# owns the window mode, the page only mirrors the
+        /// state the host echoes back, and GoonHostService writes this whenever the page's toggle
+        /// moves. Defaults off — and a recovery relaunch deliberately ignores it, so a wedged page
+        /// always comes back in a titled window that Windows can still close.</summary>
+        [JsonProperty]
+        public bool GoonFullscreen
+        {
+            get => _goonFullscreen;
+            set { _goonFullscreen = value; OnPropertyChanged(); }
         }
 
         // ---- Weekly Intake Pass (free-tier onboarding) ----------------------------
@@ -5340,6 +5390,81 @@ namespace ConditioningControlPanel.Models
                 _savedDirectoryStatusText = v.Length > 80 ? v.Substring(0, 80) : v;
                 OnPropertyChanged();
             }
+        }
+
+        #endregion
+
+        #region Goon Game (Discord sharing)
+
+        // Goon Game opt-in Discord sharing. Sharer-only gating: each flag governs what
+        // THIS user exposes to the opponent, never what they receive. All default false —
+        // privacy fails closed. See docs/GOON_DISCORD_CONTRACT.md §1/§2.
+        //
+        // Distinct from RemoteShareAvatar (remote-control audience) and
+        // ShareProfilePicture (leaderboard / Subjects directory audience). Do not conflate;
+        // different audience, different threat model.
+
+        private bool _goonShareAvatar = false;
+        /// <summary>
+        /// Show the linked Discord avatar to the Goon Game opponent (VS splash + HUD bubble).
+        /// Pushed to the server as `goon_share_avatar` on change.
+        /// </summary>
+        [JsonProperty("goonShareAvatar")]
+        public bool GoonShareAvatar
+        {
+            get => _goonShareAvatar;
+            set { _goonShareAvatar = value; OnPropertyChanged(); }
+        }
+
+        private bool _goonShareDiscordDm = false;
+        /// <summary>
+        /// Let the Goon Game opponent open a Discord DM with this user (they get a Message
+        /// button; the snowflake is only ever resolved server-side).
+        /// Pushed to the server as `goon_share_dm` on change.
+        /// </summary>
+        [JsonProperty("goonShareDiscordDm")]
+        public bool GoonShareDiscordDm
+        {
+            get => _goonShareDiscordDm;
+            set { _goonShareDiscordDm = value; OnPropertyChanged(); }
+        }
+
+        private bool _goonRichPresence = false;
+        /// <summary>
+        /// Show Goon Game activity in Discord Rich Presence (fixed strings only — never the
+        /// opponent's name, never free text). LOCAL-ONLY: never synced to the server.
+        /// </summary>
+        [JsonProperty("goonRichPresence")]
+        public bool GoonRichPresence
+        {
+            get => _goonRichPresence;
+            set { _goonRichPresence = value; OnPropertyChanged(); }
+        }
+
+        private bool _goonSeenSharePrompt = false;
+        /// <summary>
+        /// True once the one-time first-duel sharing confirm has been shown. Written by the
+        /// page via the discord-prefs bridge verb, echoed back on the next `discord` message.
+        /// </summary>
+        [JsonProperty("goonSeenSharePrompt")]
+        public bool GoonSeenSharePrompt
+        {
+            get => _goonSeenSharePrompt;
+            set { _goonSeenSharePrompt = value; OnPropertyChanged(); }
+        }
+
+        private string _goonLastOpponentJson = "";
+        /// <summary>
+        /// Serialized { name, dmId, avatarFile, ts } for the MOST RECENT opponent only
+        /// (overwrite semantics). avatarFile is a bare filename inside
+        /// %LOCALAPPDATA%\ConditioningControlPanel\goon_avatars\ — never a full path.
+        /// Written by GoonHostService only.
+        /// </summary>
+        [JsonProperty("goonLastOpponentJson")]
+        public string GoonLastOpponentJson
+        {
+            get => _goonLastOpponentJson;
+            set { _goonLastOpponentJson = value ?? ""; OnPropertyChanged(); }
         }
 
         #endregion

@@ -137,6 +137,16 @@
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.9.0.20240103" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.20.1" />
 
+    <!-- WebRTC data channel for the Goon Game 1v1 transport (Services\GoonGame\).
+         Pure managed .NET (BouncyCastle DTLS + its own SCTP stack), MIT, no native libs — so
+         it survives the single-file / self-contained publish with no extraction shim.
+         DATA CHANNEL ONLY: no media tracks are ever created; mic/cam never cross the wire.
+         Verified at coding time on net8.0 + Windows 11 (26200): two in-process peers reach
+         `connected` in ~0.85 s, an ordered/reliable channel opens at ~0.97 s, a 60 KB string
+         round-trips intact (SCTP fragmentation works), and public STUN yields an srflx
+         candidate. See docs/GOON_GAME_PLAN.md "Transport decisions". -->
+    <PackageReference Include="SIPSorcery" Version="10.0.13" />
+
     <!-- SVG rendering for color emoji (Twemoji) — WPF can't render Segoe UI Emoji
          in color, so we ship the Twemoji SVG set and render via SharpVectors.
          See Helpers/EmojiImage.cs. -->

@@ -1,0 +1,908 @@
+/* ============================================================================
+ * exec/fx.css — EFFECT TIER. Every class the exec/ renderers add to the DOM
+ * lives here and nowhere else (goon.css owns the foundation, ui/*.css owns the
+ * screens and the HUD). The bubble field, the scattered flashes, the spiral and
+ * the drain veil are direct ports of DtRH (dtrh/styles.css .rh-bubble*, .rh-spark,
+ * .sf-pfx-flash, .sf-pfx-spiral, .sf-pfx-drain) re-namespaced to gg-, so the
+ * duel's effects ARE the Fall's effects, not lookalikes.
+ *
+ * RULES THIS FILE OBEYS
+ *  1. Nothing here may raise z-index. The layers in index.html already decide
+ *     the stacking (fx = z30, stage = z20); an effect that needs to be "on top"
+ *     goes in a later layer, never in a z-index here. The mercy button (z60) is
+ *     above ALL of it by construction.
+ *  2. Animation is transform/opacity/filter only — the compositor properties.
+ *     The one exception is the lock-card progress fill, which animates width on
+ *     KEYSTROKES, not per frame.
+ *  3. Decorative loops carry .gg-deco so goon.css's heat armor
+ *     (html[data-gg-fx="hot"] { --gg-deco-play: paused }) can park them, and
+ *     every one of them stops dead under prefers-reduced-motion (bottom block).
+ *  4. NO REMOTE URLs, and TWO SHAPES OF LOCAL ONE — the difference is whose art
+ *     it is. DtRH's bundle is reached by ABSOLUTE path (`/dtrh/assets/...`):
+ *     ccp.game maps to Resources/web, so that is the very same virtual host that
+ *     serves /goon/index.html, and the harnesses mount /dtrh/ at that exact
+ *     prefix too. GOON'S OWN art is reached RELATIVE (`../assets/...`), because
+ *     this page does NOT live at one fixed prefix: the app serves it at /goon/,
+ *     every headless harness and the solo dev server serve it at the ROOT, so an
+ *     absolute `/goon/assets/...` is a 404 in half the places we run. Relative
+ *     from /exec/*.css resolves in all of them, and it is what the JS tier
+ *     already does (`./assets/items/…` in ui/arsenal.js, `./assets/monitor_frame.png`
+ *     in ui/opponent.js). Either way no network is involved.
+ *  5. THREE nodes in this file take pointer input: `.gg-bubble` (pop),
+ *     `.gg-flash--hydra` (click-to-split) and `.gg-vwin` (the floating video
+ *     window: drag / wheel / click-to-dismiss). #gg-fx and its sub-layers are
+ *     pointer-events:none and each opts back in one class at a time.
+ *     `.gg-flash--hydra` ALONE is dropped by the `body:has(#gg-stage > *)` rule
+ *     while the stage is occupied — flashes are scenery, so blocking them is
+ *     intended. The bubbles are economy and the windows are the payload you are
+ *     being asked to close; neither may become unclickable (see their banners).
+ * ==========================================================================*/
+
+/* Per-effect knobs. The renderers write these as inline custom properties on
+   their own nodes (never on :root), so two effects can disagree about opacity
+   without fighting over one variable. Values here are the "intensity 0" floor. */
+:root {
+  --gg-flash-op: 0.95;
+  --gg-sub-op: 0.45;
+  --gg-drain-op: 0.35;
+  --gg-spiral-op: 0.4;
+}
+
+/* ---------------------------------------------------------------------------
+ * FLASHES (#gg-fx-flash) — the DtRH flash, port of .sf-pfx-flash: a SCATTERED
+ * image from the player's own pool, dropped at a random spot, tilted a few
+ * degrees, in and out on one timed animation. Never full-window, never centred.
+ *
+ * SIZE lives in --gg-flash-size (38vmin + 15%, the owner's bump). exec/flashes.js
+ * writes the property for HYDRA CHILDREN (which taper per generation) and for a
+ * WHEEL RESIZE while a flash is held; it is a size var and never a transform, so
+ * it cannot fight the tilt, the fade, or the drag offset.
+ *
+ * DRAGGABLE — a flash can be picked up, thrown, and resized in hand. That whole
+ * mode lives in .gg-flash--grabbed / .is-held / .gg-flash--expire below, and the
+ * rule that makes it work is `animation: none`: while a flash is held or flying,
+ * JS writes its transform inline every frame, and an inline transform only wins
+ * once no keyframe is running (animations outrank inline styles in the cascade).
+ * Everything a dragged flash does after that — its lift, its pop, its death —
+ * therefore animates OPACITY ONLY.
+ *
+ * CLICKABLE — but only the `--hydra` variant. exec/bubbles.js mints plain
+ * `.gg-flash` nodes for its pop effect and those must stay click-through, so the
+ * pointer opt-in rides a modifier instead of the base class. The :has() rule
+ * below takes even that away the moment the stage holds a video or a lock card
+ * (the same rule the bubble field obeys), so a flash lying over the typing card
+ * can never swallow the click.
+ * ------------------------------------------------------------------------ */
+.gg-flash {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  max-width: var(--gg-flash-size, 43.7vmin);
+  max-height: var(--gg-flash-size, 43.7vmin);
+  border-radius: 10px;
+  filter: drop-shadow(0 0 26px rgba(var(--gg-pink-rgb), 0.85));
+  will-change: transform, opacity;
+  animation: ggFlash var(--gg-flash-dur, 1400ms) ease forwards;
+}
+/* Snappier in/out than the old 14%/28%: at a 5s lifetime a proportional fade
+   spent 2.1s of every flash ramping. 7%/16% holds ~3.9s of the 5s solid. */
+@keyframes ggFlash {
+  0%   { opacity: 0; transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(0.82); }
+  7%   { opacity: var(--gg-flash-op, 0.95); transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1); }
+  84%  { opacity: var(--gg-flash-op, 0.95); transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1.01); }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1.05); }
+}
+
+/* The pointer opt-in. Base .gg-flash stays click-through (bubbles' pop flashes).
+   touch-action:none because this node is DRAGGABLE (see below): a touch that
+   starts on a flash belongs to the flash, not to the page's pan/zoom. It also
+   still kills the double-tap zoom when splitting fast, which is why the old
+   `manipulation` was here. -webkit-user-drag stops the browser's own image drag
+   (the ghost preview) from stealing the gesture. */
+.gg-flash--hydra {
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}
+/* The stage (z20) owns the video surface and the lock card. While it holds
+   anything, the flashes go back to being scenery. */
+body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default; }
+
+/* A hatched child: same shape, but it snaps in with an overshoot so the split
+   reads as a split instead of another flash quietly fading up. */
+.gg-flash--hatch { animation-name: ggFlashHatch; }
+@keyframes ggFlashHatch {
+  0%   { opacity: 0; transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(0.42); }
+  4%   { opacity: var(--gg-flash-op, 0.95); transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1.12); }
+  8%   { opacity: var(--gg-flash-op, 0.95); transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(0.97); }
+  84%  { opacity: var(--gg-flash-op, 0.95); transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1.01); }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1.05); }
+}
+
+/* GRABBED — the flash has been dragged, so it has LEFT the keyframe world and
+   exec/flashes.js owns it from here: transform (anchor offset + tilt + lift) is
+   written inline every frame, opacity is pinned, and its retirement is a JS
+   timer instead of an animation's end.
+   `animation: none` is what makes the inline transform authoritative at all:
+   animation declarations outrank inline author styles in the cascade, so a
+   running keyframe would drag the node straight back to its CSS anchor. Same
+   specificity as .gg-flash / --hatch, so SOURCE ORDER is doing the work — this
+   block must stay below them. */
+.gg-flash--grabbed {
+  animation: none;
+  opacity: var(--gg-flash-op, 0.95);
+  will-change: transform, opacity;
+}
+/* ...and while it is actually in hand: heavier shadow, no transition on the
+   filter (it is re-evaluated per frame anyway) and the grabbing cursor. The lift
+   itself is a scale inside the inline transform, not here — one writer for
+   transform, always. Nothing raises z-index (rule 1): flashes.js re-appends the
+   held node so DOM order alone floats it over its siblings. */
+.gg-flash--grabbed.is-held {
+  cursor: grabbing;
+  filter:
+    drop-shadow(0 0 34px rgba(var(--gg-pink-rgb), 0.95))
+    drop-shadow(0 14px 30px rgba(0, 0, 0, 0.55));
+}
+
+/* The dismissed one. The shorthand replaces the running fade outright, and the
+   animationend it fires is the same teardown hook the fade would have used. */
+.gg-flash.is-popped {
+  pointer-events: none;
+  animation: ggFlashPop 220ms ease-out forwards;
+}
+@keyframes ggFlashPop {
+  0%   { opacity: var(--gg-flash-op, 0.95); transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1); }
+  45%  { opacity: 0.9; transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1.2); }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--gg-flash-rot, 0deg)) scale(1.34); }
+}
+
+/* THE EXITS FOR A DRAGGED FLASH. Both are OPACITY ONLY — a keyframe that touched
+   transform would outrank the inline one and teleport the node home for its own
+   death, which is the single worst-looking bug this feature can have. So a
+   dragged flash fades out where you left it, and the pop keeps only its timing.
+   Both must sit after the rules they override (--grabbed, .is-popped). */
+.gg-flash--grabbed.is-popped { animation: ggFlashFade 220ms ease-out forwards; }
+.gg-flash--expire { animation: ggFlashFade 420ms ease forwards; }
+@keyframes ggFlashFade {
+  from { opacity: var(--gg-flash-op, 0.95); }
+  to   { opacity: 0; }
+}
+
+/* ---------------------------------------------------------------------------
+ * SUBLIMINALS (#gg-fx-sub) — one word at a time, big, brief, off-centre.
+ * ------------------------------------------------------------------------ */
+.gg-sub-word {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(1.18);
+  font-family: var(--gg-font);
+  font-weight: 900;
+  font-size: var(--gg-sub-size, clamp(2.2rem, 7vw, 5.5rem));
+  letter-spacing: 0.04em;
+  line-height: 1.05;
+  text-align: center;
+  text-transform: uppercase;
+  max-width: 84vw;
+  white-space: normal;
+  word-break: break-word;
+  color: #fff;
+  text-shadow:
+    0 0 26px rgba(var(--gg-pink-rgb), 0.85),
+    0 0 60px rgba(var(--gg-violet-rgb), 0.45),
+    0 2px 12px rgba(0, 0, 0, 0.8);
+  opacity: 0;
+  will-change: opacity, transform;
+  transition: opacity var(--gg-sub-fade, 180ms) ease-out, transform var(--gg-sub-fade, 180ms) ease-out;
+}
+.gg-sub-word.is-on {
+  opacity: var(--gg-sub-op, 0.55);
+  transform: translate(-50%, -50%) scale(1);
+}
+/* The gradient variant — used for the opponent's OWN words in a storm, so a
+   phrase THEY chose is visibly theirs. Inherits everything above. */
+.gg-sub-word.is-theirs {
+  background: linear-gradient(135deg, var(--gg-pink), var(--gg-violet));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  /* text-shadow cannot survive a transparent fill — the halo moves to a filter */
+  text-shadow: none;
+  filter: drop-shadow(0 0 22px rgba(var(--gg-pink-rgb), 0.8));
+}
+
+/* ---------------------------------------------------------------------------
+ * BUBBLES (#gg-fx-bubbles) — the DtRH field, verbatim: the same bubble.png, the
+ * same rise-then-dissolve, the same sway, the same effect sprites per kind, and
+ * the same pop animation + sparkle burst.
+ *
+ * CLICKABLE — and it is the only thing in this tier that is. The layer stays
+ * pointer-events:none; the bubble opts back in, ALWAYS.
+ *
+ * IT USED TO GO CLICK-THROUGH WHILE #gg-stage WAS OCCUPIED. That rule
+ * (`body:has(#gg-stage > *) .gg-bubble { pointer-events: none }`) predates the
+ * drop economy, and once popping became the ONLY way to earn items it turned
+ * every video and every lock card into a stretch of the match where the player
+ * cannot earn at all. It is gone on purpose — do not put it back. The clash it
+ * was protecting against (a bubble eating a click meant for the video controls
+ * or the typing card) is handled where it belongs now: exec/bubbles.js measures
+ * the stage content and spawns new bubbles into the LEFT/RIGHT GUTTERS beside
+ * it, so the field simply is not over the thing you are clicking.
+ * `.gg-flash--hydra` keeps its own :has() rule (line ~101) — the flashes are
+ * scenery and blocking them IS intended; only the bubbles are economy.
+ *
+ * HEAT-EXEMPT. The field is GAMEPLAY, not ambience: it runs the whole match and
+ * popping it is how the arsenal gets fed (exec/bubbles.js -> ui/drops.js), so a
+ * frozen bubble is a broken economy, not a saved frame. The two rules below
+ * re-declare --gg-deco-play exactly the way .gg-mon-proj does in ui/hud.css, and
+ * they are the ONLY exemption in this layer: the pop WASHES (.gg-spiral,
+ * .gg-drain.is-glitching, the pop flashes) are decoration and still park at
+ * html[data-gg-fx="hot"].
+ * ------------------------------------------------------------------------ */
+.gg-bubble-wrap {
+  position: absolute;
+  bottom: 0;
+  pointer-events: none;
+  will-change: transform;
+  --gg-deco-play: running;
+  animation: ggBubbleRise var(--gg-rise, 12s) linear forwards;
+  animation-play-state: var(--gg-deco-play, running);
+}
+@keyframes ggBubbleRise {
+  /* Rises, then dissolves in place near the top instead of shooting off-screen. */
+  0%   { transform: translateY(12vh); opacity: 1; }
+  50%  { transform: translateY(-40vh); opacity: 1; }
+  100% { transform: translateY(-74vh); opacity: 0; }
+}
+.gg-bubble {
+  pointer-events: auto;
+  touch-action: manipulation;      /* no double-tap zoom when popping fast */
+  border-radius: 50%;
+  cursor: pointer;
+  will-change: transform;
+  --gg-deco-play: running;         /* gameplay, not decoration — see the banner */
+  animation: ggBubbleSway var(--gg-sway-dur, 4s) ease-in-out infinite alternate;
+  animation-play-state: var(--gg-deco-play, running);
+  background: center / contain no-repeat url('/dtrh/assets/bubbles/bubble.png');
+  filter: drop-shadow(0 0 7px rgba(var(--gg-pink-rgb), 0.5));
+}
+@keyframes ggBubbleSway {
+  from { transform: translateX(calc(var(--gg-sway, 28px) * -0.5)); }
+  to   { transform: translateX(calc(var(--gg-sway, 28px) * 0.5)); }
+}
+/* THE KIND SPRITES — DtRH art, DROP-SHADOW ONLY, and it stays that way.
+ *
+ * 2026-08-03, owner correction: a play-test note that braindrain and glitch
+ * "show in black n white" was read here as the BUBBLES being grey, and every
+ * kind got a sepia/saturate/hue-rotate recolour chain bolted in front of its
+ * halo. Wrong target. The sprites were fine — pale on purpose, and the coloured
+ * drop-shadow is what names the kind. The greyscale the owner saw was the
+ * FULLSCREEN drain veil (see the BRAIN DRAIN block below, which used to blend
+ * the pool image at `luminosity` and threw all of its colour away).
+ *
+ * So: no colour-space filter functions in these rules. Each kind gets its own
+ * halo and nothing else — flash warm white, spiral cyan, glitch acid green,
+ * braindrain violet, pinkfilter house pink, video neon red.
+ * selftest-exec reads this file and fails if a recolour chain comes back.
+ *
+ * `video` is the one kind that is NOT DtRH art. It wore the Fall's prism bubble
+ * for as long as there was nothing better on disk — the reasoning being that an
+ * iridescent swirl "reads as a screen" — and the owner's verdict on seeing it in
+ * a match was that it does not: a prism reads as a prism. It now wears
+ * ../assets/bubbles/video.png, GOON'S OWN sprite (a bubble with a big neon-red
+ * play arrow, lifted from the app's Chaos set), which says what popping it does
+ * without anyone having to be told: it opens a floating video window
+ * (exec/bubbles.js -> exec/executor.js -> exec/videos.js spawnLocal). Its halo
+ * is the only red one in the set, tuned to the arrow rather than to the glass —
+ * and it is the one path in this block that is RELATIVE, because it is ours and
+ * this page is not served at a fixed prefix (rule 4 at the top of the file). */
+.gg-bubble--flash      { background-image: url('/dtrh/assets/bubbles/effects/flash.png');      filter: drop-shadow(0 0 9px rgba(255, 240, 200, 0.75)); }
+.gg-bubble--spiral     { background-image: url('/dtrh/assets/bubbles/effects/spiral.png');     filter: drop-shadow(0 0 9px rgba(110, 225, 255, 0.75)); }
+.gg-bubble--glitch     { background-image: url('/dtrh/assets/bubbles/effects/glitch.png');     filter: drop-shadow(0 0 9px rgba(140, 255, 170, 0.75)); }
+.gg-bubble--braindrain { background-image: url('/dtrh/assets/bubbles/effects/braindrain.png'); filter: drop-shadow(0 0 9px rgba(180, 150, 255, 0.75)); }
+.gg-bubble--pinkfilter { background-image: url('/dtrh/assets/bubbles/effects/pinkfilter.png'); filter: drop-shadow(0 0 10px rgba(var(--gg-pink-rgb), 0.85)); }
+.gg-bubble--video      { background-image: url('../assets/bubbles/video.png');                 filter: drop-shadow(0 0 11px rgba(255, 90, 130, 0.8)); }
+
+.gg-bubble.is-pop { pointer-events: none; animation: ggBubblePop 0.39s ease-out forwards; }
+@keyframes ggBubblePop {
+  0%   { transform: scale(1); opacity: 1; }
+  40%  { transform: scale(1.55); opacity: 0.85; }
+  100% { transform: scale(2); opacity: 0; }
+}
+
+/* Pop sparkle burst (DtRH's port of the WPF BubbleService pop): shards fly
+   outward with a touch of gravity, shrinking + fading. --gg-dx/--gg-dy/--gg-fall. */
+.gg-spark {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%;
+  color: #ffd9ef;
+  background: currentColor;
+  box-shadow: 0 0 7px currentColor;
+  animation: ggSpark 0.62s ease-out forwards;
+}
+@keyframes ggSpark {
+  0%   { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--gg-dx, 0px), calc(var(--gg-dy, 0px) + var(--gg-fall, 40px))) scale(0.2); opacity: 0; }
+}
+
+/* ---------------------------------------------------------------------------
+ * SPIRAL (#gg-fx-spiral, and the pop flick inside #gg-fx-bubbles) — port of
+ * DtRH's .sf-pfx-spiral: one pane, covered, screen-blended, spinning slowly.
+ * Overscanned so the rotation never bares a corner. The renderer swaps only the
+ * background-image; this rule owns cover/blend/spin.
+ *
+ * THE GRAIN. The bundled pool is 360-640px dithered 256-colour GIFs, and `cover`
+ * on a 1080p+ window blows a 360px source up 3-5x: the dither pattern stops
+ * reading as shading and starts reading as GRAIN crawling over the whole screen.
+ * A constant 1.1px blur softens the dither below the resolution of the eye while
+ * leaving the spiral's own edges (which are huge at that scale) perfectly legible.
+ * It is safe to sit in `filter` because NOTHING animates filter on this pane —
+ * ggSpiralSpin is transform-only and the fade is opacity-only. Do not add a
+ * filter keyframe here without moving this blur onto a wrapper.
+ * (The other half of the fix is in exec/spiral.js: sp7.gif, the 360x360 worst
+ * offender, is out of SPIRAL_POOL. The file stays on disk — DtRH owns it.)
+ * ------------------------------------------------------------------------ */
+.gg-spiral {
+  position: absolute;
+  inset: 0;
+  background: url('/dtrh/assets/bubbles/effects/spiral.png') center / cover no-repeat;
+  mix-blend-mode: screen;
+  transform-origin: 50% 50%;
+  scale: 1.6;
+  opacity: 0;
+  filter: blur(1.1px);
+  will-change: opacity, transform;
+  transition: opacity var(--gg-spiral-fade, 450ms) ease;
+  animation: ggSpiralSpin 14s linear infinite;
+  animation-play-state: var(--gg-deco-play, running);
+}
+.gg-spiral.is-on { opacity: var(--gg-spiral-op, 0.4); }
+@keyframes ggSpiralSpin { to { transform: rotate(360deg); } }
+
+/* The pink wash a popped pinkfilter bubble throws (DtRH .sf-pfx-pink). */
+.gg-pink {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 45%,
+    rgba(var(--gg-pink-rgb), 0.5) 0%, rgba(255, 20, 147, 0.62) 100%);
+  mix-blend-mode: screen;
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+
+/* ---------------------------------------------------------------------------
+ * BOUNCING TEXT (#gg-fx-bounce) — DVD-idler phrases. The travel is driven from
+ * JS (rAF writing translate3d), so there is no keyframe here: a CSS bounce
+ * cannot reflect a live window resize or an intensity change mid-flight.
+ * ------------------------------------------------------------------------ */
+.gg-bounce-word {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-family: var(--gg-font);
+  font-weight: 800;
+  font-size: var(--gg-bounce-size, clamp(1.1rem, 2.6vw, 2.1rem));
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #fff;
+  text-shadow: 0 0 16px rgba(var(--gg-pink-rgb), 0.75), 0 2px 10px rgba(0, 0, 0, 0.7);
+  opacity: var(--gg-bounce-op, 0.5);
+  will-change: transform;
+  transition: opacity 400ms ease;
+}
+/* Every wall hit re-triggers this class (removed, then re-added) for a pop. */
+.gg-bounce-word.is-hit { animation: ggBouncePop 260ms ease-out; }
+@keyframes ggBouncePop {
+  0%   { filter: brightness(1); }
+  35%  { filter: brightness(1.9) drop-shadow(0 0 14px rgba(var(--gg-pink-rgb), 0.9)); }
+  100% { filter: brightness(1); }
+}
+
+/* ---------------------------------------------------------------------------
+ * BRAIN DRAIN (#gg-fx-drain, and the pop flick inside #gg-fx-bubbles) — the
+ * heavy, port of DtRH's .sf-pfx-drain. ONE pane: near-black dim, blur-behind,
+ * and a faint image from the player's own pool washed over it. The pane's
+ * opacity is the only dial (0.35..0.62) and higher still means heavier.
+ *
+ * IT USED TO BLEND THE WASH AT `luminosity` — DtRH's recipe, argued here as
+ * "keeps it reading as drained instead of as a slideshow". Luminosity keeps the
+ * source's lightness and takes hue+chroma from the backdrop, and the backdrop is
+ * #0a0410, so EVERY wash came out black and white. 2026-08-03 the owner called
+ * it: the drain is supposed to show the player's own media, in colour. Do not
+ * put `luminosity` back.
+ *
+ * WHAT DRAINS IT NOW, three background layers on the same single pane (top to
+ * bottom, which is the order background-image lists them), no extra element and
+ * no second backdrop-filter — that blur is the most expensive thing this page
+ * draws and there is still exactly ONE of it:
+ *   1. DIM      a near-black violet sheet at --gg-drain-dim (default .42),
+ *               blended `normal`, i.e. plain alpha over everything below. Scaling
+ *               RGB toward black lowers lightness and leaves HSV saturation
+ *               alone, so this buys "heavy" without buying "grey".
+ *   2. BLEED    a mid-grey sheet at --gg-drain-desat (default .30) blended
+ *               `color`: the blend takes hue+chroma from the grey (none) over the
+ *               image's lightness — a full greyscale — and the .30 alpha then
+ *               composites that back, so ~70% of the wash's own colour survives.
+ *               This is the knob that keeps it muted instead of neon.
+ *   3. WASH     the pool image itself, `normal` over the near-black background
+ *               colour. exec/brainDrain.js hands it in through --gg-drain-img
+ *               (NOT background-image — that would replace this whole stack).
+ * Measured headlessly on a full-chroma test wash (sat 1.00, lightness 0.50), the
+ * pane composed at opacity 1: sat 0.68, chroma 0.41, lightness 0.31 — muted and
+ * DARKER than the source. The same wash under `luminosity` measured sat 0.08 and
+ * chroma 0.05 at lightness 0.51: brighter, and grey. That is the whole bug.
+ * ------------------------------------------------------------------------ */
+.gg-drain {
+  position: absolute;
+  inset: 0;
+  background-color: #0a0410;
+  background-image:
+    linear-gradient(rgba(8, 3, 14, var(--gg-drain-dim, 0.42)), rgba(10, 4, 16, var(--gg-drain-dim, 0.42))),
+    linear-gradient(rgba(128, 128, 128, var(--gg-drain-desat, 0.30)), rgba(128, 128, 128, var(--gg-drain-desat, 0.30))),
+    var(--gg-drain-img, none);
+  background-blend-mode: normal, color, normal;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+  opacity: 0;
+  transition: opacity var(--gg-drain-fade, 900ms) ease;
+}
+.gg-drain.is-on { opacity: var(--gg-drain-op, 0.35); }
+/* The glitch shudder a popped glitch bubble puts over the drain (showGlitch).
+   A WASH, i.e. decoration: unlike the bubble that threw it, this parks at hot. */
+.gg-drain.is-glitching {
+  animation: ggDrainGlitch 0.16s steps(2) infinite;
+  animation-play-state: var(--gg-deco-play, running);
+}
+@keyframes ggDrainGlitch {
+  0%   { transform: translate(0, 0); filter: none; }
+  50%  { transform: translate(-1.2%, 0); filter: hue-rotate(35deg) saturate(1.5); }
+  100% { transform: translate(1.2%, 0); filter: hue-rotate(-25deg); }
+}
+
+/* ---------------------------------------------------------------------------
+ * VIDEOS (#gg-stage) — letterboxed into the stage, never over the HUD.
+ * ------------------------------------------------------------------------ */
+.gg-vid-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 2, 8, 0.55);
+  opacity: 0;
+  transition: opacity 260ms ease;
+}
+.gg-vid-wrap.is-on { opacity: 1; }
+.gg-vid {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+/* The soft pink frame that says "this is the duel's video, not your desktop". */
+.gg-vid-wrap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 90px rgba(var(--gg-pink-rgb), 0.28);
+}
+
+/* ---------------------------------------------------------------------------
+ * FLOATING VIDEO WINDOWS (#gg-fx-vwin) — the PAYLOAD video. The opponent's VHS
+ * is not a takeover of the screen, it is a little cursed monitor that drifts
+ * around it: glitching in, glowing, recording-dot lit, and in the player's hands
+ * (drag it, wheel it bigger, click it away). exec/videos.js owns the behaviour;
+ * the ramp's own mandatory video is still fullscreen on #gg-stage above.
+ *
+ * FOUR ELEMENTS, FOUR ANIMATIONS, AND THAT IS THE POINT. `animation` is a
+ * SHORTHAND: two rules declaring it on one element cancel each other, so a
+ * one-shot spawn-in and a forever-loop can never share a node. Hence:
+ *     .gg-vwin          NO animation WHILE IT LIVES — JS writes its transform
+ *                       inline for the drag, and keyframes outrank inline author
+ *                       styles. THE ONE EXCEPTION IS THE EXIT (see below).
+ *     .gg-vwin-drift    the slow wander (loop)
+ *     .gg-vwin-inner    the glitch-in (one-shot, one of four variants)
+ *     .gg-vwin-inner::after   the glow breath (loop)
+ *     .gg-vwin-dot      the recording pulse (loop)
+ * Every loop parks at html[data-gg-fx="hot"] through --gg-deco-play, because all
+ * of it is decoration; the DRAG, the WHEEL and the CLICK keep working parked,
+ * because none of them is an animation.
+ *
+ * THE EXIT (.gg-vwin--out) is the wrapper's free slot, and it is free precisely
+ * BECAUSE the element is done being handled: exec/videos.js drops the record
+ * from its pool first and only then hands the orphaned NODE this class, so
+ * nothing is left to drag and nothing inline is left to outrank. Two rules make
+ * it safe to sit on the wrapper at all:
+ *   · it animates opacity/clip-path/filter and NEVER transform — the drag offset
+ *     is an inline transform on this very element, and a transform keyframe here
+ *     would teleport a dismissed window back to its anchor for its last 300ms;
+ *   · it does NOT park at data-gg-fx="hot". A parked exit is a frozen corpse.
+ *     (exec/videos.js still carries a ~600ms removal timer for the cases where
+ *     the animationend never comes at all — reduced motion, a re-parented node.)
+ *
+ * POINTER: the layer is click-through and the window opts back in. It keeps that
+ * opt-in even while #gg-stage is occupied (unlike .gg-flash--hydra) — a window
+ * you cannot dismiss is a worse bug than a window that took one click, and these
+ * are small, movable and always closable. They also live here rather than on the
+ * stage precisely so a leftover one can never become a full-screen click shield.
+ * ------------------------------------------------------------------------ */
+.gg-vwin {
+  position: absolute;
+  width: var(--gg-vwin-w, 320px);
+  aspect-ratio: var(--gg-vwin-ar, 16 / 9);
+  pointer-events: auto;
+  touch-action: none;              /* a touch that starts here belongs to the window */
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  opacity: 0;
+  transition: opacity 220ms ease;
+  will-change: transform, opacity;
+}
+.gg-vwin.is-on { opacity: 1; }
+.gg-vwin.is-grabbed { cursor: grabbing; }
+
+/* THE EXIT — a GHOST. The record left the pool the instant the window settled
+   (the slot is free, the count already fell, the receipt is already posted);
+   what is left here is a node nobody owns, playing out one last CRT death.
+   pointer-events goes first: a husk that can still eat a click is the one thing
+   this whole layer exists to avoid. NOT `forwards` — the node is removed on
+   animationend (or on exec/videos.js's fallback timer), and holding the last
+   frame would only matter if it were staying, which it never is. */
+.gg-vwin.gg-vwin--out {
+  pointer-events: none;
+  animation: ggVwinOut 300ms cubic-bezier(0.3, 0.7, 0.1, 1) 1;
+}
+/* Bands tear, the picture collapses to a scanline, the line burns out. All of it
+   is opacity/clip-path/filter — no transform, because the drag offset is inline
+   on this element (see the banner). */
+@keyframes ggVwinOut {
+  0%   { opacity: 1; clip-path: inset(0 0 0 0); filter: none; }
+  22%  { opacity: 1; clip-path: inset(0 0 34% 0); filter: brightness(1.9) hue-rotate(-24deg); }
+  44%  { opacity: 1; clip-path: inset(38% 0 6% 0); filter: brightness(0.8); }
+  66%  { opacity: 0.9; clip-path: inset(6% 0 52% 0); filter: brightness(2.6) saturate(0.3); }
+  84%  { opacity: 0.5; clip-path: inset(46% 0 46% 0); filter: brightness(3.2) saturate(0); }
+  100% { opacity: 0; clip-path: inset(50% 0 50% 0); filter: brightness(3.4) saturate(0); }
+}
+
+/* THE DRIFT. Biased upward (exec/videos.js hands --gg-vwin-dy in negative) so a
+   wandering window tends away from MERCY's bottom gutter rather than into it. */
+.gg-vwin-drift {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+  animation: ggVwinDrift var(--gg-vwin-drift-dur, 24s) ease-in-out infinite alternate;
+  animation-play-state: var(--gg-deco-play, running);
+}
+@keyframes ggVwinDrift {
+  from { transform: translate(0, 0); }
+  to   { transform: translate(var(--gg-vwin-dx, 26px), var(--gg-vwin-dy, -22px)); }
+}
+/* IN HAND the window leaves the keyframe world — same law as .gg-flash--grabbed:
+   a live drift keyframe would fight the inline drag transform every frame and
+   win. exec/videos.js FOLDS the drift's current offset into the drag offset
+   before adding this class, so freezing it moves the window by exactly 0px. */
+.gg-vwin.is-grabbed .gg-vwin-drift { animation: none; }
+
+.gg-vwin-inner {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.75);
+  box-shadow:
+    0 0 20px rgba(var(--gg-pink-rgb), 0.5),
+    0 0 46px rgba(var(--gg-violet-rgb), 0.35),
+    0 10px 26px rgba(0, 0, 0, 0.55);
+}
+/* The glow BREATH rides the pseudo-element, so the one-shot glitch-in can own
+   the element's own `animation` slot outright. */
+.gg-vwin-inner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 18px rgba(var(--gg-pink-rgb), 0.35),
+    0 0 26px rgba(var(--gg-violet-rgb), 0.5);
+  animation: ggVwinGlow 3.2s ease-in-out infinite alternate;
+  animation-play-state: var(--gg-deco-play, running);
+}
+@keyframes ggVwinGlow { from { opacity: 0.4; } to { opacity: 1; } }
+
+.gg-vwin-vid {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+
+/* THE LIVE LIGHT — top-right, pulsing on the window that HAS THE MIC.
+   The pulse stays declared HERE, on the element itself, rather than moving to a
+   .is-live compound: this element's one animation slot is the dot's forever, and
+   a silent window merely has it switched off below (a rule that is more specific
+   than the bare class, whatever the source order). Same trick as .is-grabbed. */
+.gg-vwin-dot {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ff2d4b;
+  box-shadow: 0 0 10px rgba(255, 45, 75, 0.95), 0 0 22px rgba(255, 45, 75, 0.55);
+  animation: ggVwinRec 1.4s ease-in-out infinite;
+  animation-play-state: var(--gg-deco-play, running);
+}
+@keyframes ggVwinRec {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.3; transform: scale(0.8); }
+}
+/* …and every OTHER window's light is dark and still. Four blinking red dots say
+   four things are recording; one says "this is the one you can hear", which is
+   the only fact the player needs and the cheapest possible way to show it. */
+.gg-vwin:not(.is-live) .gg-vwin-dot {
+  animation: none;
+  opacity: 0.28;
+  box-shadow: none;
+}
+
+/* ---------------------------------------------------------------------------
+ * MUTED — state, not a control. A window the player click-silenced wears a small
+ * speaker-with-a-slash in the house pink; it never takes a pointer event (the
+ * click that toggles it belongs to the window underneath) and it is a MASK, so
+ * the glyph is tinted by the theme instead of being a coloured-in PNG.
+ * ------------------------------------------------------------------------ */
+.gg-vwin-mute {
+  --gg-vwin-mute-glyph: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 9h4l5-4.5v15L7 15H3z'/%3E%3Cpath d='M15.2 9.3l1.4-1.4 5.1 5.1-1.4 1.4z'/%3E%3Cpath d='M20.3 7.9l1.4 1.4-5.1 5.1-1.4-1.4z'/%3E%3C/svg%3E");
+  position: absolute;
+  right: 9px;
+  bottom: 9px;
+  width: 18px;
+  height: 18px;
+  display: none;
+  pointer-events: none;
+  background-color: rgba(var(--gg-pink-rgb), 0.92);
+  -webkit-mask: var(--gg-vwin-mute-glyph) center / contain no-repeat;
+  mask: var(--gg-vwin-mute-glyph) center / contain no-repeat;
+  filter: drop-shadow(0 0 6px rgba(var(--gg-violet-rgb), 0.8));
+}
+.gg-vwin.is-muted .gg-vwin-mute { display: block; }
+
+/* ---------------------------------------------------------------------------
+ * THE ✕ — top-LEFT, opposite the live dot, and OFF BY DEFAULT. exec/videos.js
+ * builds it into every window unconditionally; whether it exists for the player
+ * is this one attribute, which ui/prefs.js writes from `skippableVideos`. Doing
+ * it in CSS rather than in JS is what makes the option live: flip the toggle and
+ * every window ALREADY FLOATING grows (or loses) its button in the same frame,
+ * with no renderer plumbing and nothing to keep in sync.
+ *
+ * Three rules it must obey:
+ *   · a real pointer target — 24px, comfortably over the 22 exec/videos.js pins;
+ *   · it must not START A DRAG (exec/videos.js stops the press on the button);
+ *   · a GHOST's button is gone. The wrapper's pointer-events:none does NOT
+ *     protect a child that opts back in, and a husk that can still be clicked is
+ *     the exact bug this whole layer is arranged to prevent.
+ * The hover lift is a TRANSITION, not an animation: this element's animation slot
+ * has to stay empty for the same reason the wrapper's does.
+ * ------------------------------------------------------------------------ */
+.gg-vwin-x {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 24px;
+  height: 24px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.86);
+  background: rgba(10, 4, 18, 0.62);
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.55);
+  border-radius: 8px;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background 160ms ease, box-shadow 160ms ease, color 160ms ease;
+}
+html[data-gg-vskip="on"] .gg-vwin-x { display: flex; }
+.gg-vwin-x:hover {
+  color: #fff;
+  background: rgba(var(--gg-pink-rgb), 0.32);
+  box-shadow: 0 0 14px rgba(var(--gg-pink-rgb), 0.7);
+}
+.gg-vwin-x:focus-visible { outline: 2px solid var(--gg-pink); outline-offset: 2px; }
+.gg-vwin.gg-vwin--out .gg-vwin-x { display: none; pointer-events: none; }
+
+/* THE SPAWN-IN — four CRT deaths, one shot each, picked per window so four
+   windows arriving together never look cloned. None of them is `forwards`: they
+   hand the element back to its resting state, which is what keeps them from
+   sitting on top of the drift/drag transforms forever. */
+.gg-vwin-in--1 { animation: ggVwinIn1 560ms steps(3, end) 1; }
+.gg-vwin-in--2 { animation: ggVwinIn2 620ms ease-out 1; }
+.gg-vwin-in--3 { animation: ggVwinIn3 500ms cubic-bezier(0.2, 0.9, 0.1, 1) 1; }
+.gg-vwin-in--4 { animation: ggVwinIn4 680ms steps(4, end) 1; }
+/* 1 — TAPE TEAR: the picture arrives in torn bands that slide into place. */
+@keyframes ggVwinIn1 {
+  0%   { opacity: 0.2; clip-path: inset(0 0 82% 0); transform: translateX(-9%); filter: brightness(2.4); }
+  25%  { opacity: 1; clip-path: inset(46% 0 22% 0); transform: translateX(7%); filter: brightness(0.7); }
+  55%  { clip-path: inset(12% 0 58% 0); transform: translateX(-4%); filter: brightness(1.6) hue-rotate(28deg); }
+  80%  { clip-path: inset(0 0 6% 0); transform: translateX(1.5%); filter: none; }
+  100% { clip-path: inset(0 0 0 0); transform: none; }
+}
+/* 2 — TRACKING JOLT: it lands sideways and shudders into frame. */
+@keyframes ggVwinIn2 {
+  0%   { opacity: 0; transform: translate(14%, -6%) skewX(9deg) scale(1.14); filter: blur(6px) brightness(1.8); }
+  40%  { opacity: 1; transform: translate(-5%, 2%) skewX(-4deg) scale(1.02); filter: blur(1px) hue-rotate(-30deg); }
+  70%  { transform: translate(2%, -1%) skewX(1.5deg) scale(1); filter: none; }
+  100% { transform: none; filter: none; }
+}
+/* 3 — CRT POWER-ON: a hairline that blooms open. */
+@keyframes ggVwinIn3 {
+  0%   { opacity: 0.9; transform: scale(1.3, 0.02); filter: brightness(3.4) saturate(0.2); }
+  45%  { opacity: 1; transform: scale(1.06, 0.5); filter: brightness(1.7); }
+  75%  { transform: scale(0.99, 1.05); filter: brightness(1.1); }
+  100% { transform: none; filter: none; }
+}
+/* 4 — CHANNEL HUNT: hue/contrast stutter with a couple of dropped fields. */
+@keyframes ggVwinIn4 {
+  0%   { opacity: 0; filter: hue-rotate(140deg) saturate(3) contrast(2.4); clip-path: inset(24% 0 24% 0); }
+  30%  { opacity: 1; filter: hue-rotate(-90deg) saturate(2) contrast(1.6); clip-path: inset(0 0 38% 0); }
+  50%  { opacity: 0.25; filter: brightness(2.6); clip-path: inset(40% 0 0 0); }
+  75%  { opacity: 1; filter: hue-rotate(24deg); clip-path: inset(0 0 8% 0); }
+  100% { opacity: 1; filter: none; clip-path: inset(0 0 0 0); }
+}
+
+/* ---------------------------------------------------------------------------
+ * LOCK CARD (#gg-stage) — the typed-phrase card. Interactive, house-styled.
+ * ------------------------------------------------------------------------ */
+.gg-lock {
+  position: relative;
+  width: min(46rem, 92vw);
+  text-align: center;
+  overflow: hidden;               /* keeps the progress fill inside the radius */
+  animation: ggLockIn 220ms ease-out;
+}
+@keyframes ggLockIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+/* Typed-progress underlay: a width the keystroke handler sets, behind the text. */
+.gg-lock-fill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 0%;
+  background: linear-gradient(90deg, rgba(var(--gg-pink-rgb), 0.10), rgba(var(--gg-violet-rgb), 0.26));
+  border-right: 1px solid rgba(var(--gg-pink-rgb), 0.45);
+  transition: width 90ms linear;
+  pointer-events: none;
+}
+.gg-lock-inner { position: relative; }
+.gg-lock-eyebrow { margin: 0 0 0.9rem; }
+.gg-lock-phrase {
+  margin: 0;
+  font-size: clamp(1.15rem, 2.9vw, 1.9rem);
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  color: var(--gg-text-3);
+  word-break: break-word;
+}
+.gg-lock-ch { transition: color 90ms ease; }
+.gg-lock-ch.is-done { color: var(--gg-text); text-shadow: 0 0 14px rgba(var(--gg-pink-rgb), 0.6); }
+.gg-lock-ch.is-cur { color: var(--gg-pink); border-bottom: 2px solid var(--gg-pink); }
+.gg-lock-ch.is-space { white-space: pre; }
+
+.gg-lock-dots { display: flex; gap: 0.45rem; justify-content: center; margin-top: 1.1rem; }
+.gg-lock-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(var(--gg-pink-rgb), 0.35);
+}
+.gg-lock-dot.is-done {
+  background: var(--gg-pink);
+  box-shadow: 0 0 12px rgba(var(--gg-pink-rgb), 0.8);
+}
+
+/* The real input. Visible and flat: a display:none or off-screen input breaks
+   IME candidate placement (and scrolls the page on focus on mobile). */
+.gg-lock-input {
+  margin-top: 1.15rem;
+  width: 100%;
+  font-family: var(--gg-font);
+  font-size: 1rem;
+  color: var(--gg-text);
+  background: rgba(10, 4, 18, 0.75);
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.4);
+  border-radius: var(--gg-radius-plate);
+  padding: 0.6rem 0.9rem;
+  outline: none;
+  caret-color: var(--gg-pink);
+}
+.gg-lock-input:focus { border-color: var(--gg-pink); box-shadow: 0 0 0 3px rgba(var(--gg-pink-rgb), 0.18); }
+
+.gg-lock-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  margin-top: 0.9rem;
+}
+.gg-lock-hint { color: var(--gg-text-4); font-size: 0.76rem; letter-spacing: 0.08em; }
+.gg-lock-mistakes { color: var(--gg-text-3); font-size: 0.76rem; font-variant-numeric: tabular-nums; }
+
+/* Wrong keystroke: one shake, one red wash. Re-triggered by class churn. */
+.gg-lock.is-wrong { animation: ggLockShake 240ms ease-in-out; }
+@keyframes ggLockShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-7px); }
+  45% { transform: translateX(6px); }
+  70% { transform: translateX(-3px); }
+}
+.gg-lock.is-wrong .gg-lock-input { border-color: #ff5470; box-shadow: 0 0 0 3px rgba(255, 84, 112, 0.22); }
+.gg-lock.is-solved { animation: ggLockSolved 420ms ease-out forwards; }
+@keyframes ggLockSolved {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.02); box-shadow: 0 0 70px rgba(var(--gg-pink-rgb), 0.55); }
+  100% { transform: scale(1); opacity: 0; }
+}
+
+/* ---------------------------------------------------------------------------
+ * MOTION — the calm variants. Nothing here is functional: a reduced-motion
+ * player still sees every effect, it just stops travelling and pulsing.
+ * ------------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  /* Flashes still appear and still fade — they just stop scaling on the way.
+     (The hatch overshoot goes with it; both lose to this rule on source order.
+     A dismissed flash needs the explicit override: .gg-flash.is-popped outranks
+     a bare .gg-flash whatever the order, and it still has to disappear.) */
+  .gg-flash {
+    animation: none;
+    opacity: var(--gg-flash-op, 0.95);
+    transform: translate(-50%, -50%);
+  }
+  .gg-flash.is-popped { animation: none; opacity: 0; }
+  /* Dragging still works here (it is direct manipulation, not motion): the
+     grabbed transform is inline, so it beats the rule above whatever the order.
+     Only the two JS-owned FADES need saying — without them a touched flash would
+     sit at full opacity until its kill timer yanked it. */
+  .gg-flash--expire,
+  .gg-flash--grabbed.is-popped { animation: none; opacity: 0; }
+  .gg-sub-word { transform: translate(-50%, -50%) !important; transition: opacity 300ms ease; }
+  /* A floating video window still ARRIVES and is still fully handleable — it
+     just stops glitching in, stops wandering and stops blinking. Dragging,
+     wheel-resizing and click-to-dismiss are direct manipulation, not motion,
+     and none of them is behind a keyframe. */
+  .gg-vwin-drift,
+  .gg-vwin-inner,
+  .gg-vwin-dot { animation: none; }
+  .gg-vwin-inner::after { animation: none; opacity: 1; }
+  /* …and it still LEAVES. The exit is the one animation that could strand a node
+     if it were merely switched off — no keyframes means no animationend — so the
+     calm exit is an opacity drop, and exec/videos.js takes the reduced-motion
+     path (its own short timer) rather than waiting on an event that will never
+     arrive. Either way the ghost is gone inside a few hundred ms. */
+  .gg-vwin.gg-vwin--out { animation: none; opacity: 0; }
+  .gg-bubble { animation: none; }        /* no sway; the rise still carries it up */
+  .gg-spiral { animation: none; }        /* no spin; the pane still covers + blends */
+  .gg-drain.is-glitching { animation: none; }
+  .gg-bounce-word.is-hit { animation: none; }
+  .gg-lock, .gg-lock.is-wrong { animation: none; }
+  .gg-lock.is-solved { animation: none; opacity: 0; transition: opacity 300ms ease; }
+}

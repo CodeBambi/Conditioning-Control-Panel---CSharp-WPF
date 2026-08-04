@@ -1,0 +1,1305 @@
+/* ============================================================================
+ * ui/screens.css — the screen tier: title, host, join, lobby, draft, countdown,
+ * recap, plus the shared chrome (sheets, toasts, options drawer, boot probe).
+ *
+ * Builds on goon.css tokens ONLY. No new colours are invented here; everything
+ * is --gg-pink / --gg-violet / --gg-gold and the text ramp, so the duel reads as
+ * the same product as the app and the Fall.
+ *
+ * TWO RULES THAT ARE NOT STYLE:
+ *   1. Nothing in this file may position, filter, dim, animate or overlap
+ *      #gg-mercy. The drawer clips itself (--gg-drawer-clip) for exactly that
+ *      reason. See the isolation banner in goon.css.
+ *   2. Decorative motion goes behind .gg-deco / --gg-deco-play so the effect
+ *      armor and the reduced-motion switch can park it. Functional motion
+ *      (the countdown numeral, the expiry bar) must NOT.
+ * ==========================================================================*/
+
+/* ---------------------------------------------------------------------------
+ * SHARED
+ * ------------------------------------------------------------------------ */
+
+/* #gg-stage (z20) is a full-bleed flex box that sits ABOVE #gg-screens (z10).
+ * While it holds nothing it still swallows every click aimed at a screen — the
+ * title menu, the draft tiles and the code cells are all unreachable. It only
+ * needs pointer input when it is actually showing something (a mandatory video,
+ * a lock card), so it opts OUT while empty and back in the moment exec/ fills
+ * it. Found the hard way: the headless driver could not press "Practice".  */
+#gg-stage:empty { pointer-events: none; }
+
+.gg-lead {
+  margin: 0.35rem 0 1.1rem;
+  color: var(--gg-text-2);
+  font-size: 0.92rem;
+  text-align: center;
+}
+
+.gg-badge {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--gg-radius-pill);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--gg-text-3);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+}
+.gg-badge.is-ghost { opacity: 0.45; }
+
+.gg-inline-error {
+  margin: 0.6rem 0 0;
+  color: #ff8fb0;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+/* boot probe — a corner readout the play-test driver polls. Deliberately
+   present on EVERY screen, deliberately unobtrusive. */
+#gg-boot-ok {
+  position: fixed;
+  left: 0.5rem;
+  bottom: 0.35rem;
+  z-index: 5;
+  display: block;
+  margin: 0;
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(169, 140, 184, 0.35);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ---------------------------------------------------------------------------
+ * TITLE
+ * ------------------------------------------------------------------------ */
+.gg-title { text-align: center; }
+.gg-title-wordmark { margin: 0; font-size: clamp(2.2rem, 7vw, 3.4rem); letter-spacing: 0.02em; }
+
+.gg-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin: 1.6rem auto 0;
+  max-width: 22rem;
+}
+.gg-menu-item {
+  position: relative;
+  width: 100%;
+  padding: 0.7rem 1.3rem;
+  font-size: 1rem;
+  text-align: center;
+}
+.gg-menu-item.has-note { padding-bottom: 1.15rem; }
+.gg-menu-note {
+  position: absolute;
+  left: 0; right: 0; bottom: 0.28rem;
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: lowercase;
+  color: var(--gg-text-4);
+}
+.gg-btn--primary .gg-menu-note { color: rgba(255, 255, 255, 0.72); }
+
+.gg-title-ribbon {
+  margin: 1rem auto 0;
+  max-width: 22rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(255, 212, 94, 0.1);
+  border: 1px solid rgba(255, 212, 94, 0.32);
+  color: var(--gg-gold);
+  font-size: 0.76rem;
+}
+
+.gg-title-fineprint {
+  margin: 1.5rem auto 0;
+  max-width: 30rem;
+  color: var(--gg-text-4);
+  font-size: 0.74rem;
+  line-height: 1.6;
+}
+
+.gg-how-list {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--gg-text-2);
+  font-size: 0.9rem;
+  line-height: 1.75;
+  text-align: left;
+}
+.gg-how-list li { margin: 0.25rem 0; }
+
+/* ---------------------------------------------------------------------------
+ * CODE — shared by host (display) and join (entry)
+ * ------------------------------------------------------------------------ */
+.gg-code {
+  display: flex;
+  justify-content: center;
+  gap: clamp(0.3rem, 1.4vw, 0.7rem);
+  margin: 1.4rem 0 0.6rem;
+  cursor: pointer;
+}
+.gg-code-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(2.4rem, 8vw, 3.6rem);
+  height: clamp(3.2rem, 10vw, 4.6rem);
+  border-radius: var(--gg-radius-plate);
+  border: 1px solid rgba(255, 105, 180, 0.28);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: clamp(1.6rem, 5vw, 2.6rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+/* The cell's `background:` shorthand above resets background-clip, which turns
+ * .gg-grad glyphs invisible (text-fill stays transparent). Re-clip the gradient
+ * to the text here; the cell look survives via border + is-live inset glow. */
+.gg-code-cell.gg-grad {
+  background: linear-gradient(135deg, var(--gg-pink), var(--gg-violet));
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+.gg-code.is-live .gg-code-cell {
+  border-color: rgba(255, 105, 180, 0.55);
+  box-shadow: inset 0 0 22px rgba(var(--gg-pink-rgb), 0.16);
+}
+.gg-code-chip {
+  display: block;
+  margin: 0 auto;
+  width: fit-content;
+  padding: 0.15rem 0.7rem;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(255, 212, 94, 0.16);
+  color: var(--gg-gold);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+}
+
+.gg-code-wrap { position: relative; }
+.gg-code-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  border: 0;
+  background: none;
+  color: transparent;
+  caret-color: transparent;
+  font-size: 16px;            /* iOS refuses to not zoom below 16px */
+  cursor: pointer;
+}
+.gg-code--input { cursor: text; }
+.gg-code--input .gg-code-cell { transition: border-color .18s, background .18s, transform .18s; }
+.gg-code--input .gg-code-cell.is-filled { border-color: rgba(255, 105, 180, 0.65); background: rgba(255, 105, 180, 0.07); }
+.gg-code--input.is-focused .gg-code-cell.is-cursor {
+  border-color: var(--gg-pink);
+  box-shadow: 0 0 0 2px rgba(var(--gg-pink-rgb), 0.22);
+}
+.gg-code--input.is-bad { animation: ggShake .4s ease; }
+@keyframes ggShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-7px); }
+  45% { transform: translateX(6px); }
+  70% { transform: translateX(-3px); }
+}
+
+/* ---------------------------------------------------------------------------
+ * HOST
+ * ------------------------------------------------------------------------ */
+.gg-host { text-align: center; min-width: min(30rem, 92vw); }
+.gg-expiry {
+  position: relative;
+  height: 4px;
+  margin: 1.1rem auto 0.5rem;
+  max-width: 22rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.gg-expiry-fill {
+  display: block;
+  height: 100%;
+  width: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gg-pink), var(--gg-violet));
+  transition: width .5s linear;
+}
+.gg-expiry.is-urgent .gg-expiry-fill { background: linear-gradient(90deg, var(--gg-gold), #ffb347); }
+.gg-expiry.is-dead .gg-expiry-fill { background: rgba(255, 255, 255, 0.12); }
+.gg-expiry-text { margin: 0; color: var(--gg-text-4); font-size: 0.76rem; font-variant-numeric: tabular-nums; }
+
+.gg-host-actions, .gg-join-actions, .gg-lobby-actions, .gg-recap-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-top: 1.2rem;
+  flex-wrap: wrap;
+}
+/* the action row's buttons size to their label, not to the menu's column */
+.gg-recap-actions .gg-menu-item { width: auto; }
+
+.gg-waiting {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-top: 1.3rem;
+  color: var(--gg-text-3);
+  font-size: 0.88rem;
+}
+.gg-dots { display: inline-flex; gap: 4px; }
+.gg-dots i {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--gg-pink);
+  animation: ggPulse 1.4s ease-in-out infinite;
+  animation-play-state: var(--gg-deco-play);
+}
+.gg-dots i:nth-child(2) { animation-delay: .18s; }
+.gg-dots i:nth-child(3) { animation-delay: .36s; }
+@keyframes ggPulse { 0%, 100% { opacity: .25; transform: scale(.8); } 50% { opacity: 1; transform: scale(1); } }
+
+/* ---------------------------------------------------------------------------
+ * LOBBY
+ * ------------------------------------------------------------------------ */
+.gg-lobby { min-width: min(34rem, 94vw); }
+
+.gg-duel {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.8rem;
+  margin: 1.1rem 0 0.6rem;
+}
+.gg-duel-side {
+  padding: 0.8rem 0.9rem;
+  border-radius: var(--gg-radius-plate);
+  background: var(--gg-plate-bg);
+  border: var(--gg-plate-border);
+  text-align: center;
+  transition: opacity .3s, border-color .3s;
+}
+.gg-duel-side--them { border-color: rgba(179, 136, 255, 0.3); }
+.gg-duel-side.is-unknown { opacity: 0.38; }
+.gg-duel-role {
+  font-size: 0.62rem; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gg-text-4);
+}
+.gg-duel-name { margin: 0.25rem 0 0.4rem; font-size: 1.05rem; font-weight: 700; word-break: break-word; }
+.gg-duel-badges { display: flex; justify-content: center; gap: 0.3rem; }
+.gg-duel-version { margin: 0.4rem 0 0; font-size: 0.64rem; color: var(--gg-text-4); font-variant-numeric: tabular-nums; }
+.gg-duel-vs { color: var(--gg-text-4); font-size: 0.8rem; letter-spacing: 0.16em; text-transform: uppercase; }
+
+.gg-conn { margin: 0 0 1rem; text-align: center; font-size: 0.74rem; letter-spacing: 0.1em; color: var(--gg-text-4); }
+.gg-conn.is-direct { color: #8ce0b0; }
+.gg-conn.is-relay { color: var(--gg-gold); }
+.gg-conn.is-off { color: var(--gg-text-4); }
+
+.gg-consent { transition: opacity .3s; }
+.gg-consent.is-waiting { opacity: 0.4; pointer-events: none; }
+.gg-row.is-disabled { opacity: 0.45; }
+.gg-row.is-disabled .gg-row-value { color: var(--gg-text-4); font-weight: 500; font-size: 0.8rem; }
+
+/* The media-transfer opt-in: a checkbox row plus the line that says why it is off.
+   The row itself is the standard .gg-row flex; only the control and the sub-line
+   are new, and the sub-line carries the explanation a greyed control owes. */
+.gg-row--check input[type="checkbox"] {
+  accent-color: var(--gg-pink);
+  width: 1.05rem; height: 1.05rem; margin: 0 0 0 auto; flex: 0 0 auto;
+}
+.gg-row-sub {
+  margin: 0.35rem 0 0.1rem;
+  font-size: 0.72rem; line-height: 1.45; color: var(--gg-text-4);
+}
+
+.gg-lamps {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  gap: 1.6rem;
+  margin: 1.1rem 0 0.3rem;
+  padding: 0.5rem 0;
+  border-radius: var(--gg-radius-pill);
+}
+.gg-lamp { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.74rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gg-text-4); }
+.gg-lamp i {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  transition: background .2s, box-shadow .2s;
+}
+.gg-lamp.is-on { color: var(--gg-text); }
+.gg-lamp.is-on i { background: var(--gg-pink); box-shadow: 0 0 14px rgba(var(--gg-pink-rgb), 0.85); }
+/* the clears-both ripple: a single outward wash, then gone */
+.gg-lamps.is-rippling::after {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.5);
+  animation: ggRipple .7s ease-out;
+}
+@keyframes ggRipple {
+  from { transform: scale(.85); opacity: .9; }
+  to { transform: scale(1.12); opacity: 0; }
+}
+.gg-consent-changed { margin: 0.2rem 0 0; text-align: center; font-size: 0.78rem; color: var(--gg-gold); }
+.gg-btn.is-ready { background: linear-gradient(135deg, #6f4b9e, #4a3570); }
+
+/* ---------------------------------------------------------------------------
+ * DRAFT
+ * ------------------------------------------------------------------------ */
+.gg-draft { min-width: min(46rem, 96vw); }
+
+.gg-draft-head {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.8rem;
+  margin: 0.6rem 0 1rem;
+}
+.gg-draft-side { display: flex; flex-direction: column; gap: 0.35rem; }
+.gg-draft-side--them { align-items: flex-end; }
+.gg-draft-who { font-size: 0.8rem; color: var(--gg-text-2); font-weight: 600; }
+
+.gg-riskmeter { display: flex; gap: 3px; }
+.gg-riskseg {
+  width: 100%; max-width: 2.2rem; height: 6px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.09);
+  transition: background .2s, box-shadow .2s;
+}
+.gg-riskseg.is-on { background: linear-gradient(135deg, var(--gg-pink), var(--gg-violet)); }
+.gg-riskseg.is-gold.is-on { background: var(--gg-gold); box-shadow: 0 0 12px rgba(255, 212, 94, 0.55); }
+
+.gg-elems {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0.6rem;
+}
+.gg-elem {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.85rem 0.6rem 0.75rem;
+  border-radius: var(--gg-radius-plate);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--gg-text-1);
+  font-family: var(--gg-font);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color .18s, background .18s, transform .18s, opacity .18s;
+}
+.gg-elem:hover:not(:disabled) { border-color: rgba(255, 105, 180, 0.5); background: rgba(255, 105, 180, 0.06); }
+.gg-elem-glyph { display: block; width: 30px; height: 30px; }
+.gg-elem-glyph svg { width: 100%; height: 100%; fill: var(--gg-text-2); stroke: var(--gg-text-2); }
+.gg-elem-glyph svg .cut { fill: #12081a; stroke: none; }
+.gg-elem-name { font-size: 0.88rem; font-weight: 700; }
+.gg-elem-blurb { font-size: 0.68rem; color: var(--gg-text-4); line-height: 1.4; }
+.gg-elem-why { display: none; font-size: 0.66rem; color: var(--gg-text-4); line-height: 1.4; }
+
+/* NOTE: named gg-riskpips, not gg-pips — ui/hud.css owns .gg-pips for the
+   charge meter and loads AFTER this file. Two owners, one name, silent bug. */
+.gg-riskpips { display: inline-flex; gap: 3px; }
+.gg-riskpips i { width: 5px; height: 5px; border-radius: 50%; background: rgba(255, 255, 255, 0.14); }
+.gg-riskpips i.is-on { background: var(--gg-pink); }
+
+.gg-elem-badge {
+  position: absolute;
+  top: -8px; right: -8px;
+  min-width: 22px; height: 22px;
+  padding: 0 0.45rem;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #d6479c, #8e50c9);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+.gg-elem.is-picked { border-color: var(--gg-pink); background: rgba(255, 105, 180, 0.12); transform: translateY(-2px); }
+.gg-elem.is-picked .gg-elem-glyph svg { fill: var(--gg-pink); stroke: var(--gg-pink); }
+.gg-elem.is-locked-out { opacity: 0.36; }
+.gg-elem.is-unsupported { opacity: 0.3; cursor: not-allowed; }
+.gg-elem.is-unsupported .gg-elem-blurb { display: none; }
+.gg-elem.is-unsupported .gg-elem-why { display: block; }
+
+/* --- the agreement pass (2026-08-03): tiles are toggles, not picks -------
+   is-on          you allow it (default for everything)
+   is-off         you switched it off, so neither of you gets it
+   is-theirs-off  THEY switched it off — out of the pool whatever you do
+   is-always-on   bubbles: not a toggle at all, the whole match for both  */
+.gg-elem.is-on { border-color: var(--gg-pink); background: rgba(255, 105, 180, 0.12); }
+.gg-elem.is-on .gg-elem-glyph svg { fill: var(--gg-pink); stroke: var(--gg-pink); }
+.gg-elem.is-off { opacity: 0.34; border-style: dashed; }
+.gg-elem.is-off .gg-elem-glyph svg { fill: var(--gg-text-4); stroke: var(--gg-text-4); }
+.gg-elem.is-theirs-off { opacity: 0.42; border-color: rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.02); }
+.gg-elem.is-theirs-off .gg-elem-badge { background: linear-gradient(135deg, #4b4b63, #6a6a86); }
+.gg-elem.is-always-on {
+  border-color: var(--gg-gold);
+  background: rgba(255, 212, 94, 0.08);
+  cursor: default;
+  opacity: 1;
+}
+.gg-elem.is-always-on .gg-elem-glyph svg { fill: var(--gg-gold); stroke: var(--gg-gold); }
+.gg-elem.is-always-on .gg-elem-badge { background: linear-gradient(135deg, #d9a441, #f0cf7a); color: #241a05; }
+
+.gg-draft-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin-top: 1.1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+.gg-draft-meterwrap { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.gg-draft-meterwrap .gg-riskmeter { width: 9rem; }
+.gg-draft-risk { font-size: 0.8rem; color: var(--gg-text-2); font-variant-numeric: tabular-nums; }
+.gg-draft-mult { font-size: 0.8rem; color: var(--gg-gold); font-variant-numeric: tabular-nums; }
+
+.gg-draft-theirs { display: flex; align-items: center; gap: 0.5rem; }
+.gg-slots-label { font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gg-text-4); }
+.gg-slots { display: flex; gap: 0.3rem; }
+.gg-slot {
+  min-width: 4.6rem; height: 1.5rem;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 0.4rem;
+  border-radius: var(--gg-radius-pill);
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  font-size: 0.66rem;
+  color: var(--gg-text-3);
+  background-image: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.07) 50%, transparent 70%);
+  background-size: 220% 100%;
+  animation: ggShimmer 2.4s linear infinite;
+  animation-play-state: var(--gg-deco-play);
+}
+.gg-slot.is-filled {
+  border-style: solid;
+  border-color: rgba(179, 136, 255, 0.5);
+  background-image: none;
+  animation: none;
+  color: var(--gg-text-1);
+}
+@keyframes ggShimmer { from { background-position: 140% 0; } to { background-position: -40% 0; } }
+.gg-slots.is-locked .gg-slot.is-filled { box-shadow: 0 0 12px rgba(179, 136, 255, 0.3); }
+
+/* both drafts locked: one sweep, then the engine takes over */
+.gg-draft.is-sealed { position: relative; overflow: hidden; }
+.gg-draft.is-sealed::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(105deg, transparent 40%, rgba(255, 105, 180, 0.22) 50%, transparent 60%);
+  background-size: 260% 100%;
+  animation: ggSweep .9s ease-out 1;
+  pointer-events: none;
+}
+@keyframes ggSweep { from { background-position: 130% 0; } to { background-position: -60% 0; } }
+
+/* ---------------------------------------------------------------------------
+ * COUNTDOWN — full bleed. This motion is FUNCTIONAL: it must not park behind
+ * --gg-deco-play, because the numeral is the shared-clock readout.
+ * ------------------------------------------------------------------------ */
+.gg-count {
+  --gg-count-t: 0;
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.gg-count-num {
+  font-size: clamp(7rem, 34vw, 22rem);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.gg-count-num.is-beat { animation: ggCountBeat 1s cubic-bezier(.2, .7, .3, 1) 1; }
+@keyframes ggCountBeat {
+  0% { transform: scale(1.28); opacity: 0; }
+  18% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(.94); opacity: .55; }
+}
+.gg-count-num.is-go {
+  background: linear-gradient(135deg, var(--gg-gold), #ffb347);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-size: clamp(5rem, 22vw, 15rem);
+}
+.gg-count-names {
+  position: absolute;
+  top: 12%;
+  left: 0; right: 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 clamp(1rem, 8vw, 8rem);
+  font-size: clamp(0.9rem, 2.4vw, 1.4rem);
+  color: var(--gg-text-3);
+  pointer-events: none;
+}
+.gg-count-name--you { transform: translateX(calc(var(--gg-count-t) * 22vw)); transition: transform .3s linear; }
+.gg-count-name--them { transform: translateX(calc(var(--gg-count-t) * -22vw)); transition: transform .3s linear; }
+
+/* ---------------------------------------------------------------------------
+ * RECAP
+ * ------------------------------------------------------------------------ */
+.gg-recap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  width: min(44rem, 96vw);
+  margin: auto;
+  padding: 1.5rem 0;
+}
+.gg-recap .gg-card { max-width: none; width: 100%; }
+.gg-recap-hero { text-align: center; }
+.gg-recap-verdict { margin: 0; font-size: clamp(2rem, 7vw, 3rem); font-weight: 900; }
+.gg-recap-reason { margin: 0.5rem 0 0; color: var(--gg-text-2); font-size: 0.95rem; }
+.gg-badge--disputed {
+  margin-top: 0.9rem;
+  border-color: rgba(255, 212, 94, 0.5);
+  background: rgba(255, 212, 94, 0.12);
+  color: var(--gg-gold);
+}
+/* quieter than disputed on purpose: nothing is WRONG, the countersignature is
+   just still in the post. It disappears on its own when onResultFinalized
+   repaints the hero. */
+.gg-badge--unconfirmed {
+  margin-top: 0.9rem;
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--gg-text-4);
+}
+.gg-recap-h {
+  margin: 0 0 0.7rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gg-text-4);
+  font-weight: 700;
+}
+.gg-scoreline { display: flex; align-items: baseline; justify-content: center; gap: 1rem; }
+.gg-scorenum { font-size: clamp(2.2rem, 8vw, 3.4rem); font-weight: 900; font-variant-numeric: tabular-nums; }
+.gg-scorenum.is-you { color: var(--gg-pink); }
+.gg-scorenum.is-them { color: var(--gg-violet); }
+.gg-scoredash { color: var(--gg-text-4); }
+.gg-recap-fine { margin: 0.35rem 0 0; text-align: center; color: var(--gg-text-4); font-size: 0.76rem; font-variant-numeric: tabular-nums; }
+
+.gg-pllist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.gg-plrow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: var(--gg-radius-plate);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.78rem;
+}
+.gg-plrow--in { border-left: 2px solid rgba(179, 136, 255, 0.6); }
+.gg-plrow--out { border-left: 2px solid rgba(255, 105, 180, 0.6); flex-direction: row-reverse; text-align: right; }
+.gg-plrow-t { color: var(--gg-text-4); font-variant-numeric: tabular-nums; min-width: 3rem; }
+.gg-plrow-dir { color: var(--gg-text-4); font-size: 0.7rem; }
+.gg-plrow-kind { color: var(--gg-text-1); font-weight: 600; flex: 1 1 auto; }
+.gg-plrow-note { color: var(--gg-gold); font-size: 0.68rem; }
+
+.gg-chip {
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--gg-radius-pill);
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  border: 1px solid transparent;
+}
+.gg-chip.is-landed { background: rgba(255, 255, 255, 0.07); color: var(--gg-text-2); }
+.gg-chip.is-endured { background: rgba(255, 212, 94, 0.14); color: var(--gg-gold); border-color: rgba(255, 212, 94, 0.4); }
+.gg-chip.is-blocked { background: rgba(255, 255, 255, 0.04); color: var(--gg-text-4); }
+.gg-chip.is-toosoon { background: rgba(179, 136, 255, 0.12); color: var(--gg-violet); }
+
+.gg-titlestrip { display: flex; flex-direction: column; gap: 0.5rem; }
+.gg-title-chip {
+  display: flex; align-items: baseline; gap: 0.7rem;
+  padding: 0.5rem 0.8rem;
+  border-radius: var(--gg-radius-plate);
+  border: 1px solid rgba(255, 212, 94, 0.38);
+  background: rgba(255, 212, 94, 0.08);
+}
+.gg-title-chip-name { color: var(--gg-gold); font-weight: 800; font-size: 0.9rem; letter-spacing: 0.04em; }
+.gg-title-chip-why { color: var(--gg-text-3); font-size: 0.76rem; }
+
+/* ---------------------------------------------------------------------------
+ * REPORTING WHAT THEY SENT (spec §7.5) — the recap card, plus the ONE override
+ * the in-match flag button needs.
+ *
+ * THE FLAG BUTTON. exec/videos.js builds it with BOTH `gg-vwin-x` and
+ * `gg-vwin-flag`, so every pixel of it — size, plate, border, hover, focus
+ * ring, and the hide-on-exit rule — comes from the ✕ in exec/fx.css and there is
+ * no second copy of that chrome to keep in sync. Only two things differ, and
+ * both are stated here:
+ *
+ *   1. IT IS ALWAYS VISIBLE. fx.css hides `.gg-vwin-x` behind
+ *      html[data-gg-vskip="on"] because "skippable videos" is a COMFORT
+ *      preference. Reporting is a SAFETY affordance and is never behind a
+ *      preference, so this rule un-hides it.
+ *   2. It sits in the opposite corner, so the two controls never overlap.
+ *
+ * The `.gg-vwin` ancestor is load-bearing, not decoration: screens.css is
+ * linked BEFORE fx.css, so at equal specificity fx.css's `display: none` would
+ * win. Two class selectors beat one. `.gg-vwin.gg-vwin--out .gg-vwin-x` (three)
+ * still beats THIS, which is exactly right — a window on its way out shows
+ * neither control.
+ * ------------------------------------------------------------------------ */
+.gg-vwin .gg-vwin-flag {
+  display: flex;
+  left: auto;
+  right: 8px;
+  font-size: 12px;
+}
+
+.gg-recap-report .gg-recap-fine { text-align: left; }
+.gg-report-lead { margin: 0 0 0.7rem; color: var(--gg-text-2); font-size: 0.82rem; line-height: 1.5; }
+.gg-report-note-line { margin: 0.6rem 0 0; color: var(--gg-text-4); font-size: 0.7rem; line-height: 1.5; }
+
+/* The shortlist. Fixed-height thumbs so a portrait clip and a wide still do not
+   make the row jump; `object-fit: cover` is what keeps them the same shape. */
+.gg-report-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.2rem 0 0;
+}
+.gg-report-thumb {
+  position: relative;
+  width: 5.5rem;
+  padding: 0;
+  border-radius: var(--gg-radius-plate);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  overflow: hidden;
+  font: inherit;
+  color: var(--gg-text-3);
+  transition: border-color .16s, box-shadow .16s;
+}
+.gg-report-thumb img,
+.gg-report-thumb video {
+  display: block;
+  width: 100%;
+  height: 3.6rem;
+  object-fit: cover;
+  background: rgba(0, 0, 0, 0.45);
+}
+.gg-report-thumb-cap {
+  display: block;
+  padding: 0.2rem 0.3rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gg-report-thumb:hover { border-color: rgba(var(--gg-pink-rgb), 0.55); }
+.gg-report-thumb:focus-visible { outline: 2px solid var(--gg-pink); outline-offset: 2px; }
+.gg-report-thumb[aria-pressed="true"] {
+  border-color: var(--gg-pink);
+  box-shadow: 0 0 0 2px rgba(var(--gg-pink-rgb), 0.28);
+}
+/* A WORD, not a colour: the flagged ones say so. */
+.gg-report-thumb.is-flagged .gg-report-thumb-cap { color: var(--gg-gold); }
+
+/* The reason picker. A vertical stack rather than a pill row: five sentences do
+   not fit side by side, and this control must be readable in one pass. */
+.gg-report-reasons { display: flex; flex-direction: column; gap: 0.3rem; margin: 0.2rem 0 0; }
+.gg-report-reason {
+  text-align: left;
+  padding: 0.45rem 0.7rem;
+  border-radius: var(--gg-radius-plate);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--gg-text-2);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: border-color .16s, background .16s, color .16s;
+}
+.gg-report-reason:hover { border-color: rgba(var(--gg-pink-rgb), 0.5); color: var(--gg-text-1); }
+.gg-report-reason:focus-visible { outline: 2px solid var(--gg-pink); outline-offset: 2px; }
+.gg-report-reason[aria-pressed="true"] {
+  border-color: var(--gg-pink);
+  background: rgba(255, 105, 180, 0.12);
+  color: var(--gg-text-1);
+}
+
+.gg-report-note {
+  width: 100%;
+  margin: 0.2rem 0 0;
+  min-height: 4.5rem;
+  padding: 0.5rem 0.6rem;
+  resize: vertical;
+  border-radius: var(--gg-radius-plate);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--gg-text-1);
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.gg-report-note:focus-visible { outline: 2px solid var(--gg-pink); outline-offset: 1px; }
+
+.gg-report-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.7rem; }
+.gg-report-status { margin: 0.6rem 0 0; font-size: 0.8rem; color: var(--gg-text-2); }
+.gg-report-status.is-done { color: var(--gg-gold); }
+.gg-report-status.is-failed { color: var(--gg-pink); }
+
+/* ---------------------------------------------------------------------------
+ * ASSETS (scr-assets) — the compression screen.
+ *
+ * Wider than the other screens on purpose: it is the only one that is a GRID of
+ * the player's own library rather than a card of decisions. Everything else here
+ * is the standard kit (.gg-card, .gg-chip, .gg-row) so it reads as the same
+ * product with no new colours.
+ * ------------------------------------------------------------------------ */
+.gg-assets { min-width: min(58rem, 96vw); max-width: min(58rem, 96vw); text-align: left; }
+.gg-assets--off { text-align: center; }
+.gg-assets-standalone-head { margin: 0.4rem 0 0; font-size: 1.1rem; font-weight: 700; }
+
+/* Standalone device-picker: narrow card, simple rows — a phone screen, mostly. */
+.gg-assets--local { min-width: min(30rem, 96vw); max-width: min(30rem, 96vw); text-align: center; }
+.gg-local-tools { justify-content: center; margin-top: 0.8rem; }
+.gg-local-list { display: flex; flex-direction: column; gap: 0.45rem; margin: 0.8rem 0; text-align: left; }
+.gg-local-row {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--gg-radius-plate);
+  background: rgba(255, 255, 255, 0.03);
+}
+.gg-local-thumb {
+  flex: 0 0 auto; width: 2.6rem; height: 2.6rem;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: calc(var(--gg-radius-plate) * 0.7);
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+.gg-local-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.gg-local-thumb-kind { font-size: 0.62rem; letter-spacing: 0.08em; color: var(--gg-text-4); text-transform: uppercase; }
+.gg-local-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.84rem; }
+.gg-local-size { flex: 0 0 auto; font-size: 0.74rem; color: var(--gg-text-3); font-variant-numeric: tabular-nums; }
+
+.gg-assets-head { text-align: center; }
+.gg-assets-stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4rem; margin-bottom: 0.9rem; }
+.gg-assets-chip { background: rgba(255, 255, 255, 0.06); color: var(--gg-text-2); border-color: rgba(255, 255, 255, 0.12); }
+.gg-assets-chip.is-usage { color: var(--gg-text-1); font-variant-numeric: tabular-nums; }
+.gg-assets-chip.is-bad { background: rgba(255, 143, 176, 0.12); color: #ff8fb0; border-color: rgba(255, 143, 176, 0.38); }
+
+.gg-assets-tools { display: flex; flex-direction: column; gap: 0.5rem; }
+.gg-assets-tools-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.gg-assets-tools-row .gg-btn { font-size: 0.84rem; padding: 0.42rem 1rem; }
+
+.gg-assets-seg {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--gg-radius-pill);
+  border: 1px solid rgba(255, 105, 180, 0.28);
+  background: rgba(12, 6, 20, 0.6);
+}
+.gg-assets-segbtn {
+  font-family: var(--gg-font);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  color: var(--gg-text-3);
+  background: transparent;
+  border: 0;
+  border-radius: var(--gg-radius-pill);
+  padding: 0.3rem 0.75rem;
+  cursor: pointer;
+  transition: background .18s, color .18s;
+}
+.gg-assets-segbtn:hover { color: var(--gg-text-1); }
+.gg-assets-segbtn[aria-pressed="true"] { background: rgba(255, 105, 180, 0.2); color: var(--gg-text); }
+
+.gg-assets-search {
+  flex: 1 1 10rem;
+  min-width: 8rem;
+  font-family: var(--gg-font);
+  font-size: 0.82rem;
+  color: var(--gg-text);
+  background: rgba(12, 6, 20, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--gg-radius-pill);
+  padding: 0.36rem 0.85rem;
+}
+.gg-assets-search:focus { outline: none; border-color: var(--gg-pink); }
+
+.gg-assets-eta {
+  margin: 0.7rem 0 0;
+  font-size: 0.78rem;
+  color: var(--gg-text-3);
+  font-variant-numeric: tabular-nums;
+}
+.gg-assets-notice { margin: 0.3rem 0 0; font-size: 0.78rem; color: var(--gg-gold); }
+.gg-assets-empty { margin: 1.2rem 0; text-align: center; font-size: 0.84rem; color: var(--gg-text-4); }
+
+.gg-assets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 0.6rem;
+  margin: 0.9rem 0 0;
+}
+.gg-assets-sentinel { height: 1px; }
+.gg-assets-more { display: block; margin: 0.8rem auto 0; }
+
+.gg-asset {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.4rem;
+  border-radius: var(--gg-radius-plate);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+.gg-asset-media {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: 10px;
+  overflow: hidden;
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.035) 0 8px, rgba(255, 255, 255, 0.015) 8px 16px);
+  display: flex; align-items: center; justify-content: center;
+}
+.gg-asset-img, .gg-asset-vid { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gg-asset-name {
+  font-size: 0.68rem;
+  color: var(--gg-text-2);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gg-asset-badge {
+  align-self: flex-start;
+  padding: 0.08rem 0.45rem;
+  border-radius: var(--gg-radius-pill);
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+  color: var(--gg-text-3);
+  background: rgba(255, 255, 255, 0.06);
+}
+.gg-asset-acts { display: flex; gap: 0.3rem; }
+.gg-asset-act {
+  font-family: var(--gg-font);
+  font-size: 0.66rem;
+  color: var(--gg-text-3);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--gg-radius-pill);
+  padding: 0.14rem 0.5rem;
+  cursor: pointer;
+}
+.gg-asset-act:hover { color: var(--gg-text); border-color: var(--gg-pink); }
+
+/* STATE — a word on the tile AND a colour, never the colour alone. */
+.gg-asset[data-state="pending"] .gg-asset-media,
+.gg-asset[data-state="queued"] .gg-asset-media { filter: grayscale(1); opacity: 0.55; }
+.gg-asset[data-state="working"] { border-color: rgba(255, 105, 180, 0.45); }
+.gg-asset[data-state="working"] .gg-asset-media { filter: grayscale(1); opacity: 0.7; }
+.gg-asset[data-state="working"] .gg-asset-badge { color: var(--gg-pink); background: rgba(255, 105, 180, 0.14); }
+.gg-asset[data-state="ready"] .gg-asset-badge { color: #8ce0b0; background: rgba(140, 224, 176, 0.12); }
+.gg-asset[data-state="failed"] { border-color: rgba(255, 143, 176, 0.4); }
+.gg-asset[data-state="failed"] .gg-asset-badge { color: #ff8fb0; background: rgba(255, 143, 176, 0.12); }
+.gg-asset[data-state="exempt"] .gg-asset-badge { color: var(--gg-gold); background: rgba(255, 212, 94, 0.12); }
+.gg-asset.is-clicktoplay .gg-asset-media { cursor: pointer; }
+
+/* THE PROGRESS RING IS INFORMATION, NOT CHROME.
+   Nothing in it is a CSS animation — ui/screens/assets.js writes
+   stroke-dashoffset itself — but it re-declares --gg-deco-play: running for the
+   same reason .gg-mon-proj does: the moment three effects are live, goon.css
+   flips the page to `paused`, and any flourish added inside this rect later
+   would silently freeze exactly while the work it reports is happening. */
+.gg-asset-ring {
+  --gg-deco-play: running;
+  position: absolute;
+  inset: auto 0.3rem 0.3rem auto;
+  width: 30px; height: 30px;
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+.gg-asset-ring-track { fill: none; stroke: rgba(255, 255, 255, 0.14); stroke-width: 3; }
+.gg-asset-ring-value { fill: none; stroke: var(--gg-pink); stroke-width: 3; stroke-linecap: round; }
+.gg-asset[data-state="ready"] .gg-asset-ring,
+.gg-asset[data-state="exempt"] .gg-asset-ring,
+.gg-asset[data-state="pending"] .gg-asset-ring { display: none; }
+
+.gg-assets-foot { margin-top: 1.1rem; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 0.8rem; }
+.gg-assets-cap input[type="range"] { accent-color: var(--gg-pink); flex: 1 1 12rem; }
+.gg-assets-note { margin: 0.5rem 0 0; font-size: 0.72rem; color: var(--gg-text-4); line-height: 1.6; }
+.gg-assets-foot-actions { display: flex; justify-content: center; gap: 0.6rem; margin-top: 0.9rem; }
+
+/* ---------------------------------------------------------------------------
+ * SHEETS (#gg-modal, z70)
+ * ------------------------------------------------------------------------ */
+.gg-sheet-dock {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  justify-content: center;
+  padding: 0 clamp(0.5rem, 3vw, 2rem);
+}
+.gg-sheet--modal { width: min(30rem, 100%); text-align: center; }
+.gg-sheet-icon { font-size: 1.8rem; line-height: 1; margin-bottom: 0.5rem; }
+.gg-sheet-headline { margin: 0; font-size: 1.15rem; font-weight: 700; }
+.gg-sheet-line { margin: 0.5rem 0 0; color: var(--gg-text-2); font-size: 0.9rem; line-height: 1.6; }
+.gg-sheet-actions { display: flex; justify-content: center; gap: 0.6rem; margin-top: 1.1rem; }
+
+/* ---------------------------------------------------------------------------
+ * TOASTS (#gg-toasts, z50)
+ * ------------------------------------------------------------------------ */
+.gg-toast-stack {
+  position: absolute;
+  top: 1rem; left: 50%;
+  transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 0.4rem;
+  width: min(26rem, 92vw);
+}
+.gg-toast {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(12, 6, 20, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--gg-text-1);
+  font-size: 0.8rem;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  animation: ggToastIn .22s ease-out;
+}
+.gg-toast--good { border-color: rgba(140, 224, 176, 0.45); }
+.gg-toast--warn { border-color: rgba(255, 212, 94, 0.45); color: var(--gg-gold); }
+.gg-toast--bad { border-color: rgba(255, 105, 180, 0.55); }
+.gg-toast.is-leaving { animation: ggToastOut .2s ease-in forwards; }
+@keyframes ggToastIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+@keyframes ggToastOut { to { opacity: 0; transform: translateY(-6px); } }
+
+/* ---------------------------------------------------------------------------
+ * OPTIONS DRAWER (#gg-drawer, z70) — .sf-panel geometry, gg-* names.
+ *
+ * --gg-drawer-clip is the MERCY CLEARANCE. While the HUD is up the drawer
+ * shortens itself so #gg-mercy (z60) is never behind it. Do not remove.
+ * ------------------------------------------------------------------------ */
+#gg-drawer { pointer-events: none; }
+.gg-panel {
+  --gg-drawer-clip: 0px;
+  pointer-events: auto;
+  position: absolute;
+  top: 0; right: 0;
+  bottom: var(--gg-drawer-clip);
+  width: 100%;
+  padding: 1.1rem 1.2rem 2rem;
+  overflow-y: auto;
+  background: rgba(16, 8, 24, 0.94);
+  border-left: 1px solid rgba(255, 105, 180, 0.35);
+  backdrop-filter: blur(10px);
+  transform: translateX(105%);
+  transition: transform 0.25s ease;
+}
+.gg-panel.is-open { transform: none; }
+.gg-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem; }
+.gg-panel-head h2 { margin: 0; font-size: 1.1rem; letter-spacing: 0.05em; }
+.gg-panel-close {
+  border: 0; background: none; color: var(--gg-text-2);
+  font-size: 1.5rem; line-height: 1; cursor: pointer; padding: 0 0.2rem;
+}
+.gg-panel-close:hover { color: #fff; }
+.gg-panel-body { display: flex; flex-direction: column; gap: 0.3rem; }
+.gg-panel-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.8rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.gg-panel-row--slider { flex-direction: column; align-items: stretch; gap: 0.35rem; }
+.gg-panel-label { display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--gg-text-2); }
+.gg-panel-value { color: var(--gg-pink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.gg-panel-row input[type="range"] { accent-color: var(--gg-pink); width: 100%; }
+.gg-panel-note { margin: 0.9rem 0 0; font-size: 0.76rem; color: var(--gg-text-4); line-height: 1.6; }
+
+.gg-toggle {
+  position: relative;
+  width: 44px; height: 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  transition: background .18s, border-color .18s;
+}
+.gg-toggle i {
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--gg-text-3);
+  transition: transform .18s, background .18s;
+}
+.gg-toggle[aria-pressed="true"] { background: rgba(255, 105, 180, 0.28); border-color: var(--gg-pink); }
+.gg-toggle[aria-pressed="true"] i { transform: translateX(20px); background: var(--gg-pink); }
+
+/* ===========================================================================
+ * DISCORD — the avatar kit, the lobby panel, the recap plates, the VS splash.
+ * (docs/GOON_DISCORD_CONTRACT.md §6. The HUD minis are in ui/hud.css.)
+ *
+ * THE BOX IS THE POINT. Every `.gg-ava` is sized by a token on the element
+ * itself, so the box exists at its final size from the first paint and a
+ * picture arriving a round trip later REPLACES the tile inside it. Nothing on
+ * the lobby or the recap may reflow when a data URI lands.
+ *
+ * NO LOOPS LIVE HERE. The wrapper's idle bob and every reaction belong to
+ * ui/avatarFx.js (Work Item E) — this file draws the furniture and the two
+ * one-shot TRANSITIONS the splash needs, which cost the --gg-deco-play budget
+ * nothing because a transition is not an animation.
+ * ======================================================================== */
+
+.gg-ava {
+  position: relative;
+  flex: 0 0 auto;
+  width: var(--gg-ava-size, 56px);
+  height: var(--gg-ava-size, 56px);
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(12, 6, 20, 0.72);
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.5);
+  box-shadow: 0 0 18px rgba(var(--gg-pink-rgb), 0.22), inset 0 0 14px rgba(0, 0, 0, 0.55);
+  /* E's decorations are absolutely positioned children; isolation keeps them
+     (and any blend they use) inside this circle instead of over the card. */
+  isolation: isolate;
+}
+/* Pink is you, violet is them — the same two-colour vocabulary the duel card,
+   the fx chips and the opponent monitor already use. */
+.gg-ava[data-side="opp"] {
+  border-color: rgba(var(--gg-violet-rgb), 0.55);
+  box-shadow: 0 0 18px rgba(var(--gg-violet-rgb), 0.22), inset 0 0 14px rgba(0, 0, 0, 0.55);
+}
+
+.gg-ava[data-size="lobby"]  { --gg-ava-size: 64px; }
+.gg-ava[data-size="last"]   { --gg-ava-size: 44px; }
+.gg-ava[data-size="plate"]  { --gg-ava-size: 72px; }
+.gg-ava[data-size="mini"]   { --gg-ava-size: 40px; }
+.gg-ava[data-size="splash"] { --gg-ava-size: clamp(96px, 17vw, 168px); border-width: 2px; }
+
+.gg-ava-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* The fallback, and it is a real design rather than a placeholder: one letter
+   on a colour derived from the name (ui/avatar.js hueFromName). The 58%/46%
+   here MUST match TILE_SAT/TILE_LIGHT there — same colour in both channels, or
+   a tile would shift the moment JS started setting the variable. */
+.gg-ava-tile {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800;
+  font-size: calc(var(--gg-ava-size, 56px) * 0.42);
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+  background:
+    linear-gradient(150deg,
+      hsl(calc(var(--gg-ava-hue, 320) * 1deg) 58% 46%),
+      hsl(calc(var(--gg-ava-hue, 320) * 1deg) 58% 28%));
+}
+
+.gg-ava-slot { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; }
+.gg-ava-name {
+  max-width: 9rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 0.72rem; font-weight: 600; color: var(--gg-text-2);
+}
+
+/* --- the Discord-blurple button. It is the ONE non-house colour on the page,
+   and it earns it: it is the only control that leaves the game. --------- */
+.gg-btn--discord {
+  border-color: transparent;
+  background: linear-gradient(135deg, #5865f2, #7d63f5);
+  box-shadow: 0 6px 20px rgba(88, 101, 242, 0.34);
+}
+.gg-btn--discord:hover {
+  background: linear-gradient(135deg, #6b76f5, #8d74f7);
+  box-shadow: 0 6px 26px rgba(88, 101, 242, 0.5);
+}
+
+/* --- the lobby panel --------------------------------------------------- */
+.gg-dc {
+  min-width: min(34rem, 94vw);
+  margin-top: 1rem;
+  border-color: rgba(var(--gg-violet-rgb), 0.4);
+  box-shadow: 0 0 60px rgba(var(--gg-violet-rgb), 0.16);
+}
+.gg-dc-head { display: flex; align-items: center; gap: 0.95rem; }
+.gg-dc-headtext { min-width: 0; }
+.gg-dc-lead { margin: 0.35rem 0 0; font-size: 0.8rem; line-height: 1.5; color: var(--gg-text-3); }
+/* "they can see your picture" — a statement of fact, in the colour the page
+   uses for things that are switched ON, next to the face it is about. */
+.gg-dc-flag {
+  margin: 0.4rem 0 0;
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em;
+  color: var(--gg-pink);
+}
+.gg-dc-flag::before {
+  content: '';
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--gg-pink);
+  box-shadow: 0 0 10px rgba(var(--gg-pink-rgb), 0.9);
+}
+
+.gg-dc-rows { margin-top: 1rem; }
+.gg-dc-row.is-disabled { opacity: 0.45; }
+.gg-dc-row .gg-toggle { flex: 0 0 auto; }
+
+.gg-dc-link {
+  margin-top: 0.9rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--gg-radius-plate);
+  background: rgba(88, 101, 242, 0.10);
+  border: 1px solid rgba(88, 101, 242, 0.4);
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  flex-wrap: wrap;
+}
+.gg-dc-linkline { margin: 0; flex: 1 1 14rem; font-size: 0.78rem; line-height: 1.5; color: var(--gg-text-2); }
+
+/* --- last opponent ----------------------------------------------------- */
+.gg-dc-last { margin-top: 1.1rem; }
+.gg-dc-lasth {
+  margin: 0 0 0.5rem;
+  font-size: 0.66rem; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gg-text-4); font-weight: 700;
+}
+.gg-dc-lastnone { margin: 0; font-size: 0.76rem; color: var(--gg-text-4); }
+.gg-dc-lastcard {
+  position: relative;
+  display: flex; align-items: center; gap: 0.8rem;
+  padding: 0.7rem 2.4rem 0.7rem 0.8rem;
+  border-radius: var(--gg-radius-plate);
+  background: var(--gg-plate-bg);
+  border: 1px solid rgba(var(--gg-violet-rgb), 0.35);
+}
+.gg-dc-lastmeta { min-width: 0; display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start; }
+.gg-dc-lastname { margin: 0; font-weight: 700; font-size: 0.92rem; overflow: hidden; text-overflow: ellipsis; }
+.gg-dc-lastwhen { margin: 0; font-size: 0.68rem; color: var(--gg-text-4); font-variant-numeric: tabular-nums; }
+.gg-dc-forget {
+  position: absolute; top: 0.45rem; right: 0.45rem;
+  width: 30px; height: 30px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 0; border-radius: 50%;
+  color: var(--gg-text-4); font-size: 0.85rem; cursor: pointer;
+  transition: color .18s, background .18s;
+}
+.gg-dc-forget:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+
+/* --- the recap plates -------------------------------------------------- */
+.gg-recap-platewrap { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; margin-top: 1.1rem; }
+.gg-recap-plates {
+  display: flex; align-items: flex-start; justify-content: center;
+  gap: clamp(1.4rem, 6vw, 3.4rem);
+  margin-top: 1.1rem;
+}
+.gg-recap-platewrap .gg-recap-plates { margin-top: 0; }
+
+/* ---------------------------------------------------------------------------
+ * VS SPLASH — decoration with a hard deadline (boot.js drops it at the Live arm).
+ *
+ * z55: over the HUD, UNDER MERCY (z60, goon.css --gg-mercy-z). Nothing in this
+ * block may ever raise that, and pointer-events:none means it cannot eat a
+ * click on the way to anything underneath even while it is up.
+ *
+ * TRANSITIONS, NOT KEYFRAMES. There is no loop to park, so the heat governor
+ * and the reduced-motion rails have nothing to switch off — and ui/avatar.js
+ * does not mount the splash at all under reduced motion, which is the real
+ * answer. The rules below are the belt to that braces.
+ * ------------------------------------------------------------------------ */
+.gg-vs-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(1rem, 5vw, 3.5rem);
+  background: radial-gradient(60% 60% at 50% 50%, rgba(24, 10, 36, 0.62), rgba(8, 4, 14, 0) 72%);
+  opacity: 0;
+  transition: opacity .2s ease;
+}
+.gg-vs-splash.is-in { opacity: 1; }
+
+.gg-vs-splash .gg-ava-slot {
+  gap: 0.7rem;
+  transform: translate(0, 0) scale(1);
+  transition: transform .42s cubic-bezier(.2, .85, .25, 1), opacity .3s ease;
+}
+/* the slam: they arrive from their own sides and settle */
+.gg-vs-splash:not(.is-in) .gg-ava-slot[data-side="you"] { transform: translateX(-34vw) scale(1.18); }
+.gg-vs-splash:not(.is-in) .gg-ava-slot[data-side="opp"] { transform: translateX(34vw) scale(1.18); }
+.gg-vs-splash:not(.is-in) .gg-vs-splash-vs { transform: scale(2.2); opacity: 0; }
+
+.gg-vs-splash .gg-ava-name { font-size: clamp(0.8rem, 1.6vw, 1.05rem); max-width: 12rem; }
+
+.gg-vs-splash-vs {
+  font-size: clamp(1.8rem, 6vw, 4rem);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  background: linear-gradient(135deg, var(--gg-pink), var(--gg-violet));
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+  transform: scale(1);
+  opacity: 1;
+  transition: transform .34s cubic-bezier(.2, .85, .25, 1), opacity .24s ease;
+}
+
+/* the fly-out: --gg-vs-dx/dy are written by ui/avatar.js from the live HUD
+   minis, so the bubbles land where the desk actually put them */
+.gg-vs-splash.is-fly { opacity: 0; transition: opacity .34s ease .1s; }
+.gg-vs-splash.is-fly .gg-ava-slot {
+  transform: translate(var(--gg-vs-dx, 0), var(--gg-vs-dy, 0)) scale(0.26);
+  opacity: 0;
+}
+.gg-vs-splash.is-fly .gg-vs-splash-vs { transform: scale(0.4); opacity: 0; }
+
+html[data-gg-motion="reduced"] .gg-vs-splash,
+html[data-gg-motion="reduced"] .gg-vs-splash * { transition: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .gg-vs-splash, .gg-vs-splash * { transition: none !important; }
+}
+
+/* ---------------------------------------------------------------------------
+ * MOTION — the player's own switch, on top of the OS media query in goon.css.
+ * Functional motion (countdown, expiry bar) is deliberately NOT listed.
+ * ------------------------------------------------------------------------ */
+html[data-gg-motion="reduced"] .gg-deco,
+html[data-gg-motion="reduced"] .gg-dots i,
+html[data-gg-motion="reduced"] .gg-slot,
+html[data-gg-motion="reduced"] .gg-loader-ring,
+html[data-gg-motion="reduced"] .gg-toast,
+html[data-gg-motion="reduced"] .gg-eyebrow i { animation: none !important; }
+html[data-gg-motion="reduced"] .gg-draft.is-sealed::after { display: none; }
+
+/* ---------------------------------------------------------------------------
+ * PORTRAIT / narrow
+ * ------------------------------------------------------------------------ */
+@media (orientation: portrait), (max-width: 720px) {
+  .gg-duel { grid-template-columns: 1fr; }
+  .gg-duel-vs { display: none; }
+  .gg-draft-head { grid-template-columns: 1fr; }
+  .gg-draft-side--them { align-items: flex-start; }
+  .gg-elems { grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); }
+  .gg-draft-foot { flex-direction: column; align-items: stretch; }
+  .gg-count-names { top: 8%; padding: 0 1rem; }
+  .gg-plrow--out { flex-direction: row; text-align: left; }
+  .gg-assets { min-width: 0; max-width: 96vw; }
+  .gg-assets-grid { grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr)); }
+  .gg-assets-search { flex-basis: 100%; }
+}

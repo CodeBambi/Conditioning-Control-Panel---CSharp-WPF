@@ -1,0 +1,571 @@
+/* ============================================================================
+ * ui/strings.js — every user-facing string on the Goon Game page.
+ *
+ * ONE place, so a copy pass is a diff in this file and never a hunt through
+ * seven screens. Register: lowercase, cheeky-dignified, never shouty. Sentence
+ * case only where the string is a full sentence (the fineprint, the sheets).
+ *
+ * Rules that are load-bearing, not stylistic:
+ *   - NOTHING here formats a secret (codes are the only identifier a screen
+ *     ever renders; tokens live in bridge's net config and never reach the UI).
+ *   - Interpolators are FUNCTIONS, not template literals evaluated at import,
+ *     so this module is import-safe under node (no DOM, no side effects).
+ *   - The mercy copy is not here: sibling I owns ui/mercy.js and its wording is
+ *     part of the safety contract, not the copy deck.
+ * ==========================================================================*/
+
+import { GoonElement } from '../core/contracts.js';
+
+/** mm:ss for a millisecond duration. Negative and NaN clamp to 0:00. */
+export function mmss(ms) {
+  const total = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return m + ':' + String(s).padStart(2, '0');
+}
+
+/** "1 min" / "12 min" — the consent slider's value chip. */
+export function minutes(sec) {
+  const m = Math.max(1, Math.round((Number(sec) || 0) / 60));
+  return m + ' min';
+}
+
+export const S = Object.freeze({
+  /* ---------------------------------------------------------------- title */
+  title: {
+    kicker: '1v1 · endurance duel · first to break loses',
+    host: 'Host a match',
+    join: 'Join with a code',
+    practice: 'Practice',
+    practiceNote: 'solo · scripted opponent',
+    assets: 'Media library',
+    options: 'Options',
+    how: 'How it works',
+    quit: 'Quit',
+    fineprint: 'Both players endure their own library. Nothing you own leaves this machine.',
+  },
+
+  /** The "how it works" modal — exactly six bullets, in reading order. */
+  how: {
+    headline: 'how it works',
+    bullets: [
+      'two players, one clock. you both endure your own library at the same time.',
+      'you both agree what stays switched on. whatever is left, you BOTH endure — same effects, same moments.',
+      'holding still earns points; enduring what they send you earns charges.',
+      'charges buy payloads you fire at them. the receiver decides what it can run.',
+      'mercy is always one key away. escape, any phase, no confirmation.',
+      'if nobody breaks before the clock runs out, the higher score wins.',
+    ],
+    close: 'got it',
+  },
+
+  /* ----------------------------------------------------------------- host */
+  host: {
+    minting: 'minting room…',
+    open: 'room open',
+    copy: 'Copy invite line',
+    copied: 'Copied',
+    waiting: 'Waiting for your opponent…',
+    cancel: 'Cancel',
+    expiresIn: (ms) => 'expires in ' + mmss(ms),
+    expired: 'this code expired. mint a new one.',
+    inviteLine: (code) => 'Goon Game duel — code ' + code + ' (expires in 5 min)',
+  },
+
+  /* ----------------------------------------------------------------- join */
+  join: {
+    eyebrow: 'join a room',
+    lead: 'type the six characters they sent you.',
+    action: 'Join',
+    joining: 'joining…',
+    back: 'Back',
+    errUnknown: 'No room with that code. Check the last character?',
+    errFull: 'That room already has two players.',
+    errExpired: 'That code expired. Ask for a fresh one.',
+    errShort: 'six characters, please.',
+  },
+
+  /* ---------------------------------------------------------------- lobby */
+  lobby: {
+    eyebrowWaiting: 'waiting for them',
+    eyebrowReady: 'agree the terms',
+    you: 'you',
+    them: 'them',
+    noCam: 'no cam',
+    cam: 'cam',
+    unknown: '—',
+    connecting: 'connecting…',
+    direct: 'direct connection',
+    relay: 'relayed connection',
+    offline: 'not connected',
+    duration: 'Match length',
+    toyCap: 'Toy cap',
+    toyCapDisabled: 'No toy connected',
+    gap: 'Payload spacing',
+    gapValue: (sec) => '1 payload / ' + sec + 's',
+    confirm: "I'm in",
+    confirmed: (name) => 'Ready — waiting for ' + (name || 'them'),
+    changed: 'Settings changed — both of you confirm again.',
+    leave: 'Leave',
+    lampYou: 'you',
+    lampThem: 'them',
+    /* --- the media-transfer opt-in. Per-side: this row says what YOU are
+       willing to send, and the chip says what THEY answered. --- */
+    transfer: 'Send them your own media',
+    transferSub: 'a few of your images and clips go straight to them, machine to machine. never through a server.',
+    // Lowercase "supporter perk" on purpose: an explanation, not a pitch.
+    transferNoPremium: 'sending is a supporter perk — you can still receive theirs.',
+    transferPeerOld: 'their app is too old for this — nothing crosses either way.',
+    transferRelay: 'only on a direct connection. this one is relayed.',
+    transferTheirsOn: 'they opted in',
+    transferTheirsOff: 'they have not',
+  },
+
+  /* -------------------------------------------------------------- discord
+   * The sharing panel, the VS splash, the HUD minis and the recap plates.
+   *
+   * Two rules that are safety copy, not style:
+   *   1. every line says WHO SEES WHAT. "your opponent" is named in the toggle
+   *      notes because "share" on its own has been read as "publish" before;
+   *   2. nothing here ever formats an id. The Message buttons take a NAME, and
+   *      the page has no other identifier to leak (see ui/discord.js).
+   * Lowercase furniture, sentence case for the sheets — the house register. */
+  discord: {
+    eyebrow: 'discord',
+    lead: 'off by default. nothing is shared until you switch it on here.',
+    you: 'you',
+    /** The indicator on your own plate while a picture is going out. */
+    visible: 'they can see your picture',
+
+    toggleAvatar: 'Use my Discord picture',
+    toggleAvatarNote: 'your opponent sees your avatar on the versus card, on the desk and on the end card. only them, only during a duel.',
+    toggleDm: 'Allow Discord DMs',
+    toggleDmNote: 'gives your opponent a Message button after the match. they never see your account name here, and you can switch this off again whenever you like.',
+    toggleRp: 'Show Goon Game on Discord',
+    toggleRpNote: 'your discord status reads "Goon Game" while you play. fixed words only — never your opponent, never what happened.',
+
+    connectCta: 'Connect Discord',
+    connectLine: 'connect discord in the app to use your picture. this only brings the window forward — nothing signs you in but you.',
+    hostedOnly: 'this page is running in a plain browser. open the goon game from the app to connect discord.',
+
+    lastTitle: 'last opponent',
+    lastNone: 'nobody yet — whoever you duel next shows up here.',
+    lastClear: 'forget them',
+    messageOn: (name) => 'Message ' + (name || 'them') + ' on Discord',
+    /** The recap's warmer variant, offered in the moment it means something. */
+    ggMessage: (name) => 'GG! Message ' + (name || 'them'),
+    dmShort: 'DM',
+
+    agoNow: 'just now',
+    agoUnknown: 'earlier',
+    agoMinutes: (n) => n + ' min ago',
+    agoHours: (n) => n + (n === 1 ? ' hour ago' : ' hours ago'),
+    agoDays: (n) => n + (n === 1 ? ' day ago' : ' days ago'),
+
+    /** Practice mode's opponent. Tile avatar, no DM — it is not a person. */
+    practiceBot: 'Practice Bot',
+    vs: 'VS',
+
+    /** The one-time confirm, before the first duel with anything switched on. */
+    sharePrompt: {
+      icon: '👁',
+      headline: 'Your opponent is about to see this',
+      line: 'Your Discord picture and DM button will be visible to whoever you duel, for this match and every one after it. You can switch both off in the lobby at any time.',
+      go: 'That is fine',
+      cancel: 'Keep it private',
+    },
+    /** Every Message button goes through this — a browser opening mid-duel is a big surprise. */
+    dmConfirm: {
+      icon: '💬',
+      headline: 'Open Discord?',
+      line: (name) => 'This leaves the duel and opens ' + (name || 'their') + ' profile in your browser.',
+      go: 'Open Discord',
+      cancel: 'Stay here',
+    },
+  },
+
+  /* ---------------------------------------------------------------- draft */
+  draft: {
+    eyebrow: 'agree what you both endure',
+    lead: 'everything is on. switch off what you will not take — you both get whatever is left.',
+    pickCta: 'Pick 3',
+    lock: 'Lock in',
+    locked: 'locked — waiting for them',
+    theirs: 'their picks',
+    risk: (n) => 'Match risk ' + n + ' / 7',
+    score: (mult) => 'score ×' + mult.toFixed(2),
+    unsupported: "your opponent's app can't do this",
+    /* --- the agreement pass (2026-08-03 redesign) --- */
+    confirm: "I'm good with this",
+    confirmed: 'signed — waiting for them',
+    theirSignature: 'they signed',
+    theirWait: 'still deciding',
+    theirsOff: 'they switched this off',
+    alwaysOn: 'always on',
+    alwaysOnWhy: 'bubbles run the whole match, for both of you. they build.',
+    pool: (n) => 'you both get ' + n + ' effect' + (n === 1 ? '' : 's') + ' + bubbles',
+    tooFewYours: (min) => 'keep at least ' + min + ' switched on.',
+    tooFewShared: (n) => 'you two only agree on ' + n + ' — one of you has to open something up.',
+    changed: 'something moved — both of you sign again.',
+    rolled: 'the running order is rolled from the match seed. same for both of you.',
+  },
+
+  /* ------------------------------------------------------------ countdown */
+  countdown: {
+    go: 'go',
+  },
+
+  /* ---------------------------------------------------------------- recap */
+  recap: {
+    held: 'You held.',
+    broke: 'You broke.',
+    draw: 'Draw.',
+    vanished: 'They vanished.',
+    disputed: 'Results disagree — both were recorded.',
+    unconfirmed: 'Unconfirmed — waiting on the other side.',
+    mercyLine: (name, ms) => (name || 'they') + ' pressed mercy at ' + mmss(ms) + '.',
+    sdLine: (a, b) => 'The clock ran out, ' + a + '–' + b + '.',
+    abandonLine: 'Connection lost for a minute.',
+    drawLine: 'You both let go at the same moment.',
+    scoreline: 'scoreline',
+    scoreFineprint: (risk) => '1 pt/s · risk ×' + risk.toFixed(2),
+    survived: (ms) => 'survived ' + mmss(ms),
+    payloads: 'payload log',
+    noPayloads: 'nothing crossed the wire.',
+    showAll: (n) => 'Show all (' + n + ')',
+    titles: 'titles',
+    rematch: 'Rematch',
+    rematchSoon: 'soon',
+    back: 'Back to menu',
+    chipLanded: 'landed',
+    chipEndured: 'endured',
+    chipEnduredNote: '+1 charge for them',
+    chipBlocked: 'blocked',
+    chipTooSoon: 'too soon',
+    dirIn: 'they sent',
+    dirOut: 'you sent',
+
+    /* --- the report card (spec §7.5). It appears ONLY when a duel partner's
+       own media actually reached this machine, and only on the recap: filing a
+       report mid-duel would be a way to interrupt one, and interruptions are
+       exactly what an opponent would weaponise. --- */
+    reportTitle: 'report what they sent',
+    reportLead: 'these files came off their machine, not your library. if any of it should not exist, say so.',
+    reportPick: 'pick the one you mean',
+    reportFlagged: 'flagged during the match',
+    reportPrivacy: "a moderator gets the file's fingerprint, a small thumbnail and your note. they never get your name, and the other player is never told.",
+  },
+
+  /** Locally computed cosmetics. Nothing here reaches the server. */
+  titles: Object.freeze({
+    graceful: { name: 'Graceful', why: 'went eight minutes, then bowed out on your own terms.' },
+    ironEdge: { name: 'Iron Edge', why: 'the clock broke before you did.' },
+    stoneWall: { name: 'Stone Wall', why: 'four of theirs, straight through, no flinching.' },
+    untouchable: { name: 'Untouchable', why: 'nothing they threw ever reached you.' },
+    gg: { name: 'GG', why: 'broke, but never looked away.' },
+  }),
+
+  /* ------------------------------------------------- the report card mechanics
+   * The five REASON LABELS are written for a player who has just seen something
+   * they wish they had not, not for a lawyer. The WIRE CODES they map to
+   * (`csam`, `nonconsensual`, `gore`, `illegal`, `other` — proxy/goon-routes.js
+   * REPORT_REASONS) are NOT translatable copy and live in ui/report.js; nothing
+   * here is ever put on the wire.
+   *
+   * Lowercase like the rest of the furniture, and deliberately unsensational:
+   * this control has to be usable by someone who is upset. */
+  report: {
+    reasonHead: 'what is wrong with it',
+    reasons: [
+      { code: 'csam', label: 'sexual content involving a minor' },
+      { code: 'nonconsensual', label: 'someone who did not agree to be in it' },
+      { code: 'gore', label: 'real violence, injury or a death' },
+      { code: 'illegal', label: 'something else that is against the law' },
+      { code: 'other', label: 'something else' },
+    ],
+    /** `other` is the one reason a moderator cannot act on without words. */
+    noteHead: 'tell us what it is',
+    noteHint: (max) => 'up to ' + max + ' characters.',
+    notePlaceholder: 'in your own words…',
+    noteNeeded: 'a line or two, so a moderator knows what they are looking at.',
+
+    submit: 'send report',
+    submitting: 'sending…',
+    /** The id is a handle for a follow-up, not a receipt to celebrate. */
+    done: (id) => 'report sent — id ' + (id || 'unknown'),
+    deduped: 'already reported',
+    failed: "couldn't send — try again",
+    retry: 'try again',
+    givenUp: "couldn't send. it did not go through — nothing was recorded.",
+    cancel: 'never mind',
+
+    thumbLabel: (kind, n) => (kind === 'video' ? 'clip ' : 'image ') + n,
+    evidenceNote: 'a small thumbnail is made here and sent with the report, so a human can check without asking you for the file.',
+  },
+
+  /* -------------------------------------------------------------- options */
+  options: {
+    headline: 'options',
+    master: 'Master',
+    music: 'Music',
+    sfx: 'SFX',
+    motion: 'Reduce motion',
+    skippable: 'Skippable videos',
+    /* Says what the toggle does AND what it does not take away: a window can
+       always be muted with a click, on or off. */
+    skippableNote: 'gives each floating video an ✕ to close it early. off, they run their course. either way a click mutes one, and a right-click hands it the sound.',
+    shaderSpirals: 'Shader spirals',
+    /* The escape hatch, and the note says what to reach for it FOR: a picture
+       that stops moving while the game carries on is the exact symptom. Names
+       the fallback too, so turning it off does not feel like losing the bed. */
+    shaderSpiralsNote: 'draws the spiral bed live instead of stretching a gif. turn it off if the picture ever freezes while the sound and the clock keep going — the bed falls back to the bundled spirals and nothing else changes.',
+    /* THE VIEWER'S OWN SWITCH, and it is not the same decision as the sharing
+     * toggles in the lobby: those say what leaves this machine, this says what
+     * arrives. Off, their picture is never even FETCHED (ui/discord.js), which
+     * is the difference between hiding a face and not asking for one. */
+    oppAvatars: 'Show opponent avatars',
+    oppAvatarsNote: "off, you see a coloured initial instead of your opponent's discord picture — and their picture is never downloaded at all. it changes nothing about what you share.",
+    fullscreen: 'Fullscreen',
+    reset: 'Reset',
+    close: 'close',
+    lockedNote: 'Match settings are locked once you start.',
+  },
+
+  /* --------------------------------------------------- the assets screen
+   * The compression queue lives in the app, not in this page, and every line
+   * below has to keep saying so: the player is agreeing to spend minutes of
+   * their machine's time, and the only honest way to ask is with the real
+   * number and the real encoder. Lowercase throughout, like the rest of the
+   * quiet furniture.
+   *
+   * "compressed" here NEVER means "your file was changed". A copy is made and
+   * kept beside the original; that copy is the only thing that can travel. The
+   * protected note says it out loud because it is the one fear this screen has
+   * to answer before anything else on it matters. */
+  assets: {
+    eyebrow: 'your media',
+    lead: 'a compressed copy is what travels to your opponent. your originals are never touched, moved or replaced.',
+    /** No host = no queue. Rendered instead of the grid, immediately. */
+    standaloneHeadline: 'compression lives in the app',
+    standaloneLine: 'this page is running in a plain browser, so there is no library to compress. open the goon game from the app to use this screen.',
+
+    /** Standalone's OWN library: files picked straight off the device. */
+    local: {
+      headline: 'add media to send',
+      line: 'pick files from this device and they can travel to your opponent mid-duel, straight from you to them. nothing is uploaded anywhere.',
+      add: 'add files',
+      limits: (max) => 'up to ' + max + ' each · jpg, png, gif, webp, mp4, webm · or a zip of them',
+      empty: 'nothing added yet.',
+      note: 'your picks last until this page closes — add them again next visit.',
+      remove: 'remove',
+      skipDupe: (n) => n + ' already added',
+      skipBig: (n, max) => n + ' over ' + max,
+      skipType: (n) => n + ' of an unsupported type',
+      skipFailed: (n) => n + ' unreadable',
+      added: (n) => n + ' added',
+      /** A zip opened fine and held nothing we can send — say so, never stay silent. */
+      zipNone: 'no media in that zip',
+    },
+
+    statReady: (n) => n + ' ready',
+    statNeeds: (n) => n + ' to compress',
+    statFailed: (n) => n + ' failed',
+    statExempt: (n) => n + ' small enough already',
+    statUsage: (text) => text + ' cached',
+
+    compressAll: (n) => 'compress everything (' + n + ')',
+    compressAllIdle: 'everything is compressed',
+    pause: 'pause',
+    resume: 'resume',
+    deleteCompressed: 'delete compressed…',
+    filterAll: 'all',
+    filterNeeds: 'needs work',
+    filterReady: 'ready',
+    filterFailed: 'failed',
+    filterExempt: 'as-is',
+    searchLabel: 'filter by name',
+    searchPlaceholder: 'name contains…',
+
+    minutes: (n) => n + (n === 1 ? ' minute' : ' minutes'),
+    eta: (mins, encoder) => '~' + mins + ' left · ' + encoder,
+    etaEstimating: 'estimating…',
+    etaPausedMatch: 'paused for the match',
+    etaPausedUser: 'paused — nothing is running',
+    encoderHw: 'hardware encoder',
+    encoderSw: 'software encoder',
+
+    badgeNotReady: 'not ready',
+    badgeQueued: 'queued',
+    badgeWorking: (pct) => pct + '%',
+    badgeReady: 'ready',
+    badgeFailed: (why) => (why ? 'failed · ' + why : 'failed'),
+    badgeExempt: 'small — sends as-is',
+
+    tileCompress: 'compress',
+    tileDelete: 'delete copy',
+    tileRetry: 'try again',
+    tileCancel: 'cancel',
+    playPreview: 'play preview',
+
+    loading: 'reading your library…',
+    empty: 'no media in your active preset yet.',
+    emptyFiltered: 'nothing matches that.',
+    more: (n) => 'show more (' + n + ')',
+
+    capLabel: 'cache limit',
+    capValue: (gb) => gb + ' GB',
+    overCap: 'over the limit — the least-used copies get dropped first.',
+    presetChanged: (n) => 'your preset changed · ' + n + ' need compressing',
+    protectedNote: 'copies live beside your library, never inside it. deleting them here frees space and costs nothing but the time to make them again — and anything an opponent sent you is stored separately and is never touched by this button.',
+    back: 'back',
+
+    confirmCompress: {
+      icon: '⏳',
+      headline: 'this will take a while',
+      line: (mins, size, encoder) => 'about ' + mins + ' on your ' + encoder + ', working through ' + size + '. it pauses itself the moment a match starts, and you can stop it whenever you like.',
+      go: 'start compressing',
+      cancel: 'not now',
+    },
+    confirmDelete: {
+      icon: '✖',
+      headline: 'delete every compressed copy?',
+      line: (size) => 'frees ' + size + '. your originals are untouched. anything an opponent sent you is stored separately and stays.',
+      go: 'delete them',
+      cancel: 'keep them',
+    },
+
+    /** The title-screen ribbon: "412 ready · 3.1 GB cached". */
+    ribbon: (ready, size) => ready + ' ready · ' + size + ' cached',
+  },
+
+  /* --------------------------------------------------------------- sheets */
+  sheets: {
+    noPass: {
+      icon: '✦',
+      headline: 'Your free match is spent',
+      line: (when) => 'Your next free match unlocks ' + (when || 'next week') + '.',
+    },
+    notDeployed: {
+      icon: '⏳',
+      headline: 'Warming up',
+      line: 'The duel server is not answering yet. Try again in a minute.',
+    },
+    rateLimited: {
+      icon: '⏱',
+      headline: 'Slow down a moment',
+      line: (sec) => (sec ? 'Try again in ' + sec + 's.' : 'Try again shortly.'),
+    },
+    network: {
+      icon: '⚡',
+      headline: 'Could not reach the server',
+      line: 'Check your connection and try again.',
+      action: 'Try again',
+    },
+    unauthorized: {
+      icon: '🔒',
+      headline: 'Signed out',
+      line: 'Reconnect your account in the app, then come back.',
+    },
+    connectFailed: {
+      icon: '🕸',
+      headline: 'Could not connect',
+      line: 'Neither a direct nor a relayed link came up. Try again.',
+    },
+    lobbyFailed: {
+      icon: '⚙',
+      headline: 'This pairing will not work',
+      line: (reason) => String(reason || 'the two clients could not agree on a shared ruleset.'),
+    },
+    ok: 'OK',
+    cancel: 'Cancel',
+    retry: 'Try again',
+  },
+
+  /* ------------------------------------------------- the opponent monitor */
+  monitor: {
+    idle: 'quiet',
+    dropHint: 'drop it here',
+    /** The green checkmark on their projection: they took the whole payload. */
+    passed: 'they held it',
+  },
+
+  /* ---------------------------------------------- the announcer ribbon (ui/announcer.js)
+   * The one place on the page that raises its voice, because it is calling a
+   * thing that is about to happen to BOTH of you (the ramp is one shared roll).
+   * Sentence case with a real exclamation mark is deliberate here and nowhere
+   * else: `ready` is a warning shouted across a room, `on` is the flat statement
+   * that it landed. Keyed by GoonElement code.
+   *
+   * BUBBLES HAVE NO LINE ON PURPOSE — they are on from t=0 to the end for both
+   * players, so an announcement would fire once at zero and mean nothing. */
+  announce: {
+    ready: {
+      [GoonElement.Flashes]: 'Get ready to stare!',
+      [GoonElement.Videos]: 'Get ready to watch!',
+      [GoonElement.Subliminals]: 'Get ready to soak it up!',
+      [GoonElement.LockCards]: 'Get ready to type!',
+      [GoonElement.ToyPatterns]: 'Get ready to buzz!',
+      [GoonElement.BrainDrain]: 'Get ready to melt!',
+      [GoonElement.BouncingText]: 'Get ready to read!',
+      [GoonElement.Spiral]: 'Get ready to sink!',
+    },
+    on: {
+      [GoonElement.Flashes]: 'Flashes on',
+      [GoonElement.Videos]: 'Video on',
+      [GoonElement.Subliminals]: 'Subliminals on',
+      [GoonElement.LockCards]: 'Lock card!',
+      [GoonElement.ToyPatterns]: 'Toy on',
+      [GoonElement.BrainDrain]: 'Brain drain on',
+      [GoonElement.BouncingText]: 'Bouncing text on',
+      [GoonElement.Spiral]: 'Spiral on',
+    },
+  },
+
+  /* ------------------------------------------------- the arsenal + its economy
+   * Items are EARNED, not merely afforded: a slot sits locked until a popped
+   * bubble drops one (exec/bubbles.js -> ui/drops.js -> ui/arsenal.js). Every
+   * state below is a WORD on the tile, because the greyed sticker alone is
+   * colour and colour is never the only channel here. */
+  arsenal: {
+    locked: 'locked',
+    lockedTip: 'pop bubbles to earn this',
+    lockGlyph: '?',
+    /** the ×N badge on an armed sticker */
+    stack: (n) => '×' + (n | 0),
+    /** the flourish when a drop lands */
+    drop: (label) => '+1 ' + (label || 'item'),
+    dropToast: (label) => (label || 'item') + ' dropped',
+  },
+
+  /* --------------------------------------------------------------- toasts */
+  toasts: {
+    copied: 'invite line copied',
+    copyFailed: 'could not copy — select the code instead',
+    peerWobbly: 'their connection is wobbling',
+    peerBack: 'they are back',
+    charge: '+1 charge',
+    left: 'left the match',
+  },
+});
+
+/**
+ * The draftable elements, in the order the draft grid renders them.
+ * `risk` mirrors core/draft.js riskTierOf — recomputed live from the engine at
+ * render time; the value here is documentation and a fallback, never authority.
+ */
+export const ELEMENTS = Object.freeze([
+  { id: GoonElement.Flashes, name: 'flashes', risk: 0, blurb: 'constant. builds all match.' },
+  { id: GoonElement.BouncingText, name: 'bouncing text', risk: 0, blurb: 'always on your screen. slow burn.' },
+  { id: GoonElement.Subliminals, name: 'subliminals', risk: 1, blurb: 'quiet, and it climbs to the top.' },
+  // Always on for both players, start to finish — not a toggle. The draft grid renders it as a
+  // locked tile (core/draft.js ALWAYS_ON_ELEMENT); the blurb has to say so.
+  { id: GoonElement.Bubbles, name: 'bubbles', risk: 1, blurb: 'the whole match, both of you. thin at first, then not.' },
+  { id: GoonElement.Videos, name: 'videos', risk: 2, blurb: 'long takeovers. 1–2 minutes.' },
+  { id: GoonElement.LockCards, name: 'lock cards', risk: 2, blurb: "type it out. can't look away." },
+  { id: GoonElement.ToyPatterns, name: 'toy patterns', risk: 2, blurb: 'bursts, capped by your own limit.' },
+  { id: GoonElement.Spiral, name: 'spiral', risk: 2, blurb: "a slow spiral takes the whole screen. it doesn't blink. neither will they." },
+  { id: GoonElement.BrainDrain, name: 'brain drain', risk: 3, blurb: "late, heavy, and it doesn't stop." },
+]);
+
+
+export default S;
