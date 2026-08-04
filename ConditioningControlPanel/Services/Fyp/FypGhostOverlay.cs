@@ -133,6 +133,17 @@ internal sealed class FypGhostOverlay
         UpdateThumbnailBounds();
     }
 
+    /// <summary>Drop the registration and register a fresh thumbnail on the same source. The
+    /// host calls this after healing a minimize of the parked window (Show Desktop reaches it
+    /// too): DWM freezes a minimized source's thumbnail on its last frame and does not reliably
+    /// resume the OLD registration once the window is restored off-screen.</summary>
+    public void RefreshThumbnail()
+    {
+        if (_closed) return;
+        Unregister();
+        EnsureThumbnail();
+    }
+
     /// <summary>Drop the thumbnail and close the mirror and its buttons. Idempotent.</summary>
     public void Close()
     {
@@ -182,8 +193,13 @@ internal sealed class FypGhostOverlay
     }
 
     /// <summary>Point the thumbnail at our client area (physical px throughout — WinForms and
-    /// rcDestination agree, no DIP math). Letterbox: scale the source's client rect to fit,
-    /// centered; a stretched mirror would distort the moment the aspects differ.</summary>
+    /// rcDestination agree, no DIP math). COVER, not letterbox: the destination is always the
+    /// whole monitor, and an aspect mismatch is resolved by cropping the SOURCE symmetrically
+    /// (rcSource) instead of shrinking the picture. Letterboxing left a bare band across the
+    /// top of the ghost whenever the source's client was even slightly wider-aspect than the
+    /// monitor — and it always is: SetWindowPos clamps a bordered window to the max track size,
+    /// so "client == monitor" cannot be guaranteed. A few cropped rows are invisible; a bare
+    /// desktop stripe is not.</summary>
     private void UpdateThumbnailBounds()
     {
         try
@@ -192,27 +208,37 @@ internal sealed class FypGhostOverlay
             int destW = Math.Max(1, _form.ClientSize.Width);
             int destH = Math.Max(1, _form.ClientSize.Height);
 
-            int x0 = 0, y0 = 0, x1 = destW, y1 = destH;
-            if (GetClientRect(_sourceHwnd, out var src) && src.Right > 0 && src.Bottom > 0)
-            {
-                double scale = Math.Min((double)destW / src.Right, (double)destH / src.Bottom);
-                int fitW = Math.Max(1, (int)Math.Round(src.Right * scale));
-                int fitH = Math.Max(1, (int)Math.Round(src.Bottom * scale));
-                x0 = (destW - fitW) / 2; y0 = (destH - fitH) / 2;
-                x1 = x0 + fitW; y1 = y0 + fitH;
-            }
-
             var props = new DWM_THUMBNAIL_PROPERTIES
             {
                 dwFlags = DWM_TNP_RECTDESTINATION | DWM_TNP_VISIBLE
                           | DWM_TNP_SOURCECLIENTAREAONLY | DWM_TNP_OPACITY,
-                rcDestination = new RECT { Left = x0, Top = y0, Right = x1, Bottom = y1 },
+                rcDestination = new RECT { Left = 0, Top = 0, Right = destW, Bottom = destH },
                 // The user's translucency — with the surface keyed away, DWM blends the
                 // thumbnail against the desktop at exactly this alpha (pixel-verified).
                 opacity = (byte)Math.Round(Math.Clamp(_opacity, OpacityMin, 1.0) * 255.0),
                 fVisible = true,
                 fSourceClientAreaOnly = true,   // clip the source's title bar / border away
             };
+
+            if (GetClientRect(_sourceHwnd, out var src) && src.Right > 0 && src.Bottom > 0)
+            {
+                double destAspect = (double)destW / destH;
+                double srcAspect = (double)src.Right / src.Bottom;
+                int sx0 = 0, sy0 = 0, sx1 = src.Right, sy1 = src.Bottom;
+                if (srcAspect > destAspect)
+                {
+                    int w = Math.Max(1, (int)Math.Round(src.Bottom * destAspect));
+                    sx0 = (src.Right - w) / 2; sx1 = sx0 + w;
+                }
+                else if (srcAspect < destAspect)
+                {
+                    int h = Math.Max(1, (int)Math.Round(src.Right / destAspect));
+                    sy0 = (src.Bottom - h) / 2; sy1 = sy0 + h;
+                }
+                props.dwFlags |= DWM_TNP_RECTSOURCE;
+                props.rcSource = new RECT { Left = sx0, Top = sy0, Right = sx1, Bottom = sy1 };
+            }
+
             DwmUpdateThumbnailProperties(_thumb, ref props);
         }
         catch (Exception ex) { App.Logger?.Debug("FypGhostOverlay.UpdateThumbnailBounds: {E}", ex.Message); }
@@ -358,6 +384,7 @@ internal sealed class FypGhostOverlay
     private const uint COLOR_KEY = 0x00010101;   // COLORREF for RGB(1,1,1) — must match BackColor
 
     private const int DWM_TNP_RECTDESTINATION = 0x00000001;
+    private const int DWM_TNP_RECTSOURCE = 0x00000002;
     private const int DWM_TNP_OPACITY = 0x00000004;
     private const int DWM_TNP_VISIBLE = 0x00000008;
     private const int DWM_TNP_SOURCECLIENTAREAONLY = 0x00000010;
