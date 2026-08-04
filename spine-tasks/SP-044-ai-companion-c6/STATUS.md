@@ -1,5 +1,5 @@
 ## STATUS: SP-044 — AI companion slice c6: command execution
-**Current Step:** Step 1 — archaeology + dispatch/consent design + pre-approach consult
+**Current Step:** Step 3 — zero-execution proofs + superseded-generation + moderation wiring + obligations
 **Last Updated:** 2026-08-04 (worker)
 **Blockers:** none
 
@@ -10,9 +10,9 @@
 - [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: executor + consent gates + canary
-- [ ] AiCommandExecutor.cs + per-command result vocabulary
-- [ ] Master + per-effect consent gates (none-admitted default, divergence recorded)
-- [ ] Canary placeholders per command class (falsifiable zero-execution)
+- [x] AiCommandExecutor.cs + per-command result vocabulary
+- [x] Master + per-effect consent gates (none-admitted default, divergence recorded)
+- [x] Canary placeholders per command class (falsifiable zero-execution)
 
 ### Step 3: zero-execution proofs + superseded-generation + moderation wiring + obligations
 - [ ] Zero-execution proofs on every rejected class + valid-sibling verdicts

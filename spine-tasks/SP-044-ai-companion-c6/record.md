@@ -95,7 +95,7 @@ Solo consult, 2026-08-04, with the full archaeology + design above. **Actual ans
 
 ## 4. Engine review presence (T-2)
 
-(pending — recorded per `spine_review_step` call)
+- Step 1 plan review (`spine_review_step step=1 type=plan`): **SKIPPED by runtime** — "Nested reviewer spawn blocked inside pi worker session... the batch engine runs reviews after worker success (SP-195)"; artifact `.reviews/1-20260804T230925.md`; `spawnFailed=false` → proceed (engine-owned reviews run post-.DONE).
 
 ## 5. Budgets, surprises, durable-lesson candidates
 
