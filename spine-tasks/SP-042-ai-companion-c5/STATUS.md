@@ -1,5 +1,5 @@
 ## STATUS: SP-042 — AI companion slice c5: awareness
-**Current Step:** Step 3 — packaging + routing + title observation + boundary integration (in progress)
+**Current Step:** Step 5 — Testing & Verification (in progress)
 **Last Updated:** 2026-08-04 (worker, Step 1 started)
 **Blockers:** none
 
@@ -14,16 +14,16 @@
 - [x] AiCooldownRegistry (4 classes, extend-not-shrink, injectable clock) + Suppressed typed
 - [x] Unit tests (consent, each class, extend-not-shrink, Suppressed shape)
 
-### Step 3: packaging + routing + title observation + boundary integration
-- [ ] Context packaging under consent through EvaluateInput (blocking = zero transmission)
-- [ ] Keyword routing as owned ops (panic-cancellable, typed visibility, drop-by-type)
-- [ ] Title observation Windows facts + Linux typed Unavailable (no Wayland claim)
-- [ ] Offline zero-network + content-free diagnostics
+### Step 3: packaging + routing + title observation + boundary integration [COMPLETE]
+- [x] Context packaging under consent through EvaluateInput (blocking = zero transmission)
+- [x] Keyword routing as owned ops (panic-cancellable, typed visibility, drop-by-type)
+- [x] Title observation Windows facts + Linux typed Unavailable (no Wayland claim)
+- [x] Offline zero-network + content-free diagnostics
 
-### Step 4: evidence consolidation + pre-completion consult
-- [ ] record.md (archaeology, design, consults, review presence, session facts)
-- [ ] Pre-completion solo consult (verdict + actual model in record.md)
-- [ ] STATUS.md accurate before .DONE
+### Step 4: evidence consolidation + pre-completion consult [COMPLETE]
+- [x] record.md (archaeology, design, consults, review presence, session facts)
+- [x] Pre-completion solo consult (verdict + actual model in record.md)
+- [x] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification
 - [ ] Contract testCommand passes (verify.mjs + build 0W/0E + ≥537/29 floor)

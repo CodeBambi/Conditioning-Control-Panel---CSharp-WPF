@@ -68,12 +68,86 @@ All product code in ONE new file `client/src/CcpClient.Desktop/Ai/AiAwarenessSer
 3. **(c) Cooldown classes — equivalence verified:** WPF collapses loop-protection and per-keyword into ONE mute entry with `Math.Max(durations)`; the four-class union (suppressed if either is live) is behaviorally identical. Extend-not-shrink must hold per (kind, key) — `expiry = max(existing live expiry, now + duration)`; live iff `now < expiry` (admitted at equality). Do NOT port the rolled randomization into a test-critical mechanism; record `AwarenessCooldownMaxSeconds` as an owner-pending value. ADOPTED (design rule 2).
 4. **(d) Routing/drop semantics — two corrections, both adopted:** (i) canned-fallback substitution exists in WPF ONLY on the keyword AvatarComment path — window reactions return null with no canned; scope `Visible(Fallback)` to the keyword path only. (ii) WPF shows canned on REFUSAL too (its string channel collapses refusal→null); greenfield deliberately distinguishes by type and DROPS refusals (contract §4 rule 3) — record the divergence explicitly. (iii) caller-supplied fallback text inherits c3's app-authored-canned moderation non-claim ONLY when genuinely app-authored; WPF sources phrases from `CompanionPhrases`/mods — a mod-phrase consumer would not inherit the non-claim; record at the seam. ADOPTED (design rule 5).
 
+### 4.2 Pre-completion (Step 4)
+
+**Mode:** solo. Route per the 2026-08-04 rewire: Opus 5 main / Fable 5 fallback. **Actual answering model:** the consult tool output carried NO model identifier — recorded honestly per T-2 (same as §4.1 and SP-033/035/038). The received points were complete and actionable.
+
+**Verdict (substantive points) + dispositions:**
+1. **Consent TOCTOU resolves fail-safe:** the service re-reads `Consent` when delegating to the pipeline, so a mid-flight revocation is caught by the pipeline's own check (suppressed, never run). Cooldown stamps burned on a revoked-mid-flight fire match WPF's stamp-before-dispatch discipline. RECORDED (no code change).
+2. **Reaction path deliberately does NOT consult the keyword Global class** — matches WPF's two separate cooldown families (WindowAwarenessService reaction cooldown vs KeywordTriggerService global gate). A reader could assume "global" applies to all awareness; RECORDED explicitly in §7 item 9.
+3. **PerTrigger is stamped only when the caller passes `perTriggerCooldown`** — WPF per-trigger cooldown is per-trigger config (KeywordTrigger.CooldownSeconds), so a caller without one stamps nothing; the class is still CHECKED (a previously stamped entry suppresses). Semantics RECORDED in §7 item 9.
+4. **Double moderation is safe here (H7 analysis):** context fields are evaluated at packaging AND the assembled prompt again at the pipeline input boundary — but the H7 failure (two log entries + two counter hits per event) does NOT recur: awareness input blocks never escalate (c3, WPF discipline) and the boundary emits no log lines. RECORDED in §7 item 10.
+5. **Packaging separator injection is a formatting shape, not a boundary:** field values containing `|`/`]` can deform the assembled shape; WPF has no escaping either, and the guard sits outside the model. RECORDED as a non-claim in §7 item 10.
+6. **Contract §4 rule 3 vs canned Fallback reconciliation (adopted wording):** the MODEL's Unavailable outcome drops by type; what surfaces is the APP-AUTHORED canned Fallback (admission §5 rule 4's typed replacement of the WPF canned shape) — never the model's outcome bubbling up. RECORDED in §7 item 3's companion note (§2 design rule 5 already carries it).
+7. **Badge claim is the TYPED half only:** the headed badge-accuracy proof is c7 (admission §8 acceptance-mapping). §8 table adjusted to say so explicitly.
+8. **Title length in the probe Detail is metadata, never content**; capability Detail strings sit outside the §12 diagnostic-record schema. RECORDED in §6.
+9. **Title-probe test precondition named (adopted):** the Windows arm requires an interactive desktop session; a comment in the test names it so a future locked-session CI failure is diagnosable, not mysterious. ADOPTED (test comment added).
+
 ## 5. Engine review presence (T-2)
 
 | Call | Result |
 |------|--------|
-| Step 1 plan review | (recorded at step boundary) |
+| Step 1 plan review (`spine_review_step --step 1 --type plan`) | **Engine review ABSENT (expected)** — nested reviewer spawn blocked inside pi worker session; `skipped: true`, `spawnFailed: false` (SP-195: engine runs reviews after `.DONE`). Artifact: `.reviews/1-20260804T181514.md` |
+| Step 2 plan review (`spine_review_step --step 2 --type plan`) | **Engine review ABSENT (expected)** — same SP-195 skip; `spawnFailed: false`. Artifact: `.reviews/2-20260804T182546.md` |
+| Step 3 plan review (`spine_review_step --step 3 --type plan`) | **Engine review ABSENT (expected)** — same SP-195 skip; `spawnFailed: false`. Artifact: `.reviews/3-20260804T183322.md` |
 
-## 6. Evidence / budgets / surprises / durable-lesson candidates
+## 6. Title-observation session facts (Windows) + redaction registry
 
-(filled in Step 4)
+**Windows session facts (2026-08-04, this evidence box):** `AiWindowTitleCapability.Probe` ran on the Windows desktop session and returned `CapabilityState.Available` with the content-free detail `"windows foreground window title observation confirmed (title length N; content never logged)"` — a REAL foreground-window title was captured via `GetForegroundWindow` + `GetWindowTextW` (executable proof: `TitleProbe_PlatformTypedState_WindowsAvailable_LinuxUnavailable` asserts Available and that the detail does NOT contain the captured title; `TitleObservation_GatedByConsentAndCapability_TitleNeverLogged` asserts the observed title appears in no diagnostic record). The Linux arm of the same test encodes the typed-Unavailable expectation (`title-observation-linux-unprobed`) for when a distro exists; it is inert here per the WSL zero-distro named limit (header). **No Wayland claim anywhere.**
+
+**Redaction/log-site registry (SP-018 pattern):** c5 adds **ZERO new product log sites**. `AiAwarenessService` / `AiCooldownRegistry` / `AiAwarenessContextPackaging` / `AiWindowTitleCapability` emit no log lines; all outcomes ride typed results + content-free `AiDiagnosticRecord` emissions. New stable diagnostic codes (all content-free tokens — never keywords, titles, fields, or categories):
+
+| Code | Where | Meaning |
+|------|-------|---------|
+| `suppressed:cooldown` | service admission diagnostic `StableCode` | a cooldown suppressed the operation (the class rides the typed result, never the diagnostic) |
+| `suppressed:consent-denied` | service admission diagnostic `StableCode` (mirrors the pipeline's c1 code) | consent not given |
+| `refused:input` | service packaging diagnostic `StableCode` (reuses the c3 side-code convention) | a context field blocked at packaging — zero transmission |
+| `keyword-fallback` | `AiReply.Fallback.Code` | app-authored canned text surfaced on provider-Unavailable (keyword path only) |
+
+Capability reason codes (additive, defined in `AiAwarenessService.cs` — `Capabilities/` untouched): `title-observation-linux-unprobed`, `no-foreground-window`. Probe Available detail carries title LENGTH only — metadata, never content; capability Detail strings sit outside the §12 diagnostic-record schema (pre-completion consult §4.2 point 8).
+
+Executable content-freedom proofs: `Packaging_BlockingPolicyOnAnyField_ZeroTransmission_TypedDrop` (forbidden token + category code absent from all records), `CooldownSuppressed_KeywordComment_TypedOutcome_ZeroNetwork` (keyword absent), `KeywordRouting_Refused_DropsByType_NeverCanned` (keyword absent), `Packaging_Fields_NeverEnterDiagnosticsOrMemory` (sentinel title absent from diagnostics; memory Appends == 0), `TitleObservation_GatedByConsentAndCapability_TitleNeverLogged` (title absent; zero records). The SP-016 schema-level proof stays green (full suite).
+
+## 7. Deviations and per-change justifications
+
+1. **Additive pipeline overload `RunAwarenessAsync(AiRequest, AiAwarenessConsent)`** (`AiOperationPipeline.cs`, +13 lines): the typed consent state reaches the pipeline's admission point (pre-approach consult §4.1 (a)); the bool overload is preserved because 4 out-of-scope test files call it (c4 additive/lane-disjointness precedent). **Residual bool door recorded:** a caller CAN still invoke the pipeline directly with a fabricated bool; the typed overload is the admitted vocabulary going forward, and c7's UI composition consumes the typed path. No existing test call sites changed (zero edits to out-of-scope files — verified by `git diff --stat`).
+2. **Inventory row `awareness-context-fields` stays `Reserved` with updated text** (`AiModerationBoundary.cs`, string-only edit): flipping to Wired would red two assertions in `AiModerationCoverageTests.cs` (hardcoded 5/6 counts + per-Wired switch arm), which is outside SP-042 file scope (FR-WORK-06). The wiring is proven directly by `AiAwarenessTests` against the surface ID. **Orchestrator follow-up (mechanical):** flip disposition → Wired, counts 6/5, add a switch arm asserting a blocking-policy refusal on a context field. (SP-038 record §2's own known limitation: nothing executable flips Reserved→Wired.)
+3. **Drop-on-refusal NEVER falls back to canned** (recorded divergence from WPF behavior, pre-approach consult §4.1 (d)): WPF's `DispatchAvatarComment` shows a canned phrase on moderation refusal because its string channel collapses refusal → null (`KeywordTriggerService.cs:1661-1664`); the typed pipeline distinguishes by type and contract §4 rule 3 drops refusal/unavailable by type. Mechanism parity is NOT behavior parity here — deliberate, recorded.
+4. **Canned fallback scoped to the keyword path only** (consult §4.1 (d)): WPF has no canned fallback on window reactions; `RunReactionAsync` passes `fallbackText: null` so Unavailable → `Dropped(ProviderUnavailable)`.
+5. **Rolled cooldown randomization NOT ported** (`RollCooldownSeconds`, `WindowAwarenessService.cs:397-412`): nondeterminism has no place in a test-critical mechanism; `AwarenessCooldownMaxSeconds` is recorded as an owner-pending value alongside the other §9.2 #4 values.
+6. **Service methods take no per-call CancellationToken:** cancellation is generation-based (panic/provider switch) per contract §2 — the owned operation carries the token; admission-time tokens are not part of the pipeline's shape either. (Also removes 17 xUnit1051 analyzer warnings — the 0W gate.)
+7. **`Generation = -1` on service-admission diagnostics** (consent/cooldown/packaging refusals): no operation began; honest marker, content-free.
+8. **HeadlessTests untouched** — c5 is mechanism + capability probes with no UI surface; recorded honestly absent (fileScope allows "likely none").
+9. **Cooldown family separation + per-trigger stamping (pre-completion consult §4.2 points 2-3):** the window-reaction path consults ONLY the reaction cooldown (PerTrigger class, fixed slot) — NOT the keyword Global class; WPF's reaction (`CanReact`) and keyword (`_lastGlobalTriggerTime`) cooldowns are separate families and stay separate. `PerTrigger` is stamped only when the caller supplies `perTriggerCooldown` (WPF per-trigger cooldown is per-trigger config); the class is always CHECKED.
+10. **Double moderation + packaging shape (pre-completion consult §4.2 points 4-5):** fields are evaluated at packaging and the assembled prompt again at the pipeline input boundary; the H7 double-accounting failure does not recur (awareness never escalates; the boundary emits no logs). Packaging is a formatting shape with no escaping (WPF identical) — a `|` in a title deforms the shape, never a boundary bypass; recorded non-claim.
+
+## 8. Completion-criteria disposition
+
+| Criterion | Disposition |
+|-----------|-------------|
+| Code-enforced consent at admission (placeholder default NOT GIVEN; baseline both-false FACTS cited) | **MET** — typed `AiAwarenessConsent` (default `NotGiven`); enforced at the service AND the pipeline (typed overload); `Consent_Default_IsNotGiven_AndNoOperationRuns` proves keyword/reaction/title-observation all refuse with typed Suppressed + zero network; WPF both-false facts cited (§1.1) |
+| Typed cooldown machinery: 4 classes, extend-not-shrink, observable `Suppressed(cooldown)` (placeholder values; baselines recorded incl. 10-vs-90) | **MET** — `AiCooldownRegistry` (PerTrigger/Global/PerKeyword/LoopProtection), extend-not-shrink + expiry + boundary-equality tests; `AiCooldownValues.WpfBaselinePlaceholder` pinned by test with the 10-vs-90 owner question verbatim in code + this record (§1.2) |
+| Context packaging under consent, every field through the c3 boundary (blocking = zero transmission); fields never in diagnostics/memory | **MET** — `AiAwarenessContextPackaging.TryPackage`; blocking-any-field theory proves zero transmission (SendAttempts 0, provider Calls 0); sentinel-title proof for diagnostics + memory isolation |
+| Keyword routing as owned operations (panic-cancellable); typed Fallback/Unavailable visibility; drop-by-type | **MET — TYPED half** — pipeline-owned operations (`KeywordRouting_IsAnOwnedOperation_PanicCancellable`); `AiReply.Fallback` typed visibility (the badge derives from the reply variant by type — plumbing only; the HEADED badge-accuracy proof is c7 per admission §8 acceptance-mapping); `Dropped(RefusedByModeration/ProviderUnavailable/Cancelled)` at the routing layer (the c3 deferral discharged); the model's Unavailable drops by type — what surfaces is the app-authored canned Fallback (§4.2 point 6) |
+| Title-observation capability: Windows session facts + Linux typed Unavailable (WSL named limit; no Wayland claim) | **MET (Windows; Linux = named limit)** — §6 session facts; Linux arm typed-Unavailable, owner-gated, never faked |
+| Contract green (≥537/29 floor); both solo consults persisted with actual answering models | **MET (Windows; Linux = named WSL limit)** — §9 (564/564 + 29/29); consults in §4.1/§4.2 — the tool carried NO model identifier on either call (T-2 honesty note, same as SP-033/035/038) |
+
+## 9. Step 5 — contract verification transcript
+
+(filled in Step 5)
+
+## 10. Budgets, surprises, durable-lesson candidates
+
+**Budget:** single session, well inside the 4h packet budget; no context-limit exits.
+
+**Surprises:**
+1. **The pre-approach consult caught two real misreadings of WPF behavior before they shipped:** (a) I had generalized the canned-fallback to all awareness paths — WPF has it ONLY on the keyword AvatarComment path; (b) WPF shows canned on REFUSAL too (string channel collapses refusal → null) — the greenfield drop-on-refusal is a deliberate divergence that needed explicit recording, not an accidental one.
+2. **Two self-inflicted edit breaks caught immediately by build:** a botched pipeline edit dropped a method brace and mangled the PanicAsync doc comment (fixed in the same step; final diff verified cleanly additive, +13 lines).
+3. **xUnit1051 analyzer flagged per-call CancellationToken params on the new service methods (17 warnings)** — resolved by REMOVING the params: cancellation is generation-based (contract §2), so the params were false affordances. The 0W gate enforced a BETTER design.
+4. **`ArgumentException.ThrowIfNullOrEmpty` throws `ArgumentException`, not `ArgumentNullException`, for empty strings** — test asserted the wrong subtype; fixed to `ThrowsAny<ArgumentException>`.
+
+**Durable-lesson candidates (orchestrator reconciles into port-lessons.md — enabler 2):**
+1. **WPF string channels collapse distinct outcomes — porting routing means mapping the COLLAPSE, not the code.** The `GetKeywordCommentAsync` null return conflates refusal, unavailability, and empty reply; each needs its typed disposition decided explicitly, and one of them (canned-on-refusal) is a behavior the typed contract deliberately changes. (Class: WPF-archaeology fidelity.)
+2. **Cooldown class unions ≡ merged-max-dict.** When WPF merges two cooldown layers into one dictionary with Math.Max durations, typed separate classes with union suppression are behaviorally identical — record the equivalence and port the extend-not-shrink write verbatim (`existing < expiresAt` gate), not the storage shape. (Class: mechanism porting.)
+3. **Per-call CancellationTokens on generation-cancelled services are false affordances.** If cancellation is generation/owner-based (SP-004), per-call tokens mislead callers about what cancellation means — and the analyzer (xUnit1051) will tax every test call site. (Class: API design + analyzer discipline.)
+4. **Reserved→Wired inventory flips need file-scope room.** A coverage tripwire with hardcoded counts blocks the discharging slice from flipping its own row when the tripwire test sits outside the packet's file scope; packets that discharge a Reserved surface should name the coverage test in File Scope explicitly. (Class: packet authoring — SP-038's known limitation, now with a concrete collision.)

@@ -385,6 +385,11 @@ public class AiAwarenessTests
         {
             // Windows session facts (the evidence box): real capture confirmed. The detail
             // is content-free — it carries the title LENGTH, never the title.
+            // PRECONDITION (named, pre-completion consult): this arm requires an INTERACTIVE
+            // Windows desktop session — under a locked/non-interactive session
+            // GetForegroundWindow returns 0 and the probe honestly reports Unavailable
+            // (no-foreground-window). A failure here on CI means the session precondition
+            // was lost, not a product regression.
             var available = Assert.IsType<CapabilityState.Available>(state);
             Assert.Contains("length", available.Detail);
             Assert.True(AiWindowTitleCapability.TryCaptureForegroundTitle(out var title));
