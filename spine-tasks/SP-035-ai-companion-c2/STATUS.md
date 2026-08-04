@@ -1,6 +1,6 @@
 ## STATUS: SP-035 — AI companion slice c2: loopback Ollama provider
-**Current Step:** Step 2 — provider implementation
-**Last Updated:** 2026-08-04 (Step 1 complete: archaeology + design + pre-approach consult; plan review engine-skipped SP-195)
+**Current Step:** Step 3 — LAB matrix + live panic + WSL gate
+**Last Updated:** 2026-08-04 (Step 2 complete: provider + lab + 25 new tests, full suite 491/491)
 **Blockers:** none
 
 ### Step 1: archaeology + lab design + pre-approach consult
@@ -10,14 +10,14 @@
 - [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: provider implementation
-- [ ] LoopbackOllamaProvider.cs + types
-- [ ] Unit tests (round-trips, timeout classification, bounded retry, refusal, malformed, remote pre-socket)
+- [x] LoopbackOllamaProvider.cs + types
+- [x] Unit tests (round-trips, timeout classification, bounded retry, refusal, malformed, remote pre-socket)
 
 ### Step 3: LAB matrix + live panic + WSL gate
-- [ ] LAB both platforms (full failure matrix per SP-019 shapes; stale discard)
-- [ ] Panic re-verified live against real in-flight operation
-- [ ] WSL2 gate (lab + contract green on Linux; zero external traffic proven)
-- [ ] Sensitive-logging audit zero hits
+- [x] LAB both platforms (full failure matrix per SP-019 shapes; stale discard) — WINDOWS-ONLY: WSL gate is the named limit (zero distros); Linux not faked
+- [x] Panic re-verified live against real in-flight operation
+- [x] WSL2 gate (NAMED LIMIT: `wsl -l -q` empty exit 0 — zero distros; owner decision to provision; recorded verbatim in record.md §3.2)
+- [x] Sensitive-logging audit zero hits
 
 ### Step 4: evidence consolidation + pre-completion consult
 - [ ] record.md complete

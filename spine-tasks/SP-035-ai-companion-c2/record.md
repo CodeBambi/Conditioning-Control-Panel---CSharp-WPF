@@ -67,7 +67,53 @@ Evidence classes: **U** = unit tests both platforms; **LAB** = deterministic loo
 
 WSL2 gate: NAMED LIMIT (§0) — zero distros on this laptop; Linux LAB evidence not faked; Windows-only LAB recorded.
 
-## 3. (Steps 2–3 evidence lands here)
+## 3. Step 2–3 evidence (Windows lane worktree, 2026-08-04)
+
+### 3.1 LAB matrix transcript (deterministic loopback lab, real sockets on 127.0.0.1, zero external network)
+
+`dotnet test client/tests/CcpClient.Tests -c Debug --filter "FullyQualifiedName~AiProviderLabIntegrationTests|FullyQualifiedName~LoopbackOllamaProviderTests"` → **25/25 green** (13 provider-level + 12 pipeline-integration):
+
+| Matrix row (SP-019 shape) | Test(s) | Observed |
+|---------------------------|---------|----------|
+| ok round-trip | `Ok_RoundTrip_Generated_WithLoopbackProvenance` + `Ok_ThroughPipeline_Completed_WithProvenance_AndContentFreeDiagnostic` | `Generated(lab-reply-<per-run>, Loopback)`; pipeline SendAttempts==1; content-free diagnostic (Completed, no stable code) |
+| mid-stream cancel | `MidStreamCancel_TruePartialPosition_TokenIsTheMechanism` + `MidStreamCancel_Live_TypedCancelledFast_GenerationAdvanced_LabSeesClientGone` | TRUE partial-body position observed before cancel; typed Cancelled fast (<2s assertion, observed ms-scale); generation advanced via SelectProvider; lab record outcome `client-gone` — a cancelled transport cannot deliver a late result; zero applied |
+| timeout | `Timeout_Classifier_Bounded_ExternalTokenNotCancelled` + `Timeout_ThroughPipeline_TypedUnavailable_TokenNotPoisoned_LabSeesClientGone` | `Unavailable(timeout)` inside the 800ms bound (+slack assertion); external token NOT cancelled (second op succeeds through the same pipeline — token not poisoned); lab `client-gone` after the bounded wait |
+| 429 + Retry-After | `Rate429_RetryEnabled_ExactlyTwoHits_RetryAfterHonored` + `Rate429_RetryEnabled_ExactlyTwoHits_QuotaExhausted` | retry ENABLED: EXACTLY 2 lab hits (server-side count), gap ≥900ms (Retry-After: 1 honored, ≤2s clamp), `Unavailable(quota-exhausted)`; pipeline gateway counts 1/operation, provider seam 2/attempts |
+| 429 default | `Rate429_RetryDefaultOff_ExactlyOneHit` | retry DEFAULT (off — conservative posture): exactly 1 hit |
+| 500 | `Error500_RetryEnabled_Bounded_TwoHits` (provider + pipeline) | exactly 2 hits → `Unavailable(http-500)`; no storm |
+| refusal | `Refusal_TypedCarrier_ExactlyOneAttempt_NeverRetried` + `Refusal_ThroughPipeline_TypedCarrier_ExactlyOneHit` | EXACTLY 1 hit even with retry enabled; typed `Refused(content_filter, Output)`; diagnostic outcome Refused |
+| malformed | `Malformed_Garbage_NeverPartial_TypedUnavailable` + pipeline row | 1 hit → `Unavailable(malformed-output)`; never partial |
+| truncated | `Truncated_PrefixCut_NeverSurfaced_TypedUnavailable` + pipeline row | valid-prefix cut mid-document → `Unavailable(malformed-output)`; the partial reply prefix is NEVER surfaced |
+| slow-ok stale discard | `SlowOk_LateCompletion_ExactlyOneStaleDiscard_ZeroApplied` | test-side uncooperative-transport decorator (token swallowed; SP-019 RequestDetachedAsync shape) over the REAL socket/lab/body; switch mid-flight; late body REALLY arrives (lab outcome `completed`); EXACTLY 1 stale discard (`Registry.DiscardedStaleCompletions` +1); typed Cancelled; ZERO applied |
+| live panic | `Panic_Live_DuringRealInFlightOperation_TypedCancelled_BoundedDrain_ClientGone` | panic during a REAL in-flight network operation (true mid-stream position first): typed Cancelled + bounded drain (<3.5s assertion, observed fast); lab `client-gone` — the c1 mechanism proven against a real socket, not a mock |
+| remote pre-socket | `RemoteHost_RejectedPreSocket_ZeroSendAttempts` + `RemoteHost_InProduct_PreSocketRejection_BothLayers_ZeroSendAttempts` | `http://192.168.1.50:11434/` classified RemoteHostOllama; probe rejects typed `endpoint-not-admitted` with ZERO socket (<1s, the code only the pre-socket branch produces); pipeline op → `provider-unproven` with pipeline AND provider SendAttempts==0; direct provider call → `endpoint-not-admitted`, SendAttempts==0 |
+| offline zero-network | `Offline_ReVerified_ZeroNetwork_LabBoundLoopbackOnly` | registered-but-unprobed provider: interactive + awareness ops → `provider-unproven`, SendAttempts==0 both layers, lab untouched (HitCount==0); lab binds 127.0.0.1 only (`Host.IsLoopback` asserted) |
+
+### 3.2 WSL2 gate — NAMED LIMIT (never faked)
+
+Verbatim probe (2026-08-04, this laptop): `wsl -l -q` → *(empty output)*, `exit=0` — WSL installed with **ZERO distros**. The packet's designed Linux gate (`~/ccp-sp035`, lab + contract green on Linux) cannot run: provisioning a distro is an owner decision (2026-08-04 amendment item 2). **No Linux evidence is claimed or faked** — the LAB matrix above is Windows-only; offline zero-network is re-verified on the Windows lab runs (lab binds 127.0.0.1 only, asserted in the offline row). The lab/provider code is platform-agnostic .NET (HttpListener + HttpClient loopback); the Linux run remains a pending owner-gated gate.
+
+### 3.3 Sensitive-logging audit (SP-018/SP-019 discipline) — ZERO hits
+
+Registered secrets for this slice (the lab's fake payloads are the only "content"):
+
+| Secret | Shape | Where it may appear |
+|--------|-------|---------------------|
+| lab reply text | `lab-reply-<per-run-guid>` (runtime-generated) | generator line only (`AiProviderLab.cs:64`); per-run VALUES never committed |
+| fake prompt | `lab-prompt` (static test input) | test-source input generator only; never in logs/diagnostics/artifacts |
+| refusal category | `content_filter` | a stable machine TOKEN (the typed carrier's code), not content |
+
+Audit commands + outcomes:
+- `git grep -n "lab-reply-[0-9a-f]"` over committed files → **zero hits** (no per-run payload value anywhere in the tree).
+- `git grep -n '"lab-reply-"'` → 2 hits, both the GENERATOR lines (`client/spikes/.../AiLab.cs:64` pre-existing quarantined spike; `client/tests/CcpClient.Tests/AiProviderLab.cs:64`).
+- `git grep -n '"lab-prompt"'` → 2 hits, both test-source input generators.
+- `grep -rn "lab-reply\|lab-prompt" spine-tasks/SP-035-ai-companion-c2/` → zero payload hits in artifacts (record.md carries only the stable `content_filter` token in design prose).
+- Product-code log sites added by c2: **NONE** — `LoopbackOllamaProvider` emits no log lines and no diagnostic text (outcomes ride typed `AiReply` + the pipeline's content-free `AiDiagnosticRecord`); the lab is a test instrument that logs nothing. The SP-016 schema-level content-freedom proof and c1's `Diagnostics_NeverCarryText` test remain green (full suite).
+
+### 3.4 Full-suite state after Step 3
+
+`dotnet test client/tests/CcpClient.Tests -c Debug` → **491/491** (466 floor + 25 new). HeadlessTests unchanged (no new surface; c2 has no UI — recorded honestly absent in Step 5's contract run).
+
 
 ## 4. Consults
 
@@ -90,3 +136,4 @@ WSL2 gate: NAMED LIMIT (§0) — zero distros on this laptop; Linux LAB evidence
 | Call | Result |
 |------|--------|
 | Step 1 plan review (`spine_review_step --step 1 --type plan`) | **Engine review ABSENT (expected)** — nested reviewer spawn blocked inside pi worker session; `skipped: true`, `spawnFailed: false` (SP-195: engine runs reviews after `.DONE`). Artifact: `.reviews/1-20260804T132924.md` |
+| Step 2 plan review (`spine_review_step --step 2 --type plan`) | **Engine review ABSENT (expected)** — same SP-195 skip; `spawnFailed: false`. Artifact: `.reviews/2-20260804T134008.md` |
