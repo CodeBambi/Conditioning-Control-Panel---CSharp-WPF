@@ -1,13 +1,13 @@
 ## STATUS: SP-040 — AI companion slice c4: memory
 **Current Step:** Step 1 — archaeology + schema + consent design + pre-approach consult
-**Last Updated:** 2026-08-04 (authored)
+**Last Updated:** 2026-08-04 (worker)
 **Blockers:** none
 
-### Step 1: archaeology + schema + consent design + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] WPF archaeology (lifecycle, clear, ambient-stateless, persist-gated precedent, consent default)
-- [ ] AiMemoryDocument schema + store design + consent seam (placeholder default recorded)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+### Step 1: archaeology + schema + consent design + pre-approach consult (COMPLETE)
+- [x] Update STATUS.md before starting work
+- [x] WPF archaeology (lifecycle, clear, ambient-stateless, persist-gated precedent, consent default)
+- [x] AiMemoryDocument schema + store design + consent seam (placeholder default recorded)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: store implementation + schema machinery
 - [ ] AiMemoryStore.cs on SP-005 machinery (round-trips, quarantine→Degraded, journal, preserve)
