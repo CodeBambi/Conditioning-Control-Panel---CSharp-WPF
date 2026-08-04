@@ -612,6 +612,173 @@ function fakeSheets() {
 }
 
 {
+  // --- standalone zips: expand, skip the junk, hold the ceilings ----------
+  //
+  // The archives are built HERE, byte by byte — local file headers, central
+  // directory, EOCD, method 0 (STORED) — so this coverage depends on no
+  // compressor being present anywhere. The deflate leg is packed with the
+  // vendored fflate, which is also what reads it back: nothing on this path
+  // asks for DecompressionStream, in node or in the page.
+  const CRC = (() => {
+    const t = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[i] = c >>> 0;
+    }
+    return t;
+  })();
+  const crc32 = (u8) => {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < u8.length; i++) c = CRC[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  };
+  const enc = new TextEncoder();
+
+  function storedZip(entries) {
+    const locals = [];
+    const central = [];
+    let offset = 0;
+    for (const e of entries) {
+      const name = enc.encode(e.name);
+      const data = e.bytes || new Uint8Array(0);
+      const crc = crc32(data);
+      const lh = new Uint8Array(30 + name.length);
+      const lv = new DataView(lh.buffer);
+      lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true);
+      lv.setUint32(14, crc, true);
+      lv.setUint32(18, data.length, true); lv.setUint32(22, data.length, true);
+      lv.setUint16(26, name.length, true);
+      lh.set(name, 30);
+      const ch = new Uint8Array(46 + name.length);
+      const cv = new DataView(ch.buffer);
+      cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true);
+      cv.setUint32(16, crc, true);
+      cv.setUint32(20, data.length, true); cv.setUint32(24, data.length, true);
+      cv.setUint16(28, name.length, true); cv.setUint32(42, offset, true);
+      ch.set(name, 46);
+      locals.push(lh, data); central.push(ch);
+      offset += lh.length + data.length;
+    }
+    const cdSize = central.reduce((a, c) => a + c.length, 0);
+    const eocd = new Uint8Array(22);
+    const ev = new DataView(eocd.buffer);
+    ev.setUint32(0, 0x06054b50, true);
+    ev.setUint16(8, entries.length, true); ev.setUint16(10, entries.length, true);
+    ev.setUint32(12, cdSize, true); ev.setUint32(16, offset, true);
+    const all = locals.concat(central, [eocd]);
+    const out = new Uint8Array(all.reduce((a, c) => a + c.length, 0));
+    let p = 0;
+    for (const c of all) { out.set(c, p); p += c.length; }
+    return out;
+  }
+  const fill = (n, seed) => {
+    const u = new Uint8Array(n);
+    for (let i = 0; i < n; i++) u[i] = (i * 7 + seed) % 251;
+    return u;
+  };
+  const asFile = (name, bytes, type) => ({
+    name, type: type || '', size: bytes.length,
+    arrayBuffer: () => Promise.resolve(bytes.slice().buffer),
+  });
+  const zipOf = (name, entries) => asFile(name, storedZip(entries), 'application/zip');
+
+  const b = fakeBridge({ hosted: false });
+  const store = createAssetsStore({ bridge: b, logger: null });
+  await sleep(5);
+
+  const library = zipOf('library.zip', [
+    { name: 'a.png', bytes: fill(800, 1) },
+    { name: 'nested/b.mp4', bytes: fill(1200, 2) },
+    { name: 'photos/', bytes: new Uint8Array(0) },                      // directory record
+    { name: 'readme.txt', bytes: fill(64, 3) },                         // not media
+    { name: '__MACOSX/._a.png', bytes: fill(32, 4) },                   // resource fork
+    { name: '.hidden.png', bytes: fill(48, 5) },                        // dotfile
+    { name: 'inner.zip', bytes: storedZip([{ name: 'c.png', bytes: fill(100, 6) }]) },
+    { name: 'huge.png', bytes: fill(9 * 1024 * 1024, 7) },              // over the exempt cap
+  ]);
+
+  const r1 = await store.addLocalFiles([library]);
+  ok(r1.zips === 1, 'the picked archive was EXPANDED, not adopted', JSON.stringify(r1));
+  ok(r1.added === 2, 'both eligible entries came out of it', JSON.stringify(r1));
+  ok(r1.tooBig === 1, 'and the 9 MB entry hit the very same exempt cap a hand-picked file would');
+  const locals = store.items.filter((it) => it.id.indexOf('local:') === 0);
+  ok(locals.length === 2, 'they surface through store.items like any other pick');
+  ok(locals.every((it) => it.state === 'exempt' && /^[0-9a-f]{64}$/.test(it.sha)),
+    'as exempt items with a real sha');
+  const png = locals.find((it) => it.name === 'a.png');
+  ok(!!png && png.mime === 'image/png' && png.kind === 'image' && png.bytes === 800,
+    'mime, kind and size ride the extracted item (zip entries carry no file.type)');
+  const mp4 = locals.find((it) => it.name === 'b.mp4');
+  ok(!!mp4 && mp4.mime === 'video/mp4' && mp4.kind === 'video' && mp4.ext === 'mp4',
+    'a nested path keeps only its base name');
+  ok(!locals.some((it) => /readme|MACOSX|hidden|inner\.zip|photos/.test(it.name)),
+    'the txt, the resource fork, the dotfile, the directory record and the NESTED ZIP are all skipped',
+    locals.map((it) => it.name).join(','));
+
+  const r2 = await store.addLocalFiles([asFile('copy-of-a.png', fill(800, 1), 'image/png')]);
+  ok(r2.added === 0 && r2.dupes === 1,
+    'a zip entry and the same bytes picked by hand share one sha — the dedup sees straight through the archive');
+  const r3 = await store.addLocalFiles([library]);
+  ok(r3.added === 0 && r3.dupes === 2 && r3.zips === 1, 'picking the same archive twice adopts nothing new',
+    JSON.stringify(r3));
+
+  const junk = fill(64, 13);
+  const r4 = await store.addLocalFiles([asFile('broken.zip', junk, 'application/zip')]);
+  ok(r4.failed === 1 && r4.added === 0 && r4.zips === 0,
+    'a corrupt archive is ONE failed pick — it never throws and never empties the screen', JSON.stringify(r4));
+
+  const r5 = await store.addLocalFiles([
+    zipOf('more.zip', [{ name: 'd.webp', bytes: fill(700, 8) }]),
+    asFile('e.gif', fill(300, 9), ''),
+  ]);
+  ok(r5.added === 2 && r5.zips === 1, 'one call can mix an archive and a loose file', JSON.stringify(r5));
+
+  const { zipSync } = await import('../vendor/fflate/fflate.module.js');
+  const squished = zipSync({ 'squished.png': [fill(4096, 11), { level: 6 }] });
+  const r6 = await store.addLocalFiles([asFile('deflated.zip', squished, 'application/zip')]);
+  ok(r6.added === 1 && r6.zips === 1,
+    'a DEFLATED entry inflates and is adopted too — fflate does it in-process, so no DecompressionStream is needed',
+    JSON.stringify(r6));
+  ok(store.items.some((it) => it.name === 'squished.png' && it.bytes === 4096),
+    'and it lands at its ORIGINAL size, not its packed one');
+
+  // The ceilings, driven straight — the store passes only the per-entry cap.
+  const four = storedZip([1, 2, 3, 4].map((i) => ({ name: 'p' + i + '.png', bytes: fill(500, 20 + i) })));
+  const cut = await zipMod.readZipMedia(four, { maxEntries: 2 });
+  ok(cut.ok && cut.entries.length === 2 && cut.truncated === true && cut.failed === 2,
+    'the entry ceiling truncates and counts the rest as failed', JSON.stringify({ n: cut.entries.length, f: cut.failed }));
+  const bomb = await zipMod.readZipMedia(four, { maxTotalBytes: 900 });
+  ok(bomb.ok && bomb.entries.length === 1 && bomb.truncated === true,
+    'and the zip-bomb guard stops on the DECLARED size, before a byte is inflated',
+    JSON.stringify({ n: bomb.entries.length }));
+  const garbage = await zipMod.readZipMedia(junk);
+  ok(garbage.ok === false && garbage.entries.length === 0,
+    'readZipMedia answers ok:false for garbage instead of throwing', garbage.reason);
+  ok((await zipMod.readZipMedia(new Uint8Array(4))).ok === false, 'a buffer too short to hold an EOCD is refused early');
+  ok(zipMod.isZipFile({ name: 'x.ZIP', type: '' }) === true
+    && zipMod.isZipFile({ name: 'x', type: 'application/x-zip-compressed' }) === true
+    && zipMod.isZipFile({ name: 'x.png', type: 'image/png' }) === false,
+    'a zip is spotted by extension OR by mime, and nothing else is');
+  ok(zipMod.isJunkEntry('__MACOSX/foo.png') && zipMod.isJunkEntry('a/') && zipMod.isJunkEntry('a/.b.png')
+    && !zipMod.isJunkEntry('a/b.png'),
+    'the junk filter knows directory records, resource forks and dotfiles at any depth');
+
+  store.dispose();
+  ok(store.localCount === 0, 'dispose clears everything the archives added, too');
+}
+
+{
+  // --- the picker and the copy both admit that zips are allowed ----------
+  const src = await read('../ui/screens/assets.js');
+  ok(/const LOCAL_ACCEPT[\s\S]{0,300}\.zip/.test(src), 'the device picker offers .zip to the OS file sheet');
+  ok(/application\/zip/.test(src), 'by mime as well as by extension (android hands over one or the other)');
+  ok(/zip/.test(S.assets.local.limits('8 MB')), 'and the limits line says so out loud', S.assets.local.limits('8 MB'));
+  ok(typeof S.assets.local.zipNone === 'string',
+    'S.assets.local.zipNone exists — an archive holding nothing sendable must still answer');
+}
+
+{
   // --- hosted: the grid, virtualized -------------------------------------
   globalThis.IntersectionObserver = FakeIO;
   FakeIO.all.length = 0;
