@@ -89,6 +89,8 @@ C# → page:
 | `stop` | — | decoder hygiene: `pause()` → `removeAttribute('src')` → `load()` |
 | `setVolume` | `volume`, `muted?` | master × video volume; the optional `muted` folds external mute in. Secondaries are always sent `volume: 0, muted: true` |
 | `seek` | `ms` | future Deeper use; implement anyway (trivial) |
+| `attentionShow` | `id, text, size, font, color1, color2, textColor, borderColor, floating, showBorder, xPct, yPct, vx, vy, reportMotion` | one attention-check target. C# owns the text (mod trigger pool + localization stay C#-side, already line-split) and the whole style; `xPct/yPct` are 0-1 *of the free spawn range* — only the page knows how big the element measured — and `vx/vy` are CSS px per second. `reportMotion` asks for `attentionMove` and is only set when gaze-click is on |
+| `attentionHide` | `id, fade` | `fade:true` = the user got it (300ms opacity fade, then the node is reaped); `false` = timeout / teardown, gone now |
 
 page → C#:
 | msg | fields | notes |
@@ -99,7 +101,9 @@ page → C#:
 | `time` | `ms` | ~10 Hz from `timeupdate`; drives `PrimaryPlaybackTimeMsChanged` |
 | `ended` | — | natural end |
 | `error` | `code, message` | media error OR unrequested stall the page can't recover |
-| `click` | — | any pointer-down on the surface |
+| `click` | — | any pointer-down on the surface that was NOT on an attention target |
+| `attentionClick` | `id` | the user pressed a target. Reported INSTEAD of `click` (a hit must not also trigger the host's z-order lift). The target then waits for `attentionHide` — C# stays the only authority on which checks are outstanding |
+| `attentionMove` | `id, xPct, yPct, wPct, hPct` | ~10 Hz viewport-fraction rectangle of a bouncing target, only when `reportMotion` was set. Gaze hit-testing is the sole consumer; C# maps it back to DIPs against the window |
 | `key` | `key, alt, ctrl, shift` | every non-repeat keydown the page saw (DOM `event.key`). Keyboard over a focused WebView2 goes to Chromium, so this is the ONLY route ESC / panic keys have back to C#; the page `preventDefault`s the dangerous ones and C# owns the policy |
 | `log` | `msg` | host built-in page logging |
 
@@ -146,11 +150,14 @@ All of the following stay in VideoService (C#-side) and must fire for browser se
 - [ ] Safety timers (all C#-side, unchanged mechanisms): duration guillotine armed
       from the page `meta` message (was `LengthChanged`); 10-min fallback timer;
       `VideoMaxDurationSeconds` hard cap; `_enhancementDriving` stall-watch semantics.
-- [ ] Attention checks: `SetupAttention` + `FloatingText` windows are ALREADY separate
-      topmost Win32 windows — reuse UNCHANGED over the browser windows. Wire the page
-      `click` message to `BringTargetsToFront()`. Gaze (`GetGazeTargets`/`GazeClick`)
-      and toy-button input paths unchanged. `EndCurrentVideo` pass/fail/XP/troll
-      replay/mercy logic unchanged.
+- [ ] Attention checks: `SetupAttention`, the spawn schedule, the pass/fail tally, gaze
+      (`GetGazeTargets`/`GazeClick`), the toy-button alternative and `EndCurrentVideo`'s
+      pass/fail/XP/troll-replay/mercy logic are all unchanged. What changed is only the RENDERING:
+      `_targets` holds `IAttentionTarget`, and each spawn picks a representation PER SCREEN - a DOM
+      element in the player page (browser session), a WPF element inside the video window (LibVLC
+      vmem/blur path), or the original `FloatingText` topmost window (VideoView airspace, the
+      MediaElement fallback, or a monitor with no video window at all). The page `click` message
+      still drives `BringTargetsToFront()` for the windows that are still separate.
 - [ ] Strict mode: `Closing` veto + panic/Alt-F4/system-key swallowing on
       `BrowserVideoWindow` (mirror `SetupStrictHandlers`); non-strict ESC ⇒ Cleanup.
       NOTE: keyboard events over a focused WebView2 go to Chromium — also suppress
@@ -224,6 +231,10 @@ Simplest implementation: reuse `BrowserVideoEngine`'s environment + a
 - `setSinkId` per-element audio-device routing (parity with `ApplyPreferredDevice`).
 - Duck-exclusion granularity per user-data-folder/PID.
 - Optional ffmpeg transcode tool for non-browser-safe libraries.
-- DOM-based attention targets (delete FloatingText interop).
+- ~~DOM-based attention targets~~ — done on this branch (§3 `attentionShow`/`attentionHide`),
+  alongside a WPF in-window target for the LibVLC vmem path. `FloatingText` cannot be deleted
+  yet: it is still the only representation that works over a `VideoView`'s airspace, over the
+  MediaElement fallback, and on a monitor that has no video window. It goes when the last
+  `VideoView` does.
 - Migrate small LibVLC consumers (mini-player, help video, gaze minigame, editor
   preview, inline loop); then delete the watchdog museum + `BlurVmemSurface`.

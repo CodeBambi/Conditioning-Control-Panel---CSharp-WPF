@@ -151,6 +151,14 @@ namespace ConditioningControlPanel
                 var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
                 var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
                 SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW);
+                // The count bubbles are separate topmost windows and this fullscreen window is
+                // topmost too. Any click on the video - including a click "on" a bubble, whose
+                // window is click-through (IsHitTestVisible=false) - lands here, and the default
+                // WM_MOUSEACTIVATE handling re-raises this window over every live bubble: the
+                // things the user is being asked to count visibly vanish. Deny the activation the
+                // way the mandatory-video windows do; ESC keeps working because the focus taken at
+                // Show() is never surrendered by a denied click.
+                System.Windows.Interop.HwndSource.FromHwnd(hwnd)?.AddHook(NoClickRaiseHook);
                 // Cache the handle for VideoService's wedge escape hatch while we still can: these
                 // windows are fullscreen + topmost, and once the UI thread wedges nothing can
                 // resolve a Window to its HWND any more (#765/#766). Browser mode has no in-process
@@ -1812,6 +1820,23 @@ namespace ConditioningControlPanel
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_NOACTIVATE = 0x0010;
         private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+        private const int WM_MOUSEACTIVATE = 0x0021;
+        private const int MA_NOACTIVATE = 3;
+
+        /// <summary>
+        /// Same answer VideoService.PreventClickRaise gives the mandatory-video windows: deny the
+        /// click-activation (and the topmost-band z-order raise that rides on it) while keeping the
+        /// mouse message and whoever currently holds focus.
+        /// </summary>
+        private static IntPtr NoClickRaiseHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == WM_MOUSEACTIVATE)
+            {
+                handled = true;
+                return new IntPtr(MA_NOACTIVATE);
+            }
+            return IntPtr.Zero;
+        }
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern int GetWindowLong(IntPtr hwnd, int index);
