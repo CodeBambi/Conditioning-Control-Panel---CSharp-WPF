@@ -74,6 +74,57 @@ internal sealed class ChaosWebViewHost : IDisposable
         public bool OwnedByMainWindow { get; init; }
     }
 
+    /// <summary>Virtual host serving DOWNLOADED content packs (audio that no longer ships in the
+    /// installer — see docs/CONTENT_PACKS_PLAN.md §3). Mirrors the install-dir web layout, so a file
+    /// at https://ccp.game/dtrh/assets/x.mp3 is at https://ccp.content/dtrh/assets/x.mp3 when the
+    /// pack that owns it has been fetched. The page-side shims (dtrh/shared/audioSrc.js,
+    /// intake/core/audioSrc.js) pick a host per file and fall back to the other one once.</summary>
+    public const string ContentHost = "ccp.content";
+
+    /// <summary>%LOCALAPPDATA%/ConditioningControlPanel/content/Resources/web — the pack mirror of
+    /// {exe}/Resources/web. The install dir is not writable under Program Files, so downloads land
+    /// here (see the plan's "Runtime" section). Anchored on the SAME root the C# probe uses
+    /// (<see cref="Services.ContentLocator.ContentRoot"/>) so the two can never drift apart.</summary>
+    public static string ContentWebRoot
+    {
+        get
+        {
+            var root = Services.ContentLocator.ContentRoot;
+            // Empty = the probe couldn't resolve LocalApplicationData. Stay empty rather than
+            // producing a RELATIVE path that CreateDirectory would honour next to the exe.
+            return string.IsNullOrEmpty(root) ? string.Empty : Path.Combine(root, "Resources", "web");
+        }
+    }
+
+    /// <summary>The ccp.content mapping, with the folder created first — WebView2 SKIPS a mapping
+    /// whose folder is missing (the same rule that forces ccp.spirals to be created before Launch).
+    /// Allow, not Deny: the pages fetch()/decodeAudioData these files and route media elements
+    /// through WebAudio from the ccp.game origin, both of which are CORS-checked — exactly why
+    /// ccp.mod (a creator mod's audio, consumed the same way) is Allow too.</summary>
+    public static (string, string, CoreWebView2HostResourceAccessKind) ContentMapping()
+    {
+        var root = ContentWebRoot;
+        if (!string.IsNullOrEmpty(root))
+        {
+            try { Directory.CreateDirectory(root); }
+            catch (Exception ex) { App.Logger?.Debug("ChaosWebViewHost: content dir create failed: {E}", ex.Message); }
+        }
+        return (ContentHost, root, CoreWebView2HostResourceAccessKind.Allow);
+    }
+
+    /// <summary>True when downloaded pack content is actually on disk (folder exists AND is not
+    /// empty). Drives window.CCP_CONTENT_READY: false means "everything is still in the install
+    /// dir", which is the legacy full-install case and the skipped-the-download case alike.</summary>
+    private static bool HasPackContent()
+    {
+        try
+        {
+            var root = ContentWebRoot;
+            return Directory.Exists(root) && Directory.GetFileSystemEntries(root).Length > 0;
+        }
+        catch { return false; }
+    }
+
     private readonly Options _opts;
     private readonly List<string> _pending = new();   // JSON queued until the page says 'ready'
     private Window? _window;
@@ -422,9 +473,7 @@ internal sealed class ChaosWebViewHost : IDisposable
         _initStarted = true;
         try
         {
-            var userDataFolder = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "ConditioningControlPanel", _opts.UserDataFolderName);
+            var userDataFolder = Path.Combine(App.UserDataPath, _opts.UserDataFolderName);
             Directory.CreateDirectory(userDataFolder);
 
             // --disable-direct-composition-video-overlays: keep the WebGL swapchain composited
@@ -460,6 +509,29 @@ internal sealed class ChaosWebViewHost : IDisposable
                     continue;
                 }
                 core.SetVirtualHostNameToFolderMapping(host, folder, access);
+            }
+
+            // Tell a page that maps ccp.content whether pack audio is actually there, BEFORE its
+            // first script runs: the audio shims read window.CCP_CONTENT_READY to decide which host
+            // to try first (they still fall back to the other one per file, so a wrong guess costs
+            // one 404, never a missing sound). Pages without the mapping never see the flag.
+            bool mapsContent = false;
+            foreach (var (host, _, _) in _opts.Mappings)
+                if (string.Equals(host, ContentHost, StringComparison.OrdinalIgnoreCase)) { mapsContent = true; break; }
+            if (mapsContent)
+            {
+                var ready = HasPackContent() ? "true" : "false";
+                try
+                {
+                    await core.AddScriptToExecuteOnDocumentCreatedAsync(
+                        "window.CCP_CONTENT_READY = " + ready + ";").ConfigureAwait(true);
+                    if (_disposed) return;
+                }
+                catch (Exception ex)
+                {
+                    // Not fatal: the shims default to the install-dir host when the flag is absent.
+                    App.Logger?.Debug("{Tag}: CCP_CONTENT_READY inject failed: {E}", _opts.LogTag, ex.Message);
+                }
             }
 
             core.NavigationStarting += OnNavigationStarting;

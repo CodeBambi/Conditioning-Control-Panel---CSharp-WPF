@@ -148,6 +148,7 @@ namespace ConditioningControlPanel
         private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
 
         private const uint GW_HWNDPREV = 3;   // the window directly ABOVE hWnd in the z-order
+        private const uint GW_HWNDNEXT = 2;   // the window directly BELOW hWnd in the z-order
 
         /// <summary>
         /// Start monitoring for fullscreen applications
@@ -1069,7 +1070,11 @@ namespace ConditioningControlPanel
                             Top = wa.Bottom - Math.Max(120, ActualHeight) - margin;
                         }
                         catch { /* positioning is best-effort */ }
-                        ReassertTopmost();   // keep the freshly-parked widget above the run's overlays
+                        // Put the freshly-parked widget back in the topmost band. NOT above the
+                        // compositor host any more (#776) — the host's fullscreen effects, the pink
+                        // tint above all, now win over the companion; ReassertTopmost slots the tube
+                        // directly beneath the host, which still leaves it over the run's own chrome.
+                        ReassertTopmost();
                     }
                 }
                 else
@@ -1182,7 +1187,17 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Reassert topmost status when detached - ensures avatar stays on top as a widget
+        /// Reassert topmost status when detached - ensures avatar stays on top as a widget.
+        ///
+        /// #776: the raise is UNCONDITIONAL (never gated on having lost WS_EX_TOPMOST) but it is no
+        /// longer always aimed at HWND_TOPMOST. The shared compositor host carries the pink filter and
+        /// re-pins itself to the front of the topmost band every 5s (OverlayService.ReassertZOrder);
+        /// this tick fired every 500ms and put the tube back on top, so the tint appeared to blink on
+        /// and off the companion. The tint wins: when a visible host covers the tube's monitor we
+        /// insert directly BELOW it instead — still topmost, still above every ordinary app window,
+        /// permanently under the tint. Runs on the tube's OWN thread (AvatarOwnThread), which is why
+        /// the host handle comes from CompositorEngine's lock-free anchor snapshot rather than from
+        /// its UI-thread-only host dictionaries.
         /// </summary>
         private void ReassertTopmost()
         {
@@ -1191,10 +1206,59 @@ namespace ConditioningControlPanel
             // Don't fight with pop quiz for topmost z-order
             if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
 
-            // Use Win32 SetWindowPos with HWND_TOPMOST to force topmost z-order
-            // This is more reliable than WPF's Topmost property across monitor/focus changes
-            SetWindowPos(_tubeHandle, HWND_TOPMOST, 0, 0, 0, 0,
+            var insertAfter = HWND_TOPMOST;
+            if (Services.OverlayService.ResolveZOrderAction(
+                    hasVideo: false, isVideoWindow: false, aboveVideo: false, needsPin: true, force: true,
+                    yieldToCompositorHost: TryGetCompositorHostAnchor(out var hostHwnd))
+                == Services.OverlayService.ZOrderAction.PinBelowCompositorHost)
+            {
+                // Already sitting directly under the host? Then the invariant holds and we skip the
+                // call entirely — this is a layered window, and poking WM_WINDOWPOSCHANGING twice a
+                // second for nothing is exactly the kind of churn that perturbs the emote crossfades.
+                if (GetWindow(hostHwnd, GW_HWNDNEXT) == _tubeHandle) return;
+                insertAfter = hostHwnd;
+            }
+
+            // Use Win32 SetWindowPos to force the z-order slot. More reliable than WPF's Topmost
+            // property across monitor/focus changes; inserting after a topmost host keeps our own
+            // WS_EX_TOPMOST set, so the tube never drops out of the widget band.
+            SetWindowPos(_tubeHandle, insertAfter, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+
+        /// <summary>
+        /// The compositor host window the detached tube must sit under, if any: the visible
+        /// main-surface host covering the tube's centre point (physical px, the space the anchor
+        /// snapshot is published in).
+        ///
+        /// Deliberately keyed on the HOST EXISTING, not on the tint being active — an empty host is
+        /// fully transparent and click-through, so parking below it costs nothing, whereas testing
+        /// "is the tint rendering here" would re-introduce the same flip-flop the bug is about
+        /// (PinkTintLayer.ShouldRenderOnScreen can also gate the tint off this monitor entirely,
+        /// which is exactly a monitor where no host effect can ever cover us anyway).
+        ///
+        /// A playing mandatory video is left alone: the reconciler pins the hosts BELOW it (#497),
+        /// so yielding to a host there would drag the companion under an opaque fullscreen video —
+        /// a behaviour change #776 never asked for. In that state the tube keeps its old raise.
+        /// </summary>
+        private bool TryGetCompositorHostAnchor(out IntPtr hostHwnd)
+        {
+            hostHwnd = IntPtr.Zero;
+            try
+            {
+                if (App.Compositor is not { } engine) return false;
+                if (App.Video?.IsPlaying == true) return false;
+                if (!GetWindowRect(_tubeHandle, out var r)) return false;
+
+                int cx = r.Left + (r.Right - r.Left) / 2;
+                int cy = r.Top + (r.Bottom - r.Top) / 2;
+                var handle = engine.FindHostAnchorAt(cx, cy);
+                if (handle == 0) return false;
+
+                hostHwnd = handle;
+                return true;
+            }
+            catch { return false; }   // never let a z-order hint break the tick
         }
 
         /// <summary>

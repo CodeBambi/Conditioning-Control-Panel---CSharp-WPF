@@ -48,8 +48,10 @@
 
   <ItemGroup>
     <!-- UI Framework -->
-    <PackageReference Include="Buttplug" Version="3.0.1" />
-    <PackageReference Include="Buttplug.Client.Connectors.WebsocketConnector" Version="3.0.1" />
+    <!-- Buttplug 5.x is one package: Core + Client + WebSocket connector (the separate
+         Buttplug.Client.Connectors.WebsocketConnector package is 3.x-only and is gone).
+         5.0.1 speaks Buttplug message spec v4 (OutputCmd/InputCmd). -->
+    <PackageReference Include="Buttplug" Version="5.0.1" />
     <PackageReference Include="DiscordRichPresence" Version="1.6.1.70" />
     <PackageReference Include="LibVLCSharp.WPF" Version="3.8.5" />
     <!-- Pin WindowsAppSDK (transitive from LibVLCSharp) and exclude its win10-* runtime assets
@@ -97,7 +99,8 @@
     <PackageReference Include="Serilog.Sinks.Console" Version="5.0.0" />
     
     <!-- JSON Settings -->
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <!-- 13.0.4 is the floor required by Buttplug 5.0.1 (NU1605 otherwise). Patch bump only. -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     
     <!-- Security / Encryption -->
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
@@ -358,9 +361,104 @@
     <Resource Include="Resources\quests\*.png" />
   </ItemGroup>
 
+  <!-- ==========================================================================================
+       CONTENT PACKS — what NO LONGER ships in the installer.
+       See docs/CONTENT_PACKS_PLAN.md §1 (exact table) and §6 (build changes).
+
+       ~1.36 GB of version-stable audio (plus the two bundled .ccpmod archives, removed further
+       down) leaves the publish tree and is instead zipped by Scripts\build-content-packs.ps1,
+       hosted on the vX.Y.0 GitHub release, and downloaded at runtime into
+       %LOCALAPPDATA%\ConditioningControlPanel\content\.
+
+       These four properties are the single source of truth and are consumed in BOTH places the
+       content is declared: the <Content> itemgroups below AND the CopyContentAfterPublish target
+       at the bottom of this file. The *Abs variants are the same patterns made absolute, because
+       that target's Include is absolute too — keep each pair mirrored. If you change anything
+       here, change Scripts\build-content-packs.ps1 to match, or the files will exist in neither
+       the installer nor a pack.
+
+       Invariants:
+         * ALL manifests stay in-box: every *.json (bark_rules, mantras, avatar_manifest,
+           vo_manifest, sfx_manifest, vn\manifest.json) and DTRH barks\manifest.js.
+           A missing manifest is not a graceful degrade — it's a hang or a crash.
+         * Audio that STAYS (nothing below may match it): Resources\sounds root files,
+           bubbles\, chaos\, mindwipe\, braindrain\, companion_audio root (egg_*),
+           Resources\sub_audio\, Resources\AwarenessPresets\audio\.
+         * builtin-sissyhypno moves its portraits (*.png) too — its whole payload except the
+           three .json manifests (plan §1, "mod-sissy").
+         * dtrh\assets\**\*.mp3 is a deliberate catch-all: every mp3 under it moves (per-persona
+           barks, bubbles sfx/voices/drops, vn\vo, audio\drone1). The art (png/webp/gif/webm)
+           and code (js/json) stay.
+
+       Extension audit 2026-08-03 — the only extensions present in the moving folders are
+       .mp3 (everywhere), .wav (Resources\sounds\flashes_audio only) and .png
+       (builtin-sissyhypno\portraits only). The three builtin-* mod folders nevertheless list
+       the full $AudioExt set (.mp3/.wav/.ogg/.m4a) that build-content-packs.ps1 packs from
+       them, so a future .ogg there cannot ship in-box AND in a pack (double-ship: the in-box
+       copy permanently shadows the downloaded one, because ContentLocator probes BaseDirectory
+       first). installer.iss [InstallDelete] carries the same extension list.
+
+       DRIFT IS ENFORCED, NOT TRUSTED: build-content-packs.ps1 hardcodes a mirror of the two
+       Exclude properties below and hard-fails the pack build if the stripped set and the packed
+       set disagree in either direction. Edit these properties → edit $CsprojStripPatterns in
+       that script in the same commit, or the next pack build stops with a diff.
+       ========================================================================================== -->
+  <PropertyGroup>
+    <ContentPackSoundsExclude>
+      Resources\sounds\flashes_audio\**\*.mp3;
+      Resources\sounds\flashes_audio\**\*.wav;
+      Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.mp3;
+      Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.wav;
+      Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.ogg;
+      Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.m4a;
+      Resources\sounds\companion_audio\mods\builtin-locked\**\*.mp3;
+      Resources\sounds\companion_audio\mods\builtin-locked\**\*.wav;
+      Resources\sounds\companion_audio\mods\builtin-locked\**\*.ogg;
+      Resources\sounds\companion_audio\mods\builtin-locked\**\*.m4a;
+      Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.mp3;
+      Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.wav;
+      Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.ogg;
+      Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.m4a;
+      Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.png
+    </ContentPackSoundsExclude>
+    <!-- NOTE: $(MSBuildProjectDirectory), not $(ProjectDir). ProjectDir is defined by
+         Microsoft.Common.CurrentVersion.targets, which the SDK imports AFTER this file's body,
+         so it evaluates to empty here (it only works inside a <Target>, like the one below). -->
+    <ContentPackSoundsExcludeAbs>
+      $(MSBuildProjectDirectory)\Resources\sounds\flashes_audio\**\*.mp3;
+      $(MSBuildProjectDirectory)\Resources\sounds\flashes_audio\**\*.wav;
+      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.mp3;
+      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.wav;
+      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.ogg;
+      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.m4a;
+      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-locked\**\*.mp3;
+      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-locked\**\*.wav;
+      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-locked\**\*.ogg;
+      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-locked\**\*.m4a;
+      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.mp3;
+      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.wav;
+      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.ogg;
+      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.m4a;
+      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.png
+    </ContentPackSoundsExcludeAbs>
+    <ContentPackWebExclude>
+      Resources\web\intake\assets\vo\**\*.mp3;
+      Resources\web\intake\assets\sfx\**\*.mp3;
+      Resources\web\intake\assets\music\**\*.mp3;
+      Resources\web\dtrh\assets\**\*.mp3
+    </ContentPackWebExclude>
+    <ContentPackWebExcludeAbs>
+      $(MSBuildProjectDirectory)\Resources\web\intake\assets\vo\**\*.mp3;
+      $(MSBuildProjectDirectory)\Resources\web\intake\assets\sfx\**\*.mp3;
+      $(MSBuildProjectDirectory)\Resources\web\intake\assets\music\**\*.mp3;
+      $(MSBuildProjectDirectory)\Resources\web\dtrh\assets\**\*.mp3
+    </ContentPackWebExcludeAbs>
+  </PropertyGroup>
+
   <ItemGroup>
-    <!-- Sound files - must be copied to output and publish for file system access -->
-    <Content Include="Resources\sounds\**\*">
+    <!-- Sound files - must be copied to output and publish for file system access.
+         Audio listed in $(ContentPackSoundsExclude) ships as a downloadable pack instead. -->
+    <Content Include="Resources\sounds\**\*" Exclude="$(ContentPackSoundsExclude)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
@@ -368,9 +466,12 @@
     <!-- Endless three.js "rabbit hole" tunnel background (HTML/JS + vendored three.js) and the
          DtRH browser game (Resources\web\dtrh). Served to a WebView2 via virtual hosts, so they
          must live on disk in the output. Remove from the default None glob first so a no-copy
-         None item can never suppress the Content copy for new extensions (woff2/json/etc). -->
+         None item can never suppress the Content copy for new extensions (woff2/json/etc).
+         Audio listed in $(ContentPackWebExclude) ships as a downloadable pack instead. -->
     <None Remove="Resources\web\**\*" />
-    <Content Include="Resources\web\**\*" Exclude="Resources\web\**\CLAUDE.md;Resources\web\**\CAPTCHA_*.md;Resources\web\**\BUILD_PLAN.md">
+    <Content Include="Resources\web\**\*"
+             Exclude="Resources\web\**\CLAUDE.md;Resources\web\**\CAPTCHA_*.md;Resources\web\**\BUILD_PLAN.md;
+                      $(ContentPackWebExclude)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
@@ -415,25 +516,16 @@
     </Content>
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- Bundled built-in mod packages. ModService extracts these on first launch
-         into %APPDATA%/ConditioningControlPanel/builtin_mods/<id>/ and registers
-         them as non-deletable built-in mods (IsBuiltIn=true) so their full asset
-         set resolves via InstalledPath instead of the neutral baseline. -->
-    <Content Include="DroneMod\drone-mode.ccpmod">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
-    </Content>
-    <!-- Locked ships a resources-only bundle (no mod.json); its manifest stays in
-         code (BuiltInMods.CreateLocked). ModService.ExtractBundledResourceMods()
-         extracts it and adopts the folder as InstalledPath for assets only. -->
-    <Content Include="LockedMod\locked-resources.ccpmod">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
-    </Content>
-  </ItemGroup>
+  <!-- Bundled built-in mod packages — REMOVED FROM THE BUILD (docs/CONTENT_PACKS_PLAN.md §1/§6).
+       DroneMod\drone-mode.ccpmod (184 MB) and LockedMod\locked-resources.ccpmod (125 MB) used to
+       be <Content> here and were extracted by ModService on first launch into
+       %LOCALAPPDATA%\ConditioningControlPanel\builtin_mods\<id>\. They now ship inside the
+       `mod-drone` / `mod-locked` release packs at the in-zip path packs\<name>.ccpmod (see
+       Scripts\build-content-packs.ps1), landing at
+       %LOCALAPPDATA%\ConditioningControlPanel\content\packs\<name>.ccpmod, which the mod-install
+       wave (plan §3, phase C) extracts through the bundled-builtin path. The source files stay in
+       the repo under DroneMod\ / LockedMod\ — they are the pack build inputs, just not build
+       output any more. installer.iss [InstallDelete] removes the stale copies from upgraders. -->
 
   <ItemGroup>
     <Folder Include="Themes\" />
@@ -442,8 +534,13 @@
   <!-- Ensure all content files are copied during publish -->
   <Target Name="CopyContentAfterPublish" AfterTargets="Publish">
     <ItemGroup>
-      <SoundFiles Include="$(ProjectDir)Resources\sounds\**\*" />
-      <WebFiles Include="$(ProjectDir)Resources\web\**\*" Exclude="$(ProjectDir)Resources\web\**\CLAUDE.md;$(ProjectDir)Resources\web\**\CAPTCHA_*.md;$(ProjectDir)Resources\web\**\BUILD_PLAN.md" />
+      <!-- The two content-pack excludes below MUST mirror the <Content> items above, or this
+           target silently re-copies the stripped audio back into the publish tree.
+           See docs/CONTENT_PACKS_PLAN.md §6. -->
+      <SoundFiles Include="$(ProjectDir)Resources\sounds\**\*" Exclude="$(ContentPackSoundsExcludeAbs)" />
+      <WebFiles Include="$(ProjectDir)Resources\web\**\*"
+                Exclude="$(ProjectDir)Resources\web\**\CLAUDE.md;$(ProjectDir)Resources\web\**\CAPTCHA_*.md;$(ProjectDir)Resources\web\**\BUILD_PLAN.md;
+                         $(ContentPackWebExcludeAbs)" />
       <SubAudioFiles Include="$(ProjectDir)Resources\sub_audio\**\*" />
       <AwarenessPresetFiles Include="$(ProjectDir)Resources\AwarenessPresets\**\*" />
       <DeeperDemoFiles Include="$(ProjectDir)Resources\DeeperDemos\**\*" />

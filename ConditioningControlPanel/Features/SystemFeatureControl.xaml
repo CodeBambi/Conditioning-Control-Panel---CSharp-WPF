@@ -76,6 +76,21 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str setting_browser_video_engine}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock Text="{loc:Str tooltip_browser_video_engine}"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                   TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" x:Name="ChkBrowserVideoEngine"
+                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                              Checked="ChkBrowserVideoEngine_Changed" Unchecked="ChkBrowserVideoEngine_Changed"/>
+                </Grid>
+                <Grid Margin="0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
                         <TextBlock Text="{loc:Str setting_win_start}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
                         <TextBlock Text="{loc:Str tooltip_launch_automatically_when_windows_starts}"
                                    Foreground="{DynamicResource TextMutedBrush}" FontSize="11"

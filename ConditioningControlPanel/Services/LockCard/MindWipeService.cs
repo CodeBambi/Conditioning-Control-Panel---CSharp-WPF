@@ -318,7 +318,11 @@ namespace ConditioningControlPanel.Services
         private void StartNextLoopPlayer()
         {
             if (!_isRunning || !_loopMode || string.IsNullOrEmpty(_loopFilePath)) return;
-            
+
+            // Endpoint is down — the crossfade loop would otherwise re-open a device every clip
+            // length forever, blocking the UI thread inside waveOutOpen each time (#778/#779).
+            if (App.Audio?.IsOutputSuppressed == true) return;
+
             try
             {
                 if (_usePlayerA)
@@ -362,10 +366,12 @@ namespace ConditioningControlPanel.Services
                 
                 // Alternate for next iteration
                 _usePlayerA = !_usePlayerA;
+                App.Audio?.NoteOutputSuccess();
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "MindWipe: Error starting loop player");
+                App.Audio?.NoteOutputFailure("mindwipe-loop", ex.Message);
             }
         }
         
@@ -515,11 +521,13 @@ namespace ConditioningControlPanel.Services
         
         private void PlayAudio(string filePath)
         {
+            if (App.Audio?.IsOutputSuppressed == true) return; // endpoint down — stay quiet, don't spin
+
             try
             {
                 // Stop any currently playing audio
                 StopCurrentAudio();
-                
+
                 _audioReader = new AudioFileReader(filePath);
                 _audioReader.Volume = (float)_volume;
 
@@ -538,10 +546,13 @@ namespace ConditioningControlPanel.Services
                 };
                 
                 _waveOut.Play();
+                App.Audio?.NoteOutputSuccess();
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "MindWipe: Error playing audio file {Path}", filePath);
+                App.Audio?.NoteOutputFailure("mindwipe", ex.Message);
+                StopCurrentAudio(); // Init/Play threw with the fields already assigned — free them now
             }
         }
         

@@ -88,43 +88,13 @@ public static class ChaosSfx
         catch { return scale; }
     }
 
-    // Voice cap: each cue burns a Task.Run thread + its own WaveOutEvent for the clip's
-    // duration. "Fire rarely" stopped holding once chaos pops/subliminal payloads routed
-    // through here — WER dumps 27800 (0xc0000005) and 24012 (0xc0000409) both died with
-    // 6-15 threads inside this method mid audio storm. Excess cues are dropped, not
-    // queued: a one-shot SFX played late is worse than silence.
-    private const int MAX_VOICES = 6;
-    private static int _activeVoices;
-
+    // Voice cap: the local cap that used to live here is now enforced (globally, across every
+    // audio path in the app) by AudioService.PlayOneShot — which also owns the device lifetime,
+    // the failure circuit breaker and disposal. The old inline version burned a Task.Run thread
+    // PLUS NAudio's own playback thread for each cue; WER dumps 27800 (0xc0000005) and 24012
+    // (0xc0000409) both died with 6-15 threads inside this method mid audio storm.
     private static void PlayAsync(string path, float volume)
     {
-        if (Interlocked.Increment(ref _activeVoices) > MAX_VOICES)
-        {
-            Interlocked.Decrement(ref _activeVoices);
-            App.Logger?.Debug("ChaosSfx: voice cap ({Max}) reached, dropping {Path}", MAX_VOICES, path);
-            return;
-        }
-        Task.Run(() =>
-        {
-            WaveOutEvent? outputDevice = null;
-            AudioFileReader? audioFile = null;
-            try
-            {
-                audioFile = new AudioFileReader(path) { Volume = volume };
-                outputDevice = new WaveOutEvent();
-                App.Audio?.ApplyPreferredDevice(outputDevice);   // honour the user's output device
-                outputDevice.Init(audioFile);
-                outputDevice.Play();
-                while (outputDevice.PlaybackState == PlaybackState.Playing)
-                    Thread.Sleep(40);
-            }
-            catch (Exception ex) { App.Logger?.Warning("ChaosSfx playback failed: {E}", ex.Message); }
-            finally
-            {
-                try { outputDevice?.Dispose(); } catch { }
-                try { audioFile?.Dispose(); } catch { }
-                Interlocked.Decrement(ref _activeVoices);
-            }
-        });
+        App.Audio?.PlayOneShot(path, volume, "chaos-sfx");
     }
 }

@@ -170,8 +170,7 @@ namespace ConditioningControlPanel
         
         // Avatar Tube Window
         private AvatarTubeWindow? _avatarTubeWindow;
-        private WaveOutEvent? _levelUpSoundDevice;
-        private AudioFileReader? _levelUpSoundFile;
+        private Services.AudioPlaybackHandle? _levelUpSoundHandle;
         private bool _avatarWasAttachedBeforeMaximize = false;
         private bool _avatarWasAttachedBeforeBrowserFullscreen = false;
 
@@ -439,7 +438,15 @@ namespace ConditioningControlPanel
             App.BouncingText.Stop();
             App.Overlay.Stop();
 
-            // v6.0: fresh installs land on CCP Default (neutral baseline). No first-launch mod picker.
+            // v6.0: fresh installs land on CCP Default (neutral baseline).
+            // Content packs (docs/CONTENT_PACKS_PLAN.md §4 + §5): the mod media no longer ships in the
+            // installer, so the picker is back — for BOTH populations. First launch gets it below,
+            // before the tutorial; every ALREADY-Welcomed install gets it from the else branch,
+            // because the modular installer's [InstallDelete] sweep just took their bundled mod audio
+            // away and they would otherwise never be offered it back. ModPickerDialog.ShowIfNeeded
+            // owns the one-shot guards (ModPickerShown / IsFullInstall / null service), so it no-ops
+            // for everyone who should not see it — including every install that still has its
+            // bundled audio.
 
             // Show welcome dialog on first launch, then start tutorial
             // But delay tutorial if update dialog is being shown
@@ -464,6 +471,12 @@ namespace ConditioningControlPanel
                     // Only start tutorial if update dialog is done
                     if (!App.IsUpdateDialogActive && IsLoaded)
                     {
+                        // Mod picker first: it is modal and the tutorial's spotlight overlay measures
+                        // THIS window's controls, so the two must never be on screen together. No-ops
+                        // on a full/dev install, when the pack service is missing, or after the
+                        // ModPickerShown flag is set.
+                        ModPickerDialog.ShowIfNeeded(this);
+
                         StartTutorial();
                     }
                     // Normal, NOT Loaded: this app keeps the dispatcher busy enough (compositor
@@ -476,6 +489,51 @@ namespace ConditioningControlPanel
                 // Not first launch - check if we need to show "What's New" after an update
                 ShowWhatsNewIfNeeded();
                 TryPresentSeasonRecap();
+
+                // Upgraders into the modular build get the SAME picker, once, at the equivalent safe
+                // point: after the update dialog AND the What's New / season-recap dialogs are done,
+                // and once this window has actually loaded. No tutorial follows here - existing users
+                // already had it.
+                Dispatcher.BeginInvoke(new Action(async () =>
+                {
+                    try
+                    {
+                        // Let the startup dialogs that were queued just above actually claim the
+                        // flag before we start watching it - What's New posts itself and has not
+                        // raised IsStartupDialogShowing yet at this instant.
+                        await Task.Delay(1500);
+
+                        // Same waiting idiom as the first-launch branch, plus IsStartupDialogShowing:
+                        // What's New is modal and posts itself onto the dispatcher, so it can still be
+                        // pending when this runs. Every modular upgrader ARRIVES with a What's New to
+                        // read, so wait out minutes of reading, not seconds - at 30s a user still on
+                        // the patch notes silently lost the picker until the next launch (play-test
+                        // scenario C caught exactly that). Past 5 min we still defer to next launch,
+                        // which ModPickerShown=false keeps armed.
+                        for (int i = 0; i < 600 && (App.IsUpdateDialogActive || IsStartupDialogShowing); i++)
+                        {
+                            await Task.Delay(500);
+                        }
+
+                        for (int i = 0; i < 20 && !IsLoaded; i++)
+                        {
+                            await Task.Delay(500);
+                        }
+
+                        if (!App.IsUpdateDialogActive && !IsStartupDialogShowing && IsLoaded)
+                        {
+                            // Pre-ticks the card for the mod they were already running, so one press
+                            // restores what the installer removed.
+                            ModPickerDialog.ShowIfNeeded(this, preselectActiveMod: true);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "Failed to offer the mod picker to an upgrading install");
+                    }
+                    // Normal, NOT Loaded - Loaded-priority work is starved in this app and silently
+                    // never runs (same reason as the first-launch branch above).
+                }), System.Windows.Threading.DispatcherPriority.Normal);
             }
 
             // Initialize scheduler timer (checks every 30 seconds)
@@ -555,38 +613,9 @@ namespace ConditioningControlPanel
                 }
             });
 
-            // Close the Exclusives submenu popup on Alt+Tab / focus loss.
-            // MouseLeave doesn't fire during Alt+Tab, so without this the popup
-            // stays pinned on top of whatever app the user switched to.
-            Deactivated += (_, __) =>
-            {
-                if (ExclusivesSubmenuPopup != null && ExclusivesSubmenuPopup.IsOpen)
-                {
-                    _exclusivesMenuCloseTimer?.Stop();
-                    _exclusivesPinned = false;
-                    ExclusivesSubmenuPopup.IsOpen = false;
-                }
-            };
-
-            // The Exclusives popup uses StaysOpen=True (to avoid WPF's mouse-capture
-            // quirk where StaysOpen=False swallows clicks on the placement target
-            // and holds capture until the window loses+regains focus). We close
-            // it manually here when the user clicks outside both the launcher AND
-            // the popup content. Clicks inside the popup DO reach this handler
-            // (input is routed through the main window), so we must also bail on
-            // them — otherwise the popup closes before the sub-item Click can
-            // run and the tab-switch is swallowed.
-            PreviewMouseDown += (_, e) =>
-            {
-                if (ExclusivesSubmenuPopup == null || !ExclusivesSubmenuPopup.IsOpen) return;
-                if (BtnPatreonExclusives == null) return;
-                if (e.OriginalSource is not DependencyObject src) return;
-                if (IsVisualDescendant(src, BtnPatreonExclusives)) return;
-                if (ExclusivesSubmenuPopup.Child is DependencyObject popupChild
-                    && IsVisualDescendant(src, popupChild)) return;
-                _exclusivesPinned = false;
-                ExclusivesSubmenuPopup.IsOpen = false;
-            };
+            // (The Exclusives submenu popup and its Alt+Tab / outside-click close
+            // handlers were removed when the launcher became a real tab — see
+            // MainWindow.Exclusives.cs.)
 
             // velvet-mosaic: highlight dashboard cards whose feature is enabled, and
             // keep them in sync when settings change anywhere else.
@@ -688,52 +717,17 @@ namespace ConditioningControlPanel
                 // Stop any previous level up sound still playing
                 StopLevelUpSound();
 
-                Task.Run(() =>
-                {
-                    try
-                    {
-                        var audioFile = new AudioFileReader(soundPath);
-                        var outputDevice = new WaveOutEvent();
-                        App.Audio?.ApplyPreferredDevice(outputDevice);
+                var masterVolume = App.Settings.Current.MasterVolume / 100f;
+                var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.2625f;
 
-                        var masterVolume = App.Settings.Current.MasterVolume / 100f;
-                        var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.2625f;
-                        audioFile.Volume = Math.Max(0.01f, curvedVolume);
+                // AudioService owns the device + its disposal (deferred past NAudio's own unwind,
+                // which is what the old "Handle is not initialized" workaround here was for), and
+                // it never opens the device on the dispatcher — #778/#779.
+                // Stop() on an already-finished handle is a no-op, so no completion bookkeeping is
+                // needed — StopLevelUpSound above already ran before this one started.
+                _levelUpSoundHandle = App.Audio?.PlayOneShot(soundPath, Math.Max(0.01f, curvedVolume), "level-up");
 
-                        outputDevice.Init(audioFile);
-                        outputDevice.PlaybackStopped += (s, e) =>
-                        {
-                            // Defer disposal — disposing inside PlaybackStopped causes
-                            // "Handle is not initialized" when NAudio's internal cleanup
-                            // races with our Dispose call.
-                            Task.Run(() =>
-                            {
-                                try
-                                {
-                                    Thread.Sleep(50); // Let NAudio finish its internal cleanup
-                                    outputDevice.Dispose();
-                                    audioFile.Dispose();
-                                    if (_levelUpSoundDevice == outputDevice)
-                                    {
-                                        _levelUpSoundDevice = null;
-                                        _levelUpSoundFile = null;
-                                    }
-                                }
-                                catch (Exception) { }
-                            });
-                        };
-
-                        _levelUpSoundDevice = outputDevice;
-                        _levelUpSoundFile = audioFile;
-                        outputDevice.Play();
-
-                        App.Logger?.Debug("Level up sound played from: {Path}", soundPath);
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Warning("Failed to play level up sound: {Error}", ex.Message);
-                    }
-                });
+                App.Logger?.Debug("Level up sound played from: {Path}", soundPath);
             }
             catch (Exception ex)
             {
@@ -745,11 +739,8 @@ namespace ConditioningControlPanel
         {
             try
             {
-                _levelUpSoundDevice?.Stop();
-                _levelUpSoundDevice?.Dispose();
-                _levelUpSoundFile?.Dispose();
-                _levelUpSoundDevice = null;
-                _levelUpSoundFile = null;
+                _levelUpSoundHandle?.Stop();
+                _levelUpSoundHandle = null;
             }
             catch { }
         }
@@ -821,6 +812,32 @@ namespace ConditioningControlPanel
             // those presses can't fall into the "not running" branch and exit the whole app.
             // Reactivates on its own once the game window closes (IsActive flips false).
             if (Services.Chaos.DtrhHostService.IsActive) { VideoDiag.Log("PANIC", "handed off to the DtRH web game window"); return; }
+
+            // For You feed: a two-rung ladder. Press 1 drops ghost mode if the feed is parked as a
+            // see-through mirror (otherwise the user is staring at a translucent pane they cannot
+            // grab — the mouse passes straight through it, its own close button included), press 2
+            // closes the feed. The press is consumed either way (no fall-through into the "not
+            // running" exit branch). The panic key reaches us regardless of focus: it rides the
+            // WH_KEYBOARD_LL hook in OnGlobalKeyPressed, not a window-level handler.
+            if (Services.Fyp.FypHostService.IsActive)
+            {
+                if (Services.Fyp.FypHostService.IsGhosted)
+                {
+                    VideoDiag.Log("PANIC", "For You feed: ghost mode dropped (press again to close)");
+                    Services.Fyp.FypHostService.ExitGhost();
+                    return;
+                }
+                if (Services.Fyp.FypHostService.RecentlyUnghosted)
+                {
+                    // The reflexive double-tap right after rung 1 — swallow it instead of
+                    // taking the whole feed down (play-tested: one Esc-Esc closed everything).
+                    VideoDiag.Log("PANIC", "For You feed: press ignored (just un-ghosted)");
+                    return;
+                }
+                VideoDiag.Log("PANIC", "closing the For You feed window");
+                Services.Fyp.FypHostService.Close();
+                return;
+            }
 
             // #735 "grace pause": while a mandatory video is really on screen, the FIRST panic press
             // pauses it behind a small Paused/Resume card instead of stopping the engine — the user
@@ -2319,8 +2336,9 @@ namespace ConditioningControlPanel
             }
             finally { _isLoading = false; }
 
-            // Initialize Audio Sync checkbox and sliders
-            HapticsTab.ChkHapticAudioSync.IsChecked = App.Settings.Current.Haptics.AudioSync.Enabled;
+            // Audio-sync ENABLE moved onto the Haptics tab's routing matrix (Media > Audio sync)
+            // in the Phase E rebuild, and the Haptics tab's own delay/power sliders are loaded by
+            // LoadHapticsSettingsToUi(). Only the Settings-tab mirrors are initialised here.
             if (SettingsTab.SliderAudioSyncLatency != null)
             {
                 SettingsTab.SliderAudioSyncLatency.Value = App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs;
@@ -2337,28 +2355,6 @@ namespace ConditioningControlPanel
             if (SettingsTab.AudioSyncLatencyPanel != null)
             {
                 SettingsTab.AudioSyncLatencyPanel.Visibility = App.Settings.Current.Haptics.AudioSync.Enabled
-                    ? Visibility.Visible : Visibility.Collapsed;
-            }
-
-            // Initialize Video Haptic Sync enhanced UI sliders
-            if (HapticsTab.SliderVideoHapticDelay != null)
-            {
-                HapticsTab.SliderVideoHapticDelay.Value = App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs;
-                var latencyMs = App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs;
-                var sign = latencyMs >= 0 ? "+" : "";
-                if (HapticsTab.TxtVideoHapticDelay != null)
-                    HapticsTab.TxtVideoHapticDelay.Text = $"{sign}{latencyMs}ms";
-            }
-            if (HapticsTab.SliderVideoHapticPower != null)
-            {
-                var intensityPercent = (int)(App.Settings.Current.Haptics.AudioSync.LiveIntensity * 100);
-                HapticsTab.SliderVideoHapticPower.Value = intensityPercent;
-                if (HapticsTab.TxtVideoHapticPower != null)
-                    HapticsTab.TxtVideoHapticPower.Text = $"{intensityPercent}%";
-            }
-            if (HapticsTab.VideoHapticSyncSliders != null)
-            {
-                HapticsTab.VideoHapticSyncSliders.Visibility = App.Settings.Current.Haptics.AudioSync.Enabled
                     ? Visibility.Visible : Visibility.Collapsed;
             }
 

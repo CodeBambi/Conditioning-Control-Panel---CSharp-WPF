@@ -262,73 +262,12 @@ namespace ConditioningControlPanel
             ProgressionTab.ChkRampLinkSubAudio.IsChecked = s.RampLinkSubliminalAudio;
             ProgressionTab.ChkEndAtRamp.IsChecked = s.EndSessionOnRampComplete;
 
-            // Haptics
-            HapticsTab.ChkHapticsEnabled.IsChecked = s.Haptics.Enabled;
-            HapticsTab.SliderHapticIntensity.Value = s.Haptics.GlobalIntensity * 100;
-
-            // Set provider combo box first
-            foreach (System.Windows.Controls.ComboBoxItem item in HapticsTab.CmbHapticProvider.Items)
-            {
-                if (item.Tag?.ToString() == s.Haptics.Provider.ToString())
-                {
-                    HapticsTab.CmbHapticProvider.SelectedItem = item;
-                    break;
-                }
-            }
-
-            // Then set URL based on provider
-            HapticsTab.TxtHapticUrl.Text = s.Haptics.Provider switch
-            {
-                Services.Haptics.HapticProviderType.Lovense => s.Haptics.LovenseUrl,
-                Services.Haptics.HapticProviderType.Buttplug => s.Haptics.ButtplugUrl,
-                _ => s.Haptics.LovenseUrl
-            };
-
-            // Set hint text based on provider
-            HapticsTab.TxtHapticUrlHint.Text = s.Haptics.Provider switch
-            {
-                Services.Haptics.HapticProviderType.Lovense => "Lovense: Enter IP from Lovense Remote → Settings → Game Mode (http://IP:30010)",
-                Services.Haptics.HapticProviderType.Buttplug => "Buttplug: Start Intiface Central, use default ws://localhost:12345",
-                _ => "Lovense: Enter IP from Lovense Remote → Settings → Game Mode (http://IP:30010)"
-            };
-
-            // Auto-connect setting
-            HapticsTab.ChkHapticAutoConnect.IsChecked = s.Haptics.AutoConnect;
-
-            // Per-feature haptic settings
-            HapticsTab.ChkHapticBubble.IsChecked = s.Haptics.BubblePopEnabled;
-            HapticsTab.SliderHapticBubble.Value = s.Haptics.BubblePopIntensity * 100;
-            HapticsTab.ChkHapticFlashDisplay.IsChecked = s.Haptics.FlashDisplayEnabled;
-            HapticsTab.SliderHapticFlashDisplay.Value = s.Haptics.FlashDisplayIntensity * 100;
-            HapticsTab.ChkHapticFlashClick.IsChecked = s.Haptics.FlashClickEnabled;
-            HapticsTab.SliderHapticFlashClick.Value = s.Haptics.FlashClickIntensity * 100;
-            HapticsTab.ChkHapticVideo.IsChecked = s.Haptics.VideoEnabled;
-            HapticsTab.SliderHapticVideo.Value = s.Haptics.VideoIntensity * 100;
-            HapticsTab.ChkHapticTargetHit.IsChecked = s.Haptics.TargetHitEnabled;
-            HapticsTab.SliderHapticTargetHit.Value = s.Haptics.TargetHitIntensity * 100;
-            HapticsTab.ChkHapticSubliminal.IsChecked = s.Haptics.SubliminalEnabled;
-            HapticsTab.SliderHapticSubliminal.Value = s.Haptics.SubliminalIntensity * 100;
-            HapticsTab.ChkHapticLevelUp.IsChecked = s.Haptics.LevelUpEnabled;
-            HapticsTab.SliderHapticLevelUp.Value = s.Haptics.LevelUpIntensity * 100;
-            HapticsTab.ChkHapticAchievement.IsChecked = s.Haptics.AchievementEnabled;
-            HapticsTab.SliderHapticAchievement.Value = s.Haptics.AchievementIntensity * 100;
-            HapticsTab.ChkHapticBouncingText.IsChecked = s.Haptics.BouncingTextEnabled;
-            HapticsTab.SliderHapticBouncingText.Value = s.Haptics.BouncingTextIntensity * 100;
-            HapticsTab.ChkHapticDtrh.IsChecked = s.Haptics.DtrhEnabled;
-            HapticsTab.SliderHapticDtrh.Value = s.Haptics.DtrhIntensity * 100;
-            HapticsTab.SliderHapticDtrhAmbient.Value = s.Haptics.DtrhAmbientIntensity * 100;
-            HapticsTab.CmbHapticDtrhDensity.SelectedIndex = Math.Clamp(s.Haptics.DtrhDensity, 0, 2);
-
-            // Per-feature haptic mode dropdowns
-            HapticsTab.CmbHapticBubbleMode.SelectedIndex = (int)s.Haptics.BubblePopMode;
-            HapticsTab.CmbHapticFlashDisplayMode.SelectedIndex = (int)s.Haptics.FlashDisplayMode;
-            HapticsTab.CmbHapticFlashClickMode.SelectedIndex = (int)s.Haptics.FlashClickMode;
-            HapticsTab.CmbHapticVideoMode.SelectedIndex = (int)s.Haptics.VideoMode;
-            HapticsTab.CmbHapticTargetHitMode.SelectedIndex = (int)s.Haptics.TargetHitMode;
-            HapticsTab.CmbHapticSubliminalMode.SelectedIndex = (int)s.Haptics.SubliminalMode;
-            HapticsTab.CmbHapticLevelUpMode.SelectedIndex = (int)s.Haptics.LevelUpMode;
-            HapticsTab.CmbHapticAchievementMode.SelectedIndex = (int)s.Haptics.AchievementMode;
-            HapticsTab.CmbHapticBouncingTextMode.SelectedIndex = (int)s.Haptics.BouncingTextMode;
+            // Haptics — the whole tab loads itself now (MainWindow/MainWindow.Haptics.cs).
+            // The 30-odd per-control assignments that used to live here died with the Phase E
+            // rebuild: the routing matrix is data-bound to HapticSettingsV2, so there is nothing
+            // left to copy into it by hand. The provider combo (and its Mock-vs-blank fallback
+            // dance) is gone too — providers are per-provider checkboxes now.
+            LoadHapticsSettingsToUi();
 
             // Keyword Triggers
             {
@@ -441,18 +380,9 @@ namespace ConditioningControlPanel
             if (ProgressionTab.TxtRampDuration != null) ProgressionTab.TxtRampDuration.Text = $"{(int)ProgressionTab.SliderRampDuration.Value} min";
             if (ProgressionTab.TxtMultiplier != null) ProgressionTab.TxtMultiplier.Text = $"{ProgressionTab.SliderMultiplier.Value:F1}x";
 
-            // Haptic sliders
-            if (HapticsTab.TxtHapticIntensity != null) HapticsTab.TxtHapticIntensity.Text = $"{(int)HapticsTab.SliderHapticIntensity.Value}%";
-            if (HapticsTab.TxtHapticBubble != null) HapticsTab.TxtHapticBubble.Text = $"{(int)HapticsTab.SliderHapticBubble.Value}%";
-            if (HapticsTab.TxtHapticFlashDisplay != null) HapticsTab.TxtHapticFlashDisplay.Text = $"{(int)HapticsTab.SliderHapticFlashDisplay.Value}%";
-            if (HapticsTab.TxtHapticFlashClick != null) HapticsTab.TxtHapticFlashClick.Text = $"{(int)HapticsTab.SliderHapticFlashClick.Value}%";
-            if (HapticsTab.TxtHapticVideo != null) HapticsTab.TxtHapticVideo.Text = $"{(int)HapticsTab.SliderHapticVideo.Value}%";
-            if (HapticsTab.TxtHapticTargetHit != null) HapticsTab.TxtHapticTargetHit.Text = $"{(int)HapticsTab.SliderHapticTargetHit.Value}%";
-            if (HapticsTab.TxtHapticSubliminal != null) HapticsTab.TxtHapticSubliminal.Text = $"{(int)HapticsTab.SliderHapticSubliminal.Value}%";
-            if (HapticsTab.TxtHapticLevelUp != null) HapticsTab.TxtHapticLevelUp.Text = $"{(int)HapticsTab.SliderHapticLevelUp.Value}%";
-            if (HapticsTab.TxtHapticAchievement != null) HapticsTab.TxtHapticAchievement.Text = $"{(int)HapticsTab.SliderHapticAchievement.Value}%";
-            if (HapticsTab.TxtHapticDtrh != null) HapticsTab.TxtHapticDtrh.Text = $"{(int)HapticsTab.SliderHapticDtrh.Value}%";
-            if (HapticsTab.TxtHapticDtrhAmbient != null) HapticsTab.TxtHapticDtrhAmbient.Text = $"{(int)HapticsTab.SliderHapticDtrhAmbient.Value}%";
+            // Haptic slider labels are written by LoadHapticsSettingsToUi() and by the sliders'
+            // own ValueChanged handlers (which update their label BEFORE the _isLoading guard),
+            // so there is nothing left to mirror here.
         }
 
         private void SaveSettings()

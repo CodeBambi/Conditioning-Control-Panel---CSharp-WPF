@@ -125,6 +125,28 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>
+        /// Record a duration learned WITHOUT a LibVLC parse — the browser video engine's page
+        /// <c>meta</c> message. Every browser session therefore warms the selection-time duration
+        /// filter for free. Ignores non-positive durations (the page reports 0 for "unknowable")
+        /// and never throws.
+        /// </summary>
+        public void StoreDuration(string path, double seconds)
+        {
+            if (seconds <= 0) return;
+            try
+            {
+                var key = ComputeKey(path);
+                if (key == null) return;
+                if (_byKey.TryGetValue(key, out var existing) && Math.Abs(existing - seconds) < 0.5) return;
+                _byKey[key] = seconds;
+                _unparseable.TryRemove(key, out _);
+                _dirty = true;
+                ScheduleSave();
+            }
+            catch (Exception ex) { App.Logger?.Debug("VideoMetadataCache: StoreDuration failed for {Path}: {Error}", path, ex.Message); }
+        }
+
         private async Task<double?> ParseDurationAsync(string path, string key)
         {
             Media? media = null;

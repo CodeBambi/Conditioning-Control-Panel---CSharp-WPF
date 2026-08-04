@@ -32,6 +32,7 @@
  * ==========================================================================*/
 
 import { getLevel, onLevels } from '../engine/audioLevels.js';
+import { audioUrl, altSrcFor } from '../shared/audioSrc.js';
 
 // Kill-switch: true = this engine never mounts, chaosRun falls back to the old
 // hubGuide + vnPortrait + lesson cards byte-identically. (See cheshireGuide.js,
@@ -340,6 +341,36 @@ export function createCheshireVn(hud, opts = {}) {
   // ---------- one shared voice (mp3 -> analyser aura), vnPortrait's proven graph ----------
   let actx = null, audioEl = null, analyser = null, gain = null, vdata = null,
       voicePlaying = false, voiceEndCb = null;
+  // A VO clip lives either in the install tree or in a downloaded content pack
+  // (shared/audioSrc.js). voSwapping = an other-host retry is in flight, which
+  // holds the beat open just long enough for it to land; missing on BOTH hosts
+  // releases the beat exactly as a missing clip always did.
+  let voSwapping = false;
+  function endVoice() {
+    if (voSwapping) return;   // an other-host retry owns the beat until it settles
+    voicePlaying = false;
+    if (voiceEndCb) { const c = voiceEndCb; voiceEndCb = null; c(); }
+  }
+  // The clip failed to load/play. Try the OTHER audio host once (altSrcFor hands
+  // back null after that, and for a mod/user URL there is no alternate at all),
+  // then release the beat the way a missing clip always did.
+  function failVoice() {
+    // Re-entrant call for the SAME failure ('error' and the play() rejection both
+    // fire): the retry already in flight owns the outcome - never tear it down.
+    if (voSwapping) return;
+    // Only a SOURCE failure is worth another host (an autoplay refusal would hit
+    // the same wall twice, and el.error stays null for it).
+    const srcFailed = !!(audioEl && audioEl.error);
+    const alt = (srcFailed && voicePlaying) ? altSrcFor(audioEl) : null;
+    if (!alt) { endVoice(); return; }
+    voSwapping = true;
+    try {
+      audioEl.src = alt; audioEl.currentTime = 0;
+      const p = audioEl.play();
+      if (p && p.then) p.then(() => { voSwapping = false; }, () => { voSwapping = false; endVoice(); });
+      else voSwapping = false;
+    } catch (e) { voSwapping = false; endVoice(); }
+  }
   function ensureVoiceGraph() {
     if (actx) return;
     try {
@@ -350,10 +381,9 @@ export function createCheshireVn(hud, opts = {}) {
       vdata = new Uint8Array(analyser.fftSize);
       gain = actx.createGain();
       src.connect(analyser); analyser.connect(gain); gain.connect(actx.destination);
-      const endVoice = () => { voicePlaying = false; if (voiceEndCb) { const c = voiceEndCb; voiceEndCb = null; c(); } };
       audioEl.addEventListener('ended', endVoice);
       // a missing/blocked mp3 must unblock the beat immediately
-      audioEl.addEventListener('error', endVoice);
+      audioEl.addEventListener('error', failVoice);
       // dragging the 'tutorial' slider mid-line retargets the live gain (only
       // while actually speaking, so a slider move can't stomp the fade-in ramp)
       onLevels((group) => {
@@ -366,7 +396,7 @@ export function createCheshireVn(hud, opts = {}) {
     if (!script.voReady || beat.vo === false) return null;
     const id = beat.id;
     if (!id) return null;
-    return '/dtrh/assets/vn/vo/' + (script.voFolder || 'cheshire') + '/' + id + '.mp3';
+    return audioUrl('/dtrh/assets/vn/vo/' + (script.voFolder || 'cheshire') + '/' + id + '.mp3');
   }
   function startVoice(url) {
     ensureVoiceGraph(); if (!actx || !url) return;
@@ -376,9 +406,10 @@ export function createCheshireVn(hud, opts = {}) {
       // ramping to the 'tutorial' slider level (audioLevels.js) not a hardcoded 1
       const lvl = getLevel('tutorial');
       if (gain) { try { const t0 = actx.currentTime; gain.gain.cancelScheduledValues(t0); gain.gain.setValueAtTime(0.0001, t0); gain.gain.linearRampToValueAtTime(lvl, t0 + 0.6); } catch (e) {} }
-      audioEl.src = url; audioEl.currentTime = 0; voicePlaying = true;
+      audioEl.src = url; audioEl.currentTime = 0; voicePlaying = true; voSwapping = false;
       // play() rejecting (404/autoplay) must resolve the wait, not hang the beat
-      audioEl.play().catch(() => { voicePlaying = false; if (voiceEndCb) { const c = voiceEndCb; voiceEndCb = null; c(); } });
+      // (failVoice spends the one other-host retry first, if there is one)
+      audioEl.play().catch(failVoice);
     } catch (e) { /* ignore */ }
   }
   function fadeVoice(ms) {
@@ -396,6 +427,7 @@ export function createCheshireVn(hud, opts = {}) {
   }
   function stopVoice() {
     voicePlaying = false;
+    voSwapping = false;   // a cancelled line abandons its retry too
     try { if (audioEl) audioEl.pause(); } catch (e) {}
     if (voiceEndCb) { const c = voiceEndCb; voiceEndCb = null; c(); }
   }

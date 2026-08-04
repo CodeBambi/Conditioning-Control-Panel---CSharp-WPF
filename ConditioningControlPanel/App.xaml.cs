@@ -149,11 +149,26 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// User data folder path in LocalAppData - persists across updates
+        /// User data folder path in LocalAppData - persists across updates.
+        /// CCP_USERDATA_DIR redirects the whole tree (settings, logs, content, mods) so test
+        /// harnesses can run against a sandbox instead of the real profile; same env-hook
+        /// pattern as the CCP_STRESS_* knobs.
         /// </summary>
-        public static string UserDataPath { get; } = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ConditioningControlPanel");
+        public static string UserDataPath { get; } = ResolveUserDataPath();
+
+        private static string ResolveUserDataPath()
+        {
+            try
+            {
+                var overrideDir = Environment.GetEnvironmentVariable("CCP_USERDATA_DIR");
+                if (!string.IsNullOrWhiteSpace(overrideDir) && Path.IsPathRooted(overrideDir))
+                    return overrideDir;
+            }
+            catch { }
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "ConditioningControlPanel");
+        }
 
         /// <summary>
         /// User assets folder path - for user-added content that persists across updates
@@ -368,6 +383,10 @@ namespace ConditioningControlPanel
         /// <c>ShouldDeferInterruptions</c> gate.</summary>
         public static Services.Browser.BrowserMediaService BrowserMedia { get; private set; } = null!;
         public static ContentPackService ContentPacks { get; private set; } = null!;
+        /// <summary>Release-hosted content packs (baseline/web audio + per-mod media pulled out of the
+        /// installer, fetched from the vX.Y.0 GitHub release). Null only if construction failed —
+        /// every consumer must null-check; missing content degrades gracefully everywhere.</summary>
+        public static ReleaseContentService? ReleaseContent { get; private set; }
         public static CompanionService Companion { get; private set; } = null!;
         public static CommunityPromptService CommunityPrompts { get; private set; } = null!;
         public static PersonalityService Personality { get; private set; } = null!;
@@ -1424,6 +1443,20 @@ namespace ConditioningControlPanel
             Video = new VideoService();
             Video.PreloadLibVLC(); // Pre-load LibVLC in background for faster first video
 
+            // Same idea for the hybrid browser engine: building the shared WebView2 environment can
+            // take seconds on a cold start, and a first video that pays for it spends that time
+            // against its own first-frame watchdog. Warm it here instead. Only when the feature is
+            // on - a user who never routes a video to the browser must not spawn a process for it.
+            try
+            {
+                if (Settings?.Current?.BrowserVideoEngineEnabled == true)
+                    Services.Video.Browser.BrowserVideoEngine.WarmUp();
+            }
+            catch (Exception ex)
+            {
+                Logger?.Debug("BrowserVideo warm-up skipped: {Error}", ex.Message);
+            }
+
             // Session media log - must be after Flash and Video so it can subscribe to their events.
             SessionLog = new SessionLogService();
 
@@ -1597,8 +1630,12 @@ namespace ConditioningControlPanel
             Catalogue = new CatalogueService();
             CatalogueLookup = new CatalogueLookupService();
 
-            // Auto-connect haptics if enabled (runs in background)
-            if (Settings.Current.Haptics.AutoConnect && Settings.Current.Haptics.Provider != Services.Haptics.HapticProviderType.Mock)
+            // Auto-connect haptics if enabled (runs in background).
+            // The v2 device manager connects every ENABLED provider concurrently and no-ops when
+            // none is enabled, so the old "skip when Provider == Mock" special case is gone: it
+            // meant a Mock user (the default provider!) could never auto-connect, and it could
+            // not express "Lovense + Intiface at once" either.
+            if (Settings.Current.Haptics.AutoConnect)
             {
                 _ = AutoConnectHapticsAsync();
             }
@@ -1633,6 +1670,37 @@ namespace ConditioningControlPanel
 
             // Initialize content packs service
             ContentPacks = new ContentPackService();
+
+            // Release-hosted content packs (audio + mod media that no longer ship in the installer).
+            // Construction is cheap (version math + one Directory.Exists probe); the baseline fetch is
+            // fire-and-forget and no-ops on a full/dev layout, in offline mode, or once installed.
+            try
+            {
+                var releaseContent = new ReleaseContentService();
+                ReleaseContent = releaseContent;
+
+                // A pack landing mid-session must reach the mod system without a restart: extract a
+                // downloaded .ccpmod into its built-in slot, drop the resource caches, refresh mod
+                // lists. Wired here rather than in ModService's ctor - that runs far earlier, while
+                // ReleaseContent is still null.
+                Mods?.AttachReleaseContent(releaseContent);
+
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await releaseContent.EnsureBaselineAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger?.Warning(ex, "ReleaseContent: baseline check failed");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger?.Error(ex, "Failed to initialize ReleaseContentService - downloaded content unavailable this session");
+            }
 
             // Initialize webcam tracking + focus game services (Lab — gated by consent dialog).
             // Constructors are no-ops; the camera handle only opens after explicit user consent.
@@ -1870,6 +1938,11 @@ namespace ConditioningControlPanel
                 Shutdown();
                 return;
             }
+
+            // For You feed, dev shortcut: `--fyp` opens the feed window immediately,
+            // bypassing the Lab card and the premium gate (dev machines only).
+            if (e.Args.Contains("--fyp"))
+                Services.Fyp.FypHostService.Launch();
 
             // Arm the offline mic features (wake word / push-to-talk) at startup if the user left them
             // on. They're decoupled from Takeover ("She's Listening" owns them), so they no longer wait
@@ -3442,7 +3515,10 @@ Application State:
                 try
                 {
                     Logger?.Information("Syncing profile to cloud before exit...");
-                    ProfileSync.SyncProfileAsync().Wait(TimeSpan.FromSeconds(2));
+                    // Task.Run so the await continuations land on the thread pool: ProfileSyncService
+                    // has no ConfigureAwait(false), and a bare Wait() here blocks the very dispatcher
+                    // those continuations need - the sync could never finish inside the timeout.
+                    Task.Run(() => ProfileSync.SyncProfileAsync()).Wait(TimeSpan.FromSeconds(2));
                 }
                 catch (Exception ex)
                 {
@@ -3502,6 +3578,7 @@ Application State:
             Webcam?.Dispose();
             FocusGame?.Dispose();
             ContentPacks?.Dispose();
+            ReleaseContent?.Dispose();
             Roadmap?.Dispose();
             Programs?.Dispose();
             SkillTree?.Dispose();

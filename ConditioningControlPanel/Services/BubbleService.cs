@@ -1931,92 +1931,19 @@ public class BubbleService : IDisposable
         }
     }
 
-    // Performance: Pool of audio devices to avoid creating new ones for each sound
-    private static readonly Queue<WaveOutEvent> _audioDevicePool = new();
-    private static readonly object _audioPoolLock = new();
-    private const int MAX_POOLED_DEVICES = 4;
-
-    private WaveOutEvent GetPooledAudioDevice()
-    {
-        lock (_audioPoolLock)
-        {
-            if (_audioDevicePool.Count > 0)
-            {
-                return _audioDevicePool.Dequeue();
-            }
-        }
-        // Apply user's chosen output device on construction. Pool is drained when the
-        // setting changes (see DrainAudioDevicePool) so we never need to reapply on Get.
-        var w = new WaveOutEvent();
-        App.Audio?.ApplyPreferredDevice(w);
-        return w;
-    }
-
     /// <summary>
-    /// Disposes all pooled audio devices. Call after the user changes the output device
-    /// setting so the next pop-sound playback re-creates devices on the new endpoint
-    /// (DeviceNumber can't be changed once Init() has been called).
+    /// No-op kept for the settings hook: the WaveOutEvent pool this used to drain is gone.
+    /// Device selection is re-resolved by AudioService per clip, and its cache is invalidated
+    /// by the output-device setter and by the endpoint watcher (#778/#779).
     /// </summary>
-    public static void DrainAudioDevicePool()
-    {
-        lock (_audioPoolLock)
-        {
-            while (_audioDevicePool.Count > 0)
-            {
-                try { _audioDevicePool.Dequeue().Dispose(); } catch { }
-            }
-        }
-    }
-
-    private void ReturnAudioDevice(WaveOutEvent device)
-    {
-        lock (_audioPoolLock)
-        {
-            if (_audioDevicePool.Count < MAX_POOLED_DEVICES)
-            {
-                _audioDevicePool.Enqueue(device);
-            }
-            else
-            {
-                device.Dispose();
-            }
-        }
-    }
+    public static void DrainAudioDevicePool() { }
 
     private void PlaySoundAsync(string path, float volume)
     {
-        Task.Run(() =>
-        {
-            WaveOutEvent? outputDevice = null;
-            AudioFileReader? audioFile = null;
-            try
-            {
-                audioFile = new AudioFileReader(path);
-                audioFile.Volume = volume;
-
-                outputDevice = GetPooledAudioDevice();  // Performance: Reuse pooled device
-                outputDevice.Init(audioFile);
-                outputDevice.Play();
-
-                while (outputDevice.PlaybackState == PlaybackState.Playing)
-                {
-                    Thread.Sleep(50);
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning("Audio playback failed: {Error}", ex.Message);
-            }
-            finally
-            {
-                audioFile?.Dispose();
-                if (outputDevice != null)
-                {
-                    try { outputDevice.Stop(); } catch { }
-                    ReturnAudioDevice(outputDevice);  // Performance: Return to pool
-                }
-            }
-        });
+        // Pop sounds fire in bursts, which is exactly the pattern that used to park two
+        // thread-pool threads per bubble. AudioService owns the device, the concurrency cap
+        // and the disposal now (#778/#779).
+        App.Audio?.PlayOneShot(path, volume, "bubble-pop");
     }
 
     public void PopAllBubbles()
@@ -2075,14 +2002,8 @@ public class BubbleService : IDisposable
         // Close pooled bubble window shells (static pool holds hidden HWNDs for the process life).
         try { DispatcherHelper.RunOnUI(Bubble.DrainWindowPool); } catch { }
 
-        // Drain and dispose pooled audio devices (static pool persists across service restarts)
-        lock (_audioPoolLock)
-        {
-            while (_audioDevicePool.Count > 0)
-            {
-                try { _audioDevicePool.Dequeue().Dispose(); } catch { }
-            }
-        }
+        // Audio devices are no longer pooled here — AudioService owns every one-shot device
+        // and disposes it deterministically (#778/#779).
     }
 }
 

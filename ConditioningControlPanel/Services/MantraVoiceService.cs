@@ -105,15 +105,15 @@ namespace ConditioningControlPanel.Services
                 var p = Path.Combine(modPath, "resources", "sounds", "companion_audio", file);
                 if (File.Exists(p)) return p;
             }
-            // 2) embedded per-mod folder
+            // 2) embedded per-mod folder (install dir, or the downloaded content pack)
             var modId = App.Mods?.ActiveModId;
             if (!string.IsNullOrEmpty(modId))
             {
-                var pm = Path.Combine(CompanionPhraseService.CompanionAudioFolder, "mods", modId, file);
+                var pm = CompanionPhraseService.ResolveCompanionAudioFile("mods", modId, file);
                 if (File.Exists(pm)) return pm;
             }
             // 3) embedded shared fallback
-            var embedded = Path.Combine(CompanionPhraseService.CompanionAudioFolder, file);
+            var embedded = CompanionPhraseService.ResolveCompanionAudioFile(file);
             return File.Exists(embedded) ? embedded : null;
         }
 
@@ -190,10 +190,11 @@ namespace ConditioningControlPanel.Services
                 var p = Path.Combine(modPath, "resources", "sounds", "companion_audio", "mantras.json");
                 if (File.Exists(p)) return p;
             }
-            // 2) embedded per-mod folder
+            // 2) embedded per-mod folder (manifest stays bundled, but probe the content root too so a
+            //    pack-only mod folder still resolves)
             if (!string.IsNullOrEmpty(modId))
             {
-                var pm = Path.Combine(CompanionPhraseService.CompanionAudioFolder, "mods", modId, "mantras.json");
+                var pm = CompanionPhraseService.ResolveCompanionAudioFile("mods", modId, "mantras.json");
                 if (File.Exists(pm)) return pm;
             }
             return null;

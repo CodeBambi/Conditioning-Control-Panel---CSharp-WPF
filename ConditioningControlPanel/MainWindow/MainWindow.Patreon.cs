@@ -30,134 +30,13 @@ namespace ConditioningControlPanel
     // Patreon tab: exclusives submenu, Patreon exclusives content, and community prompts.
     public partial class MainWindow
     {
-        #region Exclusives Submenu
+        #region Exclusives Gates
 
-        private DispatcherTimer? _exclusivesMenuCloseTimer;
-        // True when the popup was opened by a click — hover-leave will not
-        // dismiss a pinned popup. Outside-click and Alt+Tab close it via the
-        // window-level handlers in the constructor.
-        private bool _exclusivesPinned;
-
-        private void BtnPatreonExclusives_MouseEnter(object sender, MouseEventArgs e)
-        {
-            _exclusivesMenuCloseTimer?.Stop();
-            if (ExclusivesSubmenuPopup.IsOpen) return;
-            RefreshExclusivesSubmenuLocks();
-            ExclusivesSubmenuPopup.IsOpen = true;
-        }
-
-        private void ExclusivesSubmenuPopup_MouseEnter(object sender, MouseEventArgs e)
-        {
-            _exclusivesMenuCloseTimer?.Stop();
-        }
-
-        private void ExclusivesMenu_MouseLeave(object sender, MouseEventArgs e)
-        {
-            // Click-pinned popups don't dismiss on hover-out — they only close
-            // via click-outside or sub-item selection.
-            if (_exclusivesPinned) return;
-
-            if (_exclusivesMenuCloseTimer == null)
-            {
-                _exclusivesMenuCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
-                _exclusivesMenuCloseTimer.Tick += ExclusivesMenuCloseTick;
-            }
-            _exclusivesMenuCloseTimer.Stop();
-            _exclusivesMenuCloseTimer.Start();
-        }
-
-        private void ExclusivesMenuCloseTick(object? sender, EventArgs e)
-        {
-            _exclusivesMenuCloseTimer?.Stop();
-            if (_exclusivesPinned) return;
-            ExclusivesSubmenuPopup.IsOpen = false;
-        }
-
-        private void ExclusivesSubmenuPopup_Closed(object? sender, EventArgs e)
-        {
-            _exclusivesPinned = false;
-        }
-
-        private void CloseExclusivesSubmenu()
-        {
-            _exclusivesPinned = false;
-            ExclusivesSubmenuPopup.IsOpen = false;
-        }
-
-        private void BtnSubRemoteControl_Click(object sender, RoutedEventArgs e)
-        {
-            CloseExclusivesSubmenu();
-            ShowTab("remotecontrol");
-        }
-
-        private void BtnSubBambiTakeover_Click(object sender, RoutedEventArgs e)
-        {
-            CloseExclusivesSubmenu();
-            ShowTab("bambitakeover");
-        }
-
-        private void BtnSubHaptics_Click(object sender, RoutedEventArgs e)
-        {
-            CloseExclusivesSubmenu();
-            ShowTab("haptics");
-        }
-
-        private void BtnSubAwareness_Click(object sender, RoutedEventArgs e)
-        {
-            CloseExclusivesSubmenu();
-            ShowTab("awareness");
-        }
-
-        private void BtnSubLockdown_Click(object sender, RoutedEventArgs e)
-        {
-            CloseExclusivesSubmenu();
-            ShowTab("lockdown");
-        }
-
-        private void BtnSubBlinkTrainer_Click(object sender, RoutedEventArgs e)
-        {
-            CloseExclusivesSubmenu();
-            ShowTab("blinktrainer");
-        }
-
-        private void BtnSubSheListening_Click(object sender, RoutedEventArgs e)
-        {
-            CloseExclusivesSubmenu();
-            ShowTab("shelistening");
-        }
-
-        private void BtnSubGradedIntake_Click(object sender, RoutedEventArgs e)
-        {
-            CloseExclusivesSubmenu();
-            ShowTab("gradedintake");
-        }
-
-        /// <summary>
-        /// Updates "Premium" badges on the Exclusives submenu items based on the
-        /// user's current subscription state. Called whenever the popup opens.
-        /// </summary>
-        private void RefreshExclusivesSubmenuLocks()
-        {
-            var hasPremium = App.Patreon?.HasPremiumAccess == true;
-            var badgeVis = hasPremium ? Visibility.Collapsed : Visibility.Visible;
-            if (SubBadgeRemoteControl != null) SubBadgeRemoteControl.Visibility = badgeVis;
-            if (SubBadgeBambiTakeover != null) SubBadgeBambiTakeover.Visibility = badgeVis;
-            if (SubBadgeHaptics != null) SubBadgeHaptics.Visibility = badgeVis;
-            if (SubBadgeAwareness != null) SubBadgeAwareness.Visibility = badgeVis;
-            if (SubBadgeLockdown != null) SubBadgeLockdown.Visibility = badgeVis;
-            if (SubBadgeBlinkTrainer != null) SubBadgeBlinkTrainer.Visibility = badgeVis;
-            if (SubBadgeSheListening != null) SubBadgeSheListening.Visibility = badgeVis;
-
-            // The Graded Intake is the one Exclusive a free account can legitimately open: it
-            // hands out one run a week (IntakePassService). Showing the padlock while that pass
-            // is sitting unspent would call the door locked at the exact moment it is open, so
-            // this badge follows the pass rather than the subscription. Once the pass is spent
-            // the lock comes back, which is then true again until Monday.
-            if (SubBadgeGradedIntake != null)
-                SubBadgeGradedIntake.Visibility = (hasPremium || App.IntakePass?.IsPassAvailable == true)
-                    ? Visibility.Collapsed
-                    : Visibility.Visible;
-        }
+        // The Exclusives launcher popup submenu was retired for the Exclusives tab
+        // ("the Velvet Vault", MainWindow.Exclusives.cs). Entitlement chips/veils on
+        // that tab are repainted by RefreshExclusivesTab(), which took over the old
+        // RefreshExclusivesSubmenuLocks contract — including the Graded Intake rule
+        // (weekly pass counts as an open door for free accounts).
 
         /// <summary>
         /// Routes the gating overlay's CTA button to the App Info &amp; Data popup,
@@ -245,17 +124,15 @@ namespace ConditioningControlPanel
             // Keep the patron-achievements section lock + counts in sync with entitlement.
             UpdateAchievementCount();
 
-            // Haptics - unlock for all Patreon supporters
+            // Haptics - unlock for all Patreon supporters.
+            // Phase E deleted the three dead lock overlays (HapticsConnectionLock,
+            // HapticsFeatureLock, HapticsComingSoonOverlay) — they were all Collapsed-forever
+            // leftovers stacked behind the one live gate, HapticsGate, refreshed below.
             var hasHapticsAccess = hasPremiumAccess;
             HapticsTab.HapticsContentGrid.Opacity = hasHapticsAccess ? 1.0 : 0.3;
             HapticsTab.HapticsContentGrid.IsHitTestVisible = hasHapticsAccess;
-            HapticsTab.HapticsConnectionLock.Visibility = hasHapticsAccess ? Visibility.Collapsed : Visibility.Visible;
-            HapticsTab.HapticsFeatureLock.Visibility = hasHapticsAccess ? Visibility.Collapsed : Visibility.Visible;
             HapticsTab.HapticsConnectionBox.IsEnabled = hasHapticsAccess;
             HapticsTab.HapticsFeatureBox.IsEnabled = hasHapticsAccess;
-
-            // Hide "Coming Soon" overlay for Patreon supporters
-            HapticsTab.HapticsComingSoonOverlay.Visibility = hasHapticsAccess ? Visibility.Collapsed : Visibility.Visible;
 
             // Bambi Takeover (Autonomy) — visible-but-locked: keep BambiTakeoverTab.AutonomyUnlocked
             // always visible, BambiTakeoverTab.AutonomyLocked stays collapsed (legacy element), and the
@@ -280,13 +157,14 @@ namespace ConditioningControlPanel
             // TierChanged event is raised at all.
             //
             // These are the existing entry points, called rather than reimplemented:
-            //   RefreshIntakePassTile()        - Dashboard centre tile (MainWindow.UiUpdates.cs)
-            //   RefreshExclusivesSubmenuLocks() - the SubBadgeGradedIntake padlock above
+            //   RefreshIntakePassTile() - Dashboard centre tile (MainWindow.UiUpdates.cs)
+            //   RefreshExclusivesTab()  - Exclusives tab chips/veils (incl. the pass-aware
+            //                             Graded Intake card)
             // RefreshGradedIntakeGate() is already covered by the line above.
             try
             {
                 RefreshIntakePassTile();
-                RefreshExclusivesSubmenuLocks();
+                RefreshExclusivesTab();
                 // Anything else listening to the door (and the two lazily-attached handlers, if a
                 // refresh has not run yet to install them) gets its own repaint. Idempotent, and
                 // both current listeners marshal + no-op when nothing actually changed.

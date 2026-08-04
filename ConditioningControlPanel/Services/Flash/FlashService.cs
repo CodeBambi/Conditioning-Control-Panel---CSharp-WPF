@@ -130,7 +130,16 @@ namespace ConditioningControlPanel.Services
 
         // Paths
         private string _imagesPath = "";
-        private string _soundsPath;
+
+        /// <summary>
+        /// Flash voice-line folder, re-resolved on every use — NEVER cached in a field. On a modular
+        /// install the folder does not exist at construction time (audio-base isn't downloaded yet) and
+        /// a cached path would keep pointing at the empty install-dir location, leaving flash audio
+        /// silent until a restart. Also picks up a mid-session mod switch for free
+        /// (CompanionPhraseService resolves the ACTIVE mod's flashes_audio first).
+        /// Cheap: a couple of Directory.Exists calls, and only hit when the shuffle queue runs dry.
+        /// </summary>
+        private static string SoundsPath => CompanionPhraseService.VoiceLineFolder;
 
         // Image decode cache: avoids reloading/re-decoding the same images every flash
         // Key = file path, Value = (data, lastAccess)
@@ -262,12 +271,13 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Programmatic equivalent of a mouse click on a flash window. Runs
         /// the same close + hydra-multiplication + haptic + FlashClicked
-        /// pipeline as MouseLeftButtonDown.
+        /// pipeline as MouseLeftButtonDown. Flagged as gaze-driven so hydra
+        /// can stop the self-sustaining chain (#784) — see OnFlashClicked.
         /// </summary>
         internal void GazePop(FlashWindow window)
         {
             if (window == null || window.IsFadingOut) return;
-            OnFlashClicked(window, App.Settings.Current);
+            OnFlashClicked(window, App.Settings.Current, fromGaze: true);
         }
 
         #endregion
@@ -277,8 +287,17 @@ namespace ConditioningControlPanel.Services
         public FlashService()
         {
             RefreshImagesPath();
-            _soundsPath = CompanionPhraseService.VoiceLineFolder;
-            Directory.CreateDirectory(_soundsPath);
+            // Same hazard as SubliminalService's ctor: the voice-line folder is install-dir anchored
+            // and Program Files is read-only, so once flashes_audio ships as a downloadable content
+            // pack this line would throw on startup for anyone who hasn't fetched it yet. Best effort —
+            // and only a convenience for users dropping their own files in; playback re-resolves the
+            // folder per use (see SoundsPath), so failing here costs nothing.
+            var soundsPath = SoundsPath;
+            try { Directory.CreateDirectory(soundsPath); }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("FlashService: could not create {Path} - {Error}", soundsPath, ex.Message);
+            }
             // Animation/fade heartbeat runs off CompositionTarget.Rendering (vsync-aligned)
             // — see StartHeartbeat. A 33ms DispatcherTimer's OS-quantized cadence beats
             // against the display refresh and makes GIF flashes judder (same fix as the
@@ -1436,6 +1455,11 @@ namespace ConditioningControlPanel.Services
                     ForceTopmost(window);
                 }
 
+                // PHASE F — luminance sync. One bool test when the feature is off. Runs after the
+                // visual is up so it can never delay the flash, and rides the flash's own lifetime
+                // through the mixer's auto-zero (no hide hook, so no way to leave the layer stuck).
+                if (!suppressHaptic) ApplyLuminanceSync(imageData, lifetimeMs);
+
                 lock (_lockObj)
                 {
                     _activeWindows.Add(window);
@@ -1480,6 +1504,117 @@ namespace ConditioningControlPanel.Services
                 App.Achievements?.TrackFlashImage();
             }
         }
+
+        #region Luminance Sync (Phase F)
+
+        /// <summary>Average luminance per image file, 0..1. The sample is a fixed property of the
+        /// file, so it is computed once and reused for every later flash of the same image — a
+        /// 25-flash burst of repeats costs 25 dictionary hits, not 25 downscales.</summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, double> _luminanceCache =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Downscale target for the luminance sample. 8x8 is enough for an average and
+        /// small enough that the WIC scaler's work is dominated by the (already decoded, already
+        /// display-sized) source read.</summary>
+        private const int LuminanceSampleSize = 8;
+
+        /// <summary>
+        /// PHASE F: push the flash's average brightness onto the continuous Luminance layer for as
+        /// long as the flash is up. The layer self-clears (mixer auto-zero) after
+        /// <paramref name="lifetimeMs"/>, so a flash that dies in an unusual way (panic key, engine
+        /// stop, crash-path teardown) still cannot leave the toy humming.
+        ///
+        /// Never re-decodes: it samples the frozen BitmapSource the flash is already showing.
+        /// </summary>
+        private void ApplyLuminanceSync(LoadedImageData imageData, int lifetimeMs)
+        {
+            try
+            {
+                var haptics = App.Haptics;
+                if (haptics == null || !haptics.Settings.LuminanceSyncEnabled) return;      // the whole cost when off
+                if (imageData == null || imageData.Frames.Count == 0) return;
+
+                var scale = haptics.Settings.LuminanceSyncIntensity;
+                if (scale <= 0) return;
+
+                var key = imageData.FilePath;
+                double luminance;
+                if (string.IsNullOrEmpty(key))
+                {
+                    luminance = SampleLuminance(imageData.Frames[0]);
+                }
+                else if (!_luminanceCache.TryGetValue(key!, out luminance))
+                {
+                    luminance = SampleLuminance(imageData.Frames[0]);
+                    if (luminance >= 0) _luminanceCache[key!] = luminance;
+                }
+
+                if (luminance < 0) return;      // sampling failed — stay silent rather than guess
+
+                haptics.SetLayer(Services.Haptics.Core.HapticLayer.Luminance,
+                                 luminance * Math.Clamp(scale, 0, 1),
+                                 autoZeroMs: Math.Clamp(lifetimeMs, 100, 30_000));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("FlashService: luminance sync failed (non-fatal): {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>Average perceptual luminance (Rec. 601) of an already-decoded frame, 0..1.
+        /// Returns -1 when the bitmap cannot be sampled. Downscales to 8x8 through WIC — no file
+        /// access, no GDI+, no second decode.</summary>
+        private static double SampleLuminance(BitmapSource? source)
+        {
+            try
+            {
+                if (source == null || source.PixelWidth <= 0 || source.PixelHeight <= 0) return -1;
+
+                var sx = LuminanceSampleSize / (double)source.PixelWidth;
+                var sy = LuminanceSampleSize / (double)source.PixelHeight;
+                BitmapSource sampled = source;
+                if (sx < 1.0 || sy < 1.0)
+                {
+                    sampled = new TransformedBitmap(source, new ScaleTransform(Math.Min(sx, 1.0), Math.Min(sy, 1.0)));
+                }
+                if (sampled.Format != System.Windows.Media.PixelFormats.Bgra32)
+                {
+                    sampled = new FormatConvertedBitmap(sampled, System.Windows.Media.PixelFormats.Bgra32, null, 0);
+                }
+
+                var w = sampled.PixelWidth;
+                var h = sampled.PixelHeight;
+                if (w <= 0 || h <= 0) return -1;
+
+                var stride = w * 4;
+                var pixels = new byte[stride * h];
+                sampled.CopyPixels(pixels, stride, 0);
+
+                double sum = 0;
+                double weight = 0;
+                for (int i = 0; i < pixels.Length; i += 4)
+                {
+                    // Bgra32 is premultiplied-free straight alpha here; a transparent pixel
+                    // contributes nothing (a mostly-transparent PNG is not "bright").
+                    double alpha = pixels[i + 3] / 255.0;
+                    if (alpha <= 0) continue;
+                    double b = pixels[i] / 255.0;
+                    double g = pixels[i + 1] / 255.0;
+                    double r = pixels[i + 2] / 255.0;
+                    sum += (0.299 * r + 0.587 * g + 0.114 * b) * alpha;
+                    weight += alpha;
+                }
+
+                if (weight <= 0) return 0;
+                return Math.Clamp(sum / weight, 0, 1);
+            }
+            catch
+            {
+                return -1;
+            }
+        }
+
+        #endregion
 
         /// <summary>
         /// COMPOSITOR: convert the decoded frames and spawn this flash's layer item. The
@@ -1691,7 +1826,8 @@ namespace ConditioningControlPanel.Services
             if (!anyLayer) ReleaseLayerHook();
         }
 
-        private void OnFlashClicked(FlashWindow window, AppSettings settings)
+        /// <param name="fromGaze">True when a gaze dwell/blink popped this flash rather than the mouse.</param>
+        private void OnFlashClicked(FlashWindow window, AppSettings settings, bool fromGaze = false)
         {
             // Cancel only THIS window's lifetime — other windows keep living~ ✨
             try { window.LifetimeCts?.Cancel(); } catch { }
@@ -1707,7 +1843,14 @@ namespace ConditioningControlPanel.Services
 
             // Hydra mode: spawn 2 more when clicking (NO NEW AUDIO)
             // No global _cleanupInProgress check needed — each window has its own lifetime~ 🐍
-            if (settings.CorruptionMode)
+            // #784: a gaze pop is automatic — the dwell attractor snaps straight onto the fresh
+            // children and pops them ~1s later, so an unrestricted gaze→hydra chain feeds itself
+            // and flashes never stop spawning (the population cap only bounds how many are on
+            // screen at once, not the endless churn). Let gaze take the FIRST hop off an original
+            // flash (the documented "stare to pop = click, including hydra") and stop there;
+            // children of a gaze pop just dismiss. Mouse clicks are unchanged — a human hand is
+            // the throttle there.
+            if (settings.CorruptionMode && (!fromGaze || window.HydraGeneration == 0))
             {
                 var maxHydra = Math.Min(settings.HydraLimit, 20);
                 int currentCount;
@@ -2527,7 +2670,7 @@ namespace ConditioningControlPanel.Services
             {
                 if (_soundQueue.Count == 0)
                 {
-                    var files = GetMediaFiles(_soundsPath, new[] { ".mp3", ".wav", ".ogg" });
+                    var files = GetMediaFiles(SoundsPath, new[] { ".mp3", ".wav", ".ogg" });
                     if (files.Count == 0) return null;
 
                     // Performance: Shuffle and enqueue all at once
@@ -2573,33 +2716,10 @@ namespace ConditioningControlPanel.Services
 
                 if (File.Exists(chimePath))
                 {
-                    Task.Run(() =>
-                    {
-                        try
-                        {
-                            using var audioFile = new AudioFileReader(chimePath);
-                            using var outputDevice = new WaveOutEvent();
-                            App.Audio?.ApplyPreferredDevice(outputDevice);
-
-                            var masterVolume = App.Settings.Current.MasterVolume / 100f;
-                            var volume = (float)Math.Pow(masterVolume, 1.5) * 0.35f;
-                            audioFile.Volume = volume;
-
-                            outputDevice.Init(audioFile);
-                            outputDevice.Play();
-
-                            while (outputDevice.PlaybackState == PlaybackState.Playing)
-                            {
-                                Thread.Sleep(50);
-                            }
-
-                            App.Logger?.Information("🎉 Lucky Flash! 10x XP!");
-                        }
-                        catch (Exception ex)
-                        {
-                            App.Logger?.Debug("Failed to play lucky flash sound: {Error}", ex.Message);
-                        }
-                    });
+                    var masterVolume = App.Settings.Current.MasterVolume / 100f;
+                    var volume = (float)Math.Pow(masterVolume, 1.5) * 0.35f;
+                    App.Audio?.PlayOneShot(chimePath, volume, "lucky-flash");
+                    App.Logger?.Information("🎉 Lucky Flash! 10x XP!");
                 }
             }
             catch (Exception ex)
@@ -2761,6 +2881,7 @@ namespace ConditioningControlPanel.Services
 
                 sound.Init(audioFile);
                 sound.Play();
+                App.Audio?.NoteOutputSuccess();
 
                 // Only assign to fields after everything succeeded
                 _currentAudioFile = audioFile;
@@ -2774,6 +2895,7 @@ namespace ConditioningControlPanel.Services
                 sound?.Dispose();
                 audioFile?.Dispose();
                 App.Logger.Warning("Could not play sound {Path}: {Error}", path, ex.Message);
+                App.Audio?.NoteOutputFailure("flash-sound", ex.Message);
                 return 5.0;
             }
         }
@@ -2989,11 +3111,15 @@ namespace ConditioningControlPanel.Services
                 // Closing a layered window mid-run is the render-thread-deadlock trigger.
                 if (window.IsLoaded && _windowPool.Count < WINDOW_POOL_MAX)
                 {
+                    using var _uiMark = VideoDiag.UiScope("FlashService.HideFlashWindow(layered)");
                     window.Hide();
                     _windowPool.Push(window);
                 }
                 else
                 {
+                    // The pool-overflow branch: the comment above says it, so breadcrumb it — if a
+                    // hang report's "last UI mark" is this, the deadlock trigger fired for real.
+                    using var _uiMark = VideoDiag.UiScope("FlashService.CloseFlashWindow(layered, pool full)");
                     window.Close();
                 }
             }

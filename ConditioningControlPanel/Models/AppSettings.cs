@@ -225,6 +225,20 @@ namespace ConditioningControlPanel.Models
             set { _welcomed = value; OnPropertyChanged(); }
         }
 
+        private bool _modPickerShown = false;
+        /// <summary>
+        /// True once the first-run mod picker (<c>ModPickerDialog</c>) has been offered. One-way: the
+        /// picker is a first-launch courtesy, not a recurring prompt — after this, mods are downloaded
+        /// from the Mod Manager. Set BEFORE the dialog is shown so a crash inside it cannot turn the
+        /// picker into an every-launch popup. Defaults false, so existing installs upgrading into the
+        /// modular build see it once too (docs/CONTENT_PACKS_PLAN.md §4/§5).
+        /// </summary>
+        public bool ModPickerShown
+        {
+            get => _modPickerShown;
+            set { _modPickerShown = value; OnPropertyChanged(); }
+        }
+
         private string _lastSeenVersion = "";
         /// <summary>
         /// Last version the user has seen patch notes for. Used to show "What's New" after updates.
@@ -1616,6 +1630,22 @@ namespace ConditioningControlPanel.Models
             set { _packGuidMap = value ?? new(); OnPropertyChanged(); }
         }
 
+        private Dictionary<string, InstalledPackStamp> _installedContentPacks = new();
+        /// <summary>
+        /// Release-hosted content packs (audio/mod payload stripped out of the installer and fetched
+        /// from the vX.Y.0 GitHub release) that are installed under
+        /// <c>%LOCALAPPDATA%\ConditioningControlPanel\content\</c>. Maps pack id ->
+        /// {contentVersion, sha256}: a SET, not a bool, so we can tell "installed and current" from
+        /// "installed but the pack's bytes moved". Written by ReleaseContentService.
+        /// Unrelated to <see cref="InstalledPackIds"/> (those are the encrypted creator packs).
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, InstalledPackStamp> InstalledContentPacks
+        {
+            get => _installedContentPacks;
+            set { _installedContentPacks = value ?? new(); OnPropertyChanged(); }
+        }
+
         private List<AssetPreset> _assetPresets = new();
         /// <summary>
         /// Saved asset presets that store which files are disabled.
@@ -1753,6 +1783,21 @@ namespace ConditioningControlPanel.Models
         {
             get => _videoBlurredBackgroundEnabled;
             set { _videoBlurredBackgroundEnabled = value; OnPropertyChanged(); }
+        }
+
+        private bool _browserVideoEngineEnabled;
+        /// <summary>
+        /// BETA opt-in: play mandatory videos in out-of-process WebView2 windows (the player page at
+        /// Resources/web/player) instead of in-process LibVLC. LibVLC stays the automatic fallback
+        /// for anything the browser cannot decode, so turning this on never removes a playback path —
+        /// it only changes which one is tried first. See docs/BROWSER_VIDEO_ENGINE_PLAN.md.
+        /// Default OFF.
+        /// </summary>
+        [JsonProperty]
+        public bool BrowserVideoEngineEnabled
+        {
+            get => _browserVideoEngineEnabled;
+            set { _browserVideoEngineEnabled = value; OnPropertyChanged(); }
         }
 
         private bool _restrictGazeContentToCalibratedScreen = true;
@@ -2803,6 +2848,96 @@ namespace ConditioningControlPanel.Models
         {
             get => _chaosAccessoryKey2;
             set { _chaosAccessoryKey2 = value; OnPropertyChanged(); }
+        }
+        #endregion
+
+        #region For You Feed (premium, WebView2)
+        private string _fypLayout = "duo";
+        /// <summary>Feed page layout: "duo" (landscape stacks two-up), "trio" (three-up) or
+        /// "random" (irregular mosaic quilt). Mirrors the mobile reel's setting.</summary>
+        public string FypLayout
+        {
+            get => _fypLayout;
+            set { _fypLayout = value is "duo" or "trio" or "random" ? value : "duo"; OnPropertyChanged(); }
+        }
+
+        private bool _fypIncludeGifs = true;
+        /// <summary>Mix animated GIFs from the images library into the feed.</summary>
+        public bool FypIncludeGifs
+        {
+            get => _fypIncludeGifs;
+            set { _fypIncludeGifs = value; OnPropertyChanged(); }
+        }
+
+        private bool _fypMosaicAutoChange = true;
+        /// <summary>Mosaic layout re-composes itself on a timer (off = holds until swiped).</summary>
+        public bool FypMosaicAutoChange
+        {
+            get => _fypMosaicAutoChange;
+            set { _fypMosaicAutoChange = value; OnPropertyChanged(); }
+        }
+
+        private int _fypMosaicChangeSec = 10;
+        /// <summary>Seconds between mosaic re-compositions. Floored at 3 - every morph
+        /// mounts/releases up to 4 media elements, so a faster cadence churns decoders.</summary>
+        public int FypMosaicChangeSec
+        {
+            get => _fypMosaicChangeSec;
+            set { _fypMosaicChangeSec = Math.Clamp(value, 3, 60); OnPropertyChanged(); }
+        }
+
+        private bool _fypAutoAdvance = false;
+        /// <summary>Scroll to the next page when a clip's window ends (off = loop forever).</summary>
+        public bool FypAutoAdvance
+        {
+            get => _fypAutoAdvance;
+            set { _fypAutoAdvance = value; OnPropertyChanged(); }
+        }
+
+        private bool _fypMuted = false;
+        /// <summary>Feed audio muted.</summary>
+        public bool FypMuted
+        {
+            get => _fypMuted;
+            set { _fypMuted = value; OnPropertyChanged(); }
+        }
+
+        private double _fypWindowOpacity = 1.0;
+        /// <summary>Ghost-mode translucency for the feed (0.01-1.0) - the DWM thumbnail opacity of
+        /// the see-through mirror, never the real window's alpha (the WebView2 window must never be
+        /// layered; see FypGhostOverlay). May go near-invisible: recovery is a single Esc/panic
+        /// press, which restores the fully opaque real window regardless of this value.</summary>
+        public double FypWindowOpacity
+        {
+            get => _fypWindowOpacity;
+            set { _fypWindowOpacity = Math.Clamp(value, 0.01, 1.0); OnPropertyChanged(); }
+        }
+
+        private bool _fypAudioGlow = true;
+        /// <summary>Page-side visual: the playing tile pulses with its own audio level. Persisted
+        /// here and handed to the page in the init payload; the app itself does nothing with it.</summary>
+        public bool FypAudioGlow
+        {
+            get => _fypAudioGlow;
+            set { _fypAudioGlow = value; OnPropertyChanged(); }
+        }
+
+        private bool _fypEyeControl = false;
+        /// <summary>Webcam eye control for the feed: a blink swaps one tile, holding the eyes
+        /// shut for 2s changes the whole page. Off by default - it turns the camera on.</summary>
+        public bool FypEyeControl
+        {
+            get => _fypEyeControl;
+            set { _fypEyeControl = value; OnPropertyChanged(); }
+        }
+
+        private bool _fypEyeGaze = false;
+        /// <summary>With eye control on, a blink swaps the tile the user is LOOKING at rather than
+        /// a random one. Only meaningful once gaze is calibrated; ignored otherwise.</summary>
+        public bool FypEyeGaze
+        {
+            get => _fypEyeGaze;
+            set { _fypEyeGaze = value; OnPropertyChanged(); }
         }
         #endregion
 

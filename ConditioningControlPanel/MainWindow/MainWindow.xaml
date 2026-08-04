@@ -781,8 +781,6 @@
                     </Button>
                     <Grid Grid.Column="5">
                         <Button x:Name="BtnPatreonExclusives" Tag="Patreon" Click="BtnPatreonExclusives_Click"
-                                MouseEnter="BtnPatreonExclusives_MouseEnter"
-                                MouseLeave="ExclusivesMenu_MouseLeave"
                                 ToolTip="{loc:Str tooltip_patreon_exclusives}" Cursor="Hand" Height="32" Margin="2,0">
                             <Button.Style>
                                 <Style TargetType="Button">
@@ -814,144 +812,6 @@
                                 <TextBlock Text="{loc:Str tab_exclusives}" FontSize="10"/>
                             </StackPanel>
                         </Button>
-                        <Popup x:Name="ExclusivesSubmenuPopup"
-                               PlacementTarget="{Binding ElementName=BtnPatreonExclusives}"
-                               Placement="Bottom" StaysOpen="True" AllowsTransparency="True"
-                               PopupAnimation="None"
-                               Closed="ExclusivesSubmenuPopup_Closed"
-                               MouseLeave="ExclusivesMenu_MouseLeave"
-                               MouseEnter="ExclusivesSubmenuPopup_MouseEnter">
-                            <!-- Outer transparent border bridges the visual gap between the
-                                 launcher button and the menu so the mouse doesn't fall through
-                                 dead space (which would otherwise fire MouseLeave on the popup). -->
-                            <Border Background="Transparent" Padding="0,4,0,0">
-                            <Border Background="#1A1A2E" BorderBrush="#FF69B4" BorderThickness="2"
-                                    CornerRadius="6" Padding="6" MinWidth="220">
-                                <StackPanel Orientation="Vertical">
-                                    <Button x:Name="BtnSubBlinkTrainer" Style="{StaticResource ExclusivesSubmenuButton}"
-                                            Click="BtnSubBlinkTrainer_Click">
-                                        <DockPanel LastChildFill="True">
-                                            <Border DockPanel.Dock="Right" x:Name="SubBadgeBlinkTrainer"
-                                                    Background="#FF69B4" CornerRadius="8" Padding="6,1" Margin="8,0,0,0"
-                                                    VerticalAlignment="Center">
-                                                <TextBlock Text="✨" FontSize="9" Foreground="White"/>
-                                            </Border>
-                                            <StackPanel Orientation="Horizontal">
-                                                <Image Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center"
-                                                       Source="{Binding Source='💫', Converter={StaticResource EmojiToImageSource}}"/>
-                                                <TextBlock Text="{loc:Str tab_blink_trainer}" Foreground="White" VerticalAlignment="Center"/>
-                                            </StackPanel>
-                                        </DockPanel>
-                                    </Button>
-                                    <Button x:Name="BtnSubRemoteControl" Style="{StaticResource ExclusivesSubmenuButton}"
-                                            Click="BtnSubRemoteControl_Click">
-                                        <DockPanel LastChildFill="True">
-                                            <Border DockPanel.Dock="Right" x:Name="SubBadgeRemoteControl"
-                                                    Background="#FF69B4" CornerRadius="8" Padding="6,1" Margin="8,0,0,0"
-                                                    VerticalAlignment="Center">
-                                                <TextBlock Text="✨" FontSize="9" Foreground="White"/>
-                                            </Border>
-                                            <StackPanel Orientation="Horizontal">
-                                                <Image Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center"
-                                                       Source="{Binding Source='🎮', Converter={StaticResource EmojiToImageSource}}"/>
-                                                <TextBlock Text="{loc:Str tab_remote_control}" Foreground="White" VerticalAlignment="Center"/>
-                                            </StackPanel>
-                                        </DockPanel>
-                                    </Button>
-                                    <Button x:Name="BtnSubBambiTakeover" Style="{StaticResource ExclusivesSubmenuButton}"
-                                            Click="BtnSubBambiTakeover_Click">
-                                        <DockPanel LastChildFill="True">
-                                            <Border DockPanel.Dock="Right" x:Name="SubBadgeBambiTakeover"
-                                                    Background="#FF69B4" CornerRadius="8" Padding="6,1" Margin="8,0,0,0"
-                                                    VerticalAlignment="Center">
-                                                <TextBlock Text="✨" FontSize="9" Foreground="White"/>
-                                            </Border>
-                                            <StackPanel Orientation="Horizontal">
-                                                <Image Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center"
-                                                       Source="{Binding Source='🤖', Converter={StaticResource EmojiToImageSource}}"/>
-                                                <TextBlock x:Name="TxtSubBambiTakeover" Text="{loc:Str tab_takeover}" Foreground="White" VerticalAlignment="Center"/>
-                                            </StackPanel>
-                                        </DockPanel>
-                                    </Button>
-                                    <Button x:Name="BtnSubSheListening" Style="{StaticResource ExclusivesSubmenuButton}"
-                                            Click="BtnSubSheListening_Click">
-                                        <DockPanel LastChildFill="True">
-                                            <Border DockPanel.Dock="Right" x:Name="SubBadgeSheListening"
-                                                    Background="#FF69B4" CornerRadius="8" Padding="6,1" Margin="8,0,0,0"
-                                                    VerticalAlignment="Center">
-                                                <TextBlock Text="✨" FontSize="9" Foreground="White"/>
-                                            </Border>
-                                            <StackPanel Orientation="Horizontal">
-                                                <Image Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center"
-                                                       Source="{Binding Source='🎙️', Converter={StaticResource EmojiToImageSource}}"/>
-                                                <TextBlock Text="She's Listening" Foreground="White" VerticalAlignment="Center"/>
-                                            </StackPanel>
-                                        </DockPanel>
-                                    </Button>
-                                    <Button x:Name="BtnSubGradedIntake" Style="{StaticResource ExclusivesSubmenuButton}"
-                                            Click="BtnSubGradedIntake_Click">
-                                        <DockPanel LastChildFill="True">
-                                            <Border DockPanel.Dock="Right" x:Name="SubBadgeGradedIntake"
-                                                    Background="#FF69B4" CornerRadius="8" Padding="6,1" Margin="8,0,0,0"
-                                                    VerticalAlignment="Center">
-                                                <TextBlock Text="✨" FontSize="9" Foreground="White"/>
-                                            </Border>
-                                            <StackPanel Orientation="Horizontal">
-                                                <Image Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center"
-                                                       Source="{Binding Source='❓', Converter={StaticResource EmojiToImageSource}}"/>
-                                                <TextBlock Text="Graded Intake" Foreground="White" VerticalAlignment="Center"/>
-                                            </StackPanel>
-                                        </DockPanel>
-                                    </Button>
-                                    <Button x:Name="BtnSubHaptics" Style="{StaticResource ExclusivesSubmenuButton}"
-                                            Click="BtnSubHaptics_Click">
-                                        <DockPanel LastChildFill="True">
-                                            <Border DockPanel.Dock="Right" x:Name="SubBadgeHaptics"
-                                                    Background="#FF69B4" CornerRadius="8" Padding="6,1" Margin="8,0,0,0"
-                                                    VerticalAlignment="Center">
-                                                <TextBlock Text="✨" FontSize="9" Foreground="White"/>
-                                            </Border>
-                                            <StackPanel Orientation="Horizontal">
-                                                <Image Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center"
-                                                       Source="{Binding Source='💜', Converter={StaticResource EmojiToImageSource}}"/>
-                                                <TextBlock Text="{loc:Str tab_haptics}" Foreground="White" VerticalAlignment="Center"/>
-                                            </StackPanel>
-                                        </DockPanel>
-                                    </Button>
-                                    <Button x:Name="BtnSubAwareness" Style="{StaticResource ExclusivesSubmenuButton}"
-                                            Click="BtnSubAwareness_Click">
-                                        <DockPanel LastChildFill="True">
-                                            <Border DockPanel.Dock="Right" x:Name="SubBadgeAwareness"
-                                                    Background="#FF69B4" CornerRadius="8" Padding="6,1" Margin="8,0,0,0"
-                                                    VerticalAlignment="Center">
-                                                <TextBlock Text="✨" FontSize="9" Foreground="White"/>
-                                            </Border>
-                                            <StackPanel Orientation="Horizontal">
-                                                <Image Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center"
-                                                       Source="{Binding Source='👁', Converter={StaticResource EmojiToImageSource}}"/>
-                                                <TextBlock Text="{loc:Str tab_awareness}" Foreground="White" VerticalAlignment="Center"/>
-                                            </StackPanel>
-                                        </DockPanel>
-                                    </Button>
-                                    <Button x:Name="BtnSubLockdown" Style="{StaticResource ExclusivesSubmenuButton}"
-                                            Click="BtnSubLockdown_Click">
-                                        <DockPanel LastChildFill="True">
-                                            <Border DockPanel.Dock="Right" x:Name="SubBadgeLockdown"
-                                                    Background="#FF69B4" CornerRadius="8" Padding="6,1" Margin="8,0,0,0"
-                                                    VerticalAlignment="Center">
-                                                <TextBlock Text="✨" FontSize="9" Foreground="White"/>
-                                            </Border>
-                                            <StackPanel Orientation="Horizontal">
-                                                <Image Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center"
-                                                       Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
-                                                <TextBlock Text="{loc:Str tab_lockdown_mode}" Foreground="White" VerticalAlignment="Center"/>
-                                            </StackPanel>
-                                        </DockPanel>
-                                    </Button>
-                                </StackPanel>
-                            </Border>
-                            </Border>
-                        </Popup>
                     </Grid>
                     <Button x:Name="BtnMainHelp" Grid.Column="6" Content="?" Click="BtnMainHelp_Click"
                             Width="26" Height="26" ToolTip="{loc:Str tooltip_how_to_use}" Margin="3,0">
@@ -1196,6 +1056,12 @@
              Browse / run / lapsed / graduated are four panels inside one view, switched from
              MainWindow.ProgramsTab.cs. -->
         <views:ProgramsTabView x:Name="ProgramsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+
+
+        <!-- Exclusives Tab — "the Velvet Vault". Registry-driven showcase of the
+             supporter-only features (ExclusiveFeature.All); replaced the launcher
+             popup submenu. Cards navigate; destination tabs own the premium gates. -->
+        <views:ExclusivesTabView x:Name="ExclusivesTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
 

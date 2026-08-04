@@ -87,8 +87,7 @@ public class IntakePunchCardService : IDisposable
     public IntakePunchCardService(string? statePathOverride = null)
     {
         _statePath = statePathOverride ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ConditioningControlPanel",
+            App.UserDataPath,
             "intake_punchcard.json");
 
         State = LoadState();

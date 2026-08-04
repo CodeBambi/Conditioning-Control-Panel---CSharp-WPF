@@ -33,7 +33,10 @@ namespace ConditioningControlPanel.Services
         public bool EndedNaturally { get; set; }
     }
 
-    public class VideoService : IDisposable
+    // partial: the browser-engine adapter lives in VideoService.Browser.cs (the hybrid video
+    // engine). Everything else — scheduling, selection, safety timers, attention, strict mode —
+    // stays here and is shared by both engines.
+    public partial class VideoService : IDisposable
     {
         private readonly Random _random = new();
         private Queue<string> _videoQueue = new();  // Performance: Changed to Queue for O(1) dequeue
@@ -363,7 +366,9 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public long GetCurrentPlaybackTimeMs()
         {
-            try { return _primaryMediaPlayer?.Time ?? -1; }
+            // Browser session: PrimaryMediaPlayer is null by design, and the position comes from the
+            // page's ~10Hz `time` messages instead (FunScript haptics + Deeper's time source).
+            try { return _browserActive ? _browserTimeMs : (_primaryMediaPlayer?.Time ?? -1); }
             catch { return -1; }
         }
 
@@ -379,6 +384,8 @@ namespace ConditioningControlPanel.Services
             // keeps playing, so the two screens desync (#527). Only the primary raises events, but
             // all players must track the same position.
             var target = Math.Max(0, ms);
+            // Browser session: the page seeks every screen in lockstep for the same reason.
+            if (_browserActive) _browser?.Seek(target);
             foreach (var p in SnapshotPlayers())
             {
                 try
@@ -395,6 +402,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>Pause every screen's player (kept in lockstep for multi-monitor). No-op if none.</summary>
         public void PausePrimary()
         {
+            if (_browserActive) _browser?.Pause();
             foreach (var p in SnapshotPlayers())
             {
                 try { p.SetPause(true); }
@@ -411,6 +419,7 @@ namespace ConditioningControlPanel.Services
             // _gracePaused BEFORE it calls this, so the legitimate resume is unaffected.
             if (_gracePaused) return;
 
+            if (_browserActive) _browser?.Resume();
             foreach (var p in SnapshotPlayers())
             {
                 try { p.SetPause(false); }
@@ -1250,6 +1259,10 @@ namespace ConditioningControlPanel.Services
         {
             var effectiveVolume = GetEffectiveVolume();
 
+            // Browser session: one message carries master x video volume AND the external mute
+            // (GetEffectiveVolume already folds the mute in, so both halves agree).
+            if (_browserActive) _browser?.SetVolume(effectiveVolume / 100.0, effectiveVolume <= 0);
+
             // Update LibVLC media players (thread-safe snapshot)
             List<LibVLCSharp.Shared.MediaPlayer> playersCopy;
             lock (_mediaPlayersLock)
@@ -1367,6 +1380,13 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("VideoService.Stop: LibVLCSharp.WPF not loaded, skipping CloseAll");
             }
 
+            // Stop() is the one teardown funnel that never released the queue slot: a video cut
+            // off by an engine/feature/remote stop kept "Video" claimed for the full 5-minute
+            // stuck window, blocking every queued interaction (smoke test 2026-08-04). Placed
+            // after CloseAll so the slot is never released under a still-open video window;
+            // CompleteIfCurrent never clears a claim that isn't ours.
+            App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.Video);
+
             App.Logger?.Information("VideoService stopped");
         }
 
@@ -1476,6 +1496,21 @@ namespace ConditioningControlPanel.Services
                 // us — dropping without releasing would block every interaction for the
                 // 5-minute stuck window. Safe on non-dequeue paths: current==Video with no
                 // video playing only happens right after a dequeue.
+                if (!_videoPlaying &&
+                    App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.Video)
+                {
+                    App.InteractionQueue.Complete(InteractionQueueService.InteractionType.Video);
+                }
+                return;
+            }
+
+            // For You feed open: the feed IS the video experience — a mandatory video over it
+            // would fight the feed's own players for audio and attention. Drop outright (never
+            // queue: the feed can stay open far longer than the queue's stuck window), releasing
+            // a dequeued claim the same way the cascade guard above does.
+            if (Fyp.FypHostService.IsActive)
+            {
+                App.Logger?.Information("VideoService: TriggerVideo dropped - For You feed active");
                 if (!_videoPlaying &&
                     App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.Video)
                 {
@@ -2189,8 +2224,19 @@ namespace ConditioningControlPanel.Services
             VideoDiag.Log("VIDEO", $"prologue: 1.3s delay timer scheduled +{prologueSw.ElapsedMilliseconds}ms");
         }
 
-        private void StartVideoPlayback(string path, bool strict)
+        /// <param name="forceLibVlc">Set only by the browser engine's runtime fallback: the page
+        /// already failed on this file, so the routing branch below must not send it back.</param>
+        private void StartVideoPlayback(string path, bool strict, bool forceLibVlc = false)
         {
+            // ---- hybrid routing (docs/BROWSER_VIDEO_ENGINE_PLAN.md §4) ----
+            // The ONLY change to this path. When the browser engine takes the clip it satisfies the
+            // whole parity checklist itself (see VideoService.Browser.cs) and returns; otherwise
+            // everything below runs exactly as it always has.
+            if (!forceLibVlc && Video.Browser.BrowserVideoGate.ShouldUseBrowser(path))
+            {
+                if (StartBrowserVideoPlayback(path, strict)) return;
+            }
+
             App.Logger?.Information("VideoService: StartVideoPlayback called for {File}", Path.GetFileName(path));
 
             // Every step from here to the first frame is bracketed (#750-#753): the reporters' crash
@@ -2360,6 +2406,11 @@ namespace ConditioningControlPanel.Services
                 VideoDiag.Log("VIDEO", $"show complete +{showSw.ElapsedMilliseconds}ms - {_windows.Count} window(s) on screen");
                 VideoStarted?.Invoke(this, EventArgs.Empty);
                 _ = App.Haptics?.StartVideoBackgroundVibeAsync();
+                // PHASE F: look for "<this video>.funscript" (or funscripts\<name>.funscript) and,
+                // if there is one, follow it for as long as this clip plays. Silent no-op when the
+                // feature is off, no script exists or no toy is connected.
+                try { App.Haptics?.FunScript?.OnVideoStarted(path); }
+                catch (Exception ex) { App.Logger?.Debug("FunScript start hook failed: {Error}", ex.Message); }
                 App.Logger?.Information("Playing: {File}", Path.GetFileName(path));
             }
             catch (Exception ex)
@@ -2679,7 +2730,48 @@ namespace ConditioningControlPanel.Services
             // memory callbacks (SetVideoFormat + SetVideoCallbacks) instead of a VideoView; it must
             // happen BEFORE Play() below, same as attaching a VideoView.
             if (useBlur)
+            {
                 blurSurface!.Attach(mediaPlayer);
+
+                // #786: the vmem format callback reports the CODED frame size with the sample aspect
+                // ratio dropped, so an anamorphic clip's buffer is the wrong SHAPE and drawing it at
+                // its own pixel aspect widened the picture until it filled the screen. The media's
+                // video track carries the SAR, but only once the ES is enumerated - which is after
+                // the first format callback. Push it in whenever it becomes available; the surface
+                // re-lays-out idempotently. Subscribed BEFORE Play() so a fast start can't outrun it.
+                var aspectTarget = blurSurface!;
+                var aspectPlayer = mediaPlayer;
+                void PushTrackAspect()
+                {
+                    try
+                    {
+                        var tracks = aspectPlayer.Media?.Tracks;
+                        if (tracks == null) return;
+                        foreach (var track in tracks)
+                        {
+                            if (track.TrackType != TrackType.Video) continue;
+                            var v = track.Data.Video;
+                            bool transposed = v.Orientation is VideoOrientation.LeftTop
+                                or VideoOrientation.LeftBottom
+                                or VideoOrientation.RightTop
+                                or VideoOrientation.RightBottom;
+                            double aspect = DisplayAspectFrom(v.Width, v.Height, v.SarNum, v.SarDen, transposed);
+                            if (aspect > 0)
+                            {
+                                aspectTarget.SetSourceAspect(aspect, $"track {v.Width}x{v.Height} sar {v.SarNum}:{v.SarDen}");
+                                return;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("VideoService: video-track aspect probe failed: {Error}", ex.Message);
+                    }
+                }
+                mediaPlayer.Playing += (s, e) => PushTrackAspect();
+                mediaPlayer.ESSelected += (s, e) => PushTrackAspect();
+                mediaPlayer.Vout += (s, e) => PushTrackAspect();
+            }
             else
                 videoView!.MediaPlayer = mediaPlayer;
             VideoDiag.Log("VIDEO", $"win[{tag}]: surface attached +{winSw.ElapsedMilliseconds}ms");
@@ -2846,6 +2938,63 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// True DISPLAY aspect (w/h) of a video track: the coded frame size corrected by the sample
+        /// aspect ratio, and transposed when the track carries a 90°/270° rotation (LibVLC rotates
+        /// the vmem buffer for us via video_format_ApplyRotation, but the track still reports the
+        /// pre-rotation size). Returns 0 when the numbers can't describe a real frame.
+        ///
+        /// #786: the vmem format callback hands us the CODED size with the SAR already dropped, so
+        /// an anamorphic clip (non-square pixels) arrived as, say, 640x368 when its real display
+        /// shape is much taller — and rendering that buffer at its own pixel aspect stretched the
+        /// picture sideways until it filled the screen. Never derive the on-screen shape from the
+        /// buffer when the track can tell us the truth. Pure — unit-tested.
+        /// </summary>
+        internal static double DisplayAspectFrom(uint width, uint height, uint sarNum, uint sarDen, bool transposed)
+        {
+            if (width == 0 || height == 0) return 0;
+            double num = width * (sarNum > 0 ? sarNum : 1u);
+            double den = height * (sarDen > 0 ? sarDen : 1u);
+            if (den <= 0) return 0;
+            double aspect = num / den;
+            if (transposed) aspect = 1.0 / aspect;
+            if (double.IsNaN(aspect) || double.IsInfinity(aspect) || aspect <= 0) return 0;
+            // Sanity fence: real clips live well inside 16:1 .. 1:16. Anything outside is a garbage
+            // SAR and must fall back to the buffer aspect rather than produce a sliver of video.
+            if (aspect > 16.0 || aspect < 1.0 / 16.0) return 0;
+            return aspect;
+        }
+
+        /// <summary>
+        /// Largest rect of <paramref name="aspect"/> (w/h) that fits inside the container —
+        /// i.e. letterbox or pillarbox, never stretch. Returns (0,0) when there is nothing sane to
+        /// fit yet. Pure — unit-tested.
+        /// </summary>
+        internal static (double W, double H) FitToAspect(double containerW, double containerH, double aspect)
+        {
+            if (containerW <= 0 || containerH <= 0 || aspect <= 0 ||
+                double.IsNaN(aspect) || double.IsInfinity(aspect)) return (0, 0);
+
+            double w = containerW;
+            double h = containerW / aspect;
+            if (h > containerH)
+            {
+                h = containerH;
+                w = containerH * aspect;
+            }
+            return (w, h);
+        }
+
+        /// <summary>
+        /// Whether the blurred fill is worth paying for: bars only appear when the video's display
+        /// aspect differs from the screen's by more than the tolerance. Pure — unit-tested.
+        /// </summary>
+        internal static bool NeedsBlurFill(double videoAspect, double screenAspect)
+        {
+            if (videoAspect <= 0 || screenAspect <= 0) return false;
+            return Math.Abs(videoAspect / screenAspect - 1.0) > 0.03;
+        }
+
+        /// <summary>
         /// Byte size of one BGRA frame of the given geometry, or 0 if the geometry is absurd
         /// (overflow / zero side). A bogus format callback must make the blit SKIP the frame, never
         /// allocate or copy on a garbage length. Pure — unit-tested.
@@ -2983,6 +3132,7 @@ namespace ConditioningControlPanel.Services
             private readonly ImageBrush _bgBrush;
             private readonly Image _foreground;
             private readonly System.Windows.Shapes.Rectangle _scrim;
+            private readonly Grid _hostGrid;
 
             // Set from the video-format callback once the decoder reports the real frame size.
             private uint _w;
@@ -2995,6 +3145,15 @@ namespace ConditioningControlPanel.Services
             private bool _hooked;
             private bool _disposed;
             private bool _bufferReleased;
+
+            /// <summary>Per-frame budget for <c>WriteableBitmap.TryLock</c>. Long enough that an
+            /// ordinarily busy render thread still gets its frame through (a fullscreen Gaussian
+            /// pass measures in tens of ms), short enough that a WEDGED one costs a frame instead
+            /// of the dispatcher. See the call site in <see cref="OnRendering"/>.</summary>
+            private const int BlitLockBudgetMs = 150;
+            private static readonly Duration BlitLockBudget =
+                new(TimeSpan.FromMilliseconds(BlitLockBudgetMs));
+            private bool _blitLockTimeoutLogged;
 
             /// <summary>The player whose vmem callbacks feed this surface (set in Attach). CloseAll
             /// uses it to pair the surface with the player's Stop() task, which owns the moment the
@@ -3020,6 +3179,21 @@ namespace ConditioningControlPanel.Services
             // #687: stamped by every FormatCallback (under _bufferLock, so it is paired with _w/_h).
             // A rebuild posted to the dispatcher applies only if its stamp is still the newest.
             private int _formatGeneration;
+
+            // #786: the two aspects that decide the on-screen shape.
+            //   _bufferAspect — what the LATEST format callback reported (coded size, SAR dropped).
+            //                   Re-stamped by every callback so a mid-stream resolution change
+            //                   re-lays-out instead of leaving a stale rect behind.
+            //   _trueAspect   — the SAR-corrected DISPLAY aspect from the media's video track, 0
+            //                   until the track is enumerated. Authoritative when known: an
+            //                   anamorphic clip's buffer aspect is simply the wrong shape.
+            // Written on the UI thread, read from the decoder thread inside FormatCallback, hence
+            // Volatile (doubles are not guaranteed atomic on 32-bit, but this process is x64 and a
+            // torn read here would only mis-log one line).
+            private double _bufferAspect;
+            private double _trueAspect;
+            private string _aspectSource = "buffer";
+            private bool _geometryLogged;
 
             // Delegates handed to native LibVLC — kept in fields so the GC can't collect them
             // while libvlc still holds the pointers (the callbacks fire for the whole playback).
@@ -3079,6 +3253,12 @@ namespace ConditioningControlPanel.Services
 
                 // Sharp centred video: same frame, aspect-fit. Margins are transparent so the
                 // blurred fill shows through where the bars would otherwise be black.
+                //
+                // #786: Stretch.Uniform here fits the BITMAP's pixel aspect, which is only the right
+                // shape when the vmem buffer happens to have square pixels. It is the safe default
+                // until the real display aspect is known; ApplyGeometry then switches this to an
+                // explicitly sized Stretch.Fill rect computed from that aspect, so an anamorphic or
+                // padded buffer can never be drawn stretched.
                 _foreground = new Image
                 {
                     Stretch = Stretch.Uniform,
@@ -3090,6 +3270,11 @@ namespace ConditioningControlPanel.Services
                 grid.Children.Add(_background);
                 grid.Children.Add(_scrim);
                 grid.Children.Add(_foreground);
+                // The window is created at full screen bounds and then re-pinned to the monitor's
+                // physical bounds (ForceFullScreenBounds), so the fit rect has to be recomputed when
+                // the host resizes — otherwise the first layout's numbers stick.
+                grid.SizeChanged += (_, __) => ApplyGeometry();
+                _hostGrid = grid;
                 Root = grid;
             }
 
@@ -3141,23 +3326,31 @@ namespace ConditioningControlPanel.Services
                     gen = ++_formatGeneration; // stamped with the geometry it belongs to
                 }
 
-                // Bars appear when the video aspect differs from the screen aspect. Only then do we
-                // pay for the blurred fill; a clip that already fills the screen shows just the sharp
-                // layer (which covers everything at Uniform == the whole screen).
-                double videoAspect = vh > 0 ? (double)vw / vh : _screenAspect;
-                bool needsBlur = Math.Abs(videoAspect / _screenAspect - 1.0) > 0.03;
+                // Bars appear when the video's DISPLAY aspect differs from the screen aspect. Only
+                // then do we pay for the blurred fill; a clip that already fills the screen shows
+                // just the sharp layer.
+                //
+                // #786: this used to read the aspect straight off the callback's dims. Those are the
+                // coded dims with the SAR dropped, and LibVLC re-reports them mid-setup (640x368 four
+                // times, then 640x386), so the decision flip-flopped AND the shape it was deciding
+                // about was not the shape the clip should have. The authoritative number is the
+                // track's SAR-corrected aspect when we have it; the buffer aspect is the fallback.
+                // Both the decision and the layout are recomputed from scratch on every callback.
+                double bufferAspect = (vw > 0 && vh > 0) ? (double)vw / vh : 0;
+                double effectiveAspect = EffectiveAspect(bufferAspect);
+                bool needsBlur = NeedsBlurFill(effectiveAspect, _screenAspect);
 
-                App.Logger?.Information("VideoService: blurred-background format cb — video {VW}x{VH}, buffer {BW}x{BH}, blurFill={Blur}",
-                    vw, vh, bw, bh, needsBlur);
+                App.Logger?.Information("VideoService: blurred-background format cb — video {VW}x{VH}, buffer {BW}x{BH}, displayAspect={AR:0.000} ({Src}), blurFill={Blur}",
+                    vw, vh, bw, bh, effectiveAspect, Volatile.Read(ref _trueAspect) > 0 ? "track" : "buffer", needsBlur);
                 // Runs on a LibVLC decoder thread — enqueue only, never touch the disk or the UI here.
                 // blurFill=true arms the fullscreen Gaussian; in 6.5.0 it ran every frame over the LIVE
                 // per-frame bitmap and that was the freeze (#616-#623/#632/#636/#687). It now runs over
                 // a small frozen snapshot instead, but the trace still records when it is armed.
-                Diag($"format cb - video {vw}x{vh}, buffer {bw}x{bh}, blurFill={needsBlur}");
+                Diag($"format cb - video {vw}x{vh}, buffer {bw}x{bh}, displayAspect={effectiveAspect:0.000}, blurFill={needsBlur}");
 
                 var disp = Application.Current?.Dispatcher;
                 if (disp != null && !disp.HasShutdownStarted)
-                    disp.BeginInvoke(new Action(() => RebuildBitmap(gen, bw, bh, needsBlur)));
+                    disp.BeginInvoke(new Action(() => RebuildBitmap(gen, bw, bh, bufferAspect)));
 
                 return 1; // one plane (RV32)
             }
@@ -3176,7 +3369,7 @@ namespace ConditioningControlPanel.Services
             /// decoder behind it. The stamp is re-checked INSIDE _bufferLock so the swap is atomic with
             /// respect to a format callback that lands while this rebuild is mid-flight.
             /// </summary>
-            private void RebuildBitmap(int gen, uint bw, uint bh, bool needsBlur)
+            private void RebuildBitmap(int gen, uint bw, uint bh, double bufferAspect)
             {
                 if (_disposed) return;
                 try
@@ -3189,11 +3382,26 @@ namespace ConditioningControlPanel.Services
 
                     var bmp = new WriteableBitmap((int)bw, (int)bh, 96, 96, PixelFormats.Bgr32, null);
                     bool applied;
-                    lock (_bufferLock)
+                    // BOUNDED, like the per-frame blit (:TryEnter 8ms) and Dispose (:TryEnter 250ms):
+                    // this was the last plain `lock (_bufferLock)` left on the UI thread, and since
+                    // 6.6.3 CloseAll no longer waits for Stop() on this path, a decoder thread parked
+                    // in LockCallback/FormatCallback (i.e. the wedged-Stop state the quarantine path
+                    // exists for) can now still be holding this lock long after the surface's video
+                    // ended. An unbounded wait here would hand that native wedge the dispatcher.
+                    // Dropping the rebuild is safe: the geometry the decoder is producing is stale by
+                    // definition once a newer format callback lands, and OnRendering's dimension guard
+                    // skips frames until a rebuild does land.
+                    if (!Monitor.TryEnter(_bufferLock, 250))
+                    {
+                        Diag($"bitmap rebuild dropped ({bw}x{bh}, gen {gen}) - _bufferLock still held by a native callback after 250ms");
+                        return;
+                    }
+                    try
                     {
                         applied = IsRebuildCurrent(gen, _formatGeneration);
                         if (applied) _bitmap = bmp;
                     }
+                    finally { Monitor.Exit(_bufferLock); }
                     if (!applied)
                     {
                         Diag($"stale bitmap rebuild dropped at swap ({bw}x{bh}, gen {gen} superseded)");
@@ -3201,20 +3409,118 @@ namespace ConditioningControlPanel.Services
                     }
 
                     _foreground.Source = bmp;
-                    _needsBlur = needsBlur;
-                    _background.Visibility = needsBlur ? Visibility.Visible : Visibility.Collapsed;
-                    _scrim.Visibility = needsBlur ? Visibility.Visible : Visibility.Collapsed;
+
+                    // #786: re-stamp the buffer aspect from THIS callback and re-derive both the blur
+                    // decision and the fit rect. Every callback lands a complete layout; nothing is
+                    // carried over from the previous geometry.
+                    if (bufferAspect > 0 && Math.Abs(Volatile.Read(ref _bufferAspect) - bufferAspect) >= 0.0005)
+                    {
+                        Volatile.Write(ref _bufferAspect, bufferAspect);
+                        _geometryLogged = false; // the reported shape moved - trace the new fit once
+                    }
+                    ApplyGeometry();
 
                     // The fill is fed by RefreshBackgroundSnapshot, NOT by this bitmap (#687). Drop the
                     // old snapshot so the next frame rebuilds it at the new geometry immediately.
                     _snapW = 0;
                     _snapH = 0;
                     _frameCounter = 0;
-                    if (!needsBlur) _bgBrush.ImageSource = null;
                 }
                 catch (Exception ex)
                 {
                     App.Logger?.Debug("BlurVmemSurface: bitmap rebuild failed: {Error}", ex.Message);
+                }
+            }
+
+            /// <summary>
+            /// The aspect the picture must actually be drawn at: the track's SAR-corrected display
+            /// aspect when it is known, else the buffer's own pixel aspect, else the screen's (so a
+            /// surface with no information yet is never sized to nonsense). Callable from any thread.
+            /// </summary>
+            private double EffectiveAspect(double bufferAspect)
+            {
+                double t = Volatile.Read(ref _trueAspect);
+                if (t > 0) return t;
+                if (bufferAspect > 0) return bufferAspect;
+                double b = Volatile.Read(ref _bufferAspect);
+                return b > 0 ? b : _screenAspect;
+            }
+
+            /// <summary>
+            /// The SAR-corrected display aspect read off the media's video track, pushed in once the
+            /// track is enumerated (it is not available when the first format callback fires). Safe
+            /// to call repeatedly and from any thread — it marshals to the UI thread and only
+            /// re-lays-out when the number actually changed.
+            /// </summary>
+            public void SetSourceAspect(double aspect, string source)
+            {
+                if (aspect <= 0 || _disposed) return;
+                var disp = Application.Current?.Dispatcher;
+                if (disp == null || disp.HasShutdownStarted) return;
+                disp.BeginInvoke(new Action(() =>
+                {
+                    if (_disposed) return;
+                    if (Math.Abs(Volatile.Read(ref _trueAspect) - aspect) < 0.0005) return;
+                    Volatile.Write(ref _trueAspect, aspect);
+                    _aspectSource = source;
+                    _geometryLogged = false; // the shape changed - say so once with the new numbers
+                    ApplyGeometry();
+                }));
+            }
+
+            /// <summary>
+            /// Size the sharp layer to the largest rect of the video's true display aspect that fits
+            /// this screen, and arm the blurred fill only when that leaves bars. UI thread only.
+            ///
+            /// #786: the sharp layer used to rely on Stretch.Uniform against the WriteableBitmap,
+            /// which fits the BUFFER's pixel aspect. LibVLC's vmem callback reports the coded frame
+            /// size with the sample-aspect-ratio already dropped, so an anamorphic clip was drawn at
+            /// the wrong shape — widened until it filled the screen. Computing the rect ourselves
+            /// from the display aspect makes the fit independent of whatever geometry the decoder
+            /// happens to report, and re-running it on every format callback, aspect update and
+            /// resize makes repeated callbacks idempotent instead of leaving a stale rect.
+            /// </summary>
+            private void ApplyGeometry()
+            {
+                if (_disposed) return;
+                try
+                {
+                    double aspect = EffectiveAspect(0);
+                    bool needsBlur = NeedsBlurFill(aspect, _screenAspect);
+
+                    _needsBlur = needsBlur;
+                    _background.Visibility = needsBlur ? Visibility.Visible : Visibility.Collapsed;
+                    _scrim.Visibility = needsBlur ? Visibility.Visible : Visibility.Collapsed;
+                    if (!needsBlur) _bgBrush.ImageSource = null;
+
+                    double cw = _hostGrid.ActualWidth;
+                    double ch = _hostGrid.ActualHeight;
+                    var (fw, fh) = FitToAspect(cw, ch, aspect);
+                    if (fw <= 0 || fh <= 0)
+                    {
+                        // No usable container size yet (first layout pass). Fall back to WPF's own
+                        // aspect-preserving fit rather than pinning a bogus rect — still never a
+                        // stretch, just possibly the buffer's aspect for a frame or two.
+                        _foreground.Stretch = Stretch.Uniform;
+                        _foreground.Width = double.NaN;
+                        _foreground.Height = double.NaN;
+                        return;
+                    }
+
+                    _foreground.Stretch = Stretch.Fill;   // exact, because the rect below IS the fit
+                    _foreground.Width = fw;
+                    _foreground.Height = fh;
+
+                    if (!_geometryLogged)
+                    {
+                        _geometryLogged = true;
+                        Diag($"fit {fw:0}x{fh:0} in {cw:0}x{ch:0} at displayAspect {aspect:0.000} " +
+                             $"({_aspectSource}; screen {_screenAspect:0.000}), blurFill={needsBlur}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("BlurVmemSurface: geometry apply failed: {Error}", ex.Message);
                 }
             }
 
@@ -3330,8 +3636,23 @@ namespace ConditioningControlPanel.Services
                 // blit crosses a human-visible stall, plus the very first frame. ----
                 try
                 {
+                    using var _ = VideoDiag.UiScope("BlurVmemSurface.Blit(WriteableBitmap.TryLock)");
                     long lockStart = Environment.TickCount64;
-                    bmp.Lock();
+                    // TryLock, NOT Lock: WriteableBitmap.Lock() has no timeout and waits on the WPF
+                    // RENDER thread to drop its read lock. A render thread that never drops it (the
+                    // "likely render-thread deadlock" every #775/#777/#779/#780 report ends on, and
+                    // the CWGXBitmapLockState::LockRead stack a previous hang dump caught) therefore
+                    // takes the dispatcher with it, permanently and silently. A dropped frame is
+                    // always the better trade: the decoder keeps running and the next frame retries.
+                    if (!bmp.TryLock(BlitLockBudget))
+                    {
+                        if (!_blitLockTimeoutLogged)
+                        {
+                            _blitLockTimeoutLogged = true;
+                            Diag($"frame DROPPED - WriteableBitmap.TryLock timed out after {BlitLockBudgetMs}ms (render thread is not releasing its read lock)");
+                        }
+                        return;
+                    }
                     try
                     {
                         Marshal.Copy(staging, 0, bmp.BackBuffer, bytes);
@@ -3900,6 +4221,19 @@ namespace ConditioningControlPanel.Services
                 var spawnedTargets = new List<FloatingText>();
                 bool hitRegistered = false; // Prevent double-counting hits from the same spawn
 
+                // PHASE F — "squeeze your toy" attention checks. A toy button press satisfies the
+                // check IN ADDITION to the normal click (it never replaces it), and only while
+                // this spawn's targets are on screen. Subscribed below, dropped the moment the
+                // spawn resolves either way.
+                EventHandler<Services.Haptics.Core.HapticToyEvent>? toyHandler = null;
+                void UnhookToyInput()
+                {
+                    var h = toyHandler;
+                    if (h == null) return;
+                    toyHandler = null;
+                    try { App.Haptics!.ToyInput.ButtonPressed -= h; } catch { }
+                }
+
                 App.Logger?.Debug("Spawning attention target: '{Text}' on {ScreenCount} screen(s) ({Spawned}/{Total})",
                     text, screens.Length, _spawned, _total);
 
@@ -3913,6 +4247,7 @@ namespace ConditioningControlPanel.Services
                         // Only count as a hit once per spawn (user clicked any target from this batch)
                         if (hitRegistered) return;
                         hitRegistered = true;
+                        UnhookToyInput();
 
                         _ = App.Haptics?.VideoTargetHitAsync();
                         _hits++;
@@ -3976,6 +4311,43 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("ATTENTION: Spawned {Count} targets on all screens, total now: {Total}",
                     spawnedTargets.Count, _targets.Count);
 
+                // PHASE F: arm the toy-button alternative for this spawn's lifetime.
+                if (spawnedTargets.Count > 0 &&
+                    App.Haptics != null &&
+                    App.Haptics.Settings.AttentionCheckToyButton &&
+                    App.Haptics.Settings.ToyInputEnabled)
+                {
+                    toyHandler = (s, e) =>
+                    {
+                        // ToyInputService already marshals to the dispatcher, but the event can
+                        // still land during shutdown.
+                        if (Application.Current?.Dispatcher == null) return;
+                        try
+                        {
+                            if (hitRegistered) return;
+                            FloatingText? live = null;
+                            lock (_targets)
+                            {
+                                foreach (var t in spawnedTargets)
+                                    if (_targets.Contains(t)) { live = t; break; }
+                            }
+                            if (live == null) { UnhookToyInput(); return; }
+
+                            App.Logger?.Information("ATTENTION: satisfied by toy button press");
+                            // Same idempotent pipeline as a mouse click / gaze dwell: Hit() plays
+                            // the pop sound and runs the onHit callback (which unhooks us).
+                            live.Hit();
+                            _ = App.Haptics?.PostEvent(Services.Haptics.Core.HapticEventKind.ToyButtonReward);
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Debug("Toy-button attention hit failed: {Error}", ex.Message);
+                        }
+                    };
+                    try { App.Haptics.ToyInput.ButtonPressed += toyHandler; }
+                    catch { toyHandler = null; }
+                }
+
                 // Auto-expire all targets from this spawn together
                 var lifespan = settings.AttentionLifespan * 1000;
                 Task.Delay(lifespan).ContinueWith(_ =>
@@ -3986,6 +4358,7 @@ namespace ConditioningControlPanel.Services
                         {
                             try
                             {
+                                UnhookToyInput();
                                 lock (_targets)
                                 {
                                     foreach (var target in spawnedTargets)
@@ -5145,6 +5518,16 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
+                // A browser session has NOTHING for this ladder to rescue: the decoder is in another
+                // process, no MediaPlayer is leased and no LibVLC instance is involved. Every rung
+                // would be pure collateral damage (an off-thread Stop() of players belonging to
+                // nobody, retiring a healthy shared instance, and flipping _wedgeStallSeen, which
+                // stands the strict Closing veto down for the rest of the video). A UI stall during
+                // a browser video must trigger nothing. StartBrowserVideoPlayback also disarms the
+                // watchdog outright; this is the belt to that brace, and it covers the window
+                // between the routing decision and the disarm.
+                if (_browserActive) return;
+
                 // #766/#767: stay armed through CloseAll. _videoPlaying is cleared at the TOP of the
                 // teardown, so gating on it alone made the app's longest predictable UI-thread block
                 // structurally invisible to the guard that exists to catch exactly that.
@@ -5424,6 +5807,9 @@ namespace ConditioningControlPanel.Services
             try
             {
                 _attentionTimer?.Stop();
+                // A browser session's WebView2 windows go with the video: this is the single funnel
+                // every teardown path reaches, so the engine can never outlive the run it belongs to.
+                StopBrowserSession();
                 _segmentArmedAtUtc = DateTime.MinValue;   // random-segment mode is one-shot per video
                 // #735: the video is going away, so the grace-pause card must go with it — every
                 // teardown (panic press 2, engine stop, OS lock/suspend, wedge watchdog, natural end)
@@ -5808,6 +6194,11 @@ namespace ConditioningControlPanel.Services
 
             // Stop haptic background vibe
             _ = App.Haptics?.StopVideoBackgroundVibeAsync();
+            // PHASE F: drop any funscript that was following this clip and zero its layer. Runs on
+            // every teardown path (natural end, skip, panic, attention retry) because CloseAll is
+            // the single funnel for all of them.
+            try { App.Haptics?.FunScript?.OnVideoStopped(); }
+            catch (Exception ex) { App.Logger?.Debug("FunScript stop hook failed: {Error}", ex.Message); }
 
             // Notify InteractionQueue that video is complete (triggers queued items)
             App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.Video);
@@ -5866,6 +6257,12 @@ namespace ConditioningControlPanel.Services
                 if (!string.IsNullOrEmpty(tempPath))
                 {
                     _tempPackFiles.Add(tempPath);  // Track for cleanup
+                    // Every play decrypts to a NEW ccp_temp_<GUID> path, so the browser engine's
+                    // unsafe cache would never recognise a pack clip it has already failed on and
+                    // the user would pay the fallback wait again and again. Give the temp path the
+                    // pack entry's identity - the one thing about it that is stable.
+                    Video.Browser.BrowserUnsafeVideoCache.RegisterStableKey(
+                        tempPath, $"pack:{packVideo.PackId}|{packVideo.File.OriginalName}");
                     App.Logger?.Debug("Using pack video: {Name} from pack {PackId}", packVideo.File.OriginalName, packVideo.PackId);
                     return tempPath;
                 }
@@ -6583,28 +6980,9 @@ namespace ConditioningControlPanel.Services
 
                 if (File.Exists(popPath))
                 {
-                    Task.Run(() =>
-                    {
-                        try
-                        {
-                            using var audioFile = new AudioFileReader(popPath);
-                            // Apply master volume to attention target pop sound
-                            var masterVolume = App.Settings?.Current?.MasterVolume ?? 100;
-                            audioFile.Volume = 0.6f * (masterVolume / 100f);
-                            using var outputDevice = new WaveOutEvent();
-                            App.Audio?.ApplyPreferredDevice(outputDevice);
-                            outputDevice.Init(audioFile);
-                            outputDevice.Play();
-                            while (outputDevice.PlaybackState == PlaybackState.Playing)
-                            {
-                                Thread.Sleep(50);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            App.Logger?.Debug("Pop sound playback failed: {Error}", ex.Message);
-                        }
-                    });
+                    // Apply master volume to attention target pop sound
+                    var masterVolume = App.Settings?.Current?.MasterVolume ?? 100;
+                    App.Audio?.PlayOneShot(popPath, 0.6f * (masterVolume / 100f), "target-pop");
                 }
             }
             catch (Exception ex)

@@ -1603,12 +1603,13 @@ namespace ConditioningControlPanel.Services
         {
             if (Path.IsPathRooted(path)) return path;
 
-            // Look under Resources/ first (preset-bundled audio).
-            var resPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", path);
+            // Look under Resources/ first (preset-bundled audio) — install dir, then any downloaded
+            // content pack, so a preset that points at pack-hosted audio still resolves.
+            var resPath = ContentLocator.Resolve(Path.Combine("Resources", path));
             if (File.Exists(resPath)) return resPath;
 
             // Fall back to sub_audio directory (legacy relative audio).
-            var subPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sub_audio", path);
+            var subPath = ContentLocator.Resolve(Path.Combine("Resources", "sub_audio", path));
             if (File.Exists(subPath)) return subPath;
 
             return path;
@@ -1952,6 +1953,7 @@ namespace ConditioningControlPanel.Services
 
                     _triggerPlayer.Init(_triggerAudioFile);
                     _triggerPlayer.Play();
+                    App.Audio?.NoteOutputSuccess();
 
                     App.Logger?.Information("PlayTriggerAudio: playing '{Path}' curved={Curve:0.00} master={Master:0.00} thread={Thread}",
                         Path.GetFileName(path), curvedVolume, masterVolume, System.Threading.Thread.CurrentThread.ManagedThreadId);
@@ -1961,6 +1963,8 @@ namespace ConditioningControlPanel.Services
                 catch (Exception ex)
                 {
                     App.Logger?.Warning("PlayTriggerAudio: Error playing audio: {Error}", ex.Message);
+                    App.Audio?.NoteOutputFailure("keyword-trigger", ex.Message);
+                    StopTriggerAudio(); // Init/Play threw with the fields already assigned — free them now
                     return 0;
                 }
             }

@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.Haptics.Core;
 using Newtonsoft.Json.Linq;
 
 namespace ConditioningControlPanel.Services.Haptics
@@ -16,13 +17,19 @@ namespace ConditioningControlPanel.Services.Haptics
     ///
     ///   AMBIENT — a slow "depth gauge" floor driven by the page's throttled
     ///   haptic-state feed (the game's own intensity() 0..1 signal + Surfacing melt).
-    ///   Issued as long 30s commands refreshed rarely, exactly like
-    ///   HapticService.StartVideoBackgroundVibeAsync — near-zero command traffic.
+    ///   Now published as <see cref="HapticLayer.Dtrh"/> on the mixer, which holds the level
+    ///   with zero command traffic until it changes (it used to be a 30s Lovense command
+    ///   refreshed on a timer, which is the same trick one abstraction layer lower).
     ///
     ///   ACCENTS — short pattern spikes on meaningful moments, tapped from the bark
     ///   event stream DtrhHostService already receives. Three tiers with cooldowns:
     ///   tier 3 moments always fire and preempt, tier 2 respects a shared gap, tier 1
     ///   micro-events (pops/defuses) are COALESCED into one swell scaled by count.
+    ///   Accents are mixer PULSES carrying their tier as priority, so they ride OVER the
+    ///   ambient floor instead of replacing it.
+    ///
+    /// This director's two-layer shape was the template for HapticMixer; the tuning values
+    /// below (tiers, gaps, coalesce window, ambient curve) are unchanged from v6.6.
     ///
     /// Lifecycle-safe: everything stops on run end, world freeze, covering video,
     /// window close, or the settings toggles flipping off mid-run.
@@ -274,7 +281,8 @@ namespace ConditioningControlPanel.Services.Haptics
                 var ms = haptics.IsButtplugProvider ? accent.Ms * 2 : accent.Ms;
                 App.Logger?.Debug("DtrhHaptics: accent {Label} T{Tier} {Pct}% {Ms}ms {Mode}",
                     label, accent.Tier, (int)(intensity * 100), ms, accent.Mode);
-                await PlayPattern(intensity, ms, accent.Mode, cts.Token);
+                // Tier becomes mixer priority: a tier-3 moment out-ranks (and evicts) tier-1 chatter.
+                await PlayAccentPattern(intensity, ms, accent.Mode, accent.Tier, cts.Token);
             }
             catch { }
             finally
@@ -289,7 +297,15 @@ namespace ConditioningControlPanel.Services.Haptics
         }
 
         private static Task PlayPattern(double intensity, int ms, VibrationMode mode, CancellationToken token)
-            => App.Haptics?.ApplyVibrationModeAsync(intensity, ms, mode, token) ?? Task.CompletedTask;
+            => PlayAccentPattern(intensity, ms, mode, 2, token);
+
+        private static Task PlayAccentPattern(double intensity, int ms, VibrationMode mode, int tier, CancellationToken token)
+        {
+            var haptics = App.Haptics;
+            if (haptics == null) return Task.CompletedTask;
+            var target = App.Settings?.Current?.Haptics?.V2?.Rule(HapticEventKind.DtrhAccent).Target ?? ToyRole.All;
+            return haptics.PlayPatternAsync(intensity, ms, mode, tier, target, token);
+        }
 
         // tier-1 micro-events: first one opens a short window; everything landing inside
         // becomes a single swell whose strength grows with the count (a chain-pop feels
@@ -366,14 +382,9 @@ namespace ConditioningControlPanel.Services.Haptics
                     _lastAmbientSent = target;
                     _lastAmbientSendUtc = DateTime.UtcNow;
                 }
-                if (target <= 0)
-                {
-                    _ = SafeStopDevice();
-                    return;
-                }
-                // Long-lived command, refreshed rarely (the video-background trick):
-                // the device holds the level with no further traffic.
-                _ = PlayPattern(target, 30000, VibrationMode.Constant, CancellationToken.None);
+                // Level-set: the mixer holds this until we change it, so there is no refresh
+                // traffic at all. Zero is just another level, hence no special-case stop.
+                App.Haptics?.SetLayer(HapticLayer.Dtrh, target);
             }
             catch (Exception ex)
             {
@@ -394,10 +405,19 @@ namespace ConditioningControlPanel.Services.Haptics
             _ = SafeStopDevice();
         }
 
-        private static async Task SafeStopDevice()
+        /// <summary>
+        /// Stop OUR contribution only. The old version called HapticService.StopAsync(), which
+        /// stopped the device outright and therefore also killed any video / audio-sync / Deeper
+        /// haptics that happened to be running underneath.
+        /// </summary>
+        private static Task SafeStopDevice()
         {
-            try { if (App.Haptics != null) await App.Haptics.StopAsync(); }
+            try
+            {
+                App.Haptics?.SetLayer(HapticLayer.Dtrh, 0);
+            }
             catch { }
+            return Task.CompletedTask;
         }
     }
 }

@@ -17,7 +17,11 @@ namespace ConditioningControlPanel.Services
     /// Handles audio playback and system audio ducking.
     /// Ported from Python utils.py AudioDucker.
     /// </summary>
-    public class AudioService : IDisposable
+    /// <remarks>
+    /// One-shot clip playback, the output circuit breaker and the endpoint watcher live in
+    /// <c>Services/Audio/AudioService.Playback.cs</c>.
+    /// </remarks>
+    public partial class AudioService : IDisposable
     {
         #region Fields
 
@@ -155,8 +159,12 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
+            // NOT permanent any more (#779): the circuit breaker clears this via
+            // InvalidateOutputDeviceCache when it trips and again when its cooldown expires, and
+            // the endpoint watcher clears it the moment a device comes back — so restarting the
+            // Windows Audio Endpoint Builder service recovers playback instead of needing a relaunch.
             _waveOutPermanentlyUnavailable = true;
-            App.Logger?.Warning("AudioService: no WaveOut device on this system would accept waveOutOpen ({Count} candidates tried). Audio playback disabled this session.", count);
+            App.Logger?.Warning("AudioService: no WaveOut device on this system would accept waveOutOpen ({Count} candidates tried). Audio playback paused until an endpoint returns.", count);
             return null;
         }
 
@@ -447,8 +455,7 @@ namespace ConditioningControlPanel.Services
 
         // Crash recovery file for ducking state
         private static readonly string DuckingRecoveryFile = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ConditioningControlPanel", "ducking_recovery.json");
+            App.UserDataPath, "ducking_recovery.json");
 
         #endregion
 
@@ -804,15 +811,20 @@ namespace ConditioningControlPanel.Services
 
                 _soundPlayer.Init(_soundFile);
                 _soundPlayer.Play();
-                
+                NoteOutputSuccess();
+
                 var duration = _soundFile.TotalTime.TotalSeconds;
                 App.Logger?.Debug("Playing sound: {Path}, duration: {Duration}s", Path.GetFileName(path), duration);
-                
+
                 return duration;
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning("Could not play sound {Path}: {Error}", path, ex.Message);
+                // Init/Play can throw with the fields already assigned — free them here rather than
+                // leaving an open device parked until the next PlaySound call (#778).
+                StopSound();
+                NoteOutputFailure("playsound", ex.Message);
                 return 0;
             }
         }
@@ -937,7 +949,13 @@ namespace ConditioningControlPanel.Services
         private void ApplyDuckSweep(float amount, int strength)
         {
             var currentProcessId = Environment.ProcessId;
-            var excludeWebView2 = App.Settings?.Current?.ExcludeBambiCloudFromDucking ?? true;
+            // The setting is about BambiCloud's audio. The OR is about parity: while a browser video
+            // session is on screen the app's OWN video audio comes out of a WebView2 process, so
+            // ducking it would mean the mandatory video ducks itself. LibVLC audio is in-process and
+            // the sweep structurally cannot touch it (it skips our PID), so without this the two
+            // engines would sound different for the same clip.
+            var excludeWebView2 = (App.Settings?.Current?.ExcludeBambiCloudFromDucking ?? true)
+                                  || App.Video?.IsBrowserSessionActive == true;
             var webViewPids = excludeWebView2 ? RefreshWebView2Pids() : new HashSet<int>();
 
             int ducked = 0;
@@ -1402,7 +1420,10 @@ namespace ConditioningControlPanel.Services
             }
 
             var currentProcessId = Environment.ProcessId;
-            var excludeWebView2 = App.Settings?.Current?.ExcludeBambiCloudFromDucking ?? true;
+            // Same exclusion rule as ApplyDuckSweep - a browser video session that comes up DURING
+            // an open duck window must not be caught by the rescan either.
+            var excludeWebView2 = (App.Settings?.Current?.ExcludeBambiCloudFromDucking ?? true)
+                                  || App.Video?.IsBrowserSessionActive == true;
             var webViewPids = excludeWebView2 ? RefreshWebView2Pids() : new HashSet<int>();
 
             int newlyDucked = 0;
@@ -1703,6 +1724,7 @@ namespace ConditioningControlPanel.Services
             _disposed = true;
 
             StopSound();
+            ShutdownPlayback();
             _duckWatchdog?.Dispose();
             _duckRescanTimer?.Dispose();
             _restoreRetryTimer?.Dispose();

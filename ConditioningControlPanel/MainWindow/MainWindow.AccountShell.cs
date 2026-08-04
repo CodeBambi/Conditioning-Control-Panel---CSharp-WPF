@@ -34,21 +34,9 @@ namespace ConditioningControlPanel
 
         private void BtnPatreonExclusives_Click(object sender, RoutedEventArgs e)
         {
-            // Toggle the menu. With StaysOpen=True (see the Popup in XAML) the
-            // button's Click event always fires reliably — outside-click closing
-            // is handled by the window-level PreviewMouseDown handler set up in
-            // the constructor. If the popup is already pinned-open, click closes
-            // it. Otherwise click opens & pins it (so MouseLeave won't dismiss it).
-            _exclusivesMenuCloseTimer?.Stop();
-            if (ExclusivesSubmenuPopup.IsOpen && _exclusivesPinned)
-            {
-                _exclusivesPinned = false;
-                ExclusivesSubmenuPopup.IsOpen = false;
-                return;
-            }
-            RefreshExclusivesSubmenuLocks();
-            _exclusivesPinned = true;
-            ExclusivesSubmenuPopup.IsOpen = true;
+            // The launcher popup submenu was replaced by the Exclusives tab
+            // ("the Velvet Vault") — the button is a plain tab button now.
+            ShowTab("exclusives");
         }
 
         // Walks up the visual tree (with a logical-tree fallback for content like
