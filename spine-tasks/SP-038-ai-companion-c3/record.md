@@ -100,6 +100,8 @@ Completeness tripwire (SP-009-sweep-class): an executable test asserts (a) every
 | Call | Result |
 |------|--------|
 | Step 1 plan review (`spine_review_step --step 1 --type plan`) | **Engine review ABSENT (expected)** — nested reviewer spawn blocked inside pi worker session; `skipped: true`, `spawnFailed: false` (SP-195: engine runs reviews after `.DONE`). Artifact: `.reviews/1-20260804T150006.md` |
+| Step 2 plan review (`spine_review_step --step 2 --type plan`) | **Engine review ABSENT (expected)** — same SP-195 skip; `spawnFailed: false`. Artifact: `.reviews/2-20260804T151553.md` |
+| Step 3 plan review (`spine_review_step --step 3 --type plan`) | **Engine review ABSENT (expected)** — same SP-195 skip; `spawnFailed: false`. Artifact: `.reviews/3-20260804T152504.md` |
 
 ## 6. Redaction/log-site registry (SP-018 pattern, product-side form)
 
@@ -132,3 +134,18 @@ Executable proof: `Diagnostics_BlockedOperations_CarrySideCodesOnly_NeverPolicyC
 ## 9. Step 5 — contract verification transcript
 
 (pending)
+
+## 10. Budgets, surprises, durable-lesson candidates
+
+**Budget:** single session, well inside the 4h packet budget; no context-limit exits.
+
+**Surprises:**
+1. **The advisor caught a real scope error before it shipped:** my initial design consulted the escalation cooldown for BOTH operation classes; the WPF baseline scopes it to user chat input only — extending it to awareness would have silently decided a VALUES question (owner-pending). Corrected to interactive-only consult with the extension recorded as owner-pending.
+2. **The advisor's own alternative was rejected on authority order:** it leaned toward widening `AiAdmission` for the cooldown denial, but contract §11 rule 1 (owner-ratified) already fixes the interactive denial shape as `Unavailable(reason)` — the additive code is the lower-authority change. Recorded with disposition (§4.1 point 4).
+3. **One transient full-suite failure** (§7 item 8) — not reproducible in 3 subsequent runs; recorded, not hidden.
+4. **xUnit analyzer (xUnit2029) flagged `Assert.Empty` on a reflection list** — the 0W gate catches even test-code idioms; `Assert.DoesNotContain` is the analyzer-clean shape.
+
+**Durable-lesson candidates (orchestrator reconciles into port-lessons.md — enabler 2):**
+1. **Escalation/cooldown scopes are VALUES, not mechanics** — when porting a counter mechanism, the set of surfaces it gates is part of the owner-pending values; port the baseline's scope exactly and record extensions as questions. (Class: WPF-archaeology fidelity; consult-caught before commit.)
+2. **A boundary's coverage claim needs a tripwire, not a table** — the wired/reserved inventory is executable: reflection over entry points and data variants fails the suite when a new surface appears unregistered. Tables drift; tripwires don't. (Class: coverage-honesty discipline, SP-009-sweep class.)
+3. **Output moderation belongs after the stale check, inside the owned operation** — discarded replies must never be moderated (no side effects on dropped work); the only honest "before application" point is post-`IsLive`, pre-assignment. (Class: cancellation/moderation interaction.)
