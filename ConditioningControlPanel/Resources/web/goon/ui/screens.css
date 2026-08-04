@@ -626,6 +626,14 @@
 .gg-title-chip-name { color: var(--gg-gold); font-weight: 800; font-size: 0.9rem; letter-spacing: 0.04em; }
 .gg-title-chip-why { color: var(--gg-text-3); font-size: 0.76rem; }
 
+/* --- "what was throwing all that at you" — STANDALONE ONLY, and recap.js is
+   what decides that (session.hosted); there is no CSS gate for it. Centred like
+   the hero, and the call to action is a real <a> wearing .gg-btn, so it needs
+   the two things a <button> already has: block layout and no underline. */
+.gg-recap-cta { text-align: center; }
+.gg-recap-cta-lead { margin: 0 0 0.9rem; color: var(--gg-text-2); font-size: 0.85rem; line-height: 1.55; }
+.gg-recap-cta-link, .gg-recap-cta-link:hover { display: inline-block; text-decoration: none; }
+
 /* ---------------------------------------------------------------------------
  * REPORTING WHAT THEY SENT (spec §7.5) — the recap card, plus the ONE override
  * the in-match flag button needs.

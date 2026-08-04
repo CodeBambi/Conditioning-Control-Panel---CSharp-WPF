@@ -260,6 +260,15 @@ export const S = Object.freeze({
     reportPick: 'pick the one you mean',
     reportFlagged: 'flagged during the match',
     reportPrivacy: "a moderator gets the file's fingerprint, a small thumbnail and your note. they never get your name, and the other player is never told.",
+
+    /* --- the "so what WAS that" card. STANDALONE ONLY: it is written for the
+       phone joiner who arrived from an invite link, endured a match and has
+       never seen the app the payloads came out of. Hosted, the player is
+       already inside it and the card would be selling them their own desk. --- */
+    ctaTitle: 'what was throwing all that at you',
+    ctaLead: 'the flashes, the subliminals, the lock cards — all of it comes out of the Conditioning Control Panel, a desktop app that runs the whole thing for you, opponent or no opponent.',
+    ctaLink: 'See what it does',
+    ctaFine: 'opens cclabs.app in a new tab.',
   },
 
   /** Locally computed cosmetics. Nothing here reaches the server. */

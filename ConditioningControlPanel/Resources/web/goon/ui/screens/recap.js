@@ -30,6 +30,13 @@ const STONE_WALL_ENDURED = 4;
 /** How many artifacts the report shortlist ever shows. Flagged ones come first. */
 export const MAX_REPORT_ITEMS = 6;
 
+/**
+ * Where the standalone CTA points. `.html` is NOT decoration: the site is
+ * plain static hosting with clean URLs OFF, so /explore is a 404 and
+ * /explore.html is the page every link on cclabs.app itself uses.
+ */
+export const EXPLORE_URL = 'https://cclabs.app/explore.html';
+
 /** One retry on a failed submit, then the card stops offering false hope. */
 export const REPORT_MAX_RETRIES = 1;
 
@@ -510,6 +517,48 @@ export function mount(container, ctx) {
     return row;
   }
 
+  /* ------------------------------------------------------------- the CTA
+   * "what was throwing all that at you" — the one piece of marketing on this
+   * page, and it is aimed at exactly one person: the STANDALONE joiner who
+   * followed an invite link, endured a duel on their phone and has never seen
+   * the app the payloads came out of. `session.hosted` is the same flag
+   * title.js reads to decide which menu item is primary.
+   *
+   * HOSTED IT IS ABSENT, not merely quiet: inside WebView2 the player is
+   * already in the Conditioning Control Panel, so the card would be selling
+   * them the desk they are sitting at — and a target=_blank in the host opens
+   * nothing useful anyway.
+   *
+   * It is appended BELOW the actions on purpose. The rule the report card
+   * follows applies here twice over: nothing this screen adds may sit between
+   * the player and "Back to menu".
+   *
+   * A plain <a>, not a button — a real link is middle-clickable, copyable and
+   * needs no host round-trip. `rel="noopener"` because target=_blank without
+   * it hands the new tab a window.opener back into this page.
+   */
+  const standalone = !(session && session.hosted);
+
+  function ctaCard() {
+    if (!standalone) return null;
+    const link = el('a', {
+      class: 'gg-btn gg-btn--primary gg-recap-cta-link',
+      href: EXPLORE_URL,
+      target: '_blank',
+      rel: 'noopener',
+      text: S.recap.ctaLink,
+    });
+    ledger.listen(link, 'click', () => {
+      try { audio?.sfx?.('ui-select'); } catch (_e) { /* stub bus */ }
+    });
+    return el('section', { class: 'gg-card gg-recap-cta' }, [
+      el('h2', { class: 'gg-recap-h', text: S.recap.ctaTitle }),
+      el('p', { class: 'gg-recap-cta-lead', text: S.recap.ctaLead }),
+      link,
+      el('p', { class: 'gg-recap-fine', text: S.recap.ctaFine }),
+    ]);
+  }
+
   /* --------------------------------------------------------------- paint */
 
   function paint() {
@@ -623,6 +672,16 @@ export function mount(container, ctx) {
     rematch.appendChild(el('span', { class: 'gg-menu-note', text: S.recap.rematchSoon }));
     const back = button(ledger, S.recap.back, () => actions.leave('recap'), { variant: 'primary', audio, sfx: 'ui-back' });
     column.appendChild(el('div', { class: 'gg-recap-actions' }, [rematch, back]));
+
+    /* --- discover the app (standalone only, and last) --- */
+    try {
+      const cta = ctaCard();
+      if (cta) column.appendChild(cta);
+    } catch (e) {
+      // An ad must never be the reason a player cannot leave the end card.
+      try { ctx?.logger?.warn?.('recap: cta failed to build: ' + ((e && e.message) || e)); }
+      catch (_e2) { /* logger is optional */ }
+    }
   }
 
   if (match) {
