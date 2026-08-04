@@ -86,8 +86,34 @@ Driver: `spine-tasks/SP-039-worktree-patch-hook/scratch-verify.mjs` — imports 
 
 After this packet lands, the main checkout's `scripts/spine-worktree-setup.exe` + `.spine/patches/worktree-setup-hook.mjs` + the `worktreeSetupHook` config value exist on every fresh clone and every new lane's orch base — the engine resolves the hook from the MAIN checkout (patched per the standing pre-launch verify rule) and the `.mjs` rides in each lane's branch. No fresh-machine step beyond the standing `verify.mjs`/`apply.mjs` rule for the main checkout itself.
 
+## Step 3/4 — Contract run + named gate + durable lessons
+
+### Contract testCommand (Step 4)
+
+- `node .spine/patches/verify.mjs` → **exit 0** (after the ONE recorded manual `apply.mjs` remediation at this packet's start — honesty framing (c); 7 applied project-root, 5 engine skips, recorded above).
+- `dotnet build client/CcpClient.sln -c Debug --nologo` → **0 Warning(s), 0 Error(s)**.
+- `dotnet test client/tests/CcpClient.Tests` → **Passed: 492, Failed: 0, Total: 492** — EXACT floor.
+- `dotnet test client/tests/CcpClient.HeadlessTests` → **Passed: 29, Failed: 0, Total: 29** — EXACT floor.
+- Zero product change (`ConditioningControlPanel/**` and `client/**` untouched); `git diff --check` clean; `git status --short` shows only File Scope paths.
+
+### Named post-land gate (completion criterion)
+
+**The first REAL 2-lane wave launched after this packet lands must land with ZERO mid-task `verify.mjs` reds and zero worker-side `apply.mjs` remediations.** Evidence: the wave's journal `lane.setup_hook.completed` events + each lane's `.pi/npm/worktree-setup-hook.log` (`prestaged:true`, `verifyExit:0`) + worker records showing no remediation incident. If any lane reds, **T-14 REOPENS** and the hook's fail-safe reason field names why. (This packet's own lane is explicitly NOT proof — honesty framings (c)/(e); the scratch run through the engine's provisioning functions is the pre-land evidence.)
+
+### Durable-lesson candidates (orchestrator picks at land)
+
+1. **Engine hook contracts are decided from engine SOURCE, never from the shipped templates** — the Flutter `.sh` template is POSIX-only; on Windows the no-shell `spawnSync` empirically rejects `.sh`/`.cmd`/`.mjs` (EFTYPE/EINVAL) and only a real `.exe` spawns.
+2. **pi's session-start `needsInstall` version gate (package-manager.js:1008) makes pre-staging viable**: a satisfying pinned version present in `.pi/npm` is never reinstalled; pinned sources are also excluded from pi's update checks (`parsed.pinned` skip). Patch state rides in with a copied tree.
+3. **`git worktree` nesting (worktree-of-worktree) hits MAX_PATH on this repo's deep WPF asset filenames** — scratch provisioning runs against the main checkout (production-identical depth), never nested.
+4. **csc.exe from git-bash: invoke via `cmd /c` with backslash paths** — bare `/out:` slash-args get path-mangled (CS2001/CS1504).
+5. **A fail-safe hook must carry its own evidence**: the engine journals only `durationMs` and discards hook stdout/stderr — the lane log file (gitignored `.pi/npm/`) is the only durable record of `prestaged:false` degradations.
+
+### Pre-completion consult
+
+_Pending._
+
 ## Engine-review presence (T-2 heading format load-bearing)
 
 - **Step 1 plan review (`spine_review_step` type=plan):** SKIPPED by the runtime — "Nested reviewer spawn blocked inside pi worker session ... the batch engine runs reviews after worker success (SP-195)"; `skipped: true`, `spawnFailed: false`, artifact `.reviews/1-20260804T150503.md`. Not a spawn failure → proceeded per the engine-owned review path.
 
-_Pending: Step 2+ calls._
+- **Step 2 plan review (`spine_review_step` type=plan):** SKIPPED (same SP-195 nested-spawn block; `skipped: true`, `spawnFailed: false`, artifact `.reviews/2-20260804T152155.md`).
