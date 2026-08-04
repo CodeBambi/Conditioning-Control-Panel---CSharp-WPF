@@ -149,6 +149,23 @@ public sealed record AiEnvelopePolicy(
 {
     /// <summary>All effects allowed, moderation passes everything — test/development convenience.</summary>
     public static AiEnvelopePolicy PermitAll { get; } = new(true, _ => true, _ => AiModerationVerdict.Pass.Instance);
+
+    /// <summary>
+    /// Envelope policy composed with the moderation boundary (contract §7 rule 2 — every
+    /// free-text command field pre-execution). The PRODUCT composition point: c6's command
+    /// execution wires the boundary through this factory — the composed shape exists in
+    /// product code, never a caller-must-remember convention.
+    /// </summary>
+    public static AiEnvelopePolicy ForBoundary(
+        AiModerationBoundary boundary,
+        bool masterEffectsEnabled,
+        Func<AiCommandKind, bool> isEffectAllowed,
+        double maxHapticIntensity = 0.6,
+        string? assetsRoot = null)
+    {
+        ArgumentNullException.ThrowIfNull(boundary);
+        return new AiEnvelopePolicy(masterEffectsEnabled, isEffectAllowed, boundary.ModerateCommandField, maxHapticIntensity, assetsRoot);
+    }
 }
 
 /// <summary>
@@ -434,8 +451,8 @@ public static class AiEnvelopeValidator
         return AiCommandVerdict.Valid.Instance;
     }
 
-    /// <summary>Every free-text command field (contract §7 rule 2): subliminal text, mantra, bounce words, media titles/paths.</summary>
-    private static IEnumerable<string> FreeTextFields(AiCommandData data) => data switch
+    /// <summary>Every free-text command field (contract §7 rule 2): subliminal text, mantra, bounce words, media titles/paths. The SINGLE enumeration source shared by the gate and the c3 boundary's coverage tripwire — they cannot drift.</summary>
+    public static IEnumerable<string> FreeTextFields(AiCommandData data) => data switch
     {
         AiCommandData.Subliminal s => [s.Text],
         AiCommandData.MantraLockscreen m => [m.Mantra],

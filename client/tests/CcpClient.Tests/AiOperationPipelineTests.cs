@@ -64,7 +64,7 @@ public class AiOperationPipelineTests
 
         public Harness()
         {
-            Pipeline = new AiOperationPipeline(Registry, Capabilities, LoopbackOnlyAdmissionPolicy.Instance, Diagnostics);
+            Pipeline = new AiOperationPipeline(Registry, Capabilities, LoopbackOnlyAdmissionPolicy.Instance, Diagnostics, new AiModerationBoundary());
         }
 
         public FakeProvider RegisterLoopback(AiProviderId? id = null)
