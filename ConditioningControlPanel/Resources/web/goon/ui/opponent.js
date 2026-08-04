@@ -49,7 +49,7 @@ import { GoonConnectionHealth } from '../core/match.js';
 import { GoonConsts, GoonElement, GoonMatchPhase, GoonPayloadKind, enumName } from '../core/contracts.js';
 import { GoonReceiptStatus } from '../core/scoring.js';
 import { S } from './strings.js';
-import { createPreview, stickerUrl } from './throwPreview.js';
+import { createPreview, stickerUrl, markFor, throwWord, warmSticker } from './throwPreview.js';
 
 /** Closeness 0-3 -> the word that always rides with the colour. */
 export const CLOSENESS_WORDS = Object.freeze(['steady', 'warm', 'close', 'edge']);
@@ -175,6 +175,22 @@ const VWIN_MAX_MINIS = 4;
  * will throw — with the item sticker painted underneath it until the first frame
  * decodes, and left showing for the kinds that have no content (see
  * ui/throwPreview.js for which are which, and how exact the picture is).
+ *
+ * EVERY KIND, AND EVERY KIND AS ITSELF (2026-08-05). markInbound was never
+ * kind-gated — ui/hud.js hands it every accepted payload and it has always
+ * launched one projectile per kind — but for the six kinds with no live preview
+ * the ONLY pixels were the item cutout, a ~650 KB PNG whose fetch began when the
+ * projectile did and regularly landed after it. What flew was an empty box, and
+ * an empty box reads as "nothing was thrown", which is how it was reported. So
+ * each projectile now carries, in order of precedence:
+ *     the KIND'S GLYPH (text, frame one, no network)  <- the real floor
+ *     its STICKER, revealed only once it has decoded — and WARMED at accept, so
+ *       the engine's own schedule lead pays for the fetch, never the flight
+ *     its LIVE PREVIEW, media kinds only, exactly as before
+ *   + a per-kind TINT on the sender's flare, the projectile and the splash
+ *   + THEIR WORDS under it for the two payloads that are text (LockCard,
+ *     SubliminalStorm) — textContent only, see TRUST above.
+ * None of that touches the schedule: the same one timer, the same two constants.
  * ------------------------------------------------------------------------- */
 
 /** The flight, when the schedule lead can pay for it in full. */
@@ -951,8 +967,15 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     return { x: w / 2, y: h * THROW_TARGET_Y };
   }
 
-  /** Their monitor lights up: THEY did this, and it is about to arrive. */
-  function flareMonitor() {
+  /**
+   * Their monitor lights up: THEY did this, and it is about to arrive — in the
+   * colour of the thing they threw, so the flare and the projectile that leaves
+   * it are visibly the same event.
+   */
+  function flareMonitor(tint) {
+    if (tint && root.style && typeof root.style.setProperty === 'function') {
+      try { root.style.setProperty('--gg-throw-tint', tint); } catch (_e) { /* stub DOM */ }
+    }
     cls(root, 'is-throwing', true);
     try { clearTimeout(flareTimer); } catch (_e) { /* gone */ }
     if (typeof setTimeout === 'function') {
@@ -975,7 +998,8 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
    * shorthand, so a second live rule on the same element silently cancels the
    * first. The outer travels in X (linear), the middle travels in Y (with a lob
    * partway through — that is the arc), the art spins and swells. The splash at
-   * the far end is a FOURTH node for the same reason.
+   * the far end is a FOURTH node for the same reason. Everything the mark adds
+   * below rides a TRANSITION, never an animation, for exactly that reason.
    */
   function launch(kind, payload, flightMs) {
     const d = doc();
@@ -990,12 +1014,36 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     const art = add(arc, el('i', 'gg-throw-art'));
     if (!arc || !art) return null;
 
-    // The sticker is the FLOOR: painted as the art node's background from the
-    // first frame, so a preview that is slow, broken or simply not applicable
-    // degrades to it with no timer and no branch.
+    // The kind's own colour, on the projectile and (via the rec) on the splash.
+    const mark = markFor(kind);
+    if (fly.style && typeof fly.style.setProperty === 'function') {
+      fly.style.setProperty('--gg-throw-tint', mark.tint);
+    }
+    try { if (typeof fly.setAttribute === 'function') fly.setAttribute('data-gg-kind', String(kind)); }
+    catch (_e) { /* stub DOM */ }
+
+    // THE GLYPH is the real floor — text, painted on frame one, no fetch, no
+    // decode, no way to fail. Everything below is allowed to be late.
+    add(art, el('i', 'gg-throw-mark', mark.glyph));
+
+    // The sticker sits over the glyph, but ONLY once it has actually decoded:
+    // a background-image that has not arrived yet is not a floor, it is a hole,
+    // and that hole is the whole bug this pass fixes. `is-art` is the same
+    // first-decoded-frame gate .gg-throw-live's `is-ready` already uses, and
+    // the fetch itself was started back at accept (markInbound).
     const sticker = stickerUrl(kind);
     if (sticker && art.style && typeof art.style.setProperty === 'function') {
       art.style.setProperty('--gg-throw-sticker', 'url(' + sticker + ')');
+    }
+    warmSticker(kind, () => cls(fly, 'is-art', true));
+
+    // THEIR WORDS, for the two kinds whose payload IS text. On the ARC, not the
+    // art: the art tumbles, and a spinning phrase cannot be read. `is-word`
+    // steadies the item for the same reason `is-live` does.
+    const word = throwWord(kind, payload);
+    if (word) {
+      add(arc, el('span', 'gg-throw-word', word));
+      cls(fly, 'is-word', true);
     }
 
     // …and the live preview of what is actually about to play, when there is
@@ -1023,11 +1071,11 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
       }
     }
     add(d.body, fly);
-    return { node: fly, destroy: preview ? preview.destroy : null, timers: [], to };
+    return { node: fly, destroy: preview ? preview.destroy : null, timers: [], to, tint: mark.tint };
   }
 
   /** The splash where it lands. Removed on a timer — animationend is not a promise. */
-  function splash(to) {
+  function splash(to, tint) {
     const d = doc();
     if (!d || !d.body || !to) return;
     const hit = el('i', 'gg-throw-hit');
@@ -1035,13 +1083,15 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     if (hit.style) {
       hit.style.left = Math.round(to.x) + 'px';
       hit.style.top = Math.round(to.y) + 'px';
+      // The impact is the same event as the flight and wears the same colour.
+      if (tint && typeof hit.style.setProperty === 'function') hit.style.setProperty('--gg-throw-tint', tint);
     }
     add(d.body, hit);
     laterOnce(THROW_HIT_MS + 80, () => { try { hit.remove(); } catch (_e) { /* gone */ } });
   }
 
   function throwAtUs(kind, payload, flightMs) {
-    flareMonitor();
+    flareMonitor(markFor(kind).tint);
     // Reduced motion: the highlight IS the feedback. Nothing travels, and the
     // `payload-in` cue still lands on the beat it always did.
     if (isCalm()) return;
@@ -1053,8 +1103,9 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     // animation, a reduced-motion override or a re-parent can all swallow.
     rec.timers.push(laterOnce(flightMs, () => {
       const at = rec.to;
+      const tint = rec.tint;
       dropFlight(rec);
-      splash(at);
+      splash(at, tint);
     }));
   }
 
@@ -1068,6 +1119,11 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
    */
   function markInbound({ kind = null, waitMs = 0, payload = null } = {}) {
     if (kind === null || kind === undefined) return false;
+    // Start the cutout's fetch NOW, at accept — the earliest moment we know a
+    // throw is coming. The engine's schedule lead (a second and a half) is dead
+    // time we already own, and spending it here is what stops a 650 KB PNG from
+    // having to arrive inside a 380 ms flight. Once per kind per page.
+    warmSticker(kind);
     const wait = Math.max(0, Math.min(MAX_THROW_LEAD_MS, Number(waitMs) || 0));
     // Fit the flight inside the lead; never push the impact past it by more than
     // the shortest readable throw.
