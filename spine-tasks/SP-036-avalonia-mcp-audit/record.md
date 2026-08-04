@@ -144,7 +144,7 @@ All probes run live 2026-08-04 through the gateway against `ValidateXaml` at `va
 | 2 | 2 | plan | **SKIPPED in-worker by design (SP-195)** — same feedback; reviewLevel 2; spawnFailed=false; artifact `.reviews/2-20260804T133753.md` |
 | 3 | 3 | plan | **SKIPPED in-worker by design (SP-195)** — same feedback; reviewLevel 2; spawnFailed=false; artifact `.reviews/3-20260804T133753.md` |
 | 4 | 4 | plan | **SKIPPED in-worker by design (SP-195)** — same feedback; reviewLevel 2; spawnFailed=false; artifact `.reviews/4-20260804T134239.md` |
-| 5 | 5 | plan | (recorded at call time below) |
+| 5 | 5 | plan | **SKIPPED in-worker by design (SP-195)** — same feedback; reviewLevel 2; spawnFailed=false; artifact `.reviews/5-20260804T134636.md` |
 
 Note: the `.reviews/*.md` artifact paths above are as RETURNED by the `spine_review_step` tool; the skip path did not persist them on disk (`spine-tasks/SP-036-avalonia-mcp-audit/.reviews/` does not exist — consistent with the t5-reviews-autoclean patch).
 
