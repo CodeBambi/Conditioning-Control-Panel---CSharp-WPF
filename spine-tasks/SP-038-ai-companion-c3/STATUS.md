@@ -1,14 +1,14 @@
 ## STATUS: SP-038 — AI companion slice c3: moderation boundary
-**Current Step:** Step 1 — archaeology + surface inventory + design + pre-approach consult
-**Last Updated:** 2026-08-04 (authored)
+**Current Step:** Step 1 — archaeology + surface inventory + design + pre-approach consult (work complete, plan review pending)
+**Last Updated:** 2026-08-04 (worker, Step 1 started)
 **Blockers:** none
 
 ### Step 1: archaeology + inventory + design + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] WPF archaeology (4 call sites, ModerationCounter mechanism, sentinel REJECTED, removed keyword pre-check)
-- [ ] Greenfield surface/command-field inventory (wired vs reserved, coverage-honesty table)
-- [ ] Design (policy seam, taxonomy, boundary positions, escalation mechanism, state location)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Update STATUS.md before starting work
+- [x] WPF archaeology (4 call sites, ModerationCounter mechanism, sentinel REJECTED, removed keyword pre-check)
+- [x] Greenfield surface/command-field inventory (wired vs reserved, coverage-honesty table)
+- [x] Design (policy seam, taxonomy, boundary positions, escalation mechanism, state location)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: boundary mechanism + pipeline wiring
 - [ ] AiModerationBoundary.cs + policy seam + verdict types on c1's pipeline
