@@ -19,10 +19,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Baseline pinned to the product's 12.1.0 (src/CcpClient.Desktop/CcpClient.Desktop.csproj). -->
-    <PackageReference Include="Avalonia" Version="12.1.0" />
-    <PackageReference Include="Avalonia.Desktop" Version="12.1.0" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.0" />
+    <!-- Baseline pinned to the product's 12.1.1 (src/CcpClient.Desktop/CcpClient.Desktop.csproj). -->
+    <PackageReference Include="Avalonia" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
     <!-- Spike subject: the claim under test (board row: "Avalonia.Controls.WebView 12.0.1"). -->
     <PackageReference Include="Avalonia.Controls.WebView" Version="12.0.1" />
   </ItemGroup>

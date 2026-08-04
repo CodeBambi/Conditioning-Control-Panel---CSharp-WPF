@@ -22,12 +22,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="12.1.0" />
-    <PackageReference Include="Avalonia.Desktop" Version="12.1.0" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.0" />
+    <PackageReference Include="Avalonia" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
     <!-- SP-023 / dtrh-admission.md §1: pinned 12.0.1 (current latest, MIT, dep
-         Avalonia@12.0.0 minimum — nearest-wins to the 12.1.0 baseline). -->
+         Avalonia@12.0.0 minimum — nearest-wins to the 12.1.1 baseline). -->
     <PackageReference Include="Avalonia.Controls.WebView" Version="12.0.1" />
+    <PackageReference Include="Keincheck" Version="0.11.0" />
     <!-- SP-025 / audio-backend-spike.md §1 (live-feed re-confirmed 2026-07-22): SoundFlow
          1.4.1, MIT (nupkg LICENSE.md), net8.0 TFM (runs on net10.0), bundled miniaudio
          natives per-RID (win-x64/linux-x64) — flows into SP-010 natives-beside-exe. -->

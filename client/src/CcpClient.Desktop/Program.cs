@@ -1,5 +1,6 @@
 using Avalonia;
 using CcpClient.Desktop.Lifecycle;
+using Keincheck;
 using CcpClient.Desktop.Manifest;
 
 namespace CcpClient.Desktop;
@@ -227,11 +228,22 @@ public static class Program
         bool avatarDemo = false, bool avatarCorrupt = false, string? avatarTracePath = null,
         bool avatarAnimate = false, bool dtrhDemo = false, string dtrhPage = "index.html",
         int dtrhAutoCloseSeconds = 0, bool dtrhQuick = false, int dtrhPickerTimeoutSeconds = 0,
-        string? dtrhFxDrive = null, bool dtrhM2Test = false, bool dtrhKillRenderers = false) => AppBuilder
-        .Configure<App>(() => new App(host, popupDemo, avatarDemo, avatarCorrupt, avatarTracePath, avatarAnimate,
-            dtrhDemo, dtrhPage, dtrhAutoCloseSeconds, dtrhQuick, dtrhPickerTimeoutSeconds, dtrhFxDrive, dtrhM2Test,
-            dtrhKillRenderers))
-        .UsePlatformDetect();
+        string? dtrhFxDrive = null, bool dtrhM2Test = false, bool dtrhKillRenderers = false)
+    {
+        var builder = AppBuilder
+            .Configure<App>(() => new App(host, popupDemo, avatarDemo, avatarCorrupt, avatarTracePath, avatarAnimate,
+                dtrhDemo, dtrhPage, dtrhAutoCloseSeconds, dtrhQuick, dtrhPickerTimeoutSeconds, dtrhFxDrive, dtrhM2Test,
+                dtrhKillRenderers))
+            .UsePlatformDetect();
+        // Live-UI MCP seat (avalonia-live, Keincheck embedded server on http://127.0.0.1:3001).
+        // Opt-in per run (CCP_MCP=1) so tests and normal runs never bind the port.
+        if (Environment.GetEnvironmentVariable("CCP_MCP") == "1")
+        {
+            builder = builder.UseMcpServer();
+        }
+
+        return builder;
+    }
 
     private static string? ArgValue(string[] args, string flag)
     {

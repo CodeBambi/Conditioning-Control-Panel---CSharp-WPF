@@ -6,11 +6,27 @@ Usage map addendum: `.spine/handoff.md`.
 ## Identity
 
 - NOT an npm package — local source build, registered in
-  `C:\Users\Micha\.pi\agent\mcp.json` →
-  `dotnet E:\Code\AvaloniaUI.MCP\...\AvaloniaUI.MCP.dll` (**desktop-only paths;
-  laptop needs its own clone/build/registration**).
-- Git tree 974ec59 = upstream HEAD exactly (github.com/AvaloniaUI/AvaloniaUI.MCP).
-- 53 tools. Sentry characterized in the deep-research report.
+  `C:\Users\Micha\.pi\agent\mcp.json` (pi-global discovery). **Per-machine paths:**
+  desktop `E:\Code\AvaloniaUI.MCP`; laptop `C:\Code\AvaloniaUI.MCP` (cloned + built
+  2026-08-04, `dotnet C:\Code\AvaloniaUI.MCP\src\AvaloniaUI.MCP\bin\Release\net9.0\AvaloniaUI.MCP.dll`,
+  init + 46 tools verified live).
+- Git tree 974ec59 = upstream HEAD exactly (github.com/decriptor/AvaloniaUI.MCP).
+- 46 tools (laptop build). Sentry characterized in the deep-research report.
+
+## Three-seat registration (2026-08-04, laptop; mcp.json was MISSING → recreated)
+
+| Seat | Server | Type | Cost | Status |
+|---|---|---|---|---|
+| `avalonia-docs` | official Build MCP | http `https://docs-mcp.avaloniaui.net/mcp` | free | initialize verified (`Avalonia Documentation 2.0.0`) |
+| `avalonia-live` | **Keincheck 0.11.0 embedded** (DVSProductions, MIT, Avalonia-12-native, net8) | http `http://127.0.0.1:3001` | free OSS | initialize verified (`CcpClient.Desktop 0.1.0.0`) — app-side seam: `CCP_MCP=1` env-gated `UseMcpServer()` in Program.cs |
+| `avalonia-ui` | decriptor/AvaloniaUI.MCP local build | stdio dotnet DLL (above) | MIT | initialize + tools/list verified (46 tools) |
+
+**Official DevTools MCP (`avdt mcp`) REJECTED 2026-08-04:** MCP is a paid feature
+(Avalonia Plus key, `AVALONIA_TOOLS_LICENSE_KEY`), not in the Community license —
+violates the owner's free-OSS constraint. Runner-up adirh3/AvaloniaMcp rejected:
+needs .NET 10 Preview SDK and targets Avalonia 11.2+.
+**Machine note:** this laptop needed the .NET 10 SDK for the net10.0 client
+(installed 10.0.302 via winget 2026-08-04); desktop already has it (10.0.110+).
 
 ## Usage rule (run rules)
 
