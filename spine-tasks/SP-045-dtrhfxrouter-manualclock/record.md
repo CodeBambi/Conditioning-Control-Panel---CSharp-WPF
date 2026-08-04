@@ -117,4 +117,7 @@ narrowed claim, no residual discovery.
 - `git diff --check` → clean.
 - `git status --short` → only File Scope paths (`spine-tasks/SP-045-dtrhfxrouter-manualclock/*`).
 
-**Step 3 review presence:** `spine_review_step` (step 3, type plan) → (appended at boundary).
+**Step 3 review presence:** `spine_review_step` (step 3, type plan) → PRESENT-but-SKIPPED
+(`skipped: true, spawnFailed: false`, SP-195 nested-spawn block; artifact
+`.reviews/3-20260804T231429.md`). All three in-worker plan reviews were called and skipped
+by the engine per SP-195; the batch engine runs reviews after `.DONE`.

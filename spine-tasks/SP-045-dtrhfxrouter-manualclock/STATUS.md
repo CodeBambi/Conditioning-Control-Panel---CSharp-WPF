@@ -1,6 +1,6 @@
 ## STATUS: SP-045 — DtrhFxRouterTests ManualClock hygiene
-**Current Step:** Step 3 — Testing & Verification
-**Last Updated:** 2026-08-04 (worker, Step 2 complete — review skipped SP-195, engine-owned)
+**Current Step:** done (all steps complete; .DONE pending)
+**Last Updated:** 2026-08-04 (worker, Step 3 complete — review skipped SP-195, engine-owned)
 **Blockers:** none
 
 ### Step 1: verify + inject + consult — COMPLETE
@@ -13,9 +13,9 @@
 - [x] Zero-wall-clock grep over the file
 - [x] record.md (constructions found + injected, consults, review presence)
 - [x] Pre-completion solo consult (verdict + actual model in record.md)
-- [ ] STATUS.md accurate before .DONE
+- [x] STATUS.md accurate before .DONE
 
-### Step 3: Testing & Verification
+### Step 3: Testing & Verification — COMPLETE
 - [x] Contract testCommand passes (verify.mjs + build 0W/0E + counts EXACTLY 564/29)
 - [x] git diff --check clean
 - [x] git status --short shows only File Scope paths
