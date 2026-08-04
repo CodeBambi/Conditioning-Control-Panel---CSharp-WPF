@@ -540,10 +540,18 @@ function localCaps() {
    *
    * It has to be here rather than at the send site because `t:'voice'` is
    * fire-and-forget — an old peer drops the frames without a word, and this
-   * integer is the ONLY way the sender ever finds out. (`transfer`, its sibling
-   * in core/caps.js, is NOT advertised from this file today: the media lane
-   * gates itself on session.caps.mediaTransfer + supportsBulk instead. Left
-   * exactly as it was — that is the media lane's business, not this pass's.) */
+   * integer is the ONLY way the sender ever finds out.
+   *
+   * `transfer` (its sibling in core/caps.js) is advertised on EXACTLY the same
+   * terms: this build ships net/mediaChannel.js and will parse offers, full
+   * stop. It says nothing about consent (the sheet's `media_transfer` term),
+   * nothing about premium (session.caps.mediaTransfer gates SENDING only —
+   * receiving is deliberately free), and nothing about the link (the lobby row
+   * checks supportsBulk separately). Until 2026-08-04 NOBODY set this flag —
+   * caps.js documented that boot advertises it and boot never did — so every
+   * hello said `transfer:false`, both lobbies greyed the checkbox out with
+   * "their build doesn't transfer", and the entire media lane was unreachable
+   * end to end. The owner found it on the first duel that got past ICE. */
   const voiceCap = VOICE_CAP_VERSION;
 
   let rounds = Array.isArray(caps.rounds) ? caps.rounds.slice() : Object.values(GoonRoundKind);
@@ -551,7 +559,7 @@ function localCaps() {
   if (!caps.camera) rounds = rounds.filter((r) => r !== GoonRoundKind.StaringContest);
   if (!rounds.includes(UNIVERSAL_ROUND)) rounds.push(UNIVERSAL_ROUND);
 
-  return localCapsOf({ elements, payloads, rounds, platform: 'web', voice: voiceCap });
+  return localCapsOf({ elements, payloads, rounds, platform: 'web', voice: voiceCap, transfer: true });
 }
 
 /* ============================================================================
