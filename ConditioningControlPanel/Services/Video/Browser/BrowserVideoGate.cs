@@ -27,32 +27,21 @@ namespace ConditioningControlPanel.Services.Video.Browser
             catch { return false; }
         }
 
-        /// <summary>
-        /// True when the browser engine is switched on and healthy - i.e. a video whose path is not
-        /// chosen yet MIGHT play out-of-process. Only for callers that have to decide something
-        /// BEFORE selection (BubbleCountService's poison-cooldown skip); the per-file answer is
-        /// <see cref="ShouldUseBrowser"/>, and the host re-checks it once the file is known.
-        /// </summary>
-        public static bool IsEngineUsable()
-        {
-            try
-            {
-                if (App.Settings?.Current?.BrowserVideoEngineEnabled != true) return false;
-                return BrowserVideoEngine.Instance.IsAvailable;
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("BrowserVideoGate.IsEngineUsable threw ({E}) - assuming LibVLC", ex.Message);
-                return false;
-            }
-        }
+        // There is deliberately NO "might a video use the browser?" helper here. Its only caller was
+        // BubbleCountService's poison-cooldown skip, and answering it before a file is chosen is
+        // what made that skip wrong: the routing decision is per-FILE. Both cooldown checks now run
+        // after selection and call ShouldUseBrowser with the real path.
 
         /// <summary>
         /// True when the mandatory-video pipeline should hand this clip to
         /// <see cref="BrowserVideoEngine"/> instead of LibVLC. Never throws - any doubt routes to
         /// LibVLC, which is the shipped path.
         /// </summary>
-        public static bool ShouldUseBrowser(string? path)
+        /// <param name="stableKey">Optional content identity for the unsafe-cache lookup. Null
+        /// resolves it from <see cref="BrowserUnsafeVideoCache.ResolveStableKey"/>, which is what
+        /// keeps a content-pack clip recognisable across its per-play <c>ccp_temp_&lt;GUID&gt;</c>
+        /// decrypt path.</param>
+        public static bool ShouldUseBrowser(string? path, string? stableKey = null)
         {
             try
             {
@@ -65,7 +54,7 @@ namespace ConditioningControlPanel.Services.Video.Browser
                 // A file the page cannot serve (outside every mapped virtual host) would 404 and
                 // cost a pointless fallback, so it is decided here rather than at runtime.
                 if (BrowserVideoEngine.BuildPageUrl(path) == null) return false;
-                if (BrowserUnsafeVideoCache.Contains(path)) return false;
+                if (BrowserUnsafeVideoCache.Contains(path, stableKey)) return false;
                 return true;
             }
             catch (Exception ex)

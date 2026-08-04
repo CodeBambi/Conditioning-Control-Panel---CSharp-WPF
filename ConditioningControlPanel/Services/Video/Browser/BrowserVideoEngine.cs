@@ -32,6 +32,11 @@ namespace ConditioningControlPanel.Services.Video.Browser
         /// <summary>Blurred-background (TikTok fill) composite instead of black bars. Page-side.</summary>
         public bool BlurBackground { get; init; }
 
+        /// <summary>Hide the mouse pointer over the surface. Default FALSE, which is what the LibVLC
+        /// video windows do - a surface that eats the cursor while the rest of the app still has one
+        /// reads as a frozen machine, and mouse-driven hosts (BubbleCount) need it visible.</summary>
+        public bool HideCursor { get; init; }
+
         /// <summary>Start position for the chaos random-segment mode. 0 = from the top.</summary>
         public long StartAtMs { get; init; }
 
@@ -73,33 +78,64 @@ namespace ConditioningControlPanel.Services.Video.Browser
         private const string PacksHost = "ccp.packs";
         private const string StartUrl = "https://" + GameHost + "/player/index.html";
 
-        /// <summary>How long a session may go without a <c>playing</c> report before it is treated as
-        /// undecodable. The page runs the same clock and reports error 101; whichever lands first
-        /// wins and the host's fallback is idempotent.</summary>
+        /// <summary>How long a session may go without a <c>playing</c> report ONCE THE PAGE IS UP.
+        /// The page runs the same clock from its own load and reports error 101; whichever lands
+        /// first wins and the host's fallback is idempotent.</summary>
         private const int NoPlayingTimeoutMs = 10000;
+
+        /// <summary>Budget from session start to the page's <c>ready</c> handshake. A cold WebView2
+        /// (environment build, browser process spawn, navigation) can eat well over ten seconds on a
+        /// slow disk, and NONE of that is the clip's fault - charging it to the clip is how a healthy
+        /// file ends up looking undecodable. The clock restarts at <c>ready</c>.</summary>
+        private const int PreReadyTimeoutMs = 20000;
         private const int WatchTickMs = 500;
 
         /// <summary>Two dead browser processes in one app session and the engine stands down for
         /// good - a flapping renderer must not turn every video into a fallback.</summary>
         private const int MaxProcessFailures = 2;
 
-        private static BrowserVideoEngine? _instance;
+        private static readonly Lazy<BrowserVideoEngine> _instance =
+            new(() => new BrowserVideoEngine(), System.Threading.LazyThreadSafetyMode.ExecutionAndPublication);
         private static Task<CoreWebView2Environment?>? _envTask;
+        private static readonly object _envLock = new();
         private static int _processFailures;
         private static bool _environmentDead;
 
-        /// <summary>Process-wide singleton. Touching it starts the shared environment build, so the
-        /// first video finds <see cref="IsAvailable"/> already settled.</summary>
+        /// <summary>
+        /// Process-wide singleton, built exactly once however many threads race for it (the gate is
+        /// consulted from selection code that does not always run on the UI thread).
+        ///
+        /// Touching it also KICKS OFF the shared environment build - it does not wait for it. A
+        /// first video that arrives before the build finishes still sees <see cref="IsAvailable"/>
+        /// true (it only turns false once a build has actually FAILED) and its session waits on the
+        /// same task in <see cref="InitWindowsAsync"/>. App startup warms this so the first video
+        /// does not pay for <c>CreateEnvironmentAsync</c>.
+        /// </summary>
         public static BrowserVideoEngine Instance
         {
             get
             {
-                if (_instance == null)
-                {
-                    _instance = new BrowserVideoEngine();
-                    _ = EnvironmentAsync();   // fire-and-forget warm-up
-                }
-                return _instance;
+                var engine = _instance.Value;
+                _ = EnvironmentAsync();   // fire-and-forget warm-up
+                return engine;
+            }
+        }
+
+        /// <summary>
+        /// Startup warm-up: build the singleton and begin the WebView2 environment creation now, so
+        /// the first mandatory video is not the thing that pays for a cold browser start (and does
+        /// not spend that time against its own first-frame budget). Fire-and-forget, never throws.
+        /// </summary>
+        public static void WarmUp()
+        {
+            try
+            {
+                _ = Instance;
+                App.Logger?.Debug("BrowserVideo: warm-up started (environment building in the background)");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("BrowserVideo: warm-up failed ({E}) - the first video will build the environment", ex.Message);
             }
         }
 
@@ -158,7 +194,12 @@ namespace ConditioningControlPanel.Services.Video.Browser
 
         // ===================== environment =====================
 
-        private static Task<CoreWebView2Environment?> EnvironmentAsync() => _envTask ??= CreateEnvironmentAsync();
+        private static Task<CoreWebView2Environment?> EnvironmentAsync()
+        {
+            // Locked for the same reason Instance is Lazy: two threads racing here would each start
+            // a CoreWebView2Environment.CreateAsync against the same user-data folder.
+            lock (_envLock) { return _envTask ??= CreateEnvironmentAsync(); }
+        }
 
         /// <summary>
         /// The ONE shared WebView2 environment, for hosts that own their own surfaces instead of a
@@ -365,6 +406,7 @@ namespace ConditioningControlPanel.Services.Video.Browser
                     volume = primary ? Math.Clamp(req.Volume, 0, 1) : 0.0,
                     muted = primary ? req.Muted : true,   // secondaries never carry audio
                     blurBackground = req.BlurBackground,
+                    hideCursor = req.HideCursor,
                     startAtMs = req.StartAtMs,
                 });
 
@@ -536,18 +578,37 @@ namespace ConditioningControlPanel.Services.Video.Browser
         private static bool BlamesFile(int code) => (code >= 1 && code <= 4) || code == 100 || code == 101;
 
         /// <summary>
-        /// The page handshake landed, so the queued <c>load</c> only reaches the element NOW. Restart
-        /// the first-frame clock from here: a cold WebView2 start (runtime spin-up + navigation) can
-        /// eat several of the ten seconds and would otherwise fake a decode failure on a healthy file.
+        /// The page handshake landed, so the queued <c>load</c> only reaches the element NOW - which
+        /// means everything before this point was environment start-up, not the clip failing to
+        /// decode. Restart the first-frame clock from here UNCONDITIONALLY (the pre-ready budget is
+        /// generous precisely so this always gets to run) and give the file its own full window.
         /// </summary>
         private void OnWindowReady(BrowserVideoWindow win)
         {
-            if (!win.IsPrimary || _playingSeen) return;
+            if (!win.IsPrimary || _playingSeen || _firstFrameWatch == null) return;
             _firstFrameDeadlineUtc = DateTime.UtcNow.AddMilliseconds(NoPlayingTimeoutMs);
         }
 
         private void OnWindowProcessFailed(BrowserVideoWindow win, CoreWebView2ProcessFailedKind kind)
         {
+            // ONE dead browser process fires this on EVERY window sharing it, so a dual-monitor
+            // session used to spend both strikes of the stand-down budget on a single crash. Only
+            // the primary's handler counts - and only the primary's failure ends the session.
+            if (!win.IsPrimary)
+            {
+                App.Logger?.Warning("BrowserVideo[secondary]: WebView2 process failed ({Kind}) - dropping that mirror, the primary keeps playing", kind);
+                try
+                {
+                    win.Message -= OnWindowMessage;
+                    win.ProcessFailed -= OnWindowProcessFailed;
+                    win.Ready -= OnWindowReady;
+                    _windows.Remove(win);
+                    win.Close();
+                }
+                catch (Exception ex) { App.Logger?.Debug("BrowserVideo: secondary close after ProcessFailed failed: {E}", ex.Message); }
+                return;
+            }
+
             _processFailures++;
             if (_processFailures >= MaxProcessFailures)
                 App.Logger?.Warning("BrowserVideo: {Count} WebView2 process failures this session - engine standing down, everything routes to LibVLC",
@@ -561,7 +622,9 @@ namespace ConditioningControlPanel.Services.Video.Browser
         private void ArmFirstFrameWatch()
         {
             StopFirstFrameWatch();
-            _firstFrameDeadlineUtc = DateTime.UtcNow.AddMilliseconds(NoPlayingTimeoutMs);
+            // Pre-ready budget: everything up to the page handshake is environment cost, not the
+            // clip's. OnWindowReady restarts the clock with the real (shorter) first-frame budget.
+            _firstFrameDeadlineUtc = DateTime.UtcNow.AddMilliseconds(PreReadyTimeoutMs);
             _firstFrameWatch = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(WatchTickMs) };
             _firstFrameWatch.Tick += (_, _) =>
             {
@@ -577,7 +640,12 @@ namespace ConditioningControlPanel.Services.Video.Browser
                     }
                     if (DateTime.UtcNow < _firstFrameDeadlineUtc) return;
                     StopFirstFrameWatch();
-                    RaiseFailed($"no playback within {NoPlayingTimeoutMs / 1000}s", blameFile: true);
+                    // blameFile is ALWAYS false here. This timer cannot tell "undecodable clip" from
+                    // "the page never ran / the browser is still starting", and condemning a file to
+                    // LibVLC forever on that guess is the worse error. The page's OWN error 101 -
+                    // which is raised by a page that demonstrably loaded and then got no frame - is
+                    // the legitimate file-blame path (BlamesFile), and it still is.
+                    RaiseFailed("no playback before the first-frame deadline", blameFile: false);
                 }
                 catch (Exception ex) { App.Logger?.Debug("BrowserVideo: first-frame watch tick failed: {E}", ex.Message); }
             };

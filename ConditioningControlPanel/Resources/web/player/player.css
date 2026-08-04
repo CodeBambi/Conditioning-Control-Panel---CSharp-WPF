@@ -1,4 +1,4 @@
-/* Mandatory-video player surface — pure black, no chrome, no cursor.
+/* Mandatory-video player surface — pure black, no chrome.
    Nothing here may introduce a scrollbar or a hit-testable control: the page is
    a passive surface and every interaction is reported to the host instead. */
 
@@ -13,8 +13,13 @@ html, body {
   font-family: "Segoe UI", system-ui, sans-serif;
   user-select: none;
   -webkit-user-select: none;
-  /* The video window is a "watch this" surface — a floating arrow over it is
-     both a distraction and a hint that there is something to click. */
+}
+
+/* Opt-IN only (load message: hideCursor). The mandatory-video windows do not hide
+   the pointer — neither does the LibVLC path they must be indistinguishable from —
+   and BubbleCount is mouse-driven, so an invisible pointer there is unplayable. */
+body.hide-cursor,
+body.hide-cursor * {
   cursor: none;
 }
 

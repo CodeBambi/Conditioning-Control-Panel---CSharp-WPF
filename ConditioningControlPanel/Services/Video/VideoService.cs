@@ -5511,6 +5511,16 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
+                // A browser session has NOTHING for this ladder to rescue: the decoder is in another
+                // process, no MediaPlayer is leased and no LibVLC instance is involved. Every rung
+                // would be pure collateral damage (an off-thread Stop() of players belonging to
+                // nobody, retiring a healthy shared instance, and flipping _wedgeStallSeen, which
+                // stands the strict Closing veto down for the rest of the video). A UI stall during
+                // a browser video must trigger nothing. StartBrowserVideoPlayback also disarms the
+                // watchdog outright; this is the belt to that brace, and it covers the window
+                // between the routing decision and the disarm.
+                if (_browserActive) return;
+
                 // #766/#767: stay armed through CloseAll. _videoPlaying is cleared at the TOP of the
                 // teardown, so gating on it alone made the app's longest predictable UI-thread block
                 // structurally invisible to the guard that exists to catch exactly that.
@@ -6240,6 +6250,12 @@ namespace ConditioningControlPanel.Services
                 if (!string.IsNullOrEmpty(tempPath))
                 {
                     _tempPackFiles.Add(tempPath);  // Track for cleanup
+                    // Every play decrypts to a NEW ccp_temp_<GUID> path, so the browser engine's
+                    // unsafe cache would never recognise a pack clip it has already failed on and
+                    // the user would pay the fallback wait again and again. Give the temp path the
+                    // pack entry's identity - the one thing about it that is stable.
+                    Video.Browser.BrowserUnsafeVideoCache.RegisterStableKey(
+                        tempPath, $"pack:{packVideo.PackId}|{packVideo.File.OriginalName}");
                     App.Logger?.Debug("Using pack video: {Name} from pack {PackId}", packVideo.File.OriginalName, packVideo.PackId);
                     return tempPath;
                 }

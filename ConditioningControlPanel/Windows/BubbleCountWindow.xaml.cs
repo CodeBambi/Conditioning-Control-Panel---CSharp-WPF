@@ -213,9 +213,30 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Show bubble count game on all monitors using LibVLC
         /// </summary>
+        /// <param name="onSkipped">Optional "the game never happened" resolution, used by the
+        /// poison-cooldown backstop below. A skip is NOT a loss: routing it through
+        /// <paramref name="onComplete"/> with false would read as a failed count and, in strict
+        /// mode, start the WRONG! WATCH AGAIN retry loop for a game the user never saw. When null,
+        /// a skip falls back to the completion callback (old behaviour).</param>
         public static void ShowOnAllMonitors(string videoPath, BubbleCountService.Difficulty difficulty,
-            bool strictMode, Action<bool> onComplete)
+            bool strictMode, Action<bool> onComplete, Action? onSkipped = null)
         {
+            // The completion callback must reach the service EXACTLY once. Every window shares this
+            // delegate and CloseAllWindows invokes it, which can happen INSIDE the Show() below
+            // (Loaded runs synchronously there, and a browser/LibVLC start failure closes the game
+            // from it) - so the catch at the bottom would otherwise deliver a second, contradictory
+            // completion for a game that already ended.
+            int completionDelivered = 0;
+            Action<bool> complete = ok =>
+            {
+                if (System.Threading.Interlocked.Exchange(ref completionDelivered, 1) != 0)
+                {
+                    App.Logger?.Debug("BubbleCountWindow: completion already delivered - ignoring a second one (success={Success})", ok);
+                    return;
+                }
+                onComplete?.Invoke(ok);
+            };
+
             // Reset shared state
             lock (_cleanupLock)
             {
@@ -269,15 +290,24 @@ namespace ConditioningControlPanel
 
             // A wedged native Stop() leaves a LibVLC thread stuck in this process forever, and #766
             // is precisely "poisoning at 22:05, bubble-count video at 22:18, dispatcher dead". Don't
-            // stand a fresh player up on the wreckage - the caller treats this like any other
-            // can't-show and the next scheduled game gets a clean instance. Browser mode never
-            // touches the shared instance, so the cooldown has nothing to protect there.
+            // stand a fresh player up on the wreckage. Browser mode never touches the shared
+            // instance, so the cooldown has nothing to protect there.
+            //
+            // BACKSTOP ONLY: BubbleCountService now evaluates this same cooldown after it has picked
+            // the file (it is the only place that can, because the routing decision needs the path),
+            // so reaching it here means the cooldown began in the milliseconds since. Resolved as a
+            // SKIP, never as a lost game - see onSkipped.
             var poisonMs = useBrowser ? 0 : VideoService.NativePoisonCooldownRemainingMs;
             if (poisonMs > 0)
             {
                 App.Logger?.Warning("BubbleCountWindow: shared LibVLC poisoned by a wedged Stop() - not starting ({Sec:F0}s of cooldown left)", poisonMs / 1000.0);
-                VideoDiag.Log("BUBBLE", $"ABORT - native poison cooldown, {poisonMs}ms remaining");
-                onComplete?.Invoke(false);
+                VideoDiag.Log("BUBBLE", $"SKIP - native poison cooldown, {poisonMs}ms remaining");
+                if (onSkipped != null)
+                {
+                    System.Threading.Interlocked.Exchange(ref completionDelivered, 1);
+                    onSkipped();
+                }
+                else complete(false);
                 return;
             }
 
@@ -287,7 +317,7 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Error("BubbleCountWindow: LibVLC not available, cannot show game");
                 VideoDiag.Log("BUBBLE", "ABORT - no shared LibVLC instance");
-                onComplete?.Invoke(false);
+                complete(false);
                 return;
             }
 
@@ -300,7 +330,7 @@ namespace ConditioningControlPanel
             if (screens.Length == 0 || screens[0] == null)
             {
                 App.Logger?.Error("BubbleCountWindow: No screens available");
-                onComplete?.Invoke(false);
+                complete(false);
                 return;
             }
 
@@ -321,7 +351,7 @@ namespace ConditioningControlPanel
             {
                 // Create primary window with audio
                 App.Logger?.Information("BubbleCountWindow: Creating primary window...");
-                var primaryWindow = new BubbleCountWindow(videoPath, difficulty, strictMode, onComplete, primary, true);
+                var primaryWindow = new BubbleCountWindow(videoPath, difficulty, strictMode, complete, primary, true);
 
                 App.Logger?.Information("BubbleCountWindow: Showing primary window...");
                 primaryWindow.Show();
@@ -334,7 +364,7 @@ namespace ConditioningControlPanel
                 foreach (var screen in screens.Where(s => s != primary))
                 {
                     App.Logger?.Information("BubbleCountWindow: Creating secondary window on {Screen}...", screen.DeviceName);
-                    var secondaryWindow = new BubbleCountWindow(videoPath, difficulty, strictMode, onComplete, screen, false);
+                    var secondaryWindow = new BubbleCountWindow(videoPath, difficulty, strictMode, complete, screen, false);
                     secondaryWindow.Show();
                     secondaryWindow.WindowState = WindowState.Maximized;
                     ForceTopmost(secondaryWindow);
@@ -351,7 +381,8 @@ namespace ConditioningControlPanel
                 App.Logger?.Error(ex, "BubbleCountWindow: Failed to create/show windows");
                 VideoDiag.Log("BUBBLE", $"show THREW +{showSw.ElapsedMilliseconds}ms: {ex.Message}");
                 App.Video?.DisarmManagedWedgeWatchdog();
-                onComplete?.Invoke(false);
+                // No-op when the windows already delivered one from inside Show().
+                complete(false);
             }
         }
 
@@ -820,6 +851,9 @@ namespace ConditioningControlPanel
                 // Black bars, not the TikTok fill: the bubble-count surface has always letterboxed
                 // (a plain VideoView), and the count bubbles are positioned over the whole screen.
                 blurBackground = false,
+                // The whole game is "click the bubbles": an invisible pointer would make it
+                // unplayable, so the page's cursor hiding stays off here.
+                hideCursor = false,
                 startAtMs = 0,
             });
 
@@ -970,6 +1004,16 @@ namespace ConditioningControlPanel
         {
             // Counted app-wide so a flapping renderer stands the engine down for everyone rather
             // than costing every feature a fallback. Never blames the file (plan §4).
+            //
+            // ONLY from the primary: one dead browser process raises this on every window sharing
+            // it, so on a dual-monitor game a single crash used to spend BOTH strikes of the
+            // two-strikes stand-down at once. (The secondaries can't end the game either -
+            // OnBrowserFailure is primary-only - so they just go black behind the count.)
+            if (!_isPrimary)
+            {
+                App.Logger?.Warning("BubbleCountWindow[secondary]: WebView2 process failed ({Kind}) - mirror lost, the game continues", kind);
+                return;
+            }
             BrowserVideoEngine.ReportProcessFailure(kind);
             OnBrowserFailure("WebView2 process failed: " + kind, blameFile: false);
         }

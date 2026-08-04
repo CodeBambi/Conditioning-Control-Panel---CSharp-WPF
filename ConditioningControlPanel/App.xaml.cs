@@ -1428,6 +1428,20 @@ namespace ConditioningControlPanel
             Video = new VideoService();
             Video.PreloadLibVLC(); // Pre-load LibVLC in background for faster first video
 
+            // Same idea for the hybrid browser engine: building the shared WebView2 environment can
+            // take seconds on a cold start, and a first video that pays for it spends that time
+            // against its own first-frame watchdog. Warm it here instead. Only when the feature is
+            // on - a user who never routes a video to the browser must not spawn a process for it.
+            try
+            {
+                if (Settings?.Current?.BrowserVideoEngineEnabled == true)
+                    Services.Video.Browser.BrowserVideoEngine.WarmUp();
+            }
+            catch (Exception ex)
+            {
+                Logger?.Debug("BrowserVideo warm-up skipped: {Error}", ex.Message);
+            }
+
             // Session media log - must be after Flash and Video so it can subscribe to their events.
             SessionLog = new SessionLogService();
 

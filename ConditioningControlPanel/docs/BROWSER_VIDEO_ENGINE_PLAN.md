@@ -84,10 +84,10 @@ Queue outbound messages until the page posts `ready` (ChaosWebViewHost pattern).
 C# → page:
 | msg | fields | notes |
 |---|---|---|
-| `load` | `url, volume (0-1), muted, blurBackground (bool), startAtMs?` | begins playback immediately |
+| `load` | `url, volume (0-1), muted, blurBackground (bool), hideCursor (bool), startAtMs?` | begins playback immediately. `hideCursor` defaults to **false** — the LibVLC video windows do not hide the pointer either, and BubbleCount is mouse-driven |
 | `pause` / `resume` | — | grace pause / DtRH / voice commands |
 | `stop` | — | decoder hygiene: `pause()` → `removeAttribute('src')` → `load()` |
-| `setVolume` | `volume` | master × video volume, external-mute folds in C#-side |
+| `setVolume` | `volume`, `muted?` | master × video volume; the optional `muted` folds external mute in. Secondaries are always sent `volume: 0, muted: true` |
 | `seek` | `ms` | future Deeper use; implement anyway (trivial) |
 
 page → C#:
@@ -100,13 +100,15 @@ page → C#:
 | `ended` | — | natural end |
 | `error` | `code, message` | media error OR unrequested stall the page can't recover |
 | `click` | — | any pointer-down on the surface |
+| `key` | `key, alt, ctrl, shift` | every non-repeat keydown the page saw (DOM `event.key`). Keyboard over a focused WebView2 goes to Chromium, so this is the ONLY route ESC / panic keys have back to C#; the page `preventDefault`s the dangerous ones and C# owns the policy |
 | `log` | `msg` | host built-in page logging |
 
 Page behaviour (from `surfaces.js` discipline):
 - `<video>` born muted then volume applied via message (autoplay flag makes `play()`
   legal anyway, but belt-and-suspenders).
 - `playsInline`, `disablePictureInPicture`, `preload='auto'`, no controls,
-  context-menu suppressed, text selection suppressed, cursor hidden over the surface.
+  context-menu suppressed, text selection suppressed. Cursor hiding is opt-in per load
+  (`hideCursor`), NOT unconditional — see the `load` row above.
 - Anti-pause: an unrequested `pause` while a session is live ⇒ resume once, then
   report `error` if it re-pauses (don't fight forever).
 - Blur background: when `blurBackground`, render TWO elements from the same src —

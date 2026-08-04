@@ -42,6 +42,15 @@ namespace ConditioningControlPanel.Services
         /// <summary>VideoStarted fires on the page's first real <c>playing</c>, not at window-show:
         /// a session that never reaches a frame falls back to LibVLC, which fires it instead.</summary>
         private bool _browserStartedFired;
+        /// <summary>The chaos random-segment jump is ONE seek per session. <c>meta</c> can arrive
+        /// twice (Infinity at loadedmetadata, the real value at durationchange) and a second seek
+        /// would yank the user back mid-clip.</summary>
+        private bool _browserSegmentSeeked;
+
+        /// <summary>True while a browser video session owns the screen. Read by AudioService so the
+        /// duck sweep never lowers the app's OWN video audio (LibVLC audio is in-process and
+        /// structurally un-duckable, so this is what keeps the two engines at parity).</summary>
+        public bool IsBrowserSessionActive => _browserActive;
 
         private BrowserVideoEngine Browser
         {
@@ -86,6 +95,7 @@ namespace ConditioningControlPanel.Services
                 _browserGeneration = _teardownGeneration;
                 _browserFallbackDone = false;
                 _browserStartedFired = false;
+                _browserSegmentSeeked = false;
 
                 // Chaos random-segment mode: the LibVLC path seeks from LengthChanged, but the page
                 // takes a start offset directly. The fraction needs the duration, which only arrives
@@ -98,6 +108,10 @@ namespace ConditioningControlPanel.Services
                     Volume = GetEffectiveVolume() / 100.0,
                     Muted = GetEffectiveVolume() <= 0,
                     BlurBackground = App.Settings?.Current?.VideoBlurredBackgroundEnabled == true,
+                    // Parity with the LibVLC video windows, which do NOT hide the pointer: a video
+                    // that swallows the cursor while the rest of the app still shows one reads as a
+                    // frozen machine, and attention targets are clicked over this surface.
+                    HideCursor = false,
                     IsHostPaused = () => _gracePaused,
                     ConfigureBeforeShow = (win, _, _) =>
                     {
@@ -109,10 +123,13 @@ namespace ConditioningControlPanel.Services
                     },
                     ConfigureAfterShow = (win, _, _) =>
                     {
-                        // Non-activating so the WebView2 never takes focus away from the app's own
-                        // key handling, and so a click on the video can't raise it over the
-                        // attention targets / chaos layer. Both need a realized HWND.
-                        MakeNonActivating(win);
+                        // EXACT parity with the LibVLC path (StartVideoPlayback): WS_EX_NOACTIVATE is
+                        // stamped ONLY during a chaos run, where the game layer must keep z-order.
+                        // Outside chaos the always-on PreventClickRaise is what stops a click from
+                        // raising the video, and the window keeps focus - which the WebView2 needs,
+                        // because ESC / panic keys only reach C# through the page's {type:'key'}
+                        // reports and a page that never gets a keydown reports nothing.
+                        if (App.Chaos?.IsRunning == true) MakeNonActivating(win);
                         PreventClickRaise(win);
                     },
                 };
@@ -136,6 +153,14 @@ namespace ConditioningControlPanel.Services
                 // something. NO wedge watchdog - nothing native can wedge the dispatcher here.
                 _playbackStarted = true;
 
+                // PlayVideo's prologue armed the wedge ladder before routing was decided, and
+                // _playbackStarted = true above would unlock its DESTRUCTIVE rungs (off-thread
+                // player Stop, RetireSharedLibVLC, the _wedgeStallSeen veto stand-down) for a
+                // session that owns no native player at all. Disarm it here; a UI stall during a
+                // browser video must trigger nothing. FallbackToLibVlc re-arms it before it hands
+                // the clip to LibVLC, and WedgeWatchdogTick also no-ops while _browserActive.
+                StopWedgeWatchdog();
+
                 App.Bubbles?.PauseAndClear();
                 if (App.Settings.Current.AttentionChecksEnabled) SetupAttention();
 
@@ -145,8 +170,40 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "VideoService: browser session start threw - falling back to LibVLC");
-                try { StopBrowserSession(); } catch { }
+                // NOT a bare StopBrowserSession(): _videoPlaying is still true here, so the strict
+                // Closing veto would refuse to close the windows this throw is trying to clean up
+                // and strand fullscreen surfaces on screen forever. Same clear/restore dance as the
+                // runtime fallback, strict bridge included.
+                try { StopBrowserSessionForHandoff(); } catch { }
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Close the browser surfaces while the run CONTINUES (start-path throw, runtime fallback) -
+        /// i.e. everywhere the windows must go but <see cref="_videoPlaying"/> must stay true for the
+        /// LibVLC attempt that follows.
+        ///
+        /// Two things have to be true at once for that: the strict Closing veto
+        /// (<c>SetupStrictHandlers</c>) refuses a close while <c>_videoPlaying</c> is set and no
+        /// teardown is running, so the flag is cleared across the close; and
+        /// <see cref="IsStrictActive"/> is <c>(_videoPlaying &amp;&amp; _strictActive) || _strictRetryPending</c>,
+        /// so clearing it would make a strict session look non-strict for the duration - exactly the
+        /// gap <see cref="_strictRetryPending"/> exists to bridge for ShowMessage. Bridge it the same way.
+        /// </summary>
+        private void StopBrowserSessionForHandoff()
+        {
+            var wasPlaying = _videoPlaying;
+            var wasRetryPending = _strictRetryPending;
+            bool bridgeStrict = wasPlaying && _strictActive;
+
+            if (bridgeStrict) _strictRetryPending = true;
+            _videoPlaying = false;
+            try { StopBrowserSession(); }
+            finally
+            {
+                _videoPlaying = wasPlaying;
+                if (bridgeStrict) _strictRetryPending = wasRetryPending;
             }
         }
 
@@ -177,10 +234,15 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// The runtime half of the hybrid contract (plan §4): the page could not play this file, so
-        /// replay it through LibVLC exactly once, silently. No VideoEnded is raised - as far as every
-        /// consumer is concerned this is still the same video run, and the duck ref taken in
-        /// PlayVideo is deliberately kept so CloseAll still balances it exactly once.
+        /// The runtime half of the hybrid contract (plan §4): the page could not play this file.
+        ///
+        /// PRE-START failures only (error 101 before the first frame, ProcessFailed, environment
+        /// failure, a throw on the start path) replay the clip through LibVLC exactly once, silently.
+        /// No VideoEnded is raised - as far as every consumer is concerned this is still the same
+        /// video run, and the duck ref taken in PlayVideo is deliberately kept so CloseAll still
+        /// balances it exactly once.
+        ///
+        /// A failure AFTER playback genuinely started is NOT replayed: see the branch below.
         /// </summary>
         private void FallbackToLibVlc(string reason)
         {
@@ -189,16 +251,30 @@ namespace ConditioningControlPanel.Services
 
             var path = _browserPath;
             var strict = _browserStrict;
+
+            // ---- mid-clip failure: end the run, never replay it ----
+            // VideoStarted has already gone out to seven subscribers; a replay would fire it a
+            // second time and make the user rewatch the whole clip from 0 for a stall at the end.
+            // The engine has already marked the file browser-unsafe when it blamed the file, so the
+            // NEXT play of it routes to LibVLC anyway. Mirrors BubbleCountWindow's startedOnce
+            // branch: end through the same funnel a natural end uses, so it is one VideoEnded and
+            // EndCurrentVideo's normal attention pass/fail handling.
+            if (_browserStartedFired)
+            {
+                App.Logger?.Warning("VideoService: browser playback failed MID-CLIP for {File} ({Reason}) - ending the video instead of replaying it",
+                    Path.GetFileName(path ?? "(none)"), reason);
+                VideoDiag.Log("VIDEO", $"browser MID-CLIP FAILURE ({reason}) - ending {Path.GetFileName(path ?? "?")} through the normal end funnel");
+                OnEnded();
+                return;
+            }
+
             App.Logger?.Warning("VideoService: browser playback failed for {File} ({Reason}) - replaying via LibVLC",
                 Path.GetFileName(path ?? "(none)"), reason);
             VideoDiag.Log("VIDEO", $"browser FALLBACK ({reason}) - replaying {Path.GetFileName(path ?? "?")} via LibVLC");
 
-            // The strict Closing veto refuses a close while _videoPlaying is true and no teardown is
-            // running, which would strand the browser windows on screen. Same trick ShowMessage uses.
-            var wasPlaying = _videoPlaying;
-            _videoPlaying = false;
-            try { StopBrowserSession(); }
-            finally { _videoPlaying = wasPlaying; }
+            // Drops the surfaces without letting the strict Closing veto strand them, and without
+            // letting IsStrictActive blink false across the handoff.
+            StopBrowserSessionForHandoff();
 
             if (string.IsNullOrEmpty(path) || _isCleaningUp) { Cleanup(); return; }
 
@@ -217,6 +293,14 @@ namespace ConditioningControlPanel.Services
             _lastWatchPositionMs = 0;
             _creditedWatchSeconds = 0;
             _startTime = DateTime.Now;
+
+            // Handing the clip to LibVLC means the wedge ladder matters again, and it is disarmed
+            // (StartBrowserVideoPlayback stopped it). Re-arm it in the pre-roll state PlayVideo's
+            // prologue uses - observation only - so the LibVLC window creation that follows, which
+            // is where the historic freeze strikes, is guarded again. StartVideoPlayback re-arms it
+            // for real once its windows are up.
+            _playbackStarted = false;
+            StartWedgeWatchdog();
 
             StartVideoPlayback(path, strict, forceLibVlc: true);
         }
@@ -265,7 +349,11 @@ namespace ConditioningControlPanel.Services
             // play, with no LibVLC parse (and no preparse crash surface, #750-#753).
             try
             {
-                if (!string.IsNullOrEmpty(_browserPath)) MetadataCache?.StoreDuration(_browserPath!, _duration);
+                // NOT for content-pack clips: those live at a fresh ccp_temp_<GUID> path per play, so
+                // every backfill would add a key that can never be hit again and video_metadata.json
+                // would grow without bound.
+                if (!string.IsNullOrEmpty(_browserPath) && !IsMediaTempPath(_browserPath))
+                    MetadataCache?.StoreDuration(_browserPath!, _duration);
             }
             catch (Exception ex) { App.Logger?.Debug("VideoService: browser duration backfill failed - {Error}", ex.Message); }
 
@@ -274,11 +362,14 @@ namespace ConditioningControlPanel.Services
             try
             {
                 long segMs = (long)(_segmentSec * 1000);
-                if (SegmentArmed && durationMs > segMs)
+                // One seek per session: meta arrives twice for webm / fragmented mp4 and a second
+                // jump would drag the user back to the segment start mid-clip.
+                if (!_browserSegmentSeeked && SegmentArmed && durationMs > segMs)
                 {
                     long startMs = (long)((durationMs - segMs) * _segmentFraction);
                     if (startMs > 500)
                     {
+                        _browserSegmentSeeked = true;
                         Browser.Seek(startMs);
                         App.Logger?.Information("VideoService: browser random segment - seeking to {Start}s of {Len}s",
                             startMs / 1000, durationMs / 1000);
@@ -288,17 +379,46 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex) { App.Logger?.Debug("VideoService: browser random-segment seek - {Error}", ex.Message); }
         }
 
+        /// <summary>True for a content-pack clip's per-play decrypt path (App.GetMediaTempPath()).
+        /// Those paths are GUIDs that never come back, so nothing may be cached against them.</summary>
+        private static bool IsMediaTempPath(string? path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            try
+            {
+                var root = App.GetMediaTempPath();
+                if (string.IsNullOrEmpty(root)) return false;
+                var rootFull = Path.GetFullPath(root)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                return Path.GetFullPath(path).StartsWith(rootFull + Path.DirectorySeparatorChar,
+                    StringComparison.OrdinalIgnoreCase);
+            }
+            catch { return false; }
+        }
+
         private void OnBrowserPlaying()
         {
             if (!BrowserEventIsCurrent() || _browserStartedFired) return;
+            // The internal flags are set SYNCHRONOUSLY: the mid-clip-failure branch in
+            // FallbackToLibVlc keys off _browserStartedFired, and it must be true from the instant
+            // the page says it is playing, whether or not the hop below has landed yet.
             _browserStartedFired = true;
 
             VideoDiag.Log("VIDEO", "browser playback confirmed (page reported playing)");
-            VideoStarted?.Invoke(this, EventArgs.Empty);
-            _ = App.Haptics?.StartVideoBackgroundVibeAsync();
-            try { App.Haptics?.FunScript?.OnVideoStarted(_browserPath ?? ""); }
-            catch (Exception ex) { App.Logger?.Debug("FunScript start hook failed: {Error}", ex.Message); }
             App.Logger?.Information("Playing: {File} (browser engine)", Path.GetFileName(_browserPath ?? ""));
+
+            // The RAISE is deferred. This runs inside WebView2's WebMessageReceived callback, and
+            // VideoStarted has seven subscribers (barks, chaos, bouncing text, session log, ...)
+            // that show windows and start their own work - all of it would run nested inside the
+            // browser's message loop. Same discipline as the LibVLC handlers.
+            PostAfterPageMessage(() =>
+            {
+                if (!BrowserEventIsCurrent()) return;
+                VideoStarted?.Invoke(this, EventArgs.Empty);
+                _ = App.Haptics?.StartVideoBackgroundVibeAsync();
+                try { App.Haptics?.FunScript?.OnVideoStarted(_browserPath ?? ""); }
+                catch (Exception ex) { App.Logger?.Debug("FunScript start hook failed: {Error}", ex.Message); }
+            });
         }
 
         private void OnBrowserTime(long ms)
@@ -343,6 +463,18 @@ namespace ConditioningControlPanel.Services
         private void OnBrowserKey(string key, bool alt, bool ctrl, bool shift)
         {
             if (!BrowserEventIsCurrent()) return;
+            // EVERY branch below either shows WPF windows (the grace-pause overlays) or tears the
+            // session down, and this arrives inside WebView2's message callback - so the whole
+            // policy is evaluated one dispatcher hop later, with the liveness re-checked there.
+            // Two rapid ESCs therefore queue two hops, and the second finds the session already
+            // gone rather than running Cleanup a second time (which would re-fire VideoEnded and
+            // release an InteractionQueue slot it no longer owns).
+            PostAfterPageMessage(() => HandleBrowserKey(key));
+        }
+
+        private void HandleBrowserKey(string key)
+        {
+            if (!BrowserEventIsCurrent()) return;
             try
             {
                 var settings = App.Settings?.Current;
@@ -373,7 +505,10 @@ namespace ConditioningControlPanel.Services
                         return;
                     }
                     VideoDiag.Log("PANIC", "ESC received by the browser video page - dismissing via Cleanup");
-                    PostAfterPageMessage(Cleanup);   // teardown must not run inside the page's callback
+                    // Already off the page's callback (see OnBrowserKey), but still guarded: a
+                    // second ESC that raced in behind this one must not run the teardown twice.
+                    if (_browserActive && BrowserEventIsCurrent() && _videoPlaying && !_isCleaningUp)
+                        Cleanup();
                     return;
                 }
 
@@ -385,23 +520,60 @@ namespace ConditioningControlPanel.Services
                         return;
                     }
                     VideoDiag.Log("PANIC", $"panic key '{key}' received by the browser page - ForceCleanup");
-                    PostAfterPageMessage(() => ForceCleanup());
+                    if (_browserActive && BrowserEventIsCurrent() && _videoPlaying && !_isCleaningUp)
+                        ForceCleanup();
                 }
             }
             catch (Exception ex) { App.Logger?.Debug("VideoService: browser key handling failed - {Error}", ex.Message); }
         }
 
         /// <summary>
-        /// The page reports DOM key names ("Escape", "F8", "a", " "); the setting stores a WPF
-        /// <see cref="System.Windows.Input.Key"/> name ("Escape", "F8", "A", "Space"). Function keys,
-        /// Escape and letters line up case-insensitively once Space is translated, which covers every
-        /// panic key a user can actually bind through the settings picker.
+        /// The page reports DOM key values ("Escape", "F8", "a", " ", "7", "."); the setting stores a
+        /// WPF <see cref="System.Windows.Input.Key"/> name ("Escape", "F8", "A", "Space", "D7",
+        /// "OemPeriod"). Function keys, Escape and letters line up case-insensitively; everything
+        /// else needs translating, or a user whose panic key is a digit gets nothing from a focused
+        /// WebView2. The low-level keyboard hook remains the primary route - this is the page's.
         /// </summary>
         private static bool MatchesPanicKey(string pageKey, string? panicKey)
         {
             if (string.IsNullOrEmpty(pageKey) || string.IsNullOrEmpty(panicKey)) return false;
-            var normalized = pageKey == " " ? "Space" : pageKey;
+            var normalized = TranslateDomKey(pageKey);
             return string.Equals(normalized, panicKey, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>DOM <c>KeyboardEvent.key</c> -> WPF <see cref="System.Windows.Input.Key"/> name.
+        /// Anything with no special mapping passes through unchanged (F1-F24, Escape, Home, End,
+        /// Insert, Delete, PageUp/PageDown and letters all already agree case-insensitively).</summary>
+        private static string TranslateDomKey(string pageKey)
+        {
+            // Digits are "0".."9" in the DOM and D0..D9 in WPF (the numpad ones report the same
+            // values without event.location, which the bridge does not carry - the LL hook covers
+            // a numpad binding).
+            if (pageKey.Length == 1 && pageKey[0] >= '0' && pageKey[0] <= '9') return "D" + pageKey;
+
+            return pageKey switch
+            {
+                " " => "Space",
+                "Backspace" => "Back",
+                "Tab" => "Tab",
+                "Enter" => "Return",
+                "ArrowUp" => "Up",
+                "ArrowDown" => "Down",
+                "ArrowLeft" => "Left",
+                "ArrowRight" => "Right",
+                "," => "OemComma",
+                "." => "OemPeriod",
+                "-" => "OemMinus",
+                "=" => "OemPlus",
+                ";" => "OemSemicolon",
+                "'" => "OemQuotes",
+                "[" => "OemOpenBrackets",
+                "]" => "OemCloseBrackets",
+                "\\" => "OemBackslash",
+                "/" => "OemQuestion",
+                "`" => "OemTilde",
+                _ => pageKey,
+            };
         }
     }
 }

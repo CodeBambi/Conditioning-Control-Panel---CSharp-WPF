@@ -14,7 +14,13 @@ namespace ConditioningControlPanel.Services.Video.Browser
     ///
     /// NOT populated by <c>ProcessFailed</c>: a dead browser process says nothing about the file.
     ///
-    /// Keyed by full path + file size so a re-encode of the same filename gets a fresh chance.
+    /// Keyed by a STABLE identity + file size so a re-encode of the same filename gets a fresh
+    /// chance. For a loose file on disk the identity is its full path; a content-pack clip is
+    /// AES-decrypted to a fresh <c>ccp_temp_&lt;GUID&gt;</c> path on EVERY play
+    /// (<c>ContentPackService.GetPackFileTempPath</c>), so keying one on its path would never match
+    /// again and every play would pay the full fallback. The selection sites register the pack's
+    /// canonical identity for the temp path they just created (see <see cref="RegisterStableKey"/>).
+    ///
     /// Persisted to <c>%LOCALAPPDATA%\ConditioningControlPanel\browser_unsafe_videos.json</c>;
     /// a corrupt or unreadable file degrades to an empty cache rather than blocking playback.
     /// </summary>
@@ -25,19 +31,67 @@ namespace ConditioningControlPanel.Services.Video.Browser
         private const int MaxEntries = 2000;
         private const int SaveDebounceMs = 3000;
 
+        /// <summary>Temp paths outlive nothing but the app session, so this map is in-memory only
+        /// and bounded like everything else here.</summary>
+        private const int MaxStableKeys = 512;
+
         private static readonly object _lock = new();
         private static readonly HashSet<string> _keys = new(StringComparer.OrdinalIgnoreCase);
         private static readonly List<string> _order = new();   // insertion order, for the cap
         private static bool _loaded;
         private static Timer? _saveTimer;
 
+        // path (usually a ccp_temp_<GUID> decrypt) -> stable identity of the underlying content.
+        private static readonly Dictionary<string, string> _stableKeys = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly List<string> _stableOrder = new();
+
         private static string FilePath => Path.Combine(App.UserDataPath, "browser_unsafe_videos.json");
 
+        /// <summary>
+        /// Give a path a content identity that survives the path itself. Called where a content-pack
+        /// entry is decrypted to a temp file - the caller is the only code that knows which pack
+        /// entry the GUID path came from. Never throws.
+        /// </summary>
+        public static void RegisterStableKey(string? path, string? stableKey)
+        {
+            if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(stableKey)) return;
+            try
+            {
+                var full = Path.GetFullPath(path);
+                lock (_lock)
+                {
+                    if (_stableKeys.ContainsKey(full)) return;
+                    _stableKeys[full] = stableKey!;
+                    _stableOrder.Add(full);
+                    while (_stableOrder.Count > MaxStableKeys)
+                    {
+                        _stableKeys.Remove(_stableOrder[0]);
+                        _stableOrder.RemoveAt(0);
+                    }
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("BrowserVideo: stable-key register failed: {E}", ex.Message); }
+        }
+
+        /// <summary>The registered identity for a path, or null when it is just a file on disk.</summary>
+        public static string? ResolveStableKey(string? path)
+        {
+            if (string.IsNullOrEmpty(path)) return null;
+            try
+            {
+                var full = Path.GetFullPath(path);
+                lock (_lock) { return _stableKeys.TryGetValue(full, out var k) ? k : null; }
+            }
+            catch { return null; }
+        }
+
         /// <summary>True when this exact file has already failed in the browser engine.</summary>
-        public static bool Contains(string? path)
+        /// <param name="stableKey">Content identity to key on instead of the path. Null resolves it
+        /// from the registry, so pack temp files key on their pack entry rather than their GUID.</param>
+        public static bool Contains(string? path, string? stableKey = null)
         {
             if (string.IsNullOrEmpty(path)) return false;
-            var key = KeyFor(path);
+            var key = KeyFor(path, stableKey);
             if (key == null) return false;
             lock (_lock)
             {
@@ -47,10 +101,10 @@ namespace ConditioningControlPanel.Services.Video.Browser
         }
 
         /// <summary>Record a file as browser-undecodable. Idempotent; never throws.</summary>
-        public static void Add(string? path, string reason)
+        public static void Add(string? path, string reason, string? stableKey = null)
         {
             if (string.IsNullOrEmpty(path)) return;
-            var key = KeyFor(path);
+            var key = KeyFor(path, stableKey);
             if (key == null) return;
             lock (_lock)
             {
@@ -68,15 +122,19 @@ namespace ConditioningControlPanel.Services.Video.Browser
                 Path.GetFileName(path), reason);
         }
 
-        private static string? KeyFor(string path)
+        private static string? KeyFor(string path, string? stableKey)
         {
             try
             {
                 var full = Path.GetFullPath(path);
+                // A registered identity beats the path: the decrypted size is still a perfectly good
+                // second component (the same pack entry always decrypts to the same byte count, and a
+                // re-encode changes it), so the "fresh chance after a re-encode" rule survives.
+                var identity = stableKey ?? ResolveStableKey(full) ?? full;
                 long size = 0;
                 try { size = new FileInfo(full).Length; }
-                catch { /* missing/locked: key on the path alone */ }
-                return full + "|" + size;
+                catch { /* missing/locked: key on the identity alone */ }
+                return identity + "|" + size;
             }
             catch { return null; }
         }

@@ -950,7 +950,13 @@ namespace ConditioningControlPanel.Services
         private void ApplyDuckSweep(float amount, int strength)
         {
             var currentProcessId = Environment.ProcessId;
-            var excludeWebView2 = App.Settings?.Current?.ExcludeBambiCloudFromDucking ?? true;
+            // The setting is about BambiCloud's audio. The OR is about parity: while a browser video
+            // session is on screen the app's OWN video audio comes out of a WebView2 process, so
+            // ducking it would mean the mandatory video ducks itself. LibVLC audio is in-process and
+            // the sweep structurally cannot touch it (it skips our PID), so without this the two
+            // engines would sound different for the same clip.
+            var excludeWebView2 = (App.Settings?.Current?.ExcludeBambiCloudFromDucking ?? true)
+                                  || App.Video?.IsBrowserSessionActive == true;
             var webViewPids = excludeWebView2 ? RefreshWebView2Pids() : new HashSet<int>();
 
             int ducked = 0;
@@ -1415,7 +1421,10 @@ namespace ConditioningControlPanel.Services
             }
 
             var currentProcessId = Environment.ProcessId;
-            var excludeWebView2 = App.Settings?.Current?.ExcludeBambiCloudFromDucking ?? true;
+            // Same exclusion rule as ApplyDuckSweep - a browser video session that comes up DURING
+            // an open duck window must not be caught by the rescan either.
+            var excludeWebView2 = (App.Settings?.Current?.ExcludeBambiCloudFromDucking ?? true)
+                                  || App.Video?.IsBrowserSessionActive == true;
             var webViewPids = excludeWebView2 ? RefreshWebView2Pids() : new HashSet<int>();
 
             int newlyDucked = 0;

@@ -124,34 +124,15 @@ public class BubbleCountService : IDisposable
         if (!forceTest && (!_isRunning || _isBusy)) return;
         if (_isBusy) return; // Still prevent double-triggering
 
-        // A video teardown whose native Stop() never returned leaves a LibVLC thread stuck in this
-        // process forever. #766 is exactly that: poisoning at 22:05, a bubble-count video built on
-        // the wreckage at 22:18, and a dispatcher that never drained again. Skip this turn rather
-        // than stand another player up on it - the shared instance is being rebuilt inside the same
-        // window, and the scheduler brings the next game around anyway.
-        //
-        // Browser engine on: the clip may well play out-of-process, where there is no shared LibVLC
-        // instance to have been poisoned - and the file is not chosen yet, so the routing decision
-        // cannot be made here. Defer to BubbleCountWindow.ShowOnAllMonitors, which knows the path
-        // and re-checks this exact cooldown before it leases anything native.
-        var poisonMs = Video.Browser.BrowserVideoGate.IsEngineUsable()
-            ? 0
-            : VideoService.NativePoisonCooldownRemainingMs;
-        if (poisonMs > 0)
-        {
-            App.Logger?.Warning("BubbleCountService: skipping game - a wedged native Stop() poisoned the shared LibVLC ({Sec:F0}s of cooldown left)",
-                poisonMs / 1000.0);
-            VideoDiag.Log("BUBBLE", $"game skipped - native poison cooldown, {poisonMs}ms remaining");
-            // If the interaction queue dequeued us into this call, hand the slot back or nothing
-            // else runs until stuck detection fires.
-            if (App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.BubbleCount)
-                App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
-            return;
-        }
+        // The post-poisoning hold-off (#766: poisoning at 22:05, a bubble-count video built on the
+        // wreckage at 22:18, a dispatcher that never drained again) is evaluated AFTER the video is
+        // picked - see the skip inside the continuation below. It has to be: with the browser engine
+        // on, whether this game touches the shared LibVLC instance at all depends on the FILE, and
+        // no file has been chosen yet.
 
         // For You feed open: bubble count is a video-class interaction and stands down like
         // the mandatory video does. Drop, never queue (the feed outlives the stuck window),
-        // handing back a dequeued slot the same way the poison guard above does.
+        // handing a dequeued slot straight back.
         if (Fyp.FypHostService.IsActive)
         {
             App.Logger?.Information("BubbleCountService: game dropped - For You feed active");
@@ -216,15 +197,44 @@ public class BubbleCountService : IDisposable
                         App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
                         return;
                     }
-                    
+
+                    // Now the file is known, so the routing decision can be made - and only a clip
+                    // that will actually use LibVLC cares about the poisoned shared instance. Skip
+                    // the game OUTRIGHT (the original pre-branch behaviour): the scheduler brings
+                    // the next one around on a rebuilt instance, and letting the window abort
+                    // instead would land in the completion callback as a FAILED count, which in
+                    // strict mode starts the WRONG! WATCH AGAIN retry bounce for the whole cooldown.
+                    var poisonMs = Video.Browser.BrowserVideoGate.ShouldUseBrowser(videoPath)
+                        ? 0
+                        : VideoService.NativePoisonCooldownRemainingMs;
+                    if (poisonMs > 0)
+                    {
+                        App.Logger?.Warning("BubbleCountService: skipping game - a wedged native Stop() poisoned the shared LibVLC ({Sec:F0}s of cooldown left)",
+                            poisonMs / 1000.0);
+                        VideoDiag.Log("BUBBLE", $"game skipped - native poison cooldown, {poisonMs}ms remaining");
+                        _isBusy = false;
+                        App.Bubbles?.Resume();
+                        App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
+                        return;
+                    }
+
                     // Determine difficulty settings
                     var difficulty = (Difficulty)settings.BubbleCountDifficulty;
 
                     // Track game started
                     App.Achievements?.TrackBubbleCountGameStarted();
 
-                    // Show the game on all monitors
-                    BubbleCountWindow.ShowOnAllMonitors(videoPath, difficulty, settings.BubbleCountStrictLock, OnGameComplete);
+                    // Show the game on all monitors. The skip callback is the window's backstop for
+                    // a cooldown that started in the last few milliseconds - same clean end as
+                    // above, never a lost game.
+                    BubbleCountWindow.ShowOnAllMonitors(videoPath, difficulty, settings.BubbleCountStrictLock, OnGameComplete,
+                        onSkipped: () =>
+                        {
+                            App.Logger?.Warning("BubbleCountService: game skipped by the window (native poison cooldown)");
+                            _isBusy = false;
+                            App.Bubbles?.Resume();
+                            App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
+                        });
 
                     // Extend the stuck detection timeout to cover full video + counting phase
                     var videoDuration = BubbleCountWindow.LastVideoDurationSeconds;
@@ -336,22 +346,8 @@ public class BubbleCountService : IDisposable
         // interactions (e.g. Video) start while the retry game plays.
         App.InteractionQueue?.ExtendTimeout(300);
 
-        // Same post-poisoning hold-off as TriggerGame, and the same browser-engine caveat: with the
-        // browser engine usable the retry video may never touch LibVLC, so the window decides.
-        var poisonMs = Video.Browser.BrowserVideoGate.IsEngineUsable()
-            ? 0
-            : VideoService.NativePoisonCooldownRemainingMs;
-        if (poisonMs > 0)
-        {
-            App.Logger?.Warning("BubbleCountService: retry abandoned - shared LibVLC poisoned ({Sec:F0}s of cooldown left)", poisonMs / 1000.0);
-            VideoDiag.Log("BUBBLE", $"retry abandoned - native poison cooldown, {poisonMs}ms remaining");
-            _retryCount = 0;
-            _isBusy = false;
-            App.Bubbles?.Resume();
-            App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
-            GameFailed?.Invoke(this, EventArgs.Empty);
-            return;
-        }
+        // The post-poisoning hold-off is evaluated after selection here too (see TriggerGame): with
+        // the browser engine on, whether the retry clip touches LibVLC at all depends on the file.
 
         try
         {
@@ -368,11 +364,39 @@ public class BubbleCountService : IDisposable
                 return;
             }
 
+            // End the retry loop outright rather than let it bounce off the cooldown every couple
+            // of seconds for a minute. Verbatim the original resolution (mercy: the game ends, the
+            // slot is handed back, GameFailed fires once), just taken with the file in hand.
+            var poisonMs = Video.Browser.BrowserVideoGate.ShouldUseBrowser(videoPath)
+                ? 0
+                : VideoService.NativePoisonCooldownRemainingMs;
+            if (poisonMs > 0)
+            {
+                App.Logger?.Warning("BubbleCountService: retry abandoned - shared LibVLC poisoned ({Sec:F0}s of cooldown left)", poisonMs / 1000.0);
+                VideoDiag.Log("BUBBLE", $"retry abandoned - native poison cooldown, {poisonMs}ms remaining");
+                _retryCount = 0;
+                _isBusy = false;
+                App.Bubbles?.Resume();
+                App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
+                GameFailed?.Invoke(this, EventArgs.Empty);
+                return;
+            }
+
             var difficulty = (Difficulty)settings.BubbleCountDifficulty;
 
             App.Achievements?.TrackBubbleCountGameStarted();
 
-            BubbleCountWindow.ShowOnAllMonitors(videoPath, difficulty, true, OnGameComplete);
+            BubbleCountWindow.ShowOnAllMonitors(videoPath, difficulty, true, OnGameComplete,
+                onSkipped: () =>
+                {
+                    // Backstop skip: same mercy end as the cooldown branch above, never a loss.
+                    App.Logger?.Warning("BubbleCountService: retry skipped by the window (native poison cooldown)");
+                    _retryCount = 0;
+                    _isBusy = false;
+                    App.Bubbles?.Resume();
+                    App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
+                    GameFailed?.Invoke(this, EventArgs.Empty);
+                });
         }
         catch (Exception ex)
         {
@@ -511,6 +535,11 @@ public class BubbleCountService : IDisposable
                 if (!string.IsNullOrEmpty(tempPath))
                 {
                     _tempPackFiles.Add(tempPath);
+                    // Same reason as VideoService.GetNextVideo: the decrypt path is a fresh GUID on
+                    // every play, so the browser engine's unsafe cache needs the pack entry's own
+                    // identity or a clip it has already failed on costs a full fallback each game.
+                    Video.Browser.BrowserUnsafeVideoCache.RegisterStableKey(
+                        tempPath, $"pack:{packVideo.PackId}|{packVideo.File.OriginalName}");
                     App.Logger?.Debug("BubbleCountService: Using pack video from '{Pack}': {File}",
                         packVideo.PackId, packVideo.File.OriginalName);
                     return tempPath;

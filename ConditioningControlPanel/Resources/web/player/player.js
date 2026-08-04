@@ -143,6 +143,11 @@
     if (typeof d.volume === 'number') volume = clamp01(d.volume);
     if (typeof d.muted === 'boolean') muted = d.muted;
 
+    // Opt-in, default off: the host decides, because the pointer has to stay
+    // visible wherever the surface is mouse-driven (BubbleCount) or wherever the
+    // LibVLC path it replaces would have shown one (mandatory video).
+    document.body.classList.toggle('hide-cursor', !!d.hideCursor);
+
     const now = performance.now();
     cur = {
       url: url,
@@ -273,19 +278,24 @@
 
   // ---------- foreground media events ----------
 
+  // Every listener below also stands down once the load has errored: the host is
+  // already tearing the session down or replaying the file through LibVLC, and a
+  // late meta/time post would land on a run that no longer owns them (it polluted
+  // _lastWatchPositionMs during a fallback).
+
   fg.addEventListener('loadedmetadata', () => {
-    if (!cur) return;
+    if (!cur || cur.errored) return;
     applyStart();
     postMeta();
   });
 
   fg.addEventListener('durationchange', () => {
-    if (!cur) return;
+    if (!cur || cur.errored) return;
     postMeta();
   });
 
   fg.addEventListener('canplay', () => {
-    if (!cur) return;
+    if (!cur || cur.errored) return;
     applyStart(); // loadedmetadata may have been too early to seek
   });
 
@@ -298,12 +308,12 @@
   });
 
   fg.addEventListener('timeupdate', () => {
-    if (!cur || cur.ended || cur.hostPaused) return;
+    if (!cur || cur.errored || cur.ended || cur.hostPaused) return;
     postTime(false);
   });
 
   fg.addEventListener('seeked', () => {
-    if (!cur) return;
+    if (!cur || cur.errored) return;
     cur.lastProgressAt = performance.now();
     postTime(true);
   });
@@ -312,6 +322,11 @@
     if (!cur || cur.ended || cur.errored) return;
     cur.ended = true;
     postTime(true);
+    // Nothing is supposed to move after the end, and the host keeps the surface
+    // alive through its own result/teardown flow (BubbleCount's result screen runs
+    // for as long as the user takes) — so stop the 10 Hz ticker rather than let it
+    // spin for the whole of it.
+    stopTicker();
     try { bg.pause(); } catch (e) { /* ignore */ }
     post({ type: 'ended' });
   });
@@ -396,6 +411,7 @@
     try { fg.currentTime = sec; } catch (e) { log('seek rejected: ' + e); return; }
     if (cur.blur) { try { bg.currentTime = sec; } catch (e) { /* backdrop only */ } }
     cur.ended = false; // seeking back out of the end re-arms normal reporting
+    if (ticker == null) startTicker(); // ...including the ticker the end stopped
     cur.lastProgressAt = performance.now();
     // Seeking out of a finished clip leaves the element paused; without this the
     // stall watchdog would then "catch" a video nobody asked to stop.
