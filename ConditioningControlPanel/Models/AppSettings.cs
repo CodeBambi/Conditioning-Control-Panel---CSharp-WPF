@@ -5777,14 +5777,6 @@ namespace ConditioningControlPanel.Models
             set { _blinkTrainerMixImages = value; OnPropertyChanged(); }
         }
 
-        // Tracks whether the user has visited the v5.9.8 Blink Trainer flagship
-        // page at least once. Used to suppress the one-time "moved to its own
-        // home" sticky toast (see Phase G). Defaults false so existing users
-        // see the toast on first launch after update; new users default to
-        // false too but the toast self-suppresses once they visit the tab.
-        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
-        public bool HasSeenBlinkTrainerFlagship { get; set; }
-
         /// <summary>
         /// Set once the one-time asset migration (install-dir assets -> %APPDATA% user folder)
         /// has completed. Without this flag the migration re-copies the entire library on every
