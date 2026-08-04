@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-21
 **Status:** CLOSED-OUT — no claimable board work remains (see below)
-**Next Task ID:** SP-046
+**Next Task ID:** SP-047
 
 ---
 
@@ -51,7 +51,13 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 
 **Next claimable work:** SP-046 = AI companion c7 (**companion UI surface — the FIRST UI slice**): chat view wired to the typed pipeline; badge/status accuracy headed proof (provenance drives badge; capability state drives status); refusal bubbles (interactive); user-reachable memory-clear control; awareness consent + cooldown settings surfaces; panic-quiet headed proof. **First packet under the owner's improve-don't-clone decree** (behavior parity = constraint; UI/architecture improvements a must) + avalonia-live evidence on this machine (27 verified tools — laptop substitute for DISPLAY3-class headed evidence) + A-013 advisory steps. Also carries: bool-overload retirement (6-file all-or-nothing migration — c7 naturally touches pipeline call sites). Lane partner TBD. Next unused task ID: SP-046.
 
-### Phase 5 — DTRH admit + host slices, quips/sound, AI companion, tail (ACTIVE — wave 9 next)
+### Wave 9 (staged 2026-08-05)
+
+| Task | Summary | Status | Deps |
+|------|---------|--------|------|
+| SP-046-ai-companion-c7 | Row: implement AI companion and awareness integration — slice c7 (companion UI surface: chat view wired to the typed pipeline through product composition; badge/status accuracy headed proof; refusal bubbles; user-reachable memory-clear control; awareness consent + cooldown settings surfaces; panic-quiet headed proof; bool-overload retirement (6 files); FIRST UI slice — improve-don't-clone decree + avalonia-live evidence + A-013 advisory) | Authored 2026-08-05 | SP-044 |
+
+### Phase 5 — DTRH admit + host slices, quips/sound, AI companion, tail (ACTIVE — wave 9 in flight)
 
 **WAVE-4 PARK LIFTED 2026-08-04 (~15:30 local, same day):** the anthropic-400 park was a pi request-shape defect, not account exhaustion — fixed by the `__PI_BILLING_HEADER_FIX__` local pi-ai patch (`x-anthropic-billing-header` system[0] per hermes-agent #48176; `pi -p` 200 on opus-5 AND fable-5). SP-037 landed earlier that day (floor restored). SP-035+SP-036 launch per plan. (The ~13:10 UTC park state is retained in the board's 2026-08-04 gate-history entry for the SP-037 substitution-land provenance.)
 
