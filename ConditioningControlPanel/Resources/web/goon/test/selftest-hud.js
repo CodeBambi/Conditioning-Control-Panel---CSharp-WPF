@@ -4519,8 +4519,9 @@ const audioMod = await import('../ui/audio.js');
     const kids = col20.children;
     ok(kids.indexOf(chipHost20) === kids.indexOf(findOne(col20, 'gg-mon-host')) + 1,
       'the chip sits directly under their bezel');
-    ok(kids.indexOf(micHost20) < kids.indexOf(findOne(col20, 'gg-rail--right')),
-      'and the mic above their rail, inside the column');
+    ok(kids.indexOf(micHost20) === kids.length - 1 &&
+       kids.indexOf(micHost20) > kids.indexOf(findOne(col20, 'gg-receipts')),
+      'and the mic last in the column, below the receipts (the rail moved into the arsenal drawer in batch 7)');
     ok(!!findOne(frame20, 'gg-voice-btn'), 'the button is built');
     ok(micHost20.hidden === true, 'and hidden until the feature is live');
     ok(!!hud20.parts.mic && typeof hud20.parts.mic.isRecording === 'function',
