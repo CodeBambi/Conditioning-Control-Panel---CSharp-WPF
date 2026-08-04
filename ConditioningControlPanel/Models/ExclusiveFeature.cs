@@ -76,10 +76,19 @@ namespace ConditioningControlPanel.Models
         {
             new()
             {
+                // "fyp" is not a tab - ShowTab launches the feed window for this key.
+                Key = "fyp", Emoji = "📱",
+                TitleLocKey = "tab_fyp", TaglineLocKey = "exclusives_tag_fyp",
+                ArtResource = "Resources/features/fyp.png",
+                BadgeLocKey = "exclusives_badge_new",
+                // The art's glowing phone sits left of center, low.
+                FocalX = 0.33, FocalY = 0.60,
+            },
+            new()
+            {
                 Key = "blinktrainer", Emoji = "💫",
                 TitleLocKey = "tab_blink_trainer", TaglineLocKey = "exclusives_tag_blinktrainer",
                 ArtResource = "Resources/features/blink_trainer.png",
-                BadgeLocKey = "exclusives_badge_new",
                 FocalX = 0.30, FocalY = 0.45,
             },
             new()
