@@ -32,17 +32,20 @@ tooling tasks, and land-time retrospectives) → land only after reading evidenc
 reconcile the board → next row. Workers must update STATUS.md + their board row
 before .DONE (SP-001's recorded gap — don't repeat it).
 
-CONSULT ROUTES (rewired 2026-08-04, .pi/bpx-consult.json — only these models exist):
-solo/advisor = anthropic/claude-fable-5 (the gate consult). gut-check =
-kimi-coding/kimi-for-coding-highspeed (cheap reads). council = opus-5 architect+tester,
-fable-5 critic+performance, k3 simplifier+security, k3 synthesizer — sanctioned since
-2026-07-19 amendment, roster valid since 2026-08-04; solo Fable stays the default.
+CONSULT ROUTES (rewired 2026-08-04, .pi/bpx-consult.json — only these models exist).
+Hierarchy: anthropic Opus 5 > Fable 5 > Sonnet 5; kimi K3 > highspeed. Fable 5 is the
+COSTLIEST per 1M tokens — use it where its reasoning/knowledge edge pays, not by default.
+solo/advisor = anthropic/claude-opus-5 (MAIN — best code/agentic, cheaper than Fable).
+gut-check = kimi-coding/kimi-for-coding-highspeed (cheap reads). council = opus-5
+architect+tester+performance, fable-5 critic (the one reasoning/knowledge seat),
+k3 simplifier+security, k3 synthesizer — sanctioned since 2026-07-19 amendment,
+roster valid since 2026-08-04. Spine plan/code reviewer = opus-5 (.spine/spine-config.json).
 Owner lifted ALL gates 2026-07-21; consult discipline still applies where docs require.
 
-PAUSE PROTOCOL (the only stop): if the Fable 5 consult route errors or times out,
-fall back to solo on anthropic/claude-opus-5 and continue, and start a loop that
-re-probes Fable 5 hourly; when healthy, switch back. (Sol/glm/uva routes are DEAD —
-never route there.) If Fable and Opus both fail: park in-flight work, write
+PAUSE PROTOCOL (the only stop): if the Opus 5 consult route errors or times out,
+fall back to solo on anthropic/claude-fable-5 and continue, and start a loop that
+re-probes Opus 5 hourly; when healthy, switch back. (Sol/glm/uva routes are DEAD —
+never route there.) If Opus and Fable both fail: park in-flight work, write
 .spine/handoff.md (state, evidence paths, next action), checkpoint to the active
 memory provider + client/memories/, delete loops/monitors, stop. I resume by pasting
 this prompt. Same response for safety/privacy questions, unresolvable ambiguity, or

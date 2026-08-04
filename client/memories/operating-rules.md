@@ -1,20 +1,29 @@
 # Operating Rules (owner-established, cross-session)
 
-## Consult routes — REWIRED 2026-08-04
+## Consult routes — REWIRED 2026-08-04 (v2: Opus-main)
 
 Model access is limited to **Opus 5, Fable 5, Kimi K3** (uva/sol/luna and zai/glm
 routes are gone — zai failed with provider balance error 1113). Config:
 `.pi/bpx-consult.json` (project-level, committed).
 
-- **solo/advisor**: `anthropic/claude-fable-5` (high) — the proven route.
+**Owner hierarchy (2026-08-04)**: anthropic Opus 5 > Fable 5 > Sonnet 5; kimi K3 >
+highspeed. Opus 5 ≈ Fable 5 in quality (small gap) but Fable 5 is the **costliest
+per 1M tokens** — Fable is spent only where its reasoning/knowledge edge pays.
+Opus 5 is better at code and agentic workflows; Fable 5 at reasoning/knowledge.
+
+- **solo/advisor**: `anthropic/claude-opus-5` (high) — MAIN route.
+- **fallback solo**: `anthropic/claude-fable-5` (when Opus errors/caps).
 - **gut-check**: `kimi-coding/kimi-for-coding-highspeed` (low, terse) — the cheap
   fast model, deliberately the dumb one.
-- **council**: architect+tester `anthropic/claude-opus-5`, critic+performance
-  `anthropic/claude-fable-5`, simplifier+security `kimi-api/k3`;
+- **council**: architect+tester+performance `anthropic/claude-opus-5` (code/agentic
+  seats), critic `anthropic/claude-fable-5` (single reasoning/knowledge seat —
+  cost-bounded), simplifier+security `kimi-api/k3`;
   **synthesizer `kimi-api/k3` (max)** — owner-specified.
 - **debate**: advocate=architect (opus-5), critic=critic (fable-5).
-- History: before the rewire, solo Fable 5 was the ONLY working route; Sol
-  fallback dead; council probes #4/#5 failed on uva/* seats. **Owner lifted ALL
+- **spine reviewer**: repinned fable-5 → `anthropic/claude-opus-5`
+  (`.spine/spine-config.json`, plan+code review — code strength, lower cost).
+- History: before the 2026-08-04 rewires, solo Fable 5 was the ONLY working route;
+  Sol fallback dead; council probes #4/#5 failed on uva/* seats. **Owner lifted ALL
   gates** (recorded 2026-07-21) — gates no longer block, but the pause protocol
   below still applies to consult-route failures.
 

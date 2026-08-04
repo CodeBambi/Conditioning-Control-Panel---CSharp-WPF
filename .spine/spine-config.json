@@ -19,10 +19,10 @@
       "thinking": "high"
     },
     "reviewer": {
-      "model": "anthropic/claude-fable-5",
+      "model": "anthropic/claude-opus-5",
       "thinking": "medium",
       "plan": {
-        "model": "anthropic/claude-fable-5",
+        "model": "anthropic/claude-opus-5",
         "thinking": "low"
       }
     },

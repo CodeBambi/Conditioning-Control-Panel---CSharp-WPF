@@ -3,7 +3,7 @@
   "defaultMode": "council",
   "modes": {
     "solo": {
-      "model": "anthropic/claude-fable-5",
+      "model": "anthropic/claude-opus-5",
       "thinkingLevel": "high",
       "feedbackMode": "steer"
     },
@@ -60,7 +60,7 @@
       "thinkingLevel": "max"
     },
     "performance": {
-      "defaultModel": "anthropic/claude-fable-5",
+      "defaultModel": "anthropic/claude-opus-5",
       "thinkingLevel": "medium"
     }
   },
