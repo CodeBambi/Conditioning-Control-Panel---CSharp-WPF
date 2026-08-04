@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-21
 **Status:** CLOSED-OUT — no claimable board work remains (see below)
-**Next Task ID:** SP-044
+**Next Task ID:** SP-046
 
 ---
 
@@ -40,7 +40,14 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 | SP-042-ai-companion-c5 | Row: implement AI companion and awareness integration — slice c5 (awareness: code-enforced consent at admission, placeholder NOT-GIVEN default; 4-class cooldown machinery extend-not-shrink with observable Suppressed; context packaging under consent through c3's boundary; keyword routing as owned ops; drop-by-type; title observation Windows facts + Linux typed Unavailable) | **Done 2026-08-04** (landed `49c4af7b`; batch `20260804T180449` lane-1 — FULL review chain: code APPROVE + final PASS; consent typed overload w/ residual bool door recorded; cooldown union≡merged-max-dict equivalence; canned keyword-path-only + refusal-drops divergence; separate cooldown families; title capability Windows-probed; 10-vs-90 verbatim; 564/564 + 29/29; row WIP — c6 next) | SP-038 |
 | SP-043-dtrh-captimer-tests | Tooling: T-16 DTRH cap-timer tests deterministic timing discipline (every wall-clock dependency classified + converted — injected clock per c3 precedent or tolerant window + loud classifier; product seam conditional additive; 10 consecutive full-suite runs zero cap-timer reds) | **Done 2026-08-04** (landed `49c4af7b`; batch `20260804T180449` lane-2 — FULL review chain: code APPROVE + final PASS; REAL 15s SEGMENT_SEC on ManualClock (stronger than toy 0.05s wall-clock); pre-existing ISoundClock seam (real-clock default); latent-timer surface closed class-wide; zero assertions changed; 537/29 EXACT; 10 consecutive zero-red runs; row DONE on evidence per the T-15 consistency ruling) | None |
 
-### Phase 5 — DTRH admit + host slices, quips/sound, AI companion, tail (ACTIVE — wave 7 in flight)
+### Wave 8 (staged 2026-08-04)
+
+| Task | Summary | Status | Deps |
+|------|---------|--------|------|
+| SP-044-ai-companion-c6 | Row: implement AI companion and awareness integration — slice c6 (command execution: envelope → plan → gated dispatch behind master + per-effect consent gates, none-admitted default with WPF divergence verbatim; moderation through ForBoundary; canary zero-execution proofs; NotExecuted(SupersededGeneration) lands — SP-019 limit 7 discharged; assigned obligations: Reserved→Wired flip + bool-door retirement) | Authored 2026-08-04 | SP-042 |
+| SP-045-dtrhfxrouter-manualclock | Tooling: DtrhFxRouterTests ManualClock hygiene (SP-043 §7.4 discovery — class-wide injection, zero assertion changes, zero product change; Review Level 1) | Authored 2026-08-04 | SP-043 |
+
+### Phase 5 — DTRH admit + host slices, quips/sound, AI companion, tail (ACTIVE — wave 8 in flight)
 
 **WAVE-4 PARK LIFTED 2026-08-04 (~15:30 local, same day):** the anthropic-400 park was a pi request-shape defect, not account exhaustion — fixed by the `__PI_BILLING_HEADER_FIX__` local pi-ai patch (`x-anthropic-billing-header` system[0] per hermes-agent #48176; `pi -p` 200 on opus-5 AND fable-5). SP-037 landed earlier that day (floor restored). SP-035+SP-036 launch per plan. (The ~13:10 UTC park state is retained in the board's 2026-08-04 gate-history entry for the SP-037 substitution-land provenance.)
 
