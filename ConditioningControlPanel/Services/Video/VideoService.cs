@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -19,6 +19,7 @@ using LibVLCSharp.Shared;
 using LibVLCSharp.WPF;
 using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services.Video.Browser;
 using Application = System.Windows.Application;
 using Screen = System.Windows.Forms.Screen;
 
@@ -42,7 +43,16 @@ namespace ConditioningControlPanel.Services
         private Queue<string> _videoQueue = new();  // Performance: Changed to Queue for O(1) dequeue
         private Queue<(string PackId, PackFileEntry File)> _packVideoQueue = new();  // Queue for pack videos
         private readonly List<Window> _windows = new();
-        private readonly List<FloatingText> _targets = new();
+        private readonly List<IAttentionTarget> _targets = new();
+        /// <summary>In-window attention planes, one per LibVLC video window that can host WPF content
+        /// (the vmem/blurred-background path only - a VideoView's airspace would hide them). Lives and
+        /// dies with <see cref="_windows"/>; a screen with no entry here falls back to a FloatingText
+        /// window, which is what keeps multi-monitor spawn placement identical.</summary>
+        private readonly List<InWindowAttentionLayer> _attentionLayers = new();
+        /// <summary>One entry per spawn still waiting to time out, due at an <c>_startTime</c>-relative
+        /// second so a grace pause freezes the countdown with everything else. UI thread only (spawn
+        /// tick + teardown).</summary>
+        private readonly List<AttentionSpawnExpiry> _spawnExpiries = new();
         private readonly List<string> _tempPackFiles = new();  // Track temp files for cleanup
 
         private DispatcherTimer? _scheduler;
@@ -529,10 +539,10 @@ namespace ConditioningControlPanel.Services
         /// to Focus Gaze dwells. Returns empty when VideoGazeClickEnabled is
         /// off. Caller iterates in reverse for topmost-first selection.
         /// </summary>
-        internal IReadOnlyList<FloatingText> GetGazeTargets()
+        internal IReadOnlyList<IAttentionTarget> GetGazeTargets()
         {
             if (App.Settings?.Current?.VideoGazeClickEnabled != true)
-                return Array.Empty<FloatingText>();
+                return Array.Empty<IAttentionTarget>();
             lock (_targets)
             {
                 return _targets.ToArray();
@@ -545,7 +555,7 @@ namespace ConditioningControlPanel.Services
         /// fade). Safe to call against a target that's already been hit or
         /// destroyed.
         /// </summary>
-        internal void GazeClick(FloatingText target)
+        internal void GazeClick(IAttentionTarget target)
         {
             if (target == null) return;
             target.Hit();
@@ -2701,6 +2711,19 @@ namespace ConditioningControlPanel.Services
             };
             grid.Children.Add(clickOverlay);
 
+            // Attention plane, above everything else in this window. ONLY on the vmem path: the
+            // composite is pure WPF content, so an element over it composites normally, whereas a
+            // VideoView is an HwndHost whose native child paints over every WPF sibling (airspace) -
+            // a target added there would be invisible AND unclickable, so that path keeps the
+            // separate topmost windows (see CreateAttentionTarget).
+            InWindowAttentionLayer? attentionLayer = null;
+            if (useBlur)
+            {
+                attentionLayer = new InWindowAttentionLayer(win, screen);
+                grid.Children.Add(attentionLayer);
+                _attentionLayers.Add(attentionLayer);
+            }
+
             win.Content = grid;
 
             SetupStrictHandlers(win, strict);
@@ -2708,6 +2731,16 @@ namespace ConditioningControlPanel.Services
             // Also handle at window level for any clicks that get through
             win.PreviewMouseDown += (s, e) =>
             {
+                // PreviewMouseDown TUNNELS from the window down, so this handler runs before any
+                // child sees the press - and it swallows every one of them. The attention plane
+                // therefore has to be offered the click here, by hand, or an in-window target could
+                // never be clicked at all.
+                if (attentionLayer != null && e.ChangedButton == MouseButton.Left &&
+                    attentionLayer.TryHit(e.GetPosition(attentionLayer)))
+                {
+                    e.Handled = true;
+                    return;
+                }
                 // Don't let the video window activate - keeps targets on top
                 e.Handled = true;
                 BringTargetsToFront();
@@ -4196,6 +4229,98 @@ namespace ConditioningControlPanel.Services
                 _spawnTimes.RemoveAt(0);
                 SpawnTarget();
             }
+            ExpireDueSpawns(elapsed);
+        }
+
+        /// <summary>
+        /// Retires every spawn whose lifespan has run out, in the SAME <c>_startTime</c>-relative
+        /// clock the spawn schedule uses.
+        ///
+        /// This used to be a <c>Task.Delay(lifespan)</c> per spawn, which is wall-clock and cannot be
+        /// held: a grace pause taken with a target on screen would expire it behind the Resume card
+        /// and hand the user a failed check for pausing. Reading the same clock the spawner reads
+        /// makes the countdown freeze for free — ResumeFromGrace shifts <c>_startTime</c> forward by
+        /// the paused duration, so a target comes back with exactly the time it had left.
+        ///
+        /// Runs from the spawn tick, which is already gated by <see cref="ShouldSpawnTick"/>, so
+        /// nothing here can fire while the pause is on.
+        /// </summary>
+        private void ExpireDueSpawns(double elapsed)
+        {
+            for (int i = _spawnExpiries.Count - 1; i >= 0; i--)
+            {
+                var spawn = _spawnExpiries[i];
+                if (elapsed < spawn.DueElapsed) continue;
+                _spawnExpiries.RemoveAt(i);
+                try { spawn.Unhook?.Invoke(); }
+                catch (Exception ex) { App.Logger?.Debug("Error unhooking toy input on expiry: {Error}", ex.Message); }
+                try
+                {
+                    lock (_targets)
+                    {
+                        foreach (var target in spawn.Targets)
+                        {
+                            // Absent = already clicked (or torn down); only a target still on the
+                            // books may be destroyed, and only once.
+                            if (_targets.Remove(target)) target.Destroy();
+                        }
+                    }
+                }
+                catch (Exception ex) { App.Logger?.Warning("Error expiring targets: {Error}", ex.Message); }
+            }
+        }
+
+        /// <summary>
+        /// Freezes / unfreezes every live target for a grace pause (#735): motion stops, clicks stop
+        /// registering, and the target stays on screen under the Resume card rather than vanishing.
+        /// The expiry countdown is handled by the shared clock, not here (see
+        /// <see cref="ExpireDueSpawns"/>).
+        /// </summary>
+        private void SetAttentionPaused(bool paused)
+        {
+            List<IAttentionTarget> snapshot;
+            lock (_targets) { snapshot = _targets.ToList(); }
+            foreach (var t in snapshot)
+            {
+                try { t.SetPaused(paused); }
+                catch (Exception ex) { App.Logger?.Debug("Attention target pause toggle failed: {Error}", ex.Message); }
+            }
+        }
+
+        /// <summary>
+        /// Builds one target for one screen, in the cheapest representation that screen can actually
+        /// show. Decided PER SCREEN and per spawn, never cached: a session can have a video window on
+        /// the primary only (3+ monitors without FillAllMonitorsWithVideo) while the schedule still
+        /// wants a target on every screen, and that screen must keep getting the separate window it
+        /// has always had.
+        ///
+        /// Order matters: browser session first (its page owns the whole screen), then the in-window
+        /// WPF plane (vmem/blurred-background LibVLC windows only), then the original topmost window
+        /// - which is still the ONLY thing that can appear over a VideoView's airspace or over the
+        /// MediaElement fallback.
+        /// </summary>
+        private IAttentionTarget CreateAttentionTarget(string text, Screen screen, int size,
+            in AttentionStyle style, Action onHit)
+        {
+            try
+            {
+                if (_browserActive)
+                {
+                    var win = _browser?.WindowForScreen(screen);
+                    if (win != null) return new BrowserAttentionTarget(win, text, size, style, onHit);
+                }
+                else
+                {
+                    var layer = _attentionLayers.FirstOrDefault(l => l.IsOn(screen));
+                    if (layer != null) return new InWindowAttentionTarget(layer, text, size, style, onHit);
+                }
+            }
+            catch (Exception ex)
+            {
+                // An in-window/DOM target that could not be built must not cost the user the check.
+                App.Logger?.Warning("ATTENTION: in-window target build failed ({Error}) - using a floating window", ex.Message);
+            }
+            return new FloatingText(text, screen, size, onHit);
         }
 
         private void SpawnTarget()
@@ -4218,7 +4343,8 @@ namespace ConditioningControlPanel.Services
 
                 // When dual monitor is enabled, spawn targets on ALL screens simultaneously
                 // User only needs to click ONE target to get the hit - all targets from this spawn clear together
-                var spawnedTargets = new List<FloatingText>();
+                var spawnedTargets = new List<IAttentionTarget>();
+                var style = AttentionTargetVisual.ReadStyle();
                 bool hitRegistered = false; // Prevent double-counting hits from the same spawn
 
                 // PHASE F — "squeeze your toy" attention checks. A toy button press satisfies the
@@ -4241,8 +4367,8 @@ namespace ConditioningControlPanel.Services
                 {
                     if (screen == null) continue;
 
-                    FloatingText? target = null;
-                    target = new FloatingText(text, screen, settings.AttentionSize, () =>
+                    IAttentionTarget? target = null;
+                    target = CreateAttentionTarget(text, screen, settings.AttentionSize, style, () =>
                     {
                         // Only count as a hit once per spawn (user clicked any target from this batch)
                         if (hitRegistered) return;
@@ -4270,7 +4396,7 @@ namespace ConditioningControlPanel.Services
                         }
 
                         // Get remaining targets for bringing to front
-                        List<FloatingText> remainingTargets;
+                        List<IAttentionTarget> remainingTargets;
                         lock (_targets)
                         {
                             remainingTargets = _targets.ToList();
@@ -4325,7 +4451,7 @@ namespace ConditioningControlPanel.Services
                         try
                         {
                             if (hitRegistered) return;
-                            FloatingText? live = null;
+                            IAttentionTarget? live = null;
                             lock (_targets)
                             {
                                 foreach (var t in spawnedTargets)
@@ -4348,39 +4474,14 @@ namespace ConditioningControlPanel.Services
                     catch { toyHandler = null; }
                 }
 
-                // Auto-expire all targets from this spawn together
-                var lifespan = settings.AttentionLifespan * 1000;
-                Task.Delay(lifespan).ContinueWith(_ =>
+                // Auto-expire all targets from this spawn together. Booked against the spawner's own
+                // clock (_startTime-relative seconds) rather than a wall-clock Task.Delay, so a grace
+                // pause holds the countdown instead of burning it behind the Resume card (#735).
+                _spawnExpiries.Add(new AttentionSpawnExpiry
                 {
-                    try
-                    {
-                        DispatcherHelper.RunOnUI(() =>
-                        {
-                            try
-                            {
-                                UnhookToyInput();
-                                lock (_targets)
-                                {
-                                    foreach (var target in spawnedTargets)
-                                    {
-                                        if (_targets.Contains(target))
-                                        {
-                                            _targets.Remove(target);
-                                            target.Destroy();
-                                        }
-                                    }
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                App.Logger?.Warning("Error expiring targets: {Error}", ex.Message);
-                            }
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Debug("Target auto-expire task failed (app may be shutting down): {Error}", ex.Message);
-                    }
+                    DueElapsed = (DateTime.Now - _startTime).TotalSeconds + settings.AttentionLifespan,
+                    Targets = spawnedTargets,
+                    Unhook = UnhookToyInput,
                 });
             }
             catch (Exception ex)
@@ -4681,8 +4782,8 @@ namespace ConditioningControlPanel.Services
             Pause,
             /// <summary>Same physical keystroke as a pause we just performed — swallow it, change nothing.</summary>
             ConsumedDedup,
-            /// <summary>Not pausable (no video / already paused / budget spent / attention target live)
-            /// — the press is today's normal panic press.</summary>
+            /// <summary>Not pausable (no video / already paused / budget spent) — the press is
+            /// today's normal panic press.</summary>
             FallThrough
         }
 
@@ -4699,13 +4800,17 @@ namespace ConditioningControlPanel.Services
         /// purpose: when the video window does NOT have focus only the global handler fires, and a
         /// one-shot flag would then swallow the user's genuine SECOND press. 200ms is far below a
         /// human rapid double-tap and far above the dispatcher latency between the two handlers.
+        ///
+        /// A live "CLICK ME" target used to REFUSE the pause (it would have broken the mini-game's
+        /// timing). It no longer does: the targets now pause with the video — motion frozen, clicks
+        /// off, expiry clock stopped — and come back with their remaining time intact, so there is
+        /// nothing left for a live target to protect.
         /// </summary>
         internal static GraceDecision EvaluateGraceRequest(
             bool videoPlaying,
             bool cleaningUp,
             bool alreadyPaused,
             bool consumed,
-            bool attentionTargetLive,
             double msSinceLastGraceAction,
             int dedupMs = GraceDedupMs)
         {
@@ -4713,10 +4818,6 @@ namespace ConditioningControlPanel.Services
             if (!videoPlaying || cleaningUp) return GraceDecision.FallThrough;
             if (alreadyPaused) return GraceDecision.FallThrough;   // press 2 = today's normal panic
             if (consumed) return GraceDecision.FallThrough;        // one grace pause per video run
-            // Pausing while a "CLICK ME" target is live would break the mini-game's timing, and a
-            // panic press must NEVER be silently swallowed — so refuse the pause and let the press
-            // do what it has always done.
-            if (attentionTargetLive) return GraceDecision.FallThrough;
             return GraceDecision.Pause;
         }
 
@@ -4758,6 +4859,9 @@ namespace ConditioningControlPanel.Services
                     ? double.MaxValue
                     : (nowUtc - _lastGracePauseActionUtc).TotalMilliseconds;
 
+                // State only, no longer a veto: a live target pauses with the video (see
+                // SetAttentionPaused). Still logged, because "was a check on screen?" is the first
+                // question asked of any grace-pause report.
                 bool targetLive;
                 lock (_targets) { targetLive = _targets.Count > 0; }
 
@@ -4769,7 +4873,6 @@ namespace ConditioningControlPanel.Services
                     cleaningUp: _isCleaningUp,
                     alreadyPaused: _gracePaused,
                     consumed: _gracePauseConsumed,
-                    attentionTargetLive: targetLive,
                     msSinceLastGraceAction: sinceMs);
 
                 switch (decision)
@@ -4804,6 +4907,12 @@ namespace ConditioningControlPanel.Services
             _lastGracePauseActionUtc = nowUtc;
 
             PausePrimary();
+
+            // The attention mini-game pauses WITH the video: motion frozen, clicks off. Its expiry
+            // clock stops on its own — the deadlines are held against _startTime, which
+            // ResumeFromGrace shifts forward by the whole pause — so nobody loses a check to a
+            // countdown that ran behind the Resume card.
+            SetAttentionPaused(true);
 
             // Freeze the wall-clock guards for the duration of the pause (see TimerArm).
             PauseGuardTimers(nowUtc);
@@ -4841,12 +4950,18 @@ namespace ConditioningControlPanel.Services
             StopGraceCountdown();
             CloseGraceOverlays();
 
-            // _startTime is the attention spawner's wall clock (CheckSpawnTargets compares
-            // DateTime.Now - _startTime against the scheduled spawn times) and is the ONLY read of
-            // that field in this file — watch-time credit is position-based (FinalizeWatchCredit
-            // reads _lastWatchPositionMs). Shift it forward by the pause so the targets keep landing
-            // at their intended positions in the CLIP rather than all at once on resume.
+            // _startTime is the attention mini-game's whole clock: CheckSpawnTargets compares
+            // DateTime.Now - _startTime against both the scheduled spawn times AND each live spawn's
+            // expiry deadline. Watch-time credit is position-based and does not read it
+            // (FinalizeWatchCredit reads _lastWatchPositionMs). Shifting it forward by the pause
+            // therefore does two jobs at once: targets keep landing at their intended positions in
+            // the CLIP, and a target that was on screen when the pause began gets back exactly the
+            // lifespan it had left.
             _startTime += pausedFor;
+
+            // Motion and clicks come back with it. Ordered after the _startTime shift so no expiry
+            // tick can see the old (now stale) clock.
+            SetAttentionPaused(false);
 
             // The enhancement stall watch measures "seconds since playback last advanced" against a
             // 90s grace. The pause itself contributed up to 60 of those seconds, so restart its clock
@@ -5823,6 +5938,7 @@ namespace ConditioningControlPanel.Services
                     foreach (var t in _targets.ToList()) t.Destroy();
                     _targets.Clear();
                 }
+                _spawnExpiries.Clear();
 
                 App.Logger?.Debug("CloseAll: Closing {Count} video windows, {MsgCount} message windows",
                     _windows.Count, _messageWindows.Count);
@@ -6002,6 +6118,9 @@ namespace ConditioningControlPanel.Services
                     }
                 }
                 _windows.Clear();
+                // The attention planes are children of those windows; the targets themselves were
+                // already destroyed above, so this only drops the empty hosts.
+                _attentionLayers.Clear();
                 // The escape hatch's handles die with the windows (see RunWedgeEscapeHatch).
                 lock (_videoWindowHandlesLock) { _videoWindowHandles.Clear(); }
 
@@ -6646,9 +6765,15 @@ namespace ConditioningControlPanel.Services
     }
 
     /// <summary>
-    /// Bouncing text target - customizable via settings
+    /// Bouncing text target in its own topmost window - customizable via settings.
+    ///
+    /// The original (and still the only) representation that can sit over a surface WPF cannot draw
+    /// into: the LibVLC VideoView airspace, the MediaElement fallback, and a monitor that has no
+    /// video window at all. Everywhere else the target is now an element inside the video window
+    /// itself (<see cref="InWindowAttentionTarget"/> / <see cref="BrowserAttentionTarget"/>), which
+    /// is what removed the per-frame SetWindowPos stutter this class is stuck with.
     /// </summary>
-    internal class FloatingText
+    internal class FloatingText : IAttentionTarget
     {
         // Win32 for reliable z-order management and tool window style
         [DllImport("user32.dll", SetLastError = true)]
@@ -6683,6 +6808,7 @@ namespace ConditioningControlPanel.Services
         // share identical bookkeeping (idempotency, sound, callback, fade).
         private readonly Action _onHit;
         private bool _clicked;
+        private bool _paused;
 
         public FloatingText(string text, Screen screen, int size, Action onHit)
         {
@@ -6692,7 +6818,7 @@ namespace ConditioningControlPanel.Services
                 size = Math.Max(40, size);
 
                 // Format multi-word triggers: 2 words = 2 lines, 4+ words = 2 lines with 2 on each
-                text = FormatTriggerText(text);
+                text = AttentionTargetVisual.FormatTriggerText(text);
 
                 // Get DPI scale factor (Screen uses physical pixels, WPF uses DIPs)
                 double dpiScale = 1.0;
@@ -6718,139 +6844,18 @@ namespace ConditioningControlPanel.Services
                 double areaHeight = area.Height / dpiScale;
 
                 // Margins scale with screen size to handle different resolutions
-                var marginX = Math.Min(150, areaWidth * 0.08);
-                var marginY = Math.Min(100, areaHeight * 0.08);
+                var marginX = AttentionTargetVisual.MarginFor(areaWidth, 150);
+                var marginY = AttentionTargetVisual.MarginFor(areaHeight, 100);
                 _minX = areaX + marginX;
                 _minY = areaY + marginY;
                 _maxX = areaX + areaWidth - marginX;
                 _maxY = areaY + areaHeight - marginY;
 
-                // Load style settings
-                var settings = App.Settings.Current;
-                Color color1, color2, textColor, borderColor;
-                try
-                {
-                    color1 = (Color)ColorConverter.ConvertFromString(settings.AttentionColor1);
-                    color2 = (Color)ColorConverter.ConvertFromString(settings.AttentionColor2);
-                    textColor = (Color)ColorConverter.ConvertFromString(settings.AttentionTextColor);
-                    borderColor = (Color)ColorConverter.ConvertFromString(settings.AttentionBorderColor);
-                }
-                catch
-                {
-                    // Fallback to bright fluo pink if colors invalid
-                    color1 = Color.FromRgb(255, 20, 147); // DeepPink
-                    color2 = Color.FromRgb(255, 105, 180); // HotPink
-                    textColor = Color.FromRgb(255, 20, 147); // DeepPink
-                    borderColor = Color.FromRgb(255, 20, 147);
-                }
-
-                // Check if floating text mode (no background)
-                var isFloating = settings.AttentionFloatingText;
-
-                // Create container with customizable styling
-                var border = new Border
-                {
-                    Background = isFloating
-                        ? Brushes.Transparent
-                        : new LinearGradientBrush(color1, color2, 90),
-                    CornerRadius = isFloating ? new CornerRadius(0) : new CornerRadius(20),
-                    BorderBrush = (settings.AttentionShowBorder && !isFloating)
-                        ? new SolidColorBrush(borderColor)
-                        : Brushes.Transparent,
-                    BorderThickness = (settings.AttentionShowBorder && !isFloating)
-                        ? new Thickness(3)
-                        : new Thickness(0),
-                    Padding = isFloating ? new Thickness(0) : new Thickness(20, 10, 20, 10),
-                    Effect = isFloating ? null : new System.Windows.Media.Effects.DropShadowEffect
-                    {
-                        Color = Colors.Black,
-                        BlurRadius = 15,
-                        ShadowDepth = 5,
-                        Opacity = 0.6
-                    },
-                    Cursor = System.Windows.Input.Cursors.Hand
-                };
-
-                // Create outlined text using geometry for crisp 2mm black outline
-                var fontFamily = new FontFamily($"{settings.AttentionFont}, Segoe UI, Arial");
-                var typeface = new Typeface(fontFamily, FontStyles.Normal, FontWeights.Bold, FontStretches.Normal);
-
-                // Create FormattedText to generate geometry
-                var formattedText = new FormattedText(
-                    text,
-                    System.Globalization.CultureInfo.CurrentCulture,
-                    System.Windows.FlowDirection.LeftToRight,
-                    typeface,
-                    size,
-                    Brushes.White, // Placeholder, we'll use geometry
-                    VisualTreeHelper.GetDpi(Application.Current.MainWindow).PixelsPerDip);
-                formattedText.TextAlignment = TextAlignment.Center;
-                formattedText.LineHeight = size * 0.95;
-
-                // Get text geometry for outline
-                var textGeometry = formattedText.BuildGeometry(new System.Windows.Point(0, 0));
-
-                // 2mm ≈ 7.5 pixels at 96 DPI
-                const double outlineThickness = 7.5;
-
-                // Get the actual bounds of the geometry and offset to ensure nothing is clipped
-                var bounds = textGeometry.Bounds;
-                double offsetX = -bounds.X + outlineThickness;
-                double offsetY = -bounds.Y + outlineThickness;
-
-                // Apply transform to offset the geometry so it starts within the container
-                var transformedGeometry = textGeometry.Clone();
-                transformedGeometry.Transform = new TranslateTransform(offsetX, offsetY);
-
-                // Create path for outline (black stroke)
-                var outlinePath = new System.Windows.Shapes.Path
-                {
-                    Data = transformedGeometry,
-                    Stroke = Brushes.Black,
-                    StrokeThickness = outlineThickness,
-                    StrokeLineJoin = PenLineJoin.Round,
-                    Fill = Brushes.Transparent
-                };
-
-                // Create path for fill (text color)
-                var fillPath = new System.Windows.Shapes.Path
-                {
-                    Data = transformedGeometry,
-                    Fill = new SolidColorBrush(textColor),
-                    Stroke = Brushes.Transparent
-                };
-
-                // Stack outline behind fill in a Grid
-                var textContainer = new Grid
-                {
-                    HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-                textContainer.Children.Add(outlinePath);
-                textContainer.Children.Add(fillPath);
-
-                border.Child = textContainer;
-
-                // Measure the text to get proper sizing (use actual geometry bounds + outline thickness)
-                double w = bounds.Width + outlineThickness * 2 + 60;  // Add padding + outline
-                double h = bounds.Height + outlineThickness * 2 + 40;
-
-                // Ensure minimum size
-                w = Math.Max(w, 150);
-                h = Math.Max(h, 60);
-
-                // Create a container grid with an invisible hit zone
-                // This ensures clicks register even on transparent pixels (inside "O", etc.)
-                var container = new Grid();
-
-                // Invisible hit zone rectangle - nearly transparent but still hit-testable
-                var hitZone = new System.Windows.Shapes.Rectangle
-                {
-                    Fill = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)), // Almost invisible but hit-testable
-                    IsHitTestVisible = true
-                };
-                container.Children.Add(hitZone);
-                container.Children.Add(border);
+                // Appearance (colours, floating mode, outlined text, hit zone) is shared with the
+                // in-window and DOM representations so the three cannot drift apart; only the
+                // measured size comes back, because the caller needs it for the window and the bounce.
+                var style = AttentionTargetVisual.ReadStyle();
+                var container = AttentionTargetVisual.Build(text, size, style, out double w, out double h);
 
                 _win = new Window
                 {
@@ -6969,28 +6974,6 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private void PlayPopSound()
-        {
-            try
-            {
-                var soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "bubbles");
-                var popFiles = new[] { "Pop.mp3", "Pop2.mp3", "Pop3.mp3" };
-                var chosenPop = popFiles[Random.Shared.Next(popFiles.Length)];
-                var popPath = Path.Combine(soundsPath, chosenPop);
-
-                if (File.Exists(popPath))
-                {
-                    // Apply master volume to attention target pop sound
-                    var masterVolume = App.Settings?.Current?.MasterVolume ?? 100;
-                    App.Audio?.PlayOneShot(popPath, 0.6f * (masterVolume / 100f), "target-pop");
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("Failed to start pop sound: {Error}", ex.Message);
-            }
-        }
-
         private void FadeOut()
         {
             App.Logger?.Debug("FloatingText.FadeOut() starting");
@@ -7026,13 +7009,32 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void Hit()
         {
-            if (_clicked || _dead) return;
+            // _paused: nothing scores while the video is held behind the grace-pause Resume card,
+            // whichever route got here (mouse, gaze dwell, toy button).
+            if (_clicked || _dead || _paused) return;
             _clicked = true;
             App.Logger?.Information("ATTENTION: Target clicked");
-            PlayPopSound();
+            AttentionTargetVisual.PlayPopSound();
             try { _onHit?.Invoke(); }
             catch (Exception ex) { App.Logger?.Debug("FloatingText.Hit: onHit callback threw: {Error}", ex.Message); }
             FadeOut();
+        }
+
+        /// <summary>
+        /// Grace pause (#735): stop the bounce (which also stops the topmost re-assert) and refuse
+        /// clicks, but leave the window on screen. The lifespan countdown is frozen by VideoService's
+        /// shared clock, so the target comes back with the time it had left.
+        /// </summary>
+        public void SetPaused(bool paused)
+        {
+            if (_dead || _clicked || _paused == paused) return;
+            _paused = paused;
+            try
+            {
+                if (paused) _timer.Stop();
+                else _timer.Start();
+            }
+            catch (Exception ex) { App.Logger?.Debug("FloatingText.SetPaused failed: {Error}", ex.Message); }
         }
 
         /// <summary>
@@ -7072,36 +7074,6 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Error("ATTENTION: BringToFront failed: {Error}", ex.Message);
             }
-        }
-
-        /// <summary>
-        /// Formats trigger text for display:
-        /// - 2 words: stack vertically (one per line)
-        /// - 4+ words: 2 lines with words split evenly
-        /// - 1 word or 3 words: keep as-is
-        /// </summary>
-        private static string FormatTriggerText(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return text;
-
-            var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-
-            if (words.Length == 2)
-            {
-                // 2 words: stack vertically
-                return $"{words[0]}\n{words[1]}";
-            }
-            else if (words.Length >= 4)
-            {
-                // 4+ words: split into 2 lines
-                int mid = words.Length / 2;
-                var line1 = string.Join(" ", words.Take(mid));
-                var line2 = string.Join(" ", words.Skip(mid));
-                return $"{line1}\n{line2}";
-            }
-
-            // 1 or 3 words: keep as-is
-            return text;
         }
     }
 }

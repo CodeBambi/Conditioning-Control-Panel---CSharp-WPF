@@ -17,6 +17,11 @@
     <video id="bg" muted playsinline preload="auto" disablepictureinpicture></video>
     <video id="fg" playsinline preload="auto" disablepictureinpicture></video>
   </div>
+  <!-- Attention-check targets (attentionShow / attentionHide). The only
+       hit-testable thing on the page: the layer itself passes presses through,
+       each target takes its own and reports attentionClick INSTEAD of the
+       generic click. C# still owns the text, the styling and the schedule. -->
+  <div id="attn"></div>
   <script src="player.js"></script>
 </body>
 </html>

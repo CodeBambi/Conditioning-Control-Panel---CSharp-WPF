@@ -55,6 +55,7 @@
 
   const bg = document.getElementById('bg');
   const fg = document.getElementById('fg');
+  const attnLayer = document.getElementById('attn');
 
   // Belt-and-braces alongside the HTML attributes: the element is born muted and
   // silent, and the host's volume only lands once a load says so.
@@ -105,6 +106,7 @@
   /** Free both decoders NOW. Safe to call at any time, including with no session. */
   function teardown() {
     cur = null; // first, so the pause/error churn below reaches no handler
+    clearAttention(); // targets belong to the clip that is going away
     stopTicker();
     lastTimeMs = -1;
     lastTimePostAt = 0;
@@ -380,9 +382,203 @@
     log('blur backdrop failed to decode - falling back to black');
   });
 
+  // ---------- attention-check targets ----------
+
+  // C# owns everything that decides an attention check: the trigger text (mod
+  // pool + localization stay C#-side), the styling, when a target appears, when
+  // it expires and what a hit is worth. The page owns only the paint and the
+  // bounce — as transform/opacity on a promoted layer, which is the whole point
+  // of moving them in here from their own topmost windows.
+  //
+  // Live from attentionShow until attentionHide; a click reports attentionClick
+  // and then WAITS for the host to hide it, so C#'s _targets list stays the one
+  // authority on which checks are outstanding (it also gates the grace pause).
+
+  const attn = new Map();
+  let attnRaf = 0;
+  let attnLastTs = 0;
+  let attnLastReport = 0;
+  let attnPaused = false;
+
+  function attnPump() {
+    if (!attnRaf && !attnPaused && attn.size) attnRaf = requestAnimationFrame(attnFrame);
+  }
+
+  function attnFrame(ts) {
+    attnRaf = 0;
+    // A pause that landed while this frame was already queued must still win.
+    if (attnPaused || !attn.size) { attnLastTs = 0; return; }
+
+    // A dropped frame (or a page the compositor parked) must nudge the target,
+    // not teleport it across the screen.
+    const dt = attnLastTs ? Math.min(0.25, Math.max(0, (ts - attnLastTs) / 1000)) : 1 / 60;
+    attnLastTs = ts;
+    const report = ts - attnLastReport >= TICK_MS;
+    if (report) attnLastReport = ts;
+    const vw = window.innerWidth || 1;
+    const vh = window.innerHeight || 1;
+
+    attn.forEach((t) => {
+      t.x += t.vx * dt;
+      t.y += t.vy * dt;
+      if (t.x < t.minX) { t.x = t.minX; t.vx = Math.abs(t.vx); }
+      if (t.x + t.w > t.maxX) { t.x = t.maxX - t.w; t.vx = -Math.abs(t.vx); }
+      if (t.y < t.minY) { t.y = t.minY; t.vy = Math.abs(t.vy); }
+      if (t.y + t.h > t.maxY) { t.y = t.maxY - t.h; t.vy = -Math.abs(t.vy); }
+      t.el.style.transform = 'translate3d(' + t.x + 'px,' + t.y + 'px,0)';
+      // Gaze hit-testing runs C#-side against DIP bounds, and nothing else
+      // consumes these — so they are only posted when the host asked for them.
+      if (report && t.report && !t.hit) {
+        post({
+          type: 'attentionMove',
+          id: t.id,
+          xPct: t.x / vw,
+          yPct: t.y / vh,
+          wPct: t.w / vw,
+          hPct: t.h / vh,
+        });
+      }
+    });
+
+    attnPump();
+  }
+
+  function attentionShow(d) {
+    const id = d && d.id != null ? String(d.id) : '';
+    if (!id || !attnLayer) return;
+    attentionHide({ id: id }); // a repeated id replaces, never stacks
+
+    const label = typeof d.text === 'string' ? d.text : '';
+    const size = Number(d.size) > 0 ? Number(d.size) : 40;
+
+    const el = document.createElement('div');
+    el.className = 'attn' + (d.floating ? ' attn-floating' : '');
+    el.dataset.id = id;
+
+    const box = document.createElement('div');
+    box.className = 'attn-box';
+    if (!d.floating) {
+      // LinearGradientBrush(color1, color2, 90) is top-to-bottom in WPF.
+      box.style.background = 'linear-gradient(180deg,' + (d.color1 || '#FF1493') + ',' + (d.color2 || '#FF69B4') + ')';
+      if (d.showBorder) {
+        box.style.borderWidth = '3px';
+        box.style.borderColor = d.borderColor || '#FF1493';
+      }
+    }
+
+    const text = document.createElement('div');
+    text.className = 'attn-text';
+    text.style.fontSize = size + 'px';
+    text.style.fontFamily = '"' + String(d.font || 'Segoe UI') + '","Segoe UI",Arial,sans-serif';
+
+    const out = document.createElement('span');
+    out.className = 'out';
+    out.textContent = label;      // textContent, never innerHTML: the trigger is user data
+    const fill = document.createElement('span');
+    fill.className = 'fill';
+    fill.textContent = label;
+    fill.style.color = d.textColor || '#FF1493';
+
+    text.appendChild(out);
+    text.appendChild(fill);
+    box.appendChild(text);
+    el.appendChild(box);
+    attnLayer.appendChild(el);
+
+    // Only the page can know how big the target measured, so it resolves the
+    // host's 0..1 spawn position against its own bounds.
+    const r = el.getBoundingClientRect();
+    const w = r.width || 150;
+    const h = r.height || 60;
+    const vw = window.innerWidth || w;
+    const vh = window.innerHeight || h;
+    const minX = Math.min(150, vw * 0.08);
+    const minY = Math.min(100, vh * 0.08);
+    const maxX = Math.max(minX + w, vw - minX);
+    const maxY = Math.max(minY + h, vh - minY);
+    const px = Number.isFinite(d.xPct) ? Math.min(1, Math.max(0, d.xPct)) : Math.random();
+    const py = Number.isFinite(d.yPct) ? Math.min(1, Math.max(0, d.yPct)) : Math.random();
+
+    const t = {
+      id: id,
+      el: el,
+      w: w,
+      h: h,
+      minX: minX,
+      minY: minY,
+      maxX: maxX,
+      maxY: maxY,
+      x: minX + px * Math.max(0, (maxX - w) - minX),
+      y: minY + py * Math.max(0, (maxY - h) - minY),
+      vx: Number.isFinite(d.vx) ? d.vx : 130,
+      vy: Number.isFinite(d.vy) ? d.vy : 130,
+      report: !!d.reportMotion,
+      hit: false,
+    };
+    el.style.transform = 'translate3d(' + t.x + 'px,' + t.y + 'px,0)';
+    attn.set(id, t);
+    attnPump();
+  }
+
+  function attentionHide(d) {
+    const id = d && d.id != null ? String(d.id) : '';
+    const t = attn.get(id);
+    if (!t) return;
+    attn.delete(id);
+    if (!attn.size) attnLastTs = 0;
+    const el = t.el;
+    if (d && d.fade) {
+      el.classList.add('gone');
+      // The CSS transition owns the fade; this only reaps the node afterwards.
+      setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 400);
+      return;
+    }
+    if (el.parentNode) el.parentNode.removeChild(el);
+  }
+
+  function attentionHit(t) {
+    if (!t || t.hit) return;
+    t.hit = true;
+    t.el.classList.add('attn-hit');
+    // C# runs the whole hit pipeline (pop sound, XP, clearing this spawn's
+    // mirrors on the other monitors) and answers with attentionHide.
+    post({ type: 'attentionClick', id: t.id });
+  }
+
+  /**
+   * Grace pause (#735): the targets freeze with the video. Same host-paused
+   * state the media watchdogs use, so the two can never disagree — the bounce
+   * stops, presses stop registering, and the targets stay on screen under the
+   * host's Resume card. The lifespan countdown is C#-side and freezes there.
+   */
+  function attentionSetPaused(paused) {
+    attnPaused = !!paused;
+    document.body.classList.toggle('attn-paused', attnPaused);
+    if (attnPaused) {
+      if (attnRaf) { cancelAnimationFrame(attnRaf); attnRaf = 0; }
+      attnLastTs = 0; // resume must step one frame, not the whole pause
+      return;
+    }
+    attnPump();
+  }
+
+  function clearAttention() {
+    attn.forEach((t) => { if (t.el.parentNode) t.el.parentNode.removeChild(t.el); });
+    attn.clear();
+    if (attnRaf) { cancelAnimationFrame(attnRaf); attnRaf = 0; }
+    attnLastTs = 0;
+    // A session torn down while paused must not leave the next clip's targets
+    // unclickable - the resume that would have cleared it is never coming.
+    attnPaused = false;
+    document.body.classList.remove('attn-paused');
+  }
+
   // ---------- inbound protocol ----------
 
   function doPause() {
+    // Attention targets freeze even with no live load: the host can hold the
+    // session at any point and a target must never drift on under the card.
+    attentionSetPaused(true);
     if (!cur) return;
     cur.hostPaused = true;
     try { fg.pause(); } catch (e) { /* ignore */ }
@@ -391,6 +587,7 @@
   }
 
   function doResume() {
+    attentionSetPaused(false);
     if (!cur || cur.errored || cur.ended) return;
     cur.hostPaused = false;
     // The watchdog clocks restart from here, or a 60s grace pause would look
@@ -449,6 +646,12 @@
       case 'seek':
         doSeek(data.ms);
         break;
+      case 'attentionShow':
+        attentionShow(data);
+        break;
+      case 'attentionHide':
+        attentionHide(data);
+        break;
       default:
         break;
     }
@@ -456,10 +659,24 @@
 
   // ---------- input ----------
 
-  // Any press anywhere: the host brings its attention-check / floating-text
+  // Any press anywhere: the host brings whatever it still has in its own
   // windows back to the front (window-level PreviewMouseDown is unreliable over
   // a WebView2 child HWND, so this message is the only signal C# gets).
-  window.addEventListener('pointerdown', () => post({ type: 'click' }), true);
+  //
+  // A press ON an attention target is EXCLUSIVELY that target's: it must never
+  // also read as a generic surface click, or every hit would additionally
+  // trigger the host's z-order lift. Capture phase, so no other listener can
+  // reorder this.
+  window.addEventListener('pointerdown', (e) => {
+    const node = e.target && e.target.closest ? e.target.closest('.attn') : null;
+    if (node) {
+      e.preventDefault();
+      e.stopPropagation();
+      attentionHit(attn.get(node.dataset.id));
+      return;
+    }
+    post({ type: 'click' });
+  }, true);
 
   // The page is a surface, not a document.
   window.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -514,6 +731,7 @@
       get durationMs() { return Number.isFinite(fg.duration) ? Math.round(fg.duration * 1000) : 0; },
       get blur() { return !!(cur && cur.blur); },
       get unrequestedPauses() { return cur ? cur.unrequestedPauses : 0; },
+      get attentionCount() { return attn.size; },
       get errored() { return !!(cur && cur.errored); },
     },
   });

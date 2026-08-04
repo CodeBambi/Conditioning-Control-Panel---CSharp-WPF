@@ -34,6 +34,10 @@ namespace ConditioningControlPanel.Services.Video.Browser
         /// <summary>True for the audio-bearing window (one per session). Secondaries load muted.</summary>
         public bool IsPrimary { get; }
 
+        /// <summary>The monitor this window covers. Used to place attention-check targets on the
+        /// right page (they are DOM elements inside these windows, one per screen).</summary>
+        public Screen Screen => _screen;
+
         /// <summary>True once the page has completed its handshake and the queue has been flushed.</summary>
         public bool IsReady => _surface.IsReady;
 
