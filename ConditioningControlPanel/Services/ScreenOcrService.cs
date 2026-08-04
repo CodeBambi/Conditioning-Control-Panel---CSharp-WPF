@@ -31,6 +31,9 @@ namespace ConditioningControlPanel.Services
         private OcrEngine? _ocrEngine;
         private readonly object _lock = new();
 
+        /// <summary>True when an OCR language pack was found and the engine is usable.</summary>
+        internal bool IsOcrAvailable => _ocrEngine != null;
+
         public ScreenOcrService()
         {
             try
@@ -196,23 +199,54 @@ namespace ConditioningControlPanel.Services
 
         private async System.Threading.Tasks.Task<(string? text, List<OcrWordHit>? words)> CaptureAndRecognizeAsync(WinForms.Screen screen)
         {
+            var bounds = screen.Bounds;
             Bitmap? bitmap = null;
             try
             {
-                var bounds = screen.Bounds;
                 bitmap = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
 
                 using (var g = Graphics.FromImage(bitmap))
                 {
                     g.CopyFromScreen(bounds.Left, bounds.Top, 0, 0, bounds.Size);
                 }
+            }
+            catch (Exception ex)
+            {
+                // Capture fails when the desktop is locked, DRM content is visible, a UAC prompt is
+                // up, etc. Match the original: dispose, log, and skip just this screen (the caller's
+                // loop moves on to the next one) rather than aborting the whole scan.
+                bitmap?.Dispose();
+                App.Logger?.Debug("ScreenOcrService: Capture failed for {Screen}: {Error}",
+                    screen.DeviceName, ex.Message);
+                return (null, null);
+            }
 
+            // Decode + OCR (takes ownership of the bitmap and disposes it).
+            return await DecodeAndRecognizeAsync(bitmap, bounds, screen);
+        }
+
+        /// <summary>
+        /// Converts a captured <see cref="Bitmap"/> into a WinRT SoftwareBitmap, runs OCR, and
+        /// extracts word-level bounding rects offset by <paramref name="bounds"/>. Split out from
+        /// screen capture so the decode pipeline is testable without CopyFromScreen.
+        ///
+        /// #634: the WinRT random-access-stream RCW returned by <c>ms.AsRandomAccessStream()</c>
+        /// must be disposed each call — otherwise the COM adapter pins the full BMP buffer (~8MB per
+        /// 1080p scan) until finalization, driving RAM to 100% over hours of unattended scanning.
+        /// Note: <c>BitmapDecoder</c> is NOT IDisposable in the CsWinRT projection, so disposing the
+        /// stream (not the decoder) is the fix. Takes ownership of <paramref name="bitmap"/>.
+        /// </summary>
+        internal async System.Threading.Tasks.Task<(string? text, List<OcrWordHit>? words)> DecodeAndRecognizeAsync(
+            Bitmap bitmap, Rectangle bounds, WinForms.Screen? screen)
+        {
+            try
+            {
                 // Convert System.Drawing.Bitmap → WinRT SoftwareBitmap via MemoryStream
                 using var ms = new MemoryStream();
                 bitmap.Save(ms, ImageFormat.Bmp);
                 ms.Position = 0;
 
-                var rasStream = ms.AsRandomAccessStream();
+                using var rasStream = ms.AsRandomAccessStream();
                 var decoder = await Windows.Graphics.Imaging.BitmapDecoder.CreateAsync(rasStream);
                 var softwareBitmap = await decoder.GetSoftwareBitmapAsync(
                     BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
@@ -238,7 +272,7 @@ namespace ConditioningControlPanel.Services
                                     bounds.Top + (int)br.Y,
                                     (int)br.Width,
                                     (int)br.Height),
-                                Screen = screen
+                                Screen = screen!
                             });
                         }
                     }
@@ -254,7 +288,7 @@ namespace ConditioningControlPanel.Services
             {
                 // Fails when desktop locked, DRM content visible, UAC prompt, etc.
                 App.Logger?.Debug("ScreenOcrService: Capture failed for {Screen}: {Error}",
-                    screen.DeviceName, ex.Message);
+                    screen?.DeviceName ?? "(none)", ex.Message);
                 return (null, null);
             }
             finally

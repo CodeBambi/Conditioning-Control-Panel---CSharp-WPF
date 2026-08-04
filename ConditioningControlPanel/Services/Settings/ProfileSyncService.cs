@@ -343,6 +343,35 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Ask the UI to present the season recap if it is due. No-ops harmlessly when MainWindow
+        /// is not up yet (early boot) — the startup call in MainWindow covers that case, and by
+        /// then the season key we just adopted is already saved.
+        /// </summary>
+        private static void NudgeSeasonRecap()
+        {
+            try
+            {
+                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+                dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        (System.Windows.Application.Current?.MainWindow as ConditioningControlPanel.MainWindow)?.TryPresentSeasonRecap();
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "Season recap nudge failed");
+                    }
+                }));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Season recap nudge could not be dispatched");
+            }
+        }
+
+        /// <summary>
         /// When local progression looks like fresh defaults at boot (Level 1, &lt;100 XP),
         /// the push-guard in <see cref="SyncProfileAsync"/> skips the round-trip, so a
         /// settings reset / restore never pulls the real level back down (#293). This does
@@ -366,6 +395,22 @@ namespace ConditioningControlPanel.Services
                 var v2Auth = new V2AuthService();
                 var user = await v2Auth.GetUserProfileAsync(unifiedId);
                 if (user == null) return false;
+
+                // Adopt the season key here, ahead of every early return below. This fetch already
+                // carries current_season (the profile projection always included it), but the
+                // "server is also at defaults" return further down threw the whole payload away —
+                // and a season reset is PRECISELY when local and server both sit at Level 1 / 0 XP,
+                // so the one path that could have healed a stale key bailed out exactly when it
+                // mattered. Doing it before ApplyUserDataToSettings also means it lands even when
+                // there is no level/XP progress to adopt.
+                if (Services.SeasonRecapService.ShouldAdoptServerSeason(user.CurrentSeason, settings.CurrentSeason))
+                {
+                    App.Logger?.Information("Boot heal: season key advanced {Old} -> {New} via read-only profile fetch",
+                        string.IsNullOrEmpty(settings.CurrentSeason) ? "(none)" : settings.CurrentSeason, user.CurrentSeason);
+                    settings.CurrentSeason = user.CurrentSeason;
+                    App.Settings?.Save();
+                    NudgeSeasonRecap();
+                }
 
                 // Apply server-side whitelist even when level/xp are at season-reset
                 // defaults. The flag normally rides the sync POST response, but the
@@ -404,6 +449,98 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Boot heal (#293): read-only profile fetch failed");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// One-shot guard for settings recovered from a rolling daily backup
+        /// (<see cref="SettingsService.RestoredFromBackup"/>). Such a backup restores progression
+        /// WHOLESALE and can be up to three calendar days old, so it may carry a previous season's
+        /// level, XP and skill tree. Uploading that state makes the rollback permanent — the
+        /// server takes the higher level, and every down-merge here is max/union, so it can never
+        /// self-correct (#761). This does a READ-ONLY V2 profile fetch (GET, no upload) first and:
+        ///
+        /// - server season is NEWER than the restored one while local still sits above it: the
+        ///   restore reverted across a rollover, and <c>level_reset</c> is one-shot server-side
+        ///   (the pre-corruption client already consumed it), so nothing else will ever apply it —
+        ///   adopt the server's post-rollover level/XP and drop the mechanical skills the backup
+        ///   resurrected, exactly like the <c>level_reset</c> branch in <see cref="SyncProfileAsync"/>;
+        /// - server is simply ahead: adopt it via the take-higher apply;
+        /// - otherwise keep local (the server is genuinely behind) and let the push proceed.
+        ///
+        /// Returns false ONLY when the server profile could not be read — the caller then skips
+        /// the whole sync rather than risk uploading stale progression, and retries next tick.
+        /// </summary>
+        private async Task<bool> ReconcileRestoredProfileAsync(string unifiedId)
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null) return false;
+
+            try
+            {
+                var v2Auth = new V2AuthService();
+                var user = await v2Auth.GetUserProfileAsync(unifiedId);
+                if (user == null)
+                {
+                    App.Logger?.Warning("Restore reconcile: read-only profile fetch returned nothing for {Id}", unifiedId);
+                    return false;
+                }
+
+                var localTotalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
+                var serverTotalXp = (double)user.Xp;
+
+                // Compare against the key the BACKUP carried, not the live one: a login or the
+                // #293 boot heal can have advanced settings.CurrentSeason since the restore, which
+                // would hide the rollover the restored level/XP still belong to.
+                var restoredSeason = App.Settings?.RestoredSeason ?? settings.CurrentSeason;
+                var seasonAdvanced = Services.SeasonRecapService.ShouldAdoptServerSeason(user.CurrentSeason, restoredSeason);
+
+                if (seasonAdvanced && localTotalXp > serverTotalXp)
+                {
+                    App.Logger?.Warning("Restore reconcile: restored settings belong to season {Old} but the server is on {New} — the backup reverted a rollover. Adopting the server profile: Level {LL} ({LX} XP) -> Level {SL} ({SX} XP).",
+                        string.IsNullOrEmpty(restoredSeason) ? "(none)" : restoredSeason,
+                        user.CurrentSeason, settings.PlayerLevel, (int)localTotalXp, user.Level, user.Xp);
+
+                    settings.PlayerLevel = user.Level;
+                    settings.PlayerXP = App.Progression?.GetCurrentLevelXP(user.Level, serverTotalXp) ?? 0;
+                    settings.HighestLevelEver = user.HighestLevelEver;
+                    settings.CurrentSeason = user.CurrentSeason;
+
+                    // Same policy as the level_reset branch: the POINT BALANCE is never reset,
+                    // only the tree — keep permanent nodes, drop the mechanical ones the backup
+                    // brought back. (The profile projection carries no unlocked_skills list, so
+                    // there is nothing to union in here; the next sync response re-adds anything
+                    // the server still holds.)
+                    settings.UnlockedSkills = (settings.UnlockedSkills ?? new List<string>())
+                        .Where(id => Models.SkillDefinition.PermanentIds.Contains(id)).ToList();
+                    App.SkillTree?.OnSeasonReset();
+
+                    settings.SeasonResetPending = true;
+                    NudgeSeasonRecap();
+                }
+                else if (serverTotalXp > localTotalXp)
+                {
+                    App.Logger?.Warning("Restore reconcile: server is ahead of the restored backup (Level {SL}, {SX} XP vs local Level {LL}, {LX} XP) — adopting the server profile.",
+                        user.Level, user.Xp, settings.PlayerLevel, (int)localTotalXp);
+                    v2Auth.ApplyUserDataToSettings(user); // take-higher; saves internally
+                }
+                else
+                {
+                    App.Logger?.Information("Restore reconcile: server (Level {SL}, {SX} XP, season {SS}) is not ahead of the restored local profile (Level {LL}, {LX} XP, season {LS}) — keeping local.",
+                        user.Level, user.Xp, user.CurrentSeason, settings.PlayerLevel, (int)localTotalXp, settings.CurrentSeason);
+                }
+
+                // Flush before dropping the guard. The branches above save through the 500ms
+                // debounce, so a crash inside that window would leave the PRE-reconcile level on
+                // disk with the marker already gone — and the next run would push it for real.
+                App.Settings?.SaveImmediate();
+                App.Settings?.ClearRestoredFromBackupFlag();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Restore reconcile failed — leaving the guard armed and skipping this sync");
                 return false;
             }
         }
@@ -475,10 +612,27 @@ namespace ConditioningControlPanel.Services
                     return false;
                 }
 
+                // This session's settings came out of a rolling daily backup, so the level/XP/skills
+                // below may be up to three days stale and can predate a season rollover. Reconcile
+                // against the server BEFORE the push: the sync POST is the first server contact of
+                // a run, and once a stale-but-higher profile is up there every down-merge rule is
+                // max/union, so nothing can ever bring it back down again (#761).
+                if (App.Settings?.RestoredFromBackup == true)
+                {
+                    var restoredUnifiedId = settings.UnifiedId;
+                    if (!string.IsNullOrEmpty(restoredUnifiedId) &&
+                        !await ReconcileRestoredProfileAsync(restoredUnifiedId!))
+                    {
+                        App.Logger?.Warning("Sync blocked — settings were restored from a local backup and the server profile could not be read to reconcile them. Retrying on the next sync.");
+                        return false;
+                    }
+                }
+
                 // Get achievement stats for additional tracking
                 var achievementProgress = achievements?.Progress;
 
-                // Calculate total accumulated XP (sum of all levels + current progress)
+                // Calculate total accumulated XP (sum of all levels + current progress).
+                // Read AFTER the restore reconcile above, which can rewrite level/XP.
                 var totalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
 
                 // Guard: if local data looks like fresh defaults (Level 1, near-zero XP) and we
@@ -674,6 +828,21 @@ namespace ConditioningControlPanel.Services
                             }
                         }
 
+                        // Sync the cumulable streak-fix charge balance. The server grants +1 per season
+                        // rollover and decrements on spend, so it is authoritative in both directions.
+                        // The assignment raises the settings INPC, which is what repaints the quests
+                        // tab (MainWindow.OnSettingsPropertyChangedForQuests) — the tile and the
+                        // "Fix Day (n)" caption are written imperatively, not bound, so without that
+                        // a user parked on the tab keeps seeing the stale balance.
+                        if (v2Result?.OopsieCredits != null && settings.StreakFixCharges != v2Result.OopsieCredits.Value)
+                        {
+                            var oldCharges = settings.StreakFixCharges;
+                            settings.StreakFixCharges = v2Result.OopsieCredits.Value;
+                            App.Settings?.Save();
+                            App.Logger?.Information("V2 Sync: Streak fix charges synced from server: {Old} -> {New}",
+                                oldCharges, v2Result.OopsieCredits.Value);
+                        }
+
                         // Sync display name from server (server is authoritative — admin renames, etc.)
                         if (!string.IsNullOrEmpty(v2Result?.User?.DisplayName) &&
                             v2Result.User.DisplayName != settings.UserDisplayName)
@@ -808,6 +977,26 @@ namespace ConditioningControlPanel.Services
                                 }
                             }
                             if (needsCompanionSave) App.Settings?.Save();
+                        }
+
+                        // Adopt the server's season key BEFORE the level_reset handler below, because
+                        // that handler is what nudges the recap — and the recap's whole decision is a
+                        // comparison against this key. Getting these the wrong way round is the actual
+                        // August 1 bug: the rollover arrived, the recap ran, and it compared the old
+                        // key with itself and concluded the season had not changed.
+                        var serverSeason = v2Result?.User?.CurrentSeason;
+                        if (Services.SeasonRecapService.ShouldAdoptServerSeason(serverSeason, settings.CurrentSeason))
+                        {
+                            App.Logger?.Information("V2 Sync: season key advanced {Old} -> {New} (server-authoritative)",
+                                string.IsNullOrEmpty(settings.CurrentSeason) ? "(none)" : settings.CurrentSeason, serverSeason);
+                            settings.CurrentSeason = serverSeason;
+                            App.Settings?.Save();
+
+                            // Nudge the recap on the key change itself, not only on level_reset.
+                            // level_reset is one-shot from the server, so relying on it alone means a
+                            // client that misses that single response can never recap that season.
+                            // Cheap to call: TryPresentSeasonRecap shows at most once per app run.
+                            NudgeSeasonRecap();
                         }
 
                         // Handle level_reset — server admin reset all levels, force client to accept
@@ -1966,17 +2155,19 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Use oopsie insurance via server-side validation.
-        /// Deducts 500 XP on server and marks as used for this season.
+        /// Spend one streak-fix charge ("Oopsie Insurance") via server-side validation.
+        /// The spend itself is free: the server decrements the account's cumulable charge balance
+        /// (oopsie_credits), records the fixed day and marks the season flag. No XP is deducted.
         /// </summary>
         /// <param name="fixDate">The date to fix, in YYYY-MM-DD format</param>
-        /// <returns>Tuple of (success, error message, new XP value)</returns>
-        public async Task<(bool success, string? error, int? newXp)> UseOopsieInsuranceAsync(string fixDate)
+        /// <returns>Tuple of (success, error message, the account XP total the server echoed back,
+        /// the account's remaining charge balance — null when an older server omits it)</returns>
+        public async Task<(bool success, string? error, int? newXp, int? credits)> UseOopsieInsuranceAsync(string fixDate)
         {
             var unifiedId = App.Settings?.Current?.UnifiedId;
             if (string.IsNullOrEmpty(unifiedId))
             {
-                return (false, "Oopsie Insurance requires a cloud account. Please log in first.", null);
+                return (false, "Oopsie Insurance requires a cloud account. Please log in first.", null, null);
             }
 
             try
@@ -1999,17 +2190,18 @@ namespace ConditioningControlPanel.Services
                     var errorResult = JsonConvert.DeserializeObject<OopsieErrorResponse>(json);
                     var errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
                     App.Logger?.Warning("Oopsie insurance failed: {Error}", errorMsg);
-                    return (false, errorMsg, null);
+                    return (false, errorMsg, null, null);
                 }
 
                 var result = JsonConvert.DeserializeObject<OopsieSuccessResponse>(json);
-                App.Logger?.Information("Oopsie insurance used via server: new XP = {NewXP}", result?.NewXp);
-                return (true, null, result?.NewXp);
+                App.Logger?.Information("Oopsie insurance used via server: {Credits} charge(s) left (server XP echo = {NewXP})",
+                    result?.OopsieCredits, result?.NewXp);
+                return (true, null, result?.NewXp, result?.OopsieCredits);
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Oopsie insurance request failed");
-                return (false, $"Connection failed: {ex.Message}", null);
+                return (false, $"Connection failed: {ex.Message}", null, null);
             }
         }
 
@@ -2437,6 +2629,16 @@ namespace ConditioningControlPanel.Services
             var unifiedId = App.Settings?.Current?.UnifiedId;
             if (string.IsNullOrEmpty(unifiedId)) return false;
 
+            // Settings recovered from a rolling daily backup can be up to three days stale. An
+            // automatic upload here would overwrite the cloud copy — the one snapshot that still
+            // holds the pre-corruption state — before the sync reconcile has run (#761). A forced
+            // (user-initiated) backup still goes through; that is an explicit choice.
+            if (!force && App.Settings?.RestoredFromBackup == true)
+            {
+                App.Logger?.Debug("Settings cloud backup skipped — local settings came from a daily backup and have not been reconciled yet");
+                return false;
+            }
+
             // Debounce: skip if backed up recently (unless forced)
             // Uses Interlocked for thread safety — multiple async paths can call this concurrently
             var nowTicks = DateTime.UtcNow.Ticks;
@@ -2860,6 +3062,9 @@ namespace ConditioningControlPanel.Services
             [JsonProperty("oopsie_used_season")]
             public string? OopsieUsedSeason { get; set; }
 
+            [JsonProperty("oopsie_credits")]
+            public int? OopsieCredits { get; set; }
+
             [JsonProperty("is_season0_og")]
             public bool? IsSeason0Og { get; set; }
 
@@ -2905,6 +3110,13 @@ namespace ConditioningControlPanel.Services
             [JsonProperty("highest_level_ever")]
             public int? HighestLevelEver { get; set; }
 
+            // The sync endpoint is what PERFORMS the season rollover, so it is the first thing
+            // that knows the new key — but it used to omit it from its response projection while
+            // the auth projections included it, leaving sync-only clients permanently on the old
+            // season. Null on servers older than that fix; ShouldAdoptServerSeason ignores null.
+            [JsonProperty("current_season")]
+            public string? CurrentSeason { get; set; }
+
             [JsonProperty("achievements")]
             public List<string>? Achievements { get; set; }
 
@@ -2922,6 +3134,9 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("oopsie_used_season")]
             public string? OopsieUsedSeason { get; set; }
+
+            [JsonProperty("oopsie_credits")]
+            public int? OopsieCredits { get; set; }
         }
 
         private class OopsieErrorResponse

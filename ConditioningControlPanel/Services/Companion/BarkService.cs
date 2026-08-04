@@ -1294,15 +1294,16 @@ namespace ConditioningControlPanel.Services
                 var p = System.IO.Path.Combine(modPath, "resources", "sounds", "companion_audio", file);
                 if (System.IO.File.Exists(p)) return p;
             }
-            // 2) embedded per-mod folder (Bambi/Sissy and, uniformly, the others)
+            // 2) embedded per-mod folder (Bambi/Sissy and, uniformly, the others) — bundled in the
+            //    install dir on full installs, or under the content root once it ships as a pack.
             var modId = App.Mods?.ActiveModId;
             if (!string.IsNullOrEmpty(modId))
             {
-                var pm = System.IO.Path.Combine(CompanionPhraseService.CompanionAudioFolder, "mods", modId, file);
+                var pm = CompanionPhraseService.ResolveCompanionAudioFile("mods", modId, file);
                 if (System.IO.File.Exists(pm)) return pm;
             }
             // 3) embedded shared fallback
-            var embedded = System.IO.Path.Combine(CompanionPhraseService.CompanionAudioFolder, file);
+            var embedded = CompanionPhraseService.ResolveCompanionAudioFile(file);
             return System.IO.File.Exists(embedded) ? embedded : null;
         }
 

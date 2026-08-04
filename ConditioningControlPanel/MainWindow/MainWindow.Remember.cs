@@ -23,6 +23,15 @@ namespace ConditioningControlPanel
     {
         internal void BtnRemember_Click(object sender, RoutedEventArgs e)
         {
+            // Both directions are refused mid-session, for two different reasons:
+            // RECALL rewrites ~40 prescribed fields via Preset.ApplyTo, wiping the dose the
+            // session is running. SNAPSHOT is subtler but just as wrong - it would capture the
+            // SESSION's values as "the setup I like", quietly replacing the user's own slot with
+            // whatever the program prescribed. Neither is meaningful until the session ends.
+            // This button sits in the bottom bar right next to the live session timer, which is
+            // exactly why it needs the loud refusal rather than a greyed-out no-op.
+            if (RefuseActionIfSessionLocked("remember")) return;
+
             var json = App.Settings?.Current?.RememberedConfigJson;
             if (string.IsNullOrEmpty(json)) SnapshotRememberedConfig();
             else RecallRememberedConfig();
@@ -31,8 +40,9 @@ namespace ConditioningControlPanel
         // Right-click re-saves the current setup over the slot (overwrite).
         internal void BtnRemember_RightClick(object sender, MouseButtonEventArgs e)
         {
-            SnapshotRememberedConfig();
             e.Handled = true;
+            if (RefuseActionIfSessionLocked("remember-overwrite")) return;
+            SnapshotRememberedConfig();
         }
 
         private void SnapshotRememberedConfig()

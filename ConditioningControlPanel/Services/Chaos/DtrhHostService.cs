@@ -37,10 +37,12 @@ internal static class DtrhHostService
     private static bool _runActive;
     private static bool _minimizedMainWindow;   // we tucked the main window to the tray for this session
     private static bool _relaunchedOnce;
+    private static bool _disposing;   // reentrancy guard: _host.Dispose() closes the window -> Closed -> DisposeAll
     private static bool _testMode;
     private static bool _videoHooked;
     private static bool _vnSpeaking;   // a VN tutorial beat owns the mix: skip native stingers/barks
     private static bool _worldFrozen;  // an in-world Freeze bubble is holding native video + voice
+    private static bool _diveMuted;    // the dive's in-page master mute is holding native video silent
 
     // ---- per-run native engagement metrics (local-only session telemetry) ----
     // Durations only the host can measure (video watch / voiceover / native audio
@@ -71,6 +73,11 @@ internal static class DtrhHostService
         if (_host != null) { _host.FocusWeb(); return; }
         try
         {
+            // The descent's audio (bubbles sfx, vn shared, drone bed) ships as the lazy audio-web
+            // pack. Fire-and-forget: no-op once installed, on a full install, or offline.
+            try { _ = App.ReleaseContent?.RequestPackAsync(ReleaseContentService.PackAudioWeb); }
+            catch (Exception ex) { App.Logger?.Debug("DtrhHost: audio-web request failed: {E}", ex.Message); }
+
             _exiting = false;
             _runActive = false;
             _worldFrozen = false;
@@ -95,6 +102,11 @@ internal static class DtrhHostService
                 ("ccp.art", Path.Combine(AppContext.BaseDirectory, "assets", "Chaos"), CoreWebView2HostResourceAccessKind.Allow),
                 // THE LOOM: the saved-spiral GIFs (thumbnails + in-run overlay pool).
                 ("ccp.spirals", DtrhLoomStore.SpiralsFolder, CoreWebView2HostResourceAccessKind.Allow),
+                // CONTENT PACKS: downloaded audio (barks, drone, bubbles sfx, vn vo) that no longer
+                // ships in the installer. Mirrors the ccp.game tree, so the page's audio shim only
+                // swaps the origin. Folder is created by ContentMapping() - a missing one would be
+                // skipped, and then the shim's fallback would never find anything.
+                ChaosWebViewHost.ContentMapping(),
             };
             // Creator mods: an installed mod's resources/dtrh folder (voice clips,
             // descent media, portrait, drone). Mapping ONLY the dtrh subfolder keeps
@@ -114,6 +126,11 @@ internal static class DtrhHostService
                 // button toggles borderless fullscreen. All effects are in-world now, so nothing
                 // needs the old topmost fullscreen surface.
                 StartFullscreen = false,
+                // Glue the descent above MainWindow via native ownership: main gets raised by
+                // plenty of things we don't control (avatar barks, a video window closing, a tray
+                // restore) and used to land on top of the game. Ownership makes the window manager
+                // keep the pair in order — without Topmost, which would cover other apps too.
+                OwnedByMainWindow = true,
                 WindowTitle = "Down the Rabbit Hole",
                 LogTag = "DtrhHost",
                 // The game's audio bed / drift voice must start without a click.
@@ -123,8 +140,13 @@ internal static class DtrhHostService
                 OnProcessFailed = OnProcessFailed,
             });
             _host.Show();
+            // Windowed game: the user closes it via the title-bar X. Tear down cleanly so the
+            // heartbeat watchdog can't misread the resulting heartbeat silence as a mid-run crash
+            // and relaunch the window (mirrors IntakeHostService / BureauHostService).
+            if (_host.Window != null) _host.Window.Closed += (_, _) => DisposeAll();
             HookVideoEvents(true);
             StartHeartbeatWatch();
+            Haptics.DtrhHapticDirector.OnLaunch(testMode);
             // Tuck the main CCP window into the tray while the descent owns the screen;
             // DisposeAll restores it on exit. The game window keeps focus.
             try
@@ -246,6 +268,9 @@ internal static class DtrhHostService
             case "freeze-state":
                 ApplyWorldFreeze((bool?)o["on"] ?? false);
                 break;
+            case "mute-state":
+                ApplyDiveMute((bool?)o["on"] ?? false);
+                break;
             case "meta-command":
                 _meta?.Handle(o);
                 break;
@@ -264,6 +289,7 @@ internal static class DtrhHostService
                     try { ChaosCrashSentinel.Mark($"mode=dtrh-web diff={diff}"); } catch { }
                     try { App.Bark?.NotifyChaosRunStarted(diff); } catch { }
                 }
+                try { Haptics.DtrhHapticDirector.OnRunStarted(); } catch { }
                 App.Logger?.Information("DtrhHost: run started (diff={D}, mode={M})", diff, (string?)o["mode"]);
                 break;
             }
@@ -271,8 +297,15 @@ internal static class DtrhHostService
                 OnRunEnded(o);
                 break;
             case "bark":
+                // Haptics tap FIRST: the moment happened whether or not a voice line plays
+                // over it (the vn-speaking gate below only guards the audio mix).
+                try { Haptics.DtrhHapticDirector.OnGameEvent(o); } catch { }
                 if (_vnSpeaking) break;   // don't let a bark talk over her VN line
                 RouteBark(o);
+                break;
+            case "haptic-state":
+                // page's ~2s depth/melt feed for the haptic director's ambient floor
+                try { Haptics.DtrhHapticDirector.OnHapticState(o); } catch { }
                 break;
             case "heartbeat":
                 _lastHeartbeatUtc = DateTime.UtcNow;
@@ -298,6 +331,18 @@ internal static class DtrhHostService
                 var (ok, error) = DtrhLoomStore.Delete(slug);
                 _host?.Post(new { type = "loom-result", op = "delete", ok, slug, error });
                 if (ok) PostLoomList();
+                break;
+            }
+            case "loom-reveal":
+            {
+                // 📂 on a rack tile: show the saved gif in Explorer (the game runs
+                // fullscreen, so Explorer opens behind it - still there on alt-tab).
+                var path = DtrhLoomStore.GifPathFor((string?)o["slug"]);
+                if (path != null)
+                {
+                    try { System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\""); }
+                    catch (Exception ex) { App.Logger?.Debug("DtrhHost: reveal failed: {E}", ex.Message); }
+                }
                 break;
             }
             case "boot-error":
@@ -423,8 +468,16 @@ internal static class DtrhHostService
         var s = App.Settings?.Current;
         if (s == null) return;
         if (setup["difficulty"] != null) s.ChaosDifficulty = (string?)setup["difficulty"] ?? s.ChaosDifficulty;
-        if (setup["durationSec"] != null) s.ChaosRunDurationSec = Math.Clamp((int?)setup["durationSec"] ?? 960, 60, 1200);
+        if (setup["durationSec"] != null)
+        {
+            // The Hourglass unlock lifts the ceiling to 2h; without it the preset ceiling holds.
+            int durMax = ChaosMeta.IsOwned("custom_duration") ? 7200 : 1200;
+            s.ChaosRunDurationSec = Math.Clamp((int?)setup["durationSec"] ?? 960, 60, durMax);
+        }
         if (setup["waveCount"] != null) s.ChaosWaveCount = Math.Clamp((int?)setup["waveCount"] ?? 5, 1, 12);
+        // The Bottomless Fall: the endless toggle only sticks for owners (a stale page can't
+        // arm it without the unlock); FromSettings re-checks ownership at deal time too.
+        if (setup["endless"] != null) s.ChaosEndless = ((bool?)setup["endless"] ?? false) && ChaosMeta.IsOwned("endless_mode");
         if (setup["motion"] != null) s.ChaosMotionMode = (string?)setup["motion"] ?? s.ChaosMotionMode;
         if (setup["enabledVariants"] != null)
         {
@@ -453,6 +506,7 @@ internal static class DtrhHostService
             {
                 difficulty = s?.ChaosDifficulty ?? "Easy",
                 durationSec = s?.ChaosRunDurationSec ?? 180,
+                endless = s?.ChaosEndless ?? false,
                 waveCount = s?.ChaosWaveCount ?? 5,
                 motion = s?.ChaosMotionMode ?? "Mixed",
                 enabledVariants = s?.ChaosEnabledVariants,
@@ -510,6 +564,7 @@ internal static class DtrhHostService
     private static void OnRunEnded(JObject o)
     {
         _runActive = false;
+        try { Haptics.DtrhHapticDirector.OnRunEnded(); } catch { }
         ApplyWorldFreeze(false);   // a run ending mid-freeze must resume native video + voice, not wedge them through the hub
         try
         {
@@ -674,10 +729,29 @@ internal static class DtrhHostService
     /// REAL world with it: pause any covering video and the currently-playing spoken voiceline
     /// for the freeze window, resuming both when it lifts. Idempotent (dedup on _worldFrozen);
     /// also force-resumed on run end / teardown so a clip can never wedge paused.</summary>
+    /// <summary>mute-state {on} - the dive's in-page master mute is a WEB switch that can
+    /// only silence page media; a mandatory native video that covers the page never heard it
+    /// and faded its audio in anyway. Mirror the mute onto the native VideoService so one
+    /// control silences everything. Idempotent; force-released on run end / teardown so a
+    /// muted descent can never leave every video silent afterward.</summary>
+    private static void ApplyDiveMute(bool on)
+    {
+        if (on == _diveMuted) return;
+        _diveMuted = on;
+        var disp = Application.Current?.Dispatcher;
+        if (disp == null) return;
+        disp.BeginInvoke(() =>
+        {
+            try { App.Video?.SetExternalMute(on); }
+            catch (Exception ex) { App.Logger?.Debug("DtrhHost.ApplyDiveMute: {E}", ex.Message); }
+        });
+    }
+
     private static void ApplyWorldFreeze(bool on)
     {
         if (on == _worldFrozen) return;
         _worldFrozen = on;
+        try { Haptics.DtrhHapticDirector.OnWorldFreeze(on); } catch { }
         var disp = Application.Current?.Dispatcher;
         if (disp == null) return;
         disp.BeginInvoke(() =>
@@ -729,6 +803,7 @@ internal static class DtrhHostService
     private static void OnVideoStarted(object? sender, EventArgs e)
     {
         if (_runActive) _runVideosShown++;   // session telemetry: a video was shown this run
+        try { Haptics.DtrhHapticDirector.OnVideoCovering(true); } catch { }
         var disp = Application.Current?.Dispatcher;
         if (disp == null || _host == null) return;
         disp.BeginInvoke(() => _host?.Post(new { type = "payload-state", kind = "video", on = true }));
@@ -767,6 +842,7 @@ internal static class DtrhHostService
 
     private static void OnVideoEnded(object? sender, EventArgs e)
     {
+        try { Haptics.DtrhHapticDirector.OnVideoCovering(false); } catch { }
         var disp = Application.Current?.Dispatcher;
         if (disp == null || _host == null) return;
         disp.BeginInvoke(() =>
@@ -890,11 +966,19 @@ internal static class DtrhHostService
 
     private static void DisposeAll()
     {
+        if (_disposing) return;   // _host.Dispose() closes the window, re-raising Closed -> here
+        _disposing = true;
+        try
+        {
         CancelExitWatchdog();
         StopHeartbeatWatch();
         HookVideoEvents(false);
+        // Never leave the toy running after the window dies (crash, watchdog, clean exit alike).
+        try { Haptics.DtrhHapticDirector.OnClosed(); } catch { }
         // Never leave a video or voiceline wedged paused if the window dies mid-freeze.
         if (_worldFrozen) { _worldFrozen = false; try { App.Video?.PlayPrimary(); } catch { } try { App.AvatarWindow?.ResumeSpokenAudio(); } catch { } }
+        // ...and never leave every video silent because the dive ended while muted.
+        if (_diveMuted) { _diveMuted = false; try { App.Video?.SetExternalMute(false); } catch { } }
         try { _meta?.FlushSave(); } catch { }
         if (_runActive && !_testMode)
         {
@@ -914,6 +998,8 @@ internal static class DtrhHostService
             try { (Application.Current?.MainWindow as MainWindow)?.ShowFromTray(); } catch { }
         }
         App.Logger?.Information("DtrhHostService: closed");
+        }
+        finally { _disposing = false; }
     }
 
     /// <summary>
@@ -954,6 +1040,7 @@ internal static class DtrhHostService
                 difficultyMult = cfg.DifficultyMult,
                 durationSec = cfg.DurationSec,
                 waveCount = cfg.WaveCount,
+                endless = cfg.Endless,   // The Bottomless Fall: no clock; regions loop + deepen until wake
                 effectIntensity = cfg.EffectIntensity,
                 enabledVariants = cfg.EnabledVariants,
                 motionOverride = cfg.MotionOverride?.ToString(),
@@ -983,6 +1070,8 @@ internal static class DtrhHostService
                 ownedHabitIds = meta.PurchasedUpgrades
                     .Where(id => ChaosMeta.IsUpgradeActive(id)
                                  && id != "extreme_tier"
+                                 && id != "custom_duration"   // setup-shape unlocks, no in-run
+                                 && id != "endless_mode"      // effect -> keep them off the HUD rail
                                  && ChaosUpgrades.ById(id) != null)
                     .ToList(),
                 rankIndex = (int)ChaosMeta.RankIndex,

@@ -10,7 +10,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using NAudio.Wave;
-using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Helpers;
 
 namespace ConditioningControlPanel.Services
 {
@@ -63,8 +63,8 @@ namespace ConditioningControlPanel.Services
         private DateTime _modAudioFilesCacheTime;
         private string? _modAudioCacheModId;
 
-        private WaveOutEvent? _audioPlayer;
-        private AudioFileReader? _audioFile;
+        // The whisper device itself is owned by AudioService — this is only the stop handle.
+        private AudioPlaybackHandle? _audioHandle;
 
         private bool _isRunning;
         private bool _oneShotActive; // Allow one-shot display when service not running (remote control)
@@ -81,8 +81,15 @@ namespace ConditioningControlPanel.Services
         public SubliminalService()
         {
             _audioPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sub_audio");
-            Directory.CreateDirectory(_audioPath);
-            
+            // Best effort only: the install dir is read-only under Program Files, so a missing folder
+            // here must NOT take the app down at startup — the lookups below already degrade to
+            // "no linked audio" when the folder isn't there.
+            try { Directory.CreateDirectory(_audioPath); }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("SubliminalService: could not create {Path} - {Error}", _audioPath, ex.Message);
+            }
+
             _timer = new DispatcherTimer();
             _timer.Tick += Timer_Tick;
         }
@@ -210,7 +217,7 @@ namespace ConditioningControlPanel.Services
             // Check for linked audio
             string? audioPath = FindLinkedAudio(text);
             
-            if (audioPath != null && App.Settings.Current.SubAudioEnabled)
+            if (audioPath != null && App.Settings.Current.SubAudioAudible)
             {
                 // Duck other audio, play whisper, then show visual
                 if (App.Settings.Current.AudioDuckingEnabled)
@@ -223,7 +230,7 @@ namespace ConditioningControlPanel.Services
                     _ = App.Haptics?.TriggerSubliminalPatternAsync(text);
                     Task.Delay(250).ContinueWith(__ =>
                     {
-                        Application.Current?.Dispatcher?.Invoke(() => ShowSubliminalVisuals(text));
+                        DispatcherHelper.RunOnUI(() => ShowSubliminalVisuals(text));
                     });
                 });
 
@@ -290,7 +297,7 @@ namespace ConditioningControlPanel.Services
                     _ = App.Haptics?.TriggerSubliminalPatternAsync(text);
                     Task.Delay(250).ContinueWith(__ =>
                     {
-                        Application.Current?.Dispatcher?.Invoke(() => ShowSubliminalVisuals(text));
+                        DispatcherHelper.RunOnUI(() => ShowSubliminalVisuals(text));
                     });
                 });
 
@@ -337,7 +344,7 @@ namespace ConditioningControlPanel.Services
             var delay = _random.Next(1000, 2000);
             Task.Delay(delay).ContinueWith(_ =>
             {
-                Application.Current?.Dispatcher?.Invoke(() => PlayBambiReset());
+                DispatcherHelper.RunOnUI(() => PlayBambiReset());
             });
         }
 
@@ -357,7 +364,7 @@ namespace ConditioningControlPanel.Services
             var delay = _random.Next(4000, 8000);
             Task.Delay(delay).ContinueWith(_ =>
             {
-                Application.Current?.Dispatcher?.Invoke(() => PlayBambiReset());
+                DispatcherHelper.RunOnUI(() => PlayBambiReset());
             });
         }
 
@@ -369,7 +376,7 @@ namespace ConditioningControlPanel.Services
             var resetText = App.Mods?.GetResetTriggerText() ?? "Reset";
             string? resetAudio = FindLinkedAudio(resetText);
 
-            if (resetAudio != null && App.Settings.Current.SubAudioEnabled)
+            if (resetAudio != null && App.Settings.Current.SubAudioAudible)
             {
                 if (App.Settings.Current.AudioDuckingEnabled)
                     App.Audio?.Duck(App.Settings.Current.DuckingLevel);
@@ -380,7 +387,7 @@ namespace ConditioningControlPanel.Services
                     _ = App.Haptics?.TriggerSubliminalPatternAsync(resetText);
                     Task.Delay(250).ContinueWith(__ =>
                     {
-                        Application.Current?.Dispatcher?.Invoke(() => ShowSubliminalVisuals(resetText));
+                        DispatcherHelper.RunOnUI(() => ShowSubliminalVisuals(resetText));
                     });
                 });
             }
@@ -399,7 +406,7 @@ namespace ConditioningControlPanel.Services
         public void PlayTriggerAudio(string trigger)
         {
             // Check if whispers are enabled
-            if (App.Settings?.Current?.SubAudioEnabled != true)
+            if (App.Settings?.Current?.SubAudioAudible != true)
             {
                 return;
             }
@@ -517,53 +524,49 @@ namespace ConditioningControlPanel.Services
             {
                 StopAudio();
 
-                _audioFile = new AudioFileReader(path);
-                _audioPlayer = new WaveOutEvent();
-                App.Audio?.ApplyPreferredDevice(_audioPlayer);
-
                 // Apply volume with curve, including master volume
                 var masterVol = App.Settings.Current.MasterVolume / 100.0f;
                 var subVol = App.Settings.Current.SubAudioVolume / 100.0f;
                 var curvedVol = (float)Math.Pow(subVol * masterVol, 1.5);
-                _audioFile.Volume = curvedVol;
-                
-                _audioPlayer.Init(_audioFile);
+
                 // Capture duck generation so stale callbacks after ForceUnduck are ignored
                 var duckGen = App.Audio?.DuckGeneration ?? -1;
-                _audioPlayer.PlaybackStopped += (s, e) =>
-                {
-                    // Unduck after playback + small delay
-                    Task.Delay(500).ContinueWith(_ =>
-                    {
-                        try { App.Audio?.Unduck(duckGen); }
-                        catch (Exception ex) { App.Logger?.Debug("Unduck failed in PlaybackStopped: {Error}", ex.Message); }
-                    });
-                };
-                _audioPlayer.Play();
-                // Tell the bark system a whisper is now audible so the companion won't talk over it.
-                App.Audio?.MarkWhisperAudio(_audioFile.TotalTime.TotalSeconds);
 
+                // Whispers are the highest-frequency clip in the app; the old inline WaveOutEvent
+                // was built on the UI thread, which meant NAudio posted PlaybackStopped back to the
+                // dispatcher — so the unduck AND the disposal both stalled whenever the UI was busy
+                // (#778/#779). AudioService now owns the device off-thread and guarantees the
+                // completion callback fires exactly once, including when playback is refused.
+                var handle = App.Audio?.PlayOneShot(path, curvedVol, "whisper",
+                    onStarted: duration =>
+                    {
+                        // Tell the bark system a whisper is now audible so the companion won't talk over it.
+                        App.Audio?.MarkWhisperAudio(duration.TotalSeconds);
+                    },
+                    onFinished: () =>
+                    {
+                        // Unduck after playback + small delay
+                        Task.Delay(500).ContinueWith(_ =>
+                        {
+                            try { App.Audio?.Unduck(duckGen); }
+                            catch (Exception ex) { App.Logger?.Debug("Unduck failed after whisper: {Error}", ex.Message); }
+                        });
+                    });
+
+                _audioHandle = handle;
                 App.Logger?.Debug("Playing subliminal audio: {Path}", Path.GetFileName(path));
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning("Could not play subliminal audio: {Error}", ex.Message);
-                App.Audio.Unduck();
+                App.Audio?.Unduck();
             }
         }
 
         private void StopAudio()
         {
-            try
-            {
-                _audioPlayer?.Stop();
-                _audioPlayer?.Dispose();
-                _audioFile?.Dispose();
-            }
-            catch { }
-            
-            _audioPlayer = null;
-            _audioFile = null;
+            try { _audioHandle?.Stop(); } catch { }
+            _audioHandle = null;
         }
 
         /// <summary>
@@ -589,7 +592,7 @@ namespace ConditioningControlPanel.Services
                     await Task.Delay(anticipationMs);
 
                 // Now show on UI thread
-                Application.Current?.Dispatcher?.Invoke(() => ShowSubliminalVisuals(text, opacity, overrideDurationMs));
+                DispatcherHelper.RunOnUI(() => ShowSubliminalVisuals(text, opacity, overrideDurationMs));
             }
             catch (Exception ex)
             {

@@ -9,6 +9,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Helpers;
 using XamlAnimatedGif;
 
 namespace ConditioningControlPanel.Services
@@ -127,6 +128,14 @@ namespace ConditioningControlPanel.Services
         public double ProgressPercent => _currentSession != null
             ? Math.Min(100, (ElapsedTime.TotalMinutes / _currentSession.DurationMinutes) * 100)
             : 0;
+
+        /// <summary>
+        /// #736: minutes genuinely left in the running session, for features that must fit their
+        /// schedule inside it (see <see cref="LockCardService.Start"/>). Null when no session is
+        /// running, which callers read as "open-ended".
+        /// </summary>
+        private double? SessionWindowMinutes =>
+            _currentSession == null ? null : RemainingTime.TotalMinutes;
         
         public SessionEngine(MainWindow mainWindow)
         {
@@ -145,6 +154,10 @@ namespace ConditioningControlPanel.Services
             
             _currentSession = session;
             _isRunning = true;
+            // Published so ModService can ask who owns the phrase pools. Safe to set before the
+            // pools are actually overridden: IsOverridingPhrasePools stays false until
+            // RememberPrescribedPools runs below.
+            Active = this;
             _isPaused = false;
             _pauseCount = 0;
             _pausedElapsedTime = TimeSpan.Zero;
@@ -165,6 +178,10 @@ namespace ConditioningControlPanel.Services
             
             // Apply session settings
             ApplySessionSettings(session.Settings);
+            // Record what the override just wrote, so a mid-session mod switch can neither
+            // persist these phrases as the user's own nor strip them from the running session.
+            RememberPrescribedPools();
+            try { _modIdAtStart = App.Mods?.ActiveMod?.Id; } catch { _modIdAtStart = null; }
             
             // Schedule bubble bursts if enabled
             if (session.Settings.BubblesEnabled && session.Settings.BubblesIntermittent)
@@ -266,6 +283,15 @@ namespace ConditioningControlPanel.Services
             var finalElapsedTime = ElapsedTime;
 
             _isRunning = false;
+            // Hand phrase-pool custody back to the user. Cleared here rather than at the end of
+            // StopSession so nothing can read stale prescribed pools while teardown is in flight;
+            // the reference check means a newer engine that has already published itself is not
+            // clobbered by a late stop from an older one.
+            _prescribedSubliminalPool = null;
+            _prescribedBouncingTextPool = null;
+            _prescribedLockCardPool = null;
+            if (ReferenceEquals(Active, this)) Active = null;
+
             _wallClockStopwatch.Stop();
             _cancellationToken?.Cancel();
 
@@ -442,7 +468,7 @@ namespace ConditioningControlPanel.Services
             if (settings.FlashEnabled && !IsFeaturePending("flash")) App.Flash?.Start();
             if (settings.SubliminalEnabled && !IsFeaturePending("subliminal")) App.Subliminal?.Start();
             if (settings.BubblesEnabled) App.Bubbles?.Start();
-            if (settings.LockCardEnabled && !IsFeaturePending("lock cards")) App.LockCard?.Start();
+            if (settings.LockCardEnabled && !IsFeaturePending("lock cards")) App.LockCard?.Start(SessionWindowMinutes);
             if (App.Settings.Current.PopQuizEnabled) App.PopQuiz?.Start();
             if (settings.BubbleCountEnabled && !IsFeaturePending("bubble count")) App.BubbleCount?.Start();
             if (settings.BouncingTextEnabled && !IsFeaturePending("bouncing text")) App.BouncingText?.Start();
@@ -521,8 +547,10 @@ namespace ConditioningControlPanel.Services
         {
             if (_currentSession == null) return;
             var settings = _currentSession.Settings;
-            var progress = elapsedMinutes / totalMinutes;
-            
+            // Easing curve (#660): per-session override if the preset sets one, else the global setting.
+            var curve = settings.RampCurve ?? App.Settings.Current.RampCurve;
+            var progress = RampCurves.ApplyCurve(elapsedMinutes / totalMinutes, curve);
+
             // Flash opacity ramp
             if (settings.FlashEnabled && settings.FlashOpacity != settings.FlashOpacityEnd)
             {
@@ -554,7 +582,7 @@ namespace ConditioningControlPanel.Services
             {
                 var pinkDuration = totalMinutes - _randomizedPinkStartMinute;
                 var pinkProgress = (elapsedMinutes - _randomizedPinkStartMinute) / pinkDuration;
-                pinkProgress = Math.Clamp(pinkProgress, 0, 1);
+                pinkProgress = RampCurves.ApplyCurve(pinkProgress, curve);
                 _currentPinkOpacity = Lerp(settings.PinkFilterStartOpacity, settings.PinkFilterEndOpacity, pinkProgress);
                 App.Overlay?.SetSustainedOverlayOpacity("pink_filter", _currentPinkOpacity / 100.0);
             }
@@ -564,7 +592,7 @@ namespace ConditioningControlPanel.Services
             {
                 var spiralDuration = totalMinutes - _randomizedSpiralStartMinute;
                 var spiralProgress = (elapsedMinutes - _randomizedSpiralStartMinute) / spiralDuration;
-                spiralProgress = Math.Clamp(spiralProgress, 0, 1);
+                spiralProgress = RampCurves.ApplyCurve(spiralProgress, curve);
                 _currentSpiralOpacity = Lerp(settings.SpiralOpacity, settings.SpiralOpacityEnd, spiralProgress);
                 App.Overlay?.SetSustainedOverlayOpacity("spiral", _currentSpiralOpacity / 100.0);
             }
@@ -859,6 +887,109 @@ namespace ConditioningControlPanel.Services
         private Dictionary<string, bool>? _savedSubliminalPool;
         private Dictionary<string, bool>? _savedLockCardPool;
 
+        // ---------------------------------------------------------------------------------
+        // Phrase-pool custody, for ModService (see IsOverridingPhrasePools below).
+        // ---------------------------------------------------------------------------------
+
+        /// <summary>
+        /// The pools this session PRESCRIBED, captured straight after ApplySessionSettings wrote
+        /// them. Stored as finished dictionaries rather than re-deriving them, so re-applying is a
+        /// plain assignment and cannot drift from what the override originally computed.
+        /// Null for a pool the session left alone.
+        /// </summary>
+        private Dictionary<string, bool>? _prescribedSubliminalPool;
+        private Dictionary<string, bool>? _prescribedBouncingTextPool;
+        private Dictionary<string, bool>? _prescribedLockCardPool;
+
+        /// <summary>
+        /// The active mod when this session started, so RestoreSettings can tell whether the user
+        /// switched mods mid-session and the pool snapshot it is about to restore is stale.
+        /// </summary>
+        private string? _modIdAtStart;
+
+        /// <summary>
+        /// The running engine, so <see cref="ModService"/> can ask who owns the phrase pools right
+        /// now without MainWindow having to plumb a reference through it.
+        ///
+        /// Every consumer must gate on <see cref="IsOverridingPhrasePools"/>, which re-checks
+        /// <see cref="IsRunning"/> - so even if this reference were ever left dangling by an
+        /// abnormal teardown, it reports "no session" and callers fall back to normal behaviour.
+        /// A stale non-null here can therefore never make ModService do the wrong thing.
+        /// </summary>
+        internal static SessionEngine? Active { get; private set; }
+
+        /// <summary>
+        /// True while a live session has replaced one or more phrase pools with its own.
+        ///
+        /// Why ModService needs to know: during a session the live SubliminalPool /
+        /// BouncingTextPool / LockCardPhrases are the SESSION's phrases, not the user's. Anything
+        /// that persists the live pool as the user's saved pool is writing the wrong data - and
+        /// because RestoreSettings only restores the flat pool and never the per-mod backup, that
+        /// bad backup outlives the session and gets copied over the good pool on next launch.
+        /// </summary>
+        internal bool IsOverridingPhrasePools =>
+            IsRunning && (_prescribedSubliminalPool != null
+                       || _prescribedBouncingTextPool != null
+                       || _prescribedLockCardPool != null);
+
+        /// <summary>The user's own pools, as they were before this session overrode them.</summary>
+        internal Dictionary<string, bool>? UserSubliminalPool =>
+            _savedSubliminalPool == null ? null : new Dictionary<string, bool>(_savedSubliminalPool);
+
+        internal Dictionary<string, bool>? UserBouncingTextPool =>
+            _savedBouncingTextPool == null ? null : new Dictionary<string, bool>(_savedBouncingTextPool);
+
+        internal Dictionary<string, bool>? UserLockCardPool =>
+            _savedLockCardPool == null ? null : new Dictionary<string, bool>(_savedLockCardPool);
+
+        /// <summary>
+        /// Re-asserts this session's prescribed phrase pools over the live settings.
+        ///
+        /// Called after a mod switch: ModService.ActivateMod restores the incoming mod's saved
+        /// pools, which would otherwise leave the running session speaking the user's phrases
+        /// instead of the ones it prescribed. Only pools the session actually overrode are
+        /// touched, so a mod switch still fully applies to every pool the session left alone.
+        /// </summary>
+        internal void ReapplyPhrasePoolOverrides()
+        {
+            if (!IsRunning) return;
+            var current = App.Settings?.Current;
+            if (current == null) return;
+
+            try
+            {
+                if (_prescribedSubliminalPool != null)
+                    current.SubliminalPool = new Dictionary<string, bool>(_prescribedSubliminalPool);
+                if (_prescribedBouncingTextPool != null)
+                    current.BouncingTextPool = new Dictionary<string, bool>(_prescribedBouncingTextPool);
+                if (_prescribedLockCardPool != null)
+                    current.LockCardPhrases = new Dictionary<string, bool>(_prescribedLockCardPool);
+
+                App.Logger?.Information("[Session] Re-applied prescribed phrase pools after a mod switch");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[Session] Failed to re-apply prescribed phrase pools");
+            }
+        }
+
+        /// <summary>
+        /// Snapshots whatever ApplySessionSettings just wrote into the pools, for the two uses
+        /// above. Call once per pool, immediately after the override.
+        /// </summary>
+        private void RememberPrescribedPools()
+        {
+            var current = App.Settings?.Current;
+            if (current == null) return;
+
+            if (_currentSession?.Settings.SubliminalPhrases.Count > 0)
+                _prescribedSubliminalPool = new Dictionary<string, bool>(current.SubliminalPool);
+            if (_currentSession?.Settings.BouncingTextPhrases.Count > 0)
+                _prescribedBouncingTextPool = new Dictionary<string, bool>(current.BouncingTextPool);
+            if (_currentSession?.Settings.LockCardPhrases.Count > 0)
+                _prescribedLockCardPool = new Dictionary<string, bool>(current.LockCardPhrases);
+        }
+
         // Deferred feature starts (the timeline editor's "start at minute X" events).
         // The editor serializes a StartMinute for 13 features, but the engine only ever
         // read four of them (pink filter, spiral, bubbles, corner GIF) — flash, subliminal,
@@ -1113,12 +1244,15 @@ namespace ConditioningControlPanel.Services
 
                 if (settings.LockCardStartMinute == 0)
                 {
-                    App.LockCard?.Start();
+                    App.LockCard?.Start(SessionWindowMinutes);
                 }
                 else
                 {
                     App.LockCard?.Stop();
-                    DeferFeatureStart("lock cards", settings.LockCardStartMinute, () => App.LockCard?.Start());
+                    // #736: the window is evaluated when the deferred start actually fires, so the
+                    // first card is scheduled against the time genuinely left in the session.
+                    DeferFeatureStart("lock cards", settings.LockCardStartMinute,
+                        () => App.LockCard?.Start(SessionWindowMinutes));
                 }
             }
             else
@@ -1193,6 +1327,27 @@ namespace ConditioningControlPanel.Services
                     current.SubliminalPool[kvp.Key] = kvp.Value;
                 }
                 _savedSubliminalPool = null;
+            }
+
+            // If the user switched MODS while this session was running, the snapshot restored above
+            // belongs to the OUTGOING mod - restoring it verbatim would leave the wrong mod's
+            // phrases live until the next relaunch. The per-mod backups are all correct by this
+            // point (ModService no longer persists session phrases into them), so the fix is simply
+            // to re-read the active mod's own pools. Only runs when the mod actually changed.
+            try
+            {
+                var modNow = App.Mods?.ActiveMod?.Id;
+                if (_modIdAtStart != null && modNow != null && modNow != _modIdAtStart)
+                {
+                    App.Logger?.Information(
+                        "[Session] Mod changed mid-session ({From} -> {To}); re-applying the active mod's pools "
+                        + "instead of the start-time snapshot", _modIdAtStart, modNow);
+                    App.Mods?.ReapplyActiveModPools();
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[Session] Post-session mod pool reconciliation failed");
             }
 
             current.SubAudioEnabled = _savedSettings.SubAudioEnabled;
@@ -1386,16 +1541,18 @@ namespace ConditioningControlPanel.Services
                     Stretch = System.Windows.Media.Stretch.Uniform
                 };
 
-                // Set the animated GIF source using XamlAnimatedGif
-                AnimationBehavior.SetSourceUri(imageElement, gifUri);
-                AnimationBehavior.SetRepeatBehavior(imageElement, System.Windows.Media.Animation.RepeatBehavior.Forever);
-
-                // Catch GIF rendering errors gracefully instead of letting them crash the app
+                // Catch GIF rendering errors gracefully instead of letting them crash the app.
+                // Must be attached BEFORE SetSourceUri: that starts an async load, so a fault
+                // raised in the gap would have no subscriber.
                 AnimationBehavior.AddErrorHandler(imageElement, (s, e) =>
                 {
                     App.Logger?.Warning("Corner GIF animation error ({Kind}): {Error}",
                         e.Kind, e.Exception?.Message);
                 });
+
+                // Set the animated GIF source using XamlAnimatedGif
+                AnimationBehavior.SetRepeatBehavior(imageElement, System.Windows.Media.Animation.RepeatBehavior.Forever);
+                AnimationBehavior.SetSourceUri(imageElement, gifUri);
 
                 _cornerGifImage = imageElement;
                 _cornerGifWindow.Content = imageElement;

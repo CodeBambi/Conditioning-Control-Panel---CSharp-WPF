@@ -55,6 +55,7 @@ namespace ConditioningControlPanel.Services.Audio
         private float _maxRms = 0.001f;
         private float _maxBass = 0.001f;
         private float _maxOnset = 0.001f;
+        private float _maxHigh = 0.001f;   // Phase F band-split: high-band energy peak
 
         // High-band transient detection state
         private readonly Queue<float> _highFluxHistory = new();
@@ -86,7 +87,21 @@ namespace ConditioningControlPanel.Services.Audio
         /// <param name="settings">Analysis settings for weights and sensitivity</param>
         /// <returns>Array of intensity values (0 to 1) at OutputSampleRate</returns>
         public float[] Analyze(float[] samples, AudioSyncSettings settings)
+            => Analyze(samples, settings, false, out _, out _);
+
+        /// <summary>
+        /// Analyzes mono audio samples and returns intensity values, optionally also producing the
+        /// PHASE F band-split envelopes (bass &lt;~258Hz and highs ~2-6.5kHz) from the SAME FFT pass
+        /// — no second analysis, no second decode. Both band tracks are gated by the combined
+        /// track's own silence gate, so a quiet passage stays quiet on every motor.
+        /// </summary>
+        /// <param name="wantBands">False = identical behaviour and cost to the single-track path.</param>
+        public float[] Analyze(float[] samples, AudioSyncSettings settings, bool wantBands,
+                               out float[] lowBand, out float[] highBand)
         {
+            lowBand = Array.Empty<float>();
+            highBand = Array.Empty<float>();
+
             if (samples.Length < FFT_SIZE)
             {
                 Log.Warning("AudioAnalyzer: Not enough samples ({Count}) for FFT analysis", samples.Length);
@@ -104,9 +119,10 @@ namespace ConditioningControlPanel.Services.Audio
             _maxRms = 0.001f;
             _maxBass = 0.001f;
             _maxOnset = 0.001f;
+            _maxHigh = 0.001f;
 
             // First pass: compute features and track maximums
-            var features = new (float rms, float bass, float onset, float highFlux, float bassFlux)[windowCount];
+            var features = new (float rms, float bass, float onset, float highFlux, float bassFlux, float high)[windowCount];
 
             for (int i = 0; i < windowCount; i++)
             {
@@ -141,6 +157,18 @@ namespace ConditioningControlPanel.Services.Audio
                 }
                 _maxBass = MathF.Max(_maxBass, bassEnergy);
 
+                // Phase F: high-band energy (2-6.5kHz). Same spectrum, one extra sum — only
+                // accumulated when the caller actually wants the band tracks.
+                float highEnergy = 0f;
+                if (wantBands)
+                {
+                    for (int j = HIGH_LOW_BIN; j <= HIGH_HIGH_BIN && j < spectrum.Length; j++)
+                    {
+                        highEnergy += spectrum[j];
+                    }
+                    _maxHigh = MathF.Max(_maxHigh, highEnergy);
+                }
+
                 // Calculate onset (spectral flux) - per band
                 float onset = 0f;
                 float bassFlux = 0f;  // Bass-band flux for bass drop detection
@@ -169,7 +197,7 @@ namespace ConditioningControlPanel.Services.Audio
                 _maxOnset = MathF.Max(_maxOnset, onset);
 
                 // Store features (including band-specific flux for onset detection)
-                features[i] = (rms, bassEnergy, onset, highFlux, bassFlux);
+                features[i] = (rms, bassEnergy, onset, highFlux, bassFlux, highEnergy);
 
                 // Update previous spectrum
                 _previousSpectrum ??= new float[spectrum.Length];
@@ -194,7 +222,7 @@ namespace ConditioningControlPanel.Services.Audio
 
             for (int i = 0; i < windowCount; i++)
             {
-                var (rms, bass, onset, highFlux, bassFlux) = features[i];
+                var (rms, bass, onset, highFlux, bassFlux, _) = features[i];
 
                 // Normalize features to 0-1 range
                 var normRms = rms / _maxRms;
@@ -353,6 +381,52 @@ namespace ConditioningControlPanel.Services.Audio
                 intensities[i] = intensity;
             }
 
+            // Fourth pass (Phase F band-split, opt-in): two envelopes from the SAME features.
+            // Each band is normalized against its own peak, shaped by the same sensitivity curve
+            // and smoothing as the combined track, and silenced wherever the combined track is
+            // silent — so the split only redistributes energy, it never invents any.
+            if (wantBands)
+            {
+                lowBand = new float[windowCount];
+                highBand = new float[windowCount];
+                float prevLow = 0f, prevHigh = 0f;
+                var sensitivity = (float)settings.Sensitivity;
+                var smoothing = (float)settings.Smoothing;
+
+                for (int i = 0; i < windowCount; i++)
+                {
+                    float low = features[i].bass / _maxBass;
+                    float high = features[i].high / _maxHigh;
+
+                    if (intensities[i] <= 0f)
+                    {
+                        low = 0f;
+                        high = 0f;
+                    }
+                    else
+                    {
+                        if (sensitivity != 1.0f)
+                        {
+                            if (low > 0) low = MathF.Pow(low, 1f / sensitivity);
+                            if (high > 0) high = MathF.Pow(high, 1f / sensitivity);
+                        }
+                        low = Math.Clamp(low, (float)settings.MinIntensity, (float)settings.MaxIntensity);
+                        high = Math.Clamp(high, (float)settings.MinIntensity, (float)settings.MaxIntensity);
+                    }
+
+                    if (smoothing > 0)
+                    {
+                        low = prevLow * smoothing + low * (1f - smoothing);
+                        high = prevHigh * smoothing + high * (1f - smoothing);
+                    }
+                    prevLow = low;
+                    prevHigh = high;
+
+                    lowBand[i] = low;
+                    highBand[i] = high;
+                }
+            }
+
             Log.Debug("AudioAnalyzer: Analyzed {Samples} samples into {Intensities} intensity values. MaxRMS={MaxRms:F4}, MaxBass={MaxBass:F4}, MaxOnset={MaxOnset:F4}",
                 samples.Length, intensities.Length, _maxRms, _maxBass, _maxOnset);
 
@@ -368,6 +442,7 @@ namespace ConditioningControlPanel.Services.Audio
             _maxRms = 0.001f;
             _maxBass = 0.001f;
             _maxOnset = 0.001f;
+            _maxHigh = 0.001f;
             _highFluxHistory.Clear();
             _bassFluxHistory.Clear();
             _transientCooldown = 0;

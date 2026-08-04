@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -75,7 +75,7 @@ namespace ConditioningControlPanel
             // in v5.9.8 — see Exclusives subsection below. The Lab stub itself
             // doesn't get a ? button (it's a navigation signpost, not a feature
             // surface).
-            SetHelpContent(LabTab.HelpBtnQuiz, "Quiz");
+            SetHelpContent(GradedIntakeTab.HelpBtnQuiz, "Quiz");
             // HelpBtnWebcamGames removed: the bundled Webcam Games card was split into
             // separate Gaze Minigame + Focus Gaze cards (each with its own ? button).
             SetHelpContent(LabTab.HelpBtnGazeMinigame, "GazeMinigame");
@@ -268,13 +268,17 @@ namespace ConditioningControlPanel
                 BorderThickness = new Thickness(2),
                 CornerRadius = new CornerRadius(6),
                 Padding = new Thickness(8),
-                Margin = new Thickness(0, 0, 6, 0),
+                // 1px of vertical margin is headroom for the hover lift: the row sits in a
+                // ScrollViewer whose viewport is exactly the card height, and WPF would clip the
+                // top and bottom of a 1.02 scale without so much as a warning.
+                Margin = new Thickness(0, 1, 6, 1),
                 Width = 100,
                 Height = 70,
                 Cursor = Cursors.Hand,
                 Tag = preset.Id
             };
-            
+            PreparePresetCardFx(card);
+
             card.MouseLeftButtonDown += (s, e) => SelectPreset(preset);
             card.MouseEnter += (s, e) => {
                 if (_selectedPreset?.Id != preset.Id)
@@ -389,6 +393,10 @@ namespace ConditioningControlPanel
             PresetsTab.BtnExportPreset.IsEnabled = true;
             PresetsTab.BtnSharePreset.IsEnabled = !preset.IsDefault;
             UpdatePresetShareStatusBadge(preset);
+
+            // Move the tab's one ambient loop onto the card that is now selected. After
+            // RefreshPresetsList, deliberately - it rebuilt every card in the row.
+            RefreshCardSheen();
         }
         
         internal void SessionCard_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -799,6 +807,9 @@ namespace ConditioningControlPanel
             if (e.OriginalSource is not Features.FeatureCard card) return;
             var s = App.Settings?.Current;
             if (s == null) return;
+            // A running session owns the prescribed dose - see MainWindow.SessionFeatureLock.cs.
+            // Derived from live engine state on every click, so there is nothing to un-stick.
+            if (RefuseIfSessionFeatureLocked($"card:{card.Title}")) return;
             var running = App.IsEngineRunning;
             try
             {
@@ -858,7 +869,10 @@ namespace ConditioningControlPanel
             popup.Closed += (_, __) =>
             {
                 if (_activeFeaturePopup == popup)
+                {
                     _activeFeaturePopup = null;
+                    _activeFeaturePopupContent = null;
+                }
                 // The popup has ShowInTaskbar=False, so when it closes WPF may activate
                 // whatever window happens to be behind us instead of returning focus
                 // to MainWindow. Explicitly bring MainWindow forward.
@@ -871,7 +885,16 @@ namespace ConditioningControlPanel
                 catch { /* window may be shutting down */ }
             };
             _activeFeaturePopup = popup;
+            // Tracked so RefreshSessionFeatureLock can re-derive the lock onto a popup that is
+            // already open when a session starts or ends (MainWindow.SessionFeatureLock.cs).
+            _activeFeaturePopupContent = content;
             popup.Show(); // Non-modal so bubbles and other interactions keep working
+
+            // A running session owns the prescribed dose: grey the master enable toggle and the
+            // dials it prescribes, and say why. Applied AFTER Show so the content has been
+            // through Initialized and FindName resolves - and so the visual tree the sweep walks
+            // actually exists. Both directions are handled, so nothing latches.
+            ApplySessionLockToFeaturePopup(content);
 
             // Bark hook: identify the feature by control type (locale-independent), e.g.
             // FlashFeatureControl -> "Flash". Gated/chanced in the rules so it isn't spammy.
@@ -885,64 +908,67 @@ namespace ConditioningControlPanel
             catch { }
         }
 
+        // Popup titles go through ModAwareLabel so a mod that renames a feature retitles
+        // the window too — otherwise a "Flash Images" → "Drone Pulses" replacement would
+        // rename the tile and the in-popup section header but leave the title bar behind.
         internal void CardFlash_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.FlashFeatureControl(),
-                Localization.Loc.Get("section_flash_images"),
+                ModAwareLabel("⚡ Flash Images", "section_flash_images"),
                 SettingsTab.CardFlash.Icon);
 
         internal void CardVisuals_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.VisualsFeatureControl(),
-                Localization.Loc.Get("section_visuals"),
+                ModAwareLabel("👁 Visuals", "section_visuals"),
                 glyph: "👁");
 
         internal void CardVideo_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.VideoFeatureControl(),
-                Localization.Loc.Get("section_mandatory_video"),
+                ModAwareLabel("🎬 Mandatory Video", "section_mandatory_video"),
                 SettingsTab.CardVideo.Icon);
 
         internal void CardSubliminal_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.SubliminalFeatureControl(),
-                Localization.Loc.Get("section_subliminals_2"),
+                ModAwareLabel("💭 Subliminals", "section_subliminals_2"),
                 SettingsTab.CardSubliminal.Icon);
 
         internal void CardSpiral_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.SpiralFeatureControl(),
-                Localization.Loc.Get("label_spiral_overlay"),
+                ModAwareLabel("🌀 Spiral Overlay", "label_spiral_overlay"),
                 SettingsTab.CardSpiral.Icon);
 
         internal void CardPinkFilter_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.PinkFilterFeatureControl(),
-                Localization.Loc.Get("label_pink_filter"),
+                ModAwareLabel("💗 Pink Filter", "label_pink_filter"),
                 SettingsTab.CardPinkFilter.Icon);
 
         internal void CardBubblePop_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.BubblePopFeatureControl(),
-                Localization.Loc.Get("label_bubble_pop"),
+                ModAwareLabel("🫧 Bubble Pop", "label_bubble_pop"),
                 SettingsTab.CardBubblePop.Icon);
 
         internal void CardLockCard_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.LockCardFeatureControl(),
-                Localization.Loc.Get("label_lock_card"),
+                ModAwareLabel("📐 Lock Card", "label_lock_card"),
                 SettingsTab.CardLockCard.Icon);
 
         internal void CardBubbleCount_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.BubbleCountFeatureControl(),
-                Localization.Loc.Get("label_bubble_count"),
+                ModAwareLabel("🫧 Bubble Count", "label_bubble_count"),
                 SettingsTab.CardBubbleCount.Icon);
 
         internal void CardBouncingText_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.BouncingTextFeatureControl(),
-                Localization.Loc.Get("label_bouncing_text"),
+                ModAwareLabel("📺 Bouncing Text", "label_bouncing_text"),
                 SettingsTab.CardBouncingText.Icon);
 
         internal void CardMindWipe_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.MindWipeFeatureControl(),
-                Localization.Loc.Get("label_mind_wipe"),
+                ModAwareLabel("🧠 Mind Wipe", "label_mind_wipe"),
                 SettingsTab.CardMindWipe.Icon);
 
         internal void CardSystem_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.SystemFeatureControl(),
-                Localization.Loc.Get("section_system"),
+                ModAwareLabel("⚙ System", "section_system"),
                 glyph: "⚙");
 
         internal void VelvetBtnWebcam_Click(object sender, RoutedEventArgs e)
@@ -1176,7 +1202,14 @@ namespace ConditioningControlPanel
                 _sessionEngine.SessionStarted += OnSessionStarted;
                 _sessionEngine.SessionStopped += OnSessionStopped;
             }
-            
+
+            // The engine is MainWindow-owned and created lazily, so the observers can't subscribe
+            // at their own start. Both attaches detach any previous engine first — re-attaching is
+            // safe, and doing it here means a program session started from the Sessions list is
+            // still observed. (This site used to forget both.)
+            App.Bark?.AttachSessionEngine(_sessionEngine);
+            App.Programs?.AttachSessionEngine(_sessionEngine);
+
             try
             {
                 // Start the engine if not already running
@@ -1210,6 +1243,12 @@ namespace ConditioningControlPanel
 
                 App.Logger?.Information("Session {Name} completed, awarded {XP} XP", e.Session.Name, e.XPEarned);
 
+                // Intake punch card: a session that reached its natural end has unambiguously
+                // been used, so it redeems its pending stamp regardless of the halfway threshold.
+                // A no-op unless this session was drafted by a Graded Intake.
+                try { App.IntakePunchCard?.NotifySessionCompleted(e.Session); }
+                catch (Exception ex) { App.Logger?.Debug("Punch card completion hook: {E}", ex.Message); }
+
                 // Sync progress to cloud after session (fire and forget)
                 if (App.ProfileSync?.IsSyncEnabled == true)
                 {
@@ -1218,8 +1257,40 @@ namespace ConditioningControlPanel
             });
         }
 
+        /// <summary>
+        /// Deadline until which one session-summary modal is swallowed. Set by Withdraw, which ends
+        /// today's session on purpose and has already told the user so in its own confirm.
+        ///
+        /// A DEADLINE rather than a bool because the summary is driven by SessionLogReady, and if
+        /// that event never arrived a sticky flag would silently eat the NEXT session's summary
+        /// instead. Nothing is lost by suppressing it: the log is still written and still readable
+        /// from the session history window.
+        /// </summary>
+        private DateTime _suppressSessionSummaryUntil = DateTime.MinValue;
+
+        /// <summary>
+        /// Swallow the next session summary if one arrives shortly. Called before a stop the user
+        /// has already explicitly confirmed, so the app does not editorialise on top of it.
+        /// </summary>
+        internal void SuppressNextSessionSummary(string reason)
+        {
+            _suppressSessionSummaryUntil = DateTime.UtcNow.AddSeconds(20);
+            App.Logger?.Information("Session summary suppressed for the next stop ({Reason})", reason);
+        }
+
         private void OnSessionLogReady(object? sender, SessionLogReadyEventArgs e)
         {
+            // Withdraw is specified to be unweighted and without commentary. A modal headlined
+            // "Session Ended Early" immediately after the user confirmed "the run ends here, and
+            // today's session stops with it" is commentary, and reads as a rebuke for using the
+            // way out. Consumed one-shot so only that stop is quiet.
+            if (DateTime.UtcNow < _suppressSessionSummaryUntil)
+            {
+                _suppressSessionSummaryUntil = DateTime.MinValue;
+                App.Logger?.Information("Session summary skipped (deliberate stop)");
+                return;
+            }
+
             var log = e.Log;
             Dispatcher.BeginInvoke(() => ShowSessionSummaryWhenClear(log, attempt: 0));
         }
@@ -1303,10 +1374,21 @@ namespace ConditioningControlPanel
         {
             Dispatcher.Invoke(() =>
             {
+                // Program feature lock heartbeat. Re-derives once a second and repaints only on
+                // a change, so the toggles cannot stay locked (or stay open) through any
+                // out-of-order or dropped session event. force:false = skip redundant repaints.
+                RefreshSessionFeatureLock(force: false);
+
                 if (_sessionEngine?.CurrentSession != null)
                 {
                     var remaining = e.Remaining;
                     var session = _sessionEngine.CurrentSession;
+
+                    // Intake punch card: half a drafted session is enough to prove it was used
+                    // rather than started and abandoned. Called every tick and safe to be -
+                    // redeeming removes the pending draft, so a hole can only land once.
+                    try { App.IntakePunchCard?.NotifySessionProgress(session, e.ProgressPercent); }
+                    catch (Exception ex) { App.Logger?.Debug("Punch card progress hook: {E}", ex.Message); }
 
                     // Update session button with remaining time
                     PresetsTab.BtnStartSession.Content = Loc.GetF("btn_stop_session_0_1", $"{((int)remaining.TotalMinutes):D2}", $"{remaining.Seconds:D2}");
@@ -1318,6 +1400,11 @@ namespace ConditioningControlPanel
                         : mName;
                     var pauseIndicator = _sessionEngine.IsPaused ? $" [{Loc.Get("label_paused")}]" : "";
                     TxtStartLabel.Text = Loc.GetF("label_0_1_2_3", name, $"{((int)remaining.TotalMinutes):D2}", $"{remaining.Seconds:D2}", pauseIndicator);
+
+                    // Training Programs: drive the TODAY panel's session progress strip off this
+                    // same 1-second engine tick rather than a second timer. It no-ops unless the
+                    // running session is the one the Programs tab launched.
+                    UpdateProgramSessionRow();
                 }
             });
         }
@@ -1333,6 +1420,9 @@ namespace ConditioningControlPanel
         private void OnSessionStarted(object? sender, EventArgs e)
         {
             App.IsSessionRunning = true;
+            // Safety net for the one-shot above: a new session always gets its own summary, even if
+            // a suppression was armed and its stop somehow never produced a log.
+            _suppressSessionSummaryUntil = DateTime.MinValue;
             Dispatcher.Invoke(() =>
             {
                 PresetsTab.BtnStartSession.Content = Loc.Get("btn_stop_session_2");
@@ -1361,12 +1451,26 @@ namespace ConditioningControlPanel
                     BtnPauseSession.Visibility = Visibility.Visible;
                     if (TxtPauseIcon != null) TxtPauseIcon.Text = "⏸";
                 }
+
+                // Training Programs: flip the TODAY panel out of its idle "start" state, and
+                // announce it. Both no-op unless this is the program's own session.
+                UpdateProgramSessionRow();
+                AnnounceProgramSessionStarted();
+                // ... and lock the dials the session prescribes. Applies to EVERY session -
+                // program, preset and remote - see MainWindow.SessionFeatureLock.cs rule 1.
+                RefreshSessionFeatureLock();
             });
         }
 
         private void OnSessionStopped(object? sender, EventArgs e)
         {
             App.IsSessionRunning = false;
+
+            // Captured BEFORE the dispatcher work: SessionEngine nulls _currentSession at the end
+            // of StopSession, and ProgramService clears its expected id when SessionCompleted
+            // fires - both of which can happen before a queued Invoke body runs.
+            var wasProgramSession = App.Programs?.IsProgramSession(_sessionEngine?.CurrentSession) == true;
+
             Dispatcher.Invoke(() =>
             {
                 // Stop the engine when session stops
@@ -1385,6 +1489,17 @@ namespace ConditioningControlPanel
 
                 // Hide pause button
                 BtnPauseSession.Visibility = Visibility.Collapsed;
+
+                // Training Programs: back to the idle slot, then announce (deferred - the
+                // day's slot is only marked done later in this same StopSession call).
+                UpdateProgramSessionRow();
+                AnnounceProgramSessionEnded(wasProgramSession);
+                // Hand the dials back. Deliberately NOT conditional on
+                // wasProgramSession: the refresh RE-DERIVES the lock from live engine state,
+                // so calling it unconditionally is what guarantees the toggles come back on
+                // every exit path (completion, STOP, abort, withdraw) even if this handler
+                // fires out of order or twice.
+                RefreshSessionFeatureLock();
             });
         }
 
@@ -1611,6 +1726,13 @@ namespace ConditioningControlPanel
 
         private void LoadPreset(Models.Preset preset)
         {
+            // The chokepoint: Preset.ApplyTo overwrites ~40 of the fields a running session
+            // prescribes, so applying a preset mid-session discards the dose wholesale. Guarded
+            // HERE rather than only at the click handler so every caller is covered, present and
+            // future - this tab is also where BtnStartSession and the countdown live, which makes
+            // it the preset surface a user is most likely to be looking at mid-session.
+            if (RefuseActionIfSessionLocked($"load-preset:{preset.Name}")) return;
+
             preset.ApplyTo(App.Settings.Current);
             App.Settings.Save();
             
@@ -1628,7 +1750,10 @@ namespace ConditioningControlPanel
         internal void BtnLoadPreset_Click(object sender, RoutedEventArgs e)
         {
             if (_selectedPreset == null) return;
-            
+            // Checked before the confirm too, so the user is never asked to approve something
+            // that is then refused. LoadPreset re-checks as the real guard.
+            if (RefuseActionIfSessionLocked("load-preset-click")) return;
+
             var result = MessageBox.Show(
                 Loc.GetF("msg_load_preset_confirm_0", _selectedPreset.Name),
                 Loc.Get("title_load_preset"),

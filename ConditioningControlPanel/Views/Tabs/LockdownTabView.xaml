@@ -56,7 +56,8 @@
                                         <DropShadowEffect x:Name="LockdownImageGlow" x:FieldModifier="internal" Color="#FF1493" BlurRadius="14" ShadowDepth="0" Opacity="0.7"/>
                                     </Border.Effect>
                                     <!-- Lockdown pulse managed in code-behind (StartLockdownPulse/StopLockdownPulse) -->
-                                    <Image Source="pack://application:,,,/Resources/lockdown_icon.png" Stretch="Uniform"
+                                    <Image x:Name="ImgLockdownFeature" x:FieldModifier="internal"
+                                           Source="pack://application:,,,/Resources/lockdown_icon.png" Stretch="Uniform"
                                            RenderOptions.BitmapScalingMode="HighQuality"/>
                                 </Border>
     
@@ -102,7 +103,7 @@
     
                         <!-- Translucent gating overlay (only for free users) -->
                         <Border x:Name="LockdownGate" x:FieldModifier="internal" Visibility="Collapsed"
-                                Background="#99000010" BorderBrush="#FF69B4" BorderThickness="2"
+                                Background="#99000010" BorderBrush="{DynamicResource FxGlowBrush}" BorderThickness="2"
                                 CornerRadius="12" IsHitTestVisible="True">
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Image Width="52" Height="52" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
@@ -110,7 +111,7 @@
                                            FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                                 <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="14"
                                            Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
-                                <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="#FF69B4"
+                                <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="{DynamicResource FxGlowBrush}"
                                         Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
                                     <helpers:EmojiTextBlock Text="{loc:Str gate_unlock_with_patreon}"/>
                                 </Button>

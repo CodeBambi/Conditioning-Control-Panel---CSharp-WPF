@@ -38,10 +38,10 @@
 
         <!-- Header -->
         <StackPanel Grid.Row="0" Margin="0,0,0,6">
-            <TextBlock Text="{loc:Str bug_report_title}"
+            <TextBlock x:Name="TxtHeaderTitle" Text="{loc:Str bug_report_title}"
                        Foreground="{DynamicResource PinkBrush}"
                        FontSize="20" FontWeight="Bold"/>
-            <TextBlock Text="{loc:Str bug_report_privacy_notice}"
+            <TextBlock x:Name="TxtPrivacyNotice" Text="{loc:Str bug_report_privacy_notice}"
                        Foreground="#9898B0" FontSize="11" TextWrapping="Wrap"
                        Margin="0,6,0,0"/>
         </StackPanel>
@@ -49,12 +49,12 @@
         <!-- Scrollable form body -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,8,0,8">
             <StackPanel>
-                <TextBlock Text="{loc:Str bug_report_description_label}" Style="{StaticResource FormLabel}"/>
+                <TextBlock x:Name="LblDescription" Text="{loc:Str bug_report_description_label}" Style="{StaticResource FormLabel}"/>
                 <TextBox x:Name="TxtDescription" Style="{StaticResource FormBox}"
                          Height="80" MaxLength="4000"
                          TextChanged="OnFieldChanged"/>
 
-                <TextBlock Text="{loc:Str bug_report_steps_label}" Style="{StaticResource FormLabel}"/>
+                <TextBlock x:Name="LblSteps" Text="{loc:Str bug_report_steps_label}" Style="{StaticResource FormLabel}"/>
                 <TextBox x:Name="TxtSteps" Style="{StaticResource FormBox}"
                          Height="70" MaxLength="4000"
                          TextChanged="OnFieldChanged"/>
@@ -105,5 +105,52 @@
                     BorderThickness="0" Padding="22,8" Cursor="Hand"
                     FontWeight="SemiBold" IsEnabled="False"/>
         </Grid>
+
+        <!-- Success panel (#769). Covers the form once the report is filed so the report
+             number is selectable + copyable instead of vanishing with a MessageBox. -->
+        <Border x:Name="SuccessPanel" Grid.Row="0" Grid.RowSpan="3"
+                Visibility="Collapsed"
+                Background="#0F0F1E" Margin="-20">
+            <Border Background="#14142A" BorderBrush="{DynamicResource PinkBrush}"
+                    BorderThickness="2" CornerRadius="12" Padding="24"
+                    Margin="34" VerticalAlignment="Center" HorizontalAlignment="Stretch">
+                <StackPanel>
+                    <TextBlock x:Name="TxtSuccessHeadline"
+                               Foreground="{DynamicResource PinkBrush}"
+                               FontSize="18" FontWeight="Bold" TextWrapping="Wrap"/>
+
+                    <TextBlock x:Name="LblSuccessTokenLabel" Text="{loc:Str bug_report_token_label}"
+                               Style="{StaticResource FormLabel}" Margin="0,18,0,4"/>
+                    <Grid x:Name="SuccessTokenRow">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="TxtSuccessToken" Grid.Column="0"
+                                 IsReadOnly="True" IsReadOnlyCaretVisible="True"
+                                 Background="#0A0A18" Foreground="#FFFFFF"
+                                 BorderBrush="#3D3D60" BorderThickness="1"
+                                 FontFamily="Consolas" FontSize="16" FontWeight="Bold"
+                                 Padding="10,8" VerticalContentAlignment="Center"
+                                 TextWrapping="NoWrap" AcceptsReturn="False"/>
+                        <Button x:Name="BtnCopyToken" Grid.Column="1"
+                                Content="{loc:Str btn_copy}" Click="BtnCopyToken_Click"
+                                Background="#1A1A2E" Foreground="#E0E0E0" BorderBrush="#3D3D60"
+                                BorderThickness="1" Padding="18,8" Margin="8,0,0,0" Cursor="Hand"/>
+                    </Grid>
+
+                    <TextBlock x:Name="TxtSuccessHint" Text="{loc:Str bug_report_token_hint}"
+                               Foreground="#9898B0" FontSize="12" TextWrapping="Wrap"
+                               Margin="0,14,0,0"/>
+
+                    <Button x:Name="BtnSuccessDone" Content="{loc:Str btn_done}"
+                            Click="BtnSuccessDone_Click"
+                            HorizontalAlignment="Right" Margin="0,20,0,0"
+                            Background="{DynamicResource PinkBrush}" Foreground="White"
+                            BorderThickness="0" Padding="26,8" Cursor="Hand"
+                            FontWeight="SemiBold"/>
+                </StackPanel>
+            </Border>
+        </Border>
     </Grid>
 </Window>

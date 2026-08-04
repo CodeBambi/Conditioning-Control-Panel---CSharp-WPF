@@ -20,6 +20,7 @@ namespace ConditioningControlPanel.Features
     public partial class SpiralFeatureControl : UserControl
     {
         private bool _isLoading = true;
+        private bool _monitorPopulating; // guards the monitor combo while it is rebuilt
 
         public SpiralFeatureControl()
         {
@@ -37,6 +38,8 @@ namespace ConditioningControlPanel.Features
             {
                 inpc.PropertyChanged += OnSettingsPropertyChanged;
             }
+            // Loom saves/deletes (game pane or the main-app Loom window) show up live.
+            Services.Chaos.DtrhLoomStore.Changed += OnLoomStoreChanged;
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -45,6 +48,7 @@ namespace ConditioningControlPanel.Features
             {
                 inpc.PropertyChanged -= OnSettingsPropertyChanged;
             }
+            Services.Chaos.DtrhLoomStore.Changed -= OnLoomStoreChanged;
         }
 
         private void LoadFromSettings()
@@ -56,8 +60,10 @@ namespace ConditioningControlPanel.Features
             try
             {
                 ChkEnable.IsChecked = s.SpiralEnabled;
+                ChkRandomize.IsChecked = s.SpiralRandomize;
                 SliderOpacity.Value = s.SpiralOpacity;
                 TxtOpacity.Text = $"{s.SpiralOpacity}%";
+                PopulateMonitors();
             }
             finally
             {
@@ -69,13 +75,18 @@ namespace ConditioningControlPanel.Features
         {
             // Reflect external writes (Ramp, presets, session engine) back into our UI.
             if (e.PropertyName == nameof(Models.AppSettings.SpiralEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.SpiralOpacity))
+                e.PropertyName == nameof(Models.AppSettings.SpiralOpacity) ||
+                e.PropertyName == nameof(Models.AppSettings.SpiralRandomize) ||
+                e.PropertyName == nameof(Models.AppSettings.SpiralTargetMonitor))
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
             }
             else if (e.PropertyName == nameof(Models.AppSettings.SpiralPath))
             {
                 Dispatcher.BeginInvoke(new Action(UpdateSelectionHighlight));
+                // Corner-GIF slots left on "built-in" follow the pool selection, so a spiral
+                // change must re-render them too (RefreshOverlays no-ops if none are enabled).
+                try { App.CornerGif?.RefreshOverlays(); } catch { /* overlay refresh best-effort */ }
             }
         }
 
@@ -98,6 +109,18 @@ namespace ConditioningControlPanel.Features
             }
         }
 
+        private void ChkRandomize_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            // Takes effect on the next spiral overlay/session start (never mid-run — the decoded
+            // frame cache is keyed by path, so re-picking live would cause a hitch).
+            s.SpiralRandomize = ChkRandomize.IsChecked ?? false;
+            App.Settings?.Save();
+        }
+
         private void SliderOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (_isLoading) return;
@@ -117,6 +140,71 @@ namespace ConditioningControlPanel.Features
             {
                 App.Logger?.Warning(ex, "Spiral opacity: RefreshOverlays failed");
             }
+        }
+
+        // ── Display monitor picker (#639) ─────────────────────────────────
+
+        /// <summary>Rebuild the monitor dropdown from the current display topology and select the
+        /// entry matching the saved <see cref="Models.AppSettings.SpiralTargetMonitor"/>. A saved
+        /// index that no longer exists (unplugged monitor) matches nothing and shows "Default"
+        /// WITHOUT writing back (the populate guard blocks SelectionChanged), so the target survives
+        /// a reconnect.</summary>
+        private void PopulateMonitors()
+        {
+            if (CmbMonitor == null) return;
+            int saved = App.Settings?.Current?.SpiralTargetMonitor ?? App.MonitorTargetFollowGlobal;
+            _monitorPopulating = true;
+            try
+            {
+                CmbMonitor.Items.Clear();
+                CmbMonitor.Items.Add(new ComboBoxItem { Content = Loc.Get("monitor_target_default"), Tag = App.MonitorTargetFollowGlobal });
+                CmbMonitor.Items.Add(new ComboBoxItem { Content = Loc.Get("monitor_target_all"), Tag = App.MonitorTargetAll });
+
+                var screens = App.GetAllScreensCached();
+                string monitorLabel = Loc.Get("monitor_label");
+                string primaryMarker = Loc.Get("monitor_primary_marker");
+                for (int i = 0; i < screens.Length; i++)
+                {
+                    var b = screens[i].Bounds;
+                    string prefix = screens[i].Primary ? primaryMarker + ", " : "";
+                    CmbMonitor.Items.Add(new ComboBoxItem
+                    {
+                        Content = $"{monitorLabel} {i + 1} ({prefix}{b.Width}x{b.Height})",
+                        Tag = i
+                    });
+                }
+
+                ComboBoxItem? match = null;
+                foreach (ComboBoxItem it in CmbMonitor.Items)
+                    if (it.Tag is int t && t == saved) { match = it; break; }
+                CmbMonitor.SelectedItem = match ?? (CmbMonitor.Items.Count > 0 ? CmbMonitor.Items[0] : null);
+            }
+            finally { _monitorPopulating = false; }
+        }
+
+        // Re-enumerate on open so a monitor plugged in since load appears without reopening the card.
+        private void CmbMonitor_DropDownOpened(object sender, EventArgs e)
+        {
+            App.InvalidateScreenCache();
+            PopulateMonitors();
+        }
+
+        private void CmbMonitor_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (_monitorPopulating || _isLoading) return;
+            if (CmbMonitor.SelectedItem is not ComboBoxItem item || item.Tag is not int target) return;
+
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            if (s.SpiralTargetMonitor == target) return;
+
+            s.SpiralTargetMonitor = target;
+            App.Settings?.Save();
+
+            // Compositor picks the new target up next frame (per-monitor ShouldRenderOnScreen);
+            // RefreshOverlays reconciles the legacy per-screen windows.
+            try { App.Overlay?.RefreshOverlays(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Spiral monitor: RefreshOverlays failed"); }
         }
 
         // ── Spiral library ────────────────────────────────────────────────
@@ -328,6 +416,45 @@ namespace ConditioningControlPanel.Features
         }
 
         private void BtnRefreshSpirals_Click(object sender, RoutedEventArgs e) => RefreshLibrary();
+
+        /// <summary>Open THE LOOM editor window (the enhanced spiral creator).
+        /// Saves land in the Spirals folder; DtrhLoomStore.Changed refreshes us live.</summary>
+        private void BtnOpenLoom_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Services.Chaos.LoomHostService.Launch();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Spiral card: Loom launch failed");
+            }
+        }
+
+        /// <summary>Open the standalone corner-GIF overlay config window (two pinnable corners,
+        /// independent of any running session — driven by App.CornerGif).</summary>
+        private void BtnCornerGifs_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var win = new CornerGifWindow
+                {
+                    Owner = Window.GetWindow(this),
+                };
+                win.Show();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Spiral card: Corner GIF window launch failed");
+            }
+        }
+
+        private void OnLoomStoreChanged()
+        {
+            // Raised on the loom window's bridge thread contractually near the UI
+            // thread, but marshal defensively - and the control may be unloading.
+            Dispatcher.BeginInvoke(new Action(RefreshLibrary));
+        }
 
         private void BtnSelectGif_Click(object sender, RoutedEventArgs e)
         {

@@ -86,11 +86,90 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            var fullscreen = LabTab.ChkQuizFullscreen?.IsChecked == true;
-            var playDrone = LabTab.ChkQuizDrone?.IsChecked == true;
+            var fullscreen = GradedIntakeTab.ChkQuizFullscreen?.IsChecked == true;
+            var playDrone = GradedIntakeTab.ChkQuizDrone?.IsChecked == true;
             var quizWindow = new QuizWindow(fullscreen, playDrone);
             quizWindow.Closed += (s, args) => RefreshPastQuizzes();
             quizWindow.Show();
+        }
+
+        /// <summary>
+        /// Exclusives → "Graded Intake" web-core rework. Hosts the decoupled intake page
+        /// (Resources/web/intake) in a WebView2 window via <see cref="Services.Quiz.IntakeHostService"/>,
+        /// which drafts a themed CCP session from the run's QuizRunResult. Gated the same way as the
+        /// classic AI quiz above (App.Ai.IsAvailable = cloud identity or Patreon AI access), since the
+        /// intake's server AI accent uses the same Patreon-bearer gate.
+        /// </summary>
+        internal void BtnStartIntake_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Already open? Just focus it — never re-launch a live run.
+                if (Services.Quiz.IntakeHostService.IsActive)
+                {
+                    Services.Quiz.IntakeHostService.Launch();
+                    return;
+                }
+
+                // Tier-1 gate, now pass-aware. Patrons are unchanged; a free account gets one
+                // run a week (IntakePassService). GradedIntakeGate already paints the matching
+                // state over the launch zone - this is the belt-and-braces check behind it,
+                // matching how the other Exclusives short-circuit their own entry points.
+                var pass = App.IntakePass;
+                if (pass == null || !pass.CanStartIntake)
+                {
+                    if (pass?.State == Services.IntakePassState.NeedsLogin)
+                    {
+                        MessageBox.Show(Loc.Get("msg_you_need_to_be_logged_in_to_use_the_ai_quiz"), "Login Required",
+                            MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    else
+                    {
+                        // Free and already ran this week - the upsell is the honest answer.
+                        ShowAppInfoPopup();
+                    }
+                    return;
+                }
+
+                if (App.Ai == null || !App.Ai.IsAvailable)
+                {
+                    MessageBox.Show(Loc.Get("msg_you_need_to_be_logged_in_to_use_the_ai_quiz"), "Login Required",
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                // First-ever run: don't duck the control panel. The intake normally minimizes
+                // MainWindow to get it out of the way, which is right for a returning user and
+                // reads as "the app just crashed" for someone opening it for the first time.
+                var firstEver = App.IntakePunchCard?.HasEverCompletedIntake == false;
+                Services.Quiz.IntakeHostService.Launch(duckMainWindow: !firstEver);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "BtnStartIntake_Click failed");
+                MessageBox.Show("Couldn't start Graded Intake:\n\n" + ex.Message, "Graded Intake",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        /// <summary>
+        /// Lab → "Beta Inspection Bureau" labeling game. The page is served live from
+        /// cclabs.app/bureau and hosted in WebView2 via <see cref="Services.Bureau.BureauHostService"/>;
+        /// the host supplies auth, server proxying and local frame decoding. Requires a logged-in
+        /// account (UnifiedId + auth token) — the page itself shows the clearance gate if missing.
+        /// </summary>
+        internal void BtnStartBureau_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Services.Bureau.BureauHostService.Launch();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "BtnStartBureau_Click failed");
+                MessageBox.Show("Couldn't open the Inspection Bureau:\n\n" + ex.Message,
+                    Services.Bureau.BureauHostService.ProductName, MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
 
         /// <summary>
@@ -149,6 +228,30 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Exclusives → "For You" spotlight. Opens the TikTok-style feed window (WebView2).
+        /// Reached through ShowTab("fyp"), which intercepts the key rather than switching tabs.
+        /// The card itself never blocks, so premium is enforced here.
+        /// </summary>
+        internal void OpenFypFeed()
+        {
+            try
+            {
+                if (App.Patreon?.HasPremiumAccess != true)
+                {
+                    ShowAppInfoPopup();
+                    return;
+                }
+                Services.Fyp.FypHostService.Launch();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "OpenFypFeed failed");
+                MessageBox.Show("Couldn't open the For You feed:\n\n" + ex.Message, "For You",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        /// <summary>
         /// Quick Start: launch a Chaos run with the saved settings, bypassing the modal hub.
         /// Mirrors what BEGIN CHAOS does after SaveToSettings (StartRun reads ChaosRunConfig.FromSettings),
         /// just without the dialog.
@@ -183,22 +286,175 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>True once <see cref="Services.IntakePassService.PassStateChanged"/> has been
+        /// wired up. The service is created in App.OnStartup, but MainWindow's own constructor and
+        /// the tab-navigation path both run refreshes that can beat any fixed hook-up point, so the
+        /// subscription is attached lazily from the refresh itself and this flag stops it stacking
+        /// duplicate handlers. Never unsubscribed on purpose: both the publisher (an App singleton)
+        /// and the subscriber (MainWindow) live for the whole process, so there is no leak to
+        /// collect - only a handler that would have to be re-attached for nothing.</summary>
+        private bool _intakePassHooked;
+
+        /// <summary>
+        /// Paints the Graded Intake page's gate. Four states, not two, since the weekly free pass
+        /// landed - see <see cref="Services.IntakePassState"/>:
+        ///
+        /// * <b>Premium</b> - no gate, no banner. Patrons never learn the pass exists.
+        /// * <b>Available</b> - also NO gate: the user may genuinely run it, so nothing is dimmed.
+        ///   The in-content banner announces the pass instead.
+        /// * <b>Spent</b> - gate with the "next one in N days" copy and the retakes upsell.
+        /// * <b>NeedsLogin</b> - gate asking them to sign in, because the pass is per-account.
+        ///
+        /// Mirrors the Blink Trainer treatment for the closed states: the overlay provides the
+        /// visual, IsEnabled stops keyboard tab-through behind it. Pop Quiz sits outside the gated
+        /// Border and stays reachable for everyone.
+        ///
+        /// Runs on every Exclusives navigation and on every Patreon refresh, and can therefore fire
+        /// before the tab's template has realised, so every element is null-checked and the whole
+        /// body is defensive: a gate that throws takes the tab switch down with it.
+        /// </summary>
+        internal void RefreshGradedIntakeGate()
+        {
+            if (GradedIntakeTab == null) return;
+
+            // Cheap and idempotent; done here rather than at startup so it survives whichever
+            // refresh happens to be first (see _intakePassHooked).
+            EnsureIntakePassHooked();
+
+            try
+            {
+                // Fall back to the pre-pass behaviour if the service somehow never came up:
+                // premium keeps its unlocked page, and everyone else gets the closed door.
+                // "Spent" rather than "NeedsLogin" for the fallback deliberately - it matches
+                // IntakePassService's own fail-closed default, so a broken service never shows
+                // a signed-in user a sign-in prompt they can't act on.
+                var state = App.IntakePass?.State
+                            ?? (App.Patreon?.HasPremiumAccess == true
+                                ? Services.IntakePassState.Premium
+                                : Services.IntakePassState.Spent);
+
+                var open = state == Services.IntakePassState.Premium
+                           || state == Services.IntakePassState.Available;
+
+                if (GradedIntakeTab.GradedIntakeGate != null)
+                {
+                    GradedIntakeTab.GradedIntakeGate.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
+                    // FX (PR-4a): the shared animated gate treatment. Decoration only - it never
+                    // touches Visibility, the three-state copy, or the pass logic above.
+                    Controls.PremiumGateFx.Attach(GradedIntakeTab.GradedIntakeGate);
+                }
+                if (GradedIntakeTab.GradedIntakeGatedContent != null)
+                    GradedIntakeTab.GradedIntakeGatedContent.IsEnabled = open;
+                if (GradedIntakeTab.GradedIntakePassBanner != null)
+                    GradedIntakeTab.GradedIntakePassBanner.Visibility =
+                        state == Services.IntakePassState.Available ? Visibility.Visible : Visibility.Collapsed;
+
+                // Gate copy. Only written for the two closed states: repainting it while the gate
+                // is collapsed would be wasted work, and leaving the last closed state's strings in
+                // place is invisible by definition.
+                if (state == Services.IntakePassState.NeedsLogin)
+                {
+                    SetGradedIntakeGateCopy(
+                        Loc.Get("intake_gate_login_headline"),
+                        Loc.Get("intake_gate_login_body"),
+                        Loc.Get("intake_gate_login_cta"));
+                }
+                else if (state == Services.IntakePassState.Spent)
+                {
+                    // Two keys rather than one with a {0}: DaysUntilNextPass floors at 1, and
+                    // "unlocks in 1 days" is the sort of thing that gets screenshotted. Languages
+                    // with richer plural rules can still diverge further in their own files.
+                    var days = Services.IntakePassService.DaysUntilNextPass;
+                    var body = days == 1
+                        ? Loc.Get("intake_gate_spent_body_one_day")
+                        : Loc.GetF("intake_gate_spent_body", days);
+
+                    SetGradedIntakeGateCopy(
+                        Loc.Get("intake_gate_spent_headline"),
+                        body,
+                        Loc.Get("intake_gate_spent_cta"));
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("RefreshGradedIntakeGate failed: {E}", ex.Message);
+            }
+        }
+
+        /// <summary>Writes the shared gate card's three text slots. Split out only so the two
+        /// closed states above read as data rather than as three near-identical null checks each.</summary>
+        private void SetGradedIntakeGateCopy(string headline, string body, string cta)
+        {
+            if (GradedIntakeTab == null) return;
+            if (GradedIntakeTab.TxtGradedIntakeGateHeadline != null)
+                GradedIntakeTab.TxtGradedIntakeGateHeadline.Text = headline;
+            if (GradedIntakeTab.TxtGradedIntakeGateBody != null)
+                GradedIntakeTab.TxtGradedIntakeGateBody.Text = body;
+            if (GradedIntakeTab.BtnGradedIntakeGateUnlock != null)
+                GradedIntakeTab.BtnGradedIntakeGateUnlock.Content = cta;
+        }
+
+        /// <summary>
+        /// Attaches the pass-state listener once, so the gate repaints the moment a run consumes
+        /// the week's pass. Without it the page keeps showing the "your pass is ready" banner until
+        /// the user navigates away and back, which reads as the intake not having counted.
+        /// No-ops (and stays un-hooked, so a later refresh retries) while App.IntakePass is null.
+        /// </summary>
+        private void EnsureIntakePassHooked()
+        {
+            var pass = App.IntakePass;
+            if (_intakePassHooked || pass == null) return;
+            _intakePassHooked = true;
+            pass.PassStateChanged += OnIntakePassStateChanged;
+        }
+
+        /// <summary>
+        /// The pass is consumed from the intake's result path, which may or may not be on the UI
+        /// thread depending on how the WebView2 message landed, so bounce through the dispatcher
+        /// and bail if the app is already tearing down (see the Known Issues note about event
+        /// handlers firing against closed windows).
+        /// </summary>
+        private void OnIntakePassStateChanged(object? sender, EventArgs e)
+        {
+            try
+            {
+                if (Application.Current?.Dispatcher == null) return;
+                if (Dispatcher.HasShutdownStarted) return;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try { RefreshGradedIntakeGate(); }
+                    catch (Exception ex) { App.Logger?.Debug("OnIntakePassStateChanged repaint: {E}", ex.Message); }
+                }));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("OnIntakePassStateChanged: {E}", ex.Message);
+            }
+        }
+
         private void RefreshPastQuizzes()
         {
             try
             {
+                // REBRAND: the classic quiz is hidden behind the Graded Intake, so its
+                // past-runs list has nothing to advertise. Bail before touching visibility —
+                // the panel is Collapsed in XAML and this method was the only thing that
+                // ever un-collapsed it. History for the intake lives in the intake page.
+                // (Existing quiz history on disk is untouched; unhide and this lights up again.)
+                if (GradedIntakeTab?.BtnStartQuiz?.Visibility != Visibility.Visible) return;
+
                 var history = QuizService.LoadHistory();
-                LabTab.PastQuizzesList.Children.Clear();
+                GradedIntakeTab.PastQuizzesList.Children.Clear();
 
                 if (history.Count == 0)
                 {
-                    LabTab.TxtPastQuizzesHeader.Visibility = Visibility.Collapsed;
-                    LabTab.PastQuizzesPanel.Visibility = Visibility.Collapsed;
+                    GradedIntakeTab.TxtPastQuizzesHeader.Visibility = Visibility.Collapsed;
+                    GradedIntakeTab.PastQuizzesPanel.Visibility = Visibility.Collapsed;
                     return;
                 }
 
-                LabTab.TxtPastQuizzesHeader.Visibility = Visibility.Visible;
-                LabTab.PastQuizzesPanel.Visibility = Visibility.Visible;
+                GradedIntakeTab.TxtPastQuizzesHeader.Visibility = Visibility.Visible;
+                GradedIntakeTab.PastQuizzesPanel.Visibility = Visibility.Visible;
 
                 // Trend summary at top — show latest archetype + trend per category that has history.
                 // Group by TrendKey (CategoryId string), not the enum: custom categories all
@@ -242,7 +498,7 @@ namespace ConditioningControlPanel
                         FontWeight = FontWeights.SemiBold,
                         Margin = new Thickness(8, 3, 8, 3)
                     };
-                    LabTab.PastQuizzesList.Children.Add(trendRow);
+                    GradedIntakeTab.PastQuizzesList.Children.Add(trendRow);
                 }
 
                 foreach (var entry in history)
@@ -283,7 +539,7 @@ namespace ConditioningControlPanel
                         if (s is Border b) b.Background = System.Windows.Media.Brushes.Transparent;
                     };
 
-                    LabTab.PastQuizzesList.Children.Add(row);
+                    GradedIntakeTab.PastQuizzesList.Children.Add(row);
                 }
             }
             catch (Exception ex)
@@ -297,58 +553,20 @@ namespace ConditioningControlPanel
         internal void ChkPopQuizEnabled_Changed(object sender, RoutedEventArgs e)
         {
             if (App.Settings?.Current == null) return;
-            App.Settings.Current.PopQuizEnabled = LabTab.ChkPopQuizEnabled.IsChecked == true;
+            App.Settings.Current.PopQuizEnabled = GradedIntakeTab.ChkPopQuizEnabled.IsChecked == true;
         }
 
         internal void SliderPopQuizFrequency_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (App.Settings?.Current == null || LabTab.TxtPopQuizFrequency == null) return;
+            if (App.Settings?.Current == null || GradedIntakeTab.TxtPopQuizFrequency == null) return;
             var val = (int)Math.Round(e.NewValue);
             App.Settings.Current.PopQuizFrequency = val;
-            LabTab.TxtPopQuizFrequency.Text = $"{val}/session hr";
+            GradedIntakeTab.TxtPopQuizFrequency.Text = $"{val}/session hr";
         }
 
         internal void BtnTestPopQuiz_Click(object sender, RoutedEventArgs e)
         {
             App.PopQuiz?.TestPopQuiz();
-        }
-
-        // ============ WALLPAPER OVERRIDE HANDLERS ============
-
-        internal void ChkWallpaperEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (App.Settings?.Current == null || App.Wallpaper == null) return;
-
-            var enabled = LabTab.ChkWallpaperEnabled.IsChecked == true;
-            if (enabled)
-            {
-                if (!App.Wallpaper.Activate())
-                {
-                    // No images found — uncheck and notify
-                    LabTab.ChkWallpaperEnabled.IsChecked = false;
-                    App.Settings.Current.WallpaperEnabled = false;
-                    MessageBox.Show(Loc.Get("msg_no_wallpaper_images"), "Wallpaper Override",
-                        MessageBoxButton.OK, MessageBoxImage.Information);
-                    return;
-                }
-                LabTab.TxtCurrentWallpaper.Text = App.Wallpaper.CurrentFilename;
-                LabTab.TxtCurrentWallpaper.Visibility = Visibility.Visible;
-                LabTab.BtnShuffleWallpaper.Visibility = Visibility.Visible;
-            }
-            else
-            {
-                App.Wallpaper.Deactivate();
-                LabTab.TxtCurrentWallpaper.Visibility = Visibility.Collapsed;
-                LabTab.BtnShuffleWallpaper.Visibility = Visibility.Collapsed;
-            }
-            App.Settings.Current.WallpaperEnabled = enabled;
-        }
-
-        internal void BtnShuffleWallpaper_Click(object sender, RoutedEventArgs e)
-        {
-            if (App.Wallpaper == null) return;
-            App.Wallpaper.Shuffle();
-            LabTab.TxtCurrentWallpaper.Text = App.Wallpaper.CurrentFilename;
         }
 
         private void OnLockdownActivated()

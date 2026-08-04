@@ -38,7 +38,7 @@ namespace ConditioningControlPanel.Services
             {
                 var modId = App.Mods?.ActiveModId;
                 if (string.IsNullOrEmpty(modId)) return null;
-                var p = Path.Combine(CompanionPhraseService.CompanionAudioFolder, "mods", modId, ManifestFileName);
+                var p = CompanionPhraseService.ResolveCompanionAudioFile("mods", modId, ManifestFileName);
                 return File.Exists(p) ? p : null;
             }
         }
@@ -199,7 +199,14 @@ namespace ConditioningControlPanel.Services
             {
                 if (string.IsNullOrEmpty(p.File)) continue;
                 var abs = Path.Combine(skinDir, p.File);
-                if (!File.Exists(abs)) continue;          // skip per-skin gaps (e.g. L3)
+                if (!File.Exists(abs))
+                {
+                    // The manifest can sit in the install dir while the portraits themselves shipped
+                    // in a downloaded content pack (or vice versa) — check the mirrored root before
+                    // treating this as a per-skin gap (e.g. L3).
+                    abs = ContentLocator.Mirror(abs) ?? "";
+                    if (abs.Length == 0) continue;
+                }
                 try
                 {
                     var bmp = new BitmapImage();

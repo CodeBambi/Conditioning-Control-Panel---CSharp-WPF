@@ -39,8 +39,14 @@
                         Style="{StaticResource OutlineButton}" Margin="0,0,8,0" Padding="12,6"
                         Click="BtnGetPacks_Click" ToolTip="{loc:Str tooltip_get_packs}"/>
                 <Button x:Name="BtnOpenAssetsFolder" Content="{loc:Str btn_open_folder}"
-                        Style="{StaticResource OutlineButton}" Padding="12,6"
+                        Style="{StaticResource OutlineButton}" Margin="0,0,8,0" Padding="12,6"
                         Click="BtnOpenAssetsFolder_Click" ToolTip="{loc:Str tooltip_open_assets_folder_in_explorer}"/>
+                <!-- x:FieldModifier so MainWindow.AssetsFx can pulse this button when media has
+                     been logged since the log was last opened. Event-driven: the pulse is a fixed
+                     3-cycle animation fired on tab show, never a standing loop. -->
+                <Button x:Name="BtnMediaLog" x:FieldModifier="internal" Content="{loc:Str btn_media_log}"
+                        Style="{StaticResource OutlineButton}" Padding="12,6"
+                        Click="BtnMediaLog_Click" ToolTip="{loc:Str tooltip_media_log}"/>
             </StackPanel>
         </Grid>
     
@@ -109,6 +115,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Border Width="192" Height="240" Margin="0,0,10,0" CornerRadius="8"
+                                            MouseEnter="PackCard_MouseEnter" MouseLeave="PackCard_MouseLeave"
                                             Background="{DynamicResource SurfaceBgBrush}" BorderThickness="1">
                                         <Border.Style>
                                             <Style TargetType="Border">
@@ -419,7 +426,11 @@
                             </TreeView.Resources>
                             <TreeView.ItemTemplate>
                                 <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                                    <StackPanel Orientation="Horizontal" Margin="2">
+                                    <!-- Hover nudge on the row header, on top of the TreeViewItem
+                                         style's existing IsMouseOver background wash. -->
+                                    <StackPanel Orientation="Horizontal" Margin="2"
+                                                MouseEnter="AssetTreeRow_MouseEnter"
+                                                MouseLeave="AssetTreeRow_MouseLeave">
                                         <CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay}"
                                                   IsThreeState="False"
                                                   Checked="FolderCheckBox_Changed"

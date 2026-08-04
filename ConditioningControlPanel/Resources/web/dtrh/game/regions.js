@@ -146,9 +146,17 @@ export function profileForWave(waveIndex) {
   return regionForWave(waveIndex).profile || PROFILE_NEUTRAL;
 }
 
+// The Bottomless Fall: when endless cycling is on, waveIndex past IV wraps back to I->II->...
+// instead of clamping to the Court, so an endless descent keeps rotating biomes.
+let REGION_CYCLE = false;
+export function setRegionCycle(on) { REGION_CYCLE = !!on; }
+
 /** Resolve a 1-based region index (== the run's waveIndex) to its region.
- * Relapse can push waveIndex past IV; those bonus loops reuse the Court. */
+ * Relapse can push waveIndex past IV; those bonus loops reuse the Court — unless endless
+ * cycling is armed, in which case they wrap around the four regions. */
 export function regionForWave(waveIndex) {
-  const i = Math.min(Math.max(1, (waveIndex | 0)), REGIONS.length);
-  return REGIONS[i - 1];
+  const n = REGIONS.length;
+  const raw = Math.max(1, (waveIndex | 0));
+  if (REGION_CYCLE) return REGIONS[((raw - 1) % n + n) % n];
+  return REGIONS[Math.min(raw, n) - 1];
 }

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>For You</title>
+  <link rel="stylesheet" href="fyp.css">
+</head>
+<body>
+  <div id="app">
+    <div id="viewport">
+      <div id="track"></div>
+    </div>
+
+    <!-- chrome -->
+    <div id="chrome">
+      <div id="top-left">
+        <button id="btn-options" class="round-btn" title="Feed options">⚙</button>
+      </div>
+      <div id="top-right">
+        <button id="btn-advance" class="round-btn" title="Auto-advance: scroll on when a clip ends">⟳</button>
+        <button id="btn-mute" class="round-btn" title="Mute">🔊</button>
+        <button id="btn-fullscreen" class="round-btn" title="Fullscreen">⛶</button>
+      </div>
+      <div id="caption">
+        <div id="caption-name"></div>
+        <div id="caption-folder"></div>
+      </div>
+    </div>
+
+    <!-- feed options popover -->
+    <div id="options-scrim" class="hidden">
+      <div id="options-card">
+        <div class="options-header">
+          <span>Feed options</span>
+          <button id="btn-options-close" class="round-btn small" title="Close">✕</button>
+        </div>
+        <div class="options-label">Layout</div>
+        <div class="layout-row">
+          <button class="layout-chip" data-layout="duo"><span class="chip-icon">▤</span>Duo</button>
+          <button class="layout-chip" data-layout="trio"><span class="chip-icon">☰</span>Trio</button>
+          <button class="layout-chip" data-layout="random"><span class="chip-icon">▦</span>Mosaic</button>
+        </div>
+        <div class="options-divider"></div>
+        <div class="option-row">
+          <div class="option-text">
+            <div class="option-title">Include GIFs</div>
+            <div class="option-sub">Mix animated GIFs into the feed</div>
+          </div>
+          <button id="toggle-gifs" class="pill-toggle" role="switch"></button>
+        </div>
+        <div class="options-divider"></div>
+        <div class="option-row">
+          <div class="option-text">
+            <div class="option-title">Auto-change mosaic</div>
+            <div class="option-sub" id="mosaic-sub">Mosaic reshuffles on a timer</div>
+          </div>
+          <button id="toggle-mosaic" class="pill-toggle" role="switch"></button>
+        </div>
+        <div class="option-row" id="mosaic-slider-row">
+          <div class="option-text"><div class="option-title">Change every</div></div>
+          <input id="mosaic-sec" type="range" min="3" max="60" step="1">
+          <span id="mosaic-sec-label">10s</span>
+        </div>
+        <div class="options-divider"></div>
+        <div class="option-row">
+          <div class="option-text">
+            <div class="option-title">Highlight audible tile</div>
+            <div class="option-sub">Soft pink ring on the clip you are hearing</div>
+          </div>
+          <button id="toggle-audio-glow" class="pill-toggle" role="switch"></button>
+        </div>
+        <div class="options-divider"></div>
+        <div class="options-label">Eye control</div>
+        <div class="option-row">
+          <div class="option-text">
+            <div class="option-title">Eye control (webcam)</div>
+            <div class="option-sub">Blink to swap a tile - hold eyes closed 2s to change the whole page.</div>
+          </div>
+          <button id="toggle-eye" class="pill-toggle" role="switch"></button>
+        </div>
+        <div class="option-row sub-row" id="eye-gaze-row">
+          <div class="option-text">
+            <div class="option-title">Gaze picks the tile</div>
+            <div class="option-sub">Blink swaps the tile you are looking at. Needs eye-tracking calibration.</div>
+          </div>
+          <button id="toggle-eye-gaze" class="pill-toggle" role="switch"></button>
+        </div>
+        <div class="option-row sub-row" id="eye-calibrate-row">
+          <div class="option-text">
+            <div class="option-sub">Follow the dots on screen to teach it where you look.</div>
+          </div>
+          <button id="btn-calibrate" class="mini-btn">Calibrate</button>
+        </div>
+        <div class="option-status hidden" id="eye-status"></div>
+        <div class="options-divider"></div>
+        <div class="options-label">Window</div>
+        <div class="option-row" id="opacity-row">
+          <div class="option-text">
+            <div class="option-title">Ghost opacity</div>
+            <div class="option-sub">How see-through the feed is while ghost mode is on.</div>
+          </div>
+          <input id="window-opacity" type="range" min="1" max="100" step="1">
+          <span id="window-opacity-label">100%</span>
+        </div>
+        <div class="option-row" id="clickthrough-row">
+          <div class="option-text">
+            <div class="option-title">Ghost mode</div>
+            <div class="option-sub">The feed becomes a see-through overlay your mouse passes through. Press Esc or the panic key once to bring it back.</div>
+          </div>
+          <button id="toggle-clickthrough" class="pill-toggle" role="switch"></button>
+        </div>
+        <div class="options-footer">Mosaic settings apply to the Mosaic layout.</div>
+      </div>
+    </div>
+
+    <!-- Shown whenever ghost mode engages. Lives OUTSIDE #chrome on purpose:
+         body.clickthrough hides the chrome, but this note must survive it. It renders on the
+         REAL page, so the DWM mirror shows it for its 7 seconds too - that is the point. -->
+    <div id="ct-note">
+      <div class="ct-note-title">GHOST MODE IS ON</div>
+      <div class="ct-note-sub">The feed is now a see-through overlay - your mouse passes through it.</div>
+      <div class="ct-note-sub">Press <b>Esc</b> or tap the <b>panic key</b> once to take back control.
+        The corner buttons (<b>⚙</b> and <b>🔊</b>) stay clickable.</div>
+    </div>
+
+    <!-- attention check -->
+    <button id="attention" class="hidden" title="tap!">💗</button>
+
+    <!-- empty state -->
+    <div id="empty" class="hidden">
+      <div class="empty-emoji">🎬</div>
+      <h1>For You</h1>
+      <p>An endless feed of 20-40 second clips from your own videos and GIFs.<br>
+         Add some to your assets folder to switch it on.</p>
+      <button id="btn-include-gifs" class="empty-btn hidden"></button>
+      <p class="empty-hint">Only active videos and GIFs are used - curate in the Assets tab.</p>
+    </div>
+
+    <!-- crash containment -->
+    <div id="crash" class="hidden">
+      <div class="empty-emoji">💥</div>
+      <h1>The For You feed crashed</h1>
+      <p id="crash-detail"></p>
+      <button id="btn-retry" class="empty-btn">RETRY</button>
+    </div>
+
+    <!-- boot -->
+    <div id="boot">
+      <div class="boot-pulse">♡</div>
+    </div>
+  </div>
+  <script type="module" src="main.js"></script>
+</body>
+</html>

@@ -30,118 +30,13 @@ namespace ConditioningControlPanel
     // Patreon tab: exclusives submenu, Patreon exclusives content, and community prompts.
     public partial class MainWindow
     {
-        #region Exclusives Submenu
+        #region Exclusives Gates
 
-        private DispatcherTimer? _exclusivesMenuCloseTimer;
-        // True when the popup was opened by a click — hover-leave will not
-        // dismiss a pinned popup. Outside-click and Alt+Tab close it via the
-        // window-level handlers in the constructor.
-        private bool _exclusivesPinned;
-
-        private void BtnPatreonExclusives_MouseEnter(object sender, MouseEventArgs e)
-        {
-            _exclusivesMenuCloseTimer?.Stop();
-            if (ExclusivesSubmenuPopup.IsOpen) return;
-            RefreshExclusivesSubmenuLocks();
-            ExclusivesSubmenuPopup.IsOpen = true;
-        }
-
-        private void ExclusivesSubmenuPopup_MouseEnter(object sender, MouseEventArgs e)
-        {
-            _exclusivesMenuCloseTimer?.Stop();
-        }
-
-        private void ExclusivesMenu_MouseLeave(object sender, MouseEventArgs e)
-        {
-            // Click-pinned popups don't dismiss on hover-out — they only close
-            // via click-outside or sub-item selection.
-            if (_exclusivesPinned) return;
-
-            if (_exclusivesMenuCloseTimer == null)
-            {
-                _exclusivesMenuCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
-                _exclusivesMenuCloseTimer.Tick += ExclusivesMenuCloseTick;
-            }
-            _exclusivesMenuCloseTimer.Stop();
-            _exclusivesMenuCloseTimer.Start();
-        }
-
-        private void ExclusivesMenuCloseTick(object? sender, EventArgs e)
-        {
-            _exclusivesMenuCloseTimer?.Stop();
-            if (_exclusivesPinned) return;
-            ExclusivesSubmenuPopup.IsOpen = false;
-        }
-
-        private void ExclusivesSubmenuPopup_Closed(object? sender, EventArgs e)
-        {
-            _exclusivesPinned = false;
-        }
-
-        private void CloseExclusivesSubmenu()
-        {
-            _exclusivesPinned = false;
-            ExclusivesSubmenuPopup.IsOpen = false;
-        }
-
-        private void BtnSubRemoteControl_Click(object sender, RoutedEventArgs e)
-        {
-            CloseExclusivesSubmenu();
-            ShowTab("remotecontrol");
-        }
-
-        private void BtnSubBambiTakeover_Click(object sender, RoutedEventArgs e)
-        {
-            CloseExclusivesSubmenu();
-            ShowTab("bambitakeover");
-        }
-
-        private void BtnSubHaptics_Click(object sender, RoutedEventArgs e)
-        {
-            CloseExclusivesSubmenu();
-            ShowTab("haptics");
-        }
-
-        private void BtnSubAwareness_Click(object sender, RoutedEventArgs e)
-        {
-            CloseExclusivesSubmenu();
-            ShowTab("awareness");
-        }
-
-        private void BtnSubLockdown_Click(object sender, RoutedEventArgs e)
-        {
-            CloseExclusivesSubmenu();
-            ShowTab("lockdown");
-        }
-
-        private void BtnSubBlinkTrainer_Click(object sender, RoutedEventArgs e)
-        {
-            CloseExclusivesSubmenu();
-            ShowTab("blinktrainer");
-        }
-
-        private void BtnSubSheListening_Click(object sender, RoutedEventArgs e)
-        {
-            CloseExclusivesSubmenu();
-            ShowTab("shelistening");
-        }
-
-        /// <summary>
-        /// Updates "Premium" badges on the Exclusives submenu items based on the
-        /// user's current subscription state. Called whenever the popup opens.
-        /// </summary>
-        private void RefreshExclusivesSubmenuLocks()
-        {
-            var hasPremium = App.Patreon?.HasPremiumAccess == true;
-            var badgeVis = hasPremium ? Visibility.Collapsed : Visibility.Visible;
-            if (SubBadgeRemoteControl != null) SubBadgeRemoteControl.Visibility = badgeVis;
-            if (SubBadgeBambiTakeover != null) SubBadgeBambiTakeover.Visibility = badgeVis;
-            if (SubBadgeHaptics != null) SubBadgeHaptics.Visibility = badgeVis;
-            if (SubBadgeAwareness != null) SubBadgeAwareness.Visibility = badgeVis;
-            if (SubBadgeLockdown != null) SubBadgeLockdown.Visibility = badgeVis;
-            if (SubBadgeBlinkTrainer != null) SubBadgeBlinkTrainer.Visibility = badgeVis;
-            if (SubBadgeSheListening != null) SubBadgeSheListening.Visibility = badgeVis;
-        }
+        // The Exclusives launcher popup submenu was retired for the Exclusives tab
+        // ("the Velvet Vault", MainWindow.Exclusives.cs). Entitlement chips/veils on
+        // that tab are repainted by RefreshExclusivesTab(), which took over the old
+        // RefreshExclusivesSubmenuLocks contract — including the Graded Intake rule
+        // (weekly pass counts as an open door for free accounts).
 
         /// <summary>
         /// Routes the gating overlay's CTA button to the App Info &amp; Data popup,
@@ -161,6 +56,14 @@ namespace ConditioningControlPanel
             if (gate == null) return;
             var hasPremium = App.Patreon?.HasPremiumAccess == true;
             gate.Visibility = hasPremium ? Visibility.Collapsed : Visibility.Visible;
+
+            // FX (PR-4a): one shared animated treatment for every gate in the app - scrim fog
+            // drift, a breathing glow behind the padlock, a sheen across the CTA. Attach is
+            // idempotent, decorates only (it never touches Visibility or entitlement), and parks
+            // all three clocks whenever the gate is collapsed or motion is reduced. This is the
+            // choke point six of the eight gates already share; the other two (Blink Trainer,
+            // Graded Intake) attach from their own refresh methods.
+            Controls.PremiumGateFx.Attach(gate);
         }
 
         #endregion
@@ -221,17 +124,15 @@ namespace ConditioningControlPanel
             // Keep the patron-achievements section lock + counts in sync with entitlement.
             UpdateAchievementCount();
 
-            // Haptics - unlock for all Patreon supporters
+            // Haptics - unlock for all Patreon supporters.
+            // Phase E deleted the three dead lock overlays (HapticsConnectionLock,
+            // HapticsFeatureLock, HapticsComingSoonOverlay) — they were all Collapsed-forever
+            // leftovers stacked behind the one live gate, HapticsGate, refreshed below.
             var hasHapticsAccess = hasPremiumAccess;
             HapticsTab.HapticsContentGrid.Opacity = hasHapticsAccess ? 1.0 : 0.3;
             HapticsTab.HapticsContentGrid.IsHitTestVisible = hasHapticsAccess;
-            HapticsTab.HapticsConnectionLock.Visibility = hasHapticsAccess ? Visibility.Collapsed : Visibility.Visible;
-            HapticsTab.HapticsFeatureLock.Visibility = hasHapticsAccess ? Visibility.Collapsed : Visibility.Visible;
             HapticsTab.HapticsConnectionBox.IsEnabled = hasHapticsAccess;
             HapticsTab.HapticsFeatureBox.IsEnabled = hasHapticsAccess;
-
-            // Hide "Coming Soon" overlay for Patreon supporters
-            HapticsTab.HapticsComingSoonOverlay.Visibility = hasHapticsAccess ? Visibility.Collapsed : Visibility.Visible;
 
             // Bambi Takeover (Autonomy) — visible-but-locked: keep BambiTakeoverTab.AutonomyUnlocked
             // always visible, BambiTakeoverTab.AutonomyLocked stays collapsed (legacy element), and the
@@ -244,6 +145,33 @@ namespace ConditioningControlPanel
             RefreshPremiumGate(AwarenessTab.AwarenessGate);
             RefreshPremiumGate(LockdownTab.LockdownGate);
             if (SheListeningTab != null) RefreshPremiumGate(SheListeningTab.SheListeningGate);
+            if (GradedIntakeTab != null) RefreshGradedIntakeGate();
+
+            // Weekly intake pass. It is a FREE-TIER amenity - patrons have the feature outright and
+            // must never see pass UI - so every surface that paints off IntakePassService has to be
+            // re-evaluated on this path, not just at startup. This method is the single choke point
+            // that both TierChanged handlers (Patreon and SubscribeStar) and every login/logout path
+            // (ClearAccountData, the link flows, OpenUnifiedLoginDialog's completion) already run
+            // through, so hanging the pass refresh here covers the arrival of premium AND its
+            // removal - including the free-user logout, where the tier never changes and no
+            // TierChanged event is raised at all.
+            //
+            // These are the existing entry points, called rather than reimplemented:
+            //   RefreshIntakePassTile() - Dashboard centre tile (MainWindow.UiUpdates.cs)
+            //   RefreshExclusivesTab()  - Exclusives tab chips/veils (incl. the pass-aware
+            //                             Graded Intake card)
+            // RefreshGradedIntakeGate() is already covered by the line above.
+            try
+            {
+                RefreshIntakePassTile();
+                RefreshExclusivesTab();
+                // Anything else listening to the door (and the two lazily-attached handlers, if a
+                // refresh has not run yet to install them) gets its own repaint. Idempotent, and
+                // both current listeners marshal + no-op when nothing actually changed.
+                App.IntakePass?.RaiseChanged();
+            }
+            catch (Exception ex) { App.Logger?.Debug("UpdatePatreonUI: intake pass refresh failed: {E}", ex.Message); }
+
             RefreshBecomeASubjectCta();
             // Blink Trainer uses its own gate refresh (also re-resolves stage
             // mode + status state since premium loss/gain flips the resolver
@@ -715,6 +643,7 @@ namespace ConditioningControlPanel
             if (App.Settings?.Current != null && sender is CheckBox chk)
             {
                 App.Settings.Current.DiscordShareAchievements = chk.IsChecked == true;
+                App.Settings.Save();
             }
         }
 
@@ -723,6 +652,7 @@ namespace ConditioningControlPanel
             if (App.Settings?.Current != null && sender is CheckBox chk)
             {
                 App.Settings.Current.DiscordShareLevelUps = chk.IsChecked == true;
+                App.Settings.Save();
             }
         }
 
@@ -834,7 +764,32 @@ namespace ConditioningControlPanel
             {
                 UpdatePatreonUI();
                 UpdateUnlockablesVisibility(App.Settings?.Current?.PlayerLevel ?? 1);
+                MaybeShowPremiumCelebration();
             });
+        }
+
+        /// <summary>
+        /// One-time "premium unlocked" celebration card. Re-reads the combined entitlement
+        /// (Patreon tier + whitelist + cached grace + SubscribeStar) rather than trusting any
+        /// single event's tier argument, because several grant paths - cached state restored in
+        /// the ctor, the 14-day grace window, V2-linked accounts - never raise TierChanged at
+        /// all. Suppressed (unspent) while a session, the guided tour, or the update dialog is
+        /// on screen; MainWindow_Loaded re-checks on every launch, so suppression only delays
+        /// the card, never burns it.
+        /// </summary>
+        private void MaybeShowPremiumCelebration()
+        {
+            try
+            {
+                if (App.Patreon?.HasPremiumAccess != true) return;
+                if (_sessionEngine?.IsRunning == true) return;
+                if (App.IsUpdateDialogActive || IsStartupDialogShowing) return;
+                FeatureIntroPopup.ShowCelebrationIfFirstTime(this);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Premium celebration hook failed");
+            }
         }
 
         private void InitializePatreonTab()
@@ -850,10 +805,20 @@ namespace ConditioningControlPanel
                 App.Patreon.TierChanged += OnPatreonTierChanged;
             }
 
+            // SubscribeStar is the third login provider and it OR's into the canonical premium gate
+            // (PatreonService.HasPremiumAccess), but its own init was never actually called from
+            // here despite MainWindow.SubscribeStar.cs saying it should be. Consequence:
+            // App.SubscribeStar.TierChanged had no subscriber at all, so a SubscribeStar patron's
+            // subscription resolving mid-session refreshed nothing - the premium UI (and the intake
+            // pass with it) stayed on whatever it painted at startup. One line, and it is the hook
+            // that file was written to receive.
+            InitializeSubscribeStarTab();
+
             // Initialize companion settings
             CompanionTab.ChkAvatarEnabledCompanion.IsChecked = settings.AvatarEnabled;
             CompanionTab.ChkMuteAvatarCompanion.IsChecked = settings.AvatarMuted;
-            CompanionTab.ChkMuteWhispersCompanion.IsChecked = !settings.SubAudioEnabled;
+            // "Muted" is now its own flag, not the inverse of the enable (AppSettings.SubAudioMuted).
+            CompanionTab.ChkMuteWhispersCompanion.IsChecked = settings.SubAudioMuted;
             CompanionTab.SliderIdleIntervalCompanion.Value = settings.IdleGiggleIntervalSeconds;
             CompanionTab.TxtIdleIntervalCompanion.Text = $"{settings.IdleGiggleIntervalSeconds}s";
             CompanionTab.SliderBubbleDurationCompanion.Value = settings.BubbleDurationSeconds;
@@ -864,6 +829,10 @@ namespace ConditioningControlPanel
             CompanionTab.ChkAwarenessMode.IsChecked = settings.AwarenessModeEnabled && settings.AwarenessConsentGiven;
             CompanionTab.SliderAwarenessCooldown.Value = settings.AwarenessReactionCooldownSeconds;
             CompanionTab.TxtAwarenessCooldown.Text = $"{settings.AwarenessReactionCooldownSeconds}s";
+            CompanionTab.SliderAwarenessCooldownMax.Value = settings.AwarenessCooldownMaxSeconds;
+            CompanionTab.TxtAwarenessCooldownMax.Text = settings.AwarenessCooldownMaxSeconds <= 0
+                ? Loc.Get("label_cooldown_off")
+                : $"{settings.AwarenessCooldownMaxSeconds}s";
 
             // Show/hide awareness settings panel based on enabled state
             var awarenessEnabled = awarenessAvailable && settings.AwarenessModeEnabled && settings.AwarenessConsentGiven;
@@ -1179,6 +1148,17 @@ namespace ConditioningControlPanel
             var value = (int)CompanionTab.SliderAwarenessCooldown.Value;
             CompanionTab.TxtAwarenessCooldown.Text = $"{value}s";
             App.Settings.Current.AwarenessReactionCooldownSeconds = value;
+            App.Settings.Save();
+        }
+
+        internal void SliderAwarenessCooldownMax_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || CompanionTab.TxtAwarenessCooldownMax == null) return;
+
+            // 0 (or below the base cooldown) = randomization off; the fixed base cooldown is used.
+            var value = (int)CompanionTab.SliderAwarenessCooldownMax.Value;
+            CompanionTab.TxtAwarenessCooldownMax.Text = value <= 0 ? Loc.Get("label_cooldown_off") : $"{value}s";
+            App.Settings.Current.AwarenessCooldownMaxSeconds = value;
             App.Settings.Save();
         }
 
@@ -1806,17 +1786,19 @@ namespace ConditioningControlPanel
             var checkbox = sender as CheckBox;
             var isMuted = checkbox?.IsChecked == true;
 
-            // Toggle SubAudioEnabled (muted = disabled)
+            // Flips the dedicated MUTE, not SubAudioEnabled - see AppSettings.SubAudioMuted. Mute
+            // is a comfort/safety reflex and stays available during a session; the whispers ENABLE
+            // is part of the prescribed dose and is locked while one runs.
             if (App.Settings?.Current != null)
             {
-                App.Settings.Current.SubAudioEnabled = !isMuted;
+                App.Settings.Current.SubAudioMuted = isMuted;
                 App.Settings.Save();
             }
 
-            // Sync Settings tab checkbox (inverted - it's "enabled" not "muted")
-            _isLoading = true;
-            SettingsTab.ChkAudioWhispers.IsChecked = !isMuted;
-            _isLoading = false;
+            // Deliberately NO LONGER syncing SettingsTab.ChkAudioWhispers: that checkbox is the
+            // feature's enable and this one is a mute. They were the same flag before, so muting
+            // silently turned the feature off; keeping them in step now would re-create exactly
+            // the bypass this split exists to remove.
 
             // Sync avatar menu
             _avatarTubeWindow?.UpdateQuickMenuState();
@@ -1890,8 +1872,10 @@ namespace ConditioningControlPanel
                 // Settings tab - SettingsTab.ChkAudioWhispers represents "whispers enabled"
                 SettingsTab.ChkAudioWhispers.IsChecked = enabled;
 
-                // Companion tab - CompanionTab.ChkMuteWhispersCompanion represents "whispers muted" (inverted)
-                CompanionTab.ChkMuteWhispersCompanion.IsChecked = !enabled;
+                // The Companion tab's box is a MUTE and no longer mirrors the enable, so it is
+                // driven from SubAudioMuted rather than !enabled (AppSettings.SubAudioMuted).
+                CompanionTab.ChkMuteWhispersCompanion.IsChecked =
+                    App.Settings?.Current?.SubAudioMuted == true;
             }
             finally
             {

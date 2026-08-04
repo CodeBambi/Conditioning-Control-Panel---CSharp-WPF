@@ -98,9 +98,16 @@ internal sealed class LayeredCompositorHost : ICompositorHost
         _signal.Set();
     }
 
+    // Show/Hide/UpdateScreenBounds run on the UI thread and touch a WS_EX_LAYERED window that the
+    // present thread is concurrently blitting into with UpdateLayeredWindow. Layered-window state
+    // changes are the app's historical render-thread wedge, and none of these Win32 calls can be
+    // given a timeout — so they are breadcrumbed instead: a hang report whose "last UI mark" is one
+    // of these names the wedge outright (see VideoDiag.UiScope).
+
     public void Show()
     {
         if (_hwnd == IntPtr.Zero) return;
+        using var _ = VideoDiag.UiScope($"LayeredCompositorHost.Show({ScreenDeviceName})");
         var b = ScreenBoundsPx;
         SetWindowPos(_hwnd, HWND_TOPMOST, b.X, b.Y, b.Width, b.Height, SWP_NOACTIVATE);
         ShowWindow(_hwnd, SW_SHOWNA);
@@ -110,12 +117,14 @@ internal sealed class LayeredCompositorHost : ICompositorHost
     public void Hide()
     {
         if (_hwnd == IntPtr.Zero) return;
+        using var _ = VideoDiag.UiScope($"LayeredCompositorHost.Hide({ScreenDeviceName})");
         ShowWindow(_hwnd, SW_HIDE);
         IsVisible = false;
     }
 
     public void UpdateScreenBounds(System.Windows.Forms.Screen screen)
     {
+        using var _ = VideoDiag.UiScope($"LayeredCompositorHost.UpdateScreenBounds({ScreenDeviceName})");
         var b = screen.Bounds;
         ScreenBoundsPx = b;
         if (_hwnd != IntPtr.Zero && IsVisible)
@@ -125,6 +134,7 @@ internal sealed class LayeredCompositorHost : ICompositorHost
 
     public void Close()
     {
+        using var _ = VideoDiag.UiScope($"LayeredCompositorHost.Close({ScreenDeviceName})");
         _stop = true;
         _signal.Set();
         bool exited = false;

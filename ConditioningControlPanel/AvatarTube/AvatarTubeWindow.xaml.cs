@@ -74,7 +74,7 @@ namespace ConditioningControlPanel
                     _parentWindow.ActualWidth, _parentWindow.ActualHeight,
                     _parentWindow.WindowState == WindowState.Minimized,
                     _parentWindow.IsVisible);
-                // Seed the parent HWND here (on the parent's own thread) so BringAttachedPairToFront
+                // Seed the parent HWND here (on the parent's own thread) so ApplyNativeOwner
                 // never has to touch WindowInteropHelper from the avatar thread.
                 if (_parentHandle == IntPtr.Zero)
                 {
@@ -191,7 +191,6 @@ namespace ConditioningControlPanel
             _parentWindow.StateChanged += ParentWindow_StateChanged;
             _parentWindow.IsVisibleChanged += ParentWindow_IsVisibleChanged;
             _parentWindow.Activated += ParentWindow_Activated;
-            _parentWindow.PreviewMouseDown += ParentWindow_PreviewMouseDown;
             _parentWindow.Closed += ParentWindow_Closed;
             
             // Get handles when loaded
@@ -235,11 +234,8 @@ namespace ConditioningControlPanel
             PreviewMouseWheel += Window_PreviewMouseWheel;
             PreviewKeyDown += Window_PreviewKeyDown;
 
-            // Keep tube in front during position changes when attached
-            LocationChanged += (s, e) => { if (_isAttached) BringAttachedPairToFront(); };
-
-            // When tube gets activated (e.g. after topmost video closes), redirect to parent
-            Activated += TubeWindow_Activated;
+            // Z-order pairing with main is handled by native ownership (see ApplyNativeOwner):
+            // the window manager keeps the tube directly above main, no manual raises needed.
 
             // Wire up video service events for companion speech (1.3s before video)
             if (App.Video != null)
@@ -546,35 +542,28 @@ namespace ConditioningControlPanel
             // Start the Takeover countdown bar (only ticks while Takeover is enabled)
             InitTakeoverCountdownBar();
 
-            // Hook the parent window's messages too. The keep-on-top timer polls at
-            // Background priority and gets starved exactly when AI speech is busy
-            // (GIF animation, text streaming, effects firing) — so the bubble can sit
-            // behind main for noticeably longer than the 300ms tick. Reacting to the
-            // parent's own WM_WINDOWPOSCHANGED lifts the tube back the instant main
-            // moves up in z-order, with no polling gap.
-            // Read the parent handle + install the parent-message hook ON the parent's dispatcher:
-            // HwndSource is thread-affine, and reading the parent handle off its own thread VerifyAccess-
-            // throws. Use BeginInvoke (ASYNC) in own-thread mode so this Loaded callback never blocks on the
-            // main thread — during the own-thread bootstrap the main thread is blocked on the ready handshake
-            // waiting for us to finish showing, so a synchronous Invoke here would deadlock. Inline (sync)
-            // when the avatar shares the parent's thread (flag off) — identical to the original behaviour.
+            // Seed the parent HWND, then tie the tube to main via NATIVE (Win32) ownership so the
+            // window manager itself keeps the tube glued directly above main in z-order — no message
+            // hooks, no polling, no manual raises (see ApplyNativeOwner for the full rationale).
+            // Read the parent handle ON the parent's dispatcher: reading it off its own thread
+            // VerifyAccess-throws. Use BeginInvoke (ASYNC) in own-thread mode so this Loaded callback
+            // never blocks on the main thread — during the own-thread bootstrap the main thread is
+            // blocked on the ready handshake waiting for us to finish showing, so a synchronous Invoke
+            // here would deadlock. Inline (sync) when the avatar shares the parent's thread (flag off).
             if (_parentWindow != null)
             {
-                void HookParent()
+                void SeedOwner()
                 {
                     try
                     {
                         _parentHandle = new WindowInteropHelper(_parentWindow).Handle;
                         if (_parentHandle != IntPtr.Zero)
-                        {
-                            _parentHwndSource = HwndSource.FromHwnd(_parentHandle);
-                            _parentHwndSource?.AddHook(ParentWndProc);
-                        }
+                            RunOnAvatar(() => ApplyNativeOwner(_isAttached));
                     }
-                    catch (Exception ex) { App.Logger?.Debug("AvatarTube parent hook install failed: {Error}", ex.Message); }
+                    catch (Exception ex) { App.Logger?.Debug("AvatarTube owner seed failed: {Error}", ex.Message); }
                 }
-                if (_parentWindow.Dispatcher.CheckAccess()) HookParent();
-                else _parentWindow.Dispatcher.BeginInvoke(new Action(HookParent));
+                if (_parentWindow.Dispatcher.CheckAccess()) SeedOwner();
+                else _parentWindow.Dispatcher.BeginInvoke(new Action(SeedOwner));
             }
 
             // Hide from Alt+Tab by adding WS_EX_TOOLWINDOW style.
@@ -601,10 +590,7 @@ namespace ConditioningControlPanel
                 {
                     UpdatePosition();
                     StartFloatingAnimation();
-                    // Force on first show: at startup foreground may not have transferred
-                    // to us yet, so the gated raise would bail and the tube would come up
-                    // behind the main window.
-                    BringAttachedPairToFront(force: true);
+                    // Z-order: native ownership (seeded above) keeps the tube above main.
                 }
 
                             // Reset bubble position to ensure correct placement after layout
@@ -615,6 +601,10 @@ namespace ConditioningControlPanel
                                 : EffAvatarDetachedOffsetX();
                             var initRight = initUseAttached ? 125 - initDx : 425 - initDx;
                             SpeechBubble.Margin = new Thickness(0, 0, initRight, 550);
+
+                            // Restore a saved detached placement (#669) after the initial attached layout
+                            // and native-owner seeding have settled, so Detach/position land cleanly.
+                            RestoreSavedPlacement();
                         }), System.Windows.Threading.DispatcherPriority.Loaded);
 
             // Start fullscreen detection timer

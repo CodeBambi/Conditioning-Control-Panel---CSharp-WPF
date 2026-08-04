@@ -57,8 +57,14 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
     
-                            <!-- Avatar: dark gradient bg, head/shoulders bitmap crop -->
-                            <Border Grid.Column="0" Width="96" Height="96" CornerRadius="48" Margin="0,0,16,0"
+                            <!-- Avatar: dark gradient bg, head/shoulders bitmap crop.
+                                 CompanionHeroAvatarRing is the tab's ONE ambient loop (FX plan S4):
+                                 MainWindow.CompanionFx breathes this disc 1.00<->1.015 over 5s via a
+                                 RenderTransform, so the clip, the ring and the portrait scale as one
+                                 piece and nothing in the strip re-lays-out. The 0.72px of growth sits
+                                 inside the hero border's 16px padding, so it cannot clip. -->
+                            <Border x:Name="CompanionHeroAvatarRing" x:FieldModifier="internal"
+                                    Grid.Column="0" Width="96" Height="96" CornerRadius="48" Margin="0,0,16,0"
                                     BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2"
                                     VerticalAlignment="Center">
                                 <Border.Background>
@@ -86,18 +92,32 @@
                                         <TextBlock x:Name="TxtActiveCompanionName" x:FieldModifier="internal" Text="{loc:Str label_bambi_sprite}" Foreground="White" FontSize="31" FontWeight="Bold"/>
                                         <TextBlock x:Name="TxtActiveCompanionLevel" x:FieldModifier="internal" Text="{loc:Str label_level_1}" Foreground="#888" FontSize="26" VerticalAlignment="Bottom" Margin="0,0,0,2"/>
                                     </StackPanel>
-                                    <Button x:Name="BtnChatShortcut" Grid.Column="1"
-                                            Click="BtnChatShortcut_Click"
-                                            ToolTip="{loc:Str tooltip_change_chat_shortcut}"
-                                            Background="{DynamicResource SurfaceBgBrush}" Foreground="White"
-                                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                                            Padding="10,4" FontSize="12" Cursor="Hand" VerticalAlignment="Top">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Image Width="15" Height="15" Margin="0,0,6,0"
-                                                   Source="{Binding Source='💬', Converter={StaticResource EmojiToImageSource}}"/>
-                                            <TextBlock x:Name="TxtChatShortcutLabel" x:FieldModifier="internal" Text="Ctrl+T" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold"/>
-                                        </StackPanel>
-                                    </Button>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                                        <Button x:Name="BtnChatShortcut"
+                                                Click="BtnChatShortcut_Click"
+                                                ToolTip="{loc:Str tooltip_change_chat_shortcut}"
+                                                Background="{DynamicResource SurfaceBgBrush}" Foreground="White"
+                                                BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                                                Padding="10,4" FontSize="12" Cursor="Hand" VerticalAlignment="Top">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Image Width="15" Height="15" Margin="0,0,6,0"
+                                                       Source="{Binding Source='💬', Converter={StaticResource EmojiToImageSource}}"/>
+                                                <TextBlock x:Name="TxtChatShortcutLabel" x:FieldModifier="internal" Text="Ctrl+T" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <Button x:Name="BtnCameraShortcut" Margin="8,0,0,0"
+                                                Click="BtnCameraShortcut_Click"
+                                                ToolTip="{loc:Str tooltip_change_camera_shortcut}"
+                                                Background="{DynamicResource SurfaceBgBrush}" Foreground="White"
+                                                BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                                                Padding="10,4" FontSize="12" Cursor="Hand" VerticalAlignment="Top">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Image Width="15" Height="15" Margin="0,0,6,0"
+                                                       Source="{Binding Source='📷', Converter={StaticResource EmojiToImageSource}}"/>
+                                                <TextBlock x:Name="TxtCameraShortcutLabel" x:FieldModifier="internal" Text="Ctrl+Alt+K" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
                                 </Grid>
                                 <TextBlock x:Name="TxtActiveCompanionDesc" x:FieldModifier="internal" Text="{loc:Str label_gains_bonus_xp_based_on_pink_filter_intensity}" Foreground="{DynamicResource TextDimBrush}" FontSize="16" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 <Grid Margin="0,10,0,0">
@@ -318,7 +338,11 @@
     
                     <!-- AI BRAIN SECTION -->
                     <Grid Margin="0,0,0,10">
-                        <Border CornerRadius="14" Padding="16" BorderThickness="1">
+                        <!-- CompanionAiBrainCard is the sheen host for a successful provider
+                             connection test (MainWindow.CompanionFx). Event-driven one-shot:
+                             no clock exists on this card while it sits idle. -->
+                        <Border x:Name="CompanionAiBrainCard" x:FieldModifier="internal"
+                                CornerRadius="14" Padding="16" BorderThickness="1">
                             <Border.Background>
                                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                                     <GradientStop Color="{DynamicResource SurfaceBg}" Offset="0"/>
@@ -585,6 +609,14 @@
                                     <Slider x:Name="SliderAwarenessCooldown" x:FieldModifier="internal" Style="{StaticResource PinkSlider}"
                                             Minimum="10" Maximum="300" Value="90" Margin="0,6,0,8"
                                             ValueChanged="SliderAwarenessCooldown_ValueChanged"/>
+                                    <Grid>
+                                        <TextBlock Text="{loc:Str label_reaction_cooldown_max}" Foreground="White" FontSize="13"/>
+                                        <TextBlock x:Name="TxtAwarenessCooldownMax" x:FieldModifier="internal" Text="{loc:Str label_cooldown_off}" Foreground="{DynamicResource PinkBrush}" HorizontalAlignment="Right" FontSize="13" FontWeight="Bold"/>
+                                    </Grid>
+                                    <Slider x:Name="SliderAwarenessCooldownMax" x:FieldModifier="internal" Style="{StaticResource PinkSlider}"
+                                            Minimum="0" Maximum="300" Value="0" Margin="0,6,0,4"
+                                            ValueChanged="SliderAwarenessCooldownMax_ValueChanged"/>
+                                    <TextBlock Text="{loc:Str tooltip_reaction_cooldown_max}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,8"/>
                                     <Border Background="#2A1A1A" CornerRadius="6" Padding="8" BorderBrush="#FF6B6B" BorderThickness="1">
                                         <StackPanel>
                                             <Grid>

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Graded Intake — Engine Harness</title>
+    <!-- HEADLESS-ISH driver. Runs the engine's beat loop with a SCRIPTED auto-
+         answerer and dumps each BeatSpec + the final QuizRunResult as JSON — no
+         render/effects/audio needed. This is how you validate contracts.js +
+         engine.js (and later reward.js) in isolation. Uses web-shim's standalone
+         path (localStorage/URL), never the WebView2 host. Open directly in a
+         browser: file://.../Resources/web/intake/harness.html -->
+    <style>
+      body { margin: 0; background: #14101f; color: #eae0f0; font: 14px/1.5 'Segoe UI', system-ui, sans-serif; }
+      header { padding: 14px 18px; background: #1c1730; border-bottom: 1px solid #33284d; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+      header h1 { font-size: 15px; margin: 0 12px 0 0; color: #ff69b4; }
+      label { color: #b7a9d0; font-size: 12px; }
+      select, button { font: inherit; background: #2a2344; color: #eae0f0; border: 1px solid #4a3a70; border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+      button.primary { background: #ff69b4; color: #211; border-color: #ff69b4; font-weight: 600; }
+      main { display: grid; grid-template-columns: 1fr 1fr; gap: 0; height: calc(100vh - 56px); }
+      section { overflow: auto; padding: 14px 18px; }
+      section + section { border-left: 1px solid #33284d; }
+      h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: #8f7fb0; margin: 0 0 8px; }
+      pre { white-space: pre-wrap; word-break: break-word; margin: 0; font: 12px/1.45 ui-monospace, 'Cascadia Code', Consolas, monospace; }
+      .beat { border: 1px solid #33284d; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+      .beat b { color: #b06cff; }
+      .k { color: #ff8fce; }
+      .ok { color: #7ee0a0; } .no { color: #ff9a9a; }
+    </style>
+</head>
+<body>
+    <header>
+      <h1>Graded Intake · Engine Harness</h1>
+      <label>Niche
+        <select id="niche"><option value="bambi">bambi</option><option value="drone">drone</option><option value="sissy">sissy</option><option value="circe">circe</option></select>
+      </label>
+      <label>Answers
+        <select id="strategy">
+          <option value="best">always correct</option>
+          <option value="worst">always wrong</option>
+          <option value="chase">chase reward (drift wrong as depth rises)</option>
+          <option value="random">random</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="endless"> endless</label>
+      <button class="primary" id="run">Run</button>
+      <button id="clear">Clear</button>
+      <span id="status" style="color:#8f7fb0"></span>
+    </header>
+    <main>
+      <section><h2>Beat trace</h2><div id="trace"></div></section>
+      <section><h2>QuizRunResult (final emit)</h2><pre id="result">— run to populate —</pre></section>
+    </main>
+
+    <script type="module">
+      import { createEngine } from './core/engine.js';
+      import { createAI } from './core/ai.js';
+      import { defaultBootConfig, Band } from './core/contracts.js';
+
+      const $ = (id) => document.getElementById(id);
+      const trace = $('trace'), resultOut = $('result'), status = $('status');
+
+      // Try to load the REAL reward module if it exists; else engine's stub path handles it.
+      async function maybeReward(config) {
+        try { const m = await import('./core/reward.js'); if (m.createReward) return m.createReward({ config }); } catch (_e) {}
+        return undefined;
+      }
+
+      function chooseAnswer(beat, strategy) {
+        const t0 = performance.now();
+        const mk = (chosenIndex, value) => {
+          const ev = { latencyMs: (performance.now() - t0 + Math.random() * 400) | 0, mechanic: beat.mechanic, timedOut: false, steered: false };
+          if (typeof chosenIndex === 'number') ev.chosenIndex = chosenIndex;
+          if (value !== undefined) ev.value = value;
+          return ev;
+        };
+        if (!beat.options || !beat.options.length) {
+          if (beat.mechanic === 'checkin') return mk(undefined, Math.random());
+          return mk(undefined, beat.prompt.answer !== undefined ? beat.prompt.answer : 'ok');
+        }
+        const correctIdx = beat.options.findIndex((o) => o.isCorrect);
+        const wrongIdx = beat.options.findIndex((o) => !o.isCorrect);
+        switch (strategy) {
+          case 'worst': return mk(wrongIdx >= 0 ? wrongIdx : 0);
+          case 'random': return mk((Math.random() * beat.options.length) | 0);
+          case 'chase': {
+            // drift toward the wrong (reward-chasing) answer as depth climbs
+            const wrong = Math.random() < beat.depth * 0.8 && wrongIdx >= 0;
+            return mk(wrong ? wrongIdx : correctIdx);
+          }
+          default: return mk(correctIdx >= 0 ? correctIdx : 0);
+        }
+      }
+
+      async function run() {
+        trace.innerHTML = ''; resultOut.textContent = '…running…'; status.textContent = '';
+        const config = defaultBootConfig({ niche: $('niche').value, endless: $('endless').checked });
+        const ai = createAI(null); // offline stub
+        const reward = await maybeReward(config);
+        const engine = createEngine({ bank: null, reward, ai, config });
+        const strategy = $('strategy').value;
+
+        let step = await engine.next();
+        let n = 0;
+        while (!step.done) {
+          const beat = step.beat; n++;
+          const ev = chooseAnswer(beat, strategy);
+          const opt = typeof ev.chosenIndex === 'number' ? beat.options[ev.chosenIndex] : null;
+          const div = document.createElement('div');
+          div.className = 'beat';
+          div.innerHTML = `<b>#${n}</b> <span class="k">${beat.band}</span> depth=<b>${beat.depth.toFixed(2)}</b> `
+            + `mech=${beat.mechanic} steer=${beat.steerRoll.primary}(${beat.steerRoll.intensity.toFixed(2)}) `
+            + `reward=${beat.rewardPlan.mode}<br>`
+            + `<span style="color:#b7a9d0">${beat.prompt.text}</span> → `
+            + (opt ? `<span class="${opt.isCorrect ? 'ok' : 'no'}">${opt.label}${opt.isCorrect ? ' ✓' : ' ✗'}</span>` : `<span class="ok">${JSON.stringify(ev.value)}</span>`);
+          trace.appendChild(div);
+          step = await engine.next(ev);
+          if (n > 500) { status.textContent = 'safety stop at 500 beats'; break; }
+        }
+        const result = step.result || (await engine.next()).result;
+        resultOut.textContent = JSON.stringify(result, null, 2);
+        const recoveryBeats = result.trajectory.filter(t => t.band === Band.Recovery).length;
+        status.textContent = `${n} beats · peakDepth ${result.peakDepth.toFixed(2)} · recovery beats ${recoveryBeats} · score ${result.totalScore}/${result.maxScore}`;
+      }
+
+      $('run').addEventListener('click', run);
+      $('clear').addEventListener('click', () => { trace.innerHTML = ''; resultOut.textContent = '—'; status.textContent = ''; });
+    </script>
+</body>
+</html>

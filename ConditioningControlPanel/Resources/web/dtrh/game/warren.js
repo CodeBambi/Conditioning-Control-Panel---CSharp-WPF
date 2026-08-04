@@ -38,7 +38,7 @@ import { MATERIALS, MAT_BY_ID, RECIPES, matchGrid, gridCost, recipeCost, recipeC
 import * as reveals from './reveals.js';
 import { createLoomStudio } from './loomStudio.js';
 import { BUBBLE_SKINS, getBubbleSkin, setBubbleSkin } from './variants.js';
-import { S, updateSetting, descentSetup, UNLOCK_LADDER, RANK_NAMES,
+import { S, updateSetting, descentSetup, UNLOCK_LADDER, RANK_NAMES, MOTIONS,
   WORD_PACKS, getWordPack, setWordPack } from '../engine/settings.js';
 import { getLevel } from '../engine/audioLevels.js';
 import { isMuted } from '../shared/audioMute.js';
@@ -102,13 +102,44 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
   // just ~60s each, so the ACT I-IV identity + region VO all survive. 12/16/20 are
   // the standard descents.
   const CHAMBER_TOTALS = [240, 720, 960, 1200];   // 4 / 12 / 16 / 20 min (60 / 180 / 240 / 300s per chamber)
+  // The Hourglass (2min..2h) + The Bottomless Fall (∞ endless) are Depth unlocks; owning
+  // them opens the free length dial / the endless toggle in this portal.
+  const DUR_MIN = 120, DUR_MAX = 7200;
+  const ownsCustomDur = () => { try { return metaView(getMeta()).isOwned('custom_duration'); } catch (e) { return false; } };
+  const ownsEndless = () => { try { return metaView(getMeta()).isOwned('endless_mode'); } catch (e) { return false; } };
+  const fmtDur = (s) => {
+    s = Math.round(s || 0);
+    const m = Math.floor(s / 60), sec = s % 60;
+    if (m >= 60) { const h = Math.floor(m / 60), mm = m % 60; return mm ? `${h}h ${mm}m` : `${h}h`; }
+    return sec ? `${m}m ${sec}s` : `${m} min`;
+  };
+  // The Hourglass' typed readout: forgiving parse -> seconds (or null if it's junk).
+  // Accepts "mm:ss", h/m/s tokens (incl. our own fmtDur output like "1h 5m" / "2m 30s"),
+  // or a plain number read as minutes. Clamping is the caller's job.
+  const parseDurInput = (raw) => {
+    if (raw == null) return null;
+    const str = String(raw).trim().toLowerCase();
+    if (!str) return null;
+    if (str.includes(':')) {                 // mm:ss
+      const parts = str.split(':');
+      return (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+    }
+    const h = /(\d+)\s*h/.exec(str), m = /(\d+)\s*m/.exec(str), sec = /(\d+)\s*s/.exec(str);
+    if (h || m || sec) return (h ? +h[1] * 3600 : 0) + (m ? +m[1] * 60 : 0) + (sec ? +sec[1] : 0);
+    const n = parseFloat(str);               // bare number -> minutes
+    return isFinite(n) ? Math.round(n * 60) : null;
+  };
   const setup = {
     difficulty: (runSetup && runSetup.difficulty) || 'Easy',
     durationSec: (runSetup && runSetup.durationSec) || 960,
+    endless: !!(runSetup && runSetup.endless) && ownsEndless(),
     key1: (runSetup && runSetup.key1) || 'Q',
     key2: (runSetup && runSetup.key2) || 'E',
   };
-  if (!CHAMBER_TOTALS.includes(setup.durationSec)) setup.durationSec = 960;
+  // A custom-length owner keeps any saved free value (clamped); everyone else snaps back to
+  // a preset so a stale/un-owned page can't ride a non-preset length.
+  if (ownsCustomDur()) setup.durationSec = Math.max(DUR_MIN, Math.min(DUR_MAX, setup.durationSec | 0));
+  else if (!CHAMBER_TOTALS.includes(setup.durationSec)) setup.durationSec = 960;
   // FTUE pacing: until the player has two descents behind them (and hasn't touched
   // the chip), the portal preselects the 12-min fall so run 2 fits the guided hour.
   let lengthTouched = false;
@@ -138,6 +169,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     const enabled = POOL_VARIANTS.filter((v) => !off.has(v.id)).map((v) => v.id);
     return {
       difficulty: setup.difficulty, durationSec: setup.durationSec, waveCount: 4,
+      endless: !!setup.endless && ownsEndless(),
       key1: setup.key1, key2: setup.key2,
       motion: d.motion, effectIntensity: d.effectIntensity, colorFlashes: d.colorFlashes,
       boonDraftEnabled: d.boonDraftEnabled, allowCurses: d.allowCurses, dartersEnabled: d.dartersEnabled,
@@ -184,6 +216,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     const img = document.createElement('img');
     img.src = url;
     img.alt = '';
+    img.draggable = false;   // else a native image-drag hijacks the worktable's press-and-drag paint gesture
     img.addEventListener('error', () => {
       img.remove();
       el('wr-icon-glyph', box, glyph || '◈');
@@ -515,6 +548,92 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     if (modal) root.appendChild(modal);
   }
 
+  // 🎲 Random ("surprise me"): roll the whole portal setup at once. Only ever lands on
+  // choices the player is actually allowed to pick — gated difficulties and endless/custom
+  // length stay out unless owned — then re-renders so the chips show what came up. It never
+  // starts the descent; the player still clicks the hole themselves (safer UX).
+  const pickOne = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  function rollSetup() {
+    const v = view();
+    // difficulty: any pill unlocked right now (Extreme only once its gate is earned)
+    const diffs = DIFF_PILLS.filter((d) =>
+      (!d.revealGate || reveals.isUnlocked(d.revealGate, v)) &&
+      (!d.extremeGate || v.extremeUnlocked));
+    if (diffs.length) setup.difficulty = pickOne(diffs).id;
+    // length: a preset by default; a free custom length / endless only when owned
+    const lenRolls = CHAMBER_TOTALS.map((secs) => () => { setup.endless = false; setup.durationSec = secs; });
+    if (ownsCustomDur()) lenRolls.push(() => {
+      setup.endless = false;
+      const steps = Math.floor((DUR_MAX - DUR_MIN) / 30);   // snap to the slider's 30s step
+      setup.durationSec = DUR_MIN + 30 * Math.floor(Math.random() * (steps + 1));
+    });
+    if (ownsEndless()) lenRolls.push(() => { setup.endless = true; });
+    pickOne(lenRolls)();
+    lengthTouched = true;
+    // biome is rouletted by the engine; motion/variants live in ⚙ options (not portal chips),
+    // so we leave them be — a roll only touches what the player can see reflected here.
+    sfx('ui_deepen', 0.5);
+    refreshChrome(view());
+  }
+
+  // ---- run presets (#650): save/load/delete a named portal setup -------------
+  // Persist via the chaos_meta bridge (save-preset/delete-preset) so presets ride
+  // the save slot, not localStorage. A preset is the full buildSetup() blob; on LOAD
+  // we re-validate every gated choice against what the player currently owns so a
+  // preset can never smuggle endless / a custom length / Extreme into a run they
+  // haven't unlocked (PersistRunSetup + FromSettings clamp again C#-side regardless).
+  const MAX_PRESETS = 5;
+  function savePreset(name) {
+    const nm = String(name || '').trim().slice(0, 40);
+    if (!nm) return;
+    cmd('save-preset', { name: nm, setup: buildSetup() });
+    sfx('ui_deepen', 0.45);
+  }
+  function deletePreset(name) {
+    const nm = String(name || '').trim();
+    if (!nm) return;
+    cmd('delete-preset', { name: nm });
+    sfx('ui_click', 0.3);
+  }
+  function loadPreset(p) {
+    const su = p && p.setup;
+    if (!su || typeof su !== 'object') return;
+    const v = view();
+    // difficulty: keep it only if the pill is actually available right now
+    // (its reveal earned, and Extreme only once its gate is open); else Easy.
+    const diff = typeof su.difficulty === 'string' ? su.difficulty : setup.difficulty;
+    const diffOk = DIFF_PILLS.some((d) => d.id === diff
+      && (!d.revealGate || reveals.isUnlocked(d.revealGate, v))
+      && (!d.extremeGate || v.extremeUnlocked));
+    setup.difficulty = diffOk ? diff : 'Easy';
+    // endless only for owners; custom length only for the Hourglass, else a
+    // non-preset length snaps back to the default (mirrors the init clamp).
+    setup.endless = !!su.endless && ownsEndless();
+    let dur = (su.durationSec | 0) || 960;
+    if (ownsCustomDur()) dur = Math.max(DUR_MIN, Math.min(DUR_MAX, dur));
+    else if (!CHAMBER_TOTALS.includes(dur)) dur = 960;
+    setup.durationSec = dur;
+    if (typeof su.key1 === 'string') setup.key1 = su.key1;
+    if (typeof su.key2 === 'string') setup.key2 = su.key2;
+    lengthTouched = true;
+    // ⚙ descent options (settings.js run* keys)
+    if (typeof su.motion === 'string' && MOTIONS.includes(su.motion)) updateSetting('runMotion', su.motion);
+    if (typeof su.effectIntensity === 'number' && isFinite(su.effectIntensity))
+      updateSetting('runEffectIntensity', Math.min(1.5, Math.max(0.2, su.effectIntensity)));
+    if (typeof su.colorFlashes === 'boolean') updateSetting('runColorFlashes', su.colorFlashes);
+    if (typeof su.boonDraftEnabled === 'boolean') updateSetting('runBoonDraft', su.boonDraftEnabled);
+    if (typeof su.allowCurses === 'boolean') updateSetting('runAllowCurses', su.allowCurses);
+    if (typeof su.dartersEnabled === 'boolean') updateSetting('runDarters', su.dartersEnabled);
+    // enabledVariants (null = all on) -> runVariantsOff (the switched-OFF list)
+    if (su.enabledVariants === null) updateSetting('runVariantsOff', []);
+    else if (Array.isArray(su.enabledVariants)) {
+      const on = new Set(su.enabledVariants);
+      updateSetting('runVariantsOff', POOL_VARIANTS.filter((x) => !on.has(x.id)).map((x) => x.id));
+    }
+    sfx('ui_deepen', 0.5);
+    refreshChrome(view());
+  }
+
   function refreshChrome(v) {
     if (!chrome) return;
     // currency chips
@@ -558,14 +677,105 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
         if (d.extremeGate) revealEls.set('pill_inescapable', p);
       }
       const lenRow = el('wr-pills wr-pills--center', chrome.fall);
+      const endlessOn = ownsEndless() && setup.endless;
       for (const secs of CHAMBER_TOTALS) {
-        btn('wr-seg wr-seg--small' + (setup.durationSec === secs ? ' is-on' : ''), `${secs / 60} min`, () => {
+        const chip = btn('wr-seg wr-seg--small' + (!endlessOn && setup.durationSec === secs ? ' is-on' : ''), `${secs / 60} min`, () => {
+          if (endlessOn) return;   // the clock is off; presets don't apply
           setup.durationSec = secs;
           lengthTouched = true;
           refreshChrome(view());
         }, lenRow);
+        if (endlessOn) chip.classList.add('is-locked');
       }
-      tip(lenRow, 'four chambers, always in order. each runs about a quarter of the descent and ends in a boon.');
+      // The Bottomless Fall: an ∞ toggle rides beside the presets once unlocked.
+      if (ownsEndless()) {
+        const eChip = btn('wr-seg wr-seg--small' + (endlessOn ? ' is-on' : ''), '∞ endless', () => {
+          setup.endless = !setup.endless;
+          lengthTouched = true;
+          refreshChrome(view());
+        }, lenRow);
+        tip(eChip, 'no clock. the regions loop and deepen and the boons keep coming — you rise only when you hold ESC to wake.');
+      }
+      // The Hourglass: a free 2min..2h dial under the presets (hidden while endless owns the fall).
+      if (ownsCustomDur() && !endlessOn) {
+        const dialRow = el('wr-dial wr-pills--center', chrome.fall);
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.className = 'wr-dial-range';
+        slider.min = String(DUR_MIN); slider.max = String(DUR_MAX); slider.step = '30';
+        slider.value = String(Math.max(DUR_MIN, Math.min(DUR_MAX, setup.durationSec | 0)));
+        dialRow.appendChild(slider);
+        // An editable readout: type "mm:ss" or a plain minute count to set any length by hand.
+        const durInput = document.createElement('input');
+        durInput.type = 'text';
+        durInput.className = 'wr-dial-input';
+        durInput.value = fmtDur(setup.durationSec);
+        durInput.setAttribute('aria-label', 'fall length — type mm:ss or minutes');
+        dialRow.appendChild(durInput);
+        // Commit a chosen length from either control, keeping the slider, readout and
+        // preset chips in step without a full rebuild (keeps the drag smooth).
+        const setDur = (val, src) => {
+          val = Math.max(DUR_MIN, Math.min(DUR_MAX, Math.round(val) || DUR_MIN));
+          setup.durationSec = val;
+          lengthTouched = true;
+          if (src !== 'slider') slider.value = String(val);
+          if (src !== 'input') durInput.value = fmtDur(val);
+          lenRow.querySelectorAll('.wr-seg--small').forEach((c) => {
+            c.classList.toggle('is-on', c.textContent === `${val / 60} min`);
+          });
+        };
+        slider.addEventListener('input', () => setDur(parseInt(slider.value, 10) || DUR_MIN, 'slider'));
+        // Parse on commit (Enter / blur); a junk value snaps the readout back to the current length.
+        durInput.addEventListener('change', () => {
+          const parsed = parseDurInput(durInput.value);
+          setDur(parsed == null ? setup.durationSec : parsed, 'input');
+        });
+        durInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); durInput.blur(); } });
+        tip(dialRow, 'the hourglass: set any fall from 2 minutes to 2 hours — drag it or type "mm:ss" / a minute count. the four chambers just stretch to fit.');
+      }
+      tip(lenRow, endlessOn
+        ? 'endless: no clock, no bottom. hold ESC to wake when you\'ve had enough.'
+        : 'four chambers, always in order. each runs about a quarter of the descent and ends in a boon.');
+      // 🎲 let her pick: rolls difficulty + length in one tap (only ever landing on choices
+      // you're allowed), shows what came up in the chips — but never drops you in on its own.
+      const rollRow = el('wr-pills wr-pills--center', chrome.fall);
+      const rollChip = btn('wr-seg wr-seg--roll', '🎲 surprise me', () => rollSetup(), rollRow);
+      tip(rollChip, 'let her choose: rolls your difficulty and length for you. nothing falls until you click the hole yourself.');
+
+      // #650 Run presets: reload a saved setup, or keep the current one under a name.
+      const presets = Array.isArray(v.runPresets) ? v.runPresets : [];
+      const presetRow = el('wr-pills wr-pills--center wr-presets', chrome.fall);
+      for (const p of presets) {
+        if (!p || typeof p.name !== 'string') continue;
+        const chip = btn('wr-seg wr-seg--small wr-preset', p.name, () => loadPreset(p), presetRow);
+        tip(chip, `load "${p.name}" — its difficulty, length and options (owned modes only).`);
+        const x = document.createElement('span');
+        x.className = 'wr-preset-x';
+        x.textContent = '✕';
+        x.title = `delete "${p.name}"`;
+        x.addEventListener('click', (e) => { e.stopPropagation(); deletePreset(p.name); });
+        chip.appendChild(x);
+      }
+      if (presets.length < MAX_PRESETS) {
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.className = 'wr-dial-input wr-preset-name';
+        nameInput.maxLength = 40;
+        nameInput.placeholder = 'name a preset';
+        nameInput.setAttribute('aria-label', 'name this run setup to save it as a preset');
+        presetRow.appendChild(nameInput);
+        const saveBtn = btn('wr-seg wr-seg--small wr-seg--save', '💾 save', () => {
+          const nm = nameInput.value.trim();
+          if (!nm) { nameInput.focus(); return; }
+          savePreset(nm);
+        }, presetRow);
+        nameInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); saveBtn.click(); }
+        });
+      }
+      tip(presetRow, presets.length
+        ? 'run presets: click one to reload it, ✕ to delete. loading only ever applies what you own.'
+        : 'run presets: save this difficulty + length + options under a name and reload it any time.');
     }
 
     // hint
@@ -1097,8 +1307,12 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
           cell.textContent = '?';
         } else {
           cell.classList.add('is-filled');
-          cell.textContent = c.glyph;
           cell.style.setProperty('--mt', c.tint);
+          // the real ingredient photo, glyph as fallback until/if it fails to load
+          const mi = document.createElement('img');
+          mi.className = 'wr-paper-cell-img'; mi.src = matArt(c.id); mi.alt = '';
+          mi.addEventListener('error', () => { mi.remove(); cell.textContent = c.glyph; });
+          cell.appendChild(mi);
         }
       }
       el('wr-paper-foot', page, made ? `${r.glyph} ${r.name.toLowerCase()} · made ✓` : 'unmade');
@@ -1160,52 +1374,161 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     if (boudoirTray && v.materialCount(boudoirTray) <= 0) boudoirTray = null;
 
     const card = el('wr-card wr-craft', body);
-    el('wr-card-sub', card, 'take an ingredient in hand, lay it on the table. draw the right picture and it becomes the thing.');
+    el('wr-card-sub', card, 'take an ingredient, then press-and-drag to lay a whole shape. right-click sweeps a cell off. draw the right picture and it becomes the thing.');
     const tray = el('wr-craft-tray', card);
     const grid = el('wr-craft-grid', card);
     const actions = el('wr-craft-actions', card);
 
     const remainOf = (id) => v.materialCount(id) - boudoirGrid.filter((c) => c === id).length;
 
-    function renderTray() {
+    // ---- Minecraft-grade worktable input (Part 4 QoL) ----------------------
+    // ONE cursor model, one material per cell (the pictogram matcher demands it):
+    //   • boudoirTray = what you carry "in hand" (persists across placements).
+    //   • left-click a cell holding a material  -> place it (hand keeps it, so you
+    //     can lay a whole shape); a DIFFERENT material already there swaps out to
+    //     the haul; the SAME material is a no-op.
+    //   • left-click a filled cell empty-handed -> pick it back UP into your hand
+    //     (that's the "remove, then click again to add" flow).
+    //   • PRESS-AND-DRAG across cells                    -> paint the held material
+    //     into every cell you cross (MC drag-distribute), stopping when the haul
+    //     runs dry. Drag straight off a tray slot to start painting from the rack.
+    //   • RIGHT-click / right-drag                       -> erase cells back to the
+    //     haul. "sweep the table" clears the whole grid at once.
+    // Elements are built ONCE (persistent) so mid-drag re-syncs update in place and
+    // never yank the cell out from under the pointer.
+    let paint = null;                    // { mode:'place'|'erase', mat } while a drag is live
+    const trayEls = new Map();           // material id -> { root, n }
+    const cellEls = new Array(9).fill(null);
+
+    /** Lay `mat` at cell i (swapping any different occupant back to the haul).
+     *  Returns true if the grid changed. */
+    function placeAt(i, mat) {
+      if (!mat) return false;
+      if (boudoirGrid[i] === mat) return false;      // already this one
+      if (remainOf(mat) <= 0) return false;          // haul has no spare
+      boudoirGrid[i] = mat;                          // any prior occupant frees up automatically
+      return true;
+    }
+    function eraseAt(i) {
+      if (boudoirGrid[i] == null) return false;
+      boudoirGrid[i] = null;
+      return true;
+    }
+    /** Pick a placed material off the table and INTO the hand. */
+    function pickAt(i) {
+      const cur = boudoirGrid[i];
+      if (cur == null) return false;
+      boudoirGrid[i] = null;
+      boudoirTray = cur;
+      return true;
+    }
+
+    function beginPaint(mode, mat) {
+      paint = { mode, mat };
+      // end the stroke wherever the button comes up — even off the grid
+      window.addEventListener('pointerup', endPaint, { once: true });
+      window.addEventListener('pointercancel', endPaint, { once: true });
+    }
+    function endPaint() { paint = null; }
+
+    function buildTray() {
       tray.innerHTML = '';
+      trayEls.clear();
       for (const m of MATERIALS) {
+        const t = document.createElement('button');
+        t.type = 'button';
+        t.className = 'wr-craft-mat';
+        t.appendChild(artIcon(matArt(m.id), m.glyph, '255,138,194', 34));
+        const n = el('wr-craft-mat-n', t, '×0');
+        tray.appendChild(t);
+        trayEls.set(m.id, { root: t, n });
+        t.addEventListener('pointerdown', (e) => {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          if (boudoirTray === m.id) { boudoirTray = null; sfx('ui_click', 0.25); syncCraft(); return; } // toggle out of hand
+          if (remainOf(m.id) <= 0) { sfx('ui_denied', 0.3); return; }
+          boudoirTray = m.id;
+          beginPaint('place', m.id);     // drag straight onto the table to fill
+          sfx('ui_click', 0.25);
+          syncCraft();
+        });
+      }
+    }
+
+    function buildGrid() {
+      grid.innerHTML = '';
+      grid.addEventListener('contextmenu', (e) => e.preventDefault());   // right-drag must not pop a menu
+      for (let i = 0; i < 9; i++) {
+        const cell = document.createElement('button');
+        cell.type = 'button';
+        cell.className = 'wr-craft-cell';
+        grid.appendChild(cell);
+        cellEls[i] = cell;
+        cell.addEventListener('pointerdown', (e) => {
+          if (e.button === 2) {                              // right = erase + begin erase-stroke
+            e.preventDefault();
+            beginPaint('erase', null);
+            if (eraseAt(i)) { sfx('ui_click', 0.22); syncCraft(); }
+            return;
+          }
+          if (e.button !== 0) return;
+          e.preventDefault();
+          if (boudoirTray) {                                 // holding -> place / swap, keep painting
+            const changed = placeAt(i, boudoirTray);
+            beginPaint('place', boudoirTray);
+            if (changed) { sfx('ui_click', 0.22); syncCraft(); }
+            else if (boudoirGrid[i] !== boudoirTray) sfx('ui_denied', 0.3);
+            return;
+          }
+          if (boudoirGrid[i] != null) {                      // empty-handed -> pick it up, keep painting
+            pickAt(i);
+            beginPaint('place', boudoirTray);
+            sfx('ui_click', 0.22);
+            syncCraft();
+          }
+        });
+        cell.addEventListener('pointerenter', () => {
+          if (!paint) return;
+          const changed = paint.mode === 'erase' ? eraseAt(i) : placeAt(i, paint.mat);
+          if (changed) { sfx('ui_click', 0.14); syncCraft(); }
+        });
+      }
+    }
+
+    function updateTray() {
+      for (const m of MATERIALS) {
+        const ref = trayEls.get(m.id);
+        if (!ref) continue;
         const remain = remainOf(m.id);
-        const t = btn('wr-craft-mat' + (boudoirTray === m.id ? ' is-held' : '') + (remain <= 0 ? ' is-out' : ''), '', () => {
-          boudoirTray = boudoirTray === m.id ? null : m.id;
-          renderTray();
-        }, tray);
-        el('wr-craft-mat-glyph', t, m.glyph);
-        el('wr-craft-mat-n', t, `×${remain}`);
-        tip(t, remain > 0
-          ? `${m.name} — ${boudoirTray === m.id ? 'in hand. click a cell to place it.' : 'click to take in hand'}`
+        ref.root.classList.toggle('is-held', boudoirTray === m.id);
+        ref.root.classList.toggle('is-out', remain <= 0);
+        ref.n.textContent = `×${remain}`;
+        tip(ref.root, remain > 0 || boudoirTray === m.id
+          ? `${m.name} — ${boudoirTray === m.id ? 'in hand. click or drag across the table.' : 'take it, then press-and-drag to lay a whole shape'}`
           : `no ${m.name.toLowerCase()} left to place`);
       }
     }
 
-    function renderGrid() {
-      grid.innerHTML = '';
-      for (let i = 0; i < 9; i++) {
-        const cur = boudoirGrid[i];
-        const cell = btn('wr-craft-cell' + (cur ? ' is-filled' : ''), '', () => {
-          if (boudoirGrid[i]) boudoirGrid[i] = null;                       // click filled = take it back
-          else if (boudoirTray && remainOf(boudoirTray) > 0) boudoirGrid[i] = boudoirTray;
-          else { sfx('ui_denied', 0.3); return; }
-          syncCraft();
-        }, grid);
-        if (cur) el('wr-craft-cell-glyph', cell, (MAT_BY_ID[cur] || {}).glyph || '❔');
-      }
+    function updateCell(i) {
+      const cell = cellEls[i];
+      const cur = boudoirGrid[i];
+      cell.classList.toggle('is-filled', !!cur);
+      cell.innerHTML = '';
+      if (cur) cell.appendChild(artIcon(matArt(cur), (MAT_BY_ID[cur] || {}).glyph || '❔', '255,138,194', 48));
+      tip(cell, cur ? 'left-click to lift it · right-click to sweep it off'
+        : (boudoirTray ? 'left-click (or drag) to lay it here' : ''));
     }
 
+    /** In-place refresh of the whole table — safe to call mid-drag. */
     function syncCraft() {
-      renderTray();
-      renderGrid();
+      updateTray();
+      for (let i = 0; i < 9; i++) updateCell(i);
       actions.innerHTML = '';
       grid.classList.remove('is-match');
       const filled = boudoirGrid.some(Boolean);
       const match = matchGrid(boudoirGrid);
       if (!filled) {
-        el('wr-craft-status', actions, 'place what you carry.');
+        el('wr-craft-status', actions, boudoirTray ? 'lay it on the table — press and drag to fill.' : 'take an ingredient, then draw.');
       } else if (!match) {
         el('wr-craft-status', actions, 'the picture means nothing. yet.');
       } else if (match.resultKind === 'permanent' && !match.repeatable && v.craftedCount(match.id) >= 1) {
@@ -1233,7 +1556,19 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
         }, actions);
         tip(b, again ? match.desc : 'the picture holds together. make it real.');
       }
+      // "sweep the table": return every placed ingredient to the haul at once
+      if (filled) {
+        const clr = btn('wr-craft-clear', 'sweep the table', () => {
+          boudoirGrid.fill(null);
+          sfx('ui_click', 0.3);
+          syncCraft();
+        }, actions);
+        tip(clr, 'return every placed ingredient to the haul');
+      }
     }
+
+    buildTray();
+    buildGrid();
 
     // discovered pictures: one chip each - click lays its pictogram on the table
     const found = RECIPES.filter((r) => v.discoveredRecipes.has(r.id));

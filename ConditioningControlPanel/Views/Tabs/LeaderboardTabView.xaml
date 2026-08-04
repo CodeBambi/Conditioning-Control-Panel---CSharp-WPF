@@ -4,351 +4,1038 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:tabs="clr-namespace:ConditioningControlPanel.Views.Tabs"
+             xmlns:sys="clr-namespace:System;assembly=mscorlib"
              mc:Ignorable="d"
-             d:DesignHeight="450" d:DesignWidth="800">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-    
-                <!-- Header with sort dropdown and refresh -->
-                <Border Grid.Row="0" Background="{DynamicResource TransparentPink20Brush}" CornerRadius="12,12,0,0" Padding="20,15">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-    
-                        <!-- Help button + left flavour text -->
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button x:Name="HelpBtnLeaderboard" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Tag="Leaderboard"/>
-                            <Border Background="#1888AACC" CornerRadius="8" Padding="12,8" Margin="10,0,0,0" BorderBrush="#3388AACC" BorderThickness="1">
+             FontFamily="Segoe UI"
+             TextOptions.TextFormattingMode="Ideal"
+             d:DesignHeight="600" d:DesignWidth="1240">
+
+    <!-- Converters/templates used from inside DataTemplates must live here, on the
+         UserControl, so the template can reach them (CLAUDE.md WPF gotcha #4).
+         BoolToVisibility itself comes from Resources/Theme/Converters.xaml, which is
+         merged at Application level and therefore reachable from templates too. -->
+    <UserControl.Resources>
+
+        <!-- ======================= shared board geometry =======================
+             The board is a single block rather than a full-bleed table. Everything
+             that has to stay column-aligned - header, podium, legend, roster,
+             sticky you-bar - hangs off this ONE width, and the leftover becomes
+             page margin. Change it here or the five blocks stop pixel-aligning.
+
+             The cap used to be 1120, which was tuned back when the roster dumped
+             every spare pixel into the Subject column. On a ~1440dip window that
+             left two dead bands ~160dip wide down either side of the page while
+             the board itself stayed narrow. The cap is now 1920: wide enough that
+             a normal 1080p/1440p-class window is filled edge to edge (the blocks
+             are HorizontalAlignment=Stretch, and Stretch degrades to Center only
+             once the cap actually bites), but still a cap, so an ultrawide gets a
+             readable board instead of a 3000px table with a name floating at the
+             far left of it. The extra width is NOT all handed to Subject - see the
+             column contract below.
+
+             Horizontal alignment contract for the four column-bearing blocks
+             (legend / roster rows / you-bar all measure from the SAME block edges):
+                 content left  = block left  + 14
+                 content right = block right - 31   (14 + 17px reserved scrollbar)
+             The roster reserves its scrollbar permanently (VerticalScrollBarVisibility
+             = Visible on the ListView) so the columns can't shift by 17px the moment
+             a filter makes the list short. Change one of these, change all of them.
+
+             Column contract (legend header / LbRowTemplate / sticky you-bar - all
+             three carry the SAME six definitions):
+                 0 rank         68        fixed
+                 1 subject      2*        min 130
+                 2 level        82        fixed
+                 3 xp          112        fixed
+                 4 achievements  *        min 268, max 420
+                 5 streak       90        fixed
+             Subject and Achievements share the slack 2:1 instead of Subject taking
+             all of it, so widening the board grows the achievement bar too rather
+             than opening a canyon between the name and the Level column. The 268
+             minimum means that at the old 1120 cap the arithmetic lands on exactly
+             the old layout (subject 455 / achievements 268), so nothing moves until
+             the board is actually wider than ~1200; the 420 maximum stops the bar
+             from turning into the widest thing on the page on an ultrawide. The
+             minimums also keep the narrow-window floor at the old 795dip, so no new
+             clipping is introduced when the window is dragged small. -->
+        <sys:Double x:Key="LbBlockWidth">1920</sys:Double>
+
+        <!-- ============================= chrome styles ============================= -->
+
+        <Style x:Key="LbIconButton" TargetType="Button">
+            <Setter Property="Width" Value="30"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Margin" Value="4,0,0,0"/>
+            <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource AccentTintedBgBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="8"
+                                BorderBrush="{DynamicResource TransparentPink20Brush}" BorderThickness="1">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentTintedBgHoverBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource TransparentPink40Brush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="LbTextButton" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="4,0,0,0"/>
+            <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource AccentTintedBgBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="8" Padding="11,6"
+                                BorderBrush="{DynamicResource TransparentPink20Brush}" BorderThickness="1">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentTintedBgHoverBrush}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource TransparentPink40Brush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Filter chips are RadioButtons so the active state is pure XAML (no code-behind
+             restyling to keep in sync with ApplyLeaderboardTheme). -->
+        <Style x:Key="LbFilterChip" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,0,5,0"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" CornerRadius="10" Padding="10,4"
+                                Background="{DynamicResource AccentTintedBgBrush}"
+                                BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource TransparentPink40Brush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Clickable column legend header (replaces GridViewColumnHeader.Click sorting) -->
+        <Style x:Key="LbLegendHeader" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Thin achievement progress bar -->
+        <Style x:Key="LbThinBar" TargetType="ProgressBar">
+            <Setter Property="Height" Value="4"/>
+            <Setter Property="Minimum" Value="0"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Grid>
+                            <Border Background="{TemplateBinding Background}" CornerRadius="2"/>
+                            <Border x:Name="PART_Track"/>
+                            <Border x:Name="PART_Indicator" HorizontalAlignment="Left" CornerRadius="2"
+                                    Background="{TemplateBinding Foreground}"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ============================= chip styles ============================= -->
+
+        <Style x:Key="LbChip" TargetType="Border">
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="5,0.5"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="LbChipText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="9.5"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- Level pill used by the podium cards -->
+        <Style x:Key="LbLevelPill" TargetType="Border">
+            <Setter Property="CornerRadius" Value="5"/>
+            <Setter Property="Padding" Value="7,1"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource TransparentPink40Brush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- ============================= roster row ============================= -->
+
+        <DataTemplate x:Key="LbRowTemplate">
+            <!-- Padding/Margin here are density-critical: they set the row pitch, and the
+                 pitch is what decides how many rows survive above the sticky you-bar. -->
+            <Border Background="Transparent" CornerRadius="9" Padding="10,3" Margin="4,0">
+                <Border.ToolTip>
+                    <StackPanel MaxWidth="300">
+                        <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" FontSize="13"
+                                   Foreground="{DynamicResource PinkBrush}" TextWrapping="Wrap"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <!-- LevelLabel, not label_level: on the All-Time board this number is
+                                 HighestLevelEver, so it is labelled "Peak" there. -->
+                            <TextBlock Text="{Binding LevelLabel}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                            <TextBlock Text=" " FontSize="11"/>
+                            <TextBlock Text="{Binding LevelColumnValue}" FontSize="11" FontWeight="SemiBold"
+                                       Typography.NumeralAlignment="Tabular"/>
+                            <TextBlock Text="   " FontSize="11"/>
+                            <TextBlock Text="{loc:Str label_xp}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                            <TextBlock Text=" " FontSize="11"/>
+                            <TextBlock Text="{Binding XpColumnDisplay}" FontSize="11" FontWeight="SemiBold"
+                                       Typography.NumeralAlignment="Tabular"/>
+                        </StackPanel>
+                        <!-- Trophy-case stat that used to own a permanently-blank column.
+                             Two gates, exactly as before: the viewer's trophy_case skill
+                             (ShowTrophyStats) and this subject's own HasTrophyCase flag. -->
+                        <StackPanel Orientation="Horizontal" Margin="0,3,0,0"
+                                    Visibility="{Binding ShowTrophyStats, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel Orientation="Horizontal"
+                                        Visibility="{Binding HasTrophyCase, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="{loc:Str section_best_session}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                                <TextBlock Text=" " FontSize="11"/>
+                                <TextBlock Text="{Binding LongestSessionDisplay}" FontSize="11" FontWeight="SemiBold"
+                                           Typography.NumeralAlignment="Tabular"/>
+                                <TextBlock Text=" " FontSize="11"/>
+                                <TextBlock Text="{loc:Str label_min}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                            </StackPanel>
+                        </StackPanel>
+                        <TextBlock Text="{loc:Str lb_tooltip_row}" FontSize="10.5" Margin="0,5,0,0" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextDimBrush}"/>
+                    </StackPanel>
+                </Border.ToolTip>
+
+                <Grid>
+                    <!-- KEEP IN SYNC with the legend header and the sticky you-bar below.
+                         See the column contract next to LbBlockWidth for why 1 and 4 are
+                         the two proportional columns. -->
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="68"/>
+                        <ColumnDefinition Width="2*" MinWidth="130"/>
+                        <ColumnDefinition Width="82"/>
+                        <ColumnDefinition Width="112"/>
+                        <ColumnDefinition Width="*" MinWidth="268" MaxWidth="420"/>
+                        <ColumnDefinition Width="90"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- rank + delta -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding DeltaText}" FontSize="9.5" FontWeight="Bold" Margin="0,0,5,0"
+                                   VerticalAlignment="Center" ToolTip="{loc:Str lb_tooltip_delta}"
+                                   Typography.NumeralAlignment="Tabular">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding DeltaState}" Value="up">
+                                            <Setter Property="Foreground" Value="{DynamicResource SuccessGreenBrush}"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding DeltaState}" Value="down">
+                                            <Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding DeltaState}" Value="new">
+                                            <Setter Property="Foreground" Value="{DynamicResource PinkSoftBrush}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock Text="{Binding Rank}" FontSize="16" FontWeight="Bold" VerticalAlignment="Center"
+                                   Typography.NumeralAlignment="Tabular" Foreground="{DynamicResource TextLightBrush}"/>
+                    </StackPanel>
+
+                    <!-- avatar + name + inline chips -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Grid Width="34" Height="34" Margin="0,0,10,0" VerticalAlignment="Center">
+                            <Grid.Style>
+                                <Style TargetType="Grid">
+                                    <Setter Property="Opacity" Value="0.72"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsOnline}" Value="True">
+                                            <Setter Property="Opacity" Value="1"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Grid.Style>
+                            <!-- Setter.Value can't take a Binding, and {loc:Str} IS a binding, so
+                                 the presence tooltip is two visibility-gated lines rather than a
+                                 DataTrigger that swaps ToolTip. -->
+                            <Grid.ToolTip>
                                 <StackPanel>
-                                    <TextBlock Text="{loc:Str label_leaderboard_tagline}" FontStyle="Italic" FontSize="15" FontWeight="Bold"
-                                               Foreground="#9988AACC"/>
-                                    <TextBlock Text="{loc:Str label_every_level_counts_every_quest_matters}" FontStyle="Italic" FontSize="13" FontWeight="Bold"
-                                               Foreground="#6688AACC" Margin="0,2,0,0"/>
+                                    <TextBlock Text="{loc:Str lb_tooltip_online}"
+                                               Visibility="{Binding IsOnline, Converter={StaticResource BoolToVisibility}}"/>
+                                    <TextBlock Text="{loc:Str lb_tooltip_offline}"
+                                               Visibility="{Binding IsOnline, Converter={StaticResource InverseBoolToVisibility}}"/>
                                 </StackPanel>
-                            </Border>
-                        </StackPanel>
-    
-                        <!-- Big LEADERBOARD title with stroke effect + mode toggle -->
-                        <StackPanel Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <Grid HorizontalAlignment="Center">
-                                <!-- Shadow/outline layer -->
-                                <TextBlock Text="LEADERBOARD" FontSize="38" FontWeight="ExtraBold" FontFamily="Segoe UI"
-                                           Foreground="#80000000" Margin="2,2,0,0"/>
-                                <!-- Main text -->
-                                <TextBlock Text="LEADERBOARD" FontSize="38" FontWeight="ExtraBold" FontFamily="Segoe UI"
-                                           Foreground="{DynamicResource PinkBrush}"/>
-                            </Grid>
-                            <!-- Monthly / All-Time toggle buttons -->
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
-                                <Button x:Name="BtnLeaderboardMonthly" x:FieldModifier="internal" Content="{loc:Str btn_monthly}" Padding="16,5" FontSize="12" FontWeight="SemiBold"
-                                        Background="{DynamicResource PinkBrush}" Foreground="White" Cursor="Hand" Click="BtnLeaderboardMode_Click" Tag="monthly">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border x:Name="MonthlyBorder" Background="{TemplateBinding Background}" CornerRadius="10,0,0,10" Padding="{TemplateBinding Padding}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="Opacity" Value="0.85"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                </Button>
-                                <Button x:Name="BtnLeaderboardAllTime" x:FieldModifier="internal" Content="{loc:Str btn_all_time}" Padding="16,5" FontSize="12" FontWeight="SemiBold"
-                                        Background="{DynamicResource AccentTintedBgBrush}" Foreground="{DynamicResource PinkBrush}" Cursor="Hand" Click="BtnLeaderboardMode_Click" Tag="all-time">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border x:Name="AllTimeBorder" Background="{TemplateBinding Background}" CornerRadius="0,10,10,0" Padding="{TemplateBinding Padding}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="Opacity" Value="0.85"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                </Button>
-                            </StackPanel>
-                        </StackPanel>
-    
-                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                <Border Background="#1888AACC" CornerRadius="8" Padding="12,8" Margin="0,0,12,0" BorderBrush="#3388AACC" BorderThickness="1" VerticalAlignment="Center">
-                                    <StackPanel>
-                                        <TextBlock x:Name="TxtLeaderboardSeason" x:FieldModifier="internal" Text="{loc:Str label_season_1_prove_your_devotion}"
-                                                   FontStyle="Italic" FontSize="15" FontWeight="Bold" Foreground="#9988AACC"/>
-                                        <TextBlock x:Name="TxtLeaderboardSubtitle" x:FieldModifier="internal" Text="{loc:Str label_resets_monthly_your_rank_is_everything}" FontStyle="Italic" FontSize="13" FontWeight="Bold"
-                                                   Foreground="#6688AACC" Margin="0,2,0,0"/>
-                                    </StackPanel>
+                            </Grid.ToolTip>
+                            <Ellipse Fill="{Binding AvatarBrush}" Margin="2"/>
+                            <TextBlock Text="{Binding Initials}" FontSize="12.5" FontWeight="Bold"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource DarkerBgBrush}"/>
+                            <!-- presence ring: replaces the old Online column -->
+                            <Ellipse StrokeThickness="2">
+                                <Ellipse.Style>
+                                    <Style TargetType="Ellipse">
+                                        <Setter Property="Stroke" Value="{DynamicResource PanelAccentHoverBrush}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsOnline}" Value="True">
+                                                <Setter Property="Stroke" Value="{DynamicResource PinkBrush}"/>
+                                                <Setter Property="Effect">
+                                                    <Setter.Value>
+                                                        <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="10" ShadowDepth="0" Opacity="0.9"/>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Ellipse.Style>
+                            </Ellipse>
+                        </Grid>
+
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{Binding DisplayName}" FontSize="13.5" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextLightBrush}"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,1,0,0">
+                                <!-- OG -->
+                                <Border Style="{StaticResource LbChip}" Background="#1AFFD700" BorderBrush="#80FFD700"
+                                        ToolTip="{loc:Str lb_tooltip_og}"
+                                        Visibility="{Binding IsSeason0Og, Converter={StaticResource BoolToVisibility}}">
+                                    <TextBlock Style="{StaticResource LbChipText}" Text="{loc:Str label_og}" Foreground="#FFFFD700">
+                                        <TextBlock.Effect>
+                                            <DropShadowEffect Color="#FFFFD700" BlurRadius="9" ShadowDepth="0" Opacity="0.75"/>
+                                        </TextBlock.Effect>
+                                    </TextBlock>
                                 </Border>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock x:Name="TxtLeaderboardStatus" x:FieldModifier="internal" Foreground="{DynamicResource PinkBrush}"
-                                               HorizontalAlignment="Center" Margin="0,0,0,4" FontSize="13"/>
-                                    <Button x:Name="BtnRefreshLeaderboard" x:FieldModifier="internal" Content="{loc:Str btn_refresh}" Padding="15,8"
-                                            Background="{DynamicResource PinkBrush}" Foreground="White" FontSize="13" FontWeight="SemiBold"
-                                            Click="BtnRefreshLeaderboard_Click" Cursor="Hand">
-                                        <Button.Template>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
-                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource PinkButtonHoveredBrush}"/>
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                        </Button.Template>
-                                    </Button>
-                                    <!-- Season Recap re-view entry: regenerates the most recent
-                                         season's card from its persisted snapshot. Hidden until a
-                                         snapshot exists (shown by code-behind). -->
-                                    <Button x:Name="BtnViewSeasonRecap" x:FieldModifier="internal" Content="{loc:Str recap_btn_view}" Padding="15,8" Margin="0,6,0,0"
-                                            Background="{DynamicResource AccentTintedBgBrush}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="SemiBold"
-                                            Click="BtnViewSeasonRecap_Click" Cursor="Hand" Visibility="Collapsed">
-                                        <Button.Template>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
-                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                        </Button.Template>
-                                    </Button>
-                                </StackPanel>
-                            </StackPanel>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-    
-                <!-- Leaderboard list - double-click to view profile -->
-                <ListView x:Name="LstLeaderboard" x:FieldModifier="internal" Grid.Row="1" Background="Transparent"
-                          BorderThickness="0" Margin="10,5,10,10" Foreground="{DynamicResource PinkBrush}"
-                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                          VirtualizingStackPanel.IsVirtualizing="True"
-                          VirtualizingStackPanel.VirtualizationMode="Recycling"
-                          ScrollViewer.IsDeferredScrollingEnabled="True"
-                          FontSize="18" FontFamily="Segoe UI" FontWeight="ExtraBold"
-                          GridViewColumnHeader.Click="LeaderboardColumnHeader_Click"
-                          MouseDoubleClick="LstLeaderboard_MouseDoubleClick">
-                    <ListView.Resources>
-                        <!-- Header style for dark theme - clickable for sorting -->
-                        <Style TargetType="GridViewColumnHeader">
-                            <Setter Property="Background" Value="{DynamicResource AccentTintedBgBrush}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
-                            <Setter Property="FontWeight" Value="ExtraBold"/>
-                            <Setter Property="FontSize" Value="18"/>
-                            <Setter Property="FontFamily" Value="Segoe Print"/>
-                            <Setter Property="Padding" Value="12,10"/>
-                            <Setter Property="BorderThickness" Value="0,0,1,2"/>
-                            <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-                            <Setter Property="Cursor" Value="Hand"/>
-                            <Style.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="{DynamicResource AccentTintedBgHoverBrush}"/>
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ListView.Resources>
-                    <ListView.View>
-                        <GridView>
-                            <GridViewColumn Header="{loc:Str section_rank}" Width="80" DisplayMemberBinding="{Binding Rank}"/>
-                            <!-- OG Column - Glowing pink neon for Season 0 OGs -->
-                            <GridViewColumn Header="" Width="50">
-                                <GridViewColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{loc:Str label_og}" FontWeight="ExtraBold" FontSize="16"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                   FontFamily="Segoe UI Black">
+                                <!-- Patreon tier -->
+                                <Border Visibility="{Binding ShowPatreonChip, Converter={StaticResource BoolToVisibility}}">
+                                    <Border.Style>
+                                        <Style TargetType="Border" BasedOn="{StaticResource LbChip}">
+                                            <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                                            <Setter Property="BorderBrush" Value="{DynamicResource TransparentPink40Brush}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding EffectivePatreonTier}" Value="2">
+                                                    <Setter Property="Background" Value="{DynamicResource NeonPurpleTransparent20Brush}"/>
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource NeonPurpleBrush}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding EffectivePatreonTier}" Value="3">
+                                                    <Setter Property="Background" Value="#1AFFD700"/>
+                                                    <Setter Property="BorderBrush" Value="#80FFD700"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{loc:Str section_patreon}">
                                             <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource LbChipText}">
+                                                    <Setter Property="Foreground" Value="{DynamicResource PinkSoftBrush}"/>
                                                     <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsSeason0Og}" Value="True">
-                                                            <Setter Property="Visibility" Value="Visible"/>
-                                                            <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
-                                                            <Setter Property="Effect">
-                                                                <Setter.Value>
-                                                                    <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="15" ShadowDepth="0" Opacity="1"/>
-                                                                </Setter.Value>
-                                                            </Setter>
+                                                        <DataTrigger Binding="{Binding EffectivePatreonTier}" Value="2">
+                                                            <Setter Property="Foreground" Value="{DynamicResource NeonPurpleSoftBrush}"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding EffectivePatreonTier}" Value="3">
+                                                            <Setter Property="Foreground" Value="#FFFFD700"/>
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
                                             </TextBlock.Style>
                                         </TextBlock>
-                                    </DataTemplate>
-                                </GridViewColumn.CellTemplate>
-                            </GridViewColumn>
-                            <GridViewColumn Header="{loc:Str section_name}" Width="280" DisplayMemberBinding="{Binding DisplayNameWithFlair}"/>
-                            <GridViewColumn Header="{loc:Str section_patreon}" Width="120">
-                                <GridViewColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-                                            <!-- Tier 1 Badge (also fallback for IsPatreon with tier 0) -->
-                                            <Image Source="/Resources/Patreon tier1.png" Height="42" RenderOptions.BitmapScalingMode="HighQuality">
-                                                <Image.Style>
-                                                    <Style TargetType="Image">
-                                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding PatreonTier}" Value="1">
-                                                                <Setter Property="Visibility" Value="Visible"/>
-                                                            </DataTrigger>
-                                                            <!-- Fallback: show tier1 for patrons with tier 0 -->
-                                                            <MultiDataTrigger>
-                                                                <MultiDataTrigger.Conditions>
-                                                                    <Condition Binding="{Binding IsPatreon}" Value="True"/>
-                                                                    <Condition Binding="{Binding PatreonTier}" Value="0"/>
-                                                                </MultiDataTrigger.Conditions>
-                                                                <Setter Property="Visibility" Value="Visible"/>
-                                                            </MultiDataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Image.Style>
-                                            </Image>
-                                            <!-- Tier 2 Badge -->
-                                            <Image Source="/Resources/Patreon tier2.png" Height="42" RenderOptions.BitmapScalingMode="HighQuality">
-                                                <Image.Style>
-                                                    <Style TargetType="Image">
-                                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding PatreonTier}" Value="2">
-                                                                <Setter Property="Visibility" Value="Visible"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Image.Style>
-                                            </Image>
-                                            <!-- Tier 3 Badge -->
-                                            <Image Source="/Resources/Patreon tier3.png" Height="42" RenderOptions.BitmapScalingMode="HighQuality">
-                                                <Image.Style>
-                                                    <Style TargetType="Image">
-                                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding PatreonTier}" Value="3">
-                                                                <Setter Property="Visibility" Value="Visible"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Image.Style>
-                                            </Image>
-                                        </Grid>
-                                    </DataTemplate>
-                                </GridViewColumn.CellTemplate>
-                            </GridViewColumn>
-                            <GridViewColumn Header="{loc:Str section_disc}" Width="60">
-                                <GridViewColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <Button Click="BtnLeaderboardDiscord_Click" Cursor="Hand"
-                                                Tag="{Binding DiscordId}" Background="Transparent" BorderThickness="0"
-                                                ToolTip="{loc:Str tooltip_send_discord_dm}">
-                                            <Button.Style>
-                                                <Style TargetType="Button">
-                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                        <TextBlock Text=" " Style="{StaticResource LbChipText}"/>
+                                        <TextBlock Text="{Binding PatreonTierRoman}">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource LbChipText}">
+                                                    <Setter Property="Foreground" Value="{DynamicResource PinkSoftBrush}"/>
                                                     <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding HasDiscord}" Value="True">
-                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        <DataTrigger Binding="{Binding EffectivePatreonTier}" Value="2">
+                                                            <Setter Property="Foreground" Value="{DynamicResource NeonPurpleSoftBrush}"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding EffectivePatreonTier}" Value="3">
+                                                            <Setter Property="Foreground" Value="#FFFFD700"/>
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
-                                            </Button.Style>
-                                            <Image Source="/Resources/discord.png" Height="36" VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality"/>
-                                        </Button>
-                                    </DataTemplate>
-                                </GridViewColumn.CellTemplate>
-                            </GridViewColumn>
-                            <GridViewColumn Header="{loc:Str label_level}" Width="100" DisplayMemberBinding="{Binding Level}"/>
-                            <GridViewColumn Header="{loc:Str label_xp}" Width="100" DisplayMemberBinding="{Binding XpDisplay}"/>
-                            <GridViewColumn Header="{loc:Str tab_achievements}" Width="130" DisplayMemberBinding="{Binding AchievementsDisplay}"/>
-                            <!-- Seasons column (shown only in All-Time mode) -->
-                            <GridViewColumn Header="{loc:Str section_seasons}" Width="0" DisplayMemberBinding="{Binding SeasonsCompleted}"/>
-                            <!-- Trophy Case Columns (shown only when skill unlocked) -->
-                            <GridViewColumn x:Name="ColLongestSession" Header="{loc:Str section_best_session}" Width="110">
-                                <GridViewColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Visibility="{Binding HasTrophyCase, Converter={StaticResource BoolToVisibility}}">
-                                            <TextBlock Text="{Binding LongestSessionDisplay}" HorizontalAlignment="Center"/>
-                                            <TextBlock Text="{loc:Str label_min}" FontSize="11" Foreground="#B0B0B0" HorizontalAlignment="Center" Margin="0,-3,0,0"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </GridViewColumn.CellTemplate>
-                            </GridViewColumn>
-                            <GridViewColumn x:Name="ColHighestStreak" Header="{loc:Str section_best_streak}" Width="100">
-                                <GridViewColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Visibility="{Binding HasTrophyCase, Converter={StaticResource BoolToVisibility}}">
-                                            <TextBlock Text="{Binding HighestStreakDisplay}" HorizontalAlignment="Center"/>
-                                            <TextBlock Text="{loc:Str label_days}" FontSize="11" Foreground="#B0B0B0" HorizontalAlignment="Center" Margin="0,-3,0,0"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </GridViewColumn.CellTemplate>
-                            </GridViewColumn>
-                            <GridViewColumn Header="{loc:Str label_online}" Width="80">
-                                <GridViewColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <Ellipse Width="18" Height="18" HorizontalAlignment="Center">
-                                            <Ellipse.Style>
-                                                <Style TargetType="Ellipse">
-                                                    <Setter Property="Fill" Value="#353545"/>
-                                                    <Setter Property="Stroke" Value="#454560"/>
-                                                    <Setter Property="StrokeThickness" Value="2"/>
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsOnline}" Value="True">
-                                                            <Setter Property="Fill" Value="{DynamicResource PinkBrush}"/>
-                                                            <Setter Property="Stroke" Value="{DynamicResource PinkButtonHoveredBrush}"/>
-                                                            <Setter Property="Effect">
-                                                                <Setter.Value>
-                                                                    <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="12" ShadowDepth="0"/>
-                                                                </Setter.Value>
-                                                            </Setter>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Ellipse.Style>
-                                        </Ellipse>
-                                    </DataTemplate>
-                                </GridViewColumn.CellTemplate>
-                            </GridViewColumn>
-                        </GridView>
-                    </ListView.View>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Border>
+                                <!-- Seasons (All-Time board only; replaces the old Seasons column) -->
+                                <Border Style="{StaticResource LbChip}"
+                                        Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                        BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                        Visibility="{Binding ShowSeasonsChip, Converter={StaticResource BoolToVisibility}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource LbChipText}" Text="{Binding SeasonsChipText}"
+                                                   Typography.NumeralAlignment="Tabular"
+                                                   Foreground="{DynamicResource DeeperAccentSoftBrush}"/>
+                                        <TextBlock Style="{StaticResource LbChipText}" Text=" "/>
+                                        <TextBlock Style="{StaticResource LbChipText}" Text="{loc:Str section_seasons}"
+                                                   Foreground="{DynamicResource DeeperAccentSoftBrush}"/>
+                                    </StackPanel>
+                                </Border>
+                                <!-- Discord (keeps the old column's click + tooltip) -->
+                                <Button Click="BtnLeaderboardDiscord_Click" Cursor="Hand" Tag="{Binding DiscordId}"
+                                        ToolTip="{loc:Str tooltip_send_discord_dm}"
+                                        Visibility="{Binding HasDiscord, Converter={StaticResource BoolToVisibility}}">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="Bd" CornerRadius="4" Padding="5,1" Margin="0,0,4,0" BorderThickness="1"
+                                                    Background="#1A7788FF" BorderBrush="#667788FF">
+                                                <ContentPresenter/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#337788FF"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                    <TextBlock Style="{StaticResource LbChipText}" Text="{loc:Str section_disc}" Foreground="#FF9FAFFF"/>
+                                </Button>
+                                <!-- nothing to show -->
+                                <TextBlock Style="{StaticResource LbChipText}" Text="{loc:Str lb_no_badges}"
+                                           Foreground="{DynamicResource TextDimBrush}"
+                                           Visibility="{Binding HasNoBadges, Converter={StaticResource BoolToVisibility}}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- level (labelled "Peak" on the All-Time board - see HdrLevel) -->
+                    <TextBlock Grid.Column="2" Text="{Binding LevelColumnValue}" FontSize="14" FontWeight="Bold"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Typography.NumeralAlignment="Tabular" Foreground="{DynamicResource PinkBrush}"/>
+
+                    <!-- xp -->
+                    <TextBlock Grid.Column="3" Text="{Binding XpColumnDisplay}" FontSize="13.5" FontWeight="SemiBold"
+                               HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
+                               Typography.NumeralAlignment="Tabular" Foreground="{DynamicResource TextLightBrush}"/>
+
+                    <!-- achievements -->
+                    <StackPanel Grid.Column="4" VerticalAlignment="Center" Margin="14,0,10,0">
+                        <TextBlock Text="{Binding AchievementsDisplay}" FontSize="11" FontWeight="SemiBold"
+                                   Typography.NumeralAlignment="Tabular" Foreground="{DynamicResource TextMutedBrush}"/>
+                        <ProgressBar Style="{StaticResource LbThinBar}" Margin="0,4,0,0"
+                                     Maximum="{Binding AchievementsTotal}" Value="{Binding AchievementsCount, Mode=OneWay}"/>
+                    </StackPanel>
+
+                    <!-- streak (trophy-case gated, same two gates as the old column) -->
+                    <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right"
+                                Visibility="{Binding ShowTrophyStats, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel Orientation="Horizontal"
+                                    Visibility="{Binding HasTrophyCase, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{Binding HighestStreakDisplay}" FontSize="12.5" FontWeight="Bold"
+                                       Typography.NumeralAlignment="Tabular" Foreground="{DynamicResource PinkSoftBrush}"/>
+                            <TextBlock Text=" " FontSize="12.5"/>
+                            <TextBlock Text="{loc:Str label_days}" FontSize="10.5" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextMutedBrush}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!-- ============================= tier band ============================= -->
+
+        <DataTemplate x:Key="LbBandTemplate">
+            <Grid Margin="18,4,18,2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Rectangle Grid.Column="0" Height="1" VerticalAlignment="Center">
+                    <Rectangle.Fill>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                            <GradientStop Color="#00000000" Offset="0"/>
+                            <GradientStop Color="{DynamicResource PanelAccentHover}" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Rectangle.Fill>
+                </Rectangle>
+                <StackPanel Grid.Column="1" Margin="14,0">
+                    <TextBlock Text="{Binding HeaderText}" FontSize="10.5" FontWeight="Bold"
+                               HorizontalAlignment="Center" Foreground="{DynamicResource PinkSoftBrush}"/>
+                    <TextBlock Text="{Binding Subtitle}" FontSize="9.5" HorizontalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextDimBrush}"/>
+                </StackPanel>
+                <Rectangle Grid.Column="2" Height="1" VerticalAlignment="Center">
+                    <Rectangle.Fill>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                            <GradientStop Color="{DynamicResource PanelAccentHover}" Offset="0"/>
+                            <GradientStop Color="#00000000" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Rectangle.Fill>
+                </Rectangle>
+            </Grid>
+        </DataTemplate>
+
+        <tabs:LeaderboardItemTemplateSelector x:Key="LbItemSelector"
+                                              RowTemplate="{StaticResource LbRowTemplate}"
+                                              BandTemplate="{StaticResource LbBandTemplate}"/>
+
+        <!-- ============================= podium card ============================= -->
+
+        <!-- The podium is a BADGE, not a hero banner. The stacked-portrait version cost
+             ~220px to show three names and pushed the roster down to four visible rows,
+             which is worse than the design it replaced. It is laid out on its side now:
+             rank / avatar / (name, level+xp, chips), ~80px per card. #1 still reads as
+             the winner through the gold border, the star, the drop shadow, and a bigger
+             avatar + name + card, just without owning a third of the page. -->
+        <DataTemplate x:Key="LbPodiumTemplate">
+            <Border x:Name="Card" Margin="6,0" Padding="12,6,12,6" CornerRadius="12" VerticalAlignment="Bottom"
+                    Background="{DynamicResource ElevatedSurfaceBrush}"
+                    BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <TextBlock Text="{Binding Rank}" FontSize="17" FontWeight="Bold" Margin="0,0,9,0"
+                               VerticalAlignment="Center" Typography.NumeralAlignment="Tabular"
+                               Foreground="{DynamicResource TextMutedBrush}"/>
+
+                    <Grid x:Name="AvWrap" Width="40" Height="40" Margin="0,0,10,0" VerticalAlignment="Center">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Setter Property="Opacity" Value="0.72"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsOnline}" Value="True">
+                                        <Setter Property="Opacity" Value="1"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
+                        <Grid.ToolTip>
+                            <StackPanel>
+                                <TextBlock Text="{loc:Str lb_tooltip_online}"
+                                           Visibility="{Binding IsOnline, Converter={StaticResource BoolToVisibility}}"/>
+                                <TextBlock Text="{loc:Str lb_tooltip_offline}"
+                                           Visibility="{Binding IsOnline, Converter={StaticResource InverseBoolToVisibility}}"/>
+                            </StackPanel>
+                        </Grid.ToolTip>
+                        <Ellipse Fill="{Binding AvatarBrush}" Margin="2.5"/>
+                        <TextBlock x:Name="AvInitials" Text="{Binding Initials}" FontSize="15" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource DarkerBgBrush}"/>
+                        <Ellipse StrokeThickness="2.5">
+                            <Ellipse.Style>
+                                <Style TargetType="Ellipse">
+                                    <Setter Property="Stroke" Value="{DynamicResource PanelAccentHoverBrush}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsOnline}" Value="True">
+                                            <Setter Property="Stroke" Value="{DynamicResource PinkBrush}"/>
+                                            <Setter Property="Effect">
+                                                <Setter.Value>
+                                                    <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="16" ShadowDepth="0" Opacity="0.9"/>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Ellipse.Style>
+                        </Ellipse>
+                    </Grid>
+
+                    <StackPanel VerticalAlignment="Center">
+
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="Crown" Text="&#x2605;" FontSize="13" VerticalAlignment="Center"
+                                   Margin="0,0,5,0" Visibility="Collapsed" Foreground="#FFFFD700">
+                            <TextBlock.Effect>
+                                <DropShadowEffect Color="#FFFFD700" BlurRadius="12" ShadowDepth="0" Opacity="0.85"/>
+                            </TextBlock.Effect>
+                        </TextBlock>
+                        <TextBlock x:Name="PName" Text="{Binding DisplayName}" FontSize="14" FontWeight="Bold"
+                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource TextLightBrush}"/>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                        <Border Style="{StaticResource LbLevelPill}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding LevelLabel}" FontSize="10.5" FontWeight="Bold"
+                                           Foreground="{DynamicResource PinkBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Text=" " FontSize="11"/>
+                                <TextBlock Text="{Binding LevelColumnValue}" FontSize="12" FontWeight="Bold"
+                                           Typography.NumeralAlignment="Tabular"
+                                           Foreground="{DynamicResource PinkBrush}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="{Binding XpColumnDisplay}" FontSize="12" FontWeight="Bold" Margin="8,0,3,0"
+                                   VerticalAlignment="Center" Typography.NumeralAlignment="Tabular"
+                                   Foreground="{DynamicResource TextLightBrush}"/>
+                        <TextBlock Text="{loc:Str label_xp}" FontSize="11" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextMutedBrush}"/>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,3,-4,0">
+                        <Border Style="{StaticResource LbChip}" Background="#1AFFD700" BorderBrush="#80FFD700"
+                                ToolTip="{loc:Str lb_tooltip_og}"
+                                Visibility="{Binding IsSeason0Og, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Style="{StaticResource LbChipText}" Text="{loc:Str label_og}" Foreground="#FFFFD700">
+                                <TextBlock.Effect>
+                                    <DropShadowEffect Color="#FFFFD700" BlurRadius="9" ShadowDepth="0" Opacity="0.75"/>
+                                </TextBlock.Effect>
+                            </TextBlock>
+                        </Border>
+                        <Border Style="{StaticResource LbChip}" Background="{DynamicResource TransparentPink20Brush}"
+                                BorderBrush="{DynamicResource TransparentPink40Brush}"
+                                Visibility="{Binding ShowPatreonChip, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource LbChipText}" Text="{loc:Str section_patreon}"
+                                           Foreground="{DynamicResource PinkSoftBrush}"/>
+                                <TextBlock Style="{StaticResource LbChipText}" Text=" "/>
+                                <TextBlock Style="{StaticResource LbChipText}" Text="{Binding PatreonTierRoman}"
+                                           Foreground="{DynamicResource PinkSoftBrush}"/>
+                            </StackPanel>
+                        </Border>
+                        <Button Click="BtnLeaderboardDiscord_Click" Cursor="Hand" Tag="{Binding DiscordId}"
+                                ToolTip="{loc:Str tooltip_send_discord_dm}"
+                                Visibility="{Binding HasDiscord, Converter={StaticResource BoolToVisibility}}">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="Bd" CornerRadius="4" Padding="5,1" Margin="0,0,4,0" BorderThickness="1"
+                                            Background="#1A7788FF" BorderBrush="#667788FF">
+                                        <ContentPresenter/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="#337788FF"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                            <TextBlock Style="{StaticResource LbChipText}" Text="{loc:Str section_disc}" Foreground="#FF9FAFFF"/>
+                        </Button>
+                        <TextBlock Style="{StaticResource LbChipText}" Text="{loc:Str lb_no_badges}"
+                                   Foreground="{DynamicResource TextDimBrush}"
+                                   Visibility="{Binding HasNoBadges, Converter={StaticResource BoolToVisibility}}"/>
+                    </StackPanel>
+
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Rank}" Value="1">
+                    <Setter TargetName="Card" Property="BorderBrush" Value="#8CFFD700"/>
+                    <Setter TargetName="Card" Property="Padding" Value="12,9,12,10"/>
+                    <Setter TargetName="Card" Property="Effect">
+                        <Setter.Value>
+                            <DropShadowEffect Color="#FFFFD700" BlurRadius="26" ShadowDepth="0" Opacity="0.28"/>
+                        </Setter.Value>
+                    </Setter>
+                    <Setter TargetName="Crown" Property="Visibility" Value="Visible"/>
+                    <Setter TargetName="AvWrap" Property="Width" Value="50"/>
+                    <Setter TargetName="AvWrap" Property="Height" Value="50"/>
+                    <Setter TargetName="AvInitials" Property="FontSize" Value="20"/>
+                    <Setter TargetName="PName" Property="FontSize" Value="16"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Rank}" Value="2">
+                    <Setter TargetName="Card" Property="BorderBrush" Value="#59DCE1FF"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Rank}" Value="3">
+                    <Setter TargetName="Card" Property="BorderBrush" Value="#66E2965A"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- =========================== ROW 0 - header =========================== -->
+        <!-- The tinted band stays full-bleed; its CONTENT is constrained to the shared
+             block so the toolbar's left edge lines up with the roster's rank column. -->
+        <Border Grid.Row="0" Background="{DynamicResource TransparentPink20Brush}" CornerRadius="12,12,0,0" Padding="0,5">
+          <Border MaxWidth="{StaticResource LbBlockWidth}" HorizontalAlignment="Stretch" Padding="14,0" Background="Transparent">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- season name + live countdown -->
+                <StackPanel Grid.Column="0" VerticalAlignment="Center" MinWidth="180" Margin="0,0,14,0">
+                    <TextBlock x:Name="TxtLeaderboardSeason" x:FieldModifier="internal"
+                               FontSize="13" FontWeight="Bold"
+                               TextTrimming="CharacterEllipsis" Foreground="{DynamicResource PinkBrush}"/>
+                    <TextBlock x:Name="TxtLeaderboardSubtitle" x:FieldModifier="internal"
+                               Text="" FontSize="11.5" Margin="0,2,0,0"
+                               Typography.NumeralAlignment="Tabular"
+                               TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextMutedBrush}"/>
+                </StackPanel>
+
+                <!-- segmented Monthly / All-Time pill -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="BtnLeaderboardMonthly" x:FieldModifier="internal" Content="{loc:Str btn_monthly}"
+                            Padding="15,5" FontSize="12" FontWeight="SemiBold"
+                            Background="{DynamicResource PinkBrush}" Foreground="White" Cursor="Hand"
+                            Click="BtnLeaderboardMode_Click" Tag="monthly">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="MonthlyBorder" Background="{TemplateBinding Background}" CornerRadius="10,0,0,10"
+                                        Padding="{TemplateBinding Padding}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Opacity" Value="0.85"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                    <Button x:Name="BtnLeaderboardAllTime" x:FieldModifier="internal" Content="{loc:Str btn_all_time}"
+                            Padding="15,5" FontSize="12" FontWeight="SemiBold"
+                            Background="{DynamicResource AccentTintedBgBrush}" Foreground="{DynamicResource PinkBrush}" Cursor="Hand"
+                            Click="BtnLeaderboardMode_Click" Tag="all-time">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="AllTimeBorder" Background="{TemplateBinding Background}" CornerRadius="0,10,10,0"
+                                        Padding="{TemplateBinding Padding}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Opacity" Value="0.85"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </StackPanel>
+
+                <!-- spacer is column 2 -->
+
+                <!-- search -->
+                <Border Grid.Column="3" CornerRadius="8" Padding="9,5" MinWidth="170" VerticalAlignment="Center" Margin="0,0,10,0"
+                        Background="{DynamicResource AccentTintedBgBrush}" BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                    <Grid>
+                        <TextBlock Text="{loc:Str lb_search_placeholder}" FontSize="12" IsHitTestVisible="False"
+                                   VerticalAlignment="Center" Foreground="{DynamicResource TextDimBrush}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text, ElementName=TxtLeaderboardSearch}" Value="">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBox x:Name="TxtLeaderboardSearch" x:FieldModifier="internal" FontSize="12"
+                                 Background="Transparent" BorderThickness="0" Padding="0" CaretBrush="{DynamicResource PinkBrush}"
+                                 Foreground="{DynamicResource TextLightBrush}" VerticalContentAlignment="Center"
+                                 TextChanged="LeaderboardSearch_TextChanged"/>
+                    </Grid>
+                </Border>
+
+                <!-- filter chips -->
+                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <RadioButton x:Name="ChipFilterAll" x:FieldModifier="internal" Style="{StaticResource LbFilterChip}"
+                                 GroupName="LbFilter" Tag="all" IsChecked="True" Content="{loc:Str lb_filter_all}"
+                                 Checked="LeaderboardFilter_Checked"/>
+                    <RadioButton x:Name="ChipFilterOnline" x:FieldModifier="internal" Style="{StaticResource LbFilterChip}"
+                                 GroupName="LbFilter" Tag="online" Content="{loc:Str lb_filter_online}"
+                                 Checked="LeaderboardFilter_Checked"/>
+                    <RadioButton x:Name="ChipFilterPatrons" x:FieldModifier="internal" Style="{StaticResource LbFilterChip}"
+                                 GroupName="LbFilter" Tag="patrons" Content="{loc:Str lb_filter_patrons}"
+                                 Checked="LeaderboardFilter_Checked"/>
+                    <RadioButton x:Name="ChipFilterOg" x:FieldModifier="internal" Style="{StaticResource LbFilterChip}"
+                                 GroupName="LbFilter" Tag="og" Content="{loc:Str lb_filter_og}"
+                                 Checked="LeaderboardFilter_Checked"/>
+                </StackPanel>
+
+                <!-- online / total + your rank -->
+                <StackPanel Grid.Column="5" VerticalAlignment="Center" Margin="0,0,6,0">
+                    <TextBlock x:Name="TxtLeaderboardStatus" x:FieldModifier="internal" FontSize="12"
+                               HorizontalAlignment="Right" Typography.NumeralAlignment="Tabular"
+                               Foreground="{DynamicResource TextMutedBrush}"/>
+                    <TextBlock x:Name="TxtYourRank" x:FieldModifier="internal" FontSize="11.5" FontWeight="SemiBold"
+                               HorizontalAlignment="Right" Margin="0,2,0,0" Visibility="Collapsed"
+                               Typography.NumeralAlignment="Tabular" Foreground="{DynamicResource PinkBrush}"/>
+                </StackPanel>
+
+                <!-- actions -->
+                <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="BtnRefreshLeaderboard" x:FieldModifier="internal" Style="{StaticResource LbIconButton}"
+                            Content="&#x21BB;" ToolTip="{loc:Str btn_refresh}" Click="BtnRefreshLeaderboard_Click"/>
+                    <Button x:Name="BtnJumpToMe" x:FieldModifier="internal" Style="{StaticResource LbIconButton}"
+                            Content="&#x25CE;" ToolTip="{loc:Str btn_jump_to_me}" Click="BtnJumpToMe_Click"/>
+                    <Button x:Name="BtnViewSeasonRecap" x:FieldModifier="internal" Style="{StaticResource LbTextButton}"
+                            Content="{loc:Str recap_btn_view}" Visibility="Collapsed" Click="BtnViewSeasonRecap_Click"/>
+                    <Button x:Name="HelpBtnLeaderboard" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}"
+                            VerticalAlignment="Center" Margin="6,0,0,0" Tag="Leaderboard"/>
+                </StackPanel>
+            </Grid>
+          </Border>
+        </Border>
+
+        <!-- =========================== ROW 1 - podium =========================== -->
+        <ItemsControl x:Name="PodiumHost" x:FieldModifier="internal" Grid.Row="1" Margin="0,6,0,2"
+                      MaxWidth="{StaticResource LbBlockWidth}" HorizontalAlignment="Stretch"
+                      Visibility="Collapsed" ItemTemplate="{StaticResource LbPodiumTemplate}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Rows="1" VerticalAlignment="Bottom"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+        </ItemsControl>
+
+        <!-- =========================== ROW 2 - roster =========================== -->
+        <Grid Grid.Row="2" Margin="0,2,0,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Non-scrolling column legend; headers sort. Padding 14 / 31 is the block
+                 alignment contract (the 31 covers the roster's reserved scrollbar). -->
+            <Border Grid.Row="0" MaxWidth="{StaticResource LbBlockWidth}" HorizontalAlignment="Stretch"
+                    Padding="14,5,31,5" BorderThickness="0,0,0,1"
+                    BorderBrush="{DynamicResource PanelAccentBrush}">
+                <Grid>
+                    <!-- KEEP IN SYNC with LbRowTemplate and the sticky you-bar. -->
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="68"/>
+                        <ColumnDefinition Width="2*" MinWidth="130"/>
+                        <ColumnDefinition Width="82"/>
+                        <ColumnDefinition Width="112"/>
+                        <ColumnDefinition Width="*" MinWidth="268" MaxWidth="420"/>
+                        <ColumnDefinition Width="90"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" Style="{StaticResource LbLegendHeader}" Tag="rank"
+                            HorizontalContentAlignment="Right" HorizontalAlignment="Stretch"
+                            Content="{loc:Str section_rank}" Click="LeaderboardSortHeader_Click"/>
+                    <Button Grid.Column="1" Style="{StaticResource LbLegendHeader}" Tag="name"
+                            HorizontalContentAlignment="Left" HorizontalAlignment="Stretch" Margin="44,0,0,0"
+                            Content="{loc:Str lb_col_subject}" Click="LeaderboardSortHeader_Click"/>
+                    <!-- Content is swapped to lb_col_peak on the All-Time board: the number
+                         under it is HighestLevelEver, so rank 7 legitimately out-levels rank 4
+                         and labelling it "Level" reads as a sorting bug. See ApplyModeLabels(). -->
+                    <Button x:Name="HdrLevel" x:FieldModifier="internal" Grid.Column="2"
+                            Style="{StaticResource LbLegendHeader}" Tag="level"
+                            HorizontalContentAlignment="Center" HorizontalAlignment="Stretch"
+                            Content="{loc:Str label_level}" Click="LeaderboardSortHeader_Click"/>
+                    <Button Grid.Column="3" Style="{StaticResource LbLegendHeader}" Tag="xp"
+                            HorizontalContentAlignment="Right" HorizontalAlignment="Stretch" Margin="0,0,4,0"
+                            Content="{loc:Str label_xp}" Click="LeaderboardSortHeader_Click"/>
+                    <Button Grid.Column="4" Style="{StaticResource LbLegendHeader}" Tag="achievements"
+                            HorizontalContentAlignment="Left" HorizontalAlignment="Stretch" Margin="14,0,0,0"
+                            Content="{loc:Str tab_achievements}" Click="LeaderboardSortHeader_Click"/>
+                    <Button x:Name="HdrStreak" x:FieldModifier="internal" Grid.Column="5"
+                            Style="{StaticResource LbLegendHeader}" Tag="streak"
+                            HorizontalContentAlignment="Right" HorizontalAlignment="Stretch"
+                            Content="{loc:Str lb_col_streak}" Click="LeaderboardSortHeader_Click"
+                            Visibility="{Binding ShowTrophyStats, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}"/>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="1">
+                <!-- ScrollUnit=Pixel is deliberate and load-bearing for "Jump to me".
+                     The WPF default is Item scrolling, where VerticalOffset counts ROWS,
+                     the last row on screen is always drawn half-cut against the viewport
+                     edge, and there is no way to express "put this row in the middle" -
+                     which is exactly how the target row ended up sliced by the sticky
+                     you-bar. In Pixel mode the offset is a real pixel offset, so
+                     MainWindow.Leaderboard.cs can measure the realised container and
+                     animate ScrollToVerticalOffset to a centred position. Row count here
+                     is capped at LeaderboardService.FetchLimit (200), so the usual pixel-
+                     mode cost - estimated extents while virtualising - is negligible. -->
+                <ListView x:Name="LstLeaderboard" x:FieldModifier="internal" Background="Transparent"
+                          BorderThickness="0" Margin="0,1,0,2" Padding="0"
+                          MaxWidth="{StaticResource LbBlockWidth}" HorizontalAlignment="Stretch"
+                          FontFamily="Segoe UI" FontSize="13"
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                          ScrollViewer.VerticalScrollBarVisibility="Visible"
+                          VirtualizingStackPanel.IsVirtualizing="True"
+                          VirtualizingStackPanel.VirtualizationMode="Recycling"
+                          ScrollViewer.IsDeferredScrollingEnabled="True"
+                          VirtualizingPanel.ScrollUnit="Pixel"
+                          ItemTemplateSelector="{StaticResource LbItemSelector}"
+                          PreviewMouseWheel="LstLeaderboard_PreviewMouseWheel"
+                          MouseDoubleClick="LstLeaderboard_MouseDoubleClick">
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">
                             <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
                             <Setter Property="Background" Value="Transparent"/>
-                            <Setter Property="Padding" Value="8"/>
-                            <Setter Property="Margin" Value="0,2"/>
-                            <Setter Property="FontSize" Value="18"/>
-                            <Setter Property="FontWeight" Value="ExtraBold"/>
-                            <Setter Property="FontFamily" Value="Segoe Print"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0"/>
+                            <Setter Property="FontFamily" Value="Segoe UI"/>
+                            <Setter Property="FontSize" Value="13"/>
                             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                             <Style.Triggers>
-                                <!-- OG users get gold-tinted row -->
                                 <DataTrigger Binding="{Binding IsSeason0Og}" Value="True">
-                                    <Setter Property="Background" Value="#25FFD700"/>
-                                    <Setter Property="BorderBrush" Value="#50FFD700"/>
-                                    <Setter Property="BorderThickness" Value="0,0,0,2"/>
+                                    <Setter Property="Background" Value="#18FFD700"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsCurrentUser}" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                                    <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                    <Setter Property="BorderThickness" Value="3,0,0,0"/>
                                 </DataTrigger>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="{DynamicResource TransparentPink40Brush}"/>
+                                    <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
                                 </Trigger>
                                 <Trigger Property="IsSelected" Value="True">
-                                    <Setter Property="Background" Value="{DynamicResource TransparentPink50Brush}"/>
+                                    <Setter Property="Background" Value="{DynamicResource TransparentPink40Brush}"/>
                                 </Trigger>
+                                <!-- last, so bands win over hover/selection -->
+                                <DataTrigger Binding="{Binding IsBand}" Value="True">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="BorderThickness" Value="0"/>
+                                    <Setter Property="Focusable" Value="False"/>
+                                    <Setter Property="IsHitTestVisible" Value="False"/>
+                                </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </ListView.ItemContainerStyle>
                 </ListView>
+
+                <!-- Sits just under the legend, NOT vertically centred: centred, it floated in
+                     ~500px of void and read as a rendering accident rather than as the answer
+                     to what the user just typed into the search box. -->
+                <TextBlock x:Name="TxtLeaderboardEmpty" x:FieldModifier="internal" Text="{loc:Str lb_empty_filter}"
+                           FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="20,66,20,0"
+                           TextWrapping="Wrap" TextAlignment="Center" Visibility="Collapsed"
+                           Foreground="{DynamicResource TextMutedBrush}"/>
             </Grid>
+        </Grid>
+
+        <!-- =========================== ROW 3 - sticky "you" =========================== -->
+        <Border x:Name="YouBar" x:FieldModifier="internal" Grid.Row="3" Padding="0,7"
+                Background="{DynamicResource TransparentPink20Brush}"
+                BorderThickness="0,1,0,0" BorderBrush="{DynamicResource TransparentPink40Brush}">
+          <Border MaxWidth="{StaticResource LbBlockWidth}" HorizontalAlignment="Stretch"
+                  Padding="14,0,31,0" Background="Transparent">
+            <Grid>
+                <!-- KEEP IN SYNC with LbRowTemplate and the legend header. -->
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="68"/>
+                    <ColumnDefinition Width="2*" MinWidth="130"/>
+                    <ColumnDefinition Width="82"/>
+                    <ColumnDefinition Width="112"/>
+                    <ColumnDefinition Width="*" MinWidth="268" MaxWidth="420"/>
+                    <ColumnDefinition Width="90"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <TextBlock x:Name="TxtYouDelta" x:FieldModifier="internal" FontSize="9.5" FontWeight="Bold"
+                               Margin="0,0,5,0" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular"
+                               Foreground="{DynamicResource TextDimBrush}"/>
+                    <TextBlock x:Name="TxtYouRankNumber" x:FieldModifier="internal" FontSize="16" FontWeight="Bold"
+                               VerticalAlignment="Center" Typography.NumeralAlignment="Tabular"
+                               Foreground="{DynamicResource PinkBrush}"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Grid Width="34" Height="34" Margin="0,0,10,0" VerticalAlignment="Center">
+                        <Ellipse x:Name="EllYouAvatar" x:FieldModifier="internal" Margin="2"/>
+                        <TextBlock x:Name="TxtYouInitials" x:FieldModifier="internal" FontSize="12.5" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource DarkerBgBrush}"/>
+                        <Ellipse StrokeThickness="2" Stroke="{DynamicResource PinkBrush}"/>
+                    </Grid>
+                    <StackPanel VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="TxtYouName" x:FieldModifier="internal" FontSize="14" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextLightBrush}"/>
+                            <Border CornerRadius="4" Padding="5,1" Margin="7,0,0,0" VerticalAlignment="Center"
+                                    Background="{DynamicResource PinkBrush}">
+                                <TextBlock Text="{loc:Str lb_you}" FontSize="9" FontWeight="Bold"
+                                           Foreground="{DynamicResource DarkerBgBrush}"/>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock x:Name="TxtYouGap" x:FieldModifier="internal" FontSize="11.5" Margin="0,1,0,0"
+                                   TextTrimming="CharacterEllipsis" Typography.NumeralAlignment="Tabular"
+                                   Foreground="{DynamicResource PinkSoftBrush}"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <TextBlock Grid.Column="2" x:Name="TxtYouLevel" x:FieldModifier="internal" FontSize="14" FontWeight="Bold"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Typography.NumeralAlignment="Tabular" Foreground="{DynamicResource PinkBrush}"/>
+
+                <TextBlock Grid.Column="3" x:Name="TxtYouXp" x:FieldModifier="internal" FontSize="13.5" FontWeight="SemiBold"
+                           HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
+                           Typography.NumeralAlignment="Tabular" Foreground="{DynamicResource TextLightBrush}"/>
+
+                <StackPanel Grid.Column="4" VerticalAlignment="Center" Margin="14,0,10,0">
+                    <TextBlock x:Name="TxtYouAchievements" x:FieldModifier="internal" FontSize="11" FontWeight="SemiBold"
+                               Typography.NumeralAlignment="Tabular" Foreground="{DynamicResource TextMutedBrush}"/>
+                    <ProgressBar x:Name="BarYouAchievements" x:FieldModifier="internal" Style="{StaticResource LbThinBar}"
+                                 Margin="0,4,0,0"/>
+                </StackPanel>
+
+                <TextBlock Grid.Column="5" x:Name="TxtYouPercent" x:FieldModifier="internal" FontSize="12" FontWeight="Bold"
+                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                           Typography.NumeralAlignment="Tabular" Foreground="#FFFFD700"/>
+            </Grid>
+          </Border>
+        </Border>
+    </Grid>
 </UserControl>

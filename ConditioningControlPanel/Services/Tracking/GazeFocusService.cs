@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Threading;
@@ -70,7 +70,7 @@ public class GazeFocusService : IDisposable
     // Mutually exclusive — only one target is being dwelt on at a time.
     private Bubble? _currentBubble;
     private FlashWindow? _currentFlash;
-    private FloatingText? _currentFloating;
+    private IAttentionTarget? _currentFloating;
 
     // Throttle clock for stare-linger boosts. Reset to MinValue whenever the
     // dwell target changes (or no target is held) so the first boost on
@@ -198,7 +198,12 @@ public class GazeFocusService : IDisposable
     {
         if (IsActive) return true;
         if (App.Webcam == null) return false;
-        if (!App.Webcam.IsRunning && !App.Webcam.Start()) return false;
+        // #743: this method is deliberately UI-thread-marshalled (see EvaluateDesiredState), and
+        // WebcamTrackingService.Start() blocks synchronously for up to the 90s camera-open timeout
+        // while it opens the device and builds three ONNX sessions. Calling it here froze the
+        // window until the OS "not responding" reaper killed the app. The webcam must already be
+        // up - brought there by an awaited StartAsync() on a UI path that can show progress.
+        if (!App.Webcam.IsRunning) return false;
         if (App.Webcam.Calibration == null) return false;
 
         Subscribe();
@@ -366,7 +371,7 @@ public class GazeFocusService : IDisposable
                 SetCursorLock(fr);
                 AdvanceFlashDwell(fw);
             }
-            else if (hit.Value.Floating is FloatingText ft)
+            else if (hit.Value.Floating is IAttentionTarget ft)
             {
                 SetCursorLock(ft.GetGazeBounds());
                 AdvanceFloatingTextDwell(ft);
@@ -418,7 +423,7 @@ public class GazeFocusService : IDisposable
     {
         Bubble? bestBubble = null;
         FlashWindow? bestFlash = null;
-        FloatingText? bestFloating = null;
+        IAttentionTarget? bestFloating = null;
         double bestScore = ScoreThreshold;
 
         // Defensive multi-monitor clamp at the gaze read: drop targets that
@@ -559,7 +564,7 @@ public class GazeFocusService : IDisposable
 
     private readonly struct GazeHit
     {
-        public GazeHit(Bubble? bubble, FlashWindow? flash, FloatingText? floating)
+        public GazeHit(Bubble? bubble, FlashWindow? flash, IAttentionTarget? floating)
         {
             Bubble = bubble;
             Flash = flash;
@@ -567,7 +572,7 @@ public class GazeFocusService : IDisposable
         }
         public Bubble? Bubble { get; }
         public FlashWindow? Flash { get; }
-        public FloatingText? Floating { get; }
+        public IAttentionTarget? Floating { get; }
     }
 
     private void AdvanceBubbleDwell(Bubble b)
@@ -649,7 +654,7 @@ public class GazeFocusService : IDisposable
         }
     }
 
-    private void AdvanceFloatingTextDwell(FloatingText ft)
+    private void AdvanceFloatingTextDwell(IAttentionTarget ft)
     {
         if (!ReferenceEquals(_currentFloating, ft))
         {

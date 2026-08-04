@@ -20,29 +20,26 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.3.4";
+        public const string AppVersion = "6.6.3";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.3.4 - Deeper Down
-
-A hotfix for 6.3.3. The new unified overlay could lag the whole app on some setups,
-so it is now off by default while we finish the smoother renderer. Plus a batch of
-Down the Rabbit Hole and multi-monitor fixes.
-
-⚡ PERFORMANCE & STABILITY
-- Fixed the new unified overlay making every click, tab change, and keypress lag about a second on some machines (worst with the spiral and pink filter running together). The unified overlay is now off by default and your effects fall back to the proven per-effect windows. (#550)
-- Pink filter and spiral no longer paint your other monitors when multi-monitor overlays are turned off. (#552)
+        public const string CurrentPatchNotes = @"v6.6.3 - Video Hotfix 💗
 
 🔧 BUG FIXES
-- Fixed a one-frame bubble flash in the top-left corner of the screen. (#553)
-- Down the Rabbit Hole: images and videos you deselect in the Assets tab no longer show up in the tube. (#546)
-- Down the Rabbit Hole: the mandatory video no longer lingers over the recap and hub after a descent ends. (#547)
-- Down the Rabbit Hole: Cheshire's corner comments no longer cover the control dock. (#548)
+- A video that freezes mid-stop can no longer wedge the whole app. Stuck players are retired and rebuilt off-thread, and a frozen fullscreen video now releases the desktop instead of trapping you behind it
+- Fixed a crash where a video's frame buffer was freed while the decoder was still writing into it
+- Black screens no longer count toward video watch time, and video lengths are tracked correctly again after a player is replaced
+- The Bubble Count minigame got the same treatment: no more stale players, a memory leak fixed, and it now backs off for a minute instead of retrying into a broken state
+- Deeper haptics now work even when Video Haptic Sync is off (it was silently gating them)
+- The built-in browser recovers when it fails to load, actually falls back to your external browser, and the pop-out window comes to the front properly
+- Settings saves can no longer race each other or get corrupted by a badly timed shutdown, and restoring a backup no longer gets overwritten by profile sync
+- Unchecking an asset folder now immediately removes its images from the flash rotation
+- A stuck Lock Card or Pop Quiz can no longer jam interactions forever - the app now recovers and closes it cleanly
 
-Season: Jelly July";
+Season: Airhead August";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
@@ -229,8 +226,7 @@ Season: Jelly July";
 
         private static string GetSkipFilePath()
         {
-            var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            return Path.Combine(appData, "ConditioningControlPanel", "update_skip.txt");
+            return Path.Combine(App.UserDataPath, "update_skip.txt");
         }
 
         private static string? GetSkippedUpdateVersion()
@@ -537,8 +533,7 @@ Season: Jelly July";
                 : (Process.GetCurrentProcess().MainModule?.FileName ?? "");
 
             var logPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "ConditioningControlPanel", "logs", "update-helper.log");
+                App.UserDataPath, "logs", "update-helper.log");
 
             var helperPath = WriteUpdateHelperScript(installerPath, installPath, pid, appExe, logPath);
 
@@ -660,8 +655,7 @@ Season: Jelly July";
 
                 // Also clean up Velopack install location if different
                 var velopackPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "ConditioningControlPanel",
+                    App.UserDataPath,
                     "current",
                     "browser_data");
 

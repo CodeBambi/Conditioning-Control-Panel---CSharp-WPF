@@ -39,7 +39,6 @@ namespace ConditioningControlPanel
         private DispatcherTimer? _idleTimer;
         private DispatcherTimer? _triggerTimer; // Random trigger phrases
         private DispatcherTimer? _randomBubbleTimer; // Random bubble spawning
-        private DispatcherTimer? _zOrderRefreshTimer; // Keep speech bubble on top
         private DateTime _lastSpeechEndTime = DateTime.MinValue; // Track when last speech ended
         private SpeechSource _lastSpeechSource = SpeechSource.Preset; // Track last speech source for delay calc
         private int _lastSpeechLength = 0; // Track last speech length for delay calc
@@ -124,9 +123,11 @@ namespace ConditioningControlPanel
 
         // Unified "spoken audio" channel — ALL companion voice (barks, event lines, idle voicelines) plays
         // through one stoppable player so a new line cuts off the previous one instead of overlapping.
+        // The device itself is owned by AudioService (see Services/Audio/AudioService.Playback.cs) —
+        // this window only holds the stop/pause handle and the generation ticket for the current line.
         private readonly object _spokenLock = new();
-        private NAudio.Wave.WaveOutEvent? _spokenPlayer;
-        private NAudio.Wave.AudioFileReader? _spokenReader;
+        private Services.AudioPlaybackHandle? _spokenHandle;
+        private object? _spokenTicket;
         private volatile bool _isSpeakingAudio = false;   // true only while a spoken clip is actually playing
 
         // ============================================================
@@ -525,14 +526,6 @@ namespace ConditioningControlPanel
                 SpeechBubble.UpdateLayout();
                 SpeechBubble.Visibility = Visibility.Visible;
 
-                // Start z-order refresh to keep bubble on top of main window
-                // Skip all z-order work when pop quiz is open — must not cover the quiz
-                if (!(PopQuizWindow.IsOpen || QuizWindow.IsOpen))
-                {
-                    StartZOrderRefreshTimer();
-                    BringAttachedPairToFront();
-                }
-
                 // Display duration is user-controlled via Companion tab slider (1-10s, default 2).
                 // Long AI replies are still readable: hovering keeps the bubble open, and
                 // "Show chat history" preserves the full conversation for re-reading.
@@ -579,7 +572,6 @@ namespace ConditioningControlPanel
                     }
 
                     _speechTimer.Stop();
-                    StopZOrderRefreshTimer();
                     SpeechBubble.Visibility = Visibility.Collapsed;
                     _isShowingAiBubble = false; // Clear AI bubble flag when any bubble hides
 
@@ -751,12 +743,6 @@ namespace ConditioningControlPanel
                     SpeechBubble.UpdateLayout();
                     SpeechBubble.Visibility = Visibility.Visible;
 
-                    if (!(PopQuizWindow.IsOpen || QuizWindow.IsOpen))
-                    {
-                        StartZOrderRefreshTimer();
-                        BringAttachedPairToFront();
-                    }
-
                     // Animate "" → "." → ".." → "..." so it reads as actively waiting.
                     _listeningDotsTimer?.Stop();
                     int step = 0;
@@ -793,7 +779,6 @@ namespace ConditioningControlPanel
                     if (!_isListeningBubble) return; // a real bubble already took over
                     _isListeningBubble = false;
 
-                    StopZOrderRefreshTimer();
                     SpeechBubble.Visibility = Visibility.Collapsed;
                     _lastSpeechEndTime = DateTime.Now;
                     ProcessNextSpeech();
@@ -1204,12 +1189,22 @@ namespace ConditioningControlPanel
 
                 App.Logger?.Information("MainWindow found: {Found}", mainWindow != null);
 
+                // The user clicked this themselves, so never refuse it — but hand the session
+                // over explicitly rather than navigating out from under a previous claim.
+                App.BrowserMedia?.ReplaceSession(
+                    Services.Browser.BrowserMediaService.MediaOwner.AvatarLink, takeover: true);
+
                 if (mainWindow?.NavigateToUrlInBrowser(url, autoPlayFullscreen: true) == true)
                 {
                     App.Logger?.Information("Speech bubble link routed to embedded browser: {Url}", url);
                 }
                 else
                 {
+                    // The embedded browser never issued the navigation, so release the session we
+                    // just claimed above — otherwise the app keeps treating a video that is not
+                    // playing here as an active web-media session.
+                    App.BrowserMedia?.OnMediaStopped("embedded-browser-unavailable");
+
                     // Fallback: open in external browser (HTTPS only for safety)
                     if (Uri.TryCreate(url, UriKind.Absolute, out var fallbackUri) && fallbackUri.Scheme == "https")
                     {
@@ -1472,22 +1467,7 @@ namespace ConditioningControlPanel
                     var bubblesVolume = (App.Settings?.Current?.BubblesVolume ?? 50) / 100f;
                     var normalizedVolume = Math.Max(0.05f, (float)Math.Pow(bubblesVolume * masterVolume, 1.5));
 
-                    Task.Run(() =>
-                    {
-                        try
-                        {
-                            using var audioFile = new NAudio.Wave.AudioFileReader(popPath);
-                            audioFile.Volume = normalizedVolume;
-                            using var outputDevice = new NAudio.Wave.WaveOutEvent();
-                            outputDevice.Init(audioFile);
-                            outputDevice.Play();
-                            while (outputDevice.PlaybackState == NAudio.Wave.PlaybackState.Playing)
-                            {
-                                System.Threading.Thread.Sleep(50);
-                            }
-                        }
-                        catch { }
-                    });
+                    App.Audio?.PlayOneShot(popPath, normalizedVolume, "avatar-bubble-pop");
                 }
             }
             catch (Exception ex)
@@ -1593,48 +1573,41 @@ namespace ConditioningControlPanel
                 if (!System.IO.File.Exists(filePath)) return;
                 StopSpokenAudio(); // cut off the previous line → no overlap
 
-                NAudio.Wave.AudioFileReader reader;
-                NAudio.Wave.WaveOutEvent player;
-                try
-                {
-                    reader = new NAudio.Wave.AudioFileReader(filePath) { Volume = volume };
-                    player = new NAudio.Wave.WaveOutEvent();
-                    player.Init(reader);
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Debug("PlaySpokenAudio: init failed - {Error}", ex.Message);
-                    return;
-                }
+                // One-shot playback is owned by AudioService: it opens/closes the device on its own
+                // worker thread (never the dispatcher), caps concurrency, disposes deterministically
+                // from BOTH PlaybackStopped and a safety timer, and refuses to spin when the endpoint
+                // is dead (#778/#779). The old inline version blocked a thread-pool thread for the
+                // whole clip and leaked the device outright whenever Init hung.
+                // The ticket identifies THIS line for the whole of its life. It is published under
+                // the lock before playback can start, so a clip that finishes (or is refused)
+                // before PlayOneShot even returns still unwinds against the right generation.
+                var ticket = new object();
+                lock (_spokenLock) { _spokenTicket = ticket; _spokenHandle = null; _isSpeakingAudio = true; }
 
-                lock (_spokenLock) { _spokenReader = reader; _spokenPlayer = player; _isSpeakingAudio = true; }
-
-                System.Threading.Tasks.Task.Run(() =>
-                {
-                    try
-                    {
-                        player.Play();
-                        // Loop until Stopped (not "while Playing") so a Pause() during a world-freeze
-                        // holds the clip mid-line instead of tearing it down; Resume() (Play) continues it.
-                        while (player.PlaybackState != NAudio.Wave.PlaybackState.Stopped)
-                            System.Threading.Thread.Sleep(40);
-                    }
-                    catch { /* ignore audio errors */ }
-                    finally
+                var handle = App.Audio?.PlayOneShot(filePath, volume, "companion-voice",
+                    onFinished: () =>
                     {
                         lock (_spokenLock)
                         {
-                            if (ReferenceEquals(_spokenPlayer, player)) // not already replaced by a newer line
-                            {
-                                _spokenPlayer = null;
-                                _spokenReader = null;
-                                _isSpeakingAudio = false; // stops the speaking wobble/mist exactly at clip end
-                            }
+                            if (!ReferenceEquals(_spokenTicket, ticket)) return; // replaced by a newer line
+                            _spokenTicket = null;
+                            _spokenHandle = null;
+                            _isSpeakingAudio = false; // stops the speaking wobble/mist exactly at clip end
                         }
-                        try { player.Dispose(); } catch { }
-                        try { reader.Dispose(); } catch { }
+                    });
+
+                lock (_spokenLock)
+                {
+                    if (!ReferenceEquals(_spokenTicket, ticket)) return; // already superseded / already finished
+                    if (handle == null)
+                    {
+                        // Refused (missing file, muted, breaker open) — don't leave the wobble stuck on.
+                        _spokenTicket = null;
+                        _isSpeakingAudio = false;
+                        return;
                     }
-                });
+                    _spokenHandle = handle;
+                }
             }
             catch (Exception ex)
             {
@@ -1642,29 +1615,29 @@ namespace ConditioningControlPanel
             }
         }
 
-        /// <summary>Stop the current spoken line immediately (its play-loop sees Stopped and disposes).</summary>
+        /// <summary>Stop the current spoken line immediately (AudioService disposes its device).</summary>
         public void StopSpokenAudio()
         {
-            NAudio.Wave.WaveOutEvent? p;
-            lock (_spokenLock) { p = _spokenPlayer; }
-            try { p?.Stop(); } catch { }
+            Services.AudioPlaybackHandle? h;
+            lock (_spokenLock) { h = _spokenHandle; }
+            try { h?.Stop(); } catch { }
         }
 
         /// <summary>Freeze the current spoken line in place (world-freeze). Holds position + the
-        /// speaking wobble; a paused clip survives the play-loop (it exits only on Stop). No-op if idle.</summary>
+        /// speaking wobble; a paused clip is not torn down (only Stop ends it). No-op if idle.</summary>
         public void PauseSpokenAudio()
         {
-            NAudio.Wave.WaveOutEvent? p;
-            lock (_spokenLock) { p = _spokenPlayer; }
-            try { if (p?.PlaybackState == NAudio.Wave.PlaybackState.Playing) p.Pause(); } catch { }
+            Services.AudioPlaybackHandle? h;
+            lock (_spokenLock) { h = _spokenHandle; }
+            try { h?.Pause(); } catch { }
         }
 
         /// <summary>Resume a line paused by <see cref="PauseSpokenAudio"/>. No-op if idle or already playing.</summary>
         public void ResumeSpokenAudio()
         {
-            NAudio.Wave.WaveOutEvent? p;
-            lock (_spokenLock) { p = _spokenPlayer; }
-            try { if (p?.PlaybackState == NAudio.Wave.PlaybackState.Paused) p.Play(); } catch { }
+            Services.AudioPlaybackHandle? h;
+            lock (_spokenLock) { h = _spokenHandle; }
+            try { h?.Resume(); } catch { }
         }
 
         /// <summary>
@@ -1697,13 +1670,6 @@ namespace ConditioningControlPanel
                 SpeechBubble.UpdateLayout();
                 SpeechBubble.Visibility = Visibility.Visible;
 
-                // Start z-order refresh to keep bubble on top of main window
-                // Skip all z-order work when pop quiz is open — must not cover the quiz
-                if (!(PopQuizWindow.IsOpen || QuizWindow.IsOpen))
-                {
-                    StartZOrderRefreshTimer();
-                    BringAttachedPairToFront();
-                }
 
                 // Play the voice line audio in sync with the bubble
                 PlayVoiceLineAudio(filePath);
@@ -1734,7 +1700,6 @@ namespace ConditioningControlPanel
                     _isGiggling = false;
                     _isShowingAiBubble = false; // Clear AI bubble flag when any bubble hides
                     SpeechBubble.Visibility = Visibility.Collapsed;
-                    StopZOrderRefreshTimer();
 
                     _lastSpeechEndTime = DateTime.Now;
                     _lastSpeechSource = SpeechSource.Preset;
@@ -1841,13 +1806,6 @@ namespace ConditioningControlPanel
                 SpeechBubble.UpdateLayout();
                 SpeechBubble.Visibility = Visibility.Visible;
 
-                // Start z-order refresh to keep bubble on top of main window
-                // Skip all z-order work when pop quiz is open — must not cover the quiz
-                if (!(PopQuizWindow.IsOpen || QuizWindow.IsOpen))
-                {
-                    StartZOrderRefreshTimer();
-                    BringAttachedPairToFront();
-                }
 
                 App.Logger?.Information("TriggerMode: Displayed trigger '{Trigger}'", trigger);
 
@@ -1876,7 +1834,6 @@ namespace ConditioningControlPanel
                     }
 
                     _speechTimer.Stop();
-                    StopZOrderRefreshTimer();
                     SpeechBubble.Visibility = Visibility.Collapsed;
                     _isShowingAiBubble = false; // Clear AI bubble flag when any bubble hides
 
@@ -2145,24 +2102,10 @@ namespace ConditioningControlPanel
                 var masterVolume = (App.Settings?.Current?.MasterVolume ?? 100) / 100f;
                 var volume = (float)Math.Pow(masterVolume, 1.5) * 0.9f; // a touch louder — it's a once-ever moment
 
-                Task.Run(() =>
-                {
-                    try
-                    {
-                        using var audioFile = new NAudio.Wave.AudioFileReader(clipPath);
-                        audioFile.Volume = volume;
-                        using var outputDevice = new NAudio.Wave.WaveOutEvent();
-                        outputDevice.Init(audioFile);
-                        outputDevice.Play();
-                        while (outputDevice.PlaybackState == NAudio.Wave.PlaybackState.Playing)
-                            System.Threading.Thread.Sleep(50);
-                    }
-                    catch (Exception ex) { App.Logger?.Warning(ex, "PlayNoteClip: playback failed"); }
-                    finally
-                    {
-                        RunOnAvatar(() => _isPlayingUninterruptibleClip = false);
-                    }
-                });
+                // onFinished is guaranteed to fire exactly once — including when playback is
+                // refused outright — so the uninterruptible latch can never stick on (#778).
+                App.Audio?.PlayOneShot(clipPath, volume, "note-clip",
+                    onFinished: () => RunOnAvatar(() => _isPlayingUninterruptibleClip = false));
                 return true;
             }
             catch (Exception ex)
@@ -2243,23 +2186,7 @@ namespace ConditioningControlPanel
                     // Mute egg / silenced audio (Fork F): MasterVolume == 0 means don't attempt audio.
                     if (masterVolume <= 0f) return;
 
-                    // Use NAudio for async playback
-                    Task.Run(() =>
-                    {
-                        try
-                        {
-                            using var audioFile = new NAudio.Wave.AudioFileReader(gigglePath);
-                            audioFile.Volume = volume;
-                            using var outputDevice = new NAudio.Wave.WaveOutEvent();
-                            outputDevice.Init(audioFile);
-                            outputDevice.Play();
-                            while (outputDevice.PlaybackState == NAudio.Wave.PlaybackState.Playing)
-                            {
-                                System.Threading.Thread.Sleep(50);
-                            }
-                        }
-                        catch { /* Ignore audio errors */ }
-                    });
+                    App.Audio?.PlayOneShot(gigglePath, volume, "giggle");
                 }
             }
             catch (Exception ex)
@@ -2281,23 +2208,7 @@ namespace ConditioningControlPanel
                     var masterVolume = (App.Settings?.Current?.MasterVolume ?? 100) / 100f;
                     var volume = (float)Math.Pow(masterVolume, 1.5);
 
-                    // Use NAudio for async playback
-                    Task.Run(() =>
-                    {
-                        try
-                        {
-                            using var audioFile = new NAudio.Wave.AudioFileReader(popPath);
-                            audioFile.Volume = volume;
-                            using var outputDevice = new NAudio.Wave.WaveOutEvent();
-                            outputDevice.Init(audioFile);
-                            outputDevice.Play();
-                            while (outputDevice.PlaybackState == NAudio.Wave.PlaybackState.Playing)
-                            {
-                                System.Threading.Thread.Sleep(50);
-                            }
-                        }
-                        catch { /* Ignore audio errors */ }
-                    });
+                    App.Audio?.PlayOneShot(popPath, volume, "avatar-pop");
                 }
             }
             catch (Exception ex)
@@ -2326,22 +2237,7 @@ namespace ConditioningControlPanel
                     var masterVolume = (App.Settings?.Current?.MasterVolume ?? 100) / 100f;
                     var volume = (float)Math.Pow(masterVolume, 1.5);
 
-                    Task.Run(() =>
-                    {
-                        try
-                        {
-                            using var audioFile = new NAudio.Wave.AudioFileReader(audioPath);
-                            audioFile.Volume = volume;
-                            using var outputDevice = new NAudio.Wave.WaveOutEvent();
-                            outputDevice.Init(audioFile);
-                            outputDevice.Play();
-                            while (outputDevice.PlaybackState == NAudio.Wave.PlaybackState.Playing)
-                            {
-                                System.Threading.Thread.Sleep(50);
-                            }
-                        }
-                        catch { /* Ignore audio errors */ }
-                    });
+                    App.Audio?.PlayOneShot(audioPath, volume, "cum-and-collapse");
                 }
             }
             catch (Exception ex)

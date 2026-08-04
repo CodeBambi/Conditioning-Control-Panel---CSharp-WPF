@@ -275,6 +275,57 @@ namespace ConditioningControlPanel
             UpdateMicPill();          // privacy pill: mic fully disarmed → pill off
         }
 
+        /// <summary>
+        /// Revoke microphone consent — the mic counterpart of the webcam "Revoke consent" button.
+        /// Disarms the mic via <see cref="DisarmVoiceMic"/> (wake word + push-to-talk off, in-flight
+        /// capture cut, lock cards dropped to typed solve), then clears the mic capabilities that
+        /// DisarmVoiceMic leaves alone (spoken mantras, Takeover voice prompts, voice lock cards)
+        /// and the consent record itself, so the next enable re-runs the consent dialog. The mic
+        /// stores nothing on disk, so clearing settings is the whole job.
+        /// </summary>
+        internal void SL_RevokeMicConsent_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var result = MessageBox.Show(
+                    this,
+                    "This turns off every voice feature (wake word, push-to-talk, spoken mantras, voice lock cards) and clears your mic consent. You'll be asked again next time you enable one.",
+                    "Revoke microphone consent",
+                    MessageBoxButton.OKCancel,
+                    MessageBoxImage.Warning,
+                    MessageBoxResult.Cancel);
+                if (result != MessageBoxResult.OK) return;
+
+                DisarmVoiceMic();
+
+                var s = App.Settings?.Current;
+                if (s != null)
+                {
+                    s.SpokenMantrasEnabled = false;
+                    s.AutonomyCanTriggerVoiceCommand = false;
+                    s.LockCardVoiceMode = false;
+                    s.MicConsentGiven = false;
+                    App.Settings?.Save();
+                }
+                App.Logger?.Information("Microphone consent revoked");
+
+                // DisarmVoiceMic repainted before consent was cleared — repaint again so the
+                // privacy card hides and the Takeover-tab mirrors untick.
+                var wasLoading = _isLoading;
+                _isLoading = true;
+                if (BambiTakeoverTab?.ChkAutonomyVoice != null) BambiTakeoverTab.ChkAutonomyVoice.IsChecked = false;
+                if (BambiTakeoverTab?.ChkSpeechWakeWord != null) BambiTakeoverTab.ChkSpeechWakeWord.IsChecked = false;
+                if (BambiTakeoverTab?.ChkSpeechPushToTalk != null) BambiTakeoverTab.ChkSpeechPushToTalk.IsChecked = false;
+                _isLoading = wasLoading;
+                RefreshSheListeningTab();
+                RefreshAutonomyVoiceHint();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "SL_RevokeMicConsent_Click failed");
+            }
+        }
+
         internal void SL_SetPttKey_Click(object sender, RoutedEventArgs e)
         {
             if (_capturingPttKey || SheListeningTab == null) return;
@@ -339,6 +390,11 @@ namespace ConditioningControlPanel
                 }
             }
             finally { _isLoading = wasLoading; }
+
+            // "Revoke consent" only means something once consent exists.
+            if (SheListeningTab.SL_PrivacyCard != null)
+                SheListeningTab.SL_PrivacyCard.Visibility =
+                    s?.MicConsentGiven == true ? Visibility.Visible : Visibility.Collapsed;
 
             RefreshWakeEngineStatus();
             PopulateSlMicDevices();
@@ -456,6 +512,10 @@ namespace ConditioningControlPanel
                     ? new SolidColorBrush(Color.FromRgb(0xFF, 0xB0, 0xB0))
                     : new SolidColorBrush(Color.FromRgb(0x90, 0xEE, 0x90));
             }
+
+            // FX (PR-4a): the mic disc breathes only while the mic is genuinely armed. Not "the tab
+            // is open", not "a device exists" - armed. Everything else leaves it a still disc.
+            SetSheListeningStatusPulse(armed);
 
             if (!available)
             {

@@ -48,6 +48,22 @@ namespace ConditioningControlPanel.Services
         public event EventHandler<ModPackage>? ModInstalled;
 
         /// <summary>
+        /// Fired (mod id) when a mod's CONTENT availability changed while the active mod stayed put —
+        /// a release content pack finished installing, so a built-in that had no assets (or stale
+        /// ones) now has them. Mod lists (top-bar selector, Mod Manager, first-run picker) should
+        /// rebuild. WHICH mod is active never changes here, so this is not a mod switch — but it is
+        /// not a substitute for <see cref="ModChanged"/> either: when the arriving content backs the
+        /// mod that is already active, its registration is swapped and ModChanged fires too (see
+        /// <see cref="AdoptBuiltInPackage"/>).
+        ///
+        /// Always raised on the UI thread. May fire MORE THAN ONCE per pack: once as soon as the
+        /// pack's loose media is on disk, and again when a .ccpmod inside it finishes extracting.
+        /// Handlers must be idempotent. The argument is the built-in mod id when the pack maps to one
+        /// (see <see cref="ModIdForPack"/>), otherwise the pack id itself (e.g. <c>audio-base</c>).
+        /// </summary>
+        public event EventHandler<string>? ModAvailabilityChanged;
+
+        /// <summary>
         /// The currently active mod package.
         /// </summary>
         public ModPackage ActiveMod => _activeMod;
@@ -81,7 +97,11 @@ namespace ConditioningControlPanel.Services
 
             // Replace hardcoded built-ins with extracted .ccpmod packages where
             // available so their full asset set (avatars, sounds, resources)
-            // resolves via InstalledPath instead of the neutral baseline.
+            // resolves via InstalledPath instead of the neutral baseline. The archive may sit in the
+            // install dir (legacy full install) or in a downloaded content pack.
+            // Cheap on the startup thread: the pack stamp / archive mtime decides whether the zip is
+            // opened at all, and a DOWNLOADED archive that does need unpacking is extracted on a
+            // background thread (see PrepareBuiltInMod).
             ExtractBundledBuiltInMods();
 
             // Adopt bundled resources-only packages: keep the CODE manifest but
@@ -170,8 +190,23 @@ namespace ConditioningControlPanel.Services
         /// startup RestorePoolsFromSettings copies the stale backup over the active pool and
         /// the user's changes appear to disappear.
         /// </summary>
+        /// <summary>
+        /// Set while ActivateMod is itself rewriting the pools, so its own writes do not bounce back
+        /// through this mirror and get saved as if the user had made them.
+        ///
+        /// Load-bearing during a session. RestorePoolsFromSettings ASSIGNS each pool (which raises
+        /// INPC, unlike the in-place mutation SessionEngine uses), and so does
+        /// ReapplyPhrasePoolOverrides. Without this flag those two writes would fire the mirror
+        /// while _activeMod is already the INCOMING mod - saving the outgoing mod's pools, and then
+        /// the session's prescribed phrases, over the incoming mod's perfectly good backup. The
+        /// backup we just finished reading needs no rewrite, so suppressing is also simply correct.
+        /// </summary>
+        private bool _suppressPoolMirror;
+
         private void CurrentSettings_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
+            if (_suppressPoolMirror) return;
+
             if (e.PropertyName is not (nameof(AppSettings.SubliminalPool)
                 or nameof(AppSettings.AttentionPool)
                 or nameof(AppSettings.LockCardPhrases)
@@ -328,6 +363,8 @@ namespace ConditioningControlPanel.Services
                     // Prevent overwriting built-in mods
                     if (manifest.Id.StartsWith("builtin-"))
                         return new ModInstallResult { ErrorMessage = "Cannot install a mod with a 'builtin-' prefix." };
+                    if (ReservedModIds.Contains(manifest.Id))
+                        return new ModInstallResult { ErrorMessage = $"'{manifest.Id}' is a built-in mod ID and cannot be replaced by an installed mod." };
 
                     // Check min app version
                     if (!string.IsNullOrEmpty(manifest.MinAppVersion))
@@ -433,7 +470,7 @@ namespace ConditioningControlPanel.Services
         /// Validates and sanitizes a mod manifest on install.
         /// Returns null if valid, or an error message string if rejected.
         /// </summary>
-        private static string? SanitizeManifest(ModManifest manifest)
+        internal static string? SanitizeManifest(ModManifest manifest)
         {
             // --- Field length caps ---
             if (manifest.Name.Length > 100) return "Mod name is too long (max 100 characters).";
@@ -441,10 +478,11 @@ namespace ConditioningControlPanel.Services
             if (manifest.Author.Length > 100) return "Author name is too long (max 100 characters).";
             if (manifest.Description?.Length > 1000) manifest.Description = manifest.Description[..1000];
 
+            var hexPattern = new Regex(@"^#[0-9A-Fa-f]{6}$");
+
             // --- Theme color validation ---
             if (manifest.Theme != null)
             {
-                var hexPattern = new Regex(@"^#[0-9A-Fa-f]{6}$");
                 if (manifest.Theme.AccentColor != null && !hexPattern.IsMatch(manifest.Theme.AccentColor))
                     return "Accent color must be a valid #RRGGBB hex code.";
                 if (manifest.Theme.AccentLightColor != null && !hexPattern.IsMatch(manifest.Theme.AccentLightColor))
@@ -459,6 +497,21 @@ namespace ConditioningControlPanel.Services
                     return "Surface color must be a valid #RRGGBB hex code.";
                 if (manifest.Theme.FilterColor != null && !hexPattern.IsMatch(manifest.Theme.FilterColor))
                     return "Filter color must be a valid #RRGGBB hex code.";
+            }
+
+            // --- FX palette validation ---
+            if (manifest.FxPalette != null)
+            {
+                if (manifest.FxPalette.MistColor != null && !hexPattern.IsMatch(manifest.FxPalette.MistColor))
+                    return "Mist color must be a valid #RRGGBB hex code.";
+                if (manifest.FxPalette.ParticleColor != null && !hexPattern.IsMatch(manifest.FxPalette.ParticleColor))
+                    return "Particle color must be a valid #RRGGBB hex code.";
+                if (manifest.FxPalette.GlowColor != null && !hexPattern.IsMatch(manifest.FxPalette.GlowColor))
+                    return "Glow color must be a valid #RRGGBB hex code.";
+                if (manifest.FxPalette.FlashTint != null && !hexPattern.IsMatch(manifest.FxPalette.FlashTint))
+                    return "Flash tint must be a valid #RRGGBB hex code.";
+                if (manifest.FxPalette.MistOpacity is double mo && (mo < 0 || mo > 1))
+                    return "Mist opacity must be between 0 and 1.";
             }
 
             // --- URL validation: only HTTPS allowed ---
@@ -737,8 +790,25 @@ namespace ConditioningControlPanel.Services
 
             _activeMod = mod;
 
-            // Restore pool customizations for the new mod (if any were saved previously)
-            RestorePoolsFromSettings(modId);
+            // Restore pool customizations for the new mod (if any were saved previously), then give
+            // a running session its prescribed phrases back - the restore just installed the
+            // incoming mod's pools, which would otherwise leave the session speaking the user's
+            // phrases instead of the ones it prescribed. Only pools the session actually overrode
+            // are re-asserted, so the mod switch still fully applies to the rest.
+            //
+            // Both steps assign pools and so would trip the INPC mirror; see _suppressPoolMirror
+            // for why letting them would corrupt the incoming mod's backup.
+            _suppressPoolMirror = true;
+            try
+            {
+                RestorePoolsFromSettings(modId);
+                try { SessionEngine.Active?.ReapplyPhrasePoolOverrides(); }
+                catch (Exception ex) { _log?.Debug("ActivateMod: session pool re-apply failed: {E}", ex.Message); }
+            }
+            finally
+            {
+                _suppressPoolMirror = false;
+            }
 
             // Clear resource cache
             ModResourceResolver.ClearCache();
@@ -815,6 +885,49 @@ namespace ConditioningControlPanel.Services
             var hex = GetFilterColorHex();
             return ParseHexColor(hex);
         }
+
+        // ---- Ambient FX palette ----
+        // Every FX colour in the app resolves through here (never off a mod name and never off a
+        // per-mod art path — built-in mods have InstalledPath == null, so file lookups never fire
+        // for them). Chain: fxPalette slot → theme.filterColor → theme.accentColor → app default.
+
+        /// <summary>App-wide FX fallback when a mod defines neither an fxPalette slot nor a theme.</summary>
+        internal const string FxDefaultHex = "#FF69B4";
+
+        /// <summary>The pure fallback chain, split out so it is testable without a live ModService.</summary>
+        internal static string ResolveFxSlotHex(string? slot, string? filterColor, string? accentColor)
+        {
+            if (!string.IsNullOrWhiteSpace(slot)) return slot!;
+            if (!string.IsNullOrWhiteSpace(filterColor)) return filterColor!;
+            if (!string.IsNullOrWhiteSpace(accentColor)) return accentColor!;
+            return FxDefaultHex;
+        }
+
+        private string GetFxSlotHex(Func<ModManifest, string?> slot)
+        {
+            var m = _activeMod.Manifest;
+            return ResolveFxSlotHex(slot(m), m.Theme?.FilterColor, m.Theme?.AccentColor);
+        }
+
+        public string GetMistColorHex() => GetFxSlotHex(m => m.FxPalette?.MistColor);
+
+        public (byte R, byte G, byte B) GetMistColorRgb() => ParseHexColor(GetMistColorHex());
+
+        public string GetParticleColorHex() => GetFxSlotHex(m => m.FxPalette?.ParticleColor);
+
+        public (byte R, byte G, byte B) GetParticleColorRgb() => ParseHexColor(GetParticleColorHex());
+
+        public string GetGlowColorHex() => GetFxSlotHex(m => m.FxPalette?.GlowColor);
+
+        public (byte R, byte G, byte B) GetGlowColorRgb() => ParseHexColor(GetGlowColorHex());
+
+        public string GetFlashTintHex() => GetFxSlotHex(m => m.FxPalette?.FlashTint);
+
+        public (byte R, byte G, byte B) GetFlashTintRgb() => ParseHexColor(GetFlashTintHex());
+
+        /// <summary>Fog/aurora opacity multiplier (0-1). Defaults to 1 when the mod doesn't set one.</summary>
+        public double GetMistOpacity() =>
+            Math.Clamp(_activeMod.Manifest.FxPalette?.MistOpacity ?? 1.0, 0.0, 1.0);
 
         /// <summary>
         /// Returns the secondary/purple color for the active mod.
@@ -1043,11 +1156,25 @@ namespace ConditioningControlPanel.Services
             _activeMod.Manifest.CustomAvatarSets?.FirstOrDefault(c => c.SetNumber == setNumber)?.UnlockLevel;
 
         // Tube layout offsets
-        public int GetAvatarOffsetX() => _activeMod.Manifest.TubeLayout?.AvatarOffsetX ?? 0;
-        public int GetAvatarDetachedOffsetX() => _activeMod.Manifest.TubeLayout?.AvatarDetachedOffsetX ?? 0;
-        public double GetAvatarScale() => _activeMod.Manifest.TubeLayout?.AvatarScale ?? 1.0;
-        public int GetAvatarOffsetY() => _activeMod.Manifest.TubeLayout?.AvatarOffsetY ?? 0;
-        public int GetAvatarDetachedOffsetY() => _activeMod.Manifest.TubeLayout?.AvatarDetachedOffsetY ?? 0;
+        /// <summary>
+        /// The tube layout actually in force for the active mod: a user override saved by the Mod
+        /// Manager's Tube Fit editor (AppSettings.TubeLayoutOverridesByMod) fully REPLACES the mod's
+        /// shipped manifest tubeLayout, so the user's fit always wins. Null when neither exists.
+        /// </summary>
+        private Models.ModTubeLayout? EffectiveTubeLayout()
+        {
+            if (App.Settings?.Current?.TubeLayoutOverridesByMod?.TryGetValue(ActiveModId, out var userLayout) == true
+                && userLayout != null)
+                return userLayout;
+
+            return _activeMod?.Manifest?.TubeLayout;
+        }
+
+        public int GetAvatarOffsetX() => Math.Clamp(EffectiveTubeLayout()?.AvatarOffsetX ?? 0, -1000, 1000);
+        public int GetAvatarDetachedOffsetX() => Math.Clamp(EffectiveTubeLayout()?.AvatarDetachedOffsetX ?? 0, -1000, 1000);
+        public double GetAvatarScale() => Math.Clamp(EffectiveTubeLayout()?.AvatarScale ?? 1.0, 0.1, 3.0);
+        public int GetAvatarOffsetY() => Math.Clamp(EffectiveTubeLayout()?.AvatarOffsetY ?? 0, -500, 500);
+        public int GetAvatarDetachedOffsetY() => Math.Clamp(EffectiveTubeLayout()?.AvatarDetachedOffsetY ?? 0, -500, 500);
 
         // Enhancement overrides — check explicit override first, then fall back to MakeModAware(default)
         public string GetEnhancementTreeTitle() =>
@@ -1267,148 +1394,817 @@ namespace ConditioningControlPanel.Services
         #region Private Helpers
 
         /// <summary>
+        /// Every id the app registers as a built-in (see the ctor). The "builtin-" prefix check is
+        /// NOT sufficient on its own: <see cref="BuiltInMods.DronificationId"/> is deliberately the
+        /// bare community id <c>drone-mode</c>, so without this set a user .ccpmod claiming that id
+        /// would overwrite the built-in registration on install.
+        /// </summary>
+        private static readonly HashSet<string> ReservedModIds = new(StringComparer.OrdinalIgnoreCase)
+        {
+            BuiltInMods.CCPDefaultId,
+            BuiltInMods.BambiSleepId,
+            BuiltInMods.SissyHypnoId,
+            BuiltInMods.DronificationId,
+            BuiltInMods.LockedId,
+        };
+
+        /// <summary>
         /// Bundled .ccpmod packages shipped with the app, paired with the built-in
-        /// ID they replace. The .ccpmod (e.g. DroneMod/drone-mode.ccpmod) is the
+        /// ID they replace and the content pack that carries the SAME archive when the
+        /// installer no longer ships it (docs/CONTENT_PACKS_PLAN.md §3, §8.5).
+        /// The .ccpmod (e.g. DroneMod/drone-mode.ccpmod) is the
         /// authoritative source for the mod's manifest AND its assets — once
         /// extracted, the built-in registration is overwritten with one whose
         /// InstalledPath points at the extracted folder, so ModResourceResolver
         /// finds avatars/sounds/etc. instead of falling back to the baseline.
         /// IsBuiltIn stays true so the mod can't be uninstalled.
         /// </summary>
-        private static readonly (string RelativePath, string BuiltInId)[] _bundledBuiltInMods =
+        private static readonly (string RelativePath, string BuiltInId, string PackId)[] _bundledBuiltInMods =
         {
-            ("DroneMod/drone-mode.ccpmod", BuiltInMods.DronificationId),
+            ("DroneMod/drone-mode.ccpmod", BuiltInMods.DronificationId, ReleaseContentService.PackModDrone),
         };
-
-        private void ExtractBundledBuiltInMods()
-        {
-            var builtInRoot = Path.Combine(App.UserDataPath, "builtin_mods");
-            Directory.CreateDirectory(builtInRoot);
-
-            foreach (var (relativePath, builtInId) in _bundledBuiltInMods)
-            {
-                try
-                {
-                    var bundledPath = Path.Combine(
-                        AppDomain.CurrentDomain.BaseDirectory,
-                        relativePath.Replace('/', Path.DirectorySeparatorChar));
-
-                    if (!File.Exists(bundledPath))
-                    {
-                        _log?.Warning("Bundled built-in mod missing on disk: {Path}", bundledPath);
-                        continue;
-                    }
-
-                    var extractDir = Path.Combine(builtInRoot, builtInId);
-                    var manifestPath = Path.Combine(extractDir, "mod.json");
-
-                    // Re-extract if missing, or if the bundled .ccpmod is newer
-                    // than our extracted copy (covers app updates that ship a
-                    // refreshed package).
-                    var needsExtract = !File.Exists(manifestPath)
-                        || File.GetLastWriteTimeUtc(bundledPath) > File.GetLastWriteTimeUtc(manifestPath);
-
-                    if (needsExtract)
-                    {
-                        if (Directory.Exists(extractDir))
-                            Directory.Delete(extractDir, recursive: true);
-                        Directory.CreateDirectory(extractDir);
-                        ZipFile.ExtractToDirectory(bundledPath, extractDir);
-                        _log?.Information("Extracted bundled built-in mod {BuiltInId} from {Path}", builtInId, bundledPath);
-                    }
-
-                    var json = File.ReadAllText(manifestPath);
-                    var manifest = JsonConvert.DeserializeObject<ModManifest>(json);
-                    if (manifest == null || string.IsNullOrWhiteSpace(manifest.Id))
-                    {
-                        _log?.Warning("Bundled built-in mod {BuiltInId} has invalid mod.json", builtInId);
-                        continue;
-                    }
-
-                    // Sanitize same as user-installed mods (defense-in-depth even
-                    // though we ship the package ourselves).
-                    var sanitizeError = SanitizeManifest(manifest);
-                    if (sanitizeError != null)
-                    {
-                        _log?.Warning("Bundled built-in mod {BuiltInId} failed sanitization: {Error}", builtInId, sanitizeError);
-                        continue;
-                    }
-
-                    // Force the manifest ID to match the built-in slot we're
-                    // filling so a tampered mod.json can't squat a different ID.
-                    manifest.Id = builtInId;
-
-                    _installedMods[builtInId] = new ModPackage(manifest, extractDir, isBuiltIn: true);
-                    _log?.Information("Registered bundled built-in mod {BuiltInId} from {Path}", builtInId, extractDir);
-                }
-                catch (Exception ex)
-                {
-                    _log?.Error(ex, "Failed to extract bundled built-in mod {BuiltInId} (falling back to hardcoded manifest)", builtInId);
-                }
-            }
-        }
 
         /// <summary>
         /// Bundled RESOURCES-ONLY packages shipped with the app, paired with the
-        /// built-in ID they back and the in-code manifest that stays authoritative.
+        /// built-in ID they back, the pack that can deliver the archive instead, and
+        /// the in-code manifest that stays authoritative.
         /// Unlike <see cref="_bundledBuiltInMods"/>, the .ccpmod here contains only a
         /// resources/ tree (no mod.json) — we keep the code manifest and just adopt
         /// the extracted folder as InstalledPath, so art/voicelines resolve from it
         /// while phrases/theme/textReplacements continue to come from code. This lets
         /// us tweak the manifest without ever repacking the (large) asset bundle.
         /// </summary>
-        private static readonly (string RelativePath, string BuiltInId, ModManifest Manifest)[] _bundledResourceMods =
+        private static readonly (string RelativePath, string BuiltInId, string PackId, ModManifest Manifest)[] _bundledResourceMods =
         {
-            ("LockedMod/locked-resources.ccpmod", BuiltInMods.LockedId, BuiltInMods.Locked),
+            ("LockedMod/locked-resources.ccpmod", BuiltInMods.LockedId, ReleaseContentService.PackModLocked, BuiltInMods.Locked),
         };
+
+        /// <summary>Where a built-in mod's .ccpmod archive was actually found.</summary>
+        private sealed class CcpmodSource
+        {
+            /// <summary>Absolute path to the archive.</summary>
+            public string Path { get; init; } = "";
+            /// <summary>True when it came from a downloaded content pack rather than the install dir.</summary>
+            public bool FromPack { get; init; }
+            /// <summary>Pack that carries this archive (used for the stamp comparison).</summary>
+            public string PackId { get; init; } = "";
+        }
+
+        /// <summary>
+        /// <c>builtin_mods\&lt;id&gt;\pack.json</c> — what produced the extracted tree.
+        ///
+        /// A downloaded archive's mtime says nothing useful (the download rewrites the file on every
+        /// re-fetch, and a resumed <c>.partial</c> lands stamped "now"), so for those the re-extract
+        /// trigger is the pack's contentVersion/sha256 instead. Install-dir archives keep the
+        /// historical mtime rule. <see cref="SourcePath"/> also catches the archive MOVING between
+        /// roots — an upgrade that deletes the in-box copy and lets the pack take over.
+        /// </summary>
+        private class BuiltInModPackStamp
+        {
+            [JsonProperty("contentVersion")]
+            public int ContentVersion { get; set; }
+
+            [JsonProperty("sha256")]
+            public string Sha256 { get; set; } = "";
+
+            [JsonProperty("sourcePath")]
+            public string SourcePath { get; set; } = "";
+
+            [JsonProperty("extractedUtc")]
+            public DateTime ExtractedUtc { get; set; }
+        }
+
+        private const string BuiltInPackStampFile = "pack.json";
+
+        /// <summary>Built-in ids whose extraction is running on a background thread right now.</summary>
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _extracting =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        private void ExtractBundledBuiltInMods()
+        {
+            var builtInRoot = EnsureBuiltInRoot();
+            if (builtInRoot == null) return;
+
+            SweepBuiltInStagingLeftovers(builtInRoot);
+
+            foreach (var entry in _bundledBuiltInMods)
+                PrepareBuiltInMod(builtInRoot, entry.RelativePath, entry.BuiltInId, entry.PackId, codeManifest: null);
+        }
 
         private void ExtractBundledResourceMods()
         {
-            var builtInRoot = Path.Combine(App.UserDataPath, "builtin_mods");
-            Directory.CreateDirectory(builtInRoot);
+            var builtInRoot = EnsureBuiltInRoot();
+            if (builtInRoot == null) return;
 
-            foreach (var (relativePath, builtInId, manifest) in _bundledResourceMods)
+            SweepBuiltInStagingLeftovers(builtInRoot);
+
+            foreach (var entry in _bundledResourceMods)
+                PrepareBuiltInMod(builtInRoot, entry.RelativePath, entry.BuiltInId, entry.PackId, entry.Manifest);
+        }
+
+        /// <summary>True once the staging sweep has run — it is a once-per-process, startup-only job.</summary>
+        private bool _stagingSwept;
+
+        /// <summary>
+        /// Deletes <c>&lt;id&gt;.new</c> / <c>&lt;id&gt;.old</c> siblings a previous run left behind when it
+        /// died mid-swap (see <see cref="ExtractArchive"/>), so a crashed half-swap self-heals instead of
+        /// silently hoarding a second copy of a 184 MB mod. Runs BEFORE any registration, and only from
+        /// the ctor path: a mid-session sweep could delete the staging folder a background extraction is
+        /// filling right now (the <see cref="_extracting"/> check is a second belt).
+        /// </summary>
+        private void SweepBuiltInStagingLeftovers(string builtInRoot)
+        {
+            if (_stagingSwept) return;
+            _stagingSwept = true;
+
+            try
+            {
+                foreach (var dir in Directory.GetDirectories(builtInRoot))
+                {
+                    if (!dir.EndsWith(StagingSuffix, StringComparison.OrdinalIgnoreCase)
+                        && !dir.EndsWith(RetiredSuffix, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    var owningId = Path.GetFileNameWithoutExtension(dir);
+                    if (!string.IsNullOrEmpty(owningId) && _extracting.ContainsKey(owningId)) continue;
+
+                    if (TryDeleteTree(dir))
+                        _log?.Information("ModService: swept leftover built-in staging folder {Dir}", dir);
+                    else
+                        _log?.Warning("ModService: leftover built-in staging folder {Dir} could not be removed", dir);
+                }
+            }
+            catch (Exception ex)
+            {
+                _log?.Debug("ModService: staging sweep failed: {Error}", ex.Message);
+            }
+        }
+
+        private static string? EnsureBuiltInRoot()
+        {
+            try
+            {
+                var root = Path.Combine(App.UserDataPath, "builtin_mods");
+                Directory.CreateDirectory(root);
+                return root;
+            }
+            catch (Exception ex)
+            {
+                _log?.Error(ex, "ModService: could not create builtin_mods root — built-in mods stay on their hardcoded manifests");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Locates a built-in mod's .ccpmod (install dir first, downloaded content pack second),
+        /// (re)extracts it when the stamp says so, and registers the result.
+        ///
+        /// Startup cost: in the steady state NOTHING is unzipped — the stamp/mtime check short-circuits
+        /// before the archive is even opened. When a DOWNLOADED archive does need extracting the work
+        /// runs on a background thread (drone alone is 184 MB) and re-registers itself on completion;
+        /// until then the mod behaves exactly as it does when its archive is absent, which is a
+        /// supported state everywhere (hardcoded manifest, baseline assets).
+        ///
+        /// <paramref name="codeManifest"/> non-null = resources-only package: keep the in-code manifest
+        /// and adopt only the extracted assets.
+        /// </summary>
+        private void PrepareBuiltInMod(string builtInRoot, string relativePath, string builtInId, string packId, ModManifest? codeManifest)
+        {
+            try
+            {
+                var extractDir = Path.Combine(builtInRoot, builtInId);
+                var payloadProbe = codeManifest == null
+                    ? Path.Combine(extractDir, "mod.json")          // full package: mod.json is the payload proof
+                    : Path.Combine(extractDir, "resources");        // resources-only package
+                var timeProbe = codeManifest == null ? payloadProbe : extractDir;
+
+                var source = ResolveCcpmodSource(relativePath, packId);
+                if (source == null)
+                {
+                    // No archive anywhere. That is the NORMAL state for someone who upgraded onto the
+                    // modular installer (which deletes the in-box .ccpmod) and has not fetched the
+                    // pack yet — but the tree an earlier version extracted is still sitting in
+                    // builtin_mods\<id>\ and is perfectly usable, so adopt it instead of dropping the
+                    // mod back to baseline art for the whole session.
+                    if (PathExists(payloadProbe) && RegisterExtractedBuiltIn(builtInId, extractDir, codeManifest))
+                    {
+                        _log?.Information(
+                            "Built-in mod {BuiltInId}: no .ccpmod in the install dir or content packs — keeping the previously extracted tree at {Path}",
+                            builtInId, extractDir);
+                        return;
+                    }
+
+                    // Missing in all three places: same degradation as before packs existed — the
+                    // built-in keeps its hardcoded manifest with no InstalledPath and resolves
+                    // baseline assets. Never an error dialog.
+                    _log?.Information(
+                        "Built-in mod {BuiltInId}: no .ccpmod in the install dir or content packs — using the hardcoded manifest",
+                        builtInId);
+                    return;
+                }
+
+                var needsExtract = ShouldExtract(source, extractDir, payloadProbe, timeProbe);
+
+                if (needsExtract && source.FromPack)
+                {
+                    // Register whatever a previous extraction already left on disk FIRST — a
+                    // stale-but-usable tree beats no assets. The background pass unzips into a
+                    // sibling staging folder and swaps with two renames (see ExtractArchive), so the
+                    // tree we register here is never dismantled underneath the running session.
+                    if (PathExists(payloadProbe))
+                        RegisterExtractedBuiltIn(builtInId, extractDir, codeManifest);
+
+                    ScheduleBuiltInExtraction(source, builtInId, extractDir, codeManifest);
+                    return;
+                }
+
+                if (needsExtract && !ExtractArchive(source, extractDir, builtInId)) return;
+
+                RegisterExtractedBuiltIn(builtInId, extractDir, codeManifest);
+            }
+            catch (Exception ex)
+            {
+                _log?.Error(ex, "Failed to prepare bundled built-in mod {BuiltInId} (falling back to hardcoded manifest)", builtInId);
+            }
+        }
+
+        /// <summary>
+        /// Install dir first (dev builds + legacy full installs), downloaded content pack second —
+        /// the same precedence <see cref="ContentLocator"/> applies to loose files. Null = the mod's
+        /// archive is nowhere, which is a normal state now (pack not downloaded yet).
+        /// </summary>
+        private static CcpmodSource? ResolveCcpmodSource(string relativePath, string packId)
+        {
+            try
+            {
+                var installed = Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory,
+                    relativePath.Replace('/', Path.DirectorySeparatorChar));
+                if (File.Exists(installed))
+                    return new CcpmodSource { Path = installed, FromPack = false, PackId = packId };
+
+                foreach (var candidate in PackCcpmodCandidates(relativePath, packId))
+                {
+                    if (File.Exists(candidate))
+                        return new CcpmodSource { Path = candidate, FromPack = true, PackId = packId };
+                }
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _log?.Warning(ex, "ModService: could not locate .ccpmod {Rel}", relativePath);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Pack-side paths to probe, in order: the manifest's own <c>ccpmods</c> entries (authoritative
+        /// when the manifest has been fetched), then the conventional
+        /// <c>content\packs\&lt;name&gt;.ccpmod</c> the build script always writes. ContentLocator's
+        /// two-root probe does not apply here — packs put these archives at a path that does NOT
+        /// mirror the install dir — but the root is the same one it uses.
+        /// </summary>
+        private static IEnumerable<string> PackCcpmodCandidates(string relativePath, string packId)
+        {
+            var fileName = Path.GetFileName(relativePath);
+            var root = ContentLocator.ContentRoot;   // == ReleaseContentService.ContentRoot
+            if (string.IsNullOrEmpty(root) || string.IsNullOrEmpty(fileName)) yield break;
+
+            var info = App.ReleaseContent?.GetPackInfo(packId);
+            if (info?.Ccpmods != null)
+            {
+                foreach (var packEntry in info.Ccpmods)
+                {
+                    if (string.IsNullOrWhiteSpace(packEntry)) continue;
+                    if (!string.Equals(Path.GetFileName(packEntry), fileName, StringComparison.OrdinalIgnoreCase)) continue;
+                    yield return Path.Combine(root, packEntry.Replace('/', Path.DirectorySeparatorChar));
+                }
+            }
+
+            yield return Path.Combine(root, "packs", fileName);
+        }
+
+        /// <summary>
+        /// Whether <paramref name="extractDir"/> must be (re)built from <paramref name="source"/>.
+        /// Pack archives compare the recorded pack.json stamp against ReleaseContentService's install
+        /// stamp; install-dir archives keep the historical mtime rule. Any failure answers "yes" —
+        /// a wasted unzip is cheaper than a mod stuck on stale assets.
+        /// </summary>
+        private static bool ShouldExtract(CcpmodSource source, string extractDir, string payloadProbe, string timeProbe)
+        {
+            try
+            {
+                if (!PathExists(payloadProbe)) return true;
+
+                var installed = ReadPackStamp(extractDir);
+                if (installed != null
+                    && !string.IsNullOrEmpty(installed.SourcePath)
+                    && !string.Equals(installed.SourcePath, source.Path, StringComparison.OrdinalIgnoreCase))
+                {
+                    // The archive moved between roots (upgrade deleted the in-box copy, pack took
+                    // over, or vice versa) — the two are not guaranteed to hold the same bytes.
+                    _log?.Information("Built-in mod source moved to {Path} — re-extracting", source.Path);
+                    return true;
+                }
+
+                if (source.FromPack)
+                {
+                    // Extracted before stamps existed (or from the in-box copy): rebuild once so the
+                    // tree and its stamp agree from here on.
+                    if (installed == null) return true;
+
+                    var want = ReleaseContentService.GetStampFor(source.PackId);
+                    if (want == null) return false;   // pack never stamped — trust what is on disk
+                    if (installed.ContentVersion != want.ContentVersion) return true;
+                    if (!string.IsNullOrEmpty(want.Sha256)
+                        && !string.Equals(installed.Sha256, want.Sha256, StringComparison.OrdinalIgnoreCase)) return true;
+                    return false;
+                }
+
+                // In-box archive: unchanged historical rule — re-extract when the shipped .ccpmod is
+                // newer than what we unpacked (covers app updates with a refreshed package).
+                return File.GetLastWriteTimeUtc(source.Path) > LastWriteUtc(timeProbe);
+            }
+            catch (Exception ex)
+            {
+                _log?.Warning(ex, "ModService: extract check failed for {Dir} — assuming a re-extract is needed", extractDir);
+                return true;
+            }
+        }
+
+        private static bool PathExists(string path)
+        {
+            try { return File.Exists(path) || Directory.Exists(path); }
+            catch { return false; }
+        }
+
+        private static DateTime LastWriteUtc(string path)
+        {
+            try { return Directory.Exists(path) ? Directory.GetLastWriteTimeUtc(path) : File.GetLastWriteTimeUtc(path); }
+            catch { return DateTime.MinValue; }
+        }
+
+        private static BuiltInModPackStamp? ReadPackStamp(string extractDir)
+        {
+            try
+            {
+                var path = Path.Combine(extractDir, BuiltInPackStampFile);
+                if (!File.Exists(path)) return null;
+                return JsonConvert.DeserializeObject<BuiltInModPackStamp>(File.ReadAllText(path));
+            }
+            catch (Exception ex)
+            {
+                _log?.Debug("ModService: unreadable pack stamp in {Dir}: {Error}", extractDir, ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Records what produced the extracted tree. Written AFTER the unzip, so a .ccpmod that
+        /// happened to carry its own pack.json cannot fake a stamp, and an extraction killed midway
+        /// leaves no stamp at all — which reads as "rebuild me".
+        /// </summary>
+        private static void WritePackStamp(string extractDir, CcpmodSource source)
+        {
+            try
+            {
+                var packStamp = source.FromPack ? ReleaseContentService.GetStampFor(source.PackId) : null;
+                var stamp = new BuiltInModPackStamp
+                {
+                    ContentVersion = packStamp?.ContentVersion ?? 0,
+                    Sha256 = packStamp?.Sha256 ?? "",
+                    SourcePath = source.Path,
+                    ExtractedUtc = DateTime.UtcNow
+                };
+                Directory.CreateDirectory(extractDir);
+                File.WriteAllText(
+                    Path.Combine(extractDir, BuiltInPackStampFile),
+                    JsonConvert.SerializeObject(stamp, Formatting.Indented));
+            }
+            catch (Exception ex)
+            {
+                _log?.Warning(ex, "ModService: could not write pack stamp in {Dir} — the next launch will re-extract", extractDir);
+            }
+        }
+
+        /// <summary>Sibling folders the swap in <see cref="ExtractArchive"/> stages through.</summary>
+        private const string StagingSuffix = ".new";
+        private const string RetiredSuffix = ".old";
+
+        /// <summary>
+        /// Unzip into a sibling staging folder, then swap it in with two directory renames.
+        ///
+        /// The previously extracted tree is NEVER wiped in place: by the time a pack finishes
+        /// downloading it is usually REGISTERED and live (<see cref="AdoptBuiltInPackage"/>), and
+        /// Directory.Delete is not atomic — one mp3 held open by a playing bark throws mid-delete and
+        /// leaves the live tree half-gone, with everything that DID delete missing for the whole
+        /// 10-60s unzip. Staging beside it (same volume, so the swap is a rename, not a copy) shrinks
+        /// that window to two renames.
+        ///
+        /// Returns false — logged, never thrown — on any failure, leaving the old tree serving and
+        /// its stamp still mismatched so the next launch retries.
+        /// </summary>
+        private static bool ExtractArchive(CcpmodSource source, string extractDir, string builtInId)
+        {
+            var stagingDir = extractDir + StagingSuffix;
+            var retiredDir = extractDir + RetiredSuffix;
+
+            try
+            {
+                // Leftovers from a run that died mid-swap would make ExtractToDirectory throw.
+                TryDeleteTree(stagingDir);
+                TryDeleteTree(retiredDir);
+
+                Directory.CreateDirectory(stagingDir);
+                ZipFile.ExtractToDirectory(source.Path, stagingDir);
+                WritePackStamp(stagingDir, source);
+            }
+            catch (Exception ex)
+            {
+                _log?.Error(ex, "Failed to extract built-in mod {BuiltInId} from {Path}", builtInId, source.Path);
+                TryDeleteTree(stagingDir);
+                return false;
+            }
+
+            var hadOld = Directory.Exists(extractDir);
+            if (hadOld)
             {
                 try
                 {
-                    var bundledPath = Path.Combine(
-                        AppDomain.CurrentDomain.BaseDirectory,
-                        relativePath.Replace('/', Path.DirectorySeparatorChar));
-
-                    if (!File.Exists(bundledPath))
-                    {
-                        _log?.Warning("Bundled resource mod missing on disk: {Path}", bundledPath);
-                        continue;
-                    }
-
-                    var extractDir = Path.Combine(builtInRoot, builtInId);
-                    var resourcesDir = Path.Combine(extractDir, "resources");
-
-                    // Re-extract if the resources tree is missing, or if the bundled
-                    // package is newer than our extracted copy (covers app updates
-                    // that ship refreshed assets).
-                    var needsExtract = !Directory.Exists(resourcesDir)
-                        || File.GetLastWriteTimeUtc(bundledPath) > Directory.GetLastWriteTimeUtc(extractDir);
-
-                    if (needsExtract)
-                    {
-                        if (Directory.Exists(extractDir))
-                            Directory.Delete(extractDir, recursive: true);
-                        Directory.CreateDirectory(extractDir);
-                        ZipFile.ExtractToDirectory(bundledPath, extractDir);
-                        _log?.Information("Extracted bundled resource mod {BuiltInId} from {Path}", builtInId, bundledPath);
-                    }
-
-                    // Keep the in-code manifest authoritative; only adopt the assets.
-                    _installedMods[builtInId] = new ModPackage(manifest, extractDir, isBuiltIn: true);
-                    _log?.Information("Registered resource mod {BuiltInId} with assets at {Path}", builtInId, extractDir);
+                    Directory.Move(extractDir, retiredDir);
                 }
                 catch (Exception ex)
                 {
-                    _log?.Error(ex, "Failed to extract bundled resource mod {BuiltInId} (falling back to baseline assets)", builtInId);
+                    // Something in the live tree is pinned. Keep serving it exactly as-is — the stamp
+                    // still reads "stale", so the next launch tries the whole swap again.
+                    _log?.Warning(ex,
+                        "Built-in mod {BuiltInId}: could not retire the in-use tree at {Path} — keeping the existing assets and retrying next launch",
+                        builtInId, extractDir);
+                    TryDeleteTree(stagingDir);
+                    return false;
                 }
             }
+
+            try
+            {
+                Directory.Move(stagingDir, extractDir);
+            }
+            catch (Exception ex)
+            {
+                _log?.Error(ex, "Built-in mod {BuiltInId}: could not swap the extracted tree into {Path}", builtInId, extractDir);
+                if (hadOld)
+                {
+                    // Put the old tree back rather than leaving the mod with no folder at all.
+                    try { Directory.Move(retiredDir, extractDir); }
+                    catch (Exception restoreEx)
+                    {
+                        _log?.Error(restoreEx, "Built-in mod {BuiltInId}: could not restore the retired tree from {Path}", builtInId, retiredDir);
+                    }
+                }
+                TryDeleteTree(stagingDir);
+                return false;
+            }
+
+            if (hadOld && !TryDeleteTree(retiredDir))
+            {
+                _log?.Information(
+                    "Built-in mod {BuiltInId}: retired tree {Path} still has locked files — leaving it for the next launch's sweep",
+                    builtInId, retiredDir);
+            }
+
+            _log?.Information("Extracted built-in mod {BuiltInId} from {Path} ({Source})",
+                builtInId, source.Path, source.FromPack ? "content pack" : "install dir");
+            return true;
         }
+
+        /// <summary>Best-effort recursive delete. False = locked/failed; the caller decides what to log.</summary>
+        private static bool TryDeleteTree(string dir)
+        {
+            try
+            {
+                if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _log?.Debug("ModService: could not delete {Dir}: {Error}", dir, ex.Message);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Background (re)extraction for a downloaded pack's .ccpmod — startup never blocks on it, and
+        /// a pack that lands mid-session uses the same path. On success the registry is updated on the
+        /// UI thread, the resource cache is dropped and <see cref="ModAvailabilityChanged"/> fires —
+        /// plus <see cref="ModChanged"/> when the mod that just gained its assets is the active one.
+        /// Coalesced per built-in id: a second request while one is running is ignored.
+        /// </summary>
+        private void ScheduleBuiltInExtraction(CcpmodSource source, string builtInId, string extractDir, ModManifest? codeManifest)
+        {
+            if (!_extracting.TryAdd(builtInId, 0))
+            {
+                _log?.Debug("ModService: extraction for {BuiltInId} already running — skipping duplicate request", builtInId);
+                return;
+            }
+
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    if (!ExtractArchive(source, extractDir, builtInId)) return;
+
+                    RunOnUi(() =>
+                    {
+                        try
+                        {
+                            if (!RegisterExtractedBuiltIn(builtInId, extractDir, codeManifest)) return;
+                            ModResourceResolver.ClearCache();
+
+                            // A .ccpmod carries its own bark_rules.json / mantras.json, so the mod
+                            // that just gained one has been running on empty rules all session.
+                            // ReloadRules is the same call a mod switch makes — idempotent.
+                            if (_activeMod is not null
+                                && string.Equals(_activeMod.Id, builtInId, StringComparison.OrdinalIgnoreCase))
+                            {
+                                try { App.Bark?.ReloadRules(); }
+                                catch (Exception ex) { _log?.Debug("ModService: bark reload failed: {Error}", ex.Message); }
+                            }
+
+                            RaiseModAvailabilityChanged(builtInId);
+                        }
+                        catch (Exception ex)
+                        {
+                            _log?.Error(ex, "ModService: post-extract registration failed for {BuiltInId}", builtInId);
+                        }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _log?.Error(ex, "ModService: background extraction failed for {BuiltInId}", builtInId);
+                }
+                finally
+                {
+                    _extracting.TryRemove(builtInId, out _);
+                }
+            });
+        }
+
+        /// <summary>
+        /// Adopts an extracted tree into the built-in slot: full packages take their manifest from the
+        /// extracted mod.json (sanitized, id forced to the slot), resources-only packages keep the
+        /// in-code manifest and adopt only the assets. Returns false — logged, never thrown — when the
+        /// tree is unusable, leaving the hardcoded registration in place.
+        /// </summary>
+        private bool RegisterExtractedBuiltIn(string builtInId, string extractDir, ModManifest? codeManifest)
+        {
+            try
+            {
+                if (codeManifest != null)
+                {
+                    if (!Directory.Exists(Path.Combine(extractDir, "resources")))
+                    {
+                        _log?.Warning("Resource mod {BuiltInId} has no resources/ tree at {Path}", builtInId, extractDir);
+                        return false;
+                    }
+                    // Keep the in-code manifest authoritative; only adopt the assets.
+                    AdoptBuiltInPackage(builtInId, new ModPackage(codeManifest, extractDir, isBuiltIn: true));
+                    _log?.Information("Registered resource mod {BuiltInId} with assets at {Path}", builtInId, extractDir);
+                    return true;
+                }
+
+                var manifestPath = Path.Combine(extractDir, "mod.json");
+                if (!File.Exists(manifestPath))
+                {
+                    _log?.Warning("Bundled built-in mod {BuiltInId} has no mod.json at {Path}", builtInId, extractDir);
+                    return false;
+                }
+
+                var manifest = JsonConvert.DeserializeObject<ModManifest>(File.ReadAllText(manifestPath));
+                if (manifest == null || string.IsNullOrWhiteSpace(manifest.Id))
+                {
+                    _log?.Warning("Bundled built-in mod {BuiltInId} has invalid mod.json", builtInId);
+                    return false;
+                }
+
+                // Sanitize same as user-installed mods (defense-in-depth even
+                // though we ship the package ourselves).
+                var sanitizeError = SanitizeManifest(manifest);
+                if (sanitizeError != null)
+                {
+                    _log?.Warning("Bundled built-in mod {BuiltInId} failed sanitization: {Error}", builtInId, sanitizeError);
+                    return false;
+                }
+
+                // Force the manifest ID to match the built-in slot we're
+                // filling so a tampered mod.json can't squat a different ID.
+                manifest.Id = builtInId;
+
+                AdoptBuiltInPackage(builtInId, new ModPackage(manifest, extractDir, isBuiltIn: true));
+                _log?.Information("Registered bundled built-in mod {BuiltInId} from {Path}", builtInId, extractDir);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _log?.Error(ex, "Failed to register built-in mod {BuiltInId} from {Path}", builtInId, extractDir);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Puts a freshly-extracted package into the registry. When it replaces the ACTIVE mod's
+        /// registration — a pack that finished extracting mid-session — the live _activeMod reference
+        /// is swapped too, or the session would go on resolving the baseline assets the hardcoded
+        /// manifest points at, and <see cref="ModChanged"/> is raised so everything that paints from
+        /// the mod (avatar tube, ambient FX, takeover orb, gate FX, bark rules) re-reads the new
+        /// InstalledPath + manifest. Adoption for a NON-active mod stays silent — the caller raises
+        /// <see cref="ModAvailabilityChanged"/> for the list rebuild.
+        /// (_activeMod is still null while the ctor runs; that case is the ordinary startup path,
+        /// which needs neither the swap nor the event.)
+        /// </summary>
+        private void AdoptBuiltInPackage(string builtInId, ModPackage package)
+        {
+            _installedMods[builtInId] = package;
+            if (_activeMod is null || !string.Equals(_activeMod.Id, builtInId, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            _activeMod = package;
+            _log?.Information("ModService: active mod {ModId} adopted its newly extracted assets", builtInId);
+
+            // ActivateMod can't be reused here — it early-returns when the id is unchanged, and the id
+            // is exactly what stays put (only InstalledPath and the manifest moved). Replicate the two
+            // steps of it that consumers depend on. The pool save/restore is deliberately NOT re-run:
+            // the mod id never changed, so the live pools already belong to this mod, and restoring
+            // again would throw away edits made earlier in the session.
+            try { ModResourceResolver.ClearCache(); }
+            catch (Exception ex) { _log?.Debug("ModService: resolver cache clear failed: {Error}", ex.Message); }
+
+            // The extracted mod.json can declare a different companion set than the hardcoded
+            // manifest we were running on.
+            try
+            {
+                if (App.Companion != null && !IsCompanionSupported(App.Companion.ActiveCompanion))
+                {
+                    foreach (Models.CompanionId cid in Enum.GetValues(typeof(Models.CompanionId)))
+                    {
+                        if (!IsCompanionSupported(cid)) continue;
+                        App.Companion.SwitchCompanion(cid);
+                        _log?.Information("Auto-switched companion to {CompanionId} (previous not supported by the adopted package)", cid);
+                        break;
+                    }
+                }
+            }
+            catch (Exception ex) { _log?.Warning(ex, "ModService: companion fallback failed after adopting {ModId}", builtInId); }
+
+            // Raised from a background-triggered path, so a throwing subscriber must not kill the
+            // extraction callback the way it would a user-driven mod switch.
+            try { ModChanged?.Invoke(this, package); }
+            catch (Exception ex) { _log?.Error(ex, "ModService: ModChanged subscriber threw after {ModId} adopted its extracted assets", builtInId); }
+        }
+
+        /// <summary>
+        /// Marshals onto the UI thread. Pack callbacks and extraction tasks all arrive on background
+        /// threads, and the mod registry / settings they touch are UI-thread state.
+        /// </summary>
+        private static void RunOnUi(Action action)
+        {
+            try
+            {
+                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                if (dispatcher == null)
+                {
+                    action();   // no WPF app (tests/headless) — nothing to marshal onto
+                    return;
+                }
+                if (dispatcher.HasShutdownStarted) return;
+                if (dispatcher.CheckAccess()) action();
+                else dispatcher.BeginInvoke(action);
+            }
+            catch (Exception ex)
+            {
+                _log?.Debug("ModService: UI marshal failed: {Error}", ex.Message);
+            }
+        }
+
+        #endregion
+
+        #region Release content packs (mid-session arrival)
+
+        private ReleaseContentService? _releaseContent;
+
+        /// <summary>Pack id ↔ built-in mod id for the four per-mod content packs.</summary>
+        private static readonly (string PackId, string ModId)[] _packToMod =
+        {
+            (ReleaseContentService.PackModBambi, BuiltInMods.BambiSleepId),
+            (ReleaseContentService.PackModSissy, BuiltInMods.SissyHypnoId),
+            (ReleaseContentService.PackModLocked, BuiltInMods.LockedId),
+            (ReleaseContentService.PackModDrone, BuiltInMods.DronificationId),
+        };
+
+        /// <summary>Built-in mod id a content pack delivers, or null (audio packs map to no mod).</summary>
+        public static string? ModIdForPack(string packId)
+        {
+            if (string.IsNullOrWhiteSpace(packId)) return null;
+            foreach (var (pack, mod) in _packToMod)
+                if (string.Equals(pack, packId, StringComparison.OrdinalIgnoreCase)) return mod;
+            return null;
+        }
+
+        /// <summary>Content pack that carries a built-in mod's media, or null (CCP Default ships in-box).</summary>
+        public static string? PackIdForMod(string modId)
+        {
+            if (string.IsNullOrWhiteSpace(modId)) return null;
+            foreach (var (pack, mod) in _packToMod)
+                if (string.Equals(mod, modId, StringComparison.OrdinalIgnoreCase)) return pack;
+            return null;
+        }
+
+        /// <summary>
+        /// Subscribes to <see cref="ReleaseContentService.PackInstalled"/> so a pack that lands
+        /// mid-session takes effect without a restart. Wired from App startup rather than the ctor:
+        /// ModService is built long before ReleaseContentService exists. Idempotent.
+        /// </summary>
+        public void AttachReleaseContent(ReleaseContentService? releaseContent)
+        {
+            try
+            {
+                if (releaseContent == null || ReferenceEquals(releaseContent, _releaseContent)) return;
+                if (_releaseContent != null) _releaseContent.PackInstalled -= OnReleasePackInstalled;
+                _releaseContent = releaseContent;
+                releaseContent.PackInstalled += OnReleasePackInstalled;
+                _log?.Information("ModService: listening for content-pack installs");
+            }
+            catch (Exception ex)
+            {
+                _log?.Warning(ex, "ModService: could not subscribe to content-pack installs");
+            }
+        }
+
+        /// <summary>
+        /// A pack finished installing (raised on the DOWNLOAD thread — everything here marshals).
+        /// Mod packs that carry a .ccpmod get a background (re)extraction; the rest is loose media
+        /// ContentLocator already finds, so it only needs the caches that may still be holding a
+        /// "missing file" answer dropped.
+        /// </summary>
+        private void OnReleasePackInstalled(object? sender, string packId)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(packId)) return;
+                _log?.Information("ModService: content pack {Pack} installed — refreshing mod content", packId);
+
+                RunOnUi(() =>
+                {
+                    // The registry is UI-thread state, so the probe/register pass runs here even
+                    // though the unzip it may schedule does not (ScheduleBuiltInExtraction).
+                    try
+                    {
+                        var builtInRoot = EnsureBuiltInRoot();
+                        if (builtInRoot != null)
+                        {
+                            foreach (var entry in _bundledBuiltInMods)
+                            {
+                                if (!string.Equals(entry.PackId, packId, StringComparison.OrdinalIgnoreCase)) continue;
+                                PrepareBuiltInMod(builtInRoot, entry.RelativePath, entry.BuiltInId, entry.PackId, codeManifest: null);
+                            }
+                            foreach (var entry in _bundledResourceMods)
+                            {
+                                if (!string.Equals(entry.PackId, packId, StringComparison.OrdinalIgnoreCase)) continue;
+                                PrepareBuiltInMod(builtInRoot, entry.RelativePath, entry.BuiltInId, entry.PackId, entry.Manifest);
+                            }
+                        }
+                    }
+                    catch (Exception ex) { _log?.Error(ex, "ModService: built-in refresh failed for {Pack}", packId); }
+
+                    // Null misses are cached per ActiveModId, so a mod whose audio/art just appeared
+                    // would keep resolving to nothing for the rest of the session without this.
+                    try { ModResourceResolver.ClearCache(); }
+                    catch (Exception ex) { _log?.Debug("ModService: resolver cache clear failed: {Error}", ex.Message); }
+
+                    // Voice lines are enumerated per call (no list cache), but the §7.2 positional→
+                    // filename id migration is deliberately skipped while the folder is empty — this
+                    // is the moment it can finally run. Idempotent and cheap on a migrated profile.
+                    try { CompanionPhraseService.RefreshVoiceLineIndex(); }
+                    catch (Exception ex) { _log?.Debug("ModService: voice-line refresh failed: {Error}", ex.Message); }
+
+                    RaiseModAvailabilityChanged(ModIdForPack(packId) ?? packId);
+                });
+            }
+            catch (Exception ex)
+            {
+                _log?.Error(ex, "ModService: failed to handle content-pack install for {Pack}", packId);
+            }
+        }
+
+        /// <summary>Raises <see cref="ModAvailabilityChanged"/>; a throwing subscriber never escapes.</summary>
+        private void RaiseModAvailabilityChanged(string modOrPackId)
+        {
+            try { ModAvailabilityChanged?.Invoke(this, modOrPackId); }
+            catch (Exception ex) { _log?.Debug("ModAvailabilityChanged subscriber error: {Error}", ex.Message); }
+        }
+
+        #endregion
+
+        #region Private Helpers (continued)
 
         private void LoadInstalledMods()
         {
@@ -1443,6 +2239,22 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>
+        /// Re-reads the ACTIVE mod's saved pools into the live settings.
+        ///
+        /// Called by SessionEngine.RestoreSettings when the user switched mods mid-session: the
+        /// snapshot the engine restores belongs to the mod that was active when the session started,
+        /// so without this the wrong mod's phrases stay live until the next relaunch. The mirror is
+        /// suppressed for the same reason as in ActivateMod - this only READS a backup, so it must
+        /// not turn round and rewrite it.
+        /// </summary>
+        internal void ReapplyActiveModPools()
+        {
+            _suppressPoolMirror = true;
+            try { RestorePoolsFromSettings(_activeMod.Id); }
+            finally { _suppressPoolMirror = false; }
+        }
+
         private void SaveCurrentPoolsToSettings(string modId)
         {
             var settings = App.Settings?.Current;
@@ -1454,16 +2266,41 @@ namespace ConditioningControlPanel.Services
             settings.CustomTriggersByMod ??= new Dictionary<string, List<string>>();
             settings.BouncingTextPoolByMod ??= new Dictionary<string, Dictionary<string, bool>>();
 
-            if (settings.SubliminalPool != null)
-                settings.SubliminalPoolByMod[modId] = new Dictionary<string, bool>(settings.SubliminalPool);
+            // While a session is running, the LIVE phrase pools are the session's prescribed
+            // phrases, not the user's own - SessionEngine.ApplySessionSettings overwrote them.
+            // Persisting the live pool here would therefore replace the user's saved pool for this
+            // mod with session content, and because SessionEngine.RestoreSettings only restores the
+            // FLAT pool and never this per-mod backup, the bad data outlives the session and gets
+            // copied straight over the good pool by RestorePoolsFromSettings on the next launch.
+            // So back up what the user actually owns: the engine's pre-session snapshot.
+            //
+            // This covers both routes in - the direct call from ActivateMod, and the INPC mirror in
+            // CurrentSettings_PropertyChanged. Nothing is lost by preferring the snapshot: a pool
+            // edit made mid-session was already going to be discarded by RestoreSettings at the
+            // end, so the only behaviour change is that it no longer corrupts the backup too.
+            var engine = SessionEngine.Active;
+            var sessionOwnsPools = engine?.IsOverridingPhrasePools == true;
+
+            var subPool = (sessionOwnsPools ? engine!.UserSubliminalPool : null) ?? settings.SubliminalPool;
+            var lockPool = (sessionOwnsPools ? engine!.UserLockCardPool : null) ?? settings.LockCardPhrases;
+            var bouncePool = (sessionOwnsPools ? engine!.UserBouncingTextPool : null) ?? settings.BouncingTextPool;
+
+            if (subPool != null)
+                settings.SubliminalPoolByMod[modId] = new Dictionary<string, bool>(subPool);
+            // AttentionPool and CustomTriggers are never overridden by a session, so the live
+            // values are always the user's own.
             if (settings.AttentionPool != null)
                 settings.AttentionPoolByMod[modId] = new Dictionary<string, bool>(settings.AttentionPool);
-            if (settings.LockCardPhrases != null)
-                settings.LockCardPhrasesByMod[modId] = new Dictionary<string, bool>(settings.LockCardPhrases);
+            if (lockPool != null)
+                settings.LockCardPhrasesByMod[modId] = new Dictionary<string, bool>(lockPool);
             if (settings.CustomTriggers != null)
                 settings.CustomTriggersByMod[modId] = new List<string>(settings.CustomTriggers);
-            if (settings.BouncingTextPool != null)
-                settings.BouncingTextPoolByMod[modId] = new Dictionary<string, bool>(settings.BouncingTextPool);
+            if (bouncePool != null)
+                settings.BouncingTextPoolByMod[modId] = new Dictionary<string, bool>(bouncePool);
+
+            if (sessionOwnsPools)
+                _log?.Information("ModService: backed up the USER's pre-session pools for {ModId}, " +
+                                  "not the running session's prescribed phrases", modId);
         }
 
         private void RestorePoolsFromSettings(string modId)

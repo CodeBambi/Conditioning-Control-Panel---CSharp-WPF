@@ -203,28 +203,7 @@ namespace ConditioningControlPanel
                 var master = (App.Settings?.Current?.MasterVolume ?? 100) / 100f;
                 var volume = (float)Math.Pow(master * 0.5f, 1.5);
 
-                Task.Run(() =>
-                {
-                    WaveOutEvent? output = null;
-                    AudioFileReader? reader = null;
-                    try
-                    {
-                        reader = new AudioFileReader(path) { Volume = volume };
-                        output = new WaveOutEvent();
-                        App.Audio?.ApplyPreferredDevice(output);
-                        output.Init(reader);
-                        output.Play();
-                        while (output.PlaybackState == PlaybackState.Playing)
-                            System.Threading.Thread.Sleep(50);
-                    }
-                    catch { }
-                    finally
-                    {
-                        reader?.Dispose();
-                        try { output?.Stop(); } catch { }
-                        output?.Dispose();
-                    }
-                });
+                App.Audio?.PlayOneShot(path, volume, "popquiz-chime");
             }
             catch (Exception ex)
             {
@@ -248,6 +227,24 @@ namespace ConditioningControlPanel
             {
                 border.Background = new SolidColorBrush(Color.FromArgb(0x15, 0xFF, 0xFF, 0xFF));
                 border.BorderBrush = new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF));
+            }
+        }
+
+        /// <summary>
+        /// Whether a pop quiz is actually on screen right now. Gates on the visible set rather than the
+        /// <see cref="IsOpen"/> flag: that flag is raised in the constructor and only lowered in
+        /// OnClosed, so a quiz that failed between construction and Show() would leave it stuck true
+        /// and block every later interaction.
+        /// </summary>
+        public static bool IsAnyOpen()
+        {
+            try
+            {
+                return Application.Current?.Windows.OfType<PopQuizWindow>().Any(w => w.IsVisible) == true;
+            }
+            catch
+            {
+                return false;
             }
         }
 

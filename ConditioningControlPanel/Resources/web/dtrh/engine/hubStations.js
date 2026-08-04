@@ -24,8 +24,8 @@
 import * as THREE from 'three';
 
 const ART = 'https://ccp.art/';          // station art on the CDN (boonPick idiom)
-const AHEAD = 11;                        // depth lead: the menu hangs this far ahead
-const CARD_W = 2.55, CARD_H = 3.1;       // station card content size (portrait)
+const AHEAD = 9;                         // depth lead: the menu hangs this far ahead (pulled in from 11 - nearer the POV)
+const CARD_W = 2.1, CARD_H = 2.55;       // station card content size (portrait) - smaller so they float INSIDE the bore, not in the tube wall
 const PORTAL_R = 2.1;                    // FALL IN portal disc radius
 const ANCHOR_LERP = 3.2;                 // per-frame re-anchor smoothing
 const FOCUS_SCALE = 1.15;                // focused station lift
@@ -169,13 +169,15 @@ export function createHubStations({ scene, camera, layout, nav, fx, hud }) {
 
   // default cross-section slots (binormal = x, normal = y); defs may override
   const DEFAULT_SLOTS = {
-    // Pulled in from ±3.4: at the old spread the side stations sat near the tube
-    // wall radius, so their glow halos bled past it and read as "cut off."
-    toybox:  { x: -2.9, y: 1.4 },
-    dials:   { x: 2.9,  y: 1.4 },
-    vanity:  { x: 0,    y: 2.15 },   // ducks under the DOM logo marquee
-    portal:  { x: 0,    y: -0.4 },
-    boudoir: { x: 2.9,  y: -1.15 },  // crafting (bottom-right; bottom-left is the wr-dock)
+    // Tucked inside the bore for the smaller cards (2.1 x 2.55): tight enough that
+    // no card reaches the tube wall, still with a frame-clear gap on every pair -
+    // side columns clear center horizontally, the stacked right column (dials over
+    // boudoir) clears vertically, and vanity sits clear above the FALL IN spiral.
+    toybox:  { x: -2.5, y: 0.9 },
+    dials:   { x: 2.5,  y: 0.9 },
+    vanity:  { x: 0,    y: 2.5 },    // top-center, ducks under the DOM logo marquee
+    portal:  { x: 0,    y: -0.9 },   // the dive hole (center)
+    boudoir: { x: 2.5,  y: -2.1 },   // crafting (bottom-right; bottom-left is the wr-dock) - clears the Dials card above
   };
 
   // ---- one station -----------------------------------------------------------

@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Unit tests for the pure decision logic extracted from the app's services. These cover the
+    2026-07-20 triage fixes: flash concurrency cap (#601), ambient pop-flash duration (#593),
+    mid-play vout self-heal state machine (#600), and Deeper overlay z-order / band-depth counter.
+    The project references the main WPF app and reaches its internals via InternalsVisibleTo.
+    Framework/RID match the app so the ProjectReference resolves without a platform mismatch.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <WindowsSdkPackageVersion>10.0.26100.84</WindowsSdkPackageVersion>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <IsPackable>false</IsPackable>
+    <IsPublishable>false</IsPublishable>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AssemblyName>ConditioningControlPanel.Tests</AssemblyName>
+    <RootNamespace>ConditioningControlPanel.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
+    <PackageReference Include="xunit.v3" Version="3.2.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\ConditioningControlPanel\ConditioningControlPanel.csproj" />
+  </ItemGroup>
+
+</Project>

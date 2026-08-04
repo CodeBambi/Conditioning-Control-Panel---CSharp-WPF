@@ -63,6 +63,14 @@ namespace ConditioningControlPanel
         private static EventWaitHandle? _showSignal;
         private static EventWaitHandle? _showAckSignal;
         private static bool _recoveredFromStaleInstance;
+        // How many processes the takeover actually terminated. Can be zero even after a failed
+        // ack: the mutex holder may be a build from a different folder that we refuse to touch.
+        private static int _staleInstancesKilled;
+        // KillStaleInstances runs before Serilog is configured, so its per-process verdicts are
+        // buffered here and replayed the moment Logger exists. Without them a takeover that kills
+        // the wrong process (or refuses to kill the right one) leaves no trace in logs/app-*.log
+        // and the next person has to guess.
+        private static readonly List<string> _staleInstanceDecisions = new();
         private SplashScreen? _splash;
         private static Thread? _showSignalThread;
         private readonly TaskCompletionSource _patreonInitDone = new();
@@ -141,11 +149,26 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// User data folder path in LocalAppData - persists across updates
+        /// User data folder path in LocalAppData - persists across updates.
+        /// CCP_USERDATA_DIR redirects the whole tree (settings, logs, content, mods) so test
+        /// harnesses can run against a sandbox instead of the real profile; same env-hook
+        /// pattern as the CCP_STRESS_* knobs.
         /// </summary>
-        public static string UserDataPath { get; } = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ConditioningControlPanel");
+        public static string UserDataPath { get; } = ResolveUserDataPath();
+
+        private static string ResolveUserDataPath()
+        {
+            try
+            {
+                var overrideDir = Environment.GetEnvironmentVariable("CCP_USERDATA_DIR");
+                if (!string.IsNullOrWhiteSpace(overrideDir) && Path.IsPathRooted(overrideDir))
+                    return overrideDir;
+            }
+            catch { }
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "ConditioningControlPanel");
+        }
 
         /// <summary>
         /// User assets folder path - for user-added content that persists across updates
@@ -286,6 +309,7 @@ namespace ConditioningControlPanel
         public static VideoService Video { get; private set; } = null!;
         public static AudioService Audio { get; private set; } = null!;
         public static SessionLogService SessionLog { get; private set; } = null!;
+        public static MediaHistoryService MediaHistory { get; private set; } = null!;
         public static ProgressionService Progression { get; private set; } = null!;
         public static SubliminalService Subliminal { get; private set; } = null!;
         public static Services.Compositor.CompositorEngine? Compositor { get; private set; }
@@ -309,6 +333,9 @@ namespace ConditioningControlPanel
         public static OverlayService Overlay { get; private set; } = null!;
         public static ScreenShakeService ScreenShake { get; private set; } = null!;
         public static BubbleService Bubbles { get; private set; } = null!;
+        public static CornerGifService CornerGif { get; private set; } = null!;
+        // Suggestion #659 — layered looping audio mixer (single output device).
+        public static Services.Audio.LayeredAudioService LayeredAudio { get; private set; } = null!;
         public static Services.Chaos.ChaosModeService Chaos { get; private set; } = null!;
         public static LockCardService LockCard { get; private set; } = null!;
         public static PopQuizService PopQuiz { get; private set; } = null!;
@@ -321,6 +348,10 @@ namespace ConditioningControlPanel
         public static BarkService? Bark { get; private set; }
         public static QuestDefinitionService QuestDefinitions { get; private set; } = null!;
         public static QuestService Quests { get; private set; } = null!;
+        /// <summary>Weekly free-tier pass for the Graded Intake (see IntakePassService).</summary>
+        public static IntakePassService IntakePass { get; private set; } = null!;
+        /// <summary>Eight-hole intake punch card (see IntakePunchCardService).</summary>
+        public static IntakePunchCardService IntakePunchCard { get; private set; } = null!;
         public static TutorialService Tutorial { get; private set; } = null!;
         public static IAiService Ai { get; private set; } = null!;
         public static IAiCommandService Commands { get; private set; } = null!;
@@ -347,11 +378,22 @@ namespace ConditioningControlPanel
         /// <summary>Offline "Hey Bambi" wake-word spotter (sherpa-onnx KWS, no key). Unavailable until the model is dropped into Resources\Models\sherpa-kws\; the wake loop falls back to Vosk when so.</summary>
         public static Services.Speech.SherpaWakeService WakeWord { get; private set; } = null!;
         public static InteractionQueueService InteractionQueue { get; private set; } = null!;
+        /// <summary>Single source of truth for web media playing in the embedded browser (user- or
+        /// app-started). Every subsystem that could interrupt playback asks its
+        /// <c>ShouldDeferInterruptions</c> gate.</summary>
+        public static Services.Browser.BrowserMediaService BrowserMedia { get; private set; } = null!;
         public static ContentPackService ContentPacks { get; private set; } = null!;
+        /// <summary>Release-hosted content packs (baseline/web audio + per-mod media pulled out of the
+        /// installer, fetched from the vX.Y.0 GitHub release). Null only if construction failed —
+        /// every consumer must null-check; missing content degrades gracefully everywhere.</summary>
+        public static ReleaseContentService? ReleaseContent { get; private set; }
         public static CompanionService Companion { get; private set; } = null!;
         public static CommunityPromptService CommunityPrompts { get; private set; } = null!;
         public static PersonalityService Personality { get; private set; } = null!;
         public static RoadmapService Roadmap { get; private set; } = null!;
+        /// <summary>Multi-day Training Programs runtime. Fully qualified because the namespace
+        /// segment <c>Program</c> collides with the <c>Program</c> type in C# name resolution.</summary>
+        public static Services.Program.ProgramService Programs { get; private set; } = null!;
         public static SkillTreeService SkillTree { get; private set; } = null!;
         public static KeywordTriggerService KeywordTriggers { get; private set; } = null!;
         public static KeywordTriggerPresetService KeywordPresets { get; private set; } = null!;
@@ -366,6 +408,7 @@ namespace ConditioningControlPanel
         public static LockdownService Lockdown { get; private set; } = null!;
         public static MantraService Mantra { get; private set; } = null!;
         public static MantraVoiceService MantraVoice { get; private set; } = null!;
+        public static MantraChantService MantraChant { get; private set; } = null!;
         public static ModService Mods { get; private set; } = null!;
         public static BugReportService BugReport { get; private set; } = null!;
         public static WallpaperService? Wallpaper { get; private set; }
@@ -822,6 +865,10 @@ namespace ConditioningControlPanel
                 // Stop mantra lab audio
                 Mantra?.Dispose();
 
+                // Stop the ambient mantra chant loop — and clear its persisted flag, so panic ENDS
+                // the chant instead of pausing it until the next launch (#685).
+                MantraChant?.StopAndDisarm();
+
                 // Stop autonomy mode
                 Autonomy?.Stop();
 
@@ -1026,8 +1073,13 @@ namespace ConditioningControlPanel
 
                     // No acknowledgment within the window: the primary is wedged or headless. Kill it
                     // and take over. (Logger isn't up yet here; we record the recovery once it is.)
+                    // The kill is deliberately fail-closed, so it can legitimately terminate nothing
+                    // when the mutex holder is a build from another folder or a process we can't
+                    // identify. We fall through either way: running as a second instance without the
+                    // mutex is strictly better than exiting, and every wait below is bounded, so a
+                    // survivor can't wedge this launch.
                     _recoveredFromStaleInstance = true;
-                    KillStaleInstances();
+                    _staleInstancesKilled = KillStaleInstances();
 
                     // Claim single-instance ownership now that the zombie is gone. If it died holding
                     // the mutex, WaitOne throws AbandonedMutexException but we DO acquire it.
@@ -1141,9 +1193,6 @@ namespace ConditioningControlPanel
                     flushToDiskInterval: TimeSpan.FromSeconds(1))
                 .CreateLogger();
 
-            // Route the shared (Core) display-change spawn-suppress diagnostic through our logger.
-            Services.UI.DisplayChangeCoordinator.DebugLog = msg => Logger.Debug(msg);
-
             // Log the RUNTIME version (not just the source constant) + memory baseline. A stale
             // publish can ship old code under a new label; this line is how we catch that, and the
             // working-set baseline anchors the chaos OOM telemetry.
@@ -1158,7 +1207,21 @@ namespace ConditioningControlPanel
             // Surface a single-instance takeover (a prior wedged/headless process was killed so
             // this launch could proceed). Recorded here because Logger isn't up during the handshake.
             if (_recoveredFromStaleInstance)
-                Logger.Warning("[LIFECYCLE] Previous instance was unresponsive (no show-ack within {Ms}ms) — killed it and took over as primary", ShowAckTimeoutMs);
+            {
+                if (_staleInstancesKilled > 0)
+                    Logger.Warning("[LIFECYCLE] Previous instance was unresponsive (no show-ack within {Ms}ms) — killed {Killed} stale process(es) and took over as primary", ShowAckTimeoutMs, _staleInstancesKilled);
+                else
+                    Logger.Warning("[LIFECYCLE] Previous instance was unresponsive (no show-ack within {Ms}ms) but nothing was confirmed to be this same executable, so nothing was killed. Running as a secondary instance; the single-instance mutex stays with the other process", ShowAckTimeoutMs);
+            }
+
+            // Replay the per-process takeover verdicts buffered before Serilog existed. This is the
+            // only record of WHY a sibling process was killed or spared.
+            lock (_staleInstanceDecisions)
+            {
+                foreach (var decision in _staleInstanceDecisions)
+                    Logger.Information("{TakeoverDecision}", decision);
+                _staleInstanceDecisions.Clear();
+            }
 
             // If a Rabbit Hole run was live when the process last died, the native vanish left nothing
             // in crash.log — but the chaos sentinel file is still on disk. Report+consume it so the
@@ -1175,6 +1238,13 @@ namespace ConditioningControlPanel
             // Hang 1002, nothing in crash.log). The watchdog writes one minidump per session
             // to the logs folder when the dispatcher stops responding for 10s.
             Services.UiHangWatchdog.Start(Dispatcher);
+
+            // Flush-on-write trace for the mandatory-video show/heal path and the panic key
+            // (#616/#617/#621/#622/#623). Separate from the Serilog rolling file on purpose: the
+            // relaunch a user needs in order to FILE the report scrolls the freeze window out of
+            // the 100-line app-log tail, and a hard power reset can roll a buffered write back.
+            // Its own file + WriteThrough per line survives both. See VideoDiag.
+            Services.VideoDiag.Start(Dispatcher);
 
             splash?.SetProgress(0.1, "Initializing...");
 
@@ -1282,17 +1352,6 @@ namespace ConditioningControlPanel
 
             splash?.SetProgress(0.2, "Loading settings...");
 
-            // Back the Core secure-store seams with the WPF DPAPI stores BEFORE the
-            // settings load: AppSettings.AuthToken/OpenRouterApiKey route through these
-            // (they were no-op stubs after the model collapse, which silently broke
-            // token/API-key persistence).
-            Core.Services.SecureAuthTokenStore.Wire(
-                Services.SecureAuthTokenStore.Retrieve,
-                Services.SecureAuthTokenStore.Store);
-            Core.Services.SecureApiKeyStore.Wire(
-                Services.SecureApiKeyStore.Retrieve,
-                Services.SecureApiKeyStore.Store);
-
             // Initialize services
             Settings = new SettingsService();
 
@@ -1356,12 +1415,16 @@ namespace ConditioningControlPanel
                 new RoutedEventHandler((s, _) => Services.WindowChromeHelper.ApplyDarkTitleBar((Window)s)));
             // Recolor the Season Recap card palette from the active mod.
             Services.RecapTheme.ApplyForActiveMod();
-            // On mod switch: re-tint open window title bars and re-skin the recap palette (UI thread).
+            // Seed the ambient FX palette (fog/particles/glow/flash tint) from the active mod.
+            Services.FxTheme.ApplyForActiveMod();
+            // On mod switch: re-tint open window title bars and re-skin the recap + FX palettes
+            // (UI thread). ModChanged is the authoritative signal — ApplyActiveModChange is not.
             Mods.ModChanged += (_, __) =>
             {
                 void Recolor()
                 {
                     Services.RecapTheme.ApplyForActiveMod();
+                    Services.FxTheme.ApplyForActiveMod();
                     foreach (Window w in Current.Windows)
                         Services.WindowChromeHelper.ApplyDarkTitleBar(w);
                 }
@@ -1380,8 +1443,26 @@ namespace ConditioningControlPanel
             Video = new VideoService();
             Video.PreloadLibVLC(); // Pre-load LibVLC in background for faster first video
 
+            // Same idea for the hybrid browser engine: building the shared WebView2 environment can
+            // take seconds on a cold start, and a first video that pays for it spends that time
+            // against its own first-frame watchdog. Warm it here instead. Only when the feature is
+            // on - a user who never routes a video to the browser must not spawn a process for it.
+            try
+            {
+                if (Settings?.Current?.BrowserVideoEngineEnabled == true)
+                    Services.Video.Browser.BrowserVideoEngine.WarmUp();
+            }
+            catch (Exception ex)
+            {
+                Logger?.Debug("BrowserVideo warm-up skipped: {Error}", ex.Message);
+            }
+
             // Session media log - must be after Flash and Video so it can subscribe to their events.
             SessionLog = new SessionLogService();
+
+            // App-lifetime media recap (Assets tab -> "Media Log"). Also subscribes to Flash/Video,
+            // so likewise must come after both are constructed.
+            MediaHistory = new MediaHistoryService();
 
             splash?.SetProgress(0.6, "Initializing effects...");
             Progression = new ProgressionService();
@@ -1404,9 +1485,27 @@ namespace ConditioningControlPanel
             Overlay = new OverlayService();
             ScreenShake = new ScreenShakeService();
             Bubbles = new BubbleService();
+            // Standalone corner-GIF overlays (Spiral card): restore any persisted overlays.
+            // Bug #625: RefreshOverlays only marshals when called OFF the UI thread - here we
+            // ARE the UI thread, so it used to run synchronously and Show() a transparent
+            // topmost window before MainWindow existed (reported startup crash after enabling
+            // a corner GIF). Explicitly defer to ApplicationIdle so the restore happens once
+            // startup has settled, and swallow+log any failure so it can never kill launch.
+            // #709: the restore goes through RestoreOnStartup (not RefreshOverlays) so a launch
+            // that dies mid-restore disables the slots instead of replaying the wedge forever.
+            CornerGif = new CornerGifService();
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try { CornerGif?.RestoreOnStartup(); }
+                catch (Exception ex) { Logger?.Error(ex, "Deferred CornerGif.RestoreOnStartup failed"); }
+            }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            // Suggestion #659 — layered audio mixer. Inert until Start() (used by the Audio
+            // Layers window and by #668 audio-only sessions), so constructing it is free.
+            LayeredAudio = new Services.Audio.LayeredAudioService();
             Services.Chaos.ChaosMeta.Init();   // load persistent Chaos meta-progression before the run service
             Chaos = new Services.Chaos.ChaosModeService();
             InteractionQueue = new InteractionQueueService();
+            BrowserMedia = new Services.Browser.BrowserMediaService();   // must precede any browser navigation
             LockCard = new LockCardService();
             PopQuiz = new PopQuizService();
             BubbleCount = new BubbleCountService();
@@ -1430,7 +1529,16 @@ namespace ConditioningControlPanel
                 // When server definitions change, re-check quests (regenerates if definition was removed)
                 Quests?.CheckAndGenerateQuests();
             };
+            // Intake onboarding. Both are cheap and synchronous (the pass reads AppSettings; the
+            // punch card loads one small json), and both must exist before MainWindow paints the
+            // Exclusives gate or the Dashboard tile. Neither may touch App.Notifications from its
+            // constructor - that service is not built until later in OnStartup.
+            IntakePass = new IntakePassService();
+            IntakePunchCard = new IntakePunchCardService();
             Roadmap = new RoadmapService();
+            // Needs Settings, Progression and Quests (all above); reads Patreon lazily, so it is
+            // safe here even though Patreon is not constructed until later in OnStartup.
+            Programs = new Services.Program.ProgramService();
             SkillTree = new SkillTreeService();
             Tutorial = new TutorialService();
 
@@ -1478,6 +1586,11 @@ namespace ConditioningControlPanel
             WindowAwareness = new WindowAwarenessService();
             Patreon = new PatreonService();
             SubscribeStar = new SubscribeStarService();
+            // The weekly intake pass is a free-tier amenity, so its state depends on entitlement -
+            // which only resolves once the async validation below returns. Hook both providers now
+            // that they exist so the pass re-evaluates (and every listener repaints) the moment the
+            // answer lands, instead of leaving a patron looking free until something else refreshes.
+            IntakePass?.AttachEntitlementSources();
             ProfileSync = new ProfileSyncService();
             Leaderboard = new LeaderboardService();
             Haptics = new HapticService(Settings.Current.Haptics);
@@ -1514,8 +1627,12 @@ namespace ConditioningControlPanel
             Catalogue = new CatalogueService();
             CatalogueLookup = new CatalogueLookupService();
 
-            // Auto-connect haptics if enabled (runs in background)
-            if (Settings.Current.Haptics.AutoConnect && Settings.Current.Haptics.Provider != HapticProviderType.Mock)
+            // Auto-connect haptics if enabled (runs in background).
+            // The v2 device manager connects every ENABLED provider concurrently and no-ops when
+            // none is enabled, so the old "skip when Provider == Mock" special case is gone: it
+            // meant a Mock user (the default provider!) could never auto-connect, and it could
+            // not express "Lovense + Intiface at once" either.
+            if (Settings.Current.Haptics.AutoConnect)
             {
                 _ = AutoConnectHapticsAsync();
             }
@@ -1550,6 +1667,37 @@ namespace ConditioningControlPanel
 
             // Initialize content packs service
             ContentPacks = new ContentPackService();
+
+            // Release-hosted content packs (audio + mod media that no longer ship in the installer).
+            // Construction is cheap (version math + one Directory.Exists probe); the baseline fetch is
+            // fire-and-forget and no-ops on a full/dev layout, in offline mode, or once installed.
+            try
+            {
+                var releaseContent = new ReleaseContentService();
+                ReleaseContent = releaseContent;
+
+                // A pack landing mid-session must reach the mod system without a restart: extract a
+                // downloaded .ccpmod into its built-in slot, drop the resource caches, refresh mod
+                // lists. Wired here rather than in ModService's ctor - that runs far earlier, while
+                // ReleaseContent is still null.
+                Mods?.AttachReleaseContent(releaseContent);
+
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await releaseContent.EnsureBaselineAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger?.Warning(ex, "ReleaseContent: baseline check failed");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger?.Error(ex, "Failed to initialize ReleaseContentService - downloaded content unavailable this session");
+            }
 
             // Initialize webcam tracking + focus game services (Lab — gated by consent dialog).
             // Constructors are no-ops; the camera handle only opens after explicit user consent.
@@ -1615,6 +1763,21 @@ namespace ConditioningControlPanel
 
             // Spoken Mantras (Takeover voice mechanic) — loads per-mod mantras.json on demand.
             MantraVoice = new MantraVoiceService();
+
+            // Mantra Chant — loops the active mod's voiced mantras as ambient audio (opt-in).
+            // #685: it must NOT auto-start here. OnStartup runs long before MainWindow exists, so a
+            // persisted MantraChantEnabled began looping her voice with no UI on screen to stop it —
+            // and panic only paused it, so it came back every launch. The chant now starts OFF on
+            // every launch and only ever runs from the Takeover tab toggle the user can see. Same
+            // "clear the stale enabled flag" rule Takeover itself uses (see the AutonomyResumeOnStartup
+            // block in InitializePatreonAndSyncAsync) so the checkbox matches reality on a fresh start.
+            MantraChant = new MantraChantService();
+            if (Settings?.Current != null && Settings.Current.MantraChantEnabled)
+            {
+                Settings.Current.MantraChantEnabled = false;
+                Settings.Save();
+                Logger?.Information("Mantra Chant left OFF on startup (it never auto-resumes — #685)");
+            }
 
             // Initialize wallpaper override service
             Wallpaper = new WallpaperService();
@@ -1740,6 +1903,11 @@ namespace ConditioningControlPanel
             else if (e.Args.Contains("--dtrh"))
                 Services.Chaos.DtrhHostService.Launch();
 
+            // For You feed, dev shortcut: `--fyp` opens the feed window immediately,
+            // bypassing the Lab card and the premium gate (dev machines only).
+            if (e.Args.Contains("--fyp"))
+                Services.Fyp.FypHostService.Launch();
+
             // Arm the offline mic features (wake word / push-to-talk) at startup if the user left them
             // on. They're decoupled from Takeover ("She's Listening" owns them), so they no longer wait
             // for Takeover to start. No-op unless consent is given and the speech engine is available.
@@ -1840,45 +2008,142 @@ namespace ConditioningControlPanel
         // Terminate any OTHER running CCP process that shares our executable path. Called from the
         // single-instance handshake only after the existing instance failed to acknowledge within
         // ShowAckTimeoutMs — i.e. it is wedged (render-thread deadlock) or headless and is keeping
-        // the single-instance mutex alive. Matching on the full exe path avoids nuking an unrelated
-        // same-named process or a separate install; ProcessName is a best-effort fallback when the
-        // other process's MainModule can't be read (access denied). Runs before Logger init.
-        private static void KillStaleInstances()
+        // the single-instance mutex alive. Returns how many processes were actually terminated.
+        //
+        // The match fails CLOSED: a process is killed only when we can positively read its image
+        // path AND it equals ours. The old code started from "pathMatches = true" and only ever
+        // cleared that flag when the other process's MainModule was readable, so every process the
+        // probe could not see became a kill target. MainModule is exactly the wrong probe for that:
+        // it needs PROCESS_QUERY_INFORMATION|PROCESS_VM_READ and walks the target's module list, so
+        // it throws or quietly returns null across elevation, session and bitness boundaries (on a
+        // normal desktop it is unreadable for roughly half of all running processes). The guard
+        // therefore degraded to "kill anything named ConditioningControlPanel.exe", which is every
+        // worktree's build, and running two worktrees at once became impossible. Skipping a
+        // process we cannot identify costs nothing: if we cannot even open it for a limited-info
+        // query, Kill() would have been denied anyway. Runs before Logger init, so verdicts are
+        // buffered and replayed once Serilog is up.
+        private static int KillStaleInstances()
         {
+            int killed = 0;
             try
             {
                 int selfId = Environment.ProcessId;
-                string? selfPath = null;
-                try { selfPath = Process.GetCurrentProcess().MainModule?.FileName; } catch { }
+                // Environment.ProcessPath is the apphost path straight from the runtime, no handle
+                // and no module walk, so it is the one path we can always trust about ourselves.
+                string? selfPath = NormalizeExePath(Environment.ProcessPath)
+                                   ?? NormalizeExePath(TryGetProcessImagePath(Process.GetCurrentProcess()));
                 string selfName = Process.GetCurrentProcess().ProcessName;
+
+                if (selfPath == null)
+                {
+                    NoteStaleInstanceDecision("[LIFECYCLE] Takeover aborted: our own executable path is unreadable, so no other process can be confirmed to be this same build");
+                    return 0;
+                }
 
                 foreach (var proc in Process.GetProcessesByName(selfName))
                 {
+                    int otherId = -1;
                     try
                     {
-                        if (proc.Id == selfId) continue;
+                        otherId = proc.Id;
+                        if (otherId == selfId) continue;
 
-                        // Prefer an exact executable-path match; fall back to name-only if the
-                        // path is unreadable (e.g. the target is elevated).
-                        bool pathMatches = true;
-                        if (selfPath != null)
+                        string? otherPath = NormalizeExePath(TryGetProcessImagePath(proc));
+                        if (otherPath == null)
                         {
-                            string? otherPath = null;
-                            try { otherPath = proc.MainModule?.FileName; } catch { otherPath = null; }
-                            if (otherPath != null)
-                                pathMatches = string.Equals(otherPath, selfPath, StringComparison.OrdinalIgnoreCase);
+                            NoteStaleInstanceDecision($"[LIFECYCLE] Takeover skipped pid {otherId}: its executable path could not be read, so we cannot prove it is this build");
+                            continue;
                         }
-                        if (!pathMatches) continue;
+                        if (!string.Equals(otherPath, selfPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            NoteStaleInstanceDecision($"[LIFECYCLE] Takeover skipped pid {otherId}: it runs {otherPath}, we run {selfPath}");
+                            continue;
+                        }
 
                         proc.Kill();
                         proc.WaitForExit(5000);
+                        killed++;
+                        NoteStaleInstanceDecision($"[LIFECYCLE] Takeover killed pid {otherId} ({otherPath}) after it failed to acknowledge the show-signal");
                     }
-                    catch { /* process may have exited on its own, or we lack rights — skip it */ }
+                    catch (Exception ex)
+                    {
+                        // Process may have exited on its own, or we lack rights to end it.
+                        NoteStaleInstanceDecision($"[LIFECYCLE] Takeover could not act on pid {otherId}: {ex.GetType().Name} {ex.Message}");
+                    }
                     finally { try { proc.Dispose(); } catch { } }
                 }
             }
-            catch { /* enumeration failed — takeover still proceeds; the mutex re-acquire is best-effort */ }
+            catch (Exception ex)
+            {
+                // Enumeration failed — takeover still proceeds; the mutex re-acquire is best-effort.
+                NoteStaleInstanceDecision($"[LIFECYCLE] Takeover could not enumerate processes: {ex.GetType().Name} {ex.Message}");
+            }
+            return killed;
         }
+
+        // Reads the on-disk image path of a running process without relying on Process.MainModule.
+        // QueryFullProcessImageName only needs PROCESS_QUERY_LIMITED_INFORMATION and is answered by
+        // the kernel rather than by reading the target's memory, so it succeeds against elevated,
+        // cross-session and cross-bitness processes that MainModule cannot see. MainModule stays as
+        // a second chance; when both come back empty the caller must treat the process as unknown
+        // and leave it alone.
+        private static string? TryGetProcessImagePath(Process proc)
+        {
+            try
+            {
+                IntPtr handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, proc.Id);
+                if (handle != IntPtr.Zero)
+                {
+                    try
+                    {
+                        var buffer = new StringBuilder(1024);
+                        int size = buffer.Capacity;
+                        if (QueryFullProcessImageName(handle, 0, buffer, ref size) && size > 0)
+                            return buffer.ToString();
+                    }
+                    finally { try { CloseHandle(handle); } catch { } }
+                }
+            }
+            catch { }
+
+            try { return proc.MainModule?.FileName; }
+            catch { return null; }
+        }
+
+        // Canonical form for comparing two executable paths: the same exe can be reached through a
+        // relative launch or a trailing-slash-laden path, and Windows paths are case-insensitive.
+        private static string? NormalizeExePath(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return null;
+            try { return Path.GetFullPath(path.Trim()); }
+            catch { return path.Trim(); }
+        }
+
+        // Buffers one takeover verdict for replay after Logger init. Bounded so a machine with a
+        // pile of same-named processes can't grow this without limit.
+        private static void NoteStaleInstanceDecision(string message)
+        {
+            try
+            {
+                lock (_staleInstanceDecisions)
+                {
+                    if (_staleInstanceDecisions.Count < 32)
+                        _staleInstanceDecisions.Add(message);
+                }
+            }
+            catch { }
+        }
+
+        private const int PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr OpenProcess(int dwDesiredAccess, bool bInheritHandle, int dwProcessId);
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode, EntryPoint = "QueryFullProcessImageNameW")]
+        private static extern bool QueryFullProcessImageName(IntPtr hProcess, int dwFlags, StringBuilder lpExeName, ref int lpdwSize);
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr hObject);
 
         // Standard WPF "bring to front" sequence. Activate() alone is silently
         // ignored when Windows' ForegroundLockTimeout is active (e.g. another
@@ -1897,12 +2162,8 @@ namespace ConditioningControlPanel
                 window.Topmost = true;
                 window.Topmost = wasTopmost;
                 window.Focus();
-
-                // Topmost-pulse on main moves it to the top of the regular
-                // z-band, which can leave the avatar tube buried behind it
-                // (tube was Show()'n above main but the pulse rearranges).
-                // Raise the tube too so the attached pair stays paired.
-                AvatarWindow?.RaiseAttachedTubeAboveOwner();
+                // The attached avatar tube is natively OWNED by main, so the
+                // Topmost pulse carries it along — no separate raise needed.
             }
             catch (Exception ex) { Logger?.Debug("ForceWindowToFront failed: {Error}", ex.Message); }
         }
@@ -1944,6 +2205,10 @@ namespace ConditioningControlPanel
                     }
                     catch { /* diagnostics only — never let logging fault the continuation */ }
                 }, TaskContinuationOptions.ExecuteSynchronously);
+            }
+            else
+            {
+                Logger?.Information("Achievement '{Name}' not shared to Discord: DiscordShareAchievements is off", achievement.Name);
             }
         }
         
@@ -3214,7 +3479,10 @@ Application State:
                 try
                 {
                     Logger?.Information("Syncing profile to cloud before exit...");
-                    ProfileSync.SyncProfileAsync().Wait(TimeSpan.FromSeconds(2));
+                    // Task.Run so the await continuations land on the thread pool: ProfileSyncService
+                    // has no ConfigureAwait(false), and a bare Wait() here blocks the very dispatcher
+                    // those continuations need - the sync could never finish inside the timeout.
+                    Task.Run(() => ProfileSync.SyncProfileAsync()).Wait(TimeSpan.FromSeconds(2));
                 }
                 catch (Exception ex)
                 {
@@ -3229,6 +3497,7 @@ Application State:
             KeywordHighlight?.Dispose();
 
             SessionLog?.Dispose();
+            MediaHistory?.Dispose(); // before Flash/Video so it unsubscribes cleanly + flushes final entries
             Flash?.Dispose();
             // Dispose the enhancement bridge BEFORE the VideoService it subscribes to,
             // so it unsubscribes (VideoStarted/VideoEnded/time-source) and tears down its
@@ -3236,11 +3505,16 @@ Application State:
             // Video first would leave those subscriptions dangling against a dead player.
             VideoEnhanceBridge?.Dispose();
             Video?.Dispose();
+            LayeredAudio?.Dispose(); // suggestion #659 — release the single WaveOut before other audio teardown
             Subliminal?.Dispose();
             Overlay?.Dispose();
             Compositor?.Dispose(); // after effect services so their layers deactivate first
             ScreenShake?.Dispose();
             try { Chaos?.ForceShutdown(); } catch { }
+            // Standalone corner-GIF overlays are unowned topmost windows (#709) - close them here
+            // as well as from MainWindow.Closing, since a Shutdown() that bypasses the main
+            // window's close path would otherwise leave them alive.
+            try { CornerGif?.StopAll(); } catch { }
             Bubbles?.Dispose();
             LockCard?.Dispose();
             PopQuiz?.Dispose();
@@ -3268,15 +3542,20 @@ Application State:
             Webcam?.Dispose();
             FocusGame?.Dispose();
             ContentPacks?.Dispose();
+            ReleaseContent?.Dispose();
             Roadmap?.Dispose();
+            Programs?.Dispose();
             SkillTree?.Dispose();
             QuestDefinitions?.Dispose();
             Quests?.Dispose();
+            IntakePunchCard?.Dispose();
+            IntakePass?.Dispose();
             Companion?.Dispose();
             CommunityPrompts?.Dispose();
             ActivityTracker?.Dispose();
             Haptics?.Dispose();
             AudioSync?.Dispose();
+            MantraChant?.Dispose();
             Audio?.Dispose();
             // Deeper singletons (reverse init order). The bridge holds the
             // browser/host pair; discovery owns a CTS + WebView2 nav handler;

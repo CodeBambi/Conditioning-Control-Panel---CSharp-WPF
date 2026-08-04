@@ -10,6 +10,26 @@ namespace ConditioningControlPanel.Views.Tabs
         public AvailableSubjectsTabView()
         {
             InitializeComponent();
+            // FX lifecycle (PR-4b): starts the tab's one ambient canvas and staggers the roster in.
+            IsVisibleChanged += AvailableSubjectsTabView_IsVisibleChanged;
+        }
+
+        private void AvailableSubjectsTabView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.OnAvailableSubjectsTabVisibilityChanged(IsVisible);
+        }
+
+        private void BtnConnectSubject_PressDown(object sender, MouseButtonEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.OnSubjectConnectPress(sender as FrameworkElement, true);
+        }
+
+        private void BtnConnectSubject_PressUp(object sender, MouseEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.OnSubjectConnectPress(sender as FrameworkElement, false);
         }
 
         private void AvailableSubjectsScroller_PreviewMouseWheel(object sender, MouseWheelEventArgs e)

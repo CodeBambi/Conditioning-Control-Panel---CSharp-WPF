@@ -97,6 +97,46 @@ const MAX_DOORS = 5;
 const MOUTH_IN = 2.0;        // vein collar reach into the chamber (pipe-into-tank lip)
 const ROOM_CUT_IN = 4;       // trunk wall survives this far past the entry ring (a short throat collar
                              //   inside the room, so the wall-to-wall seam is overlapped, never a gap)
+// the antechamber's CLASSIC palette (the dome's look when no biome is drawn, and
+// the base each biome retint eases OUT of). A junction/draft room that carries a
+// roomTheme lerps these -> the biome's palette by J.fxLevel (same gate the vein
+// dress uses: draft rooms hold at classic until the roulette lands, so the dome
+// becoming the biome IS part of the reveal, never an early leak).
+const ROOM_BG1 = 0x2b1024, ROOM_BG2 = 0x160a18, ROOM_LINE = 0xff69b4;
+const _ROOM_BASE_BG1 = new THREE.Color(ROOM_BG1);   // reused as the lerp source each frame
+const _ROOM_BASE_BG2 = new THREE.Color(ROOM_BG2);
+const _ROOM_BASE_LINE = new THREE.Color(ROOM_LINE);
+const ROOM_FLICKER_DUR = 0.6; // seconds of the settle flicker as the dome snaps into the biome theme
+// how strongly each wall dressing takes over the dome. The recipe wallpaper goes
+// full (its canvas alpha IS the polka-dot spacing, so the wall reads through the
+// gaps on its own); the biome image blends, so the retint + line work still read
+// underneath rather than the dome becoming a flat photo.
+const RECIPE_WALL_MIX = 1.0;
+const BIOME_WALL_MIX = 0.55;
+const WALL_FADE_RATE = 1.6;   // recipe wallpaper fade-in speed (mix units/sec)
+// A recipe plaster in a room with a biome roulette waits out the settle card
+// (~5.2s big center reveal) so the pages + their notice land as their OWN beat -
+// one thing, then the next - never stacked on the roulette payoff. Measured from
+// the moment the wheel lands (revealDone in linger). No roulette = shows at once.
+const RECIPE_CARD_HOLD = 5.4;
+
+// a 1x1 transparent texture so the dome's uWallTex sampler is ALWAYS bound (an
+// unbound sampler2D samples black / warns under WebView2/ANGLE). uWallMix holds
+// at 0 until a real dressing loads, so this placeholder is never visible.
+const PLACEHOLDER_TEX = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1, THREE.RGBAFormat);
+PLACEHOLDER_TEX.needsUpdate = true;
+
+// The recipe wall dressing is a canvas built by the GAME layer (chaosRun draws
+// the torn Lookbook page from the recipe's sketch - engine code can't reach the
+// crafting tables) and handed to schedule() as wallDress.canvas. Here it's just
+// wrapped into a tiling CanvasTexture, OWNED by the room (disposed in teardown).
+function texFromCanvas(canvas) {
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 function roomGeom(nDoors) {
   const roomR = RADIUS * ((DOOR_LAYOUT[nDoors] || DOOR_LAYOUT[2]).roomR);
   // the room center sits xRing past the fork, so the trunk pierces the near
@@ -519,7 +559,10 @@ const ROOM_FRAG = `
   varying vec2 vUv;
   varying vec3 vObjDir;
   varying float vFogDepth;
-  uniform float uTime, uFogDensity;
+  uniform float uTime, uFogDensity, uThemeFlash;
+  uniform float uWallMix, uWallRepeat;   // wall dressing: a texture plastered over the dome interior
+  uniform float uWallDot;                // >0.5 = punch each tile into a soft disc (biome polka-dot plaster)
+  uniform sampler2D uWallTex;            // always bound (1x1 transparent placeholder when idle)
   uniform vec3 uBg1, uBg2, uLineColor, uFogColor;
   uniform vec3 uHoleDir[ROOM_HOLES];
   uniform float uHoleCos[ROOM_HOLES]; // wall discarded where dot > this; 2.0 = bricked up (loser)
@@ -548,6 +591,18 @@ const ROOM_FRAG = `
     float lon = lineMask(vUv.x * 22.0 - uTime * 0.25, 0.05) * sin(vUv.y * 3.14159);
     vec3 col = base + uLineColor * (lat * 0.30 + lon * 0.22);
     col += rim;
+    // wall dressing: a plaster of recipe pages or a biome image faded over the wall.
+    // transparent gaps (wall.a==0) keep the base, so the retinted wall shows between
+    // the pinned pages / dots. uWallDot punches each repeat tile into a soft disc so
+    // an otherwise full-bleed biome image reads as polka-dot stamps of the biome.
+    vec2 wuv = fract(vUv * uWallRepeat);
+    vec4 wall = texture2D(uWallTex, wuv);
+    if (uWallDot > 0.5) {
+      float d = distance(wuv, vec2(0.5));
+      wall.a *= 1.0 - smoothstep(0.34, 0.46, d);   // soft-edged dot, biome colour between
+    }
+    col = mix(col, mix(col, wall.rgb, wall.a), uWallMix);
+    col *= 1.0 + uThemeFlash;   // biome-reveal flicker: the dome pulses bright as it becomes the drawn biome
     float f = 1.0 - exp(-uFogDensity * uFogDensity * vFogDepth * vFogDepth);
     col = mix(col, uFogColor, clamp(f, 0.0, 1.0));
     gl_FragColor = vec4(col, 1.0);
@@ -556,7 +611,7 @@ const ROOM_FRAG = `
 export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
   let J = null;           // the live fork, or null when idle
   let active = false;     // only telegraph forks during a real descent
-  const api = { onCommit: null, onLinger: null, onVeinEnd: null, onRevealFx: null };
+  const api = { onCommit: null, onLinger: null, onVeinEnd: null, onRevealFx: null, onWallReveal: null };
   const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _m = new THREE.Matrix4();
   const shatters = [];    // live shard bursts (ticked in update)
 
@@ -902,9 +957,14 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
     const mat = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        uBg1: { value: new THREE.Color(0x2b1024) },   // tube palette: the room IS more tube
-        uBg2: { value: new THREE.Color(0x160a18) },
-        uLineColor: { value: new THREE.Color(0xff69b4) },
+        uThemeFlash: { value: 0 },                    // biome-reveal flicker (update() drives it)
+        uWallMix: { value: 0 },                       // wall-dressing opacity (update() eases it)
+        uWallRepeat: { value: 1 },                    // 1 = one image; >1 tiles the plaster / dots
+        uWallDot: { value: 0 },                       // 1 = punch tiles into biome polka-dots (see frag)
+        uWallTex: { value: PLACEHOLDER_TEX },         // dressing texture (placeholder until one loads)
+        uBg1: { value: new THREE.Color(ROOM_BG1) },   // tube palette: the room IS more tube
+        uBg2: { value: new THREE.Color(ROOM_BG2) },
+        uLineColor: { value: new THREE.Color(ROOM_LINE) },
         uFogColor: { value: fogCol().clone() },
         uFogDensity: { value: FOG_DENSITY },
         uHoleDir: { value: dirs },
@@ -1096,6 +1156,11 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
     if (J.title) { try { J.title.dispose(); } catch (e) { /* ignore */ } J.title = null; }
     if (J.revealRow) { try { J.revealRow.dispose(); } catch (e) { /* ignore */ } J.revealRow = null; }
     if (J.room) { scene.remove(J.room.mesh); J.room.geo.dispose(); J.room.mat.dispose(); J.room = null; }
+    // only a glyph wallpaper is ours to free - a biome image belongs to the
+    // shared loadTexture cache and is reused by the next room that asks for it.
+    if (J.wallDress && J.wallDress.owned && J.wallDress.tex) {
+      try { J.wallDress.tex.dispose(); } catch (e) { /* ignore */ }
+    }
     if (tunnel && tunnel.clearHoles) tunnel.clearHoles();  // stale-state safety; v5 sets no wall holes
     if (tunnel && tunnel.clearCut) tunnel.clearCut();
     try { nav.setLane(0); nav.setJunctionArmed(false); nav.setForwardHold(false); } catch (e) { /* ignore */ }
@@ -1291,6 +1356,7 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
       if (landed) {
         row.done = true;
         J.revealDone = true;   // the doors come alive; the draft clock starts
+        if (J.roomTheme || J.wallDress) J.roomFlickerT = ROOM_FLICKER_DUR;   // the dome flickers into the drawn biome
         row.flare = 1;
         s.punch = 1.6;         // the winner pops...
         for (let i = 0; i < row.squares.length; i++) {
@@ -1352,15 +1418,63 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
     // fork you're already IN the biome, so it ramps with the approach; in a
     // draft room it holds at zero until the roulette lands (revealDone) - the
     // corridors dressing themselves as the destination IS the reveal's payoff.
-    if (J.veinFx) {
+    if (J.veinFx || J.roomTheme || J.wallDress) {
       const wantFx = (J.mode === 'draft' && !J.revealDone) ? 0 : 1;
       J.fxLevel = clamp(J.fxLevel + Math.sign(wantFx - J.fxLevel) * dt * 0.9, 0, 1);
-      if (J.fxLevel > 0.0001) {
+      if (J.veinFx && J.fxLevel > 0.0001) {
         for (const m of J.veins) {
           if (m.dying) continue;
           for (const k of VEIN_FX_KEYS) {
             m.mat.uniforms[fxUniName(k)].value = (J.veinFx[k] || 0) * J.fxLevel;
           }
+        }
+      }
+      // the DOME itself becomes the biome: lerp the wall gradient + linework from
+      // the classic palette toward the drawn biome's, on the same fxLevel gate.
+      if (J.roomTheme && J.room) {
+        const u = J.room.mat.uniforms, mix = J.fxLevel;
+        u.uBg1.value.copy(_ROOM_BASE_BG1).lerp(J.roomTheme.bg1, mix);
+        u.uBg2.value.copy(_ROOM_BASE_BG2).lerp(J.roomTheme.bg2, mix);
+        u.uLineColor.value.copy(_ROOM_BASE_LINE).lerp(J.roomTheme.line, mix);
+      }
+      // the wall dressing fades up. A biome image rides the SAME fxLevel gate as
+      // the retint (so a draft room still leaks nothing before the roulette
+      // lands); a recipe wallpaper waits until the player has SETTLED inside the
+      // dome (linger) and then flickers up as its own moment.
+      if (J.wallDress && J.room) {
+        const d = J.wallDress;
+        // a late-decoded ingredient photo redrew the plaster canvas: re-upload it.
+        if (d.tex && d.canvas && d.canvas.__recipeDirty) { d.tex.needsUpdate = true; d.canvas.__recipeDirty = false; }
+        if (d.mode === 'recipe') {
+          // settled AND the roulette (if any) resolved: the plaster is its own
+          // beat, never a second thing happening over the biome reveal. When a
+          // roulette ran, wait out its big settle card (RECIPE_CARD_HOLD) so the
+          // pages + their notice follow it - one thing, then the next.
+          if (J.phase === 'linger' && J.revealDone) J.wallHold += dt;
+          const cardClear = !J.revealRow || J.wallHold >= RECIPE_CARD_HOLD;
+          const want = J.phase === 'linger' && J.revealDone && cardClear ? 1 : 0;
+          if (want && !d.shown) {
+            d.shown = true;
+            J.roomFlickerT = ROOM_FLICKER_DUR;
+            if (api.onWallReveal) { try { api.onWallReveal(); } catch (e) { /* ignore */ } }
+          }
+          J.wallMix = clamp(J.wallMix + Math.sign(want - J.wallMix) * dt * WALL_FADE_RATE, 0, 1);
+        } else {
+          J.wallMix = J.fxLevel;
+        }
+        const peak = d.mode === 'recipe' ? RECIPE_WALL_MIX : BIOME_WALL_MIX;
+        J.room.mat.uniforms.uWallMix.value = d.tex ? J.wallMix * peak : 0;
+      }
+      // the settle flicker: a few decaying blinks the instant the dome takes on
+      // its new skin - the biome landing, or a recipe wallpaper revealing itself.
+      if (J.room) {
+        const u = J.room.mat.uniforms;
+        if (J.roomFlickerT > 0) {
+          J.roomFlickerT = Math.max(0, J.roomFlickerT - dt);
+          const f = J.roomFlickerT / ROOM_FLICKER_DUR;   // 1 -> 0
+          u.uThemeFlash.value = 0.7 * f * (0.4 + 0.6 * Math.abs(Math.sin(J.roomFlickerT * 42)));
+        } else if (u.uThemeFlash.value !== 0) {
+          u.uThemeFlash.value = 0;
         }
       }
     }
@@ -1431,8 +1545,12 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
      * skipped semantics), lead shortens the telegraph. veinFx = a biome's
      * corridor-dressing recipe ({accent, <knob>: weight, ...} - see
      * VEIN_FX_KEYS / biomes.js): forks pass the biome you're in, draft rooms
-     * the one the doors lead into (applied only after the roulette lands). */
-    schedule({ atDepth, branches, coaxIndex = 0, presealIndex = null, mode = 'fork', lingerSec = 0, lead = LEAD, title = null, biomeReveal = null, veinFx = null }) {
+     * the one the doors lead into (applied only after the roulette lands).
+     * wallDress = a texture plastered over the dome interior, either
+     * {mode:'biome', url} (an image faded in on the fxLevel gate, alongside the
+     * roomTheme retint) or {mode:'recipe', glyph, repeat} (the glyph tiled as a
+     * polka-dot wallpaper, revealed once the player settles into the linger). */
+    schedule({ atDepth, branches, coaxIndex = 0, presealIndex = null, mode = 'fork', lingerSec = 0, lead = LEAD, title = null, biomeReveal = null, veinFx = null, roomTheme = null, wallDress = null }) {
       if (!active) return;
       if (J) teardown();
       const descs = (branches || []).slice(0, MAX_DOORS);
@@ -1458,10 +1576,46 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
         revealRow: null, revealDone: true,
         // biome corridor dressing: eased in by update() (fxLevel 0 -> 1)
         veinFx: veinFx || null, fxLevel: 0,
+        // biome DOME dressing: the room wall retints classic -> the drawn biome's
+        // palette on the SAME fxLevel gate as the veins (draft rooms hold until
+        // the roulette lands). roomFlickerT drives the settle flash.
+        roomTheme: roomTheme ? {
+          bg1: new THREE.Color(roomTheme.bg1 != null ? roomTheme.bg1 : ROOM_BG1),
+          bg2: new THREE.Color(roomTheme.bg2 != null ? roomTheme.bg2 : ROOM_BG2),
+          line: new THREE.Color(roomTheme.line != null ? roomTheme.line : ROOM_LINE),
+        } : null,
+        roomFlickerT: 0,
+        // wall dressing: a glyph wallpaper / biome image plastered over the dome
+        // interior. update() eases wallMix toward the mode's target.
+        wallDress: wallDress ? { mode: wallDress.mode || 'biome', tex: null, owned: false, shown: false } : null,
+        wallMix: 0,
+        wallHold: 0,   // seconds the recipe plaster has waited since the roulette settled
       };
       // the dress's accent color is fixed per biome; the weights ramp via fxLevel
       if (veinFx && veinFx.accent != null) {
         for (const v of veins) v.mat.uniforms.uAccent.value.set(veinFx.accent);
+      }
+      // the dressing texture. A glyph wallpaper is rasterized here and OWNED by
+      // this room (disposed in teardown); a biome image comes from the shared
+      // loadTexture cache (the roulette already fetches the same URL, so it's a
+      // free hit) and must NOT be disposed per-room.
+      if (J.wallDress) {
+        const u = J.room.mat.uniforms;
+        u.uWallRepeat.value = wallDress.repeat != null ? wallDress.repeat : 1;
+        u.uWallDot.value = wallDress.dot ? 1 : 0;   // biome art dots; recipe pages stay rectangular
+        if (wallDress.canvas) {
+          J.wallDress.tex = texFromCanvas(wallDress.canvas);
+          J.wallDress.canvas = wallDress.canvas;   // kept so a late ingredient-photo redraw can re-upload
+          J.wallDress.owned = true;
+          u.uWallTex.value = J.wallDress.tex;
+        } else if (wallDress.url) {
+          const mine = J;   // the load is async: a torn-down room must not paint
+          loadTexture(wallDress.url, (t) => {
+            if (J !== mine || !mine.room) return;
+            mine.wallDress.tex = t;
+            mine.room.mat.uniforms.uWallTex.value = t;
+          });
+        }
       }
       // the biome roulette (draft rooms with a rolled biome only): while it
       // spins, revealDone=false keeps the doors dead + the draft clock at zero.
@@ -1576,6 +1730,11 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
      * owns the sfx bridge; the engine just narrates the hops). */
     get onRevealFx() { return api.onRevealFx; },
     set onRevealFx(fn) { api.onRevealFx = fn; },
+    /** onWallReveal() - fires ONCE the instant a recipe wall plaster reveals
+     * (after the settle card, if any). The game shows the "a page tears loose"
+     * notice here so the text lands exactly when the walls change. */
+    get onWallReveal() { return api.onWallReveal; },
+    set onWallReveal(fn) { api.onWallReveal = fn; },
     /** onVeinEnd(exitFrame) - the scene rebases the loop onto {pos,tangent,up}. */
     get onVeinEnd() { return api.onVeinEnd; },
     set onVeinEnd(fn) { api.onVeinEnd = fn; },

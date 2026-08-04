@@ -468,6 +468,12 @@ namespace ConditioningControlPanel.Services.Deeper
             try { FlushActiveBands(_lastTickTime >= 0 ? _lastTickTime : 0); }
             catch (Exception ex) { App.Logger?.Debug("EnhancementEngine FlushActiveBands: {Error}", ex.Message); }
 
+            // Safety belt: FlushActiveBands issues a Stop for every open band (which balances the
+            // overlay z-order band depth), but if any Stop dispatch was dropped, hard-zero the depth so
+            // a leaked band can't strand overlays pinned above the next mandatory video.
+            try { App.Overlay?.ResetDeeperOverlayBands(); }
+            catch { }
+
             // Flip _running first so any in-flight tick / dispatch short-circuits
             // before we start tearing down subscriptions.
             _running = false;

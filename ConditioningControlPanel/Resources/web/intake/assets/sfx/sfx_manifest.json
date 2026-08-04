@@ -1,0 +1,187 @@
+{
+  "card-melt": {
+    "variants": 2,
+    "gain": 0.5,
+    "loop": false
+  },
+  "loom-spiral-up": {
+    "variants": 1,
+    "gain": 0.15,
+    "loop": false
+  },
+  "loom-spiral-down": {
+    "variants": 1,
+    "gain": 0.15,
+    "loop": false
+  },
+  "glitch-burst": {
+    "variants": 2,
+    "gain": 0.9,
+    "loop": false
+  },
+  "error-blip": {
+    "variants": 1,
+    "gain": 0.9,
+    "loop": false
+  },
+  "freeze-sting": {
+    "variants": 1,
+    "gain": 0.9,
+    "loop": false
+  },
+  "destruct-shatter": {
+    "variants": 2,
+    "gain": 0.5,
+    "loop": false
+  },
+  "pink-wash": {
+    "variants": 2,
+    "gain": 0.15,
+    "loop": false
+  },
+  "drain-wash": {
+    "variants": 1,
+    "gain": 0.4,
+    "loop": false
+  },
+  "sticker-drag": {
+    "variants": 2,
+    "gain": 0.15,
+    "loop": false
+  },
+  "surface-bloom": {
+    "variants": 1,
+    "gain": 0.45,
+    "loop": false
+  },
+  "briefing-open": {
+    "variants": 1,
+    "gain": 0.5,
+    "loop": false
+  },
+  "pressure-heartbeat": {
+    "variants": 2,
+    "gain": 0.5,
+    "loop": true
+  },
+  "incorrect-feedback": {
+    "variants": 2,
+    "gain": 0.15,
+    "loop": false
+  },
+  "stamp": {
+    "variants": 1,
+    "gain": 0.45,
+    "loop": false
+  },
+  "chime": {
+    "variants": 1,
+    "gain": 0.4,
+    "loop": false
+  },
+  "grid-tile-flicker": {
+    "variants": 2,
+    "gain": 0.2,
+    "loop": false
+  },
+  "grid-verify-stamp": {
+    "variants": 1,
+    "gain": 0.45,
+    "loop": false
+  },
+  "grid-settle": {
+    "variants": 1,
+    "gain": 0.2,
+    "loop": false
+  },
+  "verify-hold": {
+    "variants": 1,
+    "gain": 0.15,
+    "loop": false
+  },
+  "verify-lock": {
+    "variants": 1,
+    "gain": 0.45,
+    "loop": false
+  },
+  "checkbox-tick": {
+    "variants": 1,
+    "gain": 0.2,
+    "loop": false
+  },
+  "captcha-garble": {
+    "variants": 1,
+    "gain": 0.4,
+    "loop": false
+  },
+  "captcha-rewarp": {
+    "variants": 1,
+    "gain": 0.15,
+    "loop": false
+  },
+  "captcha-verify-ok": {
+    "variants": 1,
+    "gain": 0.45,
+    "loop": false
+  },
+  "captcha-reject": {
+    "variants": 2,
+    "gain": 0.15,
+    "loop": false
+  },
+  "captcha-logged": {
+    "variants": 1,
+    "gain": 0.45,
+    "loop": false
+  },
+  "custody-stamp": {
+    "variants": 1,
+    "gain": 0.5,
+    "loop": false
+  },
+  "custody-log-tick": {
+    "variants": 2,
+    "gain": 0.15,
+    "loop": false
+  },
+  "custody-deny-override": {
+    "variants": 1,
+    "gain": 0.15,
+    "loop": false
+  },
+  "verify-tick": {
+    "variants": 2,
+    "gain": 0.1,
+    "loop": false
+  },
+  "verify-rewind": {
+    "variants": 2,
+    "gain": 0.15,
+    "loop": false
+  },
+  "verify-resolve": {
+    "variants": 1,
+    "gain": 0.35,
+    "loop": false
+  },
+  "regen-swarm": {
+    "variants": 2,
+    "gain": 0.3,
+    "loop": false
+  },
+  "regen-loop": {
+    "variants": 1,
+    "gain": 0.32,
+    "loop": false
+  },
+  "segment-flood": {
+    "variants": 1,
+    "gain": 0.35,
+    "loop": false
+  },
+  "gaze-lock": {
+    "variants": 2,
+    "gain": 0.3,
+    "loop": false
+  }
+}

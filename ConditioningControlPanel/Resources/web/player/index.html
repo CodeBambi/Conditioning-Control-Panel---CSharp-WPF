@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Player</title>
+  <link rel="stylesheet" href="player.css">
+</head>
+<body>
+  <!-- Mandatory-video surface for the hybrid Browser Video Engine.
+       The host window is already OS-level fullscreen borderless, so this page
+       NEVER calls requestFullscreen (plan trap #6) and draws no chrome at all.
+
+       #bg only decodes while blurBackground is on (body.has-bg); the rest of the
+       time its src is torn down so we are not paying for two decoders. -->
+  <div id="stage">
+    <video id="bg" muted playsinline preload="auto" disablepictureinpicture></video>
+    <video id="fg" playsinline preload="auto" disablepictureinpicture></video>
+  </div>
+  <!-- Attention-check targets (attentionShow / attentionHide). The only
+       hit-testable thing on the page: the layer itself passes presses through,
+       each target takes its own and reports attentionClick INSTEAD of the
+       generic click. C# still owns the text, the styling and the schedule. -->
+  <div id="attn"></div>
+  <script src="player.js"></script>
+</body>
+</html>

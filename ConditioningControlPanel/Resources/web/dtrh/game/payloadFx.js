@@ -23,6 +23,7 @@
 
 import { S } from '../engine/settings.js';
 import { isMuted, onMuteChange } from '../shared/audioMute.js';
+import { pickSpiralUrl } from '../engine/loomSpirals.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const clamp01 = (v) => clamp(v, 0, 1);
@@ -98,7 +99,11 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
   }
 
   function showSpiral(strength, durMult) {
-    holdOn('spiral', 'sf-pfx-spiral', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength) * durMult);
+    const h = holdOn('spiral', 'sf-pfx-spiral', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength) * durMult);
+    // Draw from the shared pool (bundled sp1..8 + the player's Loom spirals)
+    // instead of the single hardcoded spiral.png in .sf-pfx-spiral - the CSS
+    // still owns cover/blend/spin, we only swap the image so in-run spirals vary.
+    h.el.style.backgroundImage = `url('${pickSpiralUrl()}')`;
   }
   function showPink(strength, durMult) {
     holdOn('pink', 'sf-pfx-pink', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength) * durMult);
@@ -322,6 +327,40 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
     return cut;
   }
 
+  // ---- pinned centre spiral (#647) -------------------------------------------
+  // An OPTIONAL persistent spiral tacked to the tunnel's visual centre, spinning
+  // slowly, its edges masked so it blends into the bore. Purely ambient: it lives
+  // inside `root` (.sf-pfx, z4) so it inherits pointer-events:none and sits BELOW
+  // the clickable bubble field (.cf-layer z6) and the HUD (z10) - it can never eat
+  // a pop or cover a treat. Gated on the live S.runPinnedSpiral toggle; one element,
+  // shown per run and re-picked between chambers.
+  let pinnedEl = null;
+  function ensurePinned() {
+    if (!pinnedEl) {
+      pinnedEl = document.createElement('div');
+      pinnedEl.className = 'sf-pfx-pinned';
+      root.appendChild(pinnedEl);
+    }
+    return pinnedEl;
+  }
+  /** Show (or, if the toggle is off, ensure hidden) the pinned spiral for a run. */
+  function showPinnedSpiral() {
+    if (disposed) return;
+    if (!S.runPinnedSpiral) { hidePinnedSpiral(); return; }
+    const el = ensurePinned();
+    el.style.backgroundImage = `url('${pickSpiralUrl()}')`;
+    el.classList.add('is-on');
+  }
+  /** Re-pick the image on a room/biome change (only if it's currently shown). */
+  function refreshPinnedSpiral() {
+    if (disposed || !pinnedEl || !S.runPinnedSpiral || !pinnedEl.classList.contains('is-on')) return;
+    pinnedEl.style.backgroundImage = `url('${pickSpiralUrl()}')`;
+  }
+  /** Fade it out (run end / back to the hub). */
+  function hidePinnedSpiral() {
+    if (pinnedEl) pinnedEl.classList.remove('is-on');
+  }
+
   /**
    * Render a bubble payload in-world. `spec.payload` is the fire-payload shape
    * ({ kind, overlay? }); `opts.durationMult` stretches the on-screen time.
@@ -362,5 +401,5 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
     front.remove();
   }
 
-  return { applyPayload, cancelHeavy, dispose };
+  return { applyPayload, cancelHeavy, showPinnedSpiral, refreshPinnedSpiral, hidePinnedSpiral, dispose };
 }

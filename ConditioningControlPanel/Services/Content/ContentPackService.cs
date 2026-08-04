@@ -599,6 +599,89 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Installs a known pack from a LOCAL zip the user already has (drag-and-drop install,
+        /// e.g. the Bureau's evidence-drop surface or a zip fetched from the Discord catalogue).
+        /// Same pipeline as the downloaded path (extract → per-file encrypt → encrypted manifest),
+        /// minus the download and Patreon gate. The source zip is the USER'S file — never deleted.
+        /// </summary>
+        public async Task InstallPackFromLocalZipAsync(ContentPack pack, string zipPath, Action<string>? status = null)
+        {
+            if (!File.Exists(zipPath)) throw new FileNotFoundException("Pack zip not found", zipPath);
+            if (IsPackInstalled(pack.Id)) throw new InvalidOperationException($"Pack already installed: {pack.Name}");
+
+            var packGuid = Guid.NewGuid().ToString("N");
+            var packFolder = Path.Combine(_packsFolder, packGuid);
+            var tempExtractPath = Path.Combine(_packsFolder, $".{packGuid}_extract");
+            try
+            {
+                status?.Invoke("Extracting...");
+                await Task.Run(() => ZipFile.ExtractToDirectory(zipPath, tempExtractPath));
+
+                Directory.CreateDirectory(packFolder);
+                var contentFolder = Path.Combine(packFolder, "content");
+                Directory.CreateDirectory(contentFolder);
+
+                var imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp" };
+                var videoExtensions = new[] { ".mp4", ".webm", ".mkv", ".avi", ".mov", ".wmv" };
+                var imagesPath = FindSubfolder(tempExtractPath, "images");
+                var videosPath = FindSubfolder(tempExtractPath, "videos");
+                var imageFiles = imagesPath != null && Directory.Exists(imagesPath)
+                    ? Directory.GetFiles(imagesPath, "*", SearchOption.AllDirectories)
+                        .Where(f => imageExtensions.Contains(Path.GetExtension(f).ToLowerInvariant())).ToList()
+                    : new List<string>();
+                var videoFiles = videosPath != null && Directory.Exists(videosPath)
+                    ? Directory.GetFiles(videosPath, "*", SearchOption.AllDirectories)
+                        .Where(f => videoExtensions.Contains(Path.GetExtension(f).ToLowerInvariant())).ToList()
+                    : new List<string>();
+                if (imageFiles.Count == 0 && videoFiles.Count == 0)
+                    throw new InvalidDataException("Zip has no images/ or videos/ content — not a content pack.");
+
+                var totalFiles = imageFiles.Count + videoFiles.Count;
+                var manifest = new InstalledPackManifest
+                {
+                    PackId = pack.Id,
+                    PackGuid = packGuid,
+                    PackName = pack.Name,
+                    InstalledDate = DateTime.UtcNow,
+                    Files = new List<PackFileEntry>()
+                };
+
+                if (imageFiles.Count > 0)
+                    await ProcessAndEncryptFilesWithProgressAsync(imageFiles, contentFolder, "image", manifest,
+                        current => status?.Invoke($"Encrypting {current}/{totalFiles}..."));
+                if (videoFiles.Count > 0)
+                {
+                    var imageCount = imageFiles.Count;
+                    await ProcessAndEncryptFilesWithProgressAsync(videoFiles, contentFolder, "video", manifest,
+                        current => status?.Invoke($"Encrypting {imageCount + current}/{totalFiles}..."));
+                }
+
+                var manifestJson = JsonConvert.SerializeObject(manifest, Formatting.Indented);
+                PackEncryptionService.SaveEncryptedManifest(manifestJson, Path.Combine(packFolder, ".manifest.enc"));
+                Directory.Delete(tempExtractPath, true);
+                new DirectoryInfo(packFolder).Attributes |= FileAttributes.Hidden;
+
+                if (!App.Settings.Current.InstalledPackIds.Contains(pack.Id))
+                    App.Settings.Current.InstalledPackIds.Add(pack.Id);
+                App.Settings.Current.PackGuidMap ??= new Dictionary<string, string>();
+                App.Settings.Current.PackGuidMap[pack.Id] = packGuid;
+                App.Settings.Save();
+                _installedManifests[pack.Id] = manifest;
+                pack.IsDownloaded = true;
+
+                App.Logger?.Information("Pack installed from local zip: {Name} ({FileCount} files encrypted)",
+                    pack.Name, manifest.Files.Count);
+                PackDownloadCompleted?.Invoke(this, pack);
+            }
+            catch
+            {
+                try { if (Directory.Exists(tempExtractPath)) Directory.Delete(tempExtractPath, true); } catch { }
+                try { if (Directory.Exists(packFolder)) Directory.Delete(packFolder, true); } catch { }
+                throw;
+            }
+        }
+
+        /// <summary>
         /// Gets a signed download URL from the proxy server.
         /// Requires Patreon authentication.
         /// </summary>

@@ -25,6 +25,10 @@ namespace ConditioningControlPanel
     {
         public static bool IsOpen { get; private set; }
 
+        /// <summary>Score percentage that counts as a "perfect" run for the quiz achievements
+        /// (top_of_the_class, honor_roll). Below 100 on purpose - see ShowResult.</summary>
+        private const double PerfectScorePercent = 90;
+
         /// <summary>WaveStream wrapper that loops the source indefinitely.</summary>
         private class LoopStream : WaveStream
         {
@@ -524,10 +528,14 @@ namespace ConditioningControlPanel
 
             // EMIT hook for GamificationBridge quiz achievements. perfect/passed are
             // defined here (the quiz has no native pass/perfect concept): perfect =
-            // full marks, passed = >= 60%. Category uses the definition id.
+            // >= 90%, passed = >= 60%. Category uses the definition id.
+            //
+            // "Perfect" is deliberately NOT full marks: several categories score on a
+            // profile curve where the top answer is subjective, so 100% is often
+            // unreachable and the two perfect-score achievements were dead tiles.
             try
             {
-                var perfect = result.MaxScore > 0 && result.TotalScore == result.MaxScore;
+                var perfect = result.MaxScore > 0 && percentage >= PerfectScorePercent;
                 var passed = percentage >= 60;
                 var categoryId = catDef?.Id ?? result.Category.ToString();
                 QuizService.RaiseQuizCompleted(result.TotalScore, passed, perfect, categoryId);
@@ -1109,76 +1117,16 @@ namespace ConditioningControlPanel
 
         // ============ AUDIO ============
 
-        private static WaveOutEvent GetPooledDevice()
-        {
-            lock (_audioPoolLock)
-            {
-                if (_audioPool.Count > 0)
-                    return _audioPool.Dequeue();
-            }
-            // Pool is drained when user changes output device (DrainAudioDevicePool),
-            // so we only need to apply on construction.
-            var w = new WaveOutEvent();
-            App.Audio?.ApplyPreferredDevice(w);
-            return w;
-        }
-
         /// <summary>
-        /// Disposes pooled audio devices. Call after the user changes the output device
-        /// setting so the next quiz sound re-creates devices on the new endpoint.
+        /// No-op kept for the settings hook: the WaveOutEvent pool this used to drain is gone.
+        /// AudioService re-resolves the output device per clip and invalidates its own cache
+        /// on the setting change and on endpoint churn (#778/#779).
         /// </summary>
-        public static void DrainAudioDevicePool()
-        {
-            lock (_audioPoolLock)
-            {
-                while (_audioPool.Count > 0)
-                {
-                    try { _audioPool.Dequeue().Dispose(); } catch { }
-                }
-            }
-        }
-
-        private static void ReturnDevice(WaveOutEvent device)
-        {
-            lock (_audioPoolLock)
-            {
-                if (_audioPool.Count < MAX_POOLED_DEVICES)
-                    _audioPool.Enqueue(device);
-                else
-                    device.Dispose();
-            }
-        }
+        public static void DrainAudioDevicePool() { }
 
         private static void PlaySoundAsync(string path, float volume)
         {
-            Task.Run(() =>
-            {
-                WaveOutEvent? outputDevice = null;
-                AudioFileReader? audioFile = null;
-                try
-                {
-                    audioFile = new AudioFileReader(path) { Volume = volume };
-                    outputDevice = GetPooledDevice();
-                    outputDevice.Init(audioFile);
-                    outputDevice.Play();
-
-                    while (outputDevice.PlaybackState == PlaybackState.Playing)
-                        Thread.Sleep(50);
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Debug("Quiz audio playback failed: {Error}", ex.Message);
-                }
-                finally
-                {
-                    audioFile?.Dispose();
-                    if (outputDevice != null)
-                    {
-                        try { outputDevice.Stop(); } catch { }
-                        ReturnDevice(outputDevice);
-                    }
-                }
-            });
+            App.Audio?.PlayOneShot(path, volume, "quiz-sfx");
         }
 
         private static float GetVolume(float multiplier = 1f)

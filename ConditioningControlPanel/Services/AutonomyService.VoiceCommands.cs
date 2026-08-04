@@ -90,6 +90,20 @@ namespace ConditioningControlPanel.Services
 
         private static List<VoiceCommandIntent>? _voiceCommandIntents;
 
+        // The user asked to be held; voice must not be the way out (#706). Mirrors the contract
+        // AvatarTubeWindow.IsEngineStopLocked() already enforces for the tube's Stop button, so the
+        // two entry points can't disagree about whether a lock is honoured.
+        //
+        // Guard EVERY intent that reaches a privileged teardown, not just the obvious ones: the
+        // original report was `video_off`, but session `pause` funnels into SessionEngine.PauseSession
+        // -> App.Video.Stop() through a completely different file, and its aliases ("wait", "hold on")
+        // are the ones a frustrated user actually reaches for. Panic stays unguarded — it is the
+        // intended way out and routes to the same teardown on purpose.
+        private static bool StopLocked() =>
+            App.Lockdown?.IsActive == true ||
+            App.Video?.IsStrictActive == true ||
+            (App.BubbleCount?.IsBusy == true && App.Settings?.Current?.BubbleCountStrictLock == true);
+
         // ── Alias expansion ────────────────────────────────────────────────────
         // Toggle features share a wide, consistent spoken vocabulary so natural phrasings all land.
         // (The v1 intents notably lacked the bare "<noun> on" / "<noun> off" form, so "bubbles off"
@@ -188,6 +202,17 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "video_off",
                 Aliases = OffAliases("video", "the video", "no more videos", "stop playing"),
+                // Strict lock / lockdown: the whole point is that the video can't be dismissed, and
+                // VideoService.Stop() is a privileged teardown that clears _strictActive before the
+                // window's Closing veto can see it — so the refusal has to live here (#706). Panic
+                // stays unguarded: it routes to the same teardown and is the intended way out.
+                Blocked = StopLocked,
+                BlockedConfirm = new()
+                {
+                    ["bambi"] = "nuh-uh~ you locked yourself in, silly! keep watching~",
+                    ["sissy"] = "no, good girl. you asked to be locked in — eyes on the screen.",
+                    ["circe"] = "you locked it yourself. the video stays.",
+                },
                 Execute = () => App.Video?.Stop(),
                 VoiceRuleId = "voicecmd_video_off",
                 Confirm = new()
@@ -201,6 +226,14 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "video_pause",
                 Aliases = new[] { "pause the video", "pause video", "pause this video", "pause the clip", "hold the video" },
+                // Pausing indefinitely neuters a strict video just as thoroughly as stopping it (#706).
+                Blocked = StopLocked,
+                BlockedConfirm = new()
+                {
+                    ["bambi"] = "hehe, no pausing this one~ keep those eyes open!",
+                    ["sissy"] = "not this one, good girl. it plays through.",
+                    ["circe"] = "no. it plays through.",
+                },
                 Execute = () => App.Video?.PausePrimary(),
                 TerseAck = true,
                 NoChain = true,
@@ -532,6 +565,17 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "pause",
                 Aliases = new[] { "pause", "pause the session", "pause everything", "hold on", "pause please", "pause it", "wait", "hold up", "take a break", "one moment", "give me a moment" },
+                // PauseSessionFromRemote -> SessionEngine.PauseSession, which calls App.Video.Stop()
+                // along with every other feature teardown — the same privileged exit `video_off` is
+                // refused for, reached by a shorter word (#706). Note this one also outranked the
+                // panic key during lockdown, which returns early before it can pause anything.
+                Blocked = StopLocked,
+                BlockedConfirm = new()
+                {
+                    ["bambi"] = "no pausing, silly~ you're locked in til it's done!",
+                    ["sissy"] = "no pausing, good girl. you asked to be held — sit with it.",
+                    ["circe"] = "no. you don't get to pause this.",
+                },
                 Execute = () => App.MainWindowRef?.PauseSessionFromRemote(),
                 TerseAck = true,
                 NoChain = true,
@@ -570,6 +614,12 @@ namespace ConditioningControlPanel.Services
                 // MainWindow owns that sync because the controls are wired manually, not data-bound.
                 // (KillAllAudio is NOT used here — it's a panic-grade teardown that also stops Autonomy
                 // and the overlays, i.e. it would kill the very voice loop that heard "mute".)
+                //
+                // There is deliberately NO `Blocked = StopLocked` here - do not add one to match
+                // video_off / video_pause / pause. Those are guarded because they end or suspend a
+                // strict run; muting doesn't. The video plays through to the end either way, so the
+                // lock the user asked for still holds. Silencing is not escaping, and letting someone
+                // kill the sound (housemate walked in, headphones died) costs the run nothing.
                 Execute = () => App.MainWindowRef?.ApplyVoiceMute(true),
                 TerseAck = true,
                 NoChain = true,

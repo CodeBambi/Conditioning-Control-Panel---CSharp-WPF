@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Views.Tabs
 {
@@ -10,6 +11,76 @@ namespace ConditioningControlPanel.Views.Tabs
         public BambiTakeoverTabView()
         {
             InitializeComponent();
+            Loaded += (_, _) => LoadMantraChant();
+            // Tabs are shown/hidden rather than rebuilt, so Loaded fires once. Re-read on every show
+            // or the toggle lies after something else disarms the chant behind our back — panic clears
+            // MantraChantEnabled (#685) and the checkbox would still read ON.
+            IsVisibleChanged += (_, _) => { if (IsVisible) LoadMantraChant(); };
+        }
+
+        // ── Mantra Chant (suggestion #653) ────────────────────────────────────────
+        // Unique to this tab (no Takeover twin to mirror), so its controls are wired directly here
+        // instead of delegating to MainWindow like the shared voice toggles above.
+
+        private bool _mantraChantLoading;
+
+        /// <summary>Populate the chant controls from settings + refresh the voiced-content note. Runs on tab show.</summary>
+        private void LoadMantraChant()
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            _mantraChantLoading = true;
+            try
+            {
+                ChkMantraChant.IsChecked = s.MantraChantEnabled;
+                SldMantraChantVolume.Value = s.MantraChantVolume;
+                TxtMantraChantVolume.Text = $"{(int)Math.Round(s.MantraChantVolume)}%";
+                SldMantraChantGap.Value = s.MantraChantGapSeconds;
+                TxtMantraChantGap.Text = $"{s.MantraChantGapSeconds}s";
+                RefreshMantraChantHint();
+            }
+            finally { _mantraChantLoading = false; }
+        }
+
+        /// <summary>A mod with no voiced mantras can't chant, so say so rather than looping silence.</summary>
+        private void RefreshMantraChantHint()
+        {
+            if (TxtMantraChantHint == null) return;
+            var voiced = App.MantraChant?.CanChant() == true;
+            TxtMantraChantHint.Text = Loc.Get(voiced ? "desc_mantra_chant" : "desc_mantra_chant_none");
+        }
+
+        private void ChkMantraChant_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_mantraChantLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.MantraChantEnabled = ChkMantraChant.IsChecked == true;
+            App.Settings?.Save();
+            if (s.MantraChantEnabled) App.MantraChant?.Start();
+            else App.MantraChant?.Stop();
+            RefreshMantraChantHint();
+        }
+
+        private void SldMantraChantVolume_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_mantraChantLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.MantraChantVolume = e.NewValue;
+            App.Settings?.Save();
+            if (TxtMantraChantVolume != null) TxtMantraChantVolume.Text = $"{(int)Math.Round(e.NewValue)}%";
+            App.MantraChant?.ApplyVolume(); // live-apply to a clip that's already playing
+        }
+
+        private void SldMantraChantGap_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_mantraChantLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.MantraChantGapSeconds = (int)Math.Round(e.NewValue);
+            App.Settings?.Save();
+            if (TxtMantraChantGap != null) TxtMantraChantGap.Text = $"{s.MantraChantGapSeconds}s";
         }
 
         private void BtnAutonomyStartStop_Click(object sender, RoutedEventArgs e)
@@ -76,6 +147,21 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkAutonomyBehavior_Changed(sender, e);
+        }
+        private void BtnWallpaperFolder_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.BtnWallpaperFolder_Click(sender, e);
+        }
+        private void ChkWallpaperKeep_Changed(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.ChkWallpaperKeep_Changed(sender, e);
+        }
+        private void SliderWallpaperDuration_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.SliderWallpaperDuration_Changed(sender, e);
         }
         private void ChkAutonomyEnabled_Changed(object sender, RoutedEventArgs e)
         {

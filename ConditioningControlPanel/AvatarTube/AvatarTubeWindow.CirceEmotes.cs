@@ -1343,6 +1343,12 @@ namespace ConditioningControlPanel
             try { AnimationBehavior.GetAnimator(ImgAvatarAnimatedB)?.Pause(); } catch { }
             StopTalkSequence(); // abort any in-flight spoken line; resume returns to idle rotation
             _circeWatchdog?.Stop(); _circeMinHoldTimer?.Stop();
+
+            // #744: stopping the min-hold timer without clearing what it was going to swap in strands
+            // the rotation. Both recovery paths - OnCirceClipCompleted and the watchdog tick - early
+            // return while a pending clip is set, and nothing else clears it, so the avatar could stay
+            // frozen even after the window came back.
+            _circePendingClip = null;
         }
 
         private void CirceResume()
@@ -1351,7 +1357,54 @@ namespace ConditioningControlPanel
             try { AnimationBehavior.GetAnimator(ImgAvatarAnimated)?.Play(); } catch { }
             try { AnimationBehavior.GetAnimator(ImgAvatarAnimatedB)?.Play(); } catch { }
             // Restart the rotation-safety poll so rotation keeps going after returning on-screen.
-            if (_circeCurrentClip != null) EnsureWatchdogRunning();
+            // #744: unconditionally - the watchdog is what recovers a rotation that has no current
+            // clip, so gating it on _circeCurrentClip left exactly the stuck case unrecoverable.
+            EnsureWatchdogRunning();
+        }
+
+        private bool _dpiEmotesQuiesced;
+
+        /// <summary>
+        /// Freeze every emote writer to the layered surface for the duration of a per-monitor DPI
+        /// transition. WPF answers WM_DPICHANGED with a resize that runs a SYNCHRONOUS CompleteRender,
+        /// and that present cannot finish while the AllowsTransparency render thread is busy — the #477
+        /// deadlock. The float/breath transform is quiesced by the caller; this covers the OTHER driver,
+        /// the emote crossfade (idle rotation plus its opacity clocks), which was added to this surface
+        /// after the original mitigation was written and kept compositing straight through it.
+        /// Idempotent: rapid re-crossings re-arm the caller's debounce without double-pausing.
+        /// </summary>
+        internal void QuiesceEmotesForDpi()
+        {
+            if (_dpiEmotesQuiesced) return;
+            _dpiEmotesQuiesced = true;
+
+            CircePause();   // GIF animators + rotation/min-hold timers (no-op outside emote mode)
+
+            // CircePause leaves an in-flight crossfade alone: that is a DoubleAnimation clock which
+            // keeps compositing under its own steam. Kill the clocks and snap the fade to the
+            // destination frame the same way the completion path settles it (active 1 / other 0),
+            // so we quiesce on a coherent frame instead of two half-faded layers.
+            try
+            {
+                ImgAvatarAnimated?.BeginAnimation(UIElement.OpacityProperty, null);
+                ImgAvatarAnimatedB?.BeginAnimation(UIElement.OpacityProperty, null);
+                var active = _circeActiveImg;
+                if (active != null)
+                {
+                    active.Opacity = 1;
+                    var other = ReferenceEquals(active, ImgAvatarAnimated) ? ImgAvatarAnimatedB : ImgAvatarAnimated;
+                    if (other != null) other.Opacity = 0;
+                }
+            }
+            catch { /* window tearing down */ }
+        }
+
+        /// <summary>Undo <see cref="QuiesceEmotesForDpi"/> once the DPI transition has settled.</summary>
+        internal void ResumeEmotesAfterDpi()
+        {
+            if (!_dpiEmotesQuiesced) return;
+            _dpiEmotesQuiesced = false;
+            CirceResume();
         }
     }
 }

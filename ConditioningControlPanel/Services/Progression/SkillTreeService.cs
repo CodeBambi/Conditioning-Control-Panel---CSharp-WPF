@@ -158,6 +158,16 @@ public class SkillTreeService : IDisposable
                 settings.LastStreakShieldResetDate = DateTime.UtcNow.Date;
                 break;
 
+            case "oopsie_insurance":
+                // Grant the purchase's streak-fix charge locally so the UI reflects it immediately.
+                // The server grants the same charge on its side and is authoritative on next sync.
+                // Saved here because nothing else on the purchase path persists settings — without
+                // it the granted charge was lost on the next restart (the quests tab repaints off
+                // the settings INPC, which the assignment above already raises).
+                settings.StreakFixCharges++;
+                App.Settings?.Save();
+                break;
+
             case "pink_rush":
                 // Start checking for Pink Rush triggers
                 _pinkRushCheckTimer.Start();
@@ -427,9 +437,11 @@ public class SkillTreeService : IDisposable
     }
 
     /// <summary>
-    /// Use oopsie insurance to restore a broken streak for 500 XP.
+    /// Spend one streak-fix charge to restore a broken streak (free — charges are the currency).
     /// This is the automatic trigger from AchievementProgress.UpdateDailyStreak().
     /// For the manual button, MainWindow uses ProfileSyncService.UseOopsieInsuranceAsync() directly.
+    /// The "oopsie_insurance" skill gate stays on this path deliberately: everyone earns charges, but
+    /// only skill owners have them spent automatically — everyone else banks them and picks the day.
     /// Falls back to local-only if offline (acceptable for passive auto-trigger).
     /// </summary>
     public bool UseOopsieInsurance()
@@ -438,21 +450,41 @@ public class SkillTreeService : IDisposable
         if (settings == null) return false;
 
         if (!HasSkill("oopsie_insurance")) return false;
-        if (settings.SeasonalStreakRecoveryUsed) return false;
-        if (settings.PlayerXP < 500) return false;
+        // Spends down to the last charge, deliberately. An earlier revision reserved one for the
+        // user to spend manually, to stop the skill from eating everything a skill owner banks.
+        // That reserve was wrong: this path repairs the LOGIN streak (ConsecutiveDays), while the
+        // manual Fix Day button repairs the QUEST streak (DailyQuestCompletionDates ->
+        // DailyQuestStreak) and has no way to restore ConsecutiveDays. So a reserved charge could
+        // never buy back what this path protects — it just let a login streak die with charges in
+        // the bank. Better to spend the last one than to lose a streak that nothing can recover.
+        if (settings.StreakFixCharges < 1) return false;
+
+        // Deduct locally first so the balance is correct offline and so the fire-and-forget below
+        // cannot race it: the server call adopts the authoritative balance when it answers, and
+        // ordering it after this assignment means it can only ever correct, never double-spend.
+        settings.StreakFixCharges = Math.Max(0, settings.StreakFixCharges - 1);
+        settings.SeasonalStreakRecoveryUsed = true; // back-compat flag, no longer a gate
 
         // Try server-side validation if online
         var unifiedId = settings.UnifiedId;
         if (!string.IsNullOrEmpty(unifiedId) && App.ProfileSync != null)
         {
             // Fire-and-forget server call for the auto-trigger (non-blocking)
-            // The local deduction happens immediately; server sync catches up
             _ = Task.Run(async () =>
             {
                 try
                 {
                     var today = DateTime.Today.ToString("yyyy-MM-dd");
-                    await App.ProfileSync.UseOopsieInsuranceAsync(today);
+                    var (ok, _, _, credits) = await App.ProfileSync.UseOopsieInsuranceAsync(today);
+                    var current = App.Settings?.Current;
+                    if (ok && credits.HasValue && current != null && current.StreakFixCharges != credits.Value)
+                    {
+                        // Server balance wins over the optimistic local decrement (it also sees
+                        // grants/spends from other devices). The assignment raises the settings
+                        // INPC, which repaints the quests tab.
+                        current.StreakFixCharges = credits.Value;
+                        App.Settings?.Save();
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -461,10 +493,8 @@ public class SkillTreeService : IDisposable
             });
         }
 
-        settings.PlayerXP -= 500;
-        settings.SeasonalStreakRecoveryUsed = true;
-
-        App.Logger?.Information("Oopsie Insurance used! Streak restored for 500 XP");
+        App.Logger?.Information("Streak fix auto-spent! Streak restored, {Remaining} charge(s) left",
+            settings.StreakFixCharges);
         App.Settings?.Save();
 
         return true;
@@ -799,7 +829,9 @@ public class SkillTreeService : IDisposable
         var settings = App.Settings?.Current;
         if (settings == null) return;
 
-        // Reset seasonal flags
+        // Reset seasonal flags. NOTE: StreakFixCharges is deliberately NOT touched here — the
+        // fix charges are cumulable, never expire, and are server-authoritative (the server grants
+        // +1 on rollover and the next sync adopts the new balance).
         settings.SeasonalStreakRecoveryUsed = false;
         settings.CurrentStreak = 0;
         settings.LastStreakDate = null;

@@ -27,13 +27,28 @@ namespace ConditioningControlPanel
 
         private void OnSubscribeStarTierChanged(object? sender, PatreonTier tier)
         {
-            Dispatcher.Invoke(() =>
+            // This handler sat unreachable until InitializeSubscribeStarTab() was finally called,
+            // so its shutdown behaviour has never actually been exercised. It fires from a
+            // background validation continuation, and a *blocking* Invoke onto a dispatcher that
+            // has begun shutting down either throws or waits on a pump that will never run again.
+            // Bail first, then post rather than block - nothing here needs a return value.
+            if (Dispatcher == null || Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
+
+            Dispatcher.BeginInvoke(() =>
             {
-                UpdateSubscribeStarUI();
-                // Shared gate — refresh the Patreon-driven premium UI so locked
-                // features unlock/relock based on the combined entitlement.
-                UpdatePatreonUI();
-                UpdateUnlockablesVisibility(App.Settings?.Current?.PlayerLevel ?? 1);
+                try
+                {
+                    UpdateSubscribeStarUI();
+                    // Shared gate — refresh the Patreon-driven premium UI so locked
+                    // features unlock/relock based on the combined entitlement.
+                    UpdatePatreonUI();
+                    UpdateUnlockablesVisibility(App.Settings?.Current?.PlayerLevel ?? 1);
+                    MaybeShowPremiumCelebration();
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "SubscribeStar tier refresh failed");
+                }
             });
         }
 

@@ -39,6 +39,9 @@ namespace ConditioningControlPanel.Models
         [JsonProperty("theme")]
         public ModTheme? Theme { get; set; }
 
+        [JsonProperty("fxPalette")]
+        public ModFxPalette? FxPalette { get; set; }
+
         [JsonProperty("identity")]
         public ModIdentity? Identity { get; set; }
 
@@ -119,6 +122,30 @@ namespace ConditioningControlPanel.Models
 
         [JsonProperty("filterColor")]
         public string? FilterColor { get; set; }
+    }
+
+    /// <summary>
+    /// Optional per-mod overrides for the ambient FX palette (fog/aurora wash, particles, glow,
+    /// flash tint). Every slot is nullable: an unset slot resolves through Theme.FilterColor →
+    /// Theme.AccentColor → the app default, so existing mods get coherent FX with no manifest edit.
+    /// See ModService.GetMistColorHex and Services/FxTheme.cs.
+    /// </summary>
+    public class ModFxPalette
+    {
+        [JsonProperty("mistColor")]
+        public string? MistColor { get; set; }
+
+        [JsonProperty("particleColor")]
+        public string? ParticleColor { get; set; }
+
+        [JsonProperty("glowColor")]
+        public string? GlowColor { get; set; }
+
+        [JsonProperty("flashTint")]
+        public string? FlashTint { get; set; }
+
+        [JsonProperty("mistOpacity")]
+        public double? MistOpacity { get; set; }
     }
 
     public class ModIdentity

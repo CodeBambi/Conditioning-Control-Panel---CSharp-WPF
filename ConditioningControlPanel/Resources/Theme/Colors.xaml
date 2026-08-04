@@ -126,4 +126,13 @@
          (not a Brush) want a "*Color" key. Same value as NeonPurple. -->
     <Color x:Key="NeonPurpleColor">#FFB47BFF</Color>
 
+    <!-- Ambient FX palette. DESIGN-TIME SEEDS ONLY (the Bambi pink family):
+         Services/FxTheme.ApplyForActiveMod overwrites all four at startup and on every mod
+         switch from the active mod's fxPalette → filterColor → accentColor chain. Never
+         hardcode an FX colour anywhere else — read FxTheme or these keys. -->
+    <Color x:Key="FxMistColor">#FFE84393</Color>
+    <Color x:Key="FxParticleColor">#FFFF69B4</Color>
+    <Color x:Key="FxGlowColor">#FFFF69B4</Color>
+    <Color x:Key="FxFlashTintColor">#FFFF8FAF</Color>
+
 </ResourceDictionary>

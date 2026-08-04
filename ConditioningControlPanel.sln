@@ -1,9 +1,13 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.8.34330.188
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConditioningControlPanel", "ConditioningControlPanel\ConditioningControlPanel.csproj", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{DF03181A-95DC-4370-A2AB-C86A6826E490}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConditioningControlPanel.Tests", "Tests\ConditioningControlPanel.Tests\ConditioningControlPanel.Tests.csproj", "{B6CAC510-D769-456C-92F6-80565252781A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,8 +19,15 @@ Global
 		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B6CAC510-D769-456C-92F6-80565252781A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B6CAC510-D769-456C-92F6-80565252781A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B6CAC510-D769-456C-92F6-80565252781A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B6CAC510-D769-456C-92F6-80565252781A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{B6CAC510-D769-456C-92F6-80565252781A} = {DF03181A-95DC-4370-A2AB-C86A6826E490}
 	EndGlobalSection
 EndGlobal

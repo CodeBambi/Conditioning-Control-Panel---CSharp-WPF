@@ -49,6 +49,11 @@ namespace ConditioningControlPanel
             {
                 PnlDownloadUrl.Visibility = Visibility.Visible;
                 TxtDownloadUrl.TextChanged += (_, _) => UpdateSubmitEnabled();
+                // Mods get their own explainer: they are user-created and stay
+                // hosted on the creator's MEGA - the catalogue lists only the
+                // link, so the flow (export -> MEGA -> paste link) needs
+                // spelling out where presets/sessions don't.
+                TxtBody.Text = Loc.Get("dialog_catalogue_submit_mod_body");
             }
 
             ChkAffirm.Checked += (_, _) => UpdateSubmitEnabled();

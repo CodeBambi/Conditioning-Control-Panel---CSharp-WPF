@@ -193,8 +193,8 @@ public class SkillDefinition
             Tier = 3,
             Cost = 12,
             PrerequisiteId = "milestone_rewards",
-            FlavorText = "Everyone forgets sometimes, silly! Pay 500 XP to fix a broken streak once per season~",
-            Description = "Restore broken streak for 500 XP (once per season)",
+            FlavorText = "Everyone forgets sometimes, silly! Your streak fixes get spent for you, automatically~",
+            Description = "Grants a streak fix on purchase, then spends them automatically when your login streak breaks",
             EffectType = SkillEffectType.StreakRecovery,
             EffectValue = 500
         },

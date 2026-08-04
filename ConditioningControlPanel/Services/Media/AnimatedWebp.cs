@@ -69,6 +69,42 @@ internal static class AnimatedWebp
     // crashed at 228s survived a 15-min soak with burst width capped to 2 (A/B, 2026-07-12).
     private static readonly SemaphoreSlim _decodeGate = new(2, 2);
 
+    // Hard CPU ceiling on frames decoded for pathological files (composition is sequential,
+    // so this bounds work even when only a handful of frames are kept).
+    internal const int DECODE_CEILING = 600;
+
+    /// <summary>
+    /// Frame-selection plan: how many frames are decoded, which of them are KEPT, and the
+    /// stride the per-frame delay is multiplied by so the kept set still spans the clip's real
+    /// wall-clock duration. Pure and image-free so #683 stays regression-tested without needing
+    /// a decoder (see AnimatedWebpFrameStepTests).
+    ///
+    /// #683: <c>step</c> used integer division (<c>frameCount / maxKeep</c>), so every clip with
+    /// maxKeep &lt;= frameCount &lt; 2*maxKeep got step==1 — the loop then hit its
+    /// <c>frames.Count &lt; maxKeep</c> guard at frame maxKeep-1 and silently dropped the tail
+    /// (a 100-frame 66ms GIF played 60 frames = 3.96s of 6.6s, then looped). Wider clips
+    /// truncated too (170 frames → floor step 2 → only the first 120 decoded frames reachable).
+    /// CEILING division guarantees ceil(DecodeCount / Step) &lt;= MaxKeep, so the guard can never
+    /// fire before the last decoded frame and the kept set covers the whole arc.
+    /// </summary>
+    internal readonly record struct FramePlan(int Step, int DecodeCount, int MaxKeep)
+    {
+        public static FramePlan Create(int frameCount, int maxKeep, int decodeCeiling = DECODE_CEILING)
+        {
+            int keep = Math.Max(1, maxKeep);
+            int step = Math.Max(1, (int)Math.Ceiling(frameCount / (double)keep));
+            return new FramePlan(step, Math.Clamp(frameCount, 0, Math.Max(0, decodeCeiling)), keep);
+        }
+
+        /// <summary>Kept frame indices in order — exactly the set the decode loop selects.</summary>
+        public IEnumerable<int> KeptIndices()
+        {
+            int kept = 0;
+            for (int i = 0; i < DecodeCount && kept < MaxKeep; i++)
+                if (i % Step == 0) { kept++; yield return i; }
+        }
+    }
+
     /// <summary>
     /// Decode an animated webp into fully-composed, frozen BGRA frames, downscaled so the
     /// longest edge is at most <paramref name="maxDim"/> and subsampled (evenly, GIF-loader
@@ -118,26 +154,29 @@ internal static class AnimatedWebp
         var (tw, th) = ScaledSize(srcW, srcH, maxDim);
 
         // Frame budget mirrors FlashService.LoadGifFrames: estimate kept-frame memory, then
-        // subsample evenly rather than truncating (keeps the loop's full motion arc).
+        // subsample evenly across the WHOLE clip rather than truncating to a head slice — the
+        // ceiling stride in FramePlan is what makes that claim true (#683), and the matching
+        // avgMs * step delay below keeps the kept set's wall-clock duration honest.
         var bytesPerKept = (long)tw * th * 4;
         var estimatedMemoryMB = (bytesPerKept * frameCount) / (1024.0 * 1024.0);
         int maxKeep = frameCount;
         if (estimatedMemoryMB > maxMemoryMb)
             maxKeep = Math.Max(10, (int)(frameCount * (maxMemoryMb / estimatedMemoryMB)));
         maxKeep = Math.Min(maxKeep, maxFrames);
-        int step = frameCount > maxKeep ? frameCount / maxKeep : 1;
+        var plan = FramePlan.Create(frameCount, maxKeep);
+        int step = plan.Step;
 
         // Delta frames must be composed in order, so every frame up to the hard ceiling is
         // DECODED sequentially into one reusable canvas; only every step-th is KEPT.
         var frameInfos = codec.FrameInfo;
-        int decodeCount = Math.Min(frameCount, 600);   // CPU ceiling for pathological files
+        int decodeCount = plan.DecodeCount;   // = min(frameCount, 600), CPU ceiling for pathological files
         var canvasInfo = new SKImageInfo(srcW, srcH, SKColorType.Bgra8888, SKAlphaType.Premul);
         using var canvas = new SKBitmap(canvasInfo);
         IntPtr pixels = canvas.GetPixels();
 
         var frames = new List<BitmapSource>();
         long durationTotalMs = 0; int durationSamples = 0;
-        for (int i = 0; i < decodeCount && frames.Count < maxKeep; i++)
+        for (int i = 0; i < decodeCount && frames.Count < plan.MaxKeep; i++)
         {
             // WebP has no restore-previous disposal, so the canvas (holding frame i-1) always
             // satisfies a dependent frame's RequiredFrame; independent frames decode standalone.

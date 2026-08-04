@@ -51,6 +51,7 @@ const DEFAULTS = {
   runBoonDraft: true,        // mantra drafts between loops
   runAllowCurses: true,      // sins on the table
   runDarters: true,          // white rabbits
+  runPinnedSpiral: false,    // #647: pin a slow persistent spiral to the tunnel centre (default OFF)
   runVariantsOff: [],        // bubble-pool variant ids switched OFF (empty = all on)
   runSeeded: 0,              // 1 once the host's saved runSetup seeded these keys
   // ---- the guide -------------------------------------------------------------

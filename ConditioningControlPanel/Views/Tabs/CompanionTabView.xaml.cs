@@ -10,6 +10,16 @@ namespace ConditioningControlPanel.Views.Tabs
         public CompanionTabView()
         {
             InitializeComponent();
+            // FX lifecycle (PR-4b). Hooked here rather than in ShowTab so the tab owns its own
+            // decoration: the hero breath starts when the tab appears and its clock is parked the
+            // moment it is collapsed again.
+            IsVisibleChanged += CompanionTabView_IsVisibleChanged;
+        }
+
+        private void CompanionTabView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.OnCompanionTabVisibilityChanged(IsVisible);
         }
 
         private void BtnAddVideoLink_Click(object sender, RoutedEventArgs e)
@@ -21,6 +31,11 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnBrowsePrompts_Click(sender, e);
+        }
+        private void BtnCameraShortcut_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.BtnCameraShortcut_Click(sender, e);
         }
         private void BtnChatShortcut_Click(object sender, RoutedEventArgs e)
         {
@@ -196,6 +211,11 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.SliderAwarenessCooldown_ValueChanged(sender, e);
+        }
+        private void SliderAwarenessCooldownMax_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.SliderAwarenessCooldownMax_ValueChanged(sender, e);
         }
         private void SliderBubbleDuration_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {

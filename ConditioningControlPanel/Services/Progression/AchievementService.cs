@@ -95,6 +95,14 @@ public class AchievementService : IDisposable
         
         // Track time-based achievements every second
         _trackingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        // Midnight rollover FIRST, and as its own handler rather than a block inside
+        // TrackTimeBasedProgress: a throw in one multicast Tick handler suppresses the handlers
+        // after it, so keeping them separate stops either one from starving the other. Both are
+        // individually try/caught. This timer is the right host because it is created here in the
+        // constructor (App.OnStartup) and only stopped in Dispose, so it ticks for the whole app
+        // lifetime — including while completely idle, which is exactly the case the streak bug
+        // affects. SessionEngine's 1s tick was rejected: it only runs during an active session.
+        _trackingTimer.Tick += CheckDayRollover;
         _trackingTimer.Tick += TrackTimeBasedProgress;
         _trackingTimer.Start();
         
@@ -142,6 +150,61 @@ public class AchievementService : IDisposable
         }
     }
     
+    /// <summary>
+    /// Bank the login streak when the calendar day rolls over while the app is running.
+    ///
+    /// Before this existed, <see cref="AchievementProgress.LastLaunchDate"/> was only ever written
+    /// on the startup path, so a user who left their PC asleep, or who simply left CCP open across
+    /// midnight, silently lost the day (and eventually the whole streak).
+    ///
+    /// No double-count is possible: the decision is
+    /// <see cref="AchievementProgress.ShouldBankDayRollover"/> over the PERSISTED
+    /// <c>LastLaunchDate</c> — not over any timer-local bookkeeping — and the banking itself is the
+    /// same <c>UpdateDailyStreak</c> the startup path calls, which early-returns once the day is
+    /// banked. A restart at 00:05 therefore finds the day already stamped and does nothing.
+    /// Because the gate is re-derived from persisted state on every tick and never latched, a
+    /// transient failure here simply retries a second later instead of dropping the day.
+    /// </summary>
+    private void CheckDayRollover(object? sender, EventArgs e)
+    {
+        try
+        {
+            // AwardDeferredStreakBonus can surface XP/level-up UI, so don't run during teardown.
+            if (Application.Current?.Dispatcher == null) return;
+            if (Application.Current.Dispatcher.HasShutdownStarted) return;
+
+            // Cheap (two date truncations) and, crucially, stateless — see remarks above.
+            if (!_progress.TryAdvanceDayRollover()) return;
+
+            App.Logger?.Information(
+                "Login streak: day rolled over while running — banked {Date}, streak now {Days} day(s)",
+                _progress.LastLaunchDate.ToString("yyyy-MM-dd"), _progress.ConsecutiveDays);
+
+            // SyncCurrentStreak mutates settings.CurrentStreak/LastStreakDate WITHOUT saving, so it
+            // must run BEFORE Save (same ordering as ProfileSyncService.cs:932 and MergeCloudProfile).
+            _progress.SyncCurrentStreak();
+            App.Settings?.Save();
+
+            // Persist immediately rather than leaving it to the 30s auto-save: the whole point of
+            // this path is users who leave the app running, and a crash before the next auto-save
+            // would lose the banked day.
+            Save();
+
+            // Unlike the startup path (which runs before SkillTree exists and therefore defers the
+            // bonus to App.OnStartup), SkillTree is live by now, so pay it immediately. Guarded so
+            // that in the vanishingly unlikely case this fires mid-startup we leave PendingStreakBonus
+            // set for App.OnStartup rather than burning it for 0 XP.
+            if (App.SkillTree != null)
+            {
+                _progress.AwardDeferredStreakBonus();
+            }
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Error(ex, "Login streak: midnight rollover check failed");
+        }
+    }
+
     /// <summary>
     /// Track time-based progress (called every second)
     /// </summary>
@@ -744,15 +807,27 @@ public class AchievementService : IDisposable
 
         if (SuppressPopups) return true;
 
-        // Fire event to show popup
+        // Fire event to show popup. Fire-and-forget (BeginInvoke, #684): the unlock itself is already
+        // persisted above and nothing here reads back a result, so a background-thread unlock must never
+        // block behind the UI thread - a wedged dispatcher used to hang the caller forever via Invoke.
+        // The inner try-catch preserves the old swallow-and-log contract for handler exceptions, which
+        // a synchronous Invoke used to marshal back to the catch below.
         try
         {
-            DispatcherHelper.RunOnUISync(() =>
+            DispatcherHelper.RunOnUI(() =>
             {
-                App.Logger?.Debug("Firing AchievementUnlocked event for: {Name}", achievement.Name);
-                AchievementUnlocked?.Invoke(this, achievement);
-                _ = App.Haptics?.AchievementPatternAsync();
-                _ = App.Haptics?.AchievementPatternAsync();
+                try
+                {
+                    App.Logger?.Debug("Firing AchievementUnlocked event for: {Name}", achievement.Name);
+                    AchievementUnlocked?.Invoke(this, achievement);
+                    // ONE call only: this fired twice, which stacked two overlapping copies of the
+                    // same pattern on the toy rather than making it play any stronger.
+                    _ = App.Haptics?.AchievementPatternAsync();
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error(ex, "Failed to fire achievement event");
+                }
             });
         }
         catch (Exception ex)

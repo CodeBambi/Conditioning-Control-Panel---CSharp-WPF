@@ -32,6 +32,10 @@ namespace ConditioningControlPanel.Services.Audio
         public TimeSpan EndTime { get; set; }
         public ChunkState State { get; set; } = ChunkState.NotStarted;
         public float[]? IntensityData { get; set; }
+        /// <summary>Phase F band-split: bass envelope for this chunk (null unless band split is on).</summary>
+        public float[]? LowBandData { get; set; }
+        /// <summary>Phase F band-split: high-frequency envelope for this chunk.</summary>
+        public float[]? HighBandData { get; set; }
         public string? ErrorMessage { get; set; }
     }
 
@@ -45,6 +49,8 @@ namespace ConditioningControlPanel.Services.Audio
         private readonly AudioAnalyzer _analyzer;
         private readonly AudioSyncSettings _settings;
         private readonly HapticTrack _track;
+        private readonly HapticTrack _lowTrack;
+        private readonly HapticTrack _highTrack;
 
         private readonly List<AudioChunk> _chunks = new();
         private readonly object _lock = new();
@@ -82,6 +88,13 @@ namespace ConditioningControlPanel.Services.Audio
         /// The haptic track containing all processed intensity data
         /// </summary>
         public HapticTrack Track => _track;
+
+        /// <summary>Phase F band-split: bass (&lt;~258Hz) envelope track. Empty unless
+        /// <see cref="AudioSyncSettings.BandSplit"/> was on while the chunk was analysed.</summary>
+        public HapticTrack LowBandTrack => _lowTrack;
+
+        /// <summary>Phase F band-split: high (~2-6.5kHz) envelope track.</summary>
+        public HapticTrack HighBandTrack => _highTrack;
 
         /// <summary>
         /// Whether the first chunk is ready for playback
@@ -122,6 +135,8 @@ namespace ConditioningControlPanel.Services.Audio
             _downloader = new VideoDownloader();
             _analyzer = new AudioAnalyzer();
             _track = new HapticTrack(_analyzer.OutputSampleRate, settings.ChunkDurationSeconds);
+            _lowTrack = new HapticTrack(_analyzer.OutputSampleRate, settings.ChunkDurationSeconds);
+            _highTrack = new HapticTrack(_analyzer.OutputSampleRate, settings.ChunkDurationSeconds);
 
             _downloader.ProgressChanged += OnDownloadProgress;
         }
@@ -150,6 +165,8 @@ namespace ConditioningControlPanel.Services.Audio
                 _videoDuration = estimatedDuration ?? TimeSpan.FromMinutes(30);
                 _chunks.Clear();
                 _track.Clear();
+                _lowTrack.Clear();
+                _highTrack.Clear();
                 _cachedVideoPath = null;
 
                 // Create chunk definitions
@@ -312,8 +329,10 @@ namespace ConditioningControlPanel.Services.Audio
                 // Reset analyzer for each chunk to get proper normalization
                 _analyzer.Reset();
 
-                // Analyze audio
-                var intensities = _analyzer.Analyze(samples, _settings);
+                // Analyze audio. Band tracks come out of the SAME FFT pass when band split is on
+                // (Phase F) — asking for them costs one extra magnitude sum per frame.
+                bool wantBands = _settings.BandSplit;
+                var intensities = _analyzer.Analyze(samples, _settings, wantBands, out var lowBand, out var highBand);
 
                 // Store results
                 lock (_lock)
@@ -323,6 +342,13 @@ namespace ConditioningControlPanel.Services.Audio
 
                     // Add chunk to track at the correct position
                     _track.SetChunk(chunkIndex, intensities);
+                    if (wantBands && lowBand.Length > 0 && highBand.Length > 0)
+                    {
+                        chunk.LowBandData = lowBand;
+                        chunk.HighBandData = highBand;
+                        _lowTrack.SetChunk(chunkIndex, lowBand);
+                        _highTrack.SetChunk(chunkIndex, highBand);
+                    }
                     _currentlyProcessingChunk = -1;
                 }
 

@@ -59,8 +59,29 @@ namespace ConditioningControlPanel.Localization
         /// </summary>
         public void Initialize(string languageCode)
         {
-            _fallbackStrings = LoadLanguageFile("en");
+            EnsureFallbackLoaded();
             SetLanguage(languageCode);
+        }
+
+        /// <summary>
+        /// Load English into the fallback slot if it is not there yet.
+        /// </summary>
+        private void EnsureFallbackLoaded()
+        {
+            if (_fallbackStrings.Count > 0)
+                return;
+
+            _fallbackStrings = LoadLanguageFile("en");
+
+            if (_fallbackStrings.Count == 0)
+            {
+                // This is the one failure the app cannot paper over: with no English to
+                // fall back to, every Get() returns the raw key, so the UI reads
+                // "btn_start_flashes" instead of "Start Flashes". Ugly but diagnosable -
+                // and loud in the log, because the old behaviour was a single Error line
+                // that nobody would connect to a UI full of identifier text.
+                Log.Fatal("English language file failed to load - all UI strings will render as raw keys");
+            }
         }
 
         /// <summary>
@@ -71,13 +92,25 @@ namespace ConditioningControlPanel.Localization
             if (string.IsNullOrWhiteSpace(languageCode))
                 languageCode = "en";
 
+            EnsureFallbackLoaded();
+
             if (languageCode == "en")
             {
                 _strings = _fallbackStrings;
             }
             else
             {
-                _strings = LoadLanguageFile(languageCode);
+                var loaded = LoadLanguageFile(languageCode);
+                if (loaded.Count == 0)
+                {
+                    // A missing or corrupt translation must not leave the UI stringless.
+                    // Get() already falls back per key, but pointing _strings straight at
+                    // English makes a dead language behave exactly like English instead of
+                    // relying on that second lookup, and keeps the logged count honest.
+                    Log.Warning("Language '{Lang}' loaded no strings - falling back to English", languageCode);
+                    loaded = _fallbackStrings;
+                }
+                _strings = loaded;
             }
 
             CurrentLanguage = languageCode;
@@ -137,9 +170,7 @@ namespace ConditioningControlPanel.Localization
             // Fallback: try user data directory (for user-added translations)
             if (!File.Exists(filePath))
             {
-                var userDir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "ConditioningControlPanel", "Languages", $"{languageCode}.json");
+                var userDir = Path.Combine(App.UserDataPath, "Languages", $"{languageCode}.json");
                 if (File.Exists(userDir))
                     filePath = userDir;
             }
@@ -163,6 +194,8 @@ namespace ConditioningControlPanel.Localization
                 Log.Error(ex, "Failed to load language file: {Path}", filePath);
             }
 
+            // An empty dictionary is this method's "could not load" signal - SetLanguage
+            // keys the English fallback off Count == 0, so do not return partial results.
             return result;
         }
     }

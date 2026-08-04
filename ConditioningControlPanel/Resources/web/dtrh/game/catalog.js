@@ -69,6 +69,12 @@ export const UPGRADES = [
   { id: 'extreme_tier', branch: 'Depth', name: 'Inescapable Tier', glyph: '🌀', cost: 350,
     desc: 'opens the inescapable difficulty in the descent setup.',
     flavor: 'the last door was never locked.' },
+  { id: 'custom_duration', branch: 'Depth', name: 'The Hourglass', glyph: '⌛', cost: 300,
+    desc: 'unlocks a free length dial in the descent setup — set any fall from 2 minutes to 2 hours.',
+    flavor: 'you decide how long you stay under. she likes that you keep deciding to stay longer.' },
+  { id: 'endless_mode', branch: 'Depth', name: 'The Bottomless Fall', glyph: '∞', cost: 600,
+    desc: 'unlocks the ∞ endless toggle in setup: descend with no clock. the regions loop and deepen, the boons keep coming, and you rise only when you choose to wake.',
+    flavor: 'there was never a bottom. you only assumed there was.' },
 ];
 
 export const upgradeById = (id) => UPGRADES.find((u) => u.id === id) || null;
@@ -534,6 +540,9 @@ export function metaView(meta) {
     rankName: RANKS.name(rankIndex),
     extremeUnlocked: !!m.extremeUnlocked,
     giftGiven: !!m.giftGiven,
+    // #650 saved run presets: [{ name, setup }] blobs (bridge-owned). warren.js
+    // re-validates ownership before it applies one; here it's just the raw list.
+    runPresets: Array.isArray(m.runPresets) ? m.runPresets : [],
     equippedStartBoon: m.equippedStartBoon || null,
     // grab-in-the-tube: consumable (active-toy) HUD slots held per fall; starts at 1,
     // the dollhouse sews more with Sparks up to MAX_CONSUMABLE_SLOTS.

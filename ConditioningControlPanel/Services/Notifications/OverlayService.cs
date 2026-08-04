@@ -26,6 +26,12 @@ public class OverlayService : IDisposable
     // because the persistent feature is off. Decremented when the timed overlay's hide fires.
     private int _timedPinkHolds;
     private int _timedSpiralHolds;
+    // Brain Drain needs the SAME guards, and needs them harder: the base feature is disabled for
+    // rework, so settings.BrainDrainEnabled is false for everyone — which meant RefreshBrainDrainState
+    // tore a live Deeper braindrain band down on the next RefreshOverlays() (autonomy, remote control,
+    // or the user toggling pink/spiral on the dashboard all call it). Shared by "braindrain" and
+    // "braindrain_melt": they are ONE underlying overlay, never co-active.
+    private int _timedBrainDrainHolds;
     // Sustained holds: an overlay shown via ShowOverlaySustained (voice "go pink"/"spiral", Deeper
     // region bands) has no hide timer, so — like the timed holds above — the periodic reconcilers
     // (RefreshOverlays / UpdateOverlays) must NOT tear it down just because the persistent feature
@@ -33,6 +39,49 @@ public class OverlayService : IDisposable
     // early-return on a non-empty window list), so a repeat show + single hide must still release it.
     private bool _sustainedPinkHeld;
     private bool _sustainedSpiralHeld;
+    private bool _sustainedBrainDrainHeld;
+
+    /// <summary>
+    /// Pure teardown decision for an overlay that ad-hoc callers can hold open: tear it down only
+    /// when the persistent feature doesn't want it AND nothing ad-hoc is still holding it (a timed
+    /// overlay in flight, or a sustained Deeper band). Extracted (like ResolveZOrderAction) so the
+    /// guard the 500ms reconcilers depend on is unit-testable.
+    /// </summary>
+    internal static bool ShouldStopHeldOverlay(bool featureWantsIt, int timedHolds, bool sustainedHeld)
+        => !featureWantsIt && timedHolds == 0 && !sustainedHeld;
+
+    // Deeper enhancement overlay bands are the ONE case where an overlay must sit ABOVE a playing
+    // mandatory video: the pink/spiral tint IS the enhanced video's effect (pre-compositor it was a
+    // fresh topmost window created per band, so it naturally drew over the just-created video window).
+    // ReassertZOrder otherwise pins every overlay BELOW the video (#497). This depth counts live
+    // Deeper overlay bands (driven by the Deeper dispatcher's band Start/Stop); >0 flips the reconciler
+    // to pin the overlay hosts above the video instead. Ambient/session/voice overlays are unaffected.
+    // Reset to 0 by the enhancement engine on Stop so a leaked band can't strand overlays above future
+    // videos. Volatile: read on the UI reconciler, written from the (UI-thread) dispatcher.
+    private int _deeperOverlayBandDepth;
+    internal bool DeeperOverlayBandActive => System.Threading.Volatile.Read(ref _deeperOverlayBandDepth) > 0;
+
+    /// <summary>A Deeper enhancement overlay band opened (region entered). While any band is live the
+    /// z-order reconciler pins overlays ABOVE the enhanced video, and we kick an immediate reassert so
+    /// the tint pops over the video without waiting for the ~500ms reconcile tick.</summary>
+    internal void BeginDeeperOverlayBand()
+    {
+        System.Threading.Interlocked.Increment(ref _deeperOverlayBandDepth);
+        Application.Current?.Dispatcher?.BeginInvoke(new Action(() => { try { ReassertZOrder(force: true); } catch { } }));
+    }
+
+    /// <summary>A Deeper enhancement overlay band closed (region exited). On the last band exit the
+    /// reconciler returns to pinning overlays below the video, and a forced reassert re-seats them.</summary>
+    internal void EndDeeperOverlayBand()
+    {
+        if (System.Threading.Interlocked.Decrement(ref _deeperOverlayBandDepth) < 0)
+            System.Threading.Interlocked.Exchange(ref _deeperOverlayBandDepth, 0);
+        Application.Current?.Dispatcher?.BeginInvoke(new Action(() => { try { ReassertZOrder(force: true); } catch { } }));
+    }
+
+    /// <summary>Force-clear the Deeper band depth. Called by the enhancement engine on Stop so an
+    /// abnormally-ended band (no matching exit) can't leave overlays pinned above later videos.</summary>
+    internal void ResetDeeperOverlayBands() => System.Threading.Interlocked.Exchange(ref _deeperOverlayBandDepth, 0);
 
     public OverlayService()
     {
@@ -149,6 +198,14 @@ public class OverlayService : IDisposable
     private TimeSpan _gifFrameDelay = TimeSpan.FromMilliseconds(50);
     private DispatcherTimer? _gifFrameTimer;
 
+    // Spiral randomizer (#641): when SpiralRandomize is on, GetSpiralPath picks a random spiral
+    // from the pool at overlay/session START (never per-tick — the decoded-frame cache above is
+    // keyed by path and a mid-run re-decode causes a ~1s hitch). _lastRandomSpiralPath backs the
+    // no-repeat guard so we don't draw the same spiral twice in a row when >1 is available.
+    private static readonly string[] SpiralExtensions = { ".gif", ".png", ".jpg", ".jpeg", ".webp" };
+    private readonly Random _spiralRandom = new();
+    private string? _lastRandomSpiralPath;
+
     public bool IsRunning => _isRunning;
 
     /// <summary>
@@ -231,13 +288,65 @@ public class OverlayService : IDisposable
             private string GetSpiralPath()
             {
                 var settings = App.Settings.Current;
-                
-                if (!string.IsNullOrEmpty(settings.SpiralPath) && File.Exists(settings.SpiralPath))
+
+                var configured = (!string.IsNullOrEmpty(settings.SpiralPath) && File.Exists(settings.SpiralPath))
+                    ? settings.SpiralPath
+                    : null;
+
+                // Randomizer (#641): pick a fresh spiral from the pool at start only. The pool is the
+                // folder of the configured spiral if one is set, else the user Spirals library folder
+                // (the same %LOCALAPPDATA%\ConditioningControlPanel\Spirals the Spiral card populates).
+                // Falls back to the configured/default single spiral when the pool has <2 entries.
+                if (settings.SpiralRandomize)
                 {
-                    return settings.SpiralPath;
+                    var randomized = PickRandomSpiral(configured);
+                    if (randomized != null) return randomized;
                 }
-                
+
+                if (configured != null) return configured;
+
                 return ModResourceResolver.ResolveUri("spiral.gif");
+            }
+
+            /// <summary>
+            /// Build the spiral pool and return a random member (different from the last pick when
+            /// possible). Returns null when no pool exists so the caller falls back to the single
+            /// configured/default spiral. Called only at overlay/session start (never per-tick).
+            /// </summary>
+            private string? PickRandomSpiral(string? configured)
+            {
+                try
+                {
+                    // Pool directory: folder of the configured spiral, else the user Spirals library.
+                    var poolDir = !string.IsNullOrEmpty(configured)
+                        ? Path.GetDirectoryName(configured)
+                        : Path.Combine(App.UserDataPath, "Spirals");
+
+                    if (string.IsNullOrEmpty(poolDir) || !Directory.Exists(poolDir))
+                        return null;
+
+                    var pool = Directory.GetFiles(poolDir)
+                        .Where(f => SpiralExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                        .ToList();
+
+                    if (pool.Count == 0) return null;
+                    if (pool.Count == 1) return pool[0];
+
+                    // No-repeat guard (mirrors WallpaperService.Shuffle): avoid the previous pick.
+                    string pick;
+                    do
+                    {
+                        pick = pool[_spiralRandom.Next(pool.Count)];
+                    } while (pick == _lastRandomSpiralPath);
+
+                    _lastRandomSpiralPath = pick;
+                    return pick;
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error(ex, "[Overlay] Failed to pick random spiral");
+                    return null;
+                }
             }
     public void Start()
     {
@@ -387,7 +496,9 @@ public class OverlayService : IDisposable
             if (hasBrainDrain)
             {
                 var boostedIntensity = Math.Min(_currentBrainDrainIntensity * 2, 200);
-                double blurRadius = boostedIntensity * 0.4;
+                // Subtle retune 2026-07-31: pulse keeps the downscale divide now (the old raw
+                // boosted*0.4 radius would white-out against the retuned steady state).
+                double blurRadius = boostedIntensity * Compositor.BrainDrainLayer.RadiusScale / Math.Max(1, _brainDrainDownscale);
                 if (_brainDrainLayer?.IsActive == true)
                     _brainDrainLayer.Pulse(boostedIntensity);
                 foreach (var img in _brainDrainImages.Values)
@@ -554,7 +665,27 @@ public class OverlayService : IDisposable
 
     private static (byte R, byte G, byte B) GetFilterRgb()
     {
+        // A user-picked color (suggestion #643) wins over the mod/default retint.
+        // Empty setting defers to the active mod's filter color, then hot pink.
+        var custom = App.Settings?.Current?.PinkFilterColor;
+        if (TryParseHexColor(custom, out var rgb))
+            return rgb;
         return App.Mods?.GetFilterColorRgb() ?? (255, 105, 180);
+    }
+
+    /// <summary>Parses a "#RRGGBB" (or "RRGGBB") string. Returns false for null/empty/malformed.</summary>
+    private static bool TryParseHexColor(string? hex, out (byte R, byte G, byte B) rgb)
+    {
+        rgb = (255, 105, 180);
+        if (string.IsNullOrWhiteSpace(hex)) return false;
+        hex = hex.Trim().TrimStart('#');
+        if (hex.Length != 6) return false;
+        try
+        {
+            rgb = (Convert.ToByte(hex[..2], 16), Convert.ToByte(hex[2..4], 16), Convert.ToByte(hex[4..6], 16));
+            return true;
+        }
+        catch { return false; }
     }
 
     /// <summary>
@@ -575,9 +706,10 @@ public class OverlayService : IDisposable
 
         Action? show = kind switch
         {
-            "pink_filter" => () => ShowPinkFilterAdHoc(opacityPercent),
-            "spiral"      => () => ShowSpiralAdHoc(),
-            "braindrain"  => () => StartBrainDrainBlur(Math.Max(1, opacityPercent)),
+            "pink_filter"     => () => ShowPinkFilterAdHoc(opacityPercent),
+            "spiral"          => () => ShowSpiralAdHoc(),
+            "braindrain"      => () => StartBrainDrainBlur(Math.Max(1, opacityPercent)),
+            "braindrain_melt" => () => StartBrainDrainBlur(Math.Max(1, opacityPercent), melt: true),
             _ => null
         };
 
@@ -585,7 +717,8 @@ public class OverlayService : IDisposable
         {
             "pink_filter" => () => StopPinkFilter(),
             "spiral"      => () => StopSpiral(),
-            "braindrain"  => () => StopBrainDrainBlur(),
+            // Melt and plain braindrain are the same underlying overlay - one stop covers both.
+            "braindrain" or "braindrain_melt" => () => StopBrainDrainBlur(),
             _ => null
         };
 
@@ -630,7 +763,16 @@ public class OverlayService : IDisposable
                     }
                     else show();
                 }
-                else show();
+                else
+                {
+                    // braindrain / braindrain_melt: same hold counter (one underlying overlay).
+                    // StartBrainDrainBlur early-returns when it's already showing, so a second
+                    // timed effect just rides the live blur - the counter keeps it alive until the
+                    // LAST hide fires. No #573-style opacity bump here: braindrain's strength is a
+                    // blur radius, not an alpha, and it has no bump/restore machinery.
+                    _timedBrainDrainHolds++;
+                    show();
+                }
             }
             catch (Exception ex) { App.Logger?.Debug("ShowOverlayTimed show: {E}", ex.Message); }
         };
@@ -691,9 +833,16 @@ public class OverlayService : IDisposable
                         if (!settings.SpiralEnabled) hide();
                     }
                 }
-                else // braindrain: don't tear down the user's base Brain Drain when a timed effect ends
+                else // braindrain / braindrain_melt
                 {
-                    if (!settings.BrainDrainEnabled) hide();
+                    // Same release discipline as pink/spiral: drop this hold, and only tear the blur
+                    // down when nothing else owns it - another timed effect, a sustained Deeper band,
+                    // or the user's base Brain Drain feature. Before the counter existed this branch
+                    // only checked the setting, so the first timed effect to end killed a co-active
+                    // band (the setting is false for everyone while the feature is reworked).
+                    if (_timedBrainDrainHolds > 0) _timedBrainDrainHolds--;
+                    if (ShouldStopHeldOverlay(settings.BrainDrainEnabled, _timedBrainDrainHolds, _sustainedBrainDrainHeld))
+                        hide();
                 }
             }
             catch (Exception ex) { App.Logger?.Debug("ShowOverlayTimed hide: {E}", ex.Message); }
@@ -717,9 +866,10 @@ public class OverlayService : IDisposable
 
         Action? show = kind switch
         {
-            "pink_filter" => () => ShowPinkFilterAdHoc(opacityPercent),
-            "spiral"      => () => ShowSpiralAdHoc(),
-            "braindrain"  => () => StartBrainDrainBlur(Math.Max(1, opacityPercent)),
+            "pink_filter"     => () => ShowPinkFilterAdHoc(opacityPercent),
+            "spiral"          => () => ShowSpiralAdHoc(),
+            "braindrain"      => () => StartBrainDrainBlur(Math.Max(1, opacityPercent)),
+            "braindrain_melt" => () => StartBrainDrainBlur(Math.Max(1, opacityPercent), melt: true),
             _ => null
         };
 
@@ -747,6 +897,10 @@ public class OverlayService : IDisposable
                 // clears it on band exit, so the lifecycle stays symmetric.
                 if (kind == "pink_filter") { _sustainedPinkHeld = PinkShowing; if (PinkShowing) _rampPinkOpacity = opacity; }
                 else if (kind == "spiral") { _sustainedSpiralHeld = SpiralShowing; if (SpiralShowing) _rampSpiralOpacity = opacity; }
+                // braindrain / braindrain_melt share the one hold + ramp (never co-active). Gated on
+                // BrainDrainShowing for the same reason: a show() that no-oped (compositor host gone,
+                // GDI failure) must not leave a stale hold blocking a later legitimate teardown.
+                else { _sustainedBrainDrainHeld = BrainDrainShowing; if (BrainDrainShowing) _rampBrainDrainOpacity = opacity; }
             }
             catch (Exception ex) { App.Logger?.Debug("ShowOverlaySustained show: {E}", ex.Message); }
         };
@@ -778,9 +932,16 @@ public class OverlayService : IDisposable
             "pink_filter" => () => { _sustainedPinkHeld = false; _rampPinkOpacity = null; _lastAppliedPinkOpacity = -1; if (_timedPinkHolds == 0 && !settings.PinkFilterEnabled) StopPinkFilter(); },
             "spiral"      => () => { _sustainedSpiralHeld = false; _rampSpiralOpacity = null; _lastAppliedSpiralOpacity = -1; if (_timedSpiralHolds == 0 && !settings.SpiralEnabled) StopSpiral(); },
             // Guard braindrain the same way as pink/spiral: a Deeper band exit must not tear down
-            // the user's base Brain Drain feature. Clear ramp ownership, then only stop when the
-            // base feature is off (else RefreshBrainDrainState keeps it alive). (#563 consistency)
-            "braindrain"  => () => { _rampBrainDrainOpacity = null; if (!settings.BrainDrainEnabled) StopBrainDrainBlur(); },
+            // the user's base Brain Drain feature, NOR a timed braindrain effect that is still in
+            // flight. Clear ramp ownership + the sustained hold, then stop only when nothing else
+            // owns the blur. (#563 consistency)
+            "braindrain" or "braindrain_melt" => () =>
+            {
+                _sustainedBrainDrainHeld = false;
+                _rampBrainDrainOpacity = null;
+                if (ShouldStopHeldOverlay(settings.BrainDrainEnabled, _timedBrainDrainHolds, _sustainedBrainDrainHeld))
+                    StopBrainDrainBlur();
+            },
             _ => null
         };
 
@@ -824,6 +985,7 @@ public class OverlayService : IDisposable
                         ApplySpiralOpacityDirect(opacity);
                         break;
                     case "braindrain":
+                    case "braindrain_melt":   // same underlying overlay, same ramp
                         // Brain Drain ramps via blur-intensity, not alpha. Map the normalized
                         // 0..1 ramp to an intensity the same way the band's start action does
                         // (StartBrainDrainBlur uses opacity*100), so 0→max actually deepens the blur.
@@ -839,17 +1001,20 @@ public class OverlayService : IDisposable
     }
 
     /// <summary>
-    /// Releases the pink/spiral ramp holds set by <see cref="SetSustainedOverlayOpacity"/>
+    /// Releases the pink/spiral/braindrain ramp holds set by <see cref="SetSustainedOverlayOpacity"/>
     /// WITHOUT tearing the overlays down. Called when a session ends but the overlays may
     /// legitimately stay up (the user had them enabled before the session): the 500ms
     /// settings-sync takes ownership again on its next tick and re-applies the user's
-    /// saved opacity. Stop/panic paths don't need this — StopPinkFilter/StopSpiral
-    /// already clear the holds.
+    /// saved opacity. Stop/panic paths don't need this — StopPinkFilter/StopSpiral/
+    /// StopBrainDrainBlur already clear the holds.
     /// </summary>
     public void ReleaseOpacityRampHolds()
     {
         _rampPinkOpacity = null;
         _rampSpiralOpacity = null;
+        // Braindrain too: a stale ramp hold makes RefreshBrainDrainState skip intensity
+        // re-sync forever (it defers to the ramp owner while the hold is set).
+        _rampBrainDrainOpacity = null;
         _lastAppliedPinkOpacity = -1;
         _lastAppliedSpiralOpacity = -1;
     }
@@ -866,6 +1031,20 @@ public class OverlayService : IDisposable
                 brush.Color = System.Windows.Media.Color.FromArgb(a, fr, fg, fb);
         // Force the next post-ramp settings-sync to re-apply from settings.
         _lastAppliedPinkOpacity = -1;
+    }
+
+    /// <summary>
+    /// Re-push the filter color to a live tint. The compositor layer is dirty-gated
+    /// (#550) and the 500ms settings-sync only re-applies on an opacity change, so a
+    /// color-only change (the color picker) needs an explicit re-apply. No-op when the
+    /// tint isn't showing — the next Show reads the fresh color from GetFilterRgb().
+    /// </summary>
+    public void RefreshFilterColor()
+    {
+        if (!PinkShowing) return;
+        // Preserve whoever owns the opacity right now (a ramp, else the saved setting).
+        var opacity = _rampPinkOpacity ?? (App.Settings?.Current?.PinkFilterOpacity ?? 0) / 100.0;
+        ApplyPinkOpacityDirect(opacity);
     }
 
     private void ApplySpiralOpacityDirect(double opacity)
@@ -888,10 +1067,9 @@ public class OverlayService : IDisposable
         }
         try
         {
-            var settings = App.Settings?.Current;
-            var screens = settings?.DualMonitorEnabled == true
-                ? App.GetAllScreensCached()
-                : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+            // Per-effect monitor target (suggestion #639): -1 follows DualMonitorEnabled.
+            var screens = App.ResolveScreens(
+                App.Settings?.Current?.PinkFilterTargetMonitor ?? App.MonitorTargetFollowGlobal);
 
             foreach (var screen in screens)
             {
@@ -945,10 +1123,9 @@ public class OverlayService : IDisposable
         try
         {
             var settings = App.Settings.Current;
-            
-            var screens = settings.DualMonitorEnabled 
-                ? App.GetAllScreensCached() 
-                : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+
+            // Per-effect monitor target (suggestion #639): -1 follows DualMonitorEnabled.
+            var screens = App.ResolveScreens(settings.PinkFilterTargetMonitor);
 
             foreach (var screen in screens)
             {
@@ -1145,9 +1322,8 @@ public class OverlayService : IDisposable
         {
             var settings = App.Settings.Current;
 
-            var screens = settings.DualMonitorEnabled
-                ? App.GetAllScreensCached()
-                : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+            // Per-effect monitor target (suggestion #639): -1 follows DualMonitorEnabled.
+            var screens = App.ResolveScreens(settings.SpiralTargetMonitor);
 
             // For GIFs, load frames once and share across all screens
             if (_isGifSpiral)
@@ -1207,9 +1383,8 @@ public class OverlayService : IDisposable
     private void CreateSpiralVideoWindows()
     {
         var settings = App.Settings.Current;
-        var screens = settings.DualMonitorEnabled
-            ? App.GetAllScreensCached()
-            : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+        // Per-effect monitor target (suggestion #639): -1 follows DualMonitorEnabled.
+        var screens = App.ResolveScreens(settings.SpiralTargetMonitor);
 
         foreach (var screen in screens)
         {
@@ -1372,7 +1547,13 @@ public class OverlayService : IDisposable
 
                 var maxFrames = (int)Math.Min(Math.Min(frameCount, 120),
                     Math.Max(8, maxCacheBytes / Math.Max(1, bytesPerFrame)));
-                var step = frameCount > maxFrames ? frameCount / maxFrames : 1;
+                // Ceiling, not integer division: floor-step keeps frames 0..maxFrames-1 and
+                // silently drops the tail for any GIF with maxFrames <= frameCount < 2*maxFrames,
+                // breaking the loop point (#683 family). Ceiling subsamples the whole clip evenly;
+                // scaling the delay by the stride preserves the wall-clock loop duration.
+                var step = Math.Max(1, (int)Math.Ceiling(frameCount / (double)maxFrames));
+                if (step > 1)
+                    delay = TimeSpan.FromMilliseconds(frameDelayMs * step);
                 if (maxFrames < Math.Min(frameCount, 120))
                     App.Logger?.Warning("Spiral: frame cache capped at {Frames} frames ({W}x{H}) to stay under {MB} MB — a smaller spiral GIF will loop smoother",
                         maxFrames, frameW, frameH, maxCacheBytes / (1024 * 1024));
@@ -1712,8 +1893,36 @@ public class OverlayService : IDisposable
     private IntPtr _captureMemDc;
     private IntPtr _captureHBitmap;
 
-    public void StartBrainDrainBlur(int intensity)
+    /// <summary>
+    /// Brain Drain / Brain Melt are WITHHELD from playback while the effect is reworked.
+    /// This is the single authoritative gate: <see cref="StartBrainDrainBlur"/> is the only
+    /// place the visual comes up, so flipping this covers every caller (Deeper region bands,
+    /// Deeper timed effects, chaos effect bubbles, session/preset settings) at once.
+    ///
+    /// Deliberately a SKIP, not an error: creator content that already carries a braindrain
+    /// overlay keeps its saved kind, still validates, still loads, and still plays every OTHER
+    /// effect on its timeline — only the blur is silently omitted. All the stop/hold/ramp
+    /// bookkeeping around it stays live and harmlessly no-ops because nothing is showing
+    /// (StopBrainDrainBlur on nothing is a no-op; the hold counters still pair up).
+    ///
+    /// To re-enable: set this to false and restore the two picker entries in
+    /// DeeperEditorWindow (CmbOverlayKind + AddOverlayKindCombo).
+    /// </summary>
+    /// <remarks>static readonly, not const: a const would make the rest of
+    /// <see cref="StartBrainDrainBlur"/> compile-time unreachable (CS0162).</remarks>
+    public static readonly bool BrainDrainWithheld = true;
+
+    /// <summary><paramref name="melt"/> selects the "braindrain_melt" variant. Melt and plain blur
+    /// are ONE overlay - they never co-exist by design - so the flag only picks the render mode on
+    /// the compositor layer (Phase 2; today it renders identically). The legacy per-screen-window
+    /// path ignores it.</summary>
+    public void StartBrainDrainBlur(int intensity, bool melt = false)
     {
+        if (BrainDrainWithheld)
+        {
+            App.Logger?.Debug("Brain Drain skipped (withheld while the effect is reworked); melt {Melt}", melt);
+            return;
+        }
         if (BrainDrainShowing) return;
 
         _currentBrainDrainIntensity = intensity;
@@ -1726,8 +1935,8 @@ public class OverlayService : IDisposable
                 {
                     // Compositor route: capture + blur render on the shared capture-excluded
                     // host; no per-screen layered windows, no WPF BlurEffect rasterization.
-                    GetBrainDrainLayer().Start(intensity);
-                    App.Logger?.Information("Brain Drain started on compositor layer, intensity {Intensity}%", intensity);
+                    GetBrainDrainLayer().Start(intensity, melt);
+                    App.Logger?.Information("Brain Drain started on compositor layer, intensity {Intensity}%, melt {Melt}", intensity, melt);
                     return;
                 }
 
@@ -1779,6 +1988,7 @@ public class OverlayService : IDisposable
         try
         {
             _rampBrainDrainOpacity = null; // release any Deeper ramp ownership
+            _sustainedBrainDrainHeld = false; // overlay is gone (incl. force-stop / panic) — drop any stale sustained hold
 
             // Layer route (checked by activity, not the flag - mid-run flag flips must not strand it).
             if (_brainDrainLayer?.IsActive == true)
@@ -1820,7 +2030,7 @@ public class OverlayService : IDisposable
     {
         _currentBrainDrainIntensity = intensity;
         // Keep in sync with CreateBrainDrainWindow's downscaled-source radius.
-        double blurRadius = (intensity * 0.4) / Math.Max(1, _brainDrainDownscale);
+        double blurRadius = (intensity * Compositor.BrainDrainLayer.RadiusScale) / Math.Max(1, _brainDrainDownscale);
 
         DispatcherHelper.RunOnUISync(() =>
         {
@@ -1956,7 +2166,8 @@ public class OverlayService : IDisposable
             var wpfBounds = GetWpfScreenBounds(screen);
             // The source bitmap is 1/divisor size and gets upscaled by Stretch=Fill, so a
             // proportionally smaller blur radius yields the same on-screen blur far more cheaply.
-            double blurRadius = (intensity * 0.4) / Math.Max(1, _brainDrainDownscale);
+            // Strength constant shared with the compositor layer (subtle retune 2026-07-31).
+            double blurRadius = (intensity * Compositor.BrainDrainLayer.RadiusScale) / Math.Max(1, _brainDrainDownscale);
 
             var image = new System.Windows.Controls.Image
             {
@@ -2142,6 +2353,10 @@ public class OverlayService : IDisposable
     /// </summary>
     private void ReassertBounds()
     {
+        // Breadcrumb: this MOVES + RESIZES layered overlay windows (SetWindowPos with a size and
+        // SWP_SHOWWINDOW), which forces WPF to reallocate the layered surface and sync with the
+        // render thread - the shape behind this app's historical layered-window wedges.
+        using var _uiMark = VideoDiag.UiScope("OverlayService.ReassertBounds");
         // While a monitor/DPI change settles, both the screen cache and the HWND rects are in
         // flux — repositioning against stale geometry would fight the OS mid-storm (the same
         // reason the recreate path above defers). The post-settle kick heals any drift.
@@ -2213,6 +2428,11 @@ public class OverlayService : IDisposable
     /// </summary>
     private bool ReassertZOrder(bool force = false)
     {
+        // Breadcrumb: this sweeps SetWindowPos over every per-monitor layered overlay window AND
+        // every visible compositor host, on the UI thread, and NotifyTopWindowClosed forces a full
+        // pass after each mandatory video. Un-timeout-able Win32 - so name it for the next hang
+        // report instead (VideoDiag.UiScope).
+        using var _uiMark = VideoDiag.UiScope("OverlayService.ReassertZOrder");
         bool anyRecovered = false;
 
         // While a mandatory/session video is playing, keep the overlays in the topmost band but
@@ -2228,13 +2448,18 @@ public class OverlayService : IDisposable
         }
         catch { }
 
+        // A live Deeper enhancement overlay band means the overlay IS the enhanced video's effect and
+        // must sit ABOVE it, restoring the pre-compositor behavior (the #497 below-video pin is only
+        // correct for ambient/session overlays that happen to co-exist with a mandatory video).
+        bool aboveVideo = DeeperOverlayBandActive;
+
         foreach (var list in new[] { _pinkFilterWindows, _spiralWindows, _brainDrainBlurWindows })
         {
             foreach (var window in list)
             {
                 var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
                 if (hwnd == IntPtr.Zero) continue;
-                ReassertOne(hwnd, videoHwnd, force, ref anyRecovered);
+                ReassertOne(hwnd, videoHwnd, aboveVideo, force, ref anyRecovered);
             }
         }
 
@@ -2246,8 +2471,16 @@ public class OverlayService : IDisposable
         try
         {
             if (App.Compositor is { } engine)
+            {
                 foreach (var hostHwnd in engine.GetVisibleHostHandles())
-                    ReassertOne(hostHwnd, videoHwnd, force, ref anyRecovered);
+                    ReassertOne(hostHwnd, videoHwnd, aboveVideo, force, ref anyRecovered);
+                // The detached avatar tube parks itself directly BELOW the host covering its monitor
+                // so the pink tint stops flickering on and off the companion (#776). It does that on
+                // its OWN thread (AvatarOwnThread => cross-thread SetWindowPos is a deadlock source
+                // here), reading a lock-free anchor snapshot; refresh it now so a missed show/hide
+                // edge self-heals on this tick instead of persisting until the next one.
+                engine.RepublishHostAnchors();
+            }
         }
         catch (Exception ex)
         {
@@ -2256,25 +2489,64 @@ public class OverlayService : IDisposable
         return anyRecovered;
     }
 
-    /// <summary>One window's worth of ReassertZOrder: below the active video, else topmost.</summary>
-    private static void ReassertOne(IntPtr hwnd, IntPtr videoHwnd, bool force, ref bool anyRecovered)
+    /// <summary>One window's worth of ReassertZOrder. Normally: below the active video (#497), else
+    /// topmost. When <paramref name="aboveVideo"/> (a live Deeper overlay band), the overlay is the
+    /// enhanced video's own effect, so pin it to the top of the topmost band ABOVE the video instead.</summary>
+    /// <summary>Where a single topmost window should be pinned relative to a (possibly playing) video
+    /// and to the shared compositor host that carries the fullscreen effects.</summary>
+    internal enum ZOrderAction { None, PinBelowVideo, PinBelowCompositorHost, PinTopmost }
+
+    /// <summary>
+    /// Pure z-order decision for one topmost window. Extracted from <see cref="ReassertOne"/> so the
+    /// Deeper-band-above-video rule (and the #497 below-video pin it must preserve) can be unit-tested.
+    /// <paramref name="aboveVideo"/> — a live Deeper enhancement band, so the overlay IS the video's own
+    /// effect and must sit above it; otherwise a co-existing video keeps overlays pinned just below it.
+    /// <paramref name="yieldToCompositorHost"/> — the caller is a self-raising topmost window that is
+    /// NOT a compositor layer and must live UNDER the host's effects. Only the detached avatar tube
+    /// passes this: it re-pinned itself to the top of the topmost band every 500ms while the host
+    /// re-pinned itself every 5s, so the pink tint flickered on and off the companion (#776). The tube
+    /// now inserts directly below the host instead — still topmost, still above ordinary app windows,
+    /// but permanently under the tint. Ordered AFTER the video rule so #497 can never be traded away.
+    /// </summary>
+    internal static ZOrderAction ResolveZOrderAction(bool hasVideo, bool isVideoWindow, bool aboveVideo,
+        bool needsPin, bool force, bool yieldToCompositorHost = false)
+    {
+        if (hasVideo && !isVideoWindow && !aboveVideo)
+            return ZOrderAction.PinBelowVideo;
+        if (yieldToCompositorHost)
+            return ZOrderAction.PinBelowCompositorHost;
+        if (needsPin || force || aboveVideo)
+            return ZOrderAction.PinTopmost;
+        return ZOrderAction.None;
+    }
+
+    private static void ReassertOne(IntPtr hwnd, IntPtr videoHwnd, bool aboveVideo, bool force, ref bool anyRecovered)
     {
         int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
         bool needsPin = (exStyle & WS_EX_TOPMOST) == 0;
 
-        if (videoHwnd != IntPtr.Zero && hwnd != videoHwnd)
+        switch (ResolveZOrderAction(videoHwnd != IntPtr.Zero, hwnd == videoHwnd, aboveVideo, needsPin, force))
         {
-            // Insert directly below the active video window: stays topmost (above the
-            // desktop and other apps) but under the video the user is meant to watch.
-            SetWindowPos(hwnd, videoHwnd, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            if (needsPin) anyRecovered = true;
-        }
-        else if (needsPin || force)
-        {
-            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            if (needsPin) anyRecovered = true;
+            case ZOrderAction.PinBelowVideo:
+                // Insert directly below the active video window: stays topmost (above the
+                // desktop and other apps) but under the video the user is meant to watch.
+                SetWindowPos(hwnd, videoHwnd, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                if (needsPin) anyRecovered = true;
+                break;
+            case ZOrderAction.PinTopmost:
+                // Top of the topmost band. Above a playing video too — the mandatory video window is
+                // deliberately non-re-raising, so a Deeper band's tint set here stays over it. Re-applied
+                // every reconcile tick while aboveVideo holds (cheap; no fight since the video won't re-raise).
+                SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                if (needsPin) anyRecovered = true;
+                break;
+            // ZOrderAction.PinBelowCompositorHost is never produced here — the overlay windows and
+            // the hosts ARE the compositor's layers. It belongs to the detached avatar tube, which
+            // applies it itself in AvatarTubeWindow.ReassertTopmost: that window can live on its own
+            // dispatcher (AvatarOwnThread), and a cross-thread SetWindowPos sends WM_WINDOWPOSCHANGING
+            // synchronously — this app's documented deadlock source (#431/#451).
         }
     }
 
@@ -2304,6 +2576,10 @@ public class OverlayService : IDisposable
     /// </summary>
     private void RecreateOverlays()
     {
+        // Breadcrumb: the ONE path that destroys and rebuilds every per-monitor layered overlay
+        // window mid-run. It fires 3s after a sustained topmost loss, which a closing fullscreen
+        // video reliably provokes - i.e. squarely inside the freeze window of #780.
+        using var _uiMark = VideoDiag.UiScope("OverlayService.RecreateOverlays");
         App.Logger?.Warning("Overlay topmost loss persisted for 3s — recreating overlay windows");
 
         var settings = App.Settings.Current;
@@ -2619,7 +2895,9 @@ public class OverlayService : IDisposable
     {
         var settings = App.Settings.Current;
 
-        // Only start/update brain drain if the overlay service is running (engine is active)
+        // Only start/update brain drain if the overlay service is running (engine is active).
+        // Unconditional stop: this is a full teardown (service not running), same as Stop()/panic —
+        // StopBrainDrainBlur clears the sustained hold so nothing stale survives it.
         if (!_isRunning)
         {
             // Don't start brain drain if engine isn't running
@@ -2627,7 +2905,8 @@ public class OverlayService : IDisposable
             return;
         }
 
-        if (settings.BrainDrainEnabled && settings.IsLevelUnlocked(70)) // Level 70 requirement for Brain Drain
+        bool featureWantsIt = settings.BrainDrainEnabled && settings.IsLevelUnlocked(70); // Level 70 requirement for Brain Drain
+        if (featureWantsIt)
         {
             if (!BrainDrainShowing)
             {
@@ -2639,7 +2918,12 @@ public class OverlayService : IDisposable
                 UpdateBrainDrainBlurOpacity((int)settings.BrainDrainIntensity);
             }
         }
-        else
+        // The base feature being off is NOT permission to kill an ad-hoc blur: a timed effect or a
+        // sustained Deeper band owns it until its own hide fires. Without this guard every
+        // RefreshOverlays() (autonomy, remote control, the user toggling pink/spiral) silently
+        // killed a live Deeper braindrain band mid-video, since the base feature is off for everyone
+        // while it's being reworked. Same discipline as pink/spiral in RefreshOverlays.
+        else if (ShouldStopHeldOverlay(featureWantsIt, _timedBrainDrainHolds, _sustainedBrainDrainHeld))
         {
             StopBrainDrainBlur();
         }

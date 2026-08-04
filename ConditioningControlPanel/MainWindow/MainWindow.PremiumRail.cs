@@ -7,7 +7,7 @@ using ConditioningControlPanel.Services;
 namespace ConditioningControlPanel
 {
     /// <summary>Features surfaced as quick-toggle chips on the dashboard premium rail.</summary>
-    public enum PremiumFeature { Takeover, Awareness, Haptics, Lockdown, Blink, Remote, Voice }
+    public enum PremiumFeature { Takeover, Awareness, Haptics, Lockdown, Blink, Remote, Voice, GradedIntake }
 
     // Dashboard premium quick-toggle rail (left of the feature grid).
     public partial class MainWindow
@@ -146,6 +146,17 @@ namespace ConditioningControlPanel
         {
             if (SettingsTab == null || RemoteControlTab == null) return;
 
+            // Refused mid-session, and not for purity: shared control cannot actually WORK while a
+            // session runs. RemoteControlService writes FlashEnabled / SubliminalEnabled /
+            // PinkFilter* / Spiral* / LockCardEnabled, but SessionEngine.UpdateRampingValues
+            // rewrites the ramped ones about once a second - so a partner's changes to flash
+            // opacity/frequency or the overlays get stomped within a tick while the unramped ones
+            // stick. Half-working control split between two people is worse than a clear refusal.
+            //
+            // If handing over mid-session ever becomes a wanted feature, the fix is to make remote
+            // writes authoritative over the ramp - not to remove this guard.
+            if (RefuseActionIfSessionLocked("remote-start")) return;
+
             // Difficulty bubble → tier combo index (0 light/easy, 1 standard/medium, 2 full/hard).
             int tierIdx = SettingsTab.RemoteDiffHard?.IsChecked == true ? 2
                         : SettingsTab.RemoteDiffEasy?.IsChecked == true ? 0 : 1;
@@ -238,6 +249,19 @@ namespace ConditioningControlPanel
         /// </summary>
         internal void PremiumChip_Click(PremiumFeature feature)
         {
+            // A running session owns the prescribed dose (MainWindow.SessionFeatureLock.cs).
+            // Takeover / Awareness / Haptics are part of that mix, so the rail cannot flip them
+            // mid-session. Deliberately NOT gated: Voice (the mic is a privacy control - the user
+            // must always be able to disarm it) and Graded Intake (navigation, not a toggle).
+            switch (feature)
+            {
+                case PremiumFeature.Takeover:
+                case PremiumFeature.Awareness:
+                case PremiumFeature.Haptics:
+                    if (RefuseIfSessionFeatureLocked($"chip:{feature}")) return;
+                    break;
+            }
+
             switch (feature)
             {
                 case PremiumFeature.Takeover:
@@ -253,6 +277,10 @@ namespace ConditioningControlPanel
                     // Quick-start the She's Listening mic via the shared master toggle (consent +
                     // enable wake word + arm / or disarm). Decoupled from Takeover, so it works alone.
                     ToggleVoiceMic();
+                    break;
+                case PremiumFeature.GradedIntake:
+                    // Navigation shortcut, not a toggle — the intake starts from its own page.
+                    ShowTab("gradedintake");
                     break;
             }
             RefreshPremiumRail();
@@ -295,9 +323,16 @@ namespace ConditioningControlPanel
             SetDot(SettingsTab.DotVoice, MicIsArmed());
         }
 
-        private static void SetDot(System.Windows.Shapes.Ellipse? dot, bool on)
+        /// <summary>
+        /// Paints one chip's live-state dot. This is also the event-driven trigger for the dot's
+        /// pulse (MainWindow.DashboardFx.cs): a dot only breathes while its feature is genuinely
+        /// on, so a rail with nothing running holds no clocks.
+        /// </summary>
+        private void SetDot(System.Windows.Shapes.Ellipse? dot, bool on)
         {
-            if (dot != null) dot.Fill = on ? PremiumDotOn : PremiumDotOff;
+            if (dot == null) return;
+            dot.Fill = on ? PremiumDotOn : PremiumDotOff;
+            ApplyRailDotPulse(dot, on);
         }
     }
 }

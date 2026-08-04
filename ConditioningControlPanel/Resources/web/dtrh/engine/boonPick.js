@@ -598,6 +598,14 @@ export function createBoonPick({ scene, camera, layout, nav, fx, hud }) {
   return {
     open,
     update,
+    // Force the draft closed WITHOUT running any callback: clears the live cards,
+    // releases the fall's forward-hold, and returns to idle. The game layer calls
+    // this from endRun/returnToWarren so a run that ends WHILE a draft is open
+    // (clock expiry, an Esc/exit mid-pick) can't strand its 3-4 card row in the
+    // shared scene, where it would ride the idle crawl into the recap + hub and
+    // read as an unpickable "phantom draft". Cheap + idempotent (no-op when idle);
+    // it does NOT dispose the shared textures (that's dispose()'s job on shutdown).
+    reset: () => teardown(),
     isBusy: () => state === 'active',
     getPickables: () => (state === 'active' ? cards.map((c) => c.group) : []),
     pickIndex: (i) => pick(i),

@@ -30,8 +30,7 @@ namespace ConditioningControlPanel.Services
             _label = char.ToUpperInvariant(prefix[0]) + prefix.Substring(1); // "patreon" -> "Patreon"
             _entropy = Encoding.UTF8.GetBytes($"ConditioningControlPanel_{_label}_v1");
 
-            var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            var storageDir = Path.Combine(appData, "ConditioningControlPanel");
+            var storageDir = App.UserDataPath;
 
             // Ensure directory exists
             if (!Directory.Exists(storageDir))

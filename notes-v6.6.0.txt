@@ -1,0 +1,27 @@
+v6.6.0 - Enrolled 💗
+
+✨ FEATURES
+- Multi-day Training Programs (BETA) - five programs across 7/14/28 days with an enrollment ceremony, a reward-track run view, day tasks, and a feature lock while a program session runs
+- Weekly Intake Pass - a free weekly taste of the Graded Intake for everyone
+- Streak-Fix charges - Oopsie Insurance is now a stackable credit balance: +1 every season, free to spend, and 6 retroactive credits waiting for existing users
+- Bouncing Text overhaul - color modes, an effects pack, an optional second text, and an opacity control
+- Tube Fit editor - live avatar resize preview right in the Mod Manager
+- Keyword triggers can now be scoped to apps - block list, allow list, or only-in-listed-apps
+- Withdraw from a program now properly ends its session and unlocks your dashboard
+- New first-run experience - revived tour, feature intro cards, and a premium celebration
+- Achievement posts on Discord are now mod-aware
+
+🎨 UI/UX
+- App-wide FX overhaul - mod-driven color palettes, ambient effects, tab choreography, event bursts, and a reduced-motion setting for those who want calm
+- Leaderboard rebuilt as a ranked roster with a jump-to-me that glides
+- Program browse cards wear their banner art and identity crests
+- A running session now locks the dials it prescribes - no more fighting your own settings mid-session
+- Dashboard mini-game sections got explanatory tooltips
+
+🔧 BUG FIXES
+- Chinese subliminal text no longer draws as empty boxes (per-font text runs)
+- Corner GIF overlays no longer crash the app (shipped in the 6.5.2 prerelease, now for everyone)
+- Voice consent can now be revoked for the microphone too
+- Language files hardened - a broken translation file now falls back to English instead of blanking the UI
+- Quiz "perfect" achievement now accepts 90% and up
+- Keyword haptics honor the per-trigger intensity slider

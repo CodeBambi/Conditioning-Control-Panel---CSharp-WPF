@@ -177,6 +177,11 @@ namespace ConditioningControlPanel
         /// </summary>
         internal async void BtnBlinkTrainerStartSession_Click(object sender, RoutedEventArgs e)
         {
+            // #743: the prewarm below can take the full 90s camera-open timeout, and nothing used
+            // to stop the user clicking again meanwhile. The service now refuses a concurrent
+            // start outright, but a dead button is the honest signal that work is in flight.
+            var button = sender as System.Windows.Controls.Button;
+            if (button != null) button.IsEnabled = false;
             try
             {
                 if (App.BlinkTrainer == null) return;
@@ -216,6 +221,10 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Blink Trainer Start handler failed");
+            }
+            finally
+            {
+                if (button != null) button.IsEnabled = true;
             }
         }
 
@@ -275,6 +284,9 @@ namespace ConditioningControlPanel
             if (BlinkTrainerTab.BlinkTrainerGate == null) return;
             bool premium = App.Patreon?.HasPremiumAccess == true;
             BlinkTrainerTab.BlinkTrainerGate.Visibility = premium ? Visibility.Collapsed : Visibility.Visible;
+            // FX (PR-4a): the shared animated gate treatment. Decoration only - see
+            // Controls/PremiumGateFx.cs and the twin call in MainWindow.Patreon.RefreshPremiumGate.
+            Controls.PremiumGateFx.Attach(BlinkTrainerTab.BlinkTrainerGate);
             if (BlinkTrainerTab.BlinkTrainerGatedContent != null)
                 BlinkTrainerTab.BlinkTrainerGatedContent.IsEnabled = premium;
             // Stage actions (status row, Start session, tracker toggle) moved
@@ -285,6 +297,17 @@ namespace ConditioningControlPanel
         }
 
         internal async void BtnBlinkTrainerStartStopTracker_Click(object sender, RoutedEventArgs e)
+            => await ToggleWebcamTrackingAsync();
+
+        /// <summary>
+        /// Shared webcam start/stop used by the Blink-Trainer / Deeper Start-Stop
+        /// buttons and the global camera hotkey (suggestion #674). When the tracker
+        /// is off and consent is stale this surfaces the same WebcamConsentDialog the
+        /// buttons use rather than silently starting the camera. Pass
+        /// <paramref name="announce"/> = true to pop a brief toast on toggle — used
+        /// by the hotkey path, which has no button label to update.
+        /// </summary>
+        internal async Task ToggleWebcamTrackingAsync(bool announce = false)
         {
             var svc = App.Webcam;
             if (svc == null) return;
@@ -293,6 +316,9 @@ namespace ConditioningControlPanel
             {
                 svc.Stop();
                 RefreshBlinkTrainerTrackerButton();
+                if (announce)
+                    App.Notifications?.Show(Loc.Get("camera_shortcut_toast_stopped"),
+                        NotificationType.Info, TimeSpan.FromSeconds(2));
                 return;
             }
 
@@ -304,8 +330,39 @@ namespace ConditioningControlPanel
             }
 
             EnsureWebcamDebugSubscribed();
-            await StartWebcamOffUiThreadAsync(svc);
+            var started = await StartWebcamOffUiThreadAsync(svc);
             RefreshBlinkTrainerTrackerButton();
+            if (announce && started)
+                App.Notifications?.Show(Loc.Get("camera_shortcut_toast_started"),
+                    NotificationType.Info, TimeSpan.FromSeconds(2));
+        }
+
+        /// <summary>
+        /// Global camera-hotkey action. No-op when the webcam service is unavailable;
+        /// otherwise toggles the tracker via the shared <see cref="ToggleWebcamTrackingAsync"/>
+        /// (which honours the consent gate). Restores/activates the main window first
+        /// when a start would need to surface the consent dialog, so the modal isn't
+        /// lost behind a minimized owner.
+        /// </summary>
+        private void ToggleWebcamFromHotkey()
+        {
+            var svc = App.Webcam;
+            if (svc == null) return;
+
+            // A start that still needs consent shows a modal owned by this window —
+            // make sure the window is visible so the dialog can't hide behind the tray.
+            if (!svc.IsRunning && !WebcamTrackingService.IsConsentCurrent())
+            {
+                try
+                {
+                    if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+                    Show();
+                    Activate();
+                }
+                catch (Exception ex) { App.Logger?.Warning(ex, "ToggleWebcamFromHotkey: window restore failed"); }
+            }
+
+            _ = ToggleWebcamTrackingAsync(announce: true);
         }
 
         // Keeps the BT tracker toggle in sync with WebcamTrackingService.IsRunning.
@@ -558,7 +615,6 @@ namespace ConditioningControlPanel
 
         private BlinkTrainerStatusState _currentBlinkTrainerStatusState = BlinkTrainerStatusState.IdleReady;
         private RoutedEventHandler? _blinkTrainerStatusActionHandler;
-        private Storyboard? _blinkTrainerStatusDotPulseClock;
 
         private BlinkTrainerStatusState DetermineBlinkTrainerStatusState()
         {
@@ -629,7 +685,11 @@ namespace ConditioningControlPanel
             // mid-pulse when leaving IdleReady.
             BlinkTrainerTab.BlinkTrainerStatusDot.BeginAnimation(UIElement.OpacityProperty, null);
             BlinkTrainerTab.BlinkTrainerStatusDot.Opacity = 1;
-            StopBlinkTrainerStatusDotPulse();
+
+            // FX (PR-4a): the dot breathes while a session is genuinely RUNNING, and only then.
+            // It used to blink at 0.8s in IdleReady - an idle loop on a tab where, by definition,
+            // nothing is happening - which the FX plan rules out for every status surface.
+            SetBlinkTrainerStatusPulse(state == BlinkTrainerStatusState.Running);
 
             string startLabel = Localization.Loc.Get("blink_trainer_start_session");
             string stopLabel = Localization.Loc.Get("blink_trainer_stop_session");
@@ -642,7 +702,6 @@ namespace ConditioningControlPanel
                     BlinkTrainerTab.BlinkTrainerStatusText.Foreground = FindResource("TextMutedBrush") as Brush ?? Brushes.Gray;
                     WireBlinkTrainerStatusAction(null, null);
                     SetStartButtonState(enabled: true, content: startLabel);
-                    StartBlinkTrainerStatusDotPulse();
                     break;
 
                 case BlinkTrainerStatusState.Running:
@@ -732,29 +791,10 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void StartBlinkTrainerStatusDotPulse()
-        {
-            try
-            {
-                if (BlinkTrainerTab.BlinkTrainerStatusDot == null) return;
-                var sb = BlinkTrainerTab.BlinkTrainerStatusDot.Resources["BlinkTrainerStatusDotPulse"] as Storyboard;
-                if (sb == null) return;
-                _blinkTrainerStatusDotPulseClock = sb;
-                sb.Begin(BlinkTrainerTab.BlinkTrainerStatusDot, true);
-            }
-            catch (Exception ex) { App.Logger?.Warning(ex, "StartBlinkTrainerStatusDotPulse failed"); }
-        }
-
-        private void StopBlinkTrainerStatusDotPulse()
-        {
-            try
-            {
-                if (_blinkTrainerStatusDotPulseClock != null && BlinkTrainerTab.BlinkTrainerStatusDot != null)
-                    _blinkTrainerStatusDotPulseClock.Stop(BlinkTrainerTab.BlinkTrainerStatusDot);
-                _blinkTrainerStatusDotPulseClock = null;
-            }
-            catch { }
-        }
+        // The IdleReady blink (a 0.8s opacity Storyboard living in the dot's own Resources) was
+        // retired by the FX pass - see ApplyBlinkTrainerStatusState. The dot now breathes a glow
+        // while a session is RUNNING, from SetBlinkTrainerStatusPulse
+        // (MainWindow.TabFxTakeoverLabStatus.cs), and is otherwise perfectly still.
 
         // Status action button handlers — routed via WireBlinkTrainerStatusAction
         // so only the current state's handler is wired at any time.

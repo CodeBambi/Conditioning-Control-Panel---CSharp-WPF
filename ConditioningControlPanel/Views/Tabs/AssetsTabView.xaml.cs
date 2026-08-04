@@ -10,6 +10,39 @@ namespace ConditioningControlPanel.Views.Tabs
         public AssetsTabView()
         {
             InitializeComponent();
+            // FX lifecycle (PR-4b). The Assets tab deliberately has NO ambient loop; this hook
+            // only fires the Media Log's unseen-entries pulse when the tab is opened.
+            IsVisibleChanged += AssetsTabView_IsVisibleChanged;
+        }
+
+        private void AssetsTabView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.OnAssetsTabVisibilityChanged(IsVisible);
+        }
+
+        private void PackCard_MouseEnter(object sender, MouseEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.OnPackCardHover(sender as FrameworkElement, true);
+        }
+
+        private void PackCard_MouseLeave(object sender, MouseEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.OnPackCardHover(sender as FrameworkElement, false);
+        }
+
+        private void AssetTreeRow_MouseEnter(object sender, MouseEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.OnAssetTreeRowHover(sender as FrameworkElement, true);
+        }
+
+        private void AssetTreeRow_MouseLeave(object sender, MouseEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.OnAssetTreeRowHover(sender as FrameworkElement, false);
         }
 
         private void BtnCreatorDiscord_Click(object sender, RoutedEventArgs e)
@@ -41,6 +74,20 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnOpenAssetsFolder_Click(sender, e);
+        }
+        private void BtnMediaLog_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var win = new ConditioningControlPanel.MediaHistoryWindow();
+                var owner = Window.GetWindow(this);
+                if (owner != null && owner.IsLoaded) win.Owner = owner;
+                win.Show();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to open Media Log window");
+            }
         }
         private void BtnPackActivate_Click(object sender, RoutedEventArgs e)
         {

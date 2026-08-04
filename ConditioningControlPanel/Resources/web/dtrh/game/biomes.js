@@ -160,7 +160,11 @@ export const BIOMES_BY_ROOM = {
       profile: { density: 1.00, behavioral: 0.30, echo: 0.7, chaperone: 0.5, bound: 0.3, tease: 0.9 },
       wx: {},
       mech: 'incognito',
-      mechHint: 'HISTORY CLEARED wipes hit every ~40s (5s warning): everything still on screen melts for +2 🪙 each',
+      // two things happen here: every bubble spawns ANONYMOUS (soft treats fade to
+      // a plain blue soap bubble, live effects blur to a generic one that still
+      // carries its fuse) so you can't read the field — and the room clears its own
+      // history on a shrinking timer, melting whatever is still on screen.
+      mechHint: 'every bubble spawns ANONYMOUS — soft treats fade plain, live ones blur, so you can’t tell them apart: pop blind. HISTORY CLEARED wipes hit every ~40s (5s warning): everything still on screen melts for +2 🪙 each',
       // an empty page at 1am: alpha-checker wall, redaction bars crawling past
       veinFx: { accent: 0x8fa0c0, checker: 0.85, ringFade: 0.25 },
     },
@@ -504,10 +508,18 @@ export function rollBiomeIds() {
   return out;
 }
 
+// The Bottomless Fall: endless loops wrap the rolled biomes I->IV->I like regionForWave,
+// instead of a relapse's clamp-to-Court reuse. Set alongside setRegionCycle at run start.
+let BIOME_CYCLE = false;
+export function setBiomeCycle(on) { BIOME_CYCLE = !!on; }
+
 /** Resolve the rolled biome for a 1-based waveIndex (relapse loops past the
- * last region reuse its roll, mirroring regionForWave). rolled = st.biomes. */
+ * last region reuse its roll, mirroring regionForWave; endless cycling wraps). rolled = st.biomes. */
 export function biomeForWave(waveIndex, rolled) {
-  if (!rolled) return null;
-  const i = Math.min(Math.max(1, waveIndex | 0), REGION_COUNT) - 1;
+  if (!rolled || !rolled.length) return null;
+  const raw = Math.max(1, waveIndex | 0);
+  const i = BIOME_CYCLE
+    ? ((raw - 1) % rolled.length + rolled.length) % rolled.length
+    : Math.min(raw, REGION_COUNT) - 1;
   return rolled[i] ? biomeById(rolled[i]) : null;
 }

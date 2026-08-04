@@ -25,6 +25,14 @@ namespace ConditioningControlPanel.Services
         private bool _isDisposed;
         private DateTime _lastShown = DateTime.MinValue;
 
+        // Per-session no-repeat rotation (mirrors BarkService's _recentlySpoken idiom, but in-memory
+        // only — lock-card rotation deliberately does NOT persist to disk). Avoids replaying any of
+        // the last few phrases so a pure random draw can't repeat the same phrase back-to-back.
+        private readonly Queue<string> _recentPhrases = new();
+        private readonly HashSet<string> _recentPhrasesSet = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>How many distinct just-shown phrases to avoid replaying.</summary>
+        private const int RecentPhrasesMemory = 3;
+
         public bool IsRunning => _isRunning;
 
         /// <summary>
@@ -43,10 +51,15 @@ namespace ConditioningControlPanel.Services
             });
         }
 
-        public void Start()
+        /// <param name="windowMinutes">
+        /// #736: how long the caller expects to keep the service running — a session's remaining
+        /// minutes. When supplied, the first card is guaranteed to land inside that window with
+        /// room to complete it. Null (dashboard use) means open-ended.
+        /// </param>
+        public void Start(double? windowMinutes = null)
         {
             if (_isRunning) return;
-            
+
             var settings = App.Settings.Current;
 
             if (!settings.LockCardEnabled)
@@ -54,25 +67,22 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("LockCardService: Disabled in settings");
                 return;
             }
-            
+
             _isRunning = true;
-            
-            // Calculate interval based on frequency (per hour)
-            var perHour = settings.LockCardFrequency;
-            var intervalMinutes = 60.0 / perHour;
-            
-            // Add some randomness (±30%)
-            var minInterval = intervalMinutes * 0.7;
-            var maxInterval = intervalMinutes * 1.3;
-            
+
+            var perHour = Math.Max(1, settings.LockCardFrequency);
+            var firstDelay = ComputeFirstCardDelayMinutes(perHour, windowMinutes, _random.NextDouble());
+
             _timer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromMinutes(_random.NextDouble() * (maxInterval - minInterval) + minInterval)
+                Interval = TimeSpan.FromMinutes(firstDelay)
             };
             _timer.Tick += Timer_Tick;
             _timer.Start();
-            
-            App.Logger?.Information("LockCardService started - approximately {PerHour}/hour", perHour);
+
+            App.Logger?.Information(
+                "LockCardService started - approximately {PerHour}/hour, first card in {First:F1}min (window {Window})",
+                perHour, firstDelay, windowMinutes is > 0 ? $"{windowMinutes.Value:F1}min" : "open-ended");
         }
 
         public void Stop()
@@ -90,7 +100,7 @@ namespace ConditioningControlPanel.Services
         {
             // Recalculate next interval with randomness
             var settings = App.Settings.Current;
-            var perHour = settings.LockCardFrequency;
+            var perHour = Math.Max(1, settings.LockCardFrequency);
             var intervalMinutes = 60.0 / perHour;
             var minInterval = intervalMinutes * 0.7;
             var maxInterval = intervalMinutes * 1.3;
@@ -107,7 +117,64 @@ namespace ConditioningControlPanel.Services
             ShowLockCard();
         }
 
-        public void ShowLockCard(string? customPhrase = null, int customRepeats = -1, bool customStrict = false, bool isTest = false)
+        /// <summary>#736: delay before the FIRST lock card of a run, in minutes. Pure so the
+        /// reachability guarantee is unit-testable without a dispatcher.
+        ///
+        /// The first card is an OFFSET into the opening interval, not a whole inter-arrival gap.
+        /// Scheduling it at 60/freq ±30% (as before) put the earliest possible card at 1/hour at
+        /// minute 42, so a 30-minute session could never produce one — which hard-blocked every
+        /// program day whose task required a lock card. Subsequent cards keep the ±30% spacing in
+        /// <see cref="Timer_Tick"/>.
+        ///
+        /// When <paramref name="windowMinutes"/> is supplied the card is additionally clamped to
+        /// land inside it, leaving the tail free so the user can actually complete the card.
+        /// </summary>
+        /// <param name="perHour">Cards per hour; values below 1 are treated as 1.</param>
+        /// <param name="windowMinutes">Minutes the service will keep running, or null for open-ended.</param>
+        /// <param name="roll">A uniform random sample in [0,1).</param>
+        internal static double ComputeFirstCardDelayMinutes(int perHour, double? windowMinutes, double roll)
+        {
+            var intervalMinutes = 60.0 / Math.Max(1, perHour);
+
+            var maxFirst = intervalMinutes;
+            if (windowMinutes is > 0)
+                maxFirst = Math.Min(maxFirst, windowMinutes.Value * 0.8);
+
+            return roll * maxFirst;
+        }
+
+        /// <summary>Decision for what to do when <see cref="ShowLockCard"/> finds another fullscreen
+        /// interaction already visible — a lock card (#676) or a pop quiz (#763). Pure so the
+        /// defer-and-replay policy — including the one-re-defer cap that stops a close/hide race from
+        /// bouncing forever — is unit-testable without any WPF windows.</summary>
+        internal enum BlockedCardAction
+        {
+            /// <summary>No card open; show this one now.</summary>
+            Proceed,
+            /// <summary>A card is open; enqueue this request to replay after it closes.</summary>
+            Defer,
+            /// <summary>We are the dequeued replay and a card is STILL open: give up (one re-defer max)
+            /// and release the interaction slot so the queue keeps moving.</summary>
+            DropAfterReDefer,
+            /// <summary>A card is open but there is no interaction queue to defer to; drop.</summary>
+            DropNoQueue
+        }
+
+        /// <summary>#676: AI cards can arrive faster than the user types one out. Rather than silently
+        /// dropping a request that lands while a card is open, defer-and-replay it through the interaction
+        /// queue — but cap at a single re-defer so a rare close/hide race can't loop.</summary>
+        /// <param name="cardAlreadyOpen">Any blocking fullscreen interaction is on screen: another lock
+        /// card, or (#763) a pop quiz — both are ownerless HWND_TOPMOST covers and must never share the
+        /// screen.</param>
+        internal static BlockedCardAction ResolveBlockedCardAction(bool cardAlreadyOpen, bool isDeferredReplay, bool hasInteractionQueue)
+        {
+            if (!cardAlreadyOpen) return BlockedCardAction.Proceed;
+            if (isDeferredReplay) return BlockedCardAction.DropAfterReDefer; // one re-defer cap
+            if (hasInteractionQueue) return BlockedCardAction.Defer;
+            return BlockedCardAction.DropNoQueue;
+        }
+
+        public void ShowLockCard(string? customPhrase = null, int customRepeats = -1, bool customStrict = false, bool isTest = false, bool isDeferredReplay = false)
         {
             DispatcherHelper.RunOnUISync(() =>
             {
@@ -115,9 +182,43 @@ namespace ConditioningControlPanel.Services
                 // Gate on the visible set (IsAnyOpen), NOT Application.Current.Windows: since 6.2.10 the
                 // window is keep-alive pooled (dismiss => Hide(), not Close()), so a hidden pooled instance
                 // lingers in Application.Current.Windows forever and would block every card after the first.
-                if (LockCardWindow.IsAnyOpen())
+                // #763: a visible pop quiz blocks us just as hard — the interaction queue is meant to keep
+                // the two apart, but it released the slot with a card still up and both covers stacked.
+                var cardOpen = LockCardWindow.IsAnyOpen();
+                var quizOpen = PopQuizWindow.IsAnyOpen();
+                var blockedAction = ResolveBlockedCardAction(cardOpen || quizOpen, isDeferredReplay, App.InteractionQueue != null);
+                if (blockedAction != BlockedCardAction.Proceed)
                 {
-                    App.Logger?.Information("LockCardService: A lock card is already open. Skipping.");
+                    var blocker = cardOpen ? "a lock card" : "a pop quiz";
+                    // Short, log-safe snippet of the requested phrase for diagnostics.
+                    var phraseSnippet = string.IsNullOrEmpty(customPhrase)
+                        ? "(default/random)"
+                        : (customPhrase.Length > 40 ? customPhrase.Substring(0, 40) + "..." : customPhrase);
+
+                    switch (blockedAction)
+                    {
+                        case BlockedCardAction.DropAfterReDefer:
+                            // We already deferred once and are the dequeued replay, yet a card is STILL
+                            // open. Do NOT re-enqueue — the queue's Complete()/dequeue cycle already set us
+                            // as the active LockCard, so re-enqueuing would hold the slot with nothing on
+                            // screen until the 5-min stuck backstop, and could bounce indefinitely. Give up
+                            // after this single re-defer and release the slot so the queue keeps moving.
+                            App.Logger?.Warning("LockCardService: Deferred lock card still blocked on replay ({Blocker} is open). Dropping after one re-defer. Phrase: {Phrase}", blocker, phraseSnippet);
+                            App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.LockCard);
+                            break;
+
+                        case BlockedCardAction.Defer:
+                            App.Logger?.Warning("LockCardService: {Blocker} is already open. Deferring this lock card to the interaction queue. Phrase: {Phrase}", blocker, phraseSnippet);
+                            App.InteractionQueue?.TryStart(
+                                InteractionQueueService.InteractionType.LockCard,
+                                () => ShowLockCard(customPhrase, customRepeats, customStrict, isTest, isDeferredReplay: true),
+                                queue: true);
+                            break;
+
+                        case BlockedCardAction.DropNoQueue:
+                            App.Logger?.Warning("LockCardService: {Blocker} is already open and no interaction queue is available to defer to. Dropping. Phrase: {Phrase}", blocker, phraseSnippet);
+                            break;
+                    }
                     return;
                 }
 
@@ -129,7 +230,7 @@ namespace ConditioningControlPanel.Services
                 {
                     App.InteractionQueue.TryStart(
                         InteractionQueueService.InteractionType.LockCard,
-                        () => ShowLockCard(),
+                        () => ShowLockCard(customPhrase, customRepeats, customStrict, isTest),
                         queue: true);
                     return;
                 }
@@ -160,8 +261,9 @@ namespace ConditioningControlPanel.Services
                             queue: false);
                     }
 
-                    // Pick a random phrase (or use custom one if AI provided it)
-                    var phrase = customPhrase ?? enabledPhrases[_random.Next(enabledPhrases.Count)];
+                    // Pick a random phrase (or use custom one if AI provided it). The custom (AI-supplied)
+                    // path bypasses rotation entirely — it isn't a draw from the enabled pool.
+                    var phrase = customPhrase ?? PickPhrase(enabledPhrases);
                     var repeats = customRepeats >= 0 ? customRepeats : settings.LockCardRepeats;
                     var strict = customStrict || settings.LockCardStrict;
                     var voice = settings.LockCardVoiceMode;
@@ -184,6 +286,36 @@ namespace ConditioningControlPanel.Services
                     App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.LockCard);
                 }
             });
+        }
+
+        /// <summary>
+        /// Pick a phrase at random while avoiding the last few shown, so the same phrase can't
+        /// repeat back-to-back. Filters the enabled pool against the recent set (rather than
+        /// re-rolling in a loop); if that empties the pool — or only one phrase is enabled — we
+        /// skip rotation and draw from the full list so we can never loop forever or go silent.
+        /// </summary>
+        private string PickPhrase(List<string> enabledPhrases)
+        {
+            var candidates = enabledPhrases;
+            if (enabledPhrases.Count > 1)
+            {
+                var fresh = enabledPhrases.Where(p => !_recentPhrasesSet.Contains(p)).ToList();
+                if (fresh.Count > 0) candidates = fresh;
+            }
+
+            var phrase = candidates[_random.Next(candidates.Count)];
+
+            // Remember it, then trim the window to at most (pool - 1) so there's always at least one
+            // fresh candidate next time, capped at RecentPhrasesMemory. Skip tracking a lone phrase.
+            if (enabledPhrases.Count > 1 && _recentPhrasesSet.Add(phrase))
+            {
+                _recentPhrases.Enqueue(phrase);
+                int cap = Math.Min(enabledPhrases.Count - 1, RecentPhrasesMemory);
+                while (_recentPhrases.Count > cap)
+                    _recentPhrasesSet.Remove(_recentPhrases.Dequeue());
+            }
+
+            return phrase;
         }
 
         /// <summary>

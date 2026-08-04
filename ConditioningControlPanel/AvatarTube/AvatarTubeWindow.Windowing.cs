@@ -60,6 +60,8 @@ namespace ConditioningControlPanel
         private const double MinScale = 0.5;   // 50% - can shrink twice from 100%
         private const double MaxScale = 1.5;   // 150% - can grow twice from 100%
         private const double ScaleStep = 0.25; // 25% per step
+        // Set while restoring saved placement (#669) so ApplyScale/drag don't re-persist mid-restore.
+        private bool _restoringPlacement = false;
 
         // Fullscreen detection
         private DispatcherTimer? _fullscreenCheckTimer;
@@ -71,9 +73,6 @@ namespace ConditioningControlPanel
         // Win32 API
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
 
         [DllImport("user32.dll")]
         private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
@@ -119,41 +118,37 @@ namespace ConditioningControlPanel
         private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_NOACTIVATE = 0x0010;
-        private const uint SWP_SHOWWINDOW = 0x0040;
         private const uint SWP_NOZORDER = 0x0004;
         private const uint SWP_FRAMECHANGED = 0x0020;
-        private const uint GW_HWNDPREV = 3;
         private const int GWL_EXSTYLE = -20;
         private const int GWL_STYLE = -16;
         private const int WS_EX_TOOLWINDOW = 0x00000080;
         private const int WS_EX_TOPMOST = 0x00000008;
         private const uint WS_POPUP = 0x80000000;
         private const uint WS_CAPTION = 0x00C00000;
-        private static readonly IntPtr HWND_TOP = IntPtr.Zero;
         private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
         private static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
 
-        // Window message hook for maintaining topmost during drag
-        private const int WM_WINDOWPOSCHANGING = 0x0046;
-        private const int WM_WINDOWPOSCHANGED = 0x0047;
         private HwndSource? _hwndSource;
-        // Hook on the PARENT window so we can lift the tube back above main the
-        // instant main changes z-order (click, flash/overlay close, subsystem
-        // re-activation) — event-driven, no polling gap.
-        private HwndSource? _parentHwndSource;
-        private bool _reassertingAboveParent;
 
-        [StructLayout(LayoutKind.Sequential)]
-        private struct WINDOWPOS
-        {
-            public IntPtr hwnd;
-            public IntPtr hwndInsertAfter;
-            public int x;
-            public int y;
-            public int cx;
-            public int cy;
-            public uint flags;
-        }
+        // Native (Win32) ownership: while attached the tube is OWNED by the main window, so the
+        // window manager itself keeps the tube directly above main and moves/raises the two as a
+        // group. This replaces the old hand-rolled z-order machinery (parent WndProc raise hook,
+        // 300ms refresh timer, forced HWND_TOP reasserts) which could race other windows and lift
+        // the tube above unrelated surfaces (e.g. the Graded Intake host) while main stayed buried.
+        private const int GWL_HWNDPARENT = -8;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+
+        private const uint GW_HWNDPREV = 3;   // the window directly ABOVE hWnd in the z-order
+        private const uint GW_HWNDNEXT = 2;   // the window directly BELOW hWnd in the z-order
 
         /// <summary>
         /// Start monitoring for fullscreen applications
@@ -168,10 +163,86 @@ namespace ConditioningControlPanel
             _fullscreenCheckTimer.Start();
         }
 
+        // While a fullscreen game host (DTRH / Graded Intake / Loom / Bureau) owns the screen, an
+        // ATTACHED tube rides at main's z-level inside main's owner group; ANY self-show/raise
+        // leapfrogs the host sibling and floats the tube over the game (its native-owned upper-left
+        // position). Every attached self-raise path below consults this and stands down until the
+        // host closes (mirrors the chat-focus guard in .ChatInput.cs). Detached tubes are
+        // intentionally topmost widgets and stay exempt.
+        private bool SuppressSelfRaiseForGameHost => !IsDetached && ChaosWebViewHost.AnyHostActive;
+
+        /// <summary>
+        /// Drop the ATTACHED tube to the bottom of MainWindow's owner group — directly above main,
+        /// and therefore BELOW every game-host window glued over it (DTRH / Graded Intake / Loom /
+        /// Bureau).
+        ///
+        /// This is the ACTIVE half of <see cref="SuppressSelfRaiseForGameHost"/>, which is purely
+        /// passive: it stops the tube RAISING itself, but it cannot undo a raise that already
+        /// happened, and plenty of them are not self-raises at all — the window manager re-showing
+        /// the owned tube when main comes back from the intake's duck, a click that activates the
+        /// tube, or a stale WS_EX_TOPMOST left over from an <c>App.ForceWindowToFront</c>-style
+        /// Topmost pulse propagating through main to its owned windows. A tube that is already
+        /// above the host stays there forever, which is
+        /// exactly the "tube floats over Graded Intake" report.
+        ///
+        /// Passing main's OWN handle as hWndInsertAfter asks for "directly behind main", which the
+        /// window manager clamps to "directly above main" because an owned window may never sit
+        /// below its owner. That is the same trick
+        /// <see cref="ChaosWebViewHost"/>.ApplyNativeOwner uses to slot a host above the pair, run
+        /// in the opposite direction — so the tube can never end up buried under main. Ordering
+        /// against a non-topmost window also clears WS_EX_TOPMOST, which is a repair rather than a
+        /// loss: an attached tube is never meant to be topmost (<see cref="Attach"/> sets
+        /// Topmost=false) and <see cref="Detach"/> puts the band back itself.
+        ///
+        /// Nothing has to be restored when the host closes: this only reorders inside the band the
+        /// tube already belongs to, and main's next raise carries its owned tube back up with it.
+        ///
+        /// Callable from ANY thread — it self-marshals to the avatar dispatcher. Doing the
+        /// SetWindowPos on the tube's OWN thread matters: cross-thread SetWindowPos sends
+        /// WM_WINDOWPOSCHANGING synchronously and would let a busy avatar thread block main (the
+        /// app's historic mixed-DPI / render-deadlock cluster).
+        /// </summary>
+        internal void SinkToMainZOrder()
+        {
+            if (!Dispatcher.CheckAccess()) { RunOnAvatar(SinkToMainZOrder); return; }
+            try
+            {
+                // A DETACHED tube is a deliberate free-floating topmost widget — never sink it.
+                if (!_isAttached) return;
+                var tube = _tubeHandle;
+                var main = _parentHandle;
+                if (tube == IntPtr.Zero || main == IntPtr.Zero) return;
+                // Hidden (ducked with main, or hidden for a fullscreen app) can't float over
+                // anything, and reordering it would only churn frames 2x/second for nothing.
+                if (!IsWindowVisible(tube)) return;
+                // An ATTACHED tube is never meant to carry WS_EX_TOPMOST (Attach sets Topmost=false;
+                // only Detach puts the band back). Finding it set means a Topmost pulse on main
+                // propagated into its owner group and never propagated back out, which parks the
+                // tube above the entire non-topmost band - the host included - no matter where it
+                // sits relative to main. Always repair that, never trust the cheap check below for it.
+                bool strayTopmost = (GetWindowLong(tube, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+                // Otherwise: already sitting directly above main? Then nothing is between us and
+                // main, so nothing we could be floating over — leave the z-order (and this layered
+                // window's WM_WINDOWPOSCHANGING path) completely alone. This is what keeps the 500ms
+                // tick idle in the steady state instead of poking the tube twice a second.
+                if (!strayTopmost && GetWindow(main, GW_HWNDPREV) == tube) return;
+                SetWindowPos(tube, main, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+            catch { /* window may be tearing down */ }
+        }
+
         private void FullscreenCheckTimer_Tick(object? sender, EventArgs e)
         {
             try
             {
+                // A game host owns the screen: the attached tube is already tucked away with the
+                // minimized main window, and its own hide/restore dance here is the confirmed cause
+                // of the tube popping over the game. Do nothing until the host closes — except push
+                // the tube back down to main's level, which is the only tick that runs while a host
+                // is up and so is the safety net for every raise nobody told us about (the window
+                // manager's own owner-group re-show, a click on the tube, a Topmost pulse).
+                if (SuppressSelfRaiseForGameHost) { SinkToMainZOrder(); return; }
+
                 bool isOtherAppFullscreen = IsOtherAppFullscreen();
 
                 // When DETACHED, avatar should stay visible as a widget overlay
@@ -333,14 +404,22 @@ namespace ConditioningControlPanel
 
         private const int WM_DPICHANGED = 0x02E0;
         private DispatcherTimer? _dpiQuiesceTimer;
+        private bool _dpiFloatWasRunning;
 
         /// <summary>
         /// Window procedure hook. Only handles WM_DPICHANGED: when a drag crosses onto a
         /// monitor with a different scale factor, PerMonitorV2 WPF resizes this layered
         /// window, and that resize runs a SYNCHRONOUS CompleteRender that deadlocks when
         /// the shared AllowsTransparency render thread is busy (the documented hang in
-        /// OnFirstContentRendered — #477). Quiesce the 60fps float/breath transform writes
-        /// for the transition so the blocking present can complete, then resume.
+        /// OnFirstContentRendered — #477).
+        ///
+        /// The blocking present can only complete if NOTHING is writing to this surface, and
+        /// TWO independent drivers do: the 60fps float/breath transform, and the Circe emote
+        /// crossfade (~1Hz idle rotation plus its opacity clocks). The original mitigation
+        /// quiesced only the former — emote mode landed on this surface afterwards and kept
+        /// compositing straight through the transition, which is how an attached tube dragged
+        /// between mixed-DPI monitors could still wedge (Hang 1002, no crash.log, last log
+        /// line an [EMOTE] xfade). Quiesce both for the transition, then resume.
         /// </summary>
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
@@ -348,21 +427,28 @@ namespace ConditioningControlPanel
             {
                 try
                 {
+                    // NB: the quiesce must NOT be conditional on the float timer running — the emote
+                    // crossfade deadlocks this surface just as happily with the float transform idle.
                     if (_floatTimer?.IsEnabled == true)
                     {
                         _floatTimer.Stop();
-                        if (_dpiQuiesceTimer == null)
-                        {
-                            _dpiQuiesceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
-                            _dpiQuiesceTimer.Tick += (s, e) =>
-                            {
-                                _dpiQuiesceTimer?.Stop();
-                                try { _floatTimer?.Start(); } catch { /* window tearing down */ }
-                            };
-                        }
-                        _dpiQuiesceTimer.Stop(); // restart the debounce on rapid re-crossings
-                        _dpiQuiesceTimer.Start();
+                        _dpiFloatWasRunning = true;   // sticky across rapid re-crossings; cleared on resume
                     }
+                    QuiesceEmotesForDpi();
+
+                    if (_dpiQuiesceTimer == null)
+                    {
+                        _dpiQuiesceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
+                        _dpiQuiesceTimer.Tick += (s, e) =>
+                        {
+                            _dpiQuiesceTimer?.Stop();
+                            try { if (_dpiFloatWasRunning) { _dpiFloatWasRunning = false; _floatTimer?.Start(); } }
+                            catch { /* window tearing down */ }
+                            try { ResumeEmotesAfterDpi(); } catch { /* window tearing down */ }
+                        };
+                    }
+                    _dpiQuiesceTimer.Stop(); // restart the debounce on rapid re-crossings
+                    _dpiQuiesceTimer.Start();
                 }
                 catch { /* never let a hook throw */ }
             }
@@ -370,56 +456,23 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Hook on the PARENT (main) window. When main's z-order changes, lift the tube
-        /// back above it immediately so the avatar/speech bubble never gets buried behind
-        /// main's UI. This is the event-driven counterpart to the (Background-priority,
-        /// pollable-to-starvation) keep-on-top timer — it fires synchronously the moment
-        /// main moves up, closing the gap the timer leaves during busy AI speech.
+        /// Set or clear the tube's NATIVE (Win32) owner. When attached the tube is owned by the
+        /// main window: the window manager keeps an owned window directly above its owner and
+        /// raises/lowers the two as a group, so the pair can never separate — no polling, no
+        /// manual raises, and other windows (ours or other apps') can freely cover BOTH.
+        /// NOTE: this is raw GWL_HWNDPARENT ownership, NOT WPF's Window.Owner — the managed
+        /// property adds minimize/visibility coupling that caused black-window artifacts, and
+        /// it cannot be set across threads in AvatarOwnThread mode anyway.
         /// </summary>
-        private IntPtr ParentWndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        private void ApplyNativeOwner(bool owned)
         {
-            if (msg != WM_WINDOWPOSCHANGED) return IntPtr.Zero;
-            if (!_isAttached || _tubeHandle == IntPtr.Zero) return IntPtr.Zero;
-            if (_reassertingAboveParent) return IntPtr.Zero; // guard against re-entrancy
-
-            try
-            {
-                // Only react when the z-order actually changed (ignore pure move/resize —
-                // those are already handled by LocationChanged/SizeChanged).
-                var wp = Marshal.PtrToStructure<WINDOWPOS>(lParam);
-                if ((wp.flags & SWP_NOZORDER) != 0) return IntPtr.Zero;
-
-                // Don't fight pop quiz (it owns HWND_TOPMOST), and don't pop over other
-                // apps — only lift the tube when our own app owns the foreground.
-                if (PopQuizWindow.IsOpen || QuizWindow.IsOpen) return IntPtr.Zero;
-                if (!IsOurAppForeground()) return IntPtr.Zero;
-
-                // Place the tube directly above main. Moving the tube only triggers
-                // WM_WINDOWPOSCHANGED on the TUBE (its WndProc is a no-op), not on the
-                // parent, so this can't loop — but guard anyway for safety.
-                _reassertingAboveParent = true;
-                SetWindowPos(_tubeHandle, HWND_TOP, 0, 0, 0, 0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            }
-            catch { /* parent may be tearing down */ }
-            finally { _reassertingAboveParent = false; }
-
-            return IntPtr.Zero;
-        }
-
-        /// <summary>
-        /// True when the foreground window belongs to our process. Used to gate z-order
-        /// raises so we lift the tube only when our app is actually in front — never
-        /// stealing z-order from other apps (e.g. a fullscreen video player).
-        /// </summary>
-        private bool IsOurAppForeground()
-        {
-            var foreground = GetForegroundWindow();
-            if (foreground == IntPtr.Zero) return false;
-            if (foreground == _parentHandle || foreground == _tubeHandle) return true;
-            GetWindowThreadProcessId(foreground, out uint foregroundPid);
-            uint ourPid = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
-            return foregroundPid == ourPid;
+            if (_tubeHandle == IntPtr.Zero) return;
+            var owner = owned ? _parentHandle : IntPtr.Zero;
+            if (owned && owner == IntPtr.Zero) { CaptureParentGeom(); return; } // parent HWND not seeded yet; next call has it
+            SetWindowLongPtr(_tubeHandle, GWL_HWNDPARENT, owner);
+            // Owner changes are cached — flush the frame so the z-order link takes effect now.
+            SetWindowPos(_tubeHandle, IntPtr.Zero, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
         }
 
         private void CalculateScaleFactor()
@@ -630,12 +683,7 @@ namespace ConditioningControlPanel
             {
                 if (_parentWindow.WindowState == WindowState.Minimized) return;
                 CaptureParentGeom();
-                RunOnAvatar(() =>
-                {
-                    UpdatePosition();
-                    // Keep tube in front when attached, during parent move
-                    if (_isAttached) BringAttachedPairToFront();
-                });
+                RunOnAvatar(UpdatePosition);
             }
             catch { /* Window may be closing */ }
         }
@@ -653,14 +701,22 @@ namespace ConditioningControlPanel
                     switch (state)
                     {
                         case WindowState.Minimized:
-                            PauseAvatarGif();
                             if (_isAttached)
                             {
+                                PauseAvatarGif();
                                 App.Logger?.Information("[AVATAR-BLINK] hidden — parent window minimized");
                                 Hide();
                             }
                             else
                             {
+                                // #744: a detached tube is a standalone widget - it stays on screen
+                                // when the main window minimizes, so it has to stay animated too.
+                                // PauseAvatarGif used to run above this branch while the only resume
+                                // sat on the Normal/Maximized case, leaving the tube visible and
+                                // frozen on one frame. Worse in emote mode, where the pause also
+                                // stops the watchdog and the rotation is driven by clip-completion
+                                // callbacks, so nothing could ever restart it.
+                                ResumeAvatarGif();
                                 // When detached, force visibility and topmost
                                 EnsureVisibleWhenDetached();
                             }
@@ -670,13 +726,20 @@ namespace ConditioningControlPanel
                             ResumeAvatarGif();
                             if (parentVisible && App.Settings?.Current?.AvatarEnabled == true)
                             {
-                                Show();
-                                if (_isAttached)
+                                if (!SuppressSelfRaiseForGameHost)
                                 {
-                                    UpdatePosition();
-                                    BringAttachedPairToFront();
+                                    Show();
+                                    if (_isAttached) UpdatePosition();
+                                    // When detached, WPF Topmost property handles it
                                 }
-                                // When detached, WPF Topmost property handles it
+                                else
+                                {
+                                    // Main just came back from the intake's duck. The window manager
+                                    // re-shows the windows IT hid with the owner, behind WPF's back
+                                    // and in an order nothing guarantees — so the tube can surface
+                                    // above the host here even though we never asked it to.
+                                    SinkToMainZOrder();
+                                }
                             }
                             break;
                     }
@@ -699,24 +762,27 @@ namespace ConditioningControlPanel
                         && App.Settings?.Current?.AvatarEnabled == true)
                     {
                         ResumeAvatarGif();
-                        Show();
-                        if (_isAttached)
+                        if (!SuppressSelfRaiseForGameHost)
                         {
-                            UpdatePosition();
-                            BringAttachedPairToFront();
+                            Show();
+                            if (_isAttached) UpdatePosition();
                         }
+                        else SinkToMainZOrder();   // main became visible again under a live host
                         // When detached, WPF Topmost property handles it
                     }
                     else
                     {
-                        PauseAvatarGif();
                         if (_isAttached)
                         {
+                            PauseAvatarGif();
                             App.Logger?.Information("[AVATAR-BLINK] hidden — parent IsVisible went false (state={State})", state);
                             Hide();
                         }
                         else
                         {
+                            // #744: same as the minimize case - a detached tube stays on screen, so
+                            // it must keep animating. This is the minimize-to-tray path.
+                            ResumeAvatarGif();
                             // When detached, force visibility and topmost
                             EnsureVisibleWhenDetached();
                         }
@@ -730,8 +796,14 @@ namespace ConditioningControlPanel
         {
             if (_parentWindow == null) return;
 
-            // Don't do any z-order work when pop quiz is open
+            // Don't do any z-order work when pop quiz is open, or while a game host owns the
+            // screen (raising the attached tube would float it over DTRH/Intake).
             if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
+            // Activating main raises its whole owned GROUP, and Win32 defines no order between two
+            // windows that share an owner — so the tube can come up alongside (or over) the host
+            // without any raise of our own. Push it back to main's level instead of just standing
+            // down. SinkToMainZOrder self-marshals; this handler runs on the PARENT thread.
+            if (SuppressSelfRaiseForGameHost) { SinkToMainZOrder(); return; }
 
             try
             {
@@ -743,42 +815,10 @@ namespace ConditioningControlPanel
                 {
                     Show();
                     UpdatePosition();
-
-                    if (_isAttached)
-                    {
-                        // Delay BringToFront to ensure it happens AFTER parent activation completes
-                        // Use Background priority so all window activation processing finishes first
-                        Dispatcher.BeginInvoke(new Action(() =>
-                        {
-                            if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
-                            if (_isAttached && _tubeHandle != IntPtr.Zero)
-                            {
-                                BringAttachedPairToFront();
-                            }
-                        }), System.Windows.Threading.DispatcherPriority.Background);
-                    }
+                    // Z-order: native ownership keeps the tube above main automatically.
                 });
             }
             catch { /* Window may be closing */ }
-        }
-
-        private void ParentWindow_PreviewMouseDown(object sender, MouseButtonEventArgs e)
-        {
-            // Don't fight z-order when pop quiz is open
-            if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
-
-            // When main window is clicked (even if already active), immediately bring tube to front.
-            // This handles the case where Activated event doesn't fire (window already active). Reads
-            // avatar UI (SpeechBubble), so do the whole check on the avatar thread (Background priority
-            // so it lands after the click processing finishes).
-            RunOnAvatar(() =>
-            {
-                if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
-                if (_isAttached && _tubeHandle != IntPtr.Zero && SpeechBubble.Visibility == Visibility.Visible)
-                {
-                    BringAttachedPairToFront();
-                }
-            }, System.Windows.Threading.DispatcherPriority.Background);
         }
 
         private void ParentWindow_Closed(object? sender, EventArgs e)
@@ -813,6 +853,12 @@ namespace ConditioningControlPanel
             if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(ShowTube)); return; }
             try
             {
+                // Never raise an attached tube while a game host owns the screen (it would float
+                // over DTRH/Intake); the game-end restore path re-shows it once the host is gone.
+                // Take the opportunity to push it back down: whatever asked for this show (a bark,
+                // a tray restore, a session event) usually follows something that reordered us.
+                if (SuppressSelfRaiseForGameHost) { SinkToMainZOrder(); return; }
+
                 // Manual/explicit show (checkbox toggle, tray "Wake Bambi Up", session events)
                 // is a deliberate user/system request to make the avatar visible, so clear the
                 // fullscreen-hidden flag. Otherwise IsAvatarVisibleOnScreen and the fullscreen
@@ -838,7 +884,6 @@ namespace ConditioningControlPanel
                 if (_parentWindow != null && ParentVisibleNotMinimized)
                 {
                     UpdatePosition();
-                    if (_isAttached && !(PopQuizWindow.IsOpen || QuizWindow.IsOpen)) BringAttachedPairToFront();
                 }
 
                 StartFloatingAnimation();
@@ -882,18 +927,9 @@ namespace ConditioningControlPanel
                 // Release GIF animation frames to prevent memory leak
                 AnimationBehavior.SetSourceUri(ImgAvatarAnimated, null);
 
-                // Remove window message hooks. The avatar's own source is fine here; the parent's source
-                // is thread-affine to the main thread, so remove its hook there (inline when shared).
+                // Remove the window message hook (DPI-transition quiesce only).
                 _hwndSource?.RemoveHook(WndProc);
                 _hwndSource = null;
-                var parentSrc = _parentHwndSource;
-                _parentHwndSource = null;
-                if (parentSrc != null)
-                {
-                    var pd = _parentWindow?.Dispatcher;
-                    if (pd == null || pd.CheckAccess()) { try { parentSrc.RemoveHook(ParentWndProc); } catch { } }
-                    else if (!pd.HasShutdownStarted) pd.BeginInvoke(new Action(() => { try { parentSrc.RemoveHook(ParentWndProc); } catch { } }));
-                }
 
                 // Unsubscribe from video service events
                 if (App.Video != null)
@@ -970,7 +1006,6 @@ namespace ConditioningControlPanel
                     _parentWindow.StateChanged -= ParentWindow_StateChanged;
                     _parentWindow.IsVisibleChanged -= ParentWindow_IsVisibleChanged;
                     _parentWindow.Activated -= ParentWindow_Activated;
-                    _parentWindow.PreviewMouseDown -= ParentWindow_PreviewMouseDown;
                     _parentWindow.Closed -= ParentWindow_Closed;
                 }
             }
@@ -980,152 +1015,6 @@ namespace ConditioningControlPanel
             }
 
             base.OnClosed(e);
-        }
-
-        /// <summary>
-        /// Temporarily brings the tube window to front (above main window)
-        /// Only works if attached and parent window is visible and not minimized
-        /// </summary>
-        private void BringToFrontTemporarily()
-        {
-            if (_tubeHandle == IntPtr.Zero) return;
-
-            // Don't bring to front if detached (topmost handles that)
-            if (!_isAttached) return;
-
-            // Don't bring to front if parent window is not visible or minimized (cache read — avatar thread)
-            if (_parentWindow == null || !ParentVisibleNotMinimized)
-                return;
-
-            // Bring window to top of z-order (above main window)
-            // Use only SWP_NOACTIVATE - do NOT use SWP_SHOWWINDOW as it can interfere with keyboard focus
-            SetWindowPos(_tubeHandle, IntPtr.Zero, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        }
-
-        /// <summary>
-        /// Public hook for App.ForceWindowToFront: after main pulses Topmost
-        /// to defeat ForegroundLockTimeout, the tube needs to be re-raised so
-        /// the attached pair stays paired. Wraps the existing private method.
-        /// </summary>
-        public void RaiseAttachedTubeAboveOwner()
-        {
-            if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(RaiseAttachedTubeAboveOwner)); return; }
-            BringAttachedPairToFront(force: true);
-        }
-
-        /// <summary>
-        /// Bring both the parent window and the tube to the top of z-order together.
-        /// This prevents the tube from being separated from the parent (e.g. tube on top,
-        /// parent behind other apps) after video ends, fullscreen exit, or tab changes.
-        /// </summary>
-        /// <param name="force">
-        /// When true, skip the "our process owns the foreground" gate. Use this only when
-        /// the caller is DELIBERATELY foregrounding our app right now (startup show, a
-        /// Topmost true→false pulse, panic/video-end restore). In those moments Activate()
-        /// hasn't transferred foreground yet, so the gate sees the previous app and wrongly
-        /// bails — leaving the tube/bubble buried behind the main window. Passive callers
-        /// (poll timer, Activated, mouse-down, position changes) leave this false so we
-        /// never steal z-order from other apps (e.g. fullscreen video players).
-        /// </param>
-        private void BringAttachedPairToFront(bool force = false)
-        {
-            if (_tubeHandle == IntPtr.Zero) return;
-            if (!_isAttached) return;
-            if (_parentWindow == null || !ParentVisibleNotMinimized)   // cache read — avatar thread
-                return;
-
-            // Don't fight with pop quiz — it uses HWND_TOPMOST and must stay on top
-            if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen))
-                return;
-
-            // _parentHandle is seeded on the parent thread by CaptureParentGeom (reading the parent's HWND
-            // off its own thread would VerifyAccess-throw here on the avatar thread). If it isn't ready yet,
-            // kick a capture (async on the parent thread) and skip this raise — the HWND is stable once made,
-            // so the next call has it.
-            if (_parentHandle == IntPtr.Zero) { CaptureParentGeom(); return; }
-
-            // Only bring to front when our process owns the foreground window —
-            // otherwise we'd steal z-order from other apps (e.g. fullscreen video players).
-            // Skipped when force=true (caller is intentionally foregrounding our app).
-            if (!force)
-            {
-                var foreground = GetForegroundWindow();
-                if (foreground != IntPtr.Zero && foreground != _parentHandle && foreground != _tubeHandle)
-                {
-                    GetWindowThreadProcessId(foreground, out uint foregroundPid);
-                    uint ourPid = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
-                    if (foregroundPid != ourPid)
-                        return;
-                }
-            }
-
-            // Parent to top first, then tube above it — keeps them as a pair
-            SetWindowPos(_parentHandle, HWND_TOP, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            SetWindowPos(_tubeHandle, HWND_TOP, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        }
-
-        /// <summary>
-        /// When the tube window gets activated while attached (e.g. after a topmost video window closes),
-        /// redirect activation to the parent window so they stay paired.
-        /// </summary>
-        private void TubeWindow_Activated(object? sender, EventArgs e)
-        {
-            if (!_isAttached || _parentWindow == null) return;
-
-            // Don't redirect activation when user is typing in the chat input
-            if (_isInputVisible) return;
-
-            // Don't activate parent when pop quiz is open — it would cover the quiz
-            if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
-
-            try
-            {
-                // Only redirect activation to parent if our process already owns the foreground —
-                // otherwise we'd steal focus from other apps (e.g. fullscreen video players)
-                var foreground = GetForegroundWindow();
-                if (foreground != IntPtr.Zero)
-                {
-                    GetWindowThreadProcessId(foreground, out uint foregroundPid);
-                    uint ourPid = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
-                    if (foregroundPid != ourPid)
-                        return; // Another app is in front, don't steal focus
-                }
-
-                // Don't redirect activation when speech bubble is showing —
-                // redirecting brings parent to front, hiding the bubble behind it
-                if (SpeechBubble.Visibility == Visibility.Visible)
-                {
-                    Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        if (_isAttached && _tubeHandle != IntPtr.Zero)
-                            BringAttachedPairToFront();
-                    }), DispatcherPriority.Background);
-                    return;
-                }
-
-                // Defer activation to parent so Windows finishes current activation first.
-                // Include BringAttachedPairToFront in the same callback to avoid a double-deferral
-                // gap where the tube drops behind the parent between two Background dispatches.
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    try
-                    {
-                        if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
-                        if (_isAttached && _parentWindow != null && ParentVisibleNotMinimized)
-                        {
-                            // Activate touches the MAIN window — run it on the parent's thread.
-                            if (_parentWindow.Dispatcher.CheckAccess()) _parentWindow.Activate();
-                            else _parentWindow.Dispatcher.BeginInvoke(new Action(() => { try { _parentWindow.Activate(); } catch { } }));
-                            BringAttachedPairToFront();
-                        }
-                    }
-                    catch { /* Window may be closing */ }
-                }), DispatcherPriority.Background);
-            }
-            catch { /* Window may be closing */ }
         }
 
         /// <summary>
@@ -1181,7 +1070,11 @@ namespace ConditioningControlPanel
                             Top = wa.Bottom - Math.Max(120, ActualHeight) - margin;
                         }
                         catch { /* positioning is best-effort */ }
-                        ReassertTopmost();   // keep the freshly-parked widget above the run's overlays
+                        // Put the freshly-parked widget back in the topmost band. NOT above the
+                        // compositor host any more (#776) — the host's fullscreen effects, the pink
+                        // tint above all, now win over the companion; ReassertTopmost slots the tube
+                        // directly beneath the host, which still leaves it over the run's own chrome.
+                        ReassertTopmost();
                     }
                 }
                 else
@@ -1294,7 +1187,17 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Reassert topmost status when detached - ensures avatar stays on top as a widget
+        /// Reassert topmost status when detached - ensures avatar stays on top as a widget.
+        ///
+        /// #776: the raise is UNCONDITIONAL (never gated on having lost WS_EX_TOPMOST) but it is no
+        /// longer always aimed at HWND_TOPMOST. The shared compositor host carries the pink filter and
+        /// re-pins itself to the front of the topmost band every 5s (OverlayService.ReassertZOrder);
+        /// this tick fired every 500ms and put the tube back on top, so the tint appeared to blink on
+        /// and off the companion. The tint wins: when a visible host covers the tube's monitor we
+        /// insert directly BELOW it instead — still topmost, still above every ordinary app window,
+        /// permanently under the tint. Runs on the tube's OWN thread (AvatarOwnThread), which is why
+        /// the host handle comes from CompositorEngine's lock-free anchor snapshot rather than from
+        /// its UI-thread-only host dictionaries.
         /// </summary>
         private void ReassertTopmost()
         {
@@ -1303,52 +1206,59 @@ namespace ConditioningControlPanel
             // Don't fight with pop quiz for topmost z-order
             if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
 
-            // Use Win32 SetWindowPos with HWND_TOPMOST to force topmost z-order
-            // This is more reliable than WPF's Topmost property across monitor/focus changes
-            SetWindowPos(_tubeHandle, HWND_TOPMOST, 0, 0, 0, 0,
+            var insertAfter = HWND_TOPMOST;
+            if (Services.OverlayService.ResolveZOrderAction(
+                    hasVideo: false, isVideoWindow: false, aboveVideo: false, needsPin: true, force: true,
+                    yieldToCompositorHost: TryGetCompositorHostAnchor(out var hostHwnd))
+                == Services.OverlayService.ZOrderAction.PinBelowCompositorHost)
+            {
+                // Already sitting directly under the host? Then the invariant holds and we skip the
+                // call entirely — this is a layered window, and poking WM_WINDOWPOSCHANGING twice a
+                // second for nothing is exactly the kind of churn that perturbs the emote crossfades.
+                if (GetWindow(hostHwnd, GW_HWNDNEXT) == _tubeHandle) return;
+                insertAfter = hostHwnd;
+            }
+
+            // Use Win32 SetWindowPos to force the z-order slot. More reliable than WPF's Topmost
+            // property across monitor/focus changes; inserting after a topmost host keeps our own
+            // WS_EX_TOPMOST set, so the tube never drops out of the widget band.
+            SetWindowPos(_tubeHandle, insertAfter, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         }
 
         /// <summary>
-        /// Start a timer that periodically brings the window to front while speech bubble is visible.
-        /// This ensures the bubble stays on top even when user interacts with main window.
+        /// The compositor host window the detached tube must sit under, if any: the visible
+        /// main-surface host covering the tube's centre point (physical px, the space the anchor
+        /// snapshot is published in).
+        ///
+        /// Deliberately keyed on the HOST EXISTING, not on the tint being active — an empty host is
+        /// fully transparent and click-through, so parking below it costs nothing, whereas testing
+        /// "is the tint rendering here" would re-introduce the same flip-flop the bug is about
+        /// (PinkTintLayer.ShouldRenderOnScreen can also gate the tint off this monitor entirely,
+        /// which is exactly a monitor where no host effect can ever cover us anyway).
+        ///
+        /// A playing mandatory video is left alone: the reconciler pins the hosts BELOW it (#497),
+        /// so yielding to a host there would drag the companion under an opaque fullscreen video —
+        /// a behaviour change #776 never asked for. In that state the tube keeps its old raise.
         /// </summary>
-        private void StartZOrderRefreshTimer()
+        private bool TryGetCompositorHostAnchor(out IntPtr hostHwnd)
         {
-            StopZOrderRefreshTimer();
-            // Backstop to the ParentWndProc z-order hook. Runs at Render priority (NOT the
-            // DispatcherTimer default of Background, which gets starved during busy AI
-            // speech — GIF animation, text streaming, effects — and was letting the bubble
-            // sit behind main for far longer than one tick). The hook does the heavy
-            // lifting now; this just catches anything message-driven raises miss.
-            _zOrderRefreshTimer = new DispatcherTimer(DispatcherPriority.Render)
+            hostHwnd = IntPtr.Zero;
+            try
             {
-                Interval = TimeSpan.FromMilliseconds(300)
-            };
-            _zOrderRefreshTimer.Tick += (s, e) =>
-            {
-                if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
-                if (_isAttached && _tubeHandle != IntPtr.Zero && SpeechBubble.Visibility == Visibility.Visible)
-                {
-                    // Only refresh z-order when our app owns the foreground — don't steal
-                    // z-order from other apps. ParentWindow_Activated handles restoration
-                    // when the user returns to us.
-                    if (IsOurAppForeground())
-                    {
-                        BringAttachedPairToFront();
-                    }
-                }
-            };
-            _zOrderRefreshTimer.Start();
-        }
+                if (App.Compositor is not { } engine) return false;
+                if (App.Video?.IsPlaying == true) return false;
+                if (!GetWindowRect(_tubeHandle, out var r)) return false;
 
-        /// <summary>
-        /// Stop the z-order refresh timer when speech bubble is hidden
-        /// </summary>
-        private void StopZOrderRefreshTimer()
-        {
-            _zOrderRefreshTimer?.Stop();
-            _zOrderRefreshTimer = null;
+                int cx = r.Left + (r.Right - r.Left) / 2;
+                int cy = r.Top + (r.Bottom - r.Top) / 2;
+                var handle = engine.FindHostAnchorAt(cx, cy);
+                if (handle == 0) return false;
+
+                hostHwnd = handle;
+                return true;
+            }
+            catch { return false; }   // never let a z-order hint break the tick
         }
 
         /// <summary>
@@ -1394,6 +1304,17 @@ namespace ConditioningControlPanel
         /// Gets whether the avatar tube is currently detached (floating independently)
         /// </summary>
         public bool IsDetached => !_isAttached;
+
+        /// <summary>
+        /// The tube's HWND while ATTACHED, else <see cref="IntPtr.Zero"/>. Used by sibling windows that
+        /// share our native owner (the game hosts) to slot themselves ABOVE the attached pair instead of
+        /// directly above main - two windows owned by the same HWND have no defined order between them,
+        /// which is what let a game window and the tube interleave into a torn composite.
+        /// Plain-field reads only: this is called from the MAIN thread while the tube may live on its own
+        /// dispatcher thread, so it must never touch a DependencyProperty (use IsWindowVisible on the
+        /// handle instead of IsVisible).
+        /// </summary>
+        internal IntPtr AttachedHandleOrZero => _isAttached ? _tubeHandle : IntPtr.Zero;
 
         /// <summary>
         /// Gets whether the avatar is currently visible on screen.
@@ -1469,6 +1390,9 @@ namespace ConditioningControlPanel
             ShowInTaskbar = false;
             SetToolWindowStyle(true);
 
+            // Break the native ownership link — a detached widget floats free of main.
+            ApplyNativeOwner(false);
+
             // Set topmost - use both WPF property and Win32 for reliability
             Topmost = true;
             ReassertTopmost(); // Use Win32 to ensure topmost is applied immediately
@@ -1489,6 +1413,13 @@ namespace ConditioningControlPanel
 
             App.Logger?.Information("Avatar tube detached - now floating independently");
             if (!silent) Giggle("I'm free! Ctrl+scroll to resize!");
+
+            // Remember the detached state so the companion comes back floating next launch (#669).
+            if (!_restoringPlacement)
+            {
+                try { if (App.Settings?.Current != null) { App.Settings.Current.AvatarTubeDetached = true; App.Settings.Save(); } }
+                catch (Exception ex) { App.Logger?.Debug("Avatar tube: persist detached flag failed ({Error})", ex.Message); }
+            }
         }
 
         /// <summary>
@@ -1544,7 +1475,9 @@ namespace ConditioningControlPanel
 
             // Snap back to parent window position
             UpdatePosition();
-            BringAttachedPairToFront();
+
+            // Re-own the tube to main: the window manager keeps the pair glued in z-order.
+            ApplyNativeOwner(true);
 
             // Defer the TOOLWINDOW style to ensure it's applied after all window state changes
             Dispatcher.BeginInvoke(new Action(() =>
@@ -1557,6 +1490,13 @@ namespace ConditioningControlPanel
 
             App.Logger?.Information("Avatar tube attached - anchored to main window");
             if (!silent) Giggle("Back home~");
+
+            // Persist the attached state so we don't auto-detach next launch (#669).
+            if (!_restoringPlacement)
+            {
+                try { if (App.Settings?.Current != null) { App.Settings.Current.AvatarTubeDetached = false; App.Settings.Save(); } }
+                catch (Exception ex) { App.Logger?.Debug("Avatar tube: persist attached flag failed ({Error})", ex.Message); }
+            }
         }
 
         /// <summary>
@@ -1640,6 +1580,11 @@ namespace ConditioningControlPanel
                 ContentViewbox.Height = newHeight;
                 // Window follows via the ContentViewbox.SizeChanged handler wired in OnLoaded
                 // (auto-sizing is off after first paint — see OnFirstContentRendered).
+
+                // Persist the user's chosen scale (#669). Scale only changes via detached-mode
+                // gestures (Ctrl+scroll / menu / arrow keys), so this rides those; guarded so a
+                // restore doesn't re-save. Debounced Save coalesces the discrete per-step writes.
+                PersistTubePlacement();
             }
             catch (Exception ex)
             {
@@ -1772,6 +1717,32 @@ namespace ConditioningControlPanel
             {
                 _isDragging = false;
                 ReleaseMouseCapture();
+                // Remember where the user parked the detached companion (#669). Debounced Save
+                // coalesces the write, so persisting on drag-end (not per move tick) is plenty.
+                PersistTubePlacement();
+            }
+        }
+
+        /// <summary>
+        /// Save the detached companion's current Left/Top + scale so it returns to the same spot
+        /// next launch (#669). No-ops while attached (position is parent-anchored, not user-owned)
+        /// and while a restore is in flight (so the restore doesn't immediately re-save itself).
+        /// </summary>
+        private void PersistTubePlacement()
+        {
+            if (_isAttached || _restoringPlacement) return;
+            try
+            {
+                var s = App.Settings?.Current;
+                if (s == null) return;
+                s.AvatarTubeLeft = Left;
+                s.AvatarTubeTop = Top;
+                s.AvatarTubeScale = _currentScale;
+                App.Settings?.Save();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Avatar tube: persist placement failed ({Error})", ex.Message);
             }
         }
 
@@ -1831,6 +1802,66 @@ namespace ConditioningControlPanel
             catch
             {
                 // Ignore errors - position clamping is best-effort
+            }
+        }
+
+        /// <summary>
+        /// Restore the saved companion placement on startup (#669): if it was detached at last exit,
+        /// re-detach silently and reapply the saved scale + Left/Top, clamped onto a currently-connected
+        /// monitor so a since-disconnected screen can't strand it off-view. No-op when it was attached
+        /// (the default) so existing users see no change until they move/detach it themselves.
+        /// </summary>
+        public void RestoreSavedPlacement()
+        {
+            if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(RestoreSavedPlacement)); return; }
+
+            var s = App.Settings?.Current;
+            if (s == null || !s.AvatarTubeDetached) return; // attached is the default — nothing to restore
+
+            _restoringPlacement = true;
+            try
+            {
+                // Float it free first (silent — no "I'm free!" giggle on a cold boot).
+                Detach(silent: true);
+
+                // Reapply the saved scale before positioning so the clamp uses the real footprint.
+                if (!double.IsNaN(s.AvatarTubeScale) && s.AvatarTubeScale > 0)
+                {
+                    _currentScale = Math.Clamp(s.AvatarTubeScale, MinScale, MaxScale);
+                    ApplyScale();
+                    UpdateLayout(); // so ActualWidth/Height reflect the restored scale for the clamp
+                }
+
+                // Reapply the saved position, then clamp onto a live monitor. Guard AllScreens (it can
+                // be empty during certain system states) and wrap in try-catch for the mixed-DPI
+                // PointToScreen/coordinate hazards this window is prone to (#477).
+                if (!double.IsNaN(s.AvatarTubeLeft) && !double.IsNaN(s.AvatarTubeTop))
+                {
+                    try
+                    {
+                        if (System.Windows.Forms.Screen.AllScreens.Length > 0)
+                        {
+                            Left = s.AvatarTubeLeft;
+                            Top = s.AvatarTubeTop;
+                            ClampAvatarPosition(); // keep at least half of it on a connected screen
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("Avatar tube: restore position failed ({Error})", ex.Message);
+                    }
+                }
+
+                EnsureVisibleWhenDetached();
+                App.Logger?.Information("Avatar tube: restored detached placement (scale {Scale:0.00})", _currentScale);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Avatar tube: RestoreSavedPlacement failed ({Error})", ex.Message);
+            }
+            finally
+            {
+                _restoringPlacement = false;
             }
         }
     }

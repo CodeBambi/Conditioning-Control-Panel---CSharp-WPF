@@ -65,33 +65,6 @@
             </Setter>
         </Style>
 
-        <!-- Exclusives Submenu Button Style — used inside the Exclusives popup -->
-        <Style x:Key="ExclusivesSubmenuButton" TargetType="Button">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-            <Setter Property="HorizontalAlignment" Value="Stretch"/>
-            <Setter Property="Padding" Value="10,8"/>
-            <Setter Property="Margin" Value="0,1"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="border" Background="{TemplateBinding Background}"
-                                CornerRadius="6" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#33FF69B4"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
         <!-- Tab Button Active Style — filled accent with bottom indicator -->
         <Style x:Key="TabButtonActive" TargetType="Button">
             <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
@@ -420,10 +393,10 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Slider">
                         <Grid>
-                            <Border Height="3" Background="{DynamicResource PanelAccentBrush}" CornerRadius="1.5" VerticalAlignment="Center"/>
+                            <Border x:Name="TrackGroove" Height="3" Background="{DynamicResource PanelAccentBrush}" CornerRadius="1.5" VerticalAlignment="Center"/>
                             <Track x:Name="PART_Track">
                                 <Track.DecreaseRepeatButton>
-                                    <RepeatButton Command="Slider.DecreaseLarge">
+                                    <RepeatButton x:Name="TrackFill" Command="Slider.DecreaseLarge">
                                         <RepeatButton.Template>
                                             <ControlTemplate TargetType="RepeatButton">
                                                 <Border Height="3" Background="{DynamicResource PinkBrush}" CornerRadius="1.5"/>
@@ -441,10 +414,10 @@
                                     </RepeatButton>
                                 </Track.IncreaseRepeatButton>
                                 <Track.Thumb>
-                                    <Thumb>
+                                    <Thumb x:Name="SliderThumb">
                                         <Thumb.Template>
                                             <ControlTemplate>
-                                                <Border Width="14" Height="14" CornerRadius="7"
+                                                <Border x:Name="ThumbBody" Width="14" Height="14" CornerRadius="7"
                                                         Background="White" Cursor="Hand"
                                                         BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"/>
                                             </ControlTemplate>
@@ -453,6 +426,18 @@
                                 </Track.Thumb>
                             </Track>
                         </Grid>
+                        <!-- A disabled slider must LOOK disabled. Without this it renders
+                             identically to a live one and silently swallows every drag, so
+                             each caller was dimming its own control by hand (and most forgot).
+                             Dim the groove, the pink fill and the thumb; the thumb also drops
+                             its hand cursor via IsEnabled on the Thumb itself. -->
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="TrackGroove" Property="Opacity" Value="0.35"/>
+                                <Setter TargetName="TrackFill" Property="Opacity" Value="0.28"/>
+                                <Setter TargetName="SliderThumb" Property="Opacity" Value="0.35"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>

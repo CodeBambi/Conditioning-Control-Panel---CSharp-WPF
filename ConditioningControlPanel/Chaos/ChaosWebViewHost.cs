@@ -67,6 +67,62 @@ internal sealed class ChaosWebViewHost : IDisposable
 
         /// <summary>Window title (shown on the taskbar/Alt-Tab in windowed mode).</summary>
         public string WindowTitle { get; init; } = "Conditioning Control Panel";
+
+        /// <summary>true = glue this window ABOVE MainWindow via native (GWL_HWNDPARENT) ownership,
+        /// so nothing the app does to main can bury the game surface. Set for the player-facing
+        /// game windows (DtRH, Graded Intake, Bureau). See <see cref="AttachMainWindowGlue"/>.</summary>
+        public bool OwnedByMainWindow { get; init; }
+    }
+
+    /// <summary>Virtual host serving DOWNLOADED content packs (audio that no longer ships in the
+    /// installer — see docs/CONTENT_PACKS_PLAN.md §3). Mirrors the install-dir web layout, so a file
+    /// at https://ccp.game/dtrh/assets/x.mp3 is at https://ccp.content/dtrh/assets/x.mp3 when the
+    /// pack that owns it has been fetched. The page-side shims (dtrh/shared/audioSrc.js,
+    /// intake/core/audioSrc.js) pick a host per file and fall back to the other one once.</summary>
+    public const string ContentHost = "ccp.content";
+
+    /// <summary>%LOCALAPPDATA%/ConditioningControlPanel/content/Resources/web — the pack mirror of
+    /// {exe}/Resources/web. The install dir is not writable under Program Files, so downloads land
+    /// here (see the plan's "Runtime" section). Anchored on the SAME root the C# probe uses
+    /// (<see cref="Services.ContentLocator.ContentRoot"/>) so the two can never drift apart.</summary>
+    public static string ContentWebRoot
+    {
+        get
+        {
+            var root = Services.ContentLocator.ContentRoot;
+            // Empty = the probe couldn't resolve LocalApplicationData. Stay empty rather than
+            // producing a RELATIVE path that CreateDirectory would honour next to the exe.
+            return string.IsNullOrEmpty(root) ? string.Empty : Path.Combine(root, "Resources", "web");
+        }
+    }
+
+    /// <summary>The ccp.content mapping, with the folder created first — WebView2 SKIPS a mapping
+    /// whose folder is missing (the same rule that forces ccp.spirals to be created before Launch).
+    /// Allow, not Deny: the pages fetch()/decodeAudioData these files and route media elements
+    /// through WebAudio from the ccp.game origin, both of which are CORS-checked — exactly why
+    /// ccp.mod (a creator mod's audio, consumed the same way) is Allow too.</summary>
+    public static (string, string, CoreWebView2HostResourceAccessKind) ContentMapping()
+    {
+        var root = ContentWebRoot;
+        if (!string.IsNullOrEmpty(root))
+        {
+            try { Directory.CreateDirectory(root); }
+            catch (Exception ex) { App.Logger?.Debug("ChaosWebViewHost: content dir create failed: {E}", ex.Message); }
+        }
+        return (ContentHost, root, CoreWebView2HostResourceAccessKind.Allow);
+    }
+
+    /// <summary>True when downloaded pack content is actually on disk (folder exists AND is not
+    /// empty). Drives window.CCP_CONTENT_READY: false means "everything is still in the install
+    /// dir", which is the legacy full-install case and the skipped-the-download case alike.</summary>
+    private static bool HasPackContent()
+    {
+        try
+        {
+            var root = ContentWebRoot;
+            return Directory.Exists(root) && Directory.GetFileSystemEntries(root).Length > 0;
+        }
+        catch { return false; }
     }
 
     private readonly Options _opts;
@@ -77,6 +133,12 @@ internal sealed class ChaosWebViewHost : IDisposable
     private bool _disposed;
     private bool _isFullscreen;
     private double _windowedW, _windowedH;   // remembered windowed size (default 85% of screen)
+    private Window? _glueOwner;              // MainWindow, while OwnedByMainWindow glue is live
+    private EventHandler? _glueOwnerStateChanged;
+    private IntPtr _glueOwnerHandle;
+    private bool _glueAttached;
+    private HwndSource? _glueHwndSource;     // our own window's source, while the cascade veto is hooked
+    private HwndSourceHook? _glueWndHook;
 
     public bool IsReady { get; private set; }
     public Window? Window => _window;
@@ -121,6 +183,9 @@ internal sealed class ChaosWebViewHost : IDisposable
         if (!_opts.InputEnabled)
             _window.SourceInitialized += (_, _) => ApplyPassiveExStyles(_window);
         _window.Show();
+        _countedActive = true;
+        System.Threading.Interlocked.Increment(ref _activeHostCount);
+        if (_opts.OwnedByMainWindow) AttachMainWindowGlue();
         if (_opts.InputEnabled) { try { _window.Activate(); } catch { } }
 
         _ = InitWebAsync();
@@ -152,6 +217,9 @@ internal sealed class ChaosWebViewHost : IDisposable
             _window.WindowState = WindowState.Normal;
         }
         _isFullscreen = fullscreen;
+        // WindowStyle/ResizeMode churn re-stamps the frame; re-assert the owner link so a
+        // fullscreen toggle can never silently unglue the window from main.
+        RefreshNativeOwner();
     }
 
     /// <summary>True while the window is borderless-fullscreen (host-owned, not the browser API).</summary>
@@ -199,15 +267,213 @@ internal sealed class ChaosWebViewHost : IDisposable
         catch { }
     }
 
+    // ============================ main-window glue ============================
+    //
+    // Native (Win32) ownership. A player-facing game window is OWNED by MainWindow, so the window
+    // manager itself keeps it directly above main and raises/lowers the pair as a GROUP. Whatever
+    // lifts main — the natively-owned avatar tube being re-activated by a bark, a flash/video
+    // window handing focus back when it closes, a tray restore, a panic Topmost pulse (which
+    // propagates to owned windows and back) — now carries the game surface up with it instead of
+    // burying it. No polling, no manual raises, nothing to race.
+    //
+    // This is the same cure the avatar tube got (AvatarTubeWindow.Windowing.ApplyNativeOwner):
+    // raw GWL_HWNDPARENT, NOT WPF's Window.Owner, which additionally drops the taskbar button and
+    // couples managed visibility. Topmost is deliberately NOT used — it would float the game over
+    // every OTHER application on the desktop, which is not what "above main" means.
+
+    private const int GWL_HWNDPARENT = -8;
+
+    /// <summary>Own this window to MainWindow and keep the link in step with main's window state.</summary>
+    private void AttachMainWindowGlue()
+    {
+        try
+        {
+            if (_window == null || _glueAttached) return;
+            var main = (Window?)App.MainWindowRef ?? Application.Current?.MainWindow;
+            if (main == null || ReferenceEquals(main, _window)) return;
+            var ownerHwnd = new WindowInteropHelper(main).Handle;
+            if (ownerHwnd == IntPtr.Zero) return;
+
+            _glueOwner = main;
+            _glueOwnerHandle = ownerHwnd;
+            _glueAttached = true;
+            RefreshNativeOwner();
+
+            // Windows hides a window's owned windows while the owner is MINIMIZED — with the glue
+            // on, minimizing main would make the game vanish (taskbar button and all) with no way
+            // back. Drop the link for the duration of the minimize, restore it when main returns.
+            // (Tray "minimize" is Hide(), not minimize, and does not cascade — DtRH relies on that.)
+            //
+            // StateChanged ALONE was never enough: it is raised off main's WM_SIZE, i.e. after the
+            // window manager has already run the cascade, so by the time the link was dropped the
+            // game window had been hidden and clearing GWL_HWNDPARENT did not bring it back. That
+            // is why minimizing main still took the intake down with it. Three layers now:
+            //   1. VetoCascadeHide  — the WM_SHOWWINDOW/SW_PARENTCLOSING notification the cascade
+            //                         sends us first; un-glue there and refuse the hide (this is
+            //                         the only layer that runs BEFORE we are hidden).
+            //   2. StateChanged     — re-assert the link for main's new state (and re-raise above
+            //                         main when it comes back).
+            //   3. a deferred visibility repair — if the hide still landed (the ordering of the
+            //                         cascade against the owner's WM_SIZE is not contractual), show
+            //                         ourselves again once the pump has drained.
+            HookCascadeVeto();
+            _glueOwnerStateChanged = (_, _) =>
+            {
+                RefreshNativeOwner();
+                try
+                {
+                    _window?.Dispatcher.BeginInvoke(
+                        System.Windows.Threading.DispatcherPriority.Background,
+                        new Action(EnsureNativeVisible));
+                }
+                catch { }
+            };
+            main.StateChanged += _glueOwnerStateChanged;
+            App.Logger?.Information("{Tag}: glued above MainWindow (native owner)", _opts.LogTag);
+        }
+        catch (Exception ex) { App.Logger?.Debug("{Tag}.AttachMainWindowGlue: {E}", _opts.LogTag, ex.Message); }
+    }
+
+    /// <summary>Re-assert the owner link, honouring main's current window state. No-op when the
+    /// host was not launched with <see cref="Options.OwnedByMainWindow"/>.</summary>
+    private void RefreshNativeOwner()
+    {
+        if (!_glueAttached) return;
+        bool ownerDown = _glueOwner == null || _glueOwner.WindowState == WindowState.Minimized;
+        ApplyNativeOwner(!ownerDown);
+        // Main is minimized: nothing can bury us, so the link buys nothing and the cascade would
+        // only take us down with it. Make sure we survived it.
+        if (ownerDown) EnsureNativeVisible();
+    }
+
+    private void ApplyNativeOwner(bool owned)
+    {
+        try
+        {
+            if (_window == null) return;
+            var hwnd = new WindowInteropHelper(_window).Handle;
+            if (hwnd == IntPtr.Zero) return;
+            SetWindowLongPtr(hwnd, GWL_HWNDPARENT, owned ? _glueOwnerHandle : IntPtr.Zero);
+            // Owner changes are cached — flush the frame so the z-order link takes effect now.
+            SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            // Ownership is a rule about the FUTURE ("main may never be placed above this window"),
+            // not a reorder: a link re-attached while main happens to sit on top would leave the
+            // page buried under it forever. Now that the link is dropped and restored across every
+            // minimize, slot ourselves directly above main each time we take it — without
+            // activating, so re-gluing never steals focus from whatever the user is doing.
+            if (owned && _glueOwnerHandle != IntPtr.Zero)
+            {
+                // ...but "directly above main" is not high enough. An ATTACHED avatar tube is owned by
+                // main too, so it is our SIBLING, and Win32 defines no order between two windows sharing
+                // an owner — inserting directly above main drops us UNDER a tube already sitting there,
+                // which is how the tube and this page interleaved into a torn half-and-half composite.
+                // An attached tube is conceptually part of the main window (that is what "attached"
+                // means), so it rides at main's level and we go above the pair, not between them.
+                //
+                // Ask the tube to drop to main's level FIRST. Slotting after the tube is not enough on
+                // its own: if the tube is carrying WS_EX_TOPMOST (a Topmost pulse on main propagates to
+                // its owned windows), inserting a non-topmost window "after" a topmost one only puts us
+                // at the top of the NON-topmost band — still under the tube, which is how the tube ended
+                // up floating over the Graded Intake window. SinkToMainZOrder self-marshals to the avatar
+                // thread (never block main on it), so it lands right after our own insert below and wins.
+                try { App.AvatarWindow?.SinkToMainZOrder(); } catch { }
+                var insertAfter = _glueOwnerHandle;
+                var tube = App.AvatarWindow?.AttachedHandleOrZero ?? IntPtr.Zero;
+                if (tube != IntPtr.Zero && IsWindowVisible(tube)) insertAfter = tube;
+                SetWindowPos(hwnd, insertAfter, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+        }
+        catch (Exception ex) { App.Logger?.Debug("{Tag}.ApplyNativeOwner: {E}", _opts.LogTag, ex.Message); }
+    }
+
+    /// <summary>
+    /// Layer 1 of the minimize decoupling: WM_SHOWWINDOW with lParam == SW_PARENTCLOSING is the
+    /// notification the window manager sends an OWNED window just before hiding it along with its
+    /// minimizing owner. Handling it without letting DefWindowProc run refuses that hide — and it
+    /// is the only hook that fires before we are gone, whichever way main got minimized (title-bar
+    /// button, taskbar click, Win+D, or the app minimizing itself, as the intake launch does).
+    /// The owner link is dropped in the same breath so nothing re-hides us afterwards.
+    /// </summary>
+    private void HookCascadeVeto()
+    {
+        try
+        {
+            if (_window == null || _glueWndHook != null) return;
+            var hwnd = new WindowInteropHelper(_window).Handle;
+            if (hwnd == IntPtr.Zero) return;
+            var src = HwndSource.FromHwnd(hwnd);
+            if (src == null) return;
+            _glueWndHook = VetoCascadeHide;
+            _glueHwndSource = src;
+            src.AddHook(_glueWndHook);
+        }
+        catch (Exception ex) { App.Logger?.Debug("{Tag}.HookCascadeVeto: {E}", _opts.LogTag, ex.Message); }
+    }
+
+    private IntPtr VetoCascadeHide(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (_glueAttached && msg == WM_SHOWWINDOW
+            && wParam == IntPtr.Zero                       // fShow = FALSE, i.e. "about to hide"
+            && lParam.ToInt64() == SW_PARENTCLOSING)
+        {
+            ApplyNativeOwner(false);
+            handled = true;   // swallow it: DefWindowProc is what would hide us
+        }
+        return IntPtr.Zero;
+    }
+
+    /// <summary>Layer 3: undo a cascade hide that got through. WPF still believes the window is
+    /// Visible (the hide happened entirely in USER32, behind its back), so this is a native-only
+    /// repair — no WPF visibility churn, no relayout, and SW_SHOWNA rather than SW_SHOW so ducking
+    /// main never yanks focus back to the page.</summary>
+    private void EnsureNativeVisible()
+    {
+        try
+        {
+            if (_disposed || _window == null) return;
+            if (_window.Visibility != Visibility.Visible) return;   // we hid it on purpose
+            var hwnd = new WindowInteropHelper(_window).Handle;
+            if (hwnd == IntPtr.Zero || IsWindowVisible(hwnd)) return;
+            ShowWindow(hwnd, SW_SHOWNA);
+        }
+        catch (Exception ex) { App.Logger?.Debug("{Tag}.EnsureNativeVisible: {E}", _opts.LogTag, ex.Message); }
+    }
+
+    /// <summary>Unhook the state listener and clear the native owner before the window closes, so
+    /// no stale owner link or event subscription outlives the host.</summary>
+    private void DetachMainWindowGlue()
+    {
+        if (!_glueAttached) return;
+        try
+        {
+            if (_glueOwner != null && _glueOwnerStateChanged != null)
+                _glueOwner.StateChanged -= _glueOwnerStateChanged;
+        }
+        catch { }
+        try
+        {
+            if (_glueHwndSource != null && _glueWndHook != null)
+                _glueHwndSource.RemoveHook(_glueWndHook);
+        }
+        catch { }
+        ApplyNativeOwner(false);
+        _glueAttached = false;
+        _glueOwner = null;
+        _glueOwnerStateChanged = null;
+        _glueOwnerHandle = IntPtr.Zero;
+        _glueHwndSource = null;
+        _glueWndHook = null;
+    }
+
     private async Task InitWebAsync()
     {
         if (_initStarted || _web == null) return;
         _initStarted = true;
         try
         {
-            var userDataFolder = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "ConditioningControlPanel", _opts.UserDataFolderName);
+            var userDataFolder = Path.Combine(App.UserDataPath, _opts.UserDataFolderName);
             Directory.CreateDirectory(userDataFolder);
 
             // --disable-direct-composition-video-overlays: keep the WebGL swapchain composited
@@ -243,6 +509,29 @@ internal sealed class ChaosWebViewHost : IDisposable
                     continue;
                 }
                 core.SetVirtualHostNameToFolderMapping(host, folder, access);
+            }
+
+            // Tell a page that maps ccp.content whether pack audio is actually there, BEFORE its
+            // first script runs: the audio shims read window.CCP_CONTENT_READY to decide which host
+            // to try first (they still fall back to the other one per file, so a wrong guess costs
+            // one 404, never a missing sound). Pages without the mapping never see the flag.
+            bool mapsContent = false;
+            foreach (var (host, _, _) in _opts.Mappings)
+                if (string.Equals(host, ContentHost, StringComparison.OrdinalIgnoreCase)) { mapsContent = true; break; }
+            if (mapsContent)
+            {
+                var ready = HasPackContent() ? "true" : "false";
+                try
+                {
+                    await core.AddScriptToExecuteOnDocumentCreatedAsync(
+                        "window.CCP_CONTENT_READY = " + ready + ";").ConfigureAwait(true);
+                    if (_disposed) return;
+                }
+                catch (Exception ex)
+                {
+                    // Not fatal: the shims default to the install-dir host when the flag is absent.
+                    App.Logger?.Debug("{Tag}: CCP_CONTENT_READY inject failed: {E}", _opts.LogTag, ex.Message);
+                }
             }
 
             core.NavigationStarting += OnNavigationStarting;
@@ -341,10 +630,19 @@ internal sealed class ChaosWebViewHost : IDisposable
             }
         }
         catch { }
+        try { DetachMainWindowGlue(); } catch { }
         try { _web?.Dispose(); } catch { }
         try { _window?.Close(); } catch { }
+        if (_countedActive) { _countedActive = false; System.Threading.Interlocked.Decrement(ref _activeHostCount); }
         _web = null; _window = null; IsReady = false; _pending.Clear();
     }
+
+    // How many game hosts (Bureau / Graded Intake / DtRH) currently have a window up. The ATTACHED
+    // avatar tube consults this before its focus-stealing raise: an attached tube rides at main's
+    // level by definition, so it must not lift itself over a game page the user is working in.
+    private static int _activeHostCount;
+    private bool _countedActive;
+    internal static bool AnyHostActive => System.Threading.Volatile.Read(ref _activeHostCount) > 0;
 
     // Passive backdrops absorb clicks (no WS_EX_TRANSPARENT) but never steal focus / show in Alt-Tab.
     private static void ApplyPassiveExStyles(Window w)
@@ -360,8 +658,20 @@ internal sealed class ChaosWebViewHost : IDisposable
     }
 
     private const int GWL_EXSTYLE = -20;
+    private const int WM_SHOWWINDOW = 0x0018;
+    private const int SW_PARENTCLOSING = 1;   // lParam of the owner-minimize cascade's WM_SHOWWINDOW
+    private const int SW_SHOWNA = 8;          // show at current size/pos WITHOUT activating
     private const int WS_EX_NOACTIVATE = 0x08000000;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOZORDER = 0x0004;
+    private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_FRAMECHANGED = 0x0020;
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)] private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 }

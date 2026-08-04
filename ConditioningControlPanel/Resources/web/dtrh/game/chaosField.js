@@ -113,7 +113,28 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     currents: null,           // Undertow: [{x,y,r,pull}] vortices that drag the field
     currentChannelMult: 1.0,  // Undertow: hold-to-snap takes this much longer inside one
     fuseTickMult: 1.0,        // Vertigo: fuses burn hotter while the world is flipped
+    incognito: false,         // Incognito: hide each bubble's identity - benign -> faded plain,
+                              //   effect lives -> generic blurred plain (fuse kept). You can't read the field.
   };
+
+  // Incognito disguise (biome mech sets phys.incognito): what a bubble should
+  // LOOK like when its identity is hidden - visuals only, behaviour untouched.
+  //   null       -> honest (pickups, the Brittle/shatter, the Tease, the Prism)
+  //   { }        -> a faded plain soap bubble (benign treats: flash/subliminal/plain/escort)
+  //   { fuse }   -> a generic blurred plain bubble that STILL carries its fuse (every effect live)
+  const INCOG_PLAIN_SPRITE = '/dtrh/assets/bubbles/bubble.png';
+  const INCOG_PLAIN_TINT = 'rgb(184,222,255)';
+  function incognitoDisguise(spec) {
+    const k = spec.kind;
+    // Pickups and the self-telegraphing skill-checks stay honest: hiding a
+    // reward or a "don't touch it" trap would just be unfair, not mysterious.
+    if (k === 'freeze' || k === 'golden' || k === 'heart' || k === 'droplet'
+      || k === 'darter' || k === 'material' || k === 'tease' || k === 'prism'
+      || k === 'brittle') return null;              // brittle = shatter shows as before
+    if (k === 'live') return { fuse: true };        // any effect -> generic plain + fuse + blur
+    if (k === 'treat') return {};                   // flash/subliminal/plain/escort -> faded plain
+    return null;
+  }
 
   /** Any Undertow current covering (x,y)? (biome mech re-feeds phys.currents) */
   function inCurrent(x, y) {
@@ -155,16 +176,27 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     if (spec.isSweeper) wrap.classList.add('cf-bubble--sweeper');
     wrap.style.width = wrap.style.height = `${size}px`;
 
+    // Incognito: swap the face for an anonymous plain bubble (behaviour untouched).
+    const dis = phys.incognito ? incognitoDisguise(spec) : null;
+
     const body = document.createElement('div');
     body.className = 'cf-bubble-body';
-    if (spec.sprite) body.style.backgroundImage = `url('${spec.sprite}')`;
-    else body.style.background = `radial-gradient(circle at 32% 30%, rgba(255,255,255,0.75), ${spec.tint} 58%, rgba(0,0,0,0.35))`;
-    body.style.setProperty('--tint', spec.tint);
-    if (spec.label) {
-      const lab = document.createElement('span');
-      lab.className = 'cf-bubble-label';
-      lab.textContent = spec.label;
-      body.appendChild(lab);
+    if (dis) {
+      // Every disguised bubble wears the classic soap-bubble sprite, no glyph.
+      body.style.backgroundImage = `url('${INCOG_PLAIN_SPRITE}')`;
+      body.style.setProperty('--tint', INCOG_PLAIN_TINT);
+      if (dis.fuse) { body.style.filter = 'blur(1.7px)'; body.style.opacity = '0.82'; } // effect lives read as a blurred live
+      else { body.style.opacity = '0.5'; }                                              // benign treats read as a faded plain
+    } else {
+      if (spec.sprite) body.style.backgroundImage = `url('${spec.sprite}')`;
+      else body.style.background = `radial-gradient(circle at 32% 30%, rgba(255,255,255,0.75), ${spec.tint} 58%, rgba(0,0,0,0.35))`;
+      body.style.setProperty('--tint', spec.tint);
+      if (spec.label) {
+        const lab = document.createElement('span');
+        lab.className = 'cf-bubble-label';
+        lab.textContent = spec.label;
+        body.appendChild(lab);
+      }
     }
     wrap.appendChild(body);
 
@@ -312,6 +344,10 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
       if (b.telegraphLeft > 0) return;                // not active yet
       // The Spanker keeps working after the first hit: a mowing sweeper can be
       // re-smacked (fresh fling, fresh bounces) as many times as you land it.
+      // NOTE: the boon REPLACES the catch by design ("rabbits can't be caught
+      // anymore... you give up the free slow-mo" - catalog.js). Don't add a catch
+      // path here for spanker runs: the whole rabbit tree (electrified_rabbits,
+      // hopscotch, tail_plug, riptide) is built on smacked rabbits mowing.
       if (phys.spanker) { smack(b, x, y); return; }
       if (b.sweeper) return;                          // sweepers can't be CAUGHT bare-handed
       const quick = (performance.now() - b.activeAt) <= (b.spec.quickWindowMs || 500);

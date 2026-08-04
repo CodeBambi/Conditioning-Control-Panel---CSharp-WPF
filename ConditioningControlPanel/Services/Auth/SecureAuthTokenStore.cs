@@ -13,8 +13,7 @@ namespace ConditioningControlPanel.Services
     {
         private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("ConditioningControlPanel_AuthToken_v1");
         private static readonly string StoragePath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ConditioningControlPanel",
+            App.UserDataPath,
             "auth_token.dat");
 
         private static string? _cached;

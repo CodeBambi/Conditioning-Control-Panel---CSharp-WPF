@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -54,6 +54,9 @@ namespace ConditioningControlPanel
             SettingsTab.ChkFlashAudio.IsChecked = s.FlashAudioEnabled;
             SettingsTab.SliderFlashDuration.IsEnabled = !s.FlashAudioEnabled;
             SettingsTab.SliderFlashDuration.Opacity = s.FlashAudioEnabled ? 0.5 : 1.0;
+            SettingsTab.ChkFlashAvoidCenter.IsChecked = s.FlashAvoidCenter;
+            SettingsTab.SliderCenterExclusion.Value = s.FlashCenterExclusionPercent;
+            SettingsTab.TxtCenterExclusion.Text = $"{s.FlashCenterExclusionPercent}%";
             
             // Set audio link state based on frequency
             _isLoading = false;
@@ -88,8 +91,10 @@ namespace ConditioningControlPanel
             SettingsTab.ChkOfflineMode.IsChecked = s.OfflineMode;
             if (SettingsTab.ChkPerformanceMode != null) SettingsTab.ChkPerformanceMode.IsChecked = s.PerformanceMode;
             if (SettingsTab.ChkAutoPerformance != null) SettingsTab.ChkAutoPerformance.IsChecked = s.AutoPerformanceMode;
+            if (SettingsTab.CmbMotionLevel != null) SettingsTab.CmbMotionLevel.SelectedIndex = (int)s.MotionLevel;
             if (SettingsTab.ChkVideoHwDecode != null) SettingsTab.ChkVideoHwDecode.IsChecked = s.VideoForceHardwareDecoding;
             if (SettingsTab.ChkUnifiedOverlay != null) SettingsTab.ChkUnifiedOverlay.IsChecked = s.UnifiedOverlayHost;
+            if (SettingsTab.ChkIntakeNudge != null) SettingsTab.ChkIntakeNudge.IsChecked = s.IntakeNudgeEnabled;
             RemoteControlTab.ChkStopEffectsOnRemoteDisconnect.IsChecked = s.StopEffectsOnRemoteDisconnect;
             if (RemoteControlTab.ChkRemoteShareAvatar != null) RemoteControlTab.ChkRemoteShareAvatar.IsChecked = s.RemoteShareAvatar;
 
@@ -201,7 +206,7 @@ namespace ConditioningControlPanel
             BambiTakeoverTab.ChkAutonomyFlash.IsChecked = s.AutonomyCanTriggerFlash;
             BambiTakeoverTab.ChkAutonomyVideo.IsChecked = s.AutonomyCanTriggerVideo;
             BambiTakeoverTab.ChkAutonomyWebVideo.IsChecked = s.AutonomyCanTriggerWebVideo;
-            BambiTakeoverTab.ChkTakeoverVideosStrict.IsChecked = s.TakeoverVideosStrict;
+            BambiTakeoverTab.ChkProtectBrowserVideo.IsChecked = s.ProtectBrowserVideoPlayback;
             BambiTakeoverTab.ChkAutonomySubliminal.IsChecked = s.AutonomyCanTriggerSubliminal;
             BambiTakeoverTab.ChkAutonomyBubbles.IsChecked = s.AutonomyCanTriggerBubbles;
             BambiTakeoverTab.ChkAutonomyComment.IsChecked = s.AutonomyCanComment;
@@ -211,6 +216,8 @@ namespace ConditioningControlPanel
             BambiTakeoverTab.ChkAutonomyPinkFilter.IsChecked = s.AutonomyCanTriggerPinkFilter;
             BambiTakeoverTab.ChkAutonomyBouncingText.IsChecked = s.AutonomyCanTriggerBouncingText;
             BambiTakeoverTab.ChkAutonomyBubbleCount.IsChecked = s.AutonomyCanTriggerBubbleCount;
+            BambiTakeoverTab.ChkAutonomyWallpaper.IsChecked = s.AutonomyCanTriggerWallpaper;
+            RefreshWallpaperFolderLabel();
             BambiTakeoverTab.ChkAutonomyVoice.IsChecked = s.AutonomyCanTriggerVoiceCommand && s.MicConsentGiven;
             BambiTakeoverTab.ChkAutonomyResumeOnStartup.IsChecked = s.AutonomyResumeOnStartup;
             BambiTakeoverTab.ChkShowTakeoverCountdown.IsChecked = s.ShowTakeoverCountdownBar;
@@ -255,69 +262,12 @@ namespace ConditioningControlPanel
             ProgressionTab.ChkRampLinkSubAudio.IsChecked = s.RampLinkSubliminalAudio;
             ProgressionTab.ChkEndAtRamp.IsChecked = s.EndSessionOnRampComplete;
 
-            // Haptics
-            HapticsTab.ChkHapticsEnabled.IsChecked = s.Haptics.Enabled;
-            HapticsTab.SliderHapticIntensity.Value = s.Haptics.GlobalIntensity * 100;
-
-            // Set provider combo box first
-            foreach (System.Windows.Controls.ComboBoxItem item in HapticsTab.CmbHapticProvider.Items)
-            {
-                if (item.Tag?.ToString() == s.Haptics.Provider.ToString())
-                {
-                    HapticsTab.CmbHapticProvider.SelectedItem = item;
-                    break;
-                }
-            }
-
-            // Then set URL based on provider
-            HapticsTab.TxtHapticUrl.Text = s.Haptics.Provider switch
-            {
-                HapticProviderType.Lovense => s.Haptics.LovenseUrl,
-                HapticProviderType.Buttplug => s.Haptics.ButtplugUrl,
-                _ => s.Haptics.LovenseUrl
-            };
-
-            // Set hint text based on provider
-            HapticsTab.TxtHapticUrlHint.Text = s.Haptics.Provider switch
-            {
-                HapticProviderType.Lovense => "Lovense: Enter IP from Lovense Remote → Settings → Game Mode (http://IP:30010)",
-                HapticProviderType.Buttplug => "Buttplug: Start Intiface Central, use default ws://localhost:12345",
-                _ => "Lovense: Enter IP from Lovense Remote → Settings → Game Mode (http://IP:30010)"
-            };
-
-            // Auto-connect setting
-            HapticsTab.ChkHapticAutoConnect.IsChecked = s.Haptics.AutoConnect;
-
-            // Per-feature haptic settings
-            HapticsTab.ChkHapticBubble.IsChecked = s.Haptics.BubblePopEnabled;
-            HapticsTab.SliderHapticBubble.Value = s.Haptics.BubblePopIntensity * 100;
-            HapticsTab.ChkHapticFlashDisplay.IsChecked = s.Haptics.FlashDisplayEnabled;
-            HapticsTab.SliderHapticFlashDisplay.Value = s.Haptics.FlashDisplayIntensity * 100;
-            HapticsTab.ChkHapticFlashClick.IsChecked = s.Haptics.FlashClickEnabled;
-            HapticsTab.SliderHapticFlashClick.Value = s.Haptics.FlashClickIntensity * 100;
-            HapticsTab.ChkHapticVideo.IsChecked = s.Haptics.VideoEnabled;
-            HapticsTab.SliderHapticVideo.Value = s.Haptics.VideoIntensity * 100;
-            HapticsTab.ChkHapticTargetHit.IsChecked = s.Haptics.TargetHitEnabled;
-            HapticsTab.SliderHapticTargetHit.Value = s.Haptics.TargetHitIntensity * 100;
-            HapticsTab.ChkHapticSubliminal.IsChecked = s.Haptics.SubliminalEnabled;
-            HapticsTab.SliderHapticSubliminal.Value = s.Haptics.SubliminalIntensity * 100;
-            HapticsTab.ChkHapticLevelUp.IsChecked = s.Haptics.LevelUpEnabled;
-            HapticsTab.SliderHapticLevelUp.Value = s.Haptics.LevelUpIntensity * 100;
-            HapticsTab.ChkHapticAchievement.IsChecked = s.Haptics.AchievementEnabled;
-            HapticsTab.SliderHapticAchievement.Value = s.Haptics.AchievementIntensity * 100;
-            HapticsTab.ChkHapticBouncingText.IsChecked = s.Haptics.BouncingTextEnabled;
-            HapticsTab.SliderHapticBouncingText.Value = s.Haptics.BouncingTextIntensity * 100;
-
-            // Per-feature haptic mode dropdowns
-            HapticsTab.CmbHapticBubbleMode.SelectedIndex = (int)s.Haptics.BubblePopMode;
-            HapticsTab.CmbHapticFlashDisplayMode.SelectedIndex = (int)s.Haptics.FlashDisplayMode;
-            HapticsTab.CmbHapticFlashClickMode.SelectedIndex = (int)s.Haptics.FlashClickMode;
-            HapticsTab.CmbHapticVideoMode.SelectedIndex = (int)s.Haptics.VideoMode;
-            HapticsTab.CmbHapticTargetHitMode.SelectedIndex = (int)s.Haptics.TargetHitMode;
-            HapticsTab.CmbHapticSubliminalMode.SelectedIndex = (int)s.Haptics.SubliminalMode;
-            HapticsTab.CmbHapticLevelUpMode.SelectedIndex = (int)s.Haptics.LevelUpMode;
-            HapticsTab.CmbHapticAchievementMode.SelectedIndex = (int)s.Haptics.AchievementMode;
-            HapticsTab.CmbHapticBouncingTextMode.SelectedIndex = (int)s.Haptics.BouncingTextMode;
+            // Haptics — the whole tab loads itself now (MainWindow/MainWindow.Haptics.cs).
+            // The 30-odd per-control assignments that used to live here died with the Phase E
+            // rebuild: the routing matrix is data-bound to HapticSettingsV2, so there is nothing
+            // left to copy into it by hand. The provider combo (and its Mock-vs-blank fallback
+            // dance) is gone too — providers are per-provider checkboxes now.
+            LoadHapticsSettingsToUi();
 
             // Keyword Triggers
             {
@@ -430,16 +380,9 @@ namespace ConditioningControlPanel
             if (ProgressionTab.TxtRampDuration != null) ProgressionTab.TxtRampDuration.Text = $"{(int)ProgressionTab.SliderRampDuration.Value} min";
             if (ProgressionTab.TxtMultiplier != null) ProgressionTab.TxtMultiplier.Text = $"{ProgressionTab.SliderMultiplier.Value:F1}x";
 
-            // Haptic sliders
-            if (HapticsTab.TxtHapticIntensity != null) HapticsTab.TxtHapticIntensity.Text = $"{(int)HapticsTab.SliderHapticIntensity.Value}%";
-            if (HapticsTab.TxtHapticBubble != null) HapticsTab.TxtHapticBubble.Text = $"{(int)HapticsTab.SliderHapticBubble.Value}%";
-            if (HapticsTab.TxtHapticFlashDisplay != null) HapticsTab.TxtHapticFlashDisplay.Text = $"{(int)HapticsTab.SliderHapticFlashDisplay.Value}%";
-            if (HapticsTab.TxtHapticFlashClick != null) HapticsTab.TxtHapticFlashClick.Text = $"{(int)HapticsTab.SliderHapticFlashClick.Value}%";
-            if (HapticsTab.TxtHapticVideo != null) HapticsTab.TxtHapticVideo.Text = $"{(int)HapticsTab.SliderHapticVideo.Value}%";
-            if (HapticsTab.TxtHapticTargetHit != null) HapticsTab.TxtHapticTargetHit.Text = $"{(int)HapticsTab.SliderHapticTargetHit.Value}%";
-            if (HapticsTab.TxtHapticSubliminal != null) HapticsTab.TxtHapticSubliminal.Text = $"{(int)HapticsTab.SliderHapticSubliminal.Value}%";
-            if (HapticsTab.TxtHapticLevelUp != null) HapticsTab.TxtHapticLevelUp.Text = $"{(int)HapticsTab.SliderHapticLevelUp.Value}%";
-            if (HapticsTab.TxtHapticAchievement != null) HapticsTab.TxtHapticAchievement.Text = $"{(int)HapticsTab.SliderHapticAchievement.Value}%";
+            // Haptic slider labels are written by LoadHapticsSettingsToUi() and by the sliders'
+            // own ValueChanged handlers (which update their label BEFORE the _isLoading guard),
+            // so there is nothing left to mirror here.
         }
 
         private void SaveSettings()
@@ -471,6 +414,8 @@ namespace ConditioningControlPanel
             s.ImageScale = (int)SettingsTab.SliderSize.Value;
             s.FlashOpacity = (int)SettingsTab.SliderOpacity.Value;
             s.FadeDuration = (int)SettingsTab.SliderFade.Value;
+            s.FlashAvoidCenter = SettingsTab.ChkFlashAvoidCenter.IsChecked ?? false;
+            s.FlashCenterExclusionPercent = (int)SettingsTab.SliderCenterExclusion.Value;
 
             // Video
             s.MandatoryVideosEnabled = SettingsTab.ChkVideoEnabled.IsChecked ?? false;
@@ -500,8 +445,13 @@ namespace ConditioningControlPanel
             s.OfflineMode = SettingsTab.ChkOfflineMode.IsChecked ?? false;
             if (SettingsTab.ChkPerformanceMode != null) s.PerformanceMode = SettingsTab.ChkPerformanceMode.IsChecked ?? false;
             if (SettingsTab.ChkAutoPerformance != null) s.AutoPerformanceMode = SettingsTab.ChkAutoPerformance.IsChecked ?? true;
+            if (SettingsTab.CmbMotionLevel != null && SettingsTab.CmbMotionLevel.SelectedIndex >= 0)
+                s.MotionLevel = (Models.MotionLevel)SettingsTab.CmbMotionLevel.SelectedIndex;
             if (SettingsTab.ChkVideoHwDecode != null) s.VideoForceHardwareDecoding = SettingsTab.ChkVideoHwDecode.IsChecked ?? false;
             if (SettingsTab.ChkUnifiedOverlay != null) s.UnifiedOverlayHost = SettingsTab.ChkUnifiedOverlay.IsChecked ?? true;
+            // Weekly intake pass nudge. Defaults ON (it is the feature's re-engagement hook), but a
+            // recurring popup with no off switch is a bug report waiting to happen.
+            if (SettingsTab.ChkIntakeNudge != null) s.IntakeNudgeEnabled = SettingsTab.ChkIntakeNudge.IsChecked ?? true;
 
             // Deeper
             if (SettingsTab.ChkEnableDeeper != null) s.EnableDeeper = SettingsTab.ChkEnableDeeper.IsChecked ?? true;
@@ -577,32 +527,31 @@ namespace ConditioningControlPanel
             // Determine if we should create new or overwrite
             if (currentPreset == null || currentPreset.IsDefault || string.IsNullOrEmpty(currentPresetName))
             {
-                // No preset, default preset, or unknown - ask to create new
+                // #738: SaveSettings() above already wrote the settings, so this dialog is only
+                // offering an extra preset. It used to ask "would you like to save...?", which
+                // reads as the save itself - answering No and then being told "Settings saved!"
+                // looked like the app had ignored the answer. Say what already happened, and drop
+                // the second confirmation box: the title now carries it.
                 var result = MessageBox.Show(
-                    "Would you like to save your current settings as a new preset?\n\n" +
-                    "This will create a custom preset that you can load later.",
-                    "Save as Preset",
+                    Loc.Get("msg_settings_saved_offer_preset"),
+                    Loc.Get("title_settings_saved"),
                     MessageBoxButton.YesNo,
-                    MessageBoxImage.Question);
+                    MessageBoxImage.Information);
 
                 if (result == MessageBoxResult.Yes)
                 {
                     PromptSaveNewPreset();
                 }
-                else
-                {
-                    MessageBox.Show(Loc.Get("msg_settings_saved"), Loc.Get("title_success"), MessageBoxButton.OK, MessageBoxImage.Information);
-                }
             }
             else
             {
-                // Custom user preset - ask to overwrite
+                // #738: same framing fix - the settings are already saved, so Cancel is "leave my
+                // presets alone", not "don't save". Spelling the three buttons out keeps that clear.
                 var result = MessageBox.Show(
-                    $"Do you want to overwrite preset '{currentPreset.Name}' with your current settings?\n\n" +
-                    "Click 'Yes' to overwrite, 'No' to save as new preset, or 'Cancel' to just save settings.",
-                    "Overwrite Preset?",
+                    Loc.GetF("msg_settings_saved_offer_overwrite_format", currentPreset.Name),
+                    Loc.Get("title_settings_saved"),
                     MessageBoxButton.YesNoCancel,
-                    MessageBoxImage.Question);
+                    MessageBoxImage.Information);
 
                 if (result == MessageBoxResult.Yes)
                 {
@@ -628,11 +577,8 @@ namespace ConditioningControlPanel
                     // Save as new preset
                     PromptSaveNewPreset();
                 }
-                else
-                {
-                    // Cancel - just show settings saved message
-                    MessageBox.Show(Loc.Get("msg_settings_saved"), Loc.Get("title_success"), MessageBoxButton.OK, MessageBoxImage.Information);
-                }
+                // Cancel: nothing more to do. The settings were saved before the dialog and its
+                // title said so, so a second "Settings saved!" box only muddied the answer (#738).
             }
         }
 

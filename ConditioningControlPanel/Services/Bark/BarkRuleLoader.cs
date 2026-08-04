@@ -26,7 +26,7 @@ namespace ConditioningControlPanel.Services.Bark
 
         /// <summary>Embedded base manifest: Resources/sounds/companion_audio/bark_rules.json.</summary>
         public static string EmbeddedManifestPath =>
-            Path.Combine(CompanionPhraseService.CompanionAudioFolder, ManifestFileName);
+            CompanionPhraseService.ResolveCompanionAudioFile(ManifestFileName);
 
         /// <summary>Active mod's manifest from its InstalledPath (Locked/Drone-style packaged mods). Null if none.</summary>
         public static string? ActiveModManifestPath
@@ -52,7 +52,7 @@ namespace ConditioningControlPanel.Services.Bark
             {
                 var modId = App.Mods?.ActiveModId;
                 if (string.IsNullOrEmpty(modId)) return null;
-                var p = Path.Combine(CompanionPhraseService.CompanionAudioFolder, "mods", modId, ManifestFileName);
+                var p = CompanionPhraseService.ResolveCompanionAudioFile("mods", modId, ManifestFileName);
                 return File.Exists(p) ? p : null;
             }
         }

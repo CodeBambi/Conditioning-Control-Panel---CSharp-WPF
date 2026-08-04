@@ -51,27 +51,30 @@ namespace ConditioningControlPanel
             ShowTab("quests");
         }
 
+        private void BtnPrograms_Click(object sender, RoutedEventArgs e)
+        {
+            ShowTab("programs");
+
+            // The pulse is spent the moment the tab is found, whether or not the explainer shows.
+            if (App.Settings?.Current is { } s && !s.HasSeenProgramsTab)
+            {
+                s.HasSeenProgramsTab = true;
+                StopProgramsTabPulse();
+                App.Settings?.Save();
+            }
+
+            // Last, and deliberately after ShowTab: the explainer opens on top of the tab the user
+            // just landed on, so dismissing it leaves them looking at the thing it described.
+            ProgramsIntroPopup.ShowIfFirstTime(this);
+        }
+
         private void BtnEnhancements_Click(object sender, RoutedEventArgs e)
         {
             ShowTab("enhancements");
         }
 
-        private void AnimateTabIn(UIElement tab)
-        {
-            try
-            {
-                tab.Opacity = 0;
-                var anim = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200))
-                {
-                    EasingFunction = new System.Windows.Media.Animation.QuadraticEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
-                };
-                tab.BeginAnimation(OpacityProperty, anim);
-            }
-            catch
-            {
-                tab.Opacity = 1;
-            }
-        }
+        // AnimateTabIn now lives in MainWindow.ChromeFx.cs: the bare 200ms fade was replaced by
+        // the PR-1 choreography (outgoing fade -> directional slide + fade -> entrance stagger).
 
         internal void ShowTab(string tab)
         {
@@ -85,13 +88,33 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // "fyp" is a window, not a tab: the Exclusives spotlight routes through
+            // ShowTab like every other card, so the launch is intercepted here and the
+            // active tab is left alone. The card never blocks - OpenFypFeed gates.
+            if (tab == "fyp")
+            {
+                OpenFypFeed();
+                return;
+            }
+
             // Bark hook: announce navigation (gated/chanced in the rules so it isn't spammy).
             try { App.Bark?.NotifyTabNavigated(tab); } catch { }
+
+            // Park the incoming key for the transition choreography. AnimateTabIn reads it, so the
+            // ~25 call sites below stay a single argument and still get a slide direction.
+            _pendingTabKey = tab;
 
             // Stop animations on tabs we're leaving to reduce idle CPU
             StopSeasonTitleShimmer();
             StopLockdownPulse();
             StopSkillTreeAnimations();
+            StopExclusivesMotion();
+            // Every registered AmbientFxCanvas parks with its tab (see MainWindow.AmbientFx.cs) —
+            // new per-tab canvases get the stop hook without touching this method again.
+            SwitchTabFx(tab);
+            // A tooltip opened by a stationary cursor outlives the tab it belongs to, because
+            // nothing ever moved the mouse off its owner. See MainWindow.ChromeFx.cs.
+            CloseStaleToolTip();
 
             // Hide all tabs
             SettingsTab.Visibility = Visibility.Collapsed;
@@ -132,6 +155,9 @@ namespace ConditioningControlPanel
                 BlinkTrainerTab.Visibility = Visibility.Collapsed;
             }
             if (SheListeningTab != null) SheListeningTab.Visibility = Visibility.Collapsed;
+            if (GradedIntakeTab != null) GradedIntakeTab.Visibility = Visibility.Collapsed;
+            if (ProgramsTab != null) ProgramsTab.Visibility = Visibility.Collapsed;
+            if (ExclusivesTab != null) ExclusivesTab.Visibility = Visibility.Collapsed;
 
             // Reset all button styles to inactive. activeStyle is the primary-nav-only v6 variant —
             // quest sub-tabs and roadmap tracks use TabButtonActive directly (see lines further down).
@@ -140,6 +166,7 @@ namespace ConditioningControlPanel
             BtnSettings.Style = inactiveStyle;
             BtnPresets.Style = inactiveStyle;
             BtnQuests.Style = inactiveStyle;
+            if (BtnPrograms != null) BtnPrograms.Style = inactiveStyle;
             BtnEnhancements.Style = inactiveStyle;
             if (BtnDeeper != null) BtnDeeper.Style = FindResource("TabButtonDeeper") as Style;
             if (BtnAvailableSubjects != null) BtnAvailableSubjects.Style = FindResource("TabButtonNeon") as Style;
@@ -159,6 +186,15 @@ namespace ConditioningControlPanel
                     AnimateTabIn(SettingsTab);
                     BtnSettings.Style = activeStyle;
                     RefreshPremiumRail(); // recompute chip dots (incl. Voice) from live state on every show
+                    // Training Programs own the day's feature mix. Re-derived (never latched) on
+                    // every show of the Dashboard, so arriving here can never find a stale lock -
+                    // not after a crash, an abort, or a session event that fired out of order.
+                    RefreshSessionFeatureLock();
+                    // Weekly intake pass: paint the centre tile, and play the once-a-week flip
+                    // ceremony if this week's reveal hasn't run yet. Must be AFTER the tab is made
+                    // visible - the spin is skipped for an off-screen tile so a background login
+                    // callback can't burn the reveal on a control nobody is looking at.
+                    RefreshIntakePassTile();
                     break;
 
                 case "presets":
@@ -187,6 +223,13 @@ namespace ConditioningControlPanel
                     BtnQuests.Style = activeStyle;
                     StartSeasonTitleShimmer();
                     RefreshQuestUI();
+                    break;
+
+                case "programs":
+                    ProgramsTab.Visibility = Visibility.Visible;
+                    AnimateTabIn(ProgramsTab);
+                    BtnPrograms.Style = activeStyle;
+                    RefreshProgramsUI();
                     break;
 
                 case "enhancements":
@@ -276,6 +319,7 @@ namespace ConditioningControlPanel
                     AwarenessTab.Visibility = Visibility.Visible;
                     AnimateTabIn(AwarenessTab);
                     SyncAwarenessTabUI();
+                    MaybeShowFeatureIntro("awareness");
                     break;
 
                 case "remotecontrol":
@@ -306,6 +350,7 @@ namespace ConditioningControlPanel
                     HapticsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(HapticsTab);
                     UpdatePatreonUI();
+                    MaybeShowFeatureIntro("haptics");
                     break;
 
                 case "lockdown":
@@ -313,20 +358,63 @@ namespace ConditioningControlPanel
                     AnimateTabIn(LockdownTab);
                     StartLockdownPulse();
                     RefreshPremiumGate(LockdownTab.LockdownGate);
+                    MaybeShowFeatureIntro("lockdown");
                     break;
 
                 case "blinktrainer":
                     BlinkTrainerTab.Visibility = Visibility.Visible;
                     AnimateTabIn(BlinkTrainerTab);
                     RefreshBlinkTrainerTab();
+                    MaybeShowFeatureIntro("blinktrainer");
                     break;
 
                 case "shelistening":
                     SheListeningTab.Visibility = Visibility.Visible;
                     AnimateTabIn(SheListeningTab);
                     RefreshSheListeningTab();
+                    MaybeShowFeatureIntro("shelistening");
                     break;
 
+                case "gradedintake":
+                    GradedIntakeTab.Visibility = Visibility.Visible;
+                    AnimateTabIn(GradedIntakeTab);
+                    RefreshGradedIntakeGate();
+                    RefreshPastQuizzes();
+                    break;
+
+                case "exclusives":
+                    ExclusivesTab.Visibility = Visibility.Visible;
+                    AnimateTabIn(ExclusivesTab);
+                    EnsureExclusivesBuilt();     // lazy: first visit builds the shelf
+                    RefreshExclusivesTab();      // chips/veils/tier plates from live state
+                    StartExclusivesMotion();     // fog canvas + Ken Burns + card sheens
+                    break;
+
+            }
+
+            // Chrome FX: move the breathing active-tab glow onto whichever nav button owns this
+            // tab (Exclusives destinations light the Exclusives launcher). Last, so it runs
+            // whatever the switch above did - and it never throws.
+            ApplyNavActiveGlow(NavButtonForTab(tab));
+        }
+
+        /// <summary>
+        /// One-shot explainer cards for tabs whose purpose isn't obvious from their controls
+        /// (see FeatureIntros for the roster). Suppressed while a session is running - a modal
+        /// must never land on top of live conditioning. FeatureIntroPopup itself guards the
+        /// guided tour (which navigates tabs through ShowTab) and paces cards so a user
+        /// clicking through every tab doesn't eat a modal per click.
+        /// </summary>
+        private void MaybeShowFeatureIntro(string key)
+        {
+            try
+            {
+                if (_sessionEngine?.IsRunning == true) return;
+                FeatureIntroPopup.ShowIfFirstTime(key, this);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Feature intro hook failed for {Key}", key);
             }
         }
 

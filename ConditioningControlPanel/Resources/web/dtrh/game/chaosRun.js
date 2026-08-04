@@ -38,13 +38,13 @@ import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildPlain, build
   BOUND_SPAWN_CHANCE, BRITTLE_SPAWN_CHANCE,
   TEASE_GOLD_MIN, TEASE_GOLD_MAX, TEASE_DENIED_SCORE,
   DARTER_BASE_POINTS, DARTER_QUICK_BONUS } from './variants.js';
-import { draft as dealDraft, boonById, boonTheme, duoPartnerScore } from './boons.js';
-import { MAT_BY_ID, rollMaterialId, CONSUMABLE_IDS, pickSketchId } from './crafting.js';
+import { draft as dealDraft, boonById, boonTheme, duoPartnerScore, endlessFiller } from './boons.js';
+import { MAT_BY_ID, MATERIALS, matArt, rollMaterialId, CONSUMABLE_IDS, pickSketchId, RECIPE_BY_ID, sketchView, craftedArt } from './crafting.js';
 import { CRAFTED_PERMANENT_APPLY, CRAFTED_TOY_DEFS } from './craftedEffects.js';
 import { PASSIVE_APPLY, isGrabbablePassive } from './boonPassives.js';
 import { WEATHER_BY_ID, rollWeather } from './weather.js';
-import { REGIONS, REGION_COUNT, regionForWave, profileForWave, PROFILE_NEUTRAL } from './regions.js';
-import { rollBiomeIds, biomeForWave, biomeById, BIOMES_ALL } from './biomes.js';
+import { REGIONS, REGION_COUNT, regionForWave, profileForWave, PROFILE_NEUTRAL, setRegionCycle } from './regions.js';
+import { rollBiomeIds, biomeForWave, biomeById, BIOMES_ALL, setBiomeCycle } from './biomes.js';
 import { createBiomeMech } from './biomeMech.js';
 import { setAudioColor } from '../engine/audioBus.js';
 import { getVoice, setVoiceDefault, onVoice, getLevel } from '../engine/audioLevels.js';
@@ -141,8 +141,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       difficulty: rc.difficulty || 'Easy',
       difficultyMult: rc.difficultyMult ?? 1.0,   // payout scalar ONLY - pace comes from DIFF_PACE
       pace: DIFF_PACE[rc.difficulty] || DIFF_PACE.Easy,
-      durationSec: clamp(rc.durationSec ?? 960, 60, 1200),
+      durationSec: clamp(rc.durationSec ?? 960, 60, 7200),   // The Hourglass: up to 2h
       waveCount: clamp(rc.waveCount ?? REGION_COUNT, 1, 12),
+      // The Bottomless Fall: no clock — regions loop + deepen, ends only on wake (hold ESC).
+      endless: !!rc.endless,
       // The Four Chambers: a fixed I->IV descent, each ending in a boon Landing.
       // On by default; a legacy non-4-loop run (or an explicit opt-out) falls
       // back to the old random-weather / monotonic-intensity path.
@@ -224,7 +226,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       score: 0, combo: 0, bestCombo: 0, heat: 0, focus: FOCUS_START,
       gold: 0,   // run-gold running total (banked to meta Gold; drives the HUD gold ticker)
       defused: 0, detonated: 0, effectsFired: 0, spawned: 0,
-      elapsedSec: 0, runDurationSec: cfg.durationSec,
+      // Endless ignores the length dial and starts on a well-paced base (~3 min/region) that
+      // then self-extends; a normal run uses the picked duration (The Hourglass or a preset).
+      elapsedSec: 0, runDurationSec: cfg.endless ? ENDLESS_BASE_SEC : cfg.durationSec,
       waveIndex: 1, waveCount: cfg.waveCount, actIndex: 1,
       rippleCooldown: 0,
       freezeRemainingSec: 0, slowMoRemainingSec: 0,
@@ -270,6 +274,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       materialChance: 0.011,
       materialDropsThisRun: 0,
       runMaterials: {},
+      recipeRevealedThisRun: false,  // the dome plasters ONE recipe's glyph per descent
       moodRingLevel: 0,        // 💍 forecast / x1.5 weather / reroll
       stickyFingersLevel: 0,   // 🍯 held-card paddle pay tier
       dropPerPop: 0,
@@ -340,6 +345,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       privateShowPending: false, privateShowAt: 0, privateShowPayMult: 1.0,
       activesDisabled: false,
       relapseArmed: false, relapseActive: false,
+      // The Bottomless Fall: a permanent, self-extending descent. endlessLap counts full
+      // I->IV cycles completed (== "how deep you went", the recap score); endlessLift shifts
+      // the intensity band up a touch each lap so deeper loops run hotter.
+      endless: !!cfg.endless, endlessLap: 0, endlessLift: 0,
       surrenderShieldUsed: false,
       takenBoonIds: new Set(),
       runPicks: [],            // ribbon tiles: { id, name, curse }
@@ -364,6 +373,19 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   // roll no biomes (st.biomes null) and everything resolves to the classics.
   const activeBiome = () => (st && cfg && cfg.regionMode ? biomeForWave(st.waveIndex, st.biomes) : null);
   const biomeAt = (waveIndex) => (st && cfg && cfg.regionMode ? biomeForWave(waveIndex, st.biomes) : null);
+  /** The dome's biome palette: the antechamber retints from its classic pink
+   * toward these (junctions eases it on the reveal gate). Null = stay classic. */
+  const roomThemeFor = (bio) => {
+    const p = bio && bio.style && bio.style.palette;
+    if (!p) return null;
+    return { bg1: p.colBg, bg2: p.colFog, line: p.colLine };
+  };
+  /** The dome's wall art: the biome's own image, plastered polka-dot style - the
+   * shader (uWallDot) punches each repeat tile into a soft disc, so the biome reads
+   * as a field of stamps with the retinted wall showing between, not one full-bleed
+   * stretch. Faded over the retint on the same gate (a draft room leaks nothing
+   * before the roulette lands). */
+  const biomeWallFor = (bio) => (bio && bio.id ? { mode: 'biome', url: `https://ccp.art/biomes/${bio.id}.png`, repeat: 3, dot: true } : null);
   /** The chamber's effective style/profile/weather: biome override or classic. */
   const styleForWaveNow = (waveIndex) => {
     const b = biomeAt(waveIndex);
@@ -425,7 +447,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     const regionLen = st.runDurationSec / st.waveCount;
     const region = regionForWave(st.waveIndex);
     const local = smoothstep((st.elapsedSec - (st.waveIndex - 1) * regionLen) / regionLen);
-    return clamp(region.band.start + (region.band.peak - region.band.start) * local, 0, 1);
+    // The Bottomless Fall: each lap lifts the whole band a touch, so deeper loops run hotter.
+    const lift = st.endlessLift || 0;
+    return clamp(region.band.start + lift + (region.band.peak - region.band.start) * local, 0, 1);
   };
   const chanceFlip = () => {
     if (st.chanceDoubleOdds <= 0) return 1.0;
@@ -505,6 +529,19 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     try { if (guide && guide.onEvent(event, data)) return; } catch (e) { /* the tee must never eat a bark */ }
     bridge.send({ type: 'bark', event, ...(data || {}) });
   };
+  // Haptics: a low-rate depth/state feed for the host's DtrhHapticDirector — the
+  // toy's ambient layer is a literal depth gauge, so it rides the game's own
+  // intensity() signal (region bands + endless lift) plus the Surfacing melt.
+  // ~2s cadence like the liveness heartbeat; all pattern/cooldown thinking is C#-side.
+  setInterval(() => {
+    const running = state === 'running' && !heldNow();
+    bridge.send({
+      type: 'haptic-state',
+      running,
+      depth: running ? +intensity().toFixed(3) : 0,
+      melt: running ? +surfMelt.toFixed(3) : 0,
+    });
+  }, 2000);
   // The boon draft plays IN the tube (engine/boonPick.js): the fall parks, themed
   // cards hang ahead, click one to shatter-and-drop-through. Same callback
   // contract as the old DOM overlay (overlays.showDraft), which stays as a
@@ -1706,6 +1743,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // Four Chambers wall dressing: the chamber sets how plastered the tube wall
     // is (I bare -> IV almost wall-to-wall). Scales with the descent.
     if (ctx && ctx.wall) ctx.wall.setRegion(regionIndex);
+    // #647: freshen the pinned centre spiral so it varies chamber to chamber.
+    try { payloadFx?.refreshPinnedSpiral(); } catch (e) { /* ignore */ }
     // Four Chambers voiceover: the drift chain draws this chamber's region-tagged
     // lines (universal backbone still plays underneath). Escalates I->IV.
     // THE BIOMES: biome-tagged lines join in only while their place is up.
@@ -1890,6 +1929,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
   function fireJunction() {
     roomsVisited++;
+    pendingRecipeReveal = null; pendingRecipeNotice = null;   // a fresh room supersedes any unclaimed plaster
     const pair = JUNCTION_PAIRS[Math.floor(Math.random() * JUNCTION_PAIRS.length)];
     const coaxSide = Math.random() < 0.5 ? 'left' : 'right';
     // clone the branded descs - rewards are per-fork and must never stick to the
@@ -1932,8 +1972,192 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       presealIndex,
       mode: 'fork',
       veinFx: (forkBiome && forkBiome.veinFx) || null,
+      roomTheme: roomThemeFor(forkBiome),
+      wallDress: biomeWallFor(forkBiome),
     });
     bark('junction-near');
+  }
+
+  /** THE BOUDOIR: pick this descent's recipe plaster - ONE per run, and only
+   * once the boudoir itself is due (runs >= 5, same gate the torn page uses, so
+   * the walls never show her a room she hasn't been given yet). Shares the
+   * paperwall's picker off LIVE meta, so it never re-teases a recipe she already
+   * knows or already has a page for. Arms pendingRecipeReveal; the sketch is
+   * banked when she actually settles into the dome (onDraftRoomLinger). */
+  // Recipe-card art: the material PNGs drawn into each sketch cell (matArt). Loaded
+  // once and cached so the plaster + the notice draw the real ingredient photos, not
+  // emoji glyphs. Preloaded at attach so they're ready by the deep-run reveal; a late
+  // load redraws the wall canvas + flags it dirty (junctions re-uploads the texture).
+  const _matImgs = new Map();   // id -> HTMLImageElement
+  function matImg(id) {
+    let im = _matImgs.get(id);
+    if (im) return im;
+    im = new Image(); im.decoding = 'async'; im.src = matArt(id);
+    _matImgs.set(id, im);
+    return im;
+  }
+  function preloadRecipeArt() { try { for (const m of MATERIALS) matImg(m.id); } catch (e) { /* best effort */ } }
+  const imgReady = (im) => !!(im && im.complete && im.naturalWidth > 0);
+
+  function pickRecipeDress() {
+    if (!st || st.recipeRevealedThisRun || cfg.scriptedFirstRun) return null;
+    const m = hostState && hostState.meta;
+    if (!m || ((m.runsCompleted | 0) + 1) < 5) return null;
+    const id = pickSketchId(new Set(m.discoveredRecipes || []), new Set(m.paperwallSketches || []));
+    const rec = id && RECIPE_BY_ID[id];
+    if (!rec || !rec.grid) return null;
+    st.recipeRevealedThisRun = true;
+    pendingRecipeReveal = id;
+    // dome walls: MANY crisp copies of the page scattered like a Boudoir pin-wall
+    // (small + plentiful, drawn full-res so each still reads as a recipe - never a
+    // downscaled-to-mush single image). notice card: one clean page.
+    const wallCanvas = makeRecipeWallCanvas(rec);
+    pendingRecipeNotice = { name: rec.name, glyph: rec.glyph, dataUrl: makeRecipePageCanvas(rec).toDataURL('image/png') };
+    return { mode: 'recipe', canvas: wallCanvas, repeat: 2 };
+  }
+
+  /** roundRect path with a fallback for engines without ctx.roundRect. */
+  function rrectPath(g, x, y, w, h, r) {
+    g.beginPath();
+    if (g.roundRect) { g.roundRect(x, y, w, h, r); return; }
+    g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r);
+  }
+
+  /** Draw ONE torn Lookbook page CENTERED on the current canvas origin, filling a
+   * `size`x`size` box - the EXACT page she'd see on the Paperwall (parchment, the
+   * 3x3 pictogram with torn cells hidden as '?', the recipe's name along the foot).
+   * Centered so callers can translate + rotate it into a scattered plaster. */
+  function drawRecipePage(g, size, rec, cells) {
+    const inset = size * 0.06;                       // torn-edge margin inside the box
+    const w = size - inset * 2, h = size - inset * 2;
+    const x0 = -w / 2, y0 = -h / 2;                  // page top-left, relative to centre
+    const rad = size * 0.03;
+    // the page: aged parchment, faint torn edge, soft drop shadow (pinned layers)
+    g.save();
+    g.shadowColor = 'rgba(0,0,0,0.32)'; g.shadowBlur = size * 0.045; g.shadowOffsetY = size * 0.02;
+    const grd = g.createLinearGradient(0, y0, 0, y0 + h);
+    grd.addColorStop(0, '#f7eed7'); grd.addColorStop(1, '#e6d4ab');
+    g.fillStyle = grd; rrectPath(g, x0, y0, w, h, rad); g.fill();
+    g.restore();
+    g.strokeStyle = 'rgba(120,90,50,0.4)'; g.lineWidth = 2; rrectPath(g, x0 + 1, y0 + 1, w - 2, h - 2, rad); g.stroke();
+    // the pictogram: 3x3, filled cells wear the material tint + glyph, torn = '?'
+    const gw = w * 0.7, gx = x0 + (w - gw) / 2, gy = y0 + h * 0.12, cell = gw / 3;
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (let i = 0; i < 9; i++) {
+      const cx = gx + (i % 3) * cell + cell / 2;
+      const cy = gy + Math.floor(i / 3) * cell + cell / 2;
+      const s = cell * 0.82, cc = cells[i];
+      if (!cc) { g.fillStyle = 'rgba(90,70,40,0.06)'; rrectPath(g, cx - s / 2, cy - s / 2, s, s, cell * 0.14); g.fill(); continue; }
+      if (cc.torn) {
+        g.fillStyle = 'rgba(90,70,40,0.1)'; rrectPath(g, cx - s / 2, cy - s / 2, s, s, cell * 0.14); g.fill();
+        g.fillStyle = 'rgba(80,60,35,0.55)'; g.font = `${Math.round(cell * 0.5)}px serif`; g.fillText('?', cx, cy);
+      } else {
+        const im = cc.id ? matImg(cc.id) : null;
+        if (imgReady(im)) {
+          // the real ingredient photo, clipped into the cell's rounded square
+          g.save();
+          rrectPath(g, cx - s / 2, cy - s / 2, s, s, cell * 0.14); g.clip();
+          g.drawImage(im, cx - s / 2, cy - s / 2, s, s);
+          g.restore();
+        } else {
+          g.fillStyle = cc.tint; rrectPath(g, cx - s / 2, cy - s / 2, s, s, cell * 0.14); g.fill();
+          g.font = `${Math.round(cell * 0.5)}px serif`; g.fillText(cc.glyph, cx, cy);
+        }
+      }
+    }
+    // the foot: the recipe's own glyph + name
+    g.fillStyle = 'rgba(70,50,28,0.92)';
+    g.font = `600 ${Math.round(h * 0.068)}px system-ui, sans-serif`;
+    g.fillText(`${rec.glyph} ${rec.name.toLowerCase()}`, 0, y0 + h * 0.9);
+  }
+
+  /** One clean page on a transparent tile - the reveal notice's art. */
+  function makeRecipePageCanvas(rec) {
+    const S = 384;
+    const c = document.createElement('canvas');
+    c.width = c.height = S;
+    const g = c.getContext('2d');
+    g.clearRect(0, 0, S, S);
+    g.save(); g.translate(S / 2, S / 2);
+    drawRecipePage(g, S * 0.92, rec, sketchView(rec));
+    g.restore();
+    return c;
+  }
+
+  /** The dome wall: a pin-wall of the SAME page stamped many times, each tilted a
+   * little and drawn at full page resolution so it stays readable (smaller + more,
+   * never one image scaled down to mush). junctions tiles this across the dome, so
+   * each page is drawn at its 8 wrap-offsets too - the tile seams seamlessly. */
+  function makeRecipeWallCanvas(rec) {
+    const cells = sketchView(rec);
+    const TILE = 1024, GRID = 6, PAGE = 150;   // 6x6 lattice = 36 small pages per tile (was 8 big ones)
+    const c = document.createElement('canvas');
+    c.width = c.height = TILE;
+    const g = c.getContext('2d');
+    // A dense pin-wall lattice: one page per lattice cell, deterministically jittered
+    // + tilted so it reads as scattered pages (never a rigid grid), and wraps cleanly.
+    const tilts = [-7, 5, -3, 7, -5, 4, -6, 6, 3, -4, 8, -8];
+    const spots = [];
+    for (let r = 0; r < GRID; r++) for (let cN = 0; cN < GRID; cN++) {
+      const jx = (((r * 7 + cN * 3) % 5) - 2) * 0.018;   // deterministic jitter, +/- ~0.036 tile
+      const jy = (((r * 3 + cN * 5) % 5) - 2) * 0.018;
+      spots.push([(cN + 0.5) / GRID + jx, (r + 0.5) / GRID + jy, tilts[(r * GRID + cN) % tilts.length]]);
+    }
+    const paint = () => {
+      g.clearRect(0, 0, TILE, TILE);
+      for (const [fx, fy, deg] of spots) {
+        const cx = fx * TILE, cy = fy * TILE, rot = deg * Math.PI / 180;
+        for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) {
+          g.save();
+          g.translate(cx + ox * TILE, cy + oy * TILE);
+          g.rotate(rot);
+          drawRecipePage(g, PAGE, rec, cells);
+          g.fillStyle = 'rgba(60,40,20,0.5)';               // a little pin tack at the top
+          g.beginPath(); g.arc(0, -PAGE * 0.4, PAGE * 0.03, 0, Math.PI * 2); g.fill();
+          g.restore();
+        }
+      }
+    };
+    paint();
+    // Any ingredient photo not decoded yet? Redraw when it lands and flag the canvas
+    // so junctions re-uploads the texture (imgReady falls back to glyphs until then).
+    for (const cc of cells) {
+      if (!cc || cc.torn || !cc.id) continue;
+      const im = matImg(cc.id);
+      if (!imgReady(im)) im.addEventListener('load', () => { paint(); c.__recipeDirty = true; }, { once: true });
+    }
+    return c;
+  }
+
+  /** The plaster lands: pin the torn sketch in THE BOUDOIR. A TEASE, not a
+   * discovery - the shape is hers now, but she still has to make it at the
+   * worktable. add-to-set dedupes, so a re-fire is harmless. */
+  function bankRecipeReveal() {
+    const id = pendingRecipeReveal;
+    pendingRecipeReveal = null;
+    if (!id) return;
+    bridge.send({ type: 'meta-command', op: 'add-to-set', set: 'paperwallSketches', id });
+    markDiscovered('recipe:' + id);
+    // The VISIBLE notice is fired by junctions onWallReveal -> showRecipeNotice,
+    // synced to the plaster actually landing. Banking runs at linger (a beat
+    // earlier, while a roulette card may still be up), so a toast here would
+    // flash and fade before the walls ever change - which is the bug we hit.
+  }
+
+  /** The plaster lands on the dome: announce it big - the torn page itself plus
+   * its name. Fired by junctions the INSTANT the wall dressing reveals (after the
+   * biome settle card, if any), so the words and the walls change together. */
+  function showRecipeNotice() {
+    const n = pendingRecipeNotice;
+    pendingRecipeNotice = null;
+    if (!n) return;
+    hudUi.announce('A PAGE TEARS LOOSE', 'depth', 4600, {
+      artUrl: n.dataUrl, artBig: true,
+      subText: `${n.glyph} ${n.name.toLowerCase()}`,
+      hint: 'pinned to your Paperwall — draw it at the Loom',
+    });
+    try { sfx('boon_pick', 0.6); } catch (e) { /* ignore */ }
   }
 
   /** The Grand Draft: every BONUS_ROOM_EVERY-th room the descent passes through
@@ -1953,6 +2177,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     draftRoomDoors = options.length;
     draftRevealBiome = null;    // no roulette: the doors stay in this room's biome
     const bio = activeBiome();
+    // the Grand Draft's walls are free (no roulette to leak), so they take the
+    // recipe plaster when one is due; otherwise they wear the biome's own art.
+    const recipeDress = pickRecipeDress();
     ctx.junctions.schedule({
       atDepth: ctx.nav.getDepth() + JUNCTION_LEAD,
       branches: options.map(boonBranch),
@@ -1962,10 +2189,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       lead: JUNCTION_LEAD,
       title: { numeral: '✦', text: 'TEMPTATION', color: 0xffd76a },
       veinFx: (bio && bio.veinFx) || null,
+      roomTheme: roomThemeFor(bio),
+      wallDress: recipeDress || biomeWallFor(bio),
     });
     if (!ctx.junctions.isBusy()) {   // engine refused (inactive/torn down): no room, no wedge
       bonusRoomActive = false;
       draftRoomActive = false;
+      if (recipeDress) { st.recipeRevealedThisRun = false; pendingRecipeReveal = null; pendingRecipeNotice = null; }  // no room = no reveal spent
       return;
     }
     roomsVisited++;
@@ -2057,6 +2287,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   let draftRoomDoors = 3;        // dealt door count (2-5: wave drafts deal draftChoices, grand rooms 4-5)
   let roomsVisited = 0;          // every antechamber counts: forks + boon rooms (paces the grand room)
   const BONUS_ROOM_EVERY = 10;   // every 10th room is the Grand Draft (fireBonusRoom)
+  let pendingRecipeReveal = null; // recipe id plastered on the live room, banked when she settles in
+  let pendingRecipeNotice = null; // {name,glyph,dataUrl} for the reveal announce, fired when the plaster lands
   let draftDom = null;           // lazy DOM chrome: caption + reroll/resist (reuses boonPick's CSS)
   let draftCapTimer = null;      // 250ms caption countdown while the room lingers
   let draftRevealBiome = null;   // the roulette's pre-rolled target, for the settle card
@@ -2128,6 +2360,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
   function onDraftRoomLinger(on) {
     onJunctionLinger(on);   // the same near-hover crawl while the doors are read
+    // she's inside and the walls have finished becoming: pin the torn sketch
+    if (on && pendingRecipeReveal) bankRecipeReveal();
     // while the biome roulette spins the chrome stays hidden (resist/reroll
     // would be dead buttons anyway - the engine gates every pick path until
     // the wheel lands); the onRevealFx 'settle' handler shows it instead
@@ -2153,6 +2387,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     draftRoomActive = true;
     draftRoomSkip = false;
     draftRoomDoors = options.length;
+    pendingRecipeReveal = null; pendingRecipeNotice = null;   // a fresh room supersedes any unclaimed plaster
     // The Journey Rooms: the doors lead INTO the next room, so its title hangs
     // over them - big writing above the doorway mouths (junctions buildTitle).
     // The room dresses in its classic palette (never the biome's), but the
@@ -2162,6 +2397,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     const nextStyle = next.style;   // classic room palette - never the biome's (no early hint)
     const targetBiome = biomeForWave(pendingWave, st.biomes);   // null on scripted runs
     draftRevealBiome = targetBiome;   // the settle card reads it when the wheel lands
+    // the recipe plaster rides the FIRST boon dome of the descent - whichever
+    // comes first, a boundary draft room or a Grand Draft (pickRecipeDress is
+    // once-per-run, so the other one just wears its biome art as usual)
+    const recipeDress = pickRecipeDress();
     ctx.junctions.schedule({
       atDepth: ctx.nav.getDepth() + DRAFT_ROOM_LEAD,
       branches: options.map(boonBranch),
@@ -2179,8 +2418,16 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       // the doorway corridors dress as the destination biome - junctions holds
       // the dress back until the roulette lands, so it can't leak the roll
       veinFx: (targetBiome && targetBiome.veinFx) || null,
+      // ...and so does the DOME: its walls retint + take the biome's own art on
+      // the same gate, so the room BECOMES the place the doors lead into.
+      roomTheme: roomThemeFor(targetBiome),
+      // ...unless this is the descent's recipe room: the plaster wins the walls
+      // (the retint still lands, so the biome reads in the colour under it), and
+      // junctions holds it until AFTER the roulette settles - one beat, then the next.
+      wallDress: recipeDress || biomeWallFor(targetBiome),
     });
     if (ctx.junctions.isBusy()) roomsVisited++;   // armed: this room paces the Grand Draft too
+    else if (recipeDress) { st.recipeRevealedThisRun = false; pendingRecipeReveal = null; pendingRecipeNotice = null; }  // no room = no reveal spent
   }
 
   /** A draft-room door committed: the dive is already running engine-side;
@@ -2276,11 +2523,38 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   const SURF_MELT_LEAD = 18;   // remaining sec: the melt shows its hand
   const SURF_WASH_MS = 3400;   // white-out ramp; endRun fires at its peak
 
+  // ---- The Bottomless Fall (endless) ----
+  const ENDLESS_BASE_SEC = 720;     // ~3 min per region to start (4 * 180); ignores the length dial
+  // Keep the clock's floor this far ahead of the play-head. Deliberately ABOVE FINAL_LANDING_LEAD
+  // (60): every "final stretch" guard (terminal Landing, fork suppression, draft-skip on wave
+  // transition, video-slice gate) keys off remaining <= 60, so holding remaining > 75 means an
+  // endless descent keeps dealing boons/forks/videos normally and never enters a closing state.
+  const ENDLESS_EXTEND_LEAD = 75;
+
+  // Endless keeps the descent from ever ending: it holds the clock ahead of the play-head
+  // (so the Surfacing/finish never trigger) and deepens once per full I->IV lap crossed.
+  // relapse/finalLanding/finish are all separately gated on !st.endless.
+  function tickEndless() {
+    if (!st.endless) return;
+    if (st.runDurationSec - st.elapsedSec < ENDLESS_EXTEND_LEAD) {
+      const waveLen = st.runDurationSec / Math.max(1, st.waveCount);
+      st.waveCount += 1;
+      st.runDurationSec += waveLen;
+    }
+    const lap = Math.floor((st.waveIndex - 1) / REGION_COUNT);
+    if (lap > st.endlessLap) {
+      st.endlessLap = lap;
+      st.endlessLift = Math.min(0.42, st.endlessLift + 0.06);   // deeper laps ride the band hotter
+      hudUi.announce(`∞ DEPTH ${lap + 1}`, 'good', 2400, { subText: 'deeper still' });
+      sfx('sin_accept', 0.5);
+    }
+  }
+
   function tickSurfacing(dt) {
     const remain = st.runDurationSec - st.elapsedSec;
     // held back while a relapse is armed (the end isn't real yet) and while a
     // draft owns the field (the Court's Landing at T-60 must not melt its table)
-    const arm = state === 'running' && !st.relapseArmed && !drafting;
+    const arm = state === 'running' && !st.relapseArmed && !st.endless && !drafting;
     const pullT = st.finishing ? 1
       : (arm ? clamp((SURF_PULL_LEAD - remain) / (SURF_PULL_LEAD - SURF_MELT_LEAD), 0, 1) : 0);
     const meltT = st.finishing ? 1
@@ -2493,12 +2767,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // The Surfacing replaces the old "the hole is closing… ten seconds" banner:
     // the world itself closes over the last ~40s (see tickSurfacing above).
     tickSurfacing(dt);
+    tickEndless();   // The Bottomless Fall: hold the clock ahead + deepen per lap (no-op otherwise)
 
     // The Court's Landing (region IV's boon) is offered ~60s before the close, so
     // a descent NEVER ends on a boon pick: gameplay + the finish countdown carry
     // it out afterward. Held until any live fork tears down; skipped while a
     // relapse is still armed (it then fires ~60s before the EXTENDED end).
-    if (cfg.regionMode && cfg.boonDraftEnabled && !st.finalLandingDone && !st.relapseArmed
+    // Endless has no close, so no terminal Landing — its boons ride the loop drafts.
+    if (cfg.regionMode && cfg.boonDraftEnabled && !st.finalLandingDone && !st.relapseArmed && !st.endless
         && state === 'running' && !drafting
         && st.runDurationSec - st.elapsedSec <= FINAL_LANDING_LEAD
         && !(ctx && ctx.junctions && ctx.junctions.isBusy())) {
@@ -2507,9 +2783,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       return;
     }
 
-    // A live fork owns the tube: the recap must not fire mid-antechamber /
-    // mid-dive. The clock runs on a few extra seconds until the fork tears down.
-    if (st.elapsedSec >= st.runDurationSec && !(ctx && ctx.junctions && ctx.junctions.isBusy())) {
+    // A live fork OR an in-tube boon draft owns the tube: the recap must not fire
+    // mid-antechamber / mid-dive / mid-pick. The clock runs on a few extra seconds
+    // until it tears down (boonPick auto-resumes, so this can't hang the finish).
+    if (!st.endless
+        && st.elapsedSec >= st.runDurationSec
+        && !(ctx && ctx.junctions && ctx.junctions.isBusy())
+        && !(ctx && ctx.boonPick && ctx.boonPick.isBusy())) {
       // Relapse: the hole isn't done with you - one more loop, everything drips double.
       if (st.relapseArmed && !st.relapseActive) {
         st.relapseArmed = false;
@@ -2718,6 +2998,15 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       }
     }
     for (const o of options) markDiscovered('boon:' + o.id);
+    // The Bottomless Fall: once the real pool thins (uniques deplete), top the draft up with
+    // Deepening cards so an endless descent never degrades to a 1-card fork. Added AFTER the
+    // discovery loop so synthetic ids never write a codex entry. They stack across drafts.
+    if (st.endless) {
+      const want = choicesOverride || cfg.draftChoices;
+      if (options.length < want) {
+        options.push(...endlessFiller(want - options.length, new Set(options.map((o) => o.id))));
+      }
+    }
     return options;
   }
 
@@ -3437,9 +3726,49 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (any) hudUi.toast('🛏 what you crafted comes down with you');
   }
 
+  // THE BOUDOIR loadout rail: the always-on modifiers the crafted kit brings into
+  // the fall (the docked consumables show in the toy dock, so they're left out).
+  // Short lines are hand-authored (the recipe `effect` strings are too long for a
+  // 2-up chip); glyph/name come from the recipe table. Mirrors applyCraftedKit's
+  // ownership reads exactly, so the rail can never claim a modifier the run didn't get.
+  const LOADOUT_MODS = {
+    skeleton_key:  '+1 draft reroll',
+    locked_collar: '+1 collar save',
+    the_corset:    '+1 starting resistance',
+    the_timepiece: 'descent lasts +10% longer',
+    the_hourglass: 'Esc holds the fall — pause',
+    the_shot:      (n) => `+${Math.min(40, 4 * n)}% drops payout`,
+  };
+  function buildLoadout() {
+    const out = [];
+    for (const id of Object.keys(LOADOUT_MODS)) {
+      const n = craftedCount(id);
+      if (n < 1) continue;
+      const rec = RECIPE_BY_ID[id] || {};
+      const line = LOADOUT_MODS[id];
+      out.push({
+        id, glyph: rec.glyph || '◈', name: rec.name || id, art: craftedArt(id),
+        effect: typeof line === 'function' ? line(n) : line,
+        count: id === 'the_shot' ? n : 0,
+      });
+    }
+    if (cfg.denialArmed && craftedCount('the_cage') >= 1) {
+      out.push({ id: 'the_cage', glyph: '🔒', name: 'DENIAL', art: craftedArt('the_cage'),
+        effect: 'no hearts fall · everything pays +50%', curse: true });
+    }
+    if (cfg.pinnedBoonId && craftedCount('the_padlock') >= 1) {
+      const b = boonById(cfg.pinnedBoonId);
+      out.push({ id: 'the_padlock', glyph: '🔐', name: 'Padlock', art: craftedArt('the_padlock'),
+        effect: b ? `pins ${b.name} to the first draft` : 'pins a mantra to the first draft' });
+    }
+    return out;
+  }
+
   function beginCountdown(short) {
     state = 'countdown';
     st = freshState();
+    setRegionCycle(!!st.endless);   // The Bottomless Fall: bonus loops wrap I->IV instead of clamping to Court
+    setBiomeCycle(!!st.endless);    // ...and the biome art wraps in lockstep
     tickAcc = 0;
     spawnWait = 0.8;
     lastNoFocusAnnounce = -10;
@@ -3498,6 +3827,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     hudUi.updateToys(toys, toyStatus());
     hudUi.setPicks(st.runPicks);
     hudUi.setHabits(st.ownedHabitIds);   // the always-on habits rail (left, dim until hover)
+    hudUi.setLoadout(cfg.scriptedFirstRun ? [] : buildLoadout());   // the crafted modifiers brought down
+    // The pocket watch's gift — but an endless fall has no countdown to show (the clock
+    // self-extends forever), so it stays hidden there; the ∞ DEPTH banners mark progress.
+    hudUi.setClock(!cfg.scriptedFirstRun && !st.endless && craftedCount('the_timepiece') >= 1);
     hudUi.setVisible(true);
     if (!short) sfx('fall_in', 0.28);
     overlays.showCountdown({
@@ -3507,6 +3840,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         state = 'running';
         // Descent is live: wake the drift whisper + special tube moods (the hub kept them idle).
         try { ctx.setRunActive && ctx.setRunActive(true); } catch (e) { /* ignore */ }
+        // #647: the OPTIONAL centre spiral rides the whole fall (no-op when the toggle is off).
+        try { payloadFx?.showPinnedSpiral(); } catch (e) { /* ignore */ }
         bridge.send({ type: 'run-started', difficulty: cfg.difficulty, mode: 'dtrh-web' });
         // Fresh descent: dress the opening chamber. applyRegionSky covers the
         // wall plaster, drift voice AND the chamber's visual grade (Region I's
@@ -3536,8 +3871,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   function endRun(ranFullCourse) {
     if (state !== 'running') return;
     state = 'recap';
+    setRegionCycle(false); setBiomeCycle(false);   // The Bottomless Fall: disarm cycling so the next (normal) run clamps to Court
     // Surfaced: hush the drift whisper + calm the tube for the recap/hub idle.
     try { ctx.setRunActive && ctx.setRunActive(false); } catch (e) { /* ignore */ }
+    try { payloadFx?.hidePinnedSpiral(); } catch (e) { /* ignore */ }   // #647: fade the centre spiral out with the surfacing
     if (ctx && ctx.wall) ctx.wall.setRegion(0); // bare the wall for the recap/warren
     if (ctx && ctx.drift) { ctx.drift.setRegion(0); if (ctx.drift.setBiome) ctx.drift.setBiome(null); } // recap/warren: universal voice only
     if (bMech) bMech.reset();   // THE BIOMES: exit the mechanic (restores dim/beams/mirrors/speed)
@@ -3551,6 +3888,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // A mandatory-video card is an in-world DOM node (payloadFx front layer); the
     // field teardown doesn't touch it, so stop it here or it overlays the recap + hub.
     try { payloadFx?.cancelHeavy(); } catch (e) { /* ignore */ }
+    // A run ending WHILE an in-tube boon draft is open would leave its card row in
+    // the shared scene (junctions are torn down by setRunActive(false), but boonPick
+    // is not) - force it closed so no phantom draft rides the idle crawl into the
+    // recap + hub. No-op when idle.
+    try { ctx.boonPick && ctx.boonPick.reset && ctx.boonPick.reset(); } catch (e) { /* ignore */ }
     field.clearAll();
     clearAmbient();
     if (ctx.spawner) ctx.spawner.setAutoSpotlight(true); // the idling tunnel may feature again
@@ -3599,6 +3941,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       difficulty: cfg.difficulty,
       waveCount: st.waveCount,
       depth: ctx.nav.getDepth(),
+      // The Bottomless Fall: how many full I->IV laps the endless descent sank through
+      endless: !!st.endless,
+      endlessDepth: st.endlessLap,
       bestCombo: st.bestCombo,
       defused: st.defused,
       detonated: st.detonated,
@@ -3643,7 +3988,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     hudUi.setVisible(false);
     hudUi.setPicks([]);
     hudUi.setHabits([]);
+    hudUi.setLoadout([]);
+    hudUi.setClock(false);
     try { payloadFx?.cancelHeavy(); } catch (e) { /* ignore */ }   // kill any lingering video card before the hub
+    try { payloadFx?.hidePinnedSpiral(); } catch (e) { /* ignore */ }   // #647: never leave the centre spiral in the hub
+    try { ctx.boonPick && ctx.boonPick.reset && ctx.boonPick.reset(); } catch (e) { /* ignore */ }   // a draft aborted mid-pick must not strand its card row in the hub
     field.clearAll();
     clearAmbient();
     if (bMech) bMech.reset();   // a run aborted mid-chamber must not leak its biome mechanic into the hub
@@ -3674,6 +4023,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
      * the idling tunnel; a descent starts when the host answers request-run. */
     attach(sceneCtx) {
       ctx = sceneCtx;
+      preloadRecipeArt();   // warm the ingredient photos so a deep-run recipe plaster draws them, not glyphs
       ffx = createFieldFx(ctx.hud);
       payloadFx = createPayloadFx({ hud: ctx.hud, fx: ctx.fx, media: ctx.media, flashBurst: ctx.flashBurst });
       try { window.__sfPayloadFx = payloadFx; } catch { /* diagnostics seam (m2test) */ }
@@ -3703,6 +4053,15 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
           const mat = MAT_BY_ID[String(id || '')];
           if (!mat || state !== 'running') return false;
           field.spawn(buildMaterial(mat));
+          return true;
+        };
+        // diagnostics seam: force the Grand Draft NOW - __sfBonusRoom() - so the
+        // recipe plaster + wall dressing can be seen without grinding 10 rooms
+        // (re-arms the once-per-run reveal so it can be fired repeatedly)
+        window.__sfBonusRoom = () => {
+          if (state !== 'running' || !ctx || !ctx.junctions || ctx.junctions.isBusy()) return false;
+          if (st) st.recipeRevealedThisRun = false;
+          fireBonusRoom();
           return true;
         };
       } catch { /* diagnostics seam */ }
@@ -3759,6 +4118,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       if (ctx.junctions) {
         ctx.junctions.onCommit = (choice) => (choice && choice.mode === 'draft' ? onDraftDoorChosen(choice) : onJunctionChosen(choice));
         ctx.junctions.onLinger = (on, mode) => (mode === 'draft' ? onDraftRoomLinger(on) : onJunctionLinger(on));
+        // the recipe plaster's own beat: junctions fires this the instant the pages
+        // reveal (after the biome settle card), so the notice lands with the walls
+        ctx.junctions.onWallReveal = () => showRecipeNotice();
         // the biome roulette's casino noises: a tick per hop, a payoff on the
         // landing - and only THEN the draft chrome (resist/reroll/countdown),
         // which onDraftRoomLinger held back while the wheel spun

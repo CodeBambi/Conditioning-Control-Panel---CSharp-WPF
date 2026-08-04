@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Localization;
 using Newtonsoft.Json;
@@ -31,6 +33,30 @@ namespace ConditioningControlPanel.Services
         private const int MaxStepsChars = 4000;
         private const int MaxCrashLogChars = 120_000;
         private const int MaxAppLogLines = 100;
+        // Lines of the dedicated video/panic trace appended to the app-log field. The trace is
+        // terse (one short line per transition), so 200 lines covers several videos plus a whole
+        // freeze window at a few KB — well inside the crash-log-sized fields the server accepts.
+        private const int MaxVideoDiagLines = 200;
+        // Diagnostic-line rescue (#634 + freeze reports). The last-N tail scrolls the [RES]/
+        // [WATCHDOG] history out of every report because a relaunch writes far more startup
+        // chatter than MaxAppLogLines. Scan a much wider tail and keep only the marker lines so
+        // the resource/hang timeline survives even when the plain tail is all startup noise.
+        internal const int MaxDiagScanLines = 2000;
+        internal const int MaxDiagMatches = 40;      // most-recent matches kept
+        internal const int MaxDiagSectionChars = 16_000; // GitHub issue-body budget guard
+        // Grep-friendly markers written to the rolling app log. [RES]/[WATCHDOG] come from
+        // UiHangWatchdog and are the ones that actually appear today; the video markers are
+        // kept defensively (VideoDiag writes its own file, already appended in full above).
+        internal static readonly string[] DiagMarkers =
+            { "[RES]", "[WATCHDOG]", "[BLUR]", "[VIDEO]", "[VideoDiag]" };
+
+        // #769: how many report numbers we remember in AppSettings.RecentBugReports.
+        // Newest last; the oldest are trimmed on insert.
+        internal const int MaxRecentReports = 20;
+
+        // Guards the in-place mutation of the settings list — SubmitAsync resumes on a
+        // thread-pool thread, and the "My Reports" UI can read the list concurrently.
+        private static readonly object RecentReportsLock = new();
 
         private readonly HttpClient _httpClient;
 
@@ -56,6 +82,9 @@ namespace ConditioningControlPanel.Services
             public string ScrubbedAppLog { get; set; } = string.Empty;
             public bool IncludeAppLog { get; set; }
             public ScrubberCounts Counts { get; set; } = ScrubberCounts.Empty;
+            /// <summary>What the user is filing. Carried so SubmitAsync can tag the
+            /// remembered report number (#769) without re-sniffing the description.</summary>
+            public ReportKind Kind { get; set; } = ReportKind.Bug;
         }
 
         public class BugMetadata
@@ -68,6 +97,17 @@ namespace ConditioningControlPanel.Services
         }
 
         public enum SubmitOutcome { Success, SavedPending, ValidationFailed, NetworkError }
+
+        /// <summary>
+        /// What the user is filing. Both kinds ride the exact same transport,
+        /// endpoint, and signing — a Suggestion is just tagged in the description
+        /// text (see the marker below) and skips crash/app-log collection.
+        /// </summary>
+        public enum ReportKind { Bug, Suggestion }
+
+        // Prepended to the description for suggestions so they're obvious in the
+        // shared tracker (no server change — they still arrive as "bug" reports).
+        private const string SuggestionMarker = "[SUGGESTION] ";
 
         public class SubmitResult
         {
@@ -82,7 +122,7 @@ namespace ConditioningControlPanel.Services
         /// Forbidden fields (machine name, user name, hostname, Discord/Patreon
         /// identity, IP, timezone, full locale) are never populated.
         /// </summary>
-        public BugReportDraft CreateDraft(string description, string steps, bool includeAppLog)
+        public BugReportDraft CreateDraft(string description, string steps, bool includeAppLog, ReportKind kind = ReportKind.Bug)
         {
             var metadata = new BugMetadata
             {
@@ -93,34 +133,69 @@ namespace ConditioningControlPanel.Services
                 ActiveModId = ResolveActiveModId(),
             };
 
-            // Pull crash log if present.
-            var crashLogRaw = TryReadCrashLog();
-            var (scrubbedCrash, crashCounts) = LogScrubber.Scrub(crashLogRaw);
+            bool isSuggestion = kind == ReportKind.Suggestion;
+
+            // Pull crash log if present. Suggestions are feature ideas, not defects —
+            // crash/app logs are noise, so skip collecting them entirely.
+            var (scrubbedCrash, crashCounts) = isSuggestion
+                ? (string.Empty, ScrubberCounts.Empty)
+                : LogScrubber.Scrub(TryReadCrashLog());
             if (scrubbedCrash.Length > MaxCrashLogChars)
             {
                 scrubbedCrash = scrubbedCrash.Substring(scrubbedCrash.Length - MaxCrashLogChars);
             }
 
-            // Pull recent app log (last N lines) only if the user opted in.
+            // Pull recent app log (last N lines) only if the user opted in (bug reports only).
             var scrubbedApp = string.Empty;
             var appCounts = ScrubberCounts.Empty;
-            if (includeAppLog)
+            if (includeAppLog && !isSuggestion)
             {
                 var appLogRaw = TryReadRecentAppLog(MaxAppLogLines);
-                (scrubbedApp, appCounts) = LogScrubber.Scrub(appLogRaw);
+
+                // #616/#617/#621/#622/#623: the app-log tail alone was useless for the v6.5.0 freeze
+                // reports. A user whose PC had to be hard-reset must relaunch the app to file the
+                // report, and the relaunch writes far more than MaxAppLogLines of startup chatter —
+                // so the 100-line tail contained nothing but startup, every time. The video/panic
+                // trace lives in its own small flush-on-write file that a relaunch cannot scroll,
+                // so append its tail here. Same field (no server schema change), clearly delimited,
+                // and it goes through the same scrubber as everything else.
+                var diagRaw = VideoDiag.Tail(MaxVideoDiagLines);
+                var combined = string.IsNullOrWhiteSpace(diagRaw)
+                    ? appLogRaw
+                    : appLogRaw + Environment.NewLine + Environment.NewLine +
+                      "===== video/panic diagnostic trace (video-diag.log) =====" + Environment.NewLine +
+                      diagRaw;
+
+                // #634 + freeze reports: rescue the [RES]/[WATCHDOG] resource+hang timeline from a
+                // much wider window of the rolling app log so it survives even when the 100-line
+                // tail above is all startup chatter. Appended to the same field before scrubbing,
+                // so it goes through the same PII scrubber as everything else below.
+                var diagSampled = CollectSampledDiagnostics();
+                if (!string.IsNullOrWhiteSpace(diagSampled))
+                    combined = combined + Environment.NewLine + Environment.NewLine +
+                        "## Diagnostics (sampled)" + Environment.NewLine + diagSampled;
+
+                (scrubbedApp, appCounts) = LogScrubber.Scrub(combined);
             }
 
             var totalCounts = crashCounts.Add(appCounts);
 
+            // Tag suggestions in the description text itself so they stand out in the
+            // shared tracker. Marker is added before truncation so the cap still holds.
+            var desc = description ?? string.Empty;
+            if (isSuggestion)
+                desc = SuggestionMarker + desc;
+
             return new BugReportDraft
             {
                 Metadata = metadata,
-                Description = Truncate(description ?? string.Empty, MaxDescriptionChars),
-                Steps = Truncate(steps ?? string.Empty, MaxStepsChars),
+                Description = Truncate(desc, MaxDescriptionChars),
+                Steps = isSuggestion ? string.Empty : Truncate(steps ?? string.Empty, MaxStepsChars),
                 ScrubbedCrashLog = scrubbedCrash,
                 ScrubbedAppLog = scrubbedApp,
-                IncludeAppLog = includeAppLog,
+                IncludeAppLog = includeAppLog && !isSuggestion,
                 Counts = totalCounts,
+                Kind = kind,
             };
         }
 
@@ -163,6 +238,9 @@ namespace ConditioningControlPanel.Services
                 if ((int)res.StatusCode == 202)
                 {
                     var token202 = TryExtractToken(responseText);
+                    App.Logger?.Information("[BugReport] Saved pending (bot unreachable): {Token}",
+                        string.IsNullOrEmpty(token202) ? "(no token)" : token202);
+                    RememberReportToken(token202, draft.Kind);
                     return new SubmitResult
                     {
                         Outcome = SubmitOutcome.SavedPending,
@@ -192,6 +270,7 @@ namespace ConditioningControlPanel.Services
                 }
 
                 App.Logger?.Information("[BugReport] Submitted successfully: {Token}", token);
+                RememberReportToken(token, draft.Kind);
                 return new SubmitResult
                 {
                     Outcome = SubmitOutcome.Success,
@@ -224,6 +303,131 @@ namespace ConditioningControlPanel.Services
                     Outcome = SubmitOutcome.ValidationFailed,
                     ErrorMessage = ex.Message,
                 };
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Remembered report numbers (#769)
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// One decoded entry of <see cref="Models.AppSettings.RecentBugReports"/>.
+        /// </summary>
+        public class RecentReport
+        {
+            public string Token { get; set; } = string.Empty;
+            /// <summary>UTC instant the report was filed. <c>null</c> for a legacy/unparseable stamp.</summary>
+            public DateTime? TimestampUtc { get; set; }
+            public ReportKind Kind { get; set; } = ReportKind.Bug;
+        }
+
+        /// <summary>
+        /// Ring-buffer insert used by <see cref="RememberReportToken"/>. Appends
+        /// "{token}|{ISO-8601 UTC}|{kind}" and trims the oldest entries so the list never
+        /// exceeds <see cref="MaxRecentReports"/>. Blank tokens and a null list are ignored.
+        /// Pure (no settings/IO) so the cap contract can be unit-tested headlessly.
+        /// </summary>
+        internal static void AppendRecentReport(List<string> list, string? token, DateTime timestampUtc, ReportKind kind)
+        {
+            if (list == null || string.IsNullOrWhiteSpace(token)) return;
+
+            var kindText = kind == ReportKind.Suggestion ? "suggestion" : "bug";
+            var stamp = timestampUtc.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture);
+            // The record is pipe-delimited, so a pipe inside the token would shift the stamp and kind
+            // into the wrong fields on read. Server tokens are BUG-XXXXXXXXXX today; strip anyway.
+            var safeToken = token.Trim().Replace("|", "");
+            if (safeToken.Length == 0) return;
+            list.Add($"{safeToken}|{stamp}|{kindText}");
+
+            if (list.Count > MaxRecentReports)
+                list.RemoveRange(0, list.Count - MaxRecentReports);
+        }
+
+        /// <summary>
+        /// Decode stored entries into <see cref="RecentReport"/> rows, NEWEST FIRST.
+        /// Tolerates malformed/legacy entries (a bare token still yields a row). Never throws.
+        /// </summary>
+        internal static List<RecentReport> ParseRecentReports(IEnumerable<string>? entries)
+        {
+            var result = new List<RecentReport>();
+            if (entries == null) return result;
+
+            foreach (var raw in entries)
+            {
+                if (string.IsNullOrWhiteSpace(raw)) continue;
+                var parts = raw.Split('|');
+                var token = parts[0].Trim();
+                if (token.Length == 0) continue;
+
+                // EXACT "o" (the format AppendRecentReport writes), not a lenient TryParse: a corrupt
+                // field like "5" parses leniently into a plausible-looking date and the UI then shows
+                // the user a filing date that never happened. Anything else is treated as "no stamp",
+                // which the row already renders gracefully.
+                // NB: RoundtripKind alone — combining it with AdjustToUniversal throws ArgumentException.
+                DateTime? stamp = null;
+                if (parts.Length > 1 && DateTime.TryParseExact(
+                        parts[1], "o", CultureInfo.InvariantCulture,
+                        DateTimeStyles.RoundtripKind, out var parsed))
+                {
+                    stamp = parsed.Kind == DateTimeKind.Unspecified
+                        ? DateTime.SpecifyKind(parsed, DateTimeKind.Utc)   // no offset written: it was UTC
+                        : parsed.ToUniversalTime();
+                }
+
+                var kind = parts.Length > 2 && string.Equals(parts[2].Trim(), "suggestion", StringComparison.OrdinalIgnoreCase)
+                    ? ReportKind.Suggestion
+                    : ReportKind.Bug;
+
+                result.Add(new RecentReport { Token = token, TimestampUtc = stamp, Kind = kind });
+            }
+
+            result.Reverse(); // stored oldest-first; the UI shows newest-first
+            return result;
+        }
+
+        /// <summary>
+        /// Render a "…({0})…" toast when there is no token to put in it. A 202/SavedPending response
+        /// can legitimately carry no report number, and the raw format left the user reading
+        /// "Report saved (). The maintainer will receive it shortly." Drops the now-empty bracket pair
+        /// (ASCII and CJK full-width, which is what the zh-CN string uses) and tidies the spacing.
+        /// Client-side on purpose: no localization file is touched.
+        /// </summary>
+        internal static string TidyEmptyTokenPlaceholder(string? text)
+        {
+            if (string.IsNullOrEmpty(text)) return string.Empty;
+            var cleaned = Regex.Replace(text, @"[ \t]*[\(\[（【][ \t]*[\)\]）】]", "");
+            return Regex.Replace(cleaned, @"[ \t]{2,}", " ").Trim();
+        }
+
+        /// <summary>
+        /// Persist a report number so the user can quote it in Discord later. Called on BOTH
+        /// the 200 (filed) and 202 (saved pending) paths — a 202 report still gets a real
+        /// number. Failures are swallowed: never break a submission over bookkeeping.
+        /// </summary>
+        private static void RememberReportToken(string? token, ReportKind kind)
+        {
+            if (string.IsNullOrWhiteSpace(token)) return;
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings == null) return;
+
+                lock (RecentReportsLock)
+                {
+                    // Build a NEW list and publish it through the setter rather than mutating the live
+                    // one in place. This runs on a threadpool continuation while "My Reports" (and the
+                    // settings serializer) can be enumerating the property WITHOUT the lock — an
+                    // in-place Add/RemoveRange there is an InvalidOperationException waiting to happen.
+                    // Readers now always see a complete, immutable-by-convention snapshot.
+                    var updated = new List<string>(settings.RecentBugReports ?? new List<string>());
+                    AppendRecentReport(updated, token, DateTime.UtcNow, kind);
+                    settings.RecentBugReports = updated;
+                }
+                App.Settings?.Save();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("[BugReport] could not persist report number: {Msg}", ex.Message);
             }
         }
 
@@ -397,6 +601,71 @@ namespace ConditioningControlPanel.Services
             if (dropped > 0)
                 App.Logger?.Debug("[BugReport] dropped {Count} crash entries from other app versions", dropped);
             return kept.ToString();
+        }
+
+        /// <summary>
+        /// Scan a wide tail of the rolling app log (MaxDiagScanLines) and keep only the
+        /// diagnostic-critical marker lines (see <see cref="DiagMarkers"/>), returning up to
+        /// MaxDiagMatches most-recent matches. This survives the startup chatter that scrolls the
+        /// plain last-N tail (#634 RAM-growth lines, [WATCHDOG] hang timeline). Not scrubbed here —
+        /// the caller appends the result to the app-log field so it runs through the shared
+        /// LogScrubber with everything else. Never throws.
+        /// </summary>
+        private static string CollectSampledDiagnostics()
+        {
+            try
+            {
+                var raw = TryReadRecentAppLog(MaxDiagScanLines);
+                if (string.IsNullOrEmpty(raw)) return string.Empty;
+                return BuildSampledDiagnostics(raw.Split('\n'));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("[BugReport] sampled diagnostics read failed: {Msg}", ex.Message);
+                return string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// Pure core of <see cref="CollectSampledDiagnostics"/>: given the app-log lines (most recent
+        /// last), scan the last <see cref="MaxDiagScanLines"/> of them, keep only lines containing a
+        /// <see cref="DiagMarkers"/> marker, retain the <see cref="MaxDiagMatches"/> most-recent
+        /// matches in chronological order, and cap the joined section at <see cref="MaxDiagSectionChars"/>
+        /// (keeping the newest bytes). Returns an empty string when nothing matches. Never throws.
+        /// Extracted so the sampling contract can be unit-tested headlessly; the production reader
+        /// (<see cref="CollectSampledDiagnostics"/>) delegates here after loading the wide tail.
+        /// </summary>
+        internal static string BuildSampledDiagnostics(IEnumerable<string> lines)
+        {
+            if (lines == null) return string.Empty;
+            var all = lines as IReadOnlyList<string> ?? new List<string>(lines);
+            if (all.Count == 0) return string.Empty;
+
+            // Scan only the last MaxDiagScanLines lines (mirrors the wide-tail read, which already
+            // bounds the input in production — a no-op there, load-bearing for callers that pass more).
+            int scanStart = Math.Max(0, all.Count - MaxDiagScanLines);
+
+            var matches = new List<string>();
+            for (int idx = scanStart; idx < all.Count; idx++)
+            {
+                var line = (all[idx] ?? string.Empty).TrimEnd('\r');
+                for (int i = 0; i < DiagMarkers.Length; i++)
+                {
+                    if (line.Contains(DiagMarkers[i], StringComparison.Ordinal))
+                    {
+                        matches.Add(line);
+                        break;
+                    }
+                }
+            }
+            if (matches.Count == 0) return string.Empty;
+
+            int start = Math.Max(0, matches.Count - MaxDiagMatches);
+            var section = string.Join(Environment.NewLine, matches.GetRange(start, matches.Count - start));
+            // Cap the section so it can't blow the GitHub issue-body budget; keep the newest.
+            if (section.Length > MaxDiagSectionChars)
+                section = section.Substring(section.Length - MaxDiagSectionChars);
+            return section;
         }
 
         /// <summary>

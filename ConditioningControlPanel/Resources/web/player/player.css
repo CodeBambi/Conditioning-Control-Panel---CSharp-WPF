@@ -1,0 +1,145 @@
+/* Mandatory-video player surface — pure black, no chrome.
+   Nothing here may introduce a scrollbar or a hit-testable control: the page is
+   a passive surface and every interaction is reported to the host instead. */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Opt-IN only (load message: hideCursor). The mandatory-video windows do not hide
+   the pointer — neither does the LibVLC path they must be indistinguishable from —
+   and BubbleCount is mouse-driven, so an invisible pointer there is unplayable. */
+body.hide-cursor,
+body.hide-cursor * {
+  cursor: none;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  overflow: hidden;
+}
+
+#bg, #fg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  /* Pointer events land on the document (see the window-level pointerdown in
+     player.js) rather than on the media element's own default handling. */
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+
+/* Foreground: never crop the actual content. */
+#fg {
+  object-fit: contain;
+  z-index: 1;
+}
+
+/* Blurred fill behind a letterboxed clip. scale(1.1) hides the transparent
+   edge bleed that a 40px blur pulls in from outside the frame. */
+#bg {
+  object-fit: cover;
+  filter: blur(40px) brightness(0.7);
+  transform: scale(1.1);
+  z-index: 0;
+  display: none;
+}
+
+body.has-bg #bg { display: block; }
+
+/* ---- attention-check targets ----
+   The predecessor was one topmost Win32 window per target, moved with a
+   SetWindowPos every 16ms — that per-frame window move is what the owner saw as
+   stutter. Here the bounce is a transform and the fade is an opacity
+   transition, so both stay on the compositor and never trigger layout.
+   The numbers below mirror AttentionTargetVisual (7.5px outline, 20/10 padding,
+   20px radius, 3px border, 150x60 minimum) so the two renderings match. */
+
+#attn {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  overflow: hidden;
+  /* Only the targets take presses; everything else falls through to the
+     window-level handler that reports a generic click. */
+  pointer-events: none;
+}
+
+.attn {
+  position: absolute;
+  left: 0;
+  top: 0;
+  min-width: 150px;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  cursor: pointer;
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  will-change: transform, opacity;
+  transition: opacity 0.3s linear;
+}
+
+/* Clicked, waiting for the host's attentionHide: still visible, no longer
+   clickable — a second press must not report a second hit. */
+.attn.attn-hit { pointer-events: none; }
+
+/* Grace pause (#735): frozen in place under the host's Resume card. The motion
+   loop is stopped in JS; this is what stops the clicks. */
+body.attn-paused .attn { pointer-events: none; }
+
+.attn.gone { opacity: 0; pointer-events: none; }
+
+.attn-box {
+  position: relative;
+  padding: 10px 20px;
+  border-radius: 20px;
+  border: 0 solid transparent;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.6);
+}
+
+/* Floating-text mode: the outlined glyphs and nothing else. */
+.attn-floating .attn-box {
+  padding: 0;
+  border-radius: 0;
+  border-width: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.attn-text { position: relative; display: block; }
+
+.attn-text span {
+  display: block;
+  white-space: pre-line;   /* C# already split the trigger into lines */
+  text-align: center;
+  font-weight: 700;
+  line-height: 0.95;
+}
+
+/* Stroke underneath, fill on top: the same two-pass outline the WPF target
+   draws with a stroked and a filled copy of the glyph geometry. The stroked
+   copy is out of flow so the filled one alone defines the box size. */
+.attn-text .out {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  color: transparent;
+  -webkit-text-stroke: 7.5px #000;
+}

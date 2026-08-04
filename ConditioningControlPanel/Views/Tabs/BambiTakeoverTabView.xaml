@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+             xmlns:fx="clr-namespace:ConditioningControlPanel.Controls"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
@@ -84,21 +85,15 @@
                                 <ColumnDefinition Width="20"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <!-- Orb (placeholder: drawn ellipse + halo; swap for nano-banana art later) -->
-                            <Grid Grid.Column="0" Width="92" Height="92" VerticalAlignment="Center">
-                                <Ellipse x:Name="OrbHalo" x:FieldModifier="internal" Width="92" Height="92" Opacity="0">
-                                    <Ellipse.Fill>
-                                        <RadialGradientBrush>
-                                            <GradientStop Color="#FF69B4" Offset="0.0"/>
-                                            <GradientStop Color="#00FF69B4" Offset="1.0"/>
-                                        </RadialGradientBrush>
-                                    </Ellipse.Fill>
-                                </Ellipse>
-                                <Ellipse x:Name="OrbCore" x:FieldModifier="internal" Width="58" Height="58" Fill="#3A3A52"
-                                         Stroke="#5A4A6A" StrokeThickness="2" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Image Width="30" Height="30" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                       Source="{Binding Source='🌀', Converter={StaticResource EmojiToImageSource}}"/>
-                            </Grid>
+                            <!-- The orb. Was two stacked Ellipses plus a spiral emoji standing in for
+                                 one; it is now a real Skia surface (Controls/TakeoverOrb.cs) that
+                                 draws its own layered glow, rotating inner swirl and orbiting wisps,
+                                 re-tints per mod and parks whenever the tab is not on screen.
+                                 112 rather than the old 92: the wisp ring orbits out to ~0.46 of the
+                                 shorter edge and WPF clips overflow silently, so the slot is sized
+                                 for the FX at peak rather than for the old flat disc. -->
+                            <fx:TakeoverOrb x:Name="TakeoverOrbFx" x:FieldModifier="internal"
+                                            Grid.Column="0" Width="112" Height="112" VerticalAlignment="Center"/>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                 <TextBlock x:Name="TxtTakeoverStatus" x:FieldModifier="internal" Text="○ DORMANT"
                                            Foreground="#8888A0" FontSize="18" FontWeight="Bold"/>
@@ -231,7 +226,7 @@
                                     <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_flash}"><TextBlock x:Name="TxtAutoFlash" x:FieldModifier="internal" Text="{loc:Str tab_flashes}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyFlash" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                     <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_video}"><TextBlock x:Name="TxtAutoVideo" x:FieldModifier="internal" Text="{loc:Str tab_videos}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyVideo" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                     <Grid Margin="0,2" ToolTip="{loc:Str tooltip_auto_plays_hypnotube_videos_fullscreen}"><TextBlock Text="{loc:Str label_web_videos}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyWebVideo" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_takeover_strict_videos}"><TextBlock Text="{loc:Str label_takeover_strict_videos}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkTakeoverVideosStrict" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_protect_browser_video}"><TextBlock Text="{loc:Str label_protect_browser_video}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkProtectBrowserVideo" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                     <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_subliminal}"><TextBlock x:Name="TxtAutoSubliminal" x:FieldModifier="internal" Text="{loc:Str tab_subliminals}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomySubliminal" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                     <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_comment}"><TextBlock Text="{loc:Str label_comments}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyComment" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                 </StackPanel>
@@ -242,8 +237,39 @@
                                     <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_lock_cards}"><TextBlock x:Name="TxtAutoLockCards" x:FieldModifier="internal" Text="{loc:Str label_lock_cards}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyLockCard" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                     <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_bouncing_text}"><TextBlock x:Name="TxtAutoBouncing" x:FieldModifier="internal" Text="{loc:Str label_bouncing}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyBouncingText" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                     <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_mind_wipe}"><TextBlock x:Name="TxtAutoMindwipe" x:FieldModifier="internal" Text="{loc:Str label_mindwipe}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyMindWipe" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_wallpaper}"><TextBlock Text="{loc:Str label_autonomy_wallpaper}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyWallpaper" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                 </StackPanel>
                             </Grid>
+                            <!-- Wallpaper source folder — where she pulls desktop wallpapers from (blank = assets/wallpapers) -->
+                            <Grid Margin="0,10,0,0" ToolTip="{loc:Str tooltip_wallpaper_folder}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0" x:Name="BtnWallpaperFolder" x:FieldModifier="internal" Content="{loc:Str btn_choose_wallpaper_folder}"
+                                        Cursor="Hand" Background="{DynamicResource SecondaryBrush}" Foreground="White" FontSize="11"
+                                        BorderThickness="0" Padding="10,5" VerticalAlignment="Center" Click="BtnWallpaperFolder_Click">
+                                    <Button.Resources>
+                                        <Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style>
+                                    </Button.Resources>
+                                </Button>
+                                <TextBlock Grid.Column="1" x:Name="TxtWallpaperFolder" x:FieldModifier="internal" Foreground="#B0B0C8" FontSize="11"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="10,0,0,0"/>
+                            </Grid>
+                            <!-- Wallpaper persistence — every change used to snap back after a hardcoded
+                                 30s, so you barely ever saw it behind your windows (#694). Keep it, or
+                                 pick how long the pulse lasts. -->
+                            <Grid Margin="0,10,0,0" ToolTip="{loc:Str tooltip_wallpaper_keep}">
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str label_wallpaper_keep}" FontSize="12" Foreground="#CCC"/>
+                                    <TextBlock Text="{loc:Str desc_wallpaper_keep}" FontSize="10" Foreground="#888"/>
+                                </StackPanel>
+                                <CheckBox x:Name="ChkWallpaperKeep" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkWallpaperKeep_Changed" Unchecked="ChkWallpaperKeep_Changed"/>
+                            </Grid>
+                            <StackPanel x:Name="PanelWallpaperDuration" x:FieldModifier="internal" Margin="0,8,0,0" ToolTip="{loc:Str tooltip_wallpaper_duration}">
+                                <Grid><TextBlock Text="{loc:Str label_wallpaper_duration}" Foreground="#AAA" FontSize="12"/><TextBlock x:Name="TxtWallpaperDuration" x:FieldModifier="internal" Text="30s" Foreground="{DynamicResource PinkBrush}" FontSize="12" HorizontalAlignment="Right"/></Grid>
+                                <Slider x:Name="SliderWallpaperDuration" x:FieldModifier="internal" Minimum="10" Maximum="600" Value="30" Height="22" ValueChanged="SliderWallpaperDuration_Changed"/>
+                            </StackPanel>
                         </StackPanel>
                         </Border>
                     </Expander>
@@ -279,6 +305,44 @@
                                     <TextBlock Text="A pink bar under the avatar that empties before the next random action." FontSize="10" Foreground="#888"/>
                                 </StackPanel>
                                 <CheckBox x:Name="ChkShowTakeoverCountdown" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShowTakeoverCountdown_Changed" Unchecked="ChkShowTakeoverCountdown_Changed"/>
+                            </Grid>
+
+                            <Border Height="1" Background="#2E2E48" Margin="0,10"/>
+
+                            <!-- Mantra Chant (suggestion #653): loops this mod's VOICED mantras as ambient audio.
+                                 Self-contained here (no Takeover twin), so the handlers live in this tab's code-behind. -->
+                            <Grid Margin="0,2" ToolTip="{loc:Str tooltip_mantra_chant}">
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str label_mantra_chant}" FontSize="12" Foreground="#CCC"/>
+                                    <TextBlock x:Name="TxtMantraChantHint" Text="{loc:Str desc_mantra_chant}" FontSize="10" Foreground="#888"/>
+                                </StackPanel>
+                                <CheckBox x:Name="ChkMantraChant" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkMantraChant_Changed" Unchecked="ChkMantraChant_Changed"/>
+                            </Grid>
+                            <Grid Margin="0,8,0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str label_mantra_chant_volume}" FontSize="11" Foreground="#AAA" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <Slider x:Name="SldMantraChantVolume" Grid.Column="1" Width="160" VerticalAlignment="Center"
+                                        Minimum="0" Maximum="100" SmallChange="5" LargeChange="20" TickFrequency="10"
+                                        ValueChanged="SldMantraChantVolume_Changed"/>
+                                <TextBlock x:Name="TxtMantraChantVolume" Grid.Column="2" VerticalAlignment="Center" Margin="8,0,0,0"
+                                           FontSize="11" FontWeight="Bold" Foreground="#C9A0FF" MinWidth="42" TextAlignment="Right" Text="—"/>
+                            </Grid>
+                            <Grid Margin="0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str label_mantra_chant_gap}" FontSize="11" Foreground="#AAA" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <Slider x:Name="SldMantraChantGap" Grid.Column="1" Width="160" VerticalAlignment="Center"
+                                        Minimum="0" Maximum="60" SmallChange="1" LargeChange="5" TickFrequency="5"
+                                        ValueChanged="SldMantraChantGap_Changed"/>
+                                <TextBlock x:Name="TxtMantraChantGap" Grid.Column="2" VerticalAlignment="Center" Margin="8,0,0,0"
+                                           FontSize="11" FontWeight="Bold" Foreground="#C9A0FF" MinWidth="42" TextAlignment="Right" Text="—"/>
                             </Grid>
 
                             <Border Height="1" Background="#2E2E48" Margin="0,10"/>
@@ -337,7 +401,7 @@
     
                 <!-- Translucent gating overlay (only for free users) -->
                 <Border x:Name="BambiTakeoverGate" x:FieldModifier="internal" Visibility="Collapsed"
-                        Background="#99000010" BorderBrush="#FF69B4" BorderThickness="2"
+                        Background="#99000010" BorderBrush="{DynamicResource FxGlowBrush}" BorderThickness="2"
                         CornerRadius="10" IsHitTestVisible="True">
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                         <Image Width="52" Height="52" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
@@ -345,7 +409,7 @@
                                    FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                         <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="14"
                                    Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
-                        <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="#FF69B4"
+                        <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="{DynamicResource FxGlowBrush}"
                                 Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
                             <helpers:EmojiTextBlock Text="{loc:Str gate_unlock_with_patreon}"/>
                         </Button>

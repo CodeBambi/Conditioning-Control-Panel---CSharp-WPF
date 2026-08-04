@@ -187,6 +187,10 @@ namespace ConditioningControlPanel.Services
         private const int MaxBlinkClosedMs = 1500;           // longer than this is a stare/squint, not a blink
         private const int BlinkCooldownMs = 500;             // gap required between consecutive blink fires
         private const int BlinkDiagLogIntervalMs = 3000;     // log EAR baseline + blink count every ~3s
+        // Deliberate "hold your eyes shut" gesture. Sits ABOVE MaxBlinkClosedMs on purpose:
+        // a closure long enough to fire OnEyesClosedLong can never also be reported as a
+        // blink, so the two gestures are mutually exclusive by construction.
+        private const int EyesClosedLongMs = 2000;
 
         // EAR is computed against the IRIS MODEL's 71-point eye contour, NOT
         // FaceMesh's eyelid landmarks. FaceMesh's landmarks barely move during
@@ -398,6 +402,17 @@ namespace ConditioningControlPanel.Services
         }
 
         public event Action? OnBlink;
+
+        /// <summary>
+        /// Fired once per closure when the eyes have been continuously closed for
+        /// <see cref="EyesClosedLongMs"/> (2s) — a deliberate "hold it shut" gesture
+        /// rather than a blink. Fires WHILE still closed (not on reopen), so the
+        /// gesture feels immediate. <see cref="OnBlink"/> can never fire for the same
+        /// closure: that path requires closedMs &lt;= MaxBlinkClosedMs (1500ms).
+        /// Marshalled to the UI dispatcher like every other event here.
+        /// </summary>
+        public event Action? OnEyesClosedLong;
+
         public event Action<System.Windows.Point>? OnLongStare;
         public event Action? OnMouthOpen;
         public event Action? OnTongueOut;
@@ -450,10 +465,29 @@ namespace ConditioningControlPanel.Services
         // with margin while still bounding a genuinely wedged driver.
         private const int CameraOpenTimeoutSeconds = 90;
 
-        // Set when a camera-open attempt times out so the worker that's still
-        // blocked in the driver disposes whatever it eventually opens instead of
-        // leaking a live capture handle behind our back.
-        private volatile bool _openAbandoned;
+        // Stamps each camera-open attempt so a worker still blocked in the driver disposes
+        // whatever it eventually opens instead of leaking a live capture handle behind our back.
+        //
+        // #743: this was a resettable bool, and TryOpenCamera's first statement cleared it. A retry
+        // therefore re-armed the PREVIOUS attempt's worker: that worker returned from the driver,
+        // found the flag clear, and published its handle into a closure whose call had already
+        // returned - so a live VideoCapture stayed open on the same device the retry was reading
+        // from. OpenCvSharp's VideoCapture is finalizable, which makes that worse than a leak: the
+        // GC finalizer thread later called release() on a device mid-Read (native AV, invisible to
+        // every managed handler), or blocked inside it and stalled process-wide finalization -
+        // the global slowdown users reported just before the crash to desktop.
+        //
+        // A monotonic generation can't be re-armed: only the attempt that owns the current stamp
+        // may publish, and any bump invalidates every worker still in flight.
+        private int _openGeneration;
+
+        // Guards the publish/abandon handoff in TryOpenCamera. Deliberately NOT _stateLock, which
+        // Start() holds for its whole body - taking that here would deadlock the open worker.
+        private readonly object _openPublishLock = new();
+
+        // #743: 1 while a start is in progress. Checked outside _stateLock, because a caller that
+        // queues on the lock only acquires it after the state has left Starting.
+        private int _startInFlight;
 
         // Set when a capture-open attempt fails because the OpenCV native runtime
         // (OpenCvSharpExtern.dll) can't load — almost always a missing MSVC runtime
@@ -467,6 +501,10 @@ namespace ConditioningControlPanel.Services
         private BlazeFaceDetector? _faceDetector;
         private FaceMeshDetector? _faceMesh;
         private IrisDetector? _irisDetector;
+
+        /// <summary>#743: true while any ONNX session is still held, so Stop() can tell a service
+        /// with orphaned native resources from a genuinely idle one. Read under _stateLock.</summary>
+        private bool HasLoadedModels => _faceDetector != null || _faceMesh != null || _irisDetector != null;
         private Thread? _captureThread;
         private volatile bool _stopRequested;
 
@@ -476,6 +514,7 @@ namespace ConditioningControlPanel.Services
         private double _earBaseline;                             // rolling 90-frame max of avg EAR
         private bool _eyesClosed;                                // hysteresis state for both eyes (single)
         private DateTime? _eyesClosedAt;                         // start of current closed window
+        private bool _eyesClosedLongFired;                       // OnEyesClosedLong already fired for THIS closure
         private double _minEarThisClosure;                       // tracks deepest closure during current closed window
         private double _windowMinEar = double.MaxValue;          // min EAR seen since last diag log (for tuning)
         private double _windowMaxEar = double.MinValue;          // max EAR seen since last diag log
@@ -744,6 +783,29 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public bool Start()
         {
+            // #743: refuse a concurrent start rather than queueing behind it. A second click used to
+            // block here on _stateLock for the remainder of the 90s camera timeout and then re-run
+            // the entire open + model load, producing a second capture handle on the same device.
+            // The check has to sit OUTSIDE the lock - by the time a queued caller acquired it, the
+            // state had already left Starting, so an in-lock check would never see it.
+            if (Interlocked.CompareExchange(ref _startInFlight, 1, 0) != 0)
+            {
+                App.Logger?.Information("WebcamTrackingService: Start() refused — a start is already in flight");
+                return false;
+            }
+
+            try
+            {
+                return StartCore();
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _startInFlight, 0);
+            }
+        }
+
+        private bool StartCore()
+        {
             lock (_stateLock)
             {
                 if (_disposed) return false;
@@ -762,6 +824,26 @@ namespace ConditioningControlPanel.Services
                     return false;
                 }
                 if (IsRunning) return true;
+
+                // #743: a previous Stop() gives up joining a wedged capture thread after 5s and
+                // deliberately leaves it running. Starting again would set _stopRequested = false
+                // below, resurrecting that thread, and then start a second one - two 30fps
+                // pipelines sharing one detector set, whose Mat buffers are documented
+                // capture-thread-only. That races raw-pointer reads against buffer disposal.
+                if (_captureThread is { IsAlive: true })
+                {
+                    App.Logger?.Error("WebcamTrackingService: Start() refused — the previous capture thread is still alive (wedged driver). Restart the app to recover the camera.");
+                    SetState(WebcamTrackingState.Error);
+                    return false;
+                }
+
+                // #743: a failed start leaves a live capture graph and up to three ONNX sessions
+                // orphaned, because Stop() early-returns for the Error/CameraInUse states it lands
+                // in and CaptureLoop's self-termination releases nothing. Every retry then added
+                // another capture plus ~6 ORT threads and their arenas - the compounding slowdown.
+                // Safe here: nothing is running, and no capture thread is alive (checked above).
+                ReleaseModels();
+                ReleaseCapture();
 
                 SetState(WebcamTrackingState.Starting);
                 ReportStartupProgress(0.08, "Preparing eye-tracking engine…");
@@ -823,7 +905,19 @@ namespace ConditioningControlPanel.Services
             Thread? thread;
             lock (_stateLock)
             {
-                if (!IsRunning && State != WebcamTrackingState.Starting) return;
+                // #743: Error / CameraInUse / CameraDenied are exactly the states a failed start
+                // lands in, and they are also the states holding orphaned native handles. Returning
+                // early for them meant nothing ever released a failed attempt's capture graph or
+                // ONNX sessions. Only a genuinely idle service has nothing to do here.
+                if (!IsRunning
+                    && State != WebcamTrackingState.Starting
+                    && _captureThread == null
+                    && _capture == null
+                    && !HasLoadedModels)
+                {
+                    return;
+                }
+
                 _stopRequested = true;
                 thread = _captureThread;
             }
@@ -1050,7 +1144,9 @@ namespace ConditioningControlPanel.Services
 
         private bool TryOpenCamera()
         {
-            _openAbandoned = false;
+            // #743: claim a fresh generation. Never clear a shared flag here - that re-armed the
+            // previous attempt's worker and leaked a live handle onto the device (see _openGeneration).
+            var generation = Interlocked.Increment(ref _openGeneration);
 
             // The VideoCapture ctor and the probe reads below can block for an
             // unbounded time on a wedged driver or a virtual camera that never
@@ -1059,18 +1155,36 @@ namespace ConditioningControlPanel.Services
             VideoCapture? opened = null;
             var openTask = Task.Run(() =>
             {
-                var cap = OpenCaptureCore();
+                var cap = OpenCaptureCore(generation);
                 if (cap == null) return false;
-                // If we already timed out, the caller has moved on — don't publish
-                // a handle nobody will dispose.
-                if (_openAbandoned) { try { cap.Dispose(); } catch { } return false; }
-                opened = cap;
-                return true;
+                // Check and publish atomically against the timeout path below, so a handle can
+                // never be published into the gap between "still current" and the assignment.
+                lock (_openPublishLock)
+                {
+                    if (Volatile.Read(ref _openGeneration) != generation)
+                    {
+                        // The caller has moved on — don't hand over something nobody will dispose.
+                        try { cap.Dispose(); } catch { }
+                        return false;
+                    }
+                    opened = cap;
+                    return true;
+                }
             });
 
             if (!openTask.Wait(TimeSpan.FromSeconds(CameraOpenTimeoutSeconds)))
             {
-                _openAbandoned = true;
+                // Invalidate this attempt, and adopt anything the worker managed to publish in the
+                // instant before we did — otherwise that handle has no owner at all.
+                VideoCapture? stray;
+                lock (_openPublishLock)
+                {
+                    Interlocked.Increment(ref _openGeneration);
+                    stray = opened;
+                    opened = null;
+                }
+                if (stray != null) { try { stray.Dispose(); } catch { } }
+
                 App.Logger?.Warning(
                     "WebcamTrackingService: camera open timed out after {Seconds}s — driver may be hung or the device is held exclusively by another app",
                     CameraOpenTimeoutSeconds);
@@ -1095,8 +1209,14 @@ namespace ConditioningControlPanel.Services
         /// NOT publish to <see cref="_capture"/> — the watchdog in TryOpenCamera
         /// owns that so a post-timeout success can be safely disposed.
         /// </summary>
-        private VideoCapture? OpenCaptureCore()
+        /// <param name="generation">
+        /// #743: the <see cref="_openGeneration"/> stamp this attempt owns. Any bump means a
+        /// timeout or a newer Start() has taken over, so this attempt must stop and own nothing.
+        /// </param>
+        private VideoCapture? OpenCaptureCore(int generation)
         {
+            bool Abandoned() => Volatile.Read(ref _openGeneration) != generation;
+
             _nativeRuntimeMissing = false;
             try
             {
@@ -1160,7 +1280,7 @@ namespace ConditioningControlPanel.Services
                             ? "Opening camera…"
                             : $"Camera slow to respond — trying another method ({attemptIdx + 1}/{CaptureAttempts.Length})…");
 
-                    var cap = TryOpenWithBackend(deviceIndex, detectedName, attempt.Api, attempt.Name, attempt.Fourcc, ref anyOpened);
+                    var cap = TryOpenWithBackend(deviceIndex, detectedName, attempt.Api, attempt.Name, attempt.Fourcc, ref anyOpened, generation);
                     if (cap != null)
                     {
                         App.Logger?.Information(
@@ -1169,7 +1289,7 @@ namespace ConditioningControlPanel.Services
                         return cap;
                     }
                     // Abandoned mid-open (post-timeout) — stop trying, the handle's owner has moved on.
-                    if (_openAbandoned) return null;
+                    if (Abandoned()) return null;
                 }
 
                 if (_nativeRuntimeMissing)
@@ -1219,7 +1339,9 @@ namespace ConditioningControlPanel.Services
         /// if no usable frame arrived) so the caller can distinguish CameraDenied from
         /// CameraInUse.
         /// </summary>
-        private VideoCapture? TryOpenWithBackend(int deviceIndex, string detectedName, VideoCaptureAPIs api, string apiName, string? fourcc, ref bool anyOpened)
+        /// <param name="generation">#743: the <see cref="_openGeneration"/> stamp of the owning
+        /// attempt. Any bump means this probe must abandon the handle rather than return it.</param>
+        private VideoCapture? TryOpenWithBackend(int deviceIndex, string detectedName, VideoCaptureAPIs api, string apiName, string? fourcc, ref bool anyOpened, int generation)
         {
             string label = fourcc != null ? apiName + "/" + fourcc : apiName;
             App.Logger?.Information("WebcamTrackingService: opening device index {Index} ('{Name}') with {Api}", deviceIndex, detectedName, label);
@@ -1264,7 +1386,7 @@ namespace ConditioningControlPanel.Services
                 int probeReads = 0;
                 while (DateTime.UtcNow < probeDeadline)
                 {
-                    if (_openAbandoned) { cap.Dispose(); return null; }
+                    if (Volatile.Read(ref _openGeneration) != generation) { cap.Dispose(); return null; }
                     probeReads++;
                     if (cap.Read(probe) && !probe.Empty())
                     {
@@ -1411,6 +1533,7 @@ namespace ConditioningControlPanel.Services
             _earBaseline = 0;
             _eyesClosed = false;
             _eyesClosedAt = null;
+            _eyesClosedLongFired = false;
             _minEarThisClosure = double.MaxValue;
             _windowMinEar = double.MaxValue;
             _windowMaxEar = double.MinValue;
@@ -1827,6 +1950,7 @@ namespace ConditioningControlPanel.Services
             _pitchSmoothBuffer.Clear();
             _eyesClosed = false;
             _eyesClosedAt = null;
+            _eyesClosedLongFired = false;
             _mouthOpen = false;
             _mouthOpenedAt = null;
             _marSmoothBuffer.Clear();   // drop stale MAR so the median doesn't blip on face re-acquire
@@ -2484,10 +2608,19 @@ namespace ConditioningControlPanel.Services
             {
                 _eyesClosedAt = now;
                 _minEarThisClosure = avgEar;       // start tracking minimum
+                _eyesClosedLongFired = false;
             }
             else if (nowClosed)
             {
                 if (avgEar < _minEarThisClosure) _minEarThisClosure = avgEar;
+                // Still closed: the 2s "hold" gesture fires here, once per closure,
+                // without waiting for the eyes to reopen.
+                if (!_eyesClosedLongFired && _eyesClosedAt.HasValue
+                    && (now - _eyesClosedAt.Value).TotalMilliseconds >= EyesClosedLongMs)
+                {
+                    _eyesClosedLongFired = true;
+                    Dispatch(() => OnEyesClosedLong?.Invoke());
+                }
             }
             else if (!nowClosed && _eyesClosed && _eyesClosedAt.HasValue)
             {
@@ -2511,11 +2644,13 @@ namespace ConditioningControlPanel.Services
                     closedMs, _earBaseline, _minEarThisClosure, _minEarThisClosure / _earBaseline);
                 _eyesClosedAt = null;
                 _minEarThisClosure = double.MaxValue;
+                _eyesClosedLongFired = false;
             }
             else if (!nowClosed)
             {
                 _eyesClosedAt = null;
                 _minEarThisClosure = double.MaxValue;
+                _eyesClosedLongFired = false;
             }
 
             _eyesClosed = nowClosed;

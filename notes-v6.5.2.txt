@@ -1,0 +1,26 @@
+v6.5.2 - Questioning... the narrative? 🤭💗
+
+A stability pass on top of 6.5.1. Locks that are meant to hold now hold, panic actually stops things, and your desktop comes back the way you left it.
+
+🩹 FIXES
+- Your wallpaper is no longer cleared for good when a wallpaper change gets interrupted. (#692)
+- "Keep the wallpaper" and the pulse length are back in Takeover, so a change can stay if you want it to. (#694)
+- Mandatory video plays through the audio device you picked instead of the Windows default. (#707, #708)
+- Corner GIF overlays no longer wedge the app on startup, and a crash while restoring them can no longer follow you through a reinstall. (#709)
+- Voice commands can no longer talk their way out of a strict locked video. (#706)
+- Panic during a mandatory video now ends the run instead of quietly queueing the next one.
+- Failing an attention check no longer hands you an escapable video on the retry.
+- Dashboard cards follow your mod's text replacements. (#713)
+- Leaderboard: "Jump to me" stopped pointing at a page that never existed, and your rank no longer contradicts the board it is printed on. (#693)
+- The freeze behind the blurred video background is fixed. (#632, #636, #687)
+- A stuck audio duck no longer leaves the machine silenced, and Test Audio cannot hang. (#686)
+- Mantra chant respects mute, disarms on panic, and no longer resumes by itself. (#685)
+- Wake word calibration finally hears the "hey". (#682)
+- Flash and spiral GIFs sample across the whole file instead of truncating, so long GIFs keep their ending. (#683)
+- The Monitor dropdown wins over the calibration pin in the blink trainer. (#681)
+- Lock card evidence and achievement unlocks can no longer hang. (#677, #684)
+
+🌍 LOCALIZATION
+- 10 missing keys, plus new keys for the wallpaper toggle and the leaderboard rank line. (#678)
+
+Season: Jelly July

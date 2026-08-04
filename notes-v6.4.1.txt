@@ -1,0 +1,20 @@
+v6.4.1 - Deeper Down
+
+A 6.4.0 follow-up. Down the Rabbit Hole now drives your toy as you fall, the unified overlay renders off the main thread so the spiral stays smooth on every setup, and there's a batch of fixes underneath.
+
+DOWN THE RABBIT HOLE: HAPTICS
+- Down the Rabbit Hole now drives your toy as you descend: a steady ambient pulse that deepens the further you fall (and melts away on the Surfacing), plus tiered accents on the big moments.
+- Tune the feel with a new Sparse / Balanced / Rich picker on the Haptics tab.
+
+PERFORMANCE & STABILITY
+- Fixed the spiral and overlays making everything (clicks, bubbles, lock cards, mind-wipe, the quest clock) lag or freeze on higher-resolution and multi-monitor PCs. Overlay rendering now runs off the main thread, so the spiral stays smooth no matter how many effects are stacked. (#588, #586, #587)
+- The frozen "SPIRAL" word and stalled subliminals and companion during a spiral are gone with the same fix. (#586)
+
+BUG FIXES
+- The maximum video length slider is now always respected. Longer clips are cut to your cap even the first time they play, before their length has been measured. (#584)
+- Fixed losing Patreon Premium during a brief network or login hiccup while your subscription was still active. Your tier is now kept through transient sign-in blips. (#585)
+- Down the Rabbit Hole and the Loom: fixed a hard seam in the tunnel spiral style so the threads line up cleanly.
+
+If overlays still feel heavy, turn off Settings > System > "Unified overlay renderer" to fall back to the proven per-effect windows.
+
+Season: Jelly July

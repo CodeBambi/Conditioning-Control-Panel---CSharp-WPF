@@ -1,0 +1,56 @@
+v6.5.1 - Questioning... the narrative? 🤭💗
+
+A follow-up to 6.5.0: lighter on memory, fewer freezes, no more screens you cannot get out of. Plus a pile of the things you asked for.
+
+🩹 FIXES
+- Bubble Count no longer leaves a fullscreen result screen stuck on top with no way out. (#633)
+- Lock cards you could not type into, after a monitor change or a Remote Desktop reconnect, are fixed. (#618)
+- A lock card queued while another one is up now waits its turn instead of being thrown away. (#676)
+- Maximizing the main window on a second monitor no longer sends it off-screen. (#620)
+- Closing a game window with the X now shuts it down cleanly instead of reopening it.
+- Subliminals show Chinese, Japanese, Korean and emoji again instead of blank boxes. (#615)
+- Fixed a startup crash when corner GIF overlays were switched on. (#625)
+- Sessions written by the Graded Intake appear right away, each with its own name. (#614)
+- Blink trainer: animated .webp images animate instead of freezing on their first frame.
+- Blink trainer overlay can no longer be buried underneath a strict-mode video. (#630)
+- Companion: the bubble-pop egg no longer freezes the screen during a takeover. (#628)
+- Companion stays out of the way while you are inside a game, the Intake, the Loom or the Bureau.
+- Dragging between monitors with different scaling no longer hangs with the companion attached.
+
+🧠 LIGHTER ON MEMORY
+- Awareness screen reading no longer leaks memory on every scan. (#634)
+- The local AI caps what it keeps in mind and hands the model back when the app closes. (#631, #629)
+- New deep tracing for the rare video that turns into a black frozen screen, so a bug report finally captures it. (#616, #617, #621, #622, #623)
+
+✨ THE GRADED INTAKE
+- Sometimes it wants you to prove you are human first. Four different checks, with proper pictures.
+- Those checks no longer bunch up several in a row.
+- Deeper in, it stops playing fair: cards turn upside down, answers wander off, the screen glitches between questions.
+- The wrong-answer sound is gentler down there, and sometimes you get the nice one anyway.
+- Your cursor may occasionally decide for itself which answer you meant.
+
+🐰 DOWN THE RABBIT HOLE
+- Save up to 5 named run setups per save slot. (#650)
+- Optional slow spiral pinned to the middle of the tunnel, off by default. (#647)
+- Type a duration instead of dragging the slider, for Hourglass owners. (#648)
+- New "surprise me" chip rolls a random difficulty and length. (#652)
+- White rabbits show up about 15% more often.
+
+🎁 YOU ASKED FOR IT
+- Your mod's voiced mantras can loop quietly in the background, with their own volume and spacing. (#653)
+- A global camera hotkey, Ctrl+Alt+K by default. (#674)
+- Ramps can ease instead of climbing straight: ease in, ease out, S-curve, exponential. (#660)
+- Layered audio: several loops running together, mixed into one output. (#659)
+- Audio-only sessions, for the voice without the visuals. (#668)
+- Send the spiral and the pink filter to different monitors. (#639)
+- The spiral overlay can pick a random spiral from your library each time it starts. (#641)
+- Awareness reactions can roll a random cooldown inside a range. (#640)
+- A detached companion remembers where you put it and how big you made it. (#669)
+- Leaderboard shows your rank, highlights your row, and can jump straight to you. (#664)
+- Lock cards stop repeating the same phrase back to back. (#673)
+- Choose the color of the pink filter tint. (#643)
+- Wallpaper takeover moved into Takeover, with a folder picker so you choose the source. (#672)
+- New Media Log on the Assets tab: your last 500 flashes and videos, with thumbnails and open-in-folder.
+- New Suggestion button, for sending ideas the same quick way you file a bug.
+
+Season: Jelly July

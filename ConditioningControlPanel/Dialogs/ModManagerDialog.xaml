@@ -83,6 +83,49 @@
                             <TextBlock x:Name="TxtModVersion" FontSize="12" Foreground="#808080" Margin="0,0,0,12"/>
                             <TextBlock x:Name="TxtModDescription" FontSize="13" Foreground="#C0C0C0" TextWrapping="Wrap" Margin="0,0,0,15"/>
 
+                            <!-- Content pack row: built-in mods whose media (voice lines, portraits,
+                                 DTRH barks) lives in a release-hosted pack that is not downloaded yet.
+                                 Hidden entirely on full/dev installs and for user mods. -->
+                            <Border x:Name="PackPanel" Background="{DynamicResource PanelAccentBrush}" CornerRadius="8"
+                                    Padding="12" Margin="0,0,0,15" Visibility="Collapsed">
+                                <StackPanel>
+                                    <TextBlock x:Name="TxtPackState" Text="{loc:Str modmgr_pack_not_downloaded}"
+                                               Foreground="#FFB347" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{loc:Str modmgr_pack_hint}" Foreground="#A0A0A0" FontSize="11"
+                                               TextWrapping="Wrap" Margin="0,5,0,0"/>
+                                    <ProgressBar x:Name="PackProgress" Height="6" Minimum="0" Maximum="100" Value="0"
+                                                 Background="#252542" Foreground="{DynamicResource PinkBrush}"
+                                                 BorderThickness="0" Margin="0,10,0,0" Visibility="Collapsed"/>
+                                    <Button x:Name="BtnDownloadPack" Click="BtnDownloadPack_Click"
+                                            Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="SemiBold"
+                                            Padding="14,7" BorderThickness="0" Cursor="Hand"
+                                            HorizontalAlignment="Left" Margin="0,10,0,0" FontSize="12">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6"
+                                                                    Padding="{TemplateBinding Padding}">
+                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter TargetName="bd" Property="Background" Value="#FF1493"/>
+                                                                </Trigger>
+                                                                <Trigger Property="IsEnabled" Value="False">
+                                                                    <Setter TargetName="bd" Property="Opacity" Value="0.5"/>
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </StackPanel>
+                            </Border>
+
                             <!-- Theme Color Preview -->
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                                 <TextBlock Text="{loc:Str label_theme}" Foreground="#808080" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -149,6 +192,31 @@
                                         </Style>
                                     </Button.Style>
                                 </Button>
+                                <Button x:Name="BtnTubeFit" Content="{loc:Str btn_tube_fit}" Click="BtnTubeFit_Click"
+                                        ToolTip="{loc:Str tooltip_tube_fit}"
+                                        Background="{DynamicResource PanelAccentBrush}" Foreground="#B084DC" FontWeight="SemiBold"
+                                        Padding="16,8" BorderThickness="0" Cursor="Hand" Margin="0,0,10,0"
+                                        Visibility="Collapsed">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6"
+                                                                Padding="{TemplateBinding Padding}">
+                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="bd" Property="Opacity" Value="0.85"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
                                 <Button x:Name="BtnUninstall" Content="{loc:Str btn_uninstall}" Click="BtnUninstall_Click"
                                         Background="{DynamicResource PanelAccentBrush}" Foreground="#FF6B6B" FontWeight="SemiBold"
                                         Padding="16,8" BorderThickness="0" Cursor="Hand">
@@ -181,6 +249,30 @@
             <!-- Bottom Bar -->
             <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" CornerRadius="0,0,12,12" Padding="15,10">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button x:Name="BtnBrowseCatalogue" Content="{loc:Str btn_browse_mod_catalogue}" Click="BtnBrowseCatalogue_Click"
+                            ToolTip="{loc:Str tooltip_browse_mod_catalogue}"
+                            Background="{DynamicResource PanelAccentBrush}" Foreground="#B084DC" Padding="14,7" BorderThickness="0"
+                            Cursor="Hand" Margin="0,0,10,0" FontSize="12">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="bd" Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Button.Style>
+                    </Button>
                     <Button x:Name="BtnInstall" Content="{loc:Str btn_install_from_file}" Click="BtnInstall_Click"
                             Background="{DynamicResource PanelAccentBrush}" Foreground="White" Padding="14,7" BorderThickness="0"
                             Cursor="Hand" Margin="0,0,10,0" FontSize="12">

@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
-using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Haptics;
+using ConditioningControlPanel.Services.Haptics.Core;
 using Serilog;
 
 namespace ConditioningControlPanel.Services
@@ -15,22 +17,44 @@ namespace ConditioningControlPanel.Services
         Unreachable
     }
 
+    /// <summary>
+    /// Facade over the v2 haptics engine.
+    ///
+    /// Every public method that existed before v6.7 still exists with the same signature, so all
+    /// ~25 consumer call sites compile untouched — but none of them talk to a device any more.
+    /// They post SEMANTIC events (<see cref="PostEvent"/>) or set CONTINUOUS layers
+    /// (<see cref="SetLayer"/>) on <see cref="HapticMixer"/>, which owns mixing, safety and the
+    /// single 10 Hz output loop.
+    ///
+    /// Bugs this rewrite closes:
+    ///  - ConnectAsync used to force <c>Settings.Enabled = true</c> behind the user's back.
+    ///  - Two CancellationTokenSources (flash decay, video vibe) were cancelled and disposed from
+    ///    fire-and-forget continuations, throwing ObjectDisposedException into
+    ///    UnobservedTaskException. The mixer schedules everything on its own loop, so both are gone.
+    ///  - <c>_currentEventType</c> was a single unsynchronized string shared by every feature.
+    ///  - <c>Dispose</c> did <c>DisconnectAsync().Wait(1000)</c> on the UI thread during shutdown.
+    ///  - <c>RampUpAsync</c> had no callers and drove the device directly (kept as a thin shim).
+    ///  - The premium/enabled gate was re-checked (inconsistently) in every method; it is now
+    ///    evaluated once, inside the mixer.
+    /// </summary>
     public class HapticService : IDisposable
     {
-        private readonly MockHapticProvider _mockProvider;
-        private readonly LovenseProvider _lovenseProvider;
-        private readonly ButtplugProvider _buttplugProvider;
-        private IHapticProvider? _activeProvider;
+        private readonly HapticDeviceManager _deviceManager;
+        private readonly HapticMixer _mixer;
         private bool _disposed;
-        private string? _currentEventType;
+
         private System.Threading.Timer? _pingTimer;
         private static readonly TimeSpan PingInterval = TimeSpan.FromSeconds(30);
-        // A single failed ping used to drop the device immediately, so one transient
-        // blip (Wi-Fi hiccup, Lovense-cloud latency, device momentarily busy) killed
-        // the connection until the user manually reconnected (#302). Require several
-        // consecutive failures (~90s at the 30s interval) before giving up.
+        // A single failed ping used to drop the device immediately, so one transient blip
+        // (Wi-Fi hiccup, device momentarily busy) killed the connection until the user manually
+        // reconnected (#302). Require several consecutive failures (~90s) before giving up.
         private int _consecutivePingFailures;
         private const int MaxConsecutivePingFailures = 3;
+
+        /// <summary>Latest sequence per event kind, so flipping a feature toggle off mid-pattern
+        /// still stops that pattern (and only that one).</summary>
+        private readonly Dictionary<HapticEventKind, HapticSequence> _liveByKind = new();
+        private readonly object _liveGate = new();
 
         public event EventHandler<bool>? ConnectionChanged;
         public event EventHandler<string>? DeviceDiscovered;
@@ -38,8 +62,23 @@ namespace ConditioningControlPanel.Services
         public event EventHandler<string>? HapticTriggered;
 
         public HapticSettings Settings { get; }
-        public bool IsConnected => _activeProvider?.IsConnected ?? false;
-        public string ProviderName => _activeProvider?.Name ?? "None";
+
+        /// <summary>The mixer. New code should prefer PostEvent/SetLayer on this service.</summary>
+        public HapticMixer Mixer => _mixer;
+        /// <summary>Device registry (roles, trims, battery, capabilities) for the Phase E UI.</summary>
+        public HapticDeviceManager DeviceManager => _deviceManager;
+
+        /// <summary>PHASE F: two-way toy input (buttons, user-override back-off). Never null.
+        /// Constructed here rather than in App.OnStartup because Phase F does not touch
+        /// App.xaml.cs — see docs/HAPTICS_OVERHAUL_PLAN.md.</summary>
+        public ToyInputService ToyInput { get; }
+
+        /// <summary>PHASE F: .funscript auto-load + playback. Never null; VideoService drives it
+        /// through <c>App.Haptics.FunScript</c>.</summary>
+        public FunScriptService FunScript { get; }
+
+        public bool IsConnected => _deviceManager.IsConnected;
+        public string ProviderName => _deviceManager.ProviderNames;
         public bool IsButtplugProvider => Settings.Provider == HapticProviderType.Buttplug;
 
         /// <summary>
@@ -47,103 +86,88 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public int SubliminalAnticipationMs => IsButtplugProvider ? 1300 : 250;
 
-        public System.Collections.Generic.List<string> ConnectedDevices =>
-            _activeProvider?.ConnectedDevices ?? new System.Collections.Generic.List<string>();
+        public List<string> ConnectedDevices
+        {
+            get
+            {
+                var list = new List<string>();
+                foreach (var d in _deviceManager.Devices)
+                    list.Add(string.IsNullOrWhiteSpace(d.Nickname) ? d.Name : d.Nickname);
+                return list;
+            }
+        }
 
         public HapticService(HapticSettings settings)
         {
             Settings = settings;
-            _mockProvider = new MockHapticProvider();
-            _lovenseProvider = new LovenseProvider();
-            _buttplugProvider = new ButtplugProvider();
+            Settings.EnsureV2Migrated();
 
-            // Wire up events from all providers
-            WireProviderEvents(_mockProvider);
-            WireProviderEvents(_lovenseProvider);
-            WireProviderEvents(_buttplugProvider);
+            _deviceManager = new HapticDeviceManager(settings);
+            _mixer = new HapticMixer(_deviceManager, settings);
 
-            // Listen for settings changes to enable live stop
+            _deviceManager.ConnectionChanged += (s, connected) => { try { ConnectionChanged?.Invoke(this, connected); } catch { } };
+            _deviceManager.DeviceDiscovered += (s, name) => { try { DeviceDiscovered?.Invoke(this, name); } catch { } };
+            _deviceManager.Error += (s, error) => { try { Error?.Invoke(this, error); } catch { } };
+            _mixer.Activity += (s, msg) => { try { HapticTriggered?.Invoke(this, msg); } catch { } };
+
+            // Phase F services. Self-initialised here on purpose: App.xaml.cs belongs to the UI
+            // rebuild, so nothing in Phase F may register services there. Both are inert until a
+            // provider raises an input event / a video with a script starts.
+            ToyInput = new ToyInputService(_deviceManager, _mixer, settings);
+            FunScript = new FunScriptService(this, settings);
+
             Settings.PropertyChanged += OnSettingsChanged;
+            _mixer.Start();
         }
 
         private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e)
         {
-            // If master enabled is turned off, stop immediately
+            // Master toggle off => everything stops right now.
             if (e.PropertyName == nameof(HapticSettings.Enabled) && !Settings.Enabled)
             {
-                _ = StopAsync();
+                _mixer.PanicStop();
                 return;
             }
 
-            // If a specific feature is turned off and it's currently running, stop
-            if (_currentEventType != null)
+            // A feature turned off mid-pattern stops THAT pattern (the old code stopped the
+            // device outright, which also killed unrelated features).
+            switch (e.PropertyName)
             {
-                var shouldStop = e.PropertyName switch
-                {
-                    nameof(HapticSettings.BubblePopEnabled) when _currentEventType == "BubblePop" => !Settings.BubblePopEnabled,
-                    nameof(HapticSettings.FlashDisplayEnabled) when _currentEventType == "FlashDisplay" => !Settings.FlashDisplayEnabled,
-                    nameof(HapticSettings.FlashClickEnabled) when _currentEventType == "FlashClick" => !Settings.FlashClickEnabled,
-                    nameof(HapticSettings.VideoEnabled) when _currentEventType == "Video" => !Settings.VideoEnabled,
-                    nameof(HapticSettings.TargetHitEnabled) when _currentEventType == "TargetHit" => !Settings.TargetHitEnabled,
-                    nameof(HapticSettings.SubliminalEnabled) when _currentEventType == "Subliminal" => !Settings.SubliminalEnabled,
-                    nameof(HapticSettings.LevelUpEnabled) when _currentEventType == "LevelUp" => !Settings.LevelUpEnabled,
-                    nameof(HapticSettings.AchievementEnabled) when _currentEventType == "Achievement" => !Settings.AchievementEnabled,
-                    nameof(HapticSettings.BouncingTextEnabled) when _currentEventType == "BouncingText" => !Settings.BouncingTextEnabled,
-                    nameof(HapticSettings.BlinkEnabled) when _currentEventType == "Blink" => !Settings.BlinkEnabled,
-                    _ => false
-                };
-
-                if (shouldStop)
-                {
-                    _ = StopAsync();
-                }
+                case nameof(HapticSettings.BubblePopEnabled) when !Settings.BubblePopEnabled: CancelKind(HapticEventKind.BubblePop); break;
+                case nameof(HapticSettings.FlashDisplayEnabled) when !Settings.FlashDisplayEnabled: CancelKind(HapticEventKind.FlashDecay); break;
+                case nameof(HapticSettings.FlashClickEnabled) when !Settings.FlashClickEnabled: CancelKind(HapticEventKind.FlashClick); break;
+                case nameof(HapticSettings.TargetHitEnabled) when !Settings.TargetHitEnabled: CancelKind(HapticEventKind.VideoTargetHit); break;
+                case nameof(HapticSettings.SubliminalEnabled) when !Settings.SubliminalEnabled: CancelKind(HapticEventKind.SubliminalTrigger); break;
+                case nameof(HapticSettings.LevelUpEnabled) when !Settings.LevelUpEnabled: CancelKind(HapticEventKind.LevelUp); break;
+                case nameof(HapticSettings.AchievementEnabled) when !Settings.AchievementEnabled:
+                    CancelKind(HapticEventKind.Achievement);
+                    CancelKind(HapticEventKind.QuestComplete);
+                    CancelKind(HapticEventKind.AvatarEasterEgg);
+                    break;
+                case nameof(HapticSettings.BouncingTextEnabled) when !Settings.BouncingTextEnabled: CancelKind(HapticEventKind.BouncingTextBounce); break;
+                case nameof(HapticSettings.BlinkEnabled) when !Settings.BlinkEnabled: CancelKind(HapticEventKind.BlinkPulse); break;
+                case nameof(HapticSettings.VideoEnabled) when !Settings.VideoEnabled: _mixer.SetLayer(HapticLayer.Video, 0); break;
             }
         }
 
-        private void WireProviderEvents(IHapticProvider provider)
-        {
-            provider.ConnectionChanged += (s, connected) => ConnectionChanged?.Invoke(this, connected);
-            provider.DeviceDiscovered += (s, device) => DeviceDiscovered?.Invoke(this, device);
-            provider.Error += (s, error) => Error?.Invoke(this, error);
-        }
+        // ================================================================== connection
 
         public async Task<bool> ConnectAsync()
         {
-            // Disconnect any existing provider
             await DisconnectAsync();
 
-            // Select the provider based on settings
-            _activeProvider = Settings.Provider switch
-            {
-                HapticProviderType.Mock => _mockProvider,
-                HapticProviderType.Lovense => _lovenseProvider,
-                HapticProviderType.Buttplug => _buttplugProvider,
-                _ => null
-            };
-
-            if (_activeProvider == null)
-            {
-                Error?.Invoke(this, "No provider selected");
-                return false;
-            }
-
-            // Set URLs for providers that need them
-            if (_activeProvider is LovenseProvider lovense)
-            {
-                lovense.SetUrl(Settings.LovenseUrl);
-            }
-            else if (_activeProvider is ButtplugProvider buttplug)
-            {
-                buttplug.SetUrl(Settings.ButtplugUrl);
-            }
-
-            Log.Information("Connecting to haptic provider: {Provider}", _activeProvider.Name);
-            var result = await _activeProvider.ConnectAsync();
+            // NOTE: deliberately does NOT set Settings.Enabled = true. Connecting a toy is not
+            // consent to start buzzing; the master toggle is the user's.
+            Log.Information("Connecting haptic providers");
+            var result = await _deviceManager.ConnectAsync(CancellationToken.None);
             if (result)
             {
-                // Auto-enable haptics when successfully connected
-                Settings.Enabled = true;
+                _mixer.Start();
                 StartPingTimer();
+            }
+            else
+            {
+                Error?.Invoke(this, "No haptic provider connected");
             }
             return result;
         }
@@ -151,11 +175,8 @@ namespace ConditioningControlPanel.Services
         public async Task DisconnectAsync()
         {
             StopPingTimer();
-            if (_activeProvider != null)
-            {
-                await _activeProvider.DisconnectAsync();
-                _activeProvider = null;
-            }
+            _mixer.ClearAll();
+            await _deviceManager.DisconnectAsync();
         }
 
         private void StartPingTimer()
@@ -175,12 +196,9 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var provider = _activeProvider;
-                if (provider == null || !provider.IsConnected) return;
+                if (!_deviceManager.IsConnected) return;
 
-                var ok = await provider.PingAsync();
-                if (provider != _activeProvider) return; // provider swapped during the await
-
+                var ok = await _deviceManager.PingAsync();
                 if (ok)
                 {
                     _consecutivePingFailures = 0;
@@ -197,7 +215,7 @@ namespace ConditioningControlPanel.Services
 
                 App.Logger?.Warning("Haptic ping failed {Max}x consecutively — device unreachable, marking disconnected", MaxConsecutivePingFailures);
                 _consecutivePingFailures = 0;
-                await provider.DisconnectAsync();
+                await _deviceManager.DisconnectAsync();
             }
             catch (Exception ex)
             {
@@ -205,737 +223,636 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        /// <summary>
-        /// Lowest intensity that still maps to a real vibration level. LovenseProvider
-        /// treats intensity &lt;= 0.05 as "off", so any floor of exactly 0.05 silences the
-        /// device instead of keeping a faint buzz (#516). Every minimum floor in this
-        /// service must clear that cutoff.
-        /// </summary>
-        private const double MinPerceptibleIntensity = 0.06;
+        // ================================================================== new first-class API
 
         /// <summary>
-        /// Get slider intensity with minimum floor (devices need ~5% to respond)
-        /// Slider value directly controls device power: 1% = min, 100% = max
+        /// Fire a semantic event. The routing matrix decides whether it plays, how hard, with
+        /// which pattern and at which toy role. This is the API new consumers should call.
         /// </summary>
-        private double GetSliderIntensity(double sliderValue)
+        public HapticSequence PostEvent(HapticEventKind kind, double? intensityOverride = null)
+            => PostEvent(kind, intensityOverride, null, null, 0);
+
+        /// <summary>Set a continuous 0..1 source. Layers combine by MAX; transients ride over them.
+        /// <paramref name="autoZeroMs"/> makes the layer self-clear (live sliders).</summary>
+        public void SetLayer(HapticLayer layer, double value, int autoZeroMs = 0)
+            => _mixer.SetLayer(layer, value, autoZeroMs);
+
+        public double GetLayer(HapticLayer layer) => _mixer.GetLayer(layer);
+
+        // ---------------------------------------------------------------- Phase F additions
+
+        /// <summary>
+        /// PHASE F: set a continuous layer as a per-vibration-motor breakdown (audio band-split).
+        /// Toys with fewer than two Vibrate actuators transparently fall back to
+        /// <c>max(perMotor)</c>, i.e. exactly today's behaviour. Null clears the breakdown.
+        /// </summary>
+        public void SetLayerPerActuator(HapticLayer layer, double[]? perMotor)
+            => _mixer.SetLayerPerActuator(layer, perMotor);
+
+        /// <summary>PHASE F: back the continuous layers off for a while (the user reached for the
+        /// toy themselves). Transient events still fire.</summary>
+        public void SuppressContinuousLayers(int seconds)
+            => _mixer.SuppressLayersUntil(DateTime.UtcNow.AddSeconds(Math.Max(0, seconds)));
+
+        /// <summary>Highest number of Vibrate actuators on any connected, enabled toy
+        /// (Edge = 2, Lapis = 3). 0 when nothing vibrating is connected.</summary>
+        public int MaxVibrateMotors
         {
-            // Minimum floor so device always responds, max 100%
-            return Math.Clamp(sliderValue, MinPerceptibleIntensity, 1.0);
+            get
+            {
+                int best = 0;
+                try
+                {
+                    foreach (var d in _deviceManager.Devices)
+                    {
+                        if (!d.Enabled || !d.IsConnected) continue;
+                        int n = 0;
+                        foreach (var a in d.Actuators) if (a.Type == ActuatorType.Vibrate) n++;
+                        if (n > best) best = n;
+                    }
+                }
+                catch { }
+                return best;
+            }
         }
 
-        /// <summary>
-        /// Apply a vibration pattern based on the selected mode
-        /// Duration stays the same, pattern changes how vibration feels within that duration
-        /// </summary>
-        public async Task ApplyVibrationModeAsync(double intensity, int durationMs, VibrationMode mode, System.Threading.CancellationToken? token = null)
+        /// <summary>True when at least one connected toy has an absolute Position actuator
+        /// (Solace Pro). FunScript uses this to decide position vs. vibration rendering.</summary>
+        public bool HasPositionActuator
         {
-            if (_activeProvider == null || !_activeProvider.IsConnected) return;
-
-            switch (mode)
+            get
             {
-                case VibrationMode.Constant:
-                    // Simple continuous vibration
-                    await _activeProvider.VibrateAsync(intensity, durationMs);
-                    break;
-
-                case VibrationMode.Pulse:
-                    // Quick on/off pulses - 50ms on, 30ms off
-                    var pulseCount = Math.Max(1, durationMs / 80);
-                    for (int i = 0; i < pulseCount; i++)
+                try
+                {
+                    foreach (var d in _deviceManager.Devices)
                     {
-                        if (token?.IsCancellationRequested == true) break;
-                        await _activeProvider.VibrateAsync(intensity, 50);
-                        if (i < pulseCount - 1) await Task.Delay(30);
+                        if (!d.Enabled || !d.IsConnected) continue;
+                        foreach (var a in d.Actuators) if (a.Type == ActuatorType.Position) return true;
                     }
-                    break;
-
-                case VibrationMode.Wave:
-                    // Smooth ramp up then down
-                    var waveSteps = 6;
-                    var waveStepDuration = durationMs / (waveSteps * 2);
-                    // Ramp up
-                    for (int i = 1; i <= waveSteps; i++)
-                    {
-                        if (token?.IsCancellationRequested == true) break;
-                        var stepIntensity = intensity * (i / (double)waveSteps);
-                        await _activeProvider.VibrateAsync(Math.Max(stepIntensity, MinPerceptibleIntensity), waveStepDuration);
-                    }
-                    // Ramp down
-                    for (int i = waveSteps - 1; i >= 0; i--)
-                    {
-                        if (token?.IsCancellationRequested == true) break;
-                        var stepIntensity = intensity * (i / (double)waveSteps);
-                        await _activeProvider.VibrateAsync(Math.Max(stepIntensity, MinPerceptibleIntensity), waveStepDuration);
-                    }
-                    break;
-
-                case VibrationMode.Heartbeat:
-                    // Double pulse pattern (ba-bump, pause, repeat)
-                    var heartbeatCount = Math.Max(1, durationMs / 400);
-                    for (int i = 0; i < heartbeatCount; i++)
-                    {
-                        if (token?.IsCancellationRequested == true) break;
-                        // First beat (strong)
-                        await _activeProvider.VibrateAsync(intensity, 80);
-                        await Task.Delay(60);
-                        // Second beat (lighter)
-                        await _activeProvider.VibrateAsync(intensity * 0.7, 60);
-                        if (i < heartbeatCount - 1) await Task.Delay(200);
-                    }
-                    break;
-
-                case VibrationMode.Escalate:
-                    // Ramps up from low to full intensity
-                    var escalateSteps = 8;
-                    var escalateStepDuration = durationMs / escalateSteps;
-                    for (int i = 1; i <= escalateSteps; i++)
-                    {
-                        if (token?.IsCancellationRequested == true) break;
-                        var stepIntensity = intensity * (0.2 + 0.8 * (i / (double)escalateSteps));
-                        await _activeProvider.VibrateAsync(stepIntensity, escalateStepDuration);
-                    }
-                    break;
-
-                case VibrationMode.Earthquake:
-                    // Random intensity variations
-                    var quakeSteps = Math.Max(2, durationMs / 100);
-                    for (int i = 0; i < quakeSteps; i++)
-                    {
-                        if (token?.IsCancellationRequested == true) break;
-                        // Random between 30% and 100% of set intensity
-                        var randomIntensity = intensity * (0.3 + Random.Shared.NextDouble() * 0.7);
-                        await _activeProvider.VibrateAsync(randomIntensity, 80);
-                        await Task.Delay(20);
-                    }
-                    break;
+                }
+                catch { }
+                return false;
             }
         }
 
         /// <summary>
-        /// Check if a feature is enabled
+        /// PHASE F: absolute stroke placement, 0..1, on every connected toy that has a Position
+        /// actuator. Position is deliberately NOT mixed (it is placement, not intensity) — the
+        /// mixer skips Position actuators entirely and FunScript owns this path.
         /// </summary>
-        private bool IsFeatureEnabled(string eventType)
+        public async Task SetPositionAsync(double position01, CancellationToken ct = default)
         {
-            return eventType switch
+            List<HapticDevice>? targets = null;
+            try
             {
-                "BubblePop" => Settings.BubblePopEnabled,
-                "FlashDisplay" => Settings.FlashDisplayEnabled,
-                "FlashClick" => Settings.FlashClickEnabled,
-                "Video" => Settings.VideoEnabled,
-                "TargetHit" => Settings.TargetHitEnabled,
-                "Subliminal" => Settings.SubliminalEnabled,
-                "LevelUp" => Settings.LevelUpEnabled,
-                "Achievement" => Settings.AchievementEnabled,
-                "BouncingText" => Settings.BouncingTextEnabled,
-                "Blink" => Settings.BlinkEnabled,
-                _ => true
-            };
+                foreach (var d in _deviceManager.Devices)
+                {
+                    if (!d.Enabled || !d.IsConnected) continue;
+                    foreach (var a in d.Actuators)
+                    {
+                        if (a.Type != ActuatorType.Position) continue;
+                        (targets ??= new List<HapticDevice>()).Add(d);
+                        break;
+                    }
+                }
+            }
+            catch { }
+
+            if (targets == null) return;
+            foreach (var d in targets)
+            {
+                try { await _mixer.SetPositionAsync(d.DeviceKey, position01, ct).ConfigureAwait(false); }
+                catch (OperationCanceledException) { return; }
+                catch (Exception ex) { App.Logger?.Debug("SetPositionAsync failed for {Key}: {E}", d.DeviceKey, ex.Message); }
+            }
         }
 
-        public async Task TriggerAsync(string eventType, double sliderIntensity, int durationMs)
+        /// <summary>Everything off NOW, bypassing throttles and unchanged-send suppression.</summary>
+        public void PanicStop() => _mixer.PanicStop();
+
+        /// <summary>Play a rendered pattern with an explicit priority (the DtRH director's tiers).</summary>
+        public async Task PlayPatternAsync(double intensity, int durationMs, VibrationMode mode,
+                                           int priority, ToyRole target = ToyRole.All,
+                                           CancellationToken token = default)
         {
-            Log.Debug("TriggerAsync called: {Event}, Enabled={Enabled}, Provider={Provider}, Connected={Connected}",
-                eventType, Settings.Enabled, _activeProvider?.Name ?? "null", _activeProvider?.IsConnected ?? false);
-
-            if (!Settings.Enabled || _activeProvider == null || !_activeProvider.IsConnected)
-                return;
-
-            if (!IsFeatureEnabled(eventType)) return;
-
-            _currentEventType = eventType;
-
-            // Slider directly controls device power
-            var intensity = GetSliderIntensity(sliderIntensity);
-
-            Log.Debug("Haptic trigger: {Event} at {Intensity}% for {Duration}ms",
-                eventType, (int)(intensity * 100), durationMs);
-
-            HapticTriggered?.Invoke(this, $"{eventType}: {(int)(intensity * 100)}%");
-
-            await _activeProvider.VibrateAsync(intensity, durationMs);
-            _currentEventType = null;
+            var steps = HapticPatterns.Render(mode, intensity, durationMs, priority, target);
+            var seq = _mixer.Play(steps);
+            if (!token.CanBeCanceled) { await seq.Completion; return; }
+            using var reg = token.Register(seq.Cancel);
+            try { await seq.Completion; } catch (OperationCanceledException) { }
         }
+
+        private HapticSequence PostEvent(HapticEventKind kind, double? intensityOverride,
+                                         int? durationOverride, VibrationMode? modeOverride, int priority)
+        {
+            var rule = Settings.V2.Rule(kind);
+            if (!rule.Enabled) return HapticSequence.Completed();
+
+            var intensity = Math.Clamp(intensityOverride ?? rule.Intensity, MinPerceptibleIntensity, 1.0);
+            var mode = modeOverride ?? rule.Mode;
+            var duration = durationOverride ?? DefaultDurationMs(kind);
+
+            var steps = HapticPatterns.Render(mode, intensity, duration, priority, rule.Target);
+            var seq = _mixer.Play(steps);
+            TrackKind(kind, seq);
+            Announce(kind.ToString(), intensity);
+            return seq;
+        }
+
+        private static int DefaultDurationMs(HapticEventKind kind) => kind switch
+        {
+            HapticEventKind.BubblePop => 100,
+            HapticEventKind.BouncingTextBounce => 60,
+            HapticEventKind.BlinkPulse => 150,
+            HapticEventKind.VideoTargetHit => 100,
+            HapticEventKind.SubliminalTrigger => 150,
+            HapticEventKind.KeywordTrigger => 150,
+            HapticEventKind.GazeReward => 150,
+            HapticEventKind.AiCommand => 800,
+            HapticEventKind.ToyButtonReward => 250,
+            _ => 300
+        };
+
+        private void TrackKind(HapticEventKind kind, HapticSequence seq)
+        {
+            lock (_liveGate) _liveByKind[kind] = seq;
+        }
+
+        private void CancelKind(HapticEventKind kind)
+        {
+            HapticSequence? seq;
+            lock (_liveGate)
+            {
+                _liveByKind.TryGetValue(kind, out seq);
+                _liveByKind.Remove(kind);
+            }
+            seq?.Cancel();
+        }
+
+        private void Announce(string label, double intensity)
+        {
+            try { HapticTriggered?.Invoke(this, $"{label}: {(int)(intensity * 100)}%"); } catch { }
+        }
+
+        // ================================================================== legacy shims
+
+        /// <summary>
+        /// Lowest intensity that still maps to a real vibration level (#516). Mirrors
+        /// <see cref="HapticMixer.MinPerceptibleIntensity"/>.
+        /// </summary>
+        private const double MinPerceptibleIntensity = HapticMixer.MinPerceptibleIntensity;
+
+        private static double GetSliderIntensity(double sliderValue)
+            => Math.Clamp(sliderValue, MinPerceptibleIntensity, 1.0);
+
+        /// <summary>
+        /// Legacy entry point: renders <paramref name="mode"/> as a mixer envelope sequence and
+        /// awaits it. The six modes now actually feel different (see <see cref="HapticPatterns"/>).
+        /// </summary>
+        public Task ApplyVibrationModeAsync(double intensity, int durationMs, VibrationMode mode,
+                                            CancellationToken? token = null)
+            => PlayPatternAsync(intensity, durationMs, mode, priority: 0, target: ToyRole.All,
+                                token: token ?? CancellationToken.None);
+
+        public Task TriggerAsync(string eventType, double sliderIntensity, int durationMs)
+        {
+            var kind = MapEventType(eventType);
+            Log.Debug("TriggerAsync: {Event} -> {Kind} at {Intensity}% for {Duration}ms",
+                eventType, kind, (int)(sliderIntensity * 100), durationMs);
+            var seq = PostEvent(kind, GetSliderIntensity(sliderIntensity), durationMs, null, 0);
+            return seq.Completion;
+        }
+
+        private static HapticEventKind MapEventType(string eventType) => eventType switch
+        {
+            "BubblePop" => HapticEventKind.BubblePop,
+            "FlashDisplay" => HapticEventKind.FlashDecay,
+            "FlashClick" => HapticEventKind.FlashClick,
+            "TargetHit" => HapticEventKind.VideoTargetHit,
+            "Subliminal" => HapticEventKind.SubliminalTrigger,
+            "Keyword" => HapticEventKind.KeywordTrigger,
+            "LevelUp" => HapticEventKind.LevelUp,
+            "Achievement" => HapticEventKind.Achievement,
+            "Quest" => HapticEventKind.QuestComplete,
+            "BouncingText" => HapticEventKind.BouncingTextBounce,
+            "Blink" => HapticEventKind.BlinkPulse,
+            "Gaze" => HapticEventKind.GazeReward,
+            "Dtrh" => HapticEventKind.DtrhAccent,
+            _ => HapticEventKind.AiCommand      // remote_control, AI commands, anything ad-hoc
+        };
 
         public async Task<HapticTestResult> TestAsync()
         {
-            var provider = _activeProvider;
-            if (provider == null || !provider.IsConnected)
+            if (!_deviceManager.IsConnected)
             {
-                App.Logger?.Warning("TestAsync: Not connected - provider={Provider}, connected={Connected}",
-                    provider?.Name ?? "null", provider?.IsConnected);
+                App.Logger?.Warning("TestAsync: Not connected");
                 Error?.Invoke(this, "Not connected to any device");
                 return HapticTestResult.NotConnected;
             }
 
-            // Verify the device is actually reachable. IsConnected can stay true after a VPN flip
-            // breaks routing, so without this check the test would silently fail with no feedback.
-            var reachable = await provider.PingAsync();
+            // IsConnected can stay true after a VPN flip breaks routing, so confirm on the wire.
+            var reachable = await _deviceManager.PingAsync();
             if (!reachable)
             {
-                App.Logger?.Warning("TestAsync: Device unreachable on {Provider} - likely VPN/network change", provider.Name);
-                await provider.DisconnectAsync();
+                App.Logger?.Warning("TestAsync: Device unreachable — likely VPN/network change");
+                await _deviceManager.DisconnectAsync();
                 Error?.Invoke(this, "Device unreachable");
                 return HapticTestResult.Unreachable;
             }
 
-            App.Logger?.Information("TestAsync: Starting test pattern on {Provider}", provider.Name);
-
-            // Run a test pattern at fixed levels (use longer duration to trigger timeSec mode)
-            // Level 6, 12, 20 out of 20
-            await provider.VibrateAsync(0.3, 500);
-            await Task.Delay(600);
-            await provider.VibrateAsync(0.6, 500);
-            await Task.Delay(600);
-            await provider.VibrateAsync(1.0, 800);
-            await Task.Delay(900);
-
-            // Stop after test
-            await provider.StopAsync();
+            App.Logger?.Information("TestAsync: Starting test pattern");
+            // The test must work even if the user has not flipped the master toggle on yet.
+            _mixer.AllowTestWindow(4000);
+            // Three steps up the range, on a high priority so ambient layers can't mask them.
+            var steps = new List<HapticPulseStep>
+            {
+                new(0,    new HapticPulse(0.3, 60, 440, 100, 5)),
+                new(1100, new HapticPulse(0.6, 60, 440, 100, 5)),
+                new(2200, new HapticPulse(1.0, 60, 740, 120, 5)),
+            };
+            await _mixer.Play(steps).Completion;
             App.Logger?.Information("TestAsync: Test pattern completed");
             return HapticTestResult.Success;
         }
 
-        public async Task StopAsync()
+        /// <summary>
+        /// Play a rendered pattern at ONE device (the Phase E toy-card Test button and the
+        /// pattern lab's "play on this toy"). Deliberately not routed through the mixer: the
+        /// mixer mixes for every device by ROLE, and a per-toy test is by definition not a role.
+        /// Master multiplier, master cap and the per-device trim are still applied, and the
+        /// device is explicitly zeroed on the way out — a test must never leave a toy running.
+        /// </summary>
+        public async Task<bool> TestDeviceAsync(string deviceKey,
+                                                VibrationMode mode = VibrationMode.Constant,
+                                                double intensity = 0.6, int durationMs = 700,
+                                                CancellationToken token = default)
         {
-            _currentEventType = null;
-            if (_activeProvider != null)
+            if (_disposed || string.IsNullOrEmpty(deviceKey)) return false;
+
+            var device = _deviceManager.Find(deviceKey);
+            if (device == null || !device.IsConnected || !device.Enabled) return false;
+
+            durationMs = Math.Clamp(durationMs, 100, 8000);
+            // Same contract as TestAsync: works with the master toggle off (AllowTestWindow only
+            // waives Settings.Enabled), but premium is still required.
+            _mixer.AllowTestWindow(durationMs + 2000);
+            if (!_mixer.IsGateOpen) return false;
+
+            var steps = HapticPatterns.Render(mode, Math.Clamp(intensity, MinPerceptibleIntensity, 1.0),
+                                              durationMs, priority: 5);
+            var total = Math.Max(durationMs, HapticPatterns.TotalMs(steps));
+
+            var trim = Math.Clamp(device.IntensityTrim, 0, 1);
+            var master = _mixer.MasterIntensity;
+            var cap = _mixer.MasterCap;
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            try
             {
-                await _activeProvider.StopAsync();
+                while (sw.ElapsedMilliseconds <= total)
+                {
+                    var raw = HapticPatterns.SampleAt(steps, (int)sw.ElapsedMilliseconds);
+                    var level = Math.Min(raw * master, cap);
+                    if (raw > 0) level = Math.Max(level, MinPerceptibleIntensity);
+                    await SendDeviceLevelAsync(device, level * trim, token).ConfigureAwait(false);
+                    await Task.Delay(HapticMixer.DefaultTickMs, token).ConfigureAwait(false);
+                }
             }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { App.Logger?.Debug("TestDeviceAsync failed: {E}", ex.Message); }
+            finally
+            {
+                try { await SendDeviceLevelAsync(device, 0, CancellationToken.None).ConfigureAwait(false); }
+                catch { }
+            }
+
+            Announce("Test " + (string.IsNullOrWhiteSpace(device.Nickname) ? device.Name : device.Nickname), intensity);
+            return true;
+        }
+
+        private Task SendDeviceLevelAsync(HapticDevice device, double level, CancellationToken token)
+        {
+            var outputs = new List<ActuatorOutput>(device.Actuators.Count);
+            foreach (var a in device.Actuators)
+            {
+                // Position is placement and Stroke is a range pair — neither is a level.
+                if (a.Type == ActuatorType.Position || a.Type == ActuatorType.Stroke) continue;
+                var stepCount = Math.Max(1, a.Steps);
+                var q = (int)Math.Round(Math.Clamp(level, 0, 1) * stepCount);
+                outputs.Add(new ActuatorOutput(a.Type, a.Index, q / (double)stepCount));
+            }
+            if (outputs.Count == 0) return Task.CompletedTask;
+            return _deviceManager.SendAsync(device, outputs, token);
+        }
+
+        /// <summary>Stop everything currently playing (transients AND continuous layers).</summary>
+        public Task StopAsync()
+        {
+            _mixer.ClearAll();
+            return Task.CompletedTask;
         }
 
         /// <summary>
-        /// Live intensity control from slider - directly sets vibration level
-        /// 0% = stop, 1% = minimum device capability, 100% = maximum
+        /// Live intensity control from the slider. Holds the Manual layer at the requested level
+        /// and self-clears after 1.5s, matching the old "send a 1.5s vibrate" feel without
+        /// leaving the toy running if the user walks away mid-drag.
         /// </summary>
-        public async Task LiveIntensityUpdateAsync(double intensity)
+        public Task LiveIntensityUpdateAsync(double intensity)
         {
-            if (_activeProvider == null || !_activeProvider.IsConnected)
-                return;
-
-            // Stop if intensity is 0
             if (intensity <= 0)
             {
-                await _activeProvider.StopAsync();
-                HapticTriggered?.Invoke(this, "Live: Stopped");
-                return;
+                _mixer.SetLayer(HapticLayer.Manual, 0);
+                Announce("Live", 0);
+                return Task.CompletedTask;
             }
-
-            // Clamp to valid range (1-100%)
-            var clampedIntensity = Math.Clamp(intensity, 0.01, 1.0);
-
-            // Send 1.5 second vibration - just enough to feel the level
-            await _activeProvider.VibrateAsync(clampedIntensity, 1500);
-
-            HapticTriggered?.Invoke(this, $"Live: {(int)(clampedIntensity * 100)}%");
+            var clamped = Math.Clamp(intensity, 0.01, 1.0);
+            _mixer.SetLayer(HapticLayer.Manual, clamped, autoZeroMs: 1500);
+            Announce("Live", clamped);
+            return Task.CompletedTask;
         }
 
         /// <summary>
-        /// Set continuous intensity for audio sync playback.
-        /// Optimized for frequent calls (~20-50Hz) during video playback.
+        /// Continuous intensity for audio-synced playback. Called at 20-50 Hz by AudioSyncService;
+        /// this now costs a lock and an array write — the 10 Hz mixer loop does the sending.
         /// </summary>
-        /// <param name="intensity">Intensity value from 0.0 to 1.0</param>
-        public async Task SetSyncIntensityAsync(double intensity)
+        public Task SetSyncIntensityAsync(double intensity)
         {
-            if (!Settings.Enabled || !Settings.AudioSync.Enabled)
+            if (!Settings.AudioSync.Enabled)
             {
-                // Log occasionally to avoid spam
-                return;
+                _mixer.SetLayer(HapticLayer.AudioSync, 0);
+                return Task.CompletedTask;
             }
-
-            if (_activeProvider == null || !_activeProvider.IsConnected)
-            {
-                App.Logger?.Debug("SetSyncIntensity: No active provider or not connected");
-                return;
-            }
-
-            // Apply min/max from audio sync settings
-            var clampedIntensity = Math.Clamp(intensity,
-                Settings.AudioSync.MinIntensity,
-                Settings.AudioSync.MaxIntensity);
-
-            // Send short duration for continuous sync
-            App.Logger?.Information("SetSyncIntensity: Sending {Intensity:F2} to {Provider}", clampedIntensity, _activeProvider.Name);
-            await _activeProvider.VibrateAsync(clampedIntensity, 200);
+            var clamped = Math.Clamp(intensity, Settings.AudioSync.MinIntensity, Settings.AudioSync.MaxIntensity);
+            _mixer.SetLayer(HapticLayer.AudioSync, clamped);
+            return Task.CompletedTask;
         }
 
         /// <summary>
-        /// Send a pattern of intensity values to play as a smooth continuous sequence.
-        /// Much smoother than individual commands - device interpolates between values.
+        /// PHASE F: band-split audio sync. <paramref name="lowBand"/> drives vibration motor 0,
+        /// <paramref name="highBand"/> motor 1 (and any further motors repeat the high band).
+        /// A single-motor toy hears <c>max(low, high)</c>, so it is unaffected by the mode.
         /// </summary>
-        /// <param name="intensities">Array of intensity values (0.0-1.0)</param>
-        /// <param name="totalDurationMs">Total duration for the pattern</param>
-        public async Task SetSyncPatternAsync(float[] intensities, int totalDurationMs)
+        public Task SetSyncIntensityAsync(double lowBand, double highBand)
         {
-            if (!Settings.Enabled || !Settings.AudioSync.Enabled)
-                return;
-
-            if (_activeProvider == null || !_activeProvider.IsConnected)
+            if (!Settings.AudioSync.Enabled)
             {
-                App.Logger?.Debug("SetSyncPattern: No active provider or not connected");
-                return;
+                _mixer.SetLayerPerActuator(HapticLayer.AudioSync, null);
+                _mixer.SetLayer(HapticLayer.AudioSync, 0);
+                return Task.CompletedTask;
             }
 
-            // Convert to device levels
-            var levels = new int[intensities.Length];
+            double Clamp(double v) => v <= 0
+                ? 0
+                : Math.Clamp(v, Settings.AudioSync.MinIntensity, Settings.AudioSync.MaxIntensity);
+
+            _mixer.SetLayerPerActuator(HapticLayer.AudioSync, new[] { Clamp(lowBand), Clamp(highBand) });
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Play an authored keyframe envelope (Deeper runtime + its editor preview).
+        /// Deliberately NOT gated on Settings.AudioSync.Enabled — that default-OFF toggle belongs
+        /// to a different feature and would drop every Deeper haptic.
+        /// </summary>
+        public Task SetSyncPatternAsync(float[] intensities, int totalDurationMs)
+        {
+            if (intensities == null || intensities.Length == 0 || totalDurationMs <= 0) return Task.CompletedTask;
+
+            var values = new double[intensities.Length];
             for (int i = 0; i < intensities.Length; i++)
-            {
-                var clamped = Math.Clamp(intensities[i],
-                    (float)Settings.AudioSync.MinIntensity,
-                    (float)Settings.AudioSync.MaxIntensity);
-                levels[i] = Haptics.LovenseProvider.IntensityToLevel(clamped);
-            }
+                values[i] = Math.Clamp(intensities[i], 0f, 1f);
 
-            // Send pattern if provider supports it
-            if (_activeProvider is Haptics.LovenseProvider lovense)
-            {
-                await lovense.VibratePatternAsync(levels, totalDurationMs);
-            }
-            else
-            {
-                // Fallback: just send the average intensity
-                var avgLevel = levels.Length > 0 ? levels.Sum() / levels.Length : 0;
-                var avgIntensity = avgLevel / 20.0;
-                await _activeProvider.VibrateAsync(avgIntensity, totalDurationMs);
-            }
+            // Authored intensities are used as-is: the audio-sync min/max sliders tune a different
+            // feature and would distort the pattern.
+            _mixer.PlayLayerEnvelope(HapticLayer.Pattern, values, totalDurationMs);
+            return Task.CompletedTask;
         }
 
         // === SPECIAL PATTERNS ===
 
-        public async Task LevelUpPatternAsync()
+        public Task LevelUpPatternAsync()
         {
-            if (!Settings.Enabled || !Settings.LevelUpEnabled || _activeProvider == null || !_activeProvider.IsConnected)
-                return;
+            var rule = Settings.V2.Rule(HapticEventKind.LevelUp);
+            if (!rule.Enabled) return Task.CompletedTask;
 
-            _currentEventType = "LevelUp";
-            // Slider directly controls device power
-            var intensity = GetSliderIntensity(Settings.LevelUpIntensity);
-            var mode = Settings.LevelUpMode;
-            HapticTriggered?.Invoke(this, $"LevelUp: {(int)(intensity * 100)}%");
-
-            // Celebration pattern - same intensity, building duration, using selected mode
-            await ApplyVibrationModeAsync(intensity, 100, mode);
-            if (!Settings.LevelUpEnabled) { _currentEventType = null; return; }
-            await Task.Delay(150);
-
-            await ApplyVibrationModeAsync(intensity, 150, mode);
-            if (!Settings.LevelUpEnabled) { _currentEventType = null; return; }
-            await Task.Delay(200);
-
-            await ApplyVibrationModeAsync(intensity, 200, mode);
-            if (!Settings.LevelUpEnabled) { _currentEventType = null; return; }
-            await Task.Delay(250);
-
-            await ApplyVibrationModeAsync(intensity, 300, mode);
-            if (!Settings.LevelUpEnabled) { _currentEventType = null; return; }
-            await Task.Delay(350);
-
-            await ApplyVibrationModeAsync(intensity, 150, mode);
-            if (!Settings.LevelUpEnabled) { _currentEventType = null; return; }
-            await Task.Delay(200);
-
-            await ApplyVibrationModeAsync(intensity, 100, mode);
-            _currentEventType = null;
+            var intensity = GetSliderIntensity(rule.Intensity);
+            // Celebration: same intensity, building durations (the original ladder).
+            var seq = PlayLadder(HapticEventKind.LevelUp, intensity, rule.Mode,
+                new[] { (0, 100), (250, 150), (600, 200), (1050, 300), (1700, 150), (2050, 100) });
+            Announce("LevelUp", intensity);
+            return seq.Completion;
         }
 
-        public async Task AchievementPatternAsync()
+        public Task AchievementPatternAsync()
         {
-            if (!Settings.Enabled || !Settings.AchievementEnabled || _activeProvider == null || !_activeProvider.IsConnected)
-                return;
+            var rule = Settings.V2.Rule(HapticEventKind.Achievement);
+            if (!rule.Enabled) return Task.CompletedTask;
 
-            _currentEventType = "Achievement";
-            // Slider directly controls device power
-            var intensity = GetSliderIntensity(Settings.AchievementIntensity);
-            var mode = Settings.AchievementMode;
-            HapticTriggered?.Invoke(this, $"Achievement: {(int)(intensity * 100)}%");
-
-            // Achievement pattern - triumphant pulses, using selected mode
-            await ApplyVibrationModeAsync(intensity, 100, mode);
-            if (!Settings.AchievementEnabled) { _currentEventType = null; return; }
-            await Task.Delay(150);
-
-            await ApplyVibrationModeAsync(intensity, 200, mode);
-            if (!Settings.AchievementEnabled) { _currentEventType = null; return; }
-            await Task.Delay(250);
-
-            await ApplyVibrationModeAsync(intensity, 100, mode);
-            if (!Settings.AchievementEnabled) { _currentEventType = null; return; }
-            await Task.Delay(150);
-
-            await ApplyVibrationModeAsync(intensity, 300, mode);
-            if (!Settings.AchievementEnabled) { _currentEventType = null; return; }
-            await Task.Delay(350);
-
-            await ApplyVibrationModeAsync(intensity, 150, mode);
-            _currentEventType = null;
+            var intensity = GetSliderIntensity(rule.Intensity);
+            var seq = PlayLadder(HapticEventKind.Achievement, intensity, rule.Mode,
+                new[] { (0, 100), (250, 200), (700, 100), (950, 300), (1600, 150) });
+            Announce("Achievement", intensity);
+            return seq.Completion;
         }
 
-        public async Task RampUpAsync(double startPercent, double endPercent, int totalDurationMs, int steps = 5)
+        private HapticSequence PlayLadder(HapticEventKind kind, double intensity, VibrationMode mode,
+                                          (int offsetMs, int durationMs)[] rungs, int priority = 2)
         {
-            if (!Settings.Enabled || !Settings.VideoEnabled || _activeProvider == null || !_activeProvider.IsConnected)
-                return;
+            var steps = new List<HapticPulseStep>();
+            var target = Settings.V2.Rule(kind).Target;
+            foreach (var (offset, duration) in rungs)
+                HapticPatterns.Append(steps, HapticPatterns.Render(mode, intensity, duration, priority, target), offset);
+            var seq = _mixer.Play(steps);
+            TrackKind(kind, seq);
+            return seq;
+        }
 
-            _currentEventType = "Video";
-            // Slider controls the max intensity, start/end are percentages of that
+        /// <summary>
+        /// Ramp the video background layer between two fractions of the Video slider.
+        /// No production caller as of v6.7 — kept so nothing breaks if one returns.
+        /// </summary>
+        public Task RampUpAsync(double startPercent, double endPercent, int totalDurationMs, int steps = 5)
+        {
+            if (!Settings.VideoEnabled) return Task.CompletedTask;
+
             var maxIntensity = GetSliderIntensity(Settings.VideoIntensity);
-            var stepDuration = totalDurationMs / steps;
-            var intensityStep = (endPercent - startPercent) / steps;
-
+            steps = Math.Clamp(steps, 1, 64);
+            var values = new double[steps + 1];
             for (int i = 0; i <= steps; i++)
             {
-                if (!Settings.VideoEnabled) { _currentEventType = null; return; }
-                var percent = startPercent + (intensityStep * i);
-                var intensity = maxIntensity * percent;
-                await _activeProvider.VibrateAsync(Math.Clamp(intensity, MinPerceptibleIntensity, 1), stepDuration);
-                if (i < steps) await Task.Delay(stepDuration);
+                var percent = startPercent + (endPercent - startPercent) * (i / (double)steps);
+                values[i] = Math.Clamp(maxIntensity * percent, 0, 1);
             }
-            _currentEventType = null;
+            _mixer.PlayLayerEnvelope(HapticLayer.Video, values, Math.Max(1, totalDurationMs));
+            return Task.CompletedTask;
         }
 
         // === FLASH DECAY SYSTEM ===
-        private System.Threading.CancellationTokenSource? _flashDecayCts;
 
-        /// <summary>
-        /// Start a vibe that rapidly decays over 2 seconds.
-        /// Slider controls starting intensity, we control the decay pattern.
-        /// </summary>
-        public async Task FlashDecayVibeAsync()
+        /// <summary>Vibe that decays over ~2s. The slider sets the starting intensity; the decay
+        /// curve (0.7^n over 8 rungs) is ours and is preserved exactly.</summary>
+        public Task FlashDecayVibeAsync() => PlayDecayLadder(HapticEventKind.FlashDecay);
+
+        /// <summary>Flash click — same decay shape, its own routing row. Refreshes (replaces) any
+        /// decay already running so a click ladder can't stack on itself.</summary>
+        public Task FlashClickVibeAsync() => PlayDecayLadder(HapticEventKind.FlashClick);
+
+        private Task PlayDecayLadder(HapticEventKind kind)
         {
-            if (!Settings.Enabled || !Settings.FlashDisplayEnabled || _activeProvider == null || !_activeProvider.IsConnected)
-                return;
+            var rule = Settings.V2.Rule(kind);
+            if (!rule.Enabled) return Task.CompletedTask;
 
-            // Cancel and dispose any existing decay
-            _flashDecayCts?.Cancel();
-            _flashDecayCts?.Dispose();
-            _flashDecayCts = new System.Threading.CancellationTokenSource();
-            var token = _flashDecayCts.Token;
+            // Replace whatever decay is running (both flash kinds share the visual moment).
+            CancelKind(HapticEventKind.FlashDecay);
+            CancelKind(HapticEventKind.FlashClick);
 
-            _currentEventType = "FlashDisplay";
-            // Slider directly controls starting intensity
-            var startIntensity = GetSliderIntensity(Settings.FlashDisplayIntensity);
-            var mode = Settings.FlashDisplayMode;
-            HapticTriggered?.Invoke(this, $"Flash: {(int)(startIntensity * 100)}%");
-
-            try
+            var start = GetSliderIntensity(rule.Intensity);
+            var steps = new List<HapticPulseStep>();
+            for (int i = 0; i < 8; i++)
             {
-                // Decay over 2 seconds in 8 steps (250ms each), using selected mode
-                for (int i = 0; i < 8; i++)
-                {
-                    if (token.IsCancellationRequested || !Settings.FlashDisplayEnabled) break;
-
-                    // Exponential decay from slider intensity
-                    var decayFactor = Math.Pow(0.7, i);
-                    var intensity = Math.Max(startIntensity * decayFactor, MinPerceptibleIntensity);
-
-                    await ApplyVibrationModeAsync(intensity, 250, mode, token);
-                    await Task.Delay(200, token);
-                }
-
-                // Final stop
-                if (!token.IsCancellationRequested)
-                    await _activeProvider.StopAsync();
+                var intensity = Math.Max(start * Math.Pow(0.7, i), MinPerceptibleIntensity);
+                HapticPatterns.Append(steps,
+                    HapticPatterns.Render(rule.Mode, intensity, 250, priority: 1, target: rule.Target),
+                    offsetMs: i * 450);
             }
-            catch (OperationCanceledException) { }
-            finally
-            {
-                _currentEventType = null;
-            }
-        }
-
-        /// <summary>
-        /// Flash click - refreshes the decay with click intensity
-        /// </summary>
-        public async Task FlashClickVibeAsync()
-        {
-            if (!Settings.Enabled || !Settings.FlashClickEnabled || _activeProvider == null || !_activeProvider.IsConnected)
-                return;
-
-            _flashDecayCts?.Cancel();
-            _flashDecayCts?.Dispose();
-            _flashDecayCts = new System.Threading.CancellationTokenSource();
-            var token = _flashDecayCts.Token;
-
-            _currentEventType = "FlashClick";
-            // Slider directly controls starting intensity
-            var startIntensity = GetSliderIntensity(Settings.FlashClickIntensity);
-            var mode = Settings.FlashClickMode;
-            HapticTriggered?.Invoke(this, $"Flash Click: {(int)(startIntensity * 100)}%");
-
-            try
-            {
-                // Decay over 2 seconds in 8 steps, using selected mode
-                for (int i = 0; i < 8; i++)
-                {
-                    if (token.IsCancellationRequested || !Settings.FlashClickEnabled) break;
-
-                    var decayFactor = Math.Pow(0.7, i);
-                    var intensity = Math.Max(startIntensity * decayFactor, MinPerceptibleIntensity);
-
-                    await ApplyVibrationModeAsync(intensity, 250, mode, token);
-                    await Task.Delay(200, token);
-                }
-
-                if (!token.IsCancellationRequested)
-                    await _activeProvider.StopAsync();
-            }
-            catch (OperationCanceledException) { }
-            finally
-            {
-                _currentEventType = null;
-            }
+            var seq = _mixer.Play(steps);
+            TrackKind(kind, seq);
+            Announce(kind == HapticEventKind.FlashClick ? "Flash Click" : "Flash", start);
+            return seq.Completion;
         }
 
         // === BUBBLE COMBO SYSTEM ===
         private DateTime _lastBubblePop = DateTime.MinValue;
         private int _bubbleCombo = 0;
 
-        public async Task BubblePopAsync()
+        public Task BubblePopAsync()
         {
-            Log.Debug("BubblePopAsync called: Enabled={Enabled}, BubbleEnabled={BubbleEnabled}, Connected={Connected}",
-                Settings.Enabled, Settings.BubblePopEnabled, _activeProvider?.IsConnected ?? false);
+            var rule = Settings.V2.Rule(HapticEventKind.BubblePop);
+            if (!rule.Enabled) return Task.CompletedTask;
 
-            if (!Settings.Enabled || !Settings.BubblePopEnabled || _activeProvider == null || !_activeProvider.IsConnected)
-                return;
-
-            _currentEventType = "BubblePop";
             var now = DateTime.Now;
-            // 2 second combo window
-            if ((now - _lastBubblePop).TotalMilliseconds > 2000) _bubbleCombo = 0;
-            _bubbleCombo++;
-            _lastBubblePop = now;
+            lock (_liveGate)
+            {
+                if ((now - _lastBubblePop).TotalMilliseconds > 2000) _bubbleCombo = 0;   // 2s combo window
+                _bubbleCombo++;
+                _lastBubblePop = now;
+            }
 
-            // Slider directly controls device power
-            var intensity = GetSliderIntensity(Settings.BubblePopIntensity);
-
-            HapticTriggered?.Invoke(this, $"Bubble: {_bubbleCombo}x ({(int)(intensity * 100)}%)");
-            // 100ms pattern using selected mode
-            await ApplyVibrationModeAsync(intensity, 100, Settings.BubblePopMode);
-            _currentEventType = null;
+            var seq = PostEvent(HapticEventKind.BubblePop, GetSliderIntensity(rule.Intensity), 100, null, 1);
+            HapticTriggered?.Invoke(this, $"Bubble: {_bubbleCombo}x ({(int)(rule.Intensity * 100)}%)");
+            return seq.Completion;
         }
 
         // === BOUNCING TEXT ===
 
-        /// <summary>
-        /// Brief sharp pulse when bouncing text hits screen edge
-        /// </summary>
-        public async Task BouncingTextBounceAsync()
-        {
-            if (!Settings.Enabled || !Settings.BouncingTextEnabled || _activeProvider == null || !_activeProvider.IsConnected)
-                return;
-
-            _currentEventType = "BouncingText";
-
-            // Slider directly controls device power
-            var intensity = GetSliderIntensity(Settings.BouncingTextIntensity);
-            HapticTriggered?.Invoke(this, $"Bounce: {(int)(intensity * 100)}%");
-
-            // Quick 60ms pattern using selected mode
-            await ApplyVibrationModeAsync(intensity, 60, Settings.BouncingTextMode);
-            _currentEventType = null;
-        }
+        /// <summary>Brief sharp pulse when bouncing text hits a screen edge.</summary>
+        public Task BouncingTextBounceAsync()
+            => PostEvent(HapticEventKind.BouncingTextBounce, null, 60, null, 0).Completion;
 
         // === BLINK TRAINER ===
 
-        /// <summary>
-        /// Fire a short pulse on each blink detected by the Lab "Blink Trainer".
-        /// Mirrors the other discrete-event features (BubblePop / BouncingText):
-        /// slider directly controls device power, BlinkMode picks the pattern.
-        /// </summary>
-        public async Task BlinkPulseAsync()
-        {
-            if (!Settings.Enabled || !Settings.BlinkEnabled || _activeProvider == null || !_activeProvider.IsConnected)
-                return;
-
-            _currentEventType = "Blink";
-            // Slider directly controls device power
-            var intensity = GetSliderIntensity(Settings.BlinkIntensity);
-            HapticTriggered?.Invoke(this, $"Blink: {(int)(intensity * 100)}%");
-
-            await ApplyVibrationModeAsync(intensity, 150, Settings.BlinkMode);
-            _currentEventType = null;
-        }
+        /// <summary>Short pulse on each blink detected by the Lab "Blink Trainer".</summary>
+        public Task BlinkPulseAsync()
+            => PostEvent(HapticEventKind.BlinkPulse, null, 150, null, 0).Completion;
 
         // === VIDEO BACKGROUND VIBE ===
-        private System.Threading.CancellationTokenSource? _videoVibeCts;
         private int _videoTargetHits = 0;
-        private DateTime _videoStartTime;
-        private double _currentVideoIntensity = 0;
 
-        public async Task StartVideoBackgroundVibeAsync()
+        public Task StartVideoBackgroundVibeAsync()
         {
-            if (!Settings.Enabled || !Settings.VideoEnabled || _activeProvider == null || !_activeProvider.IsConnected)
-                return;
+            if (!Settings.VideoEnabled) { _mixer.SetLayer(HapticLayer.Video, 0); return Task.CompletedTask; }
 
-            // Slider at 0 means "no background vibe, target-hit spikes only" — the
-            // MinPerceptibleIntensity floor below must not turn 0 into a constant buzz.
+            // Slider at 0 means "no background vibe, target-hit spikes only" — the perceptible
+            // floor must not turn 0 into a constant buzz.
             if (Settings.VideoIntensity <= 0)
             {
-                _videoVibeCts?.Cancel();
-                _currentVideoIntensity = 0;
+                _mixer.SetLayer(HapticLayer.Video, 0);
                 _videoTargetHits = 0;
-                return;
+                return Task.CompletedTask;
             }
 
-            var provider = _activeProvider;
-
-            _videoVibeCts?.Cancel();
-            _videoVibeCts?.Dispose();
-            _videoVibeCts = new System.Threading.CancellationTokenSource();
-            var token = _videoVibeCts.Token;
             _videoTargetHits = 0;
-            _videoStartTime = DateTime.Now;
-
-            _currentEventType = "Video";
-            // Background vibe is 10% of slider so target hits feel impactful.
-            // Floor must clear LovenseProvider's "intensity <= 0.05 = off" cutoff — a 0.05
-            // floor mapped to level 0 and the whole video ran silent (#516).
-            _currentVideoIntensity = Math.Max(Settings.VideoIntensity * 0.1, 0.06);
-            HapticTriggered?.Invoke(this, $"Video: Background {(int)(_currentVideoIntensity * 100)}%");
-
-            try
-            {
-                while (!token.IsCancellationRequested && Settings.VideoEnabled && provider?.IsConnected == true)
-                {
-                    // Send long duration command (30 sec) - will be overridden by target hits
-                    await provider.VibrateAsync(_currentVideoIntensity, 30000);
-
-                    // Check less frequently since intensity is constant
-                    await Task.Delay(5000, token);
-                }
-            }
-            catch (OperationCanceledException) { }
-            finally
-            {
-                _currentEventType = null;
-            }
+            // Background vibe is 10% of the slider so target hits feel impactful.
+            var level = Math.Max(Settings.VideoIntensity * 0.1, MinPerceptibleIntensity);
+            _mixer.SetLayer(HapticLayer.Video, level);
+            Announce("Video Background", level);
+            return Task.CompletedTask;
         }
 
-        public async Task StopVideoBackgroundVibeAsync()
+        public Task StopVideoBackgroundVibeAsync()
         {
-            _videoVibeCts?.Cancel();
-            _videoVibeCts?.Dispose();
-            _videoVibeCts = null;
             _videoTargetHits = 0;
-            _currentVideoIntensity = 0;
-            await StopAsync();
+            _mixer.SetLayer(HapticLayer.Video, 0);
+            return Task.CompletedTask;
         }
 
-        public async Task VideoTargetHitAsync()
+        public Task VideoTargetHitAsync()
         {
-            // Check if target hit haptics are enabled (separate from video background)
-            if (!Settings.Enabled || !Settings.TargetHitEnabled || _activeProvider == null || !_activeProvider.IsConnected)
-                return;
+            var rule = Settings.V2.Rule(HapticEventKind.VideoTargetHit);
+            if (!rule.Enabled) return Task.CompletedTask;
 
-            var gen = ++_videoTargetHits;
-
-            // Use target hit intensity (not video intensity) for the spike
-            var spikeIntensity = GetSliderIntensity(Settings.TargetHitIntensity);
-            HapticTriggered?.Invoke(this, $"Target Hit #{_videoTargetHits}: {(int)(spikeIntensity * 100)}%");
-
-            // Quick intensity spike using target hit mode - short 100ms burst
-            // This replaces the background vibe briefly with higher intensity
-            await ApplyVibrationModeAsync(spikeIntensity, 100, Settings.TargetHitMode);
-
-            // Let the spike actually be felt before the background command overrides it —
-            // both are near-instant HTTP posts, so an immediate resume erased the spike (#516).
-            await Task.Delay(150);
-
-            // Only the newest hit resumes the background: an older hit's delayed resume
-            // would land mid-spike of a newer hit and flatten it. Stop also resets the
-            // counter, so a resume can't fire after the video ended.
-            if (gen != _videoTargetHits) return;
-
-            // Resume background vibe; skip when it maps to level 0 so we don't kill the spike
-            // with an "off" command (LovenseProvider treats <= 0.05 as off).
-            if (_currentVideoIntensity > 0.05 && Settings.VideoEnabled && _activeProvider?.IsConnected == true)
-            {
-                await _activeProvider.VibrateAsync(_currentVideoIntensity, 30000);
-            }
+            var hit = ++_videoTargetHits;
+            // Priority 3: the spike rides OVER the video floor instead of replacing it, so the
+            // old "resume the background afterwards" dance (and the race between overlapping
+            // hits that flattened each other, #516) is gone.
+            var seq = PostEvent(HapticEventKind.VideoTargetHit, GetSliderIntensity(rule.Intensity), 100, null, 3);
+            HapticTriggered?.Invoke(this, $"Target Hit #{hit}: {(int)(rule.Intensity * 100)}%");
+            return seq.Completion;
         }
 
         // === SUBLIMINAL PATTERN SYSTEM ===
 
-        /// <summary>
-        /// Trigger short haptic pulse for subliminal text
-        /// Slider directly controls intensity, we control duration
-        /// </summary>
-        public async Task TriggerSubliminalPatternAsync(string triggerText)
+        /// <summary>Short pulse for subliminal text; duration is keyed off the trigger's wording.</summary>
+        public Task TriggerSubliminalPatternAsync(string triggerText)
         {
-            if (!Settings.Enabled || !Settings.SubliminalEnabled || _activeProvider == null || !_activeProvider.IsConnected)
-                return;
+            var duration = TriggerDurationMs(triggerText);
+            return PostEvent(HapticEventKind.SubliminalTrigger, null, duration, null, 1).Completion;
+        }
 
-            _currentEventType = "Subliminal";
-            // Slider directly controls device power
-            var intensity = GetSliderIntensity(Settings.SubliminalIntensity);
-            var textLower = triggerText.ToLowerInvariant();
+        // === AWARENESS KEYWORD PATTERN ===
 
-            HapticTriggered?.Invoke(this, $"Subliminal: {(int)(intensity * 100)}%");
+        /// <summary>
+        /// Pulse for an Awareness keyword hit. Intensity comes from the trigger's own action config
+        /// (the per-action slider in the preset editor), NOT a global slider, and it must not depend
+        /// on the Subliminal feature's toggle.
+        /// </summary>
+        public Task TriggerKeywordPatternAsync(string triggerText, double intensity)
+        {
+            var duration = TriggerDurationMs(triggerText);
+            return PostEvent(HapticEventKind.KeywordTrigger, GetSliderIntensity(intensity), duration, null, 1).Completion;
+        }
 
-            try
-            {
-                // Short patterns based on trigger type, using selected mode
-                // Buttplug.io needs longer durations due to protocol overhead
-                int durationMs;
-                var durationMultiplier = IsButtplugProvider ? 2.0 : 1.0;
-
-                if (textLower.Contains("cum") || textLower.Contains("collapse") || textLower.Contains("drop"))
-                {
-                    // Slightly longer for intense triggers
-                    durationMs = (int)(250 * durationMultiplier);
-                }
-                else if (textLower.Contains("freeze") || textLower.Contains("zap"))
-                {
-                    // Sharp quick burst
-                    durationMs = (int)(120 * durationMultiplier);
-                }
-                else
-                {
-                    // Default: quick pulse
-                    durationMs = (int)(150 * durationMultiplier);
-                }
-                await ApplyVibrationModeAsync(intensity, durationMs, Settings.SubliminalMode);
-            }
-            finally
-            {
-                _currentEventType = null;
-            }
+        private int TriggerDurationMs(string triggerText)
+        {
+            var textLower = (triggerText ?? "").ToLowerInvariant();
+            // Buttplug.io needs longer durations due to protocol overhead.
+            var multiplier = IsButtplugProvider ? 2.0 : 1.0;
+            if (textLower.Contains("cum") || textLower.Contains("collapse") || textLower.Contains("drop"))
+                return (int)(250 * multiplier);      // slightly longer for intense triggers
+            if (textLower.Contains("freeze") || textLower.Contains("zap"))
+                return (int)(120 * multiplier);      // sharp quick burst
+            return (int)(150 * multiplier);          // default: quick pulse
         }
 
         // === AVATAR EASTER EGG PATTERN ===
 
-        /// <summary>
-        /// Long vibe (~8 seconds) for the avatar 20-click easter egg
-        /// Slider directly controls intensity
-        /// </summary>
-        public async Task AvatarEasterEggPatternAsync()
+        /// <summary>Long vibe (~8s) for the avatar 20-click easter egg.</summary>
+        public Task AvatarEasterEggPatternAsync()
         {
-            if (!Settings.Enabled || _activeProvider == null || !_activeProvider.IsConnected)
-                return;
+            var rule = Settings.V2.Rule(HapticEventKind.AvatarEasterEgg);
+            if (!rule.Enabled) return Task.CompletedTask;
 
-            _currentEventType = "Achievement";
-            // Slider directly controls device power
-            var intensity = GetSliderIntensity(Settings.AchievementIntensity);
+            var intensity = GetSliderIntensity(rule.Intensity);
+            var steps = new List<HapticPulseStep>();
+            for (int i = 0; i < 16; i++)
+                steps.Add(new HapticPulseStep(i * 500, new HapticPulse(intensity, 20, 430, 50, 2, rule.Target)));
+            steps.Add(new HapticPulseStep(8000, new HapticPulse(intensity, 20, 280, 50, 2, rule.Target)));
+            steps.Add(new HapticPulseStep(8400, new HapticPulse(intensity, 20, 380, 60, 2, rule.Target)));
+
+            var seq = _mixer.Play(steps);
+            TrackKind(HapticEventKind.AvatarEasterEgg, seq);
             HapticTriggered?.Invoke(this, $"Avatar: Easter Egg! {(int)(intensity * 100)}%");
-
-            try
-            {
-                // ~8 second pattern
-                for (int i = 0; i < 16; i++)
-                {
-                    if (!Settings.AchievementEnabled) break;
-                    await _activeProvider.VibrateAsync(intensity, 450);
-                    await Task.Delay(50);
-                }
-
-                // Final pulses
-                await _activeProvider.VibrateAsync(intensity, 300);
-                await Task.Delay(100);
-                await _activeProvider.VibrateAsync(intensity, 400);
-            }
-            finally
-            {
-                _currentEventType = null;
-            }
+            return seq.Completion;
         }
 
         public void Dispose()
@@ -943,12 +860,13 @@ namespace ConditioningControlPanel.Services
             if (_disposed) return;
             _disposed = true;
             Settings.PropertyChanged -= OnSettingsChanged;
-            _flashDecayCts?.Cancel();
-            _flashDecayCts?.Dispose();
-            _videoVibeCts?.Cancel();
-            _videoVibeCts?.Dispose();
+            try { FunScript.Dispose(); } catch { }
+            try { ToyInput.Dispose(); } catch { }
             StopPingTimer();
-            DisconnectAsync().Wait(1000);
+            // Never blocks: the mixer zeroes state synchronously and flushes the all-stop on a
+            // background task with a hard 2s cap (plus a ProcessExit watchdog).
+            _mixer.Dispose();
+            _deviceManager.Dispose();
         }
     }
 }

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Newtonsoft.Json.Linq;
 
 namespace ConditioningControlPanel.Services.Chaos;
 
@@ -154,6 +155,16 @@ public sealed class ChaosMetaState
     /// after discovery as faded "made" trophies, so this only ever grows.</summary>
     public HashSet<string> PaperwallSketches { get; set; } = new();
 
+    // ---- run presets (#650): named snapshots of the portal run setup -----------
+    /// <summary>Saved run configurations (difficulty / length / motion / variants / …),
+    /// each under a player-chosen name. These are PAGE-OWNED blobs: C# stores them
+    /// verbatim (shape/size validation only, never anti-cheat) and never reads them for
+    /// gameplay. A preset can never smuggle an unowned mode into a run - ownership of
+    /// endless / custom-duration / extreme is re-checked page-side at load time AND again
+    /// in PersistRunSetup/FromSettings at deal time. Additive: absent in old saves -&gt; an
+    /// empty list, so a run is byte-for-byte unchanged.</summary>
+    public List<ChaosRunPreset> RunPresets { get; set; } = new();
+
     // lifetime stats (consumed by the Stats tab in a later session)
     public int RunsCompleted { get; set; } = 0;
     public long BestScore { get; set; } = 0;
@@ -164,4 +175,14 @@ public sealed class ChaosMetaState
     /// <summary>Lifetime seconds spent holding defuse channels ("time holding on" in the
     /// Looking Glass). Keeps accumulating after the slow_fuses lesson completes.</summary>
     public double TotalChannelSeconds { get; set; } = 0;
+}
+
+/// <summary>One saved run preset (#650): a name plus the raw portal setup blob (the
+/// <c>buildSetup()</c> wire shape from warren.js). <see cref="Setup"/> is stored as a
+/// JSON tree so this model stays ignorant of the game catalog; the bridge whitelists
+/// the keys it copies and the page re-validates ownership when it loads one.</summary>
+public sealed class ChaosRunPreset
+{
+    public string Name { get; set; } = "";
+    public JObject? Setup { get; set; }
 }

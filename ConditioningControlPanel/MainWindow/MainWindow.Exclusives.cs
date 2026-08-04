@@ -1,0 +1,559 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Documents;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
+using System.Windows.Media.Imaging;
+using ConditioningControlPanel.Controls;
+using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
+
+namespace ConditioningControlPanel
+{
+    // Exclusives tab ("the Velvet Vault"): the registry-driven showcase that replaced
+    // the launcher popup. ExclusiveFeature.All is the single source of truth - this
+    // file turns each entry into a card and keeps entitlement chips/veils current.
+    // Cards never block: ShowTab(key) always runs and the destination tab's own
+    // premium gate does the enforcement, exactly as the popup items did.
+    public partial class MainWindow
+    {
+        private sealed class ExclusiveCardUi
+        {
+            public required ExclusiveFeature Feature;
+            public required Border Card;
+            public required Image Art;
+            public required TextBlock Title;
+            public required Border Chip;
+            public required TextBlock ChipText;
+            public required Border Veil;
+            public required TextBlock VeilLock;
+            public CardSheenAdorner? Sheen;
+        }
+
+        private readonly List<ExclusiveCardUi> _exclusiveCards = new();
+        private bool _exclusivesBuilt;
+        private bool _exclusivesSheenRetryQueued;
+
+        private static readonly FontFamily FredokaFont =
+            new(new Uri("pack://application:,,,/"), "./Fonts/#Fredoka");
+
+        /// <summary>Spotlight = the first registry entry (the newest exclusive).</summary>
+        internal void OpenExclusiveSpotlight() => ShowTab(ExclusiveFeature.All[0].Key);
+
+        // ============================== build ==============================
+
+        private void EnsureExclusivesBuilt()
+        {
+            if (_exclusivesBuilt || ExclusivesTab == null) return;
+            _exclusivesBuilt = true;
+
+            try
+            {
+                var spot = ExclusiveFeature.All[0];
+                ExclusivesTab.SpotArtImage.Source = LoadPackImage(spot.ArtResource);
+                ExclusivesTab.TxtSpotTitle.Text = $"{spot.Emoji} {ExclusiveTitle(spot)}";
+                ExclusivesTab.TxtSpotTagline.Text = Loc.Get(spot.TaglineLocKey);
+                if (spot.BadgeLocKey != null)
+                    ExclusivesTab.TxtSpotBadge.Text = Loc.Get(spot.BadgeLocKey);
+                else
+                    ExclusivesTab.SpotBadge.Visibility = Visibility.Collapsed;
+
+                foreach (var feature in ExclusiveFeature.All.Skip(1))
+                    ExclusivesTab.ExclusivesShelf.Children.Add(BuildExclusiveCard(feature));
+
+                // Parks/resumes with tab switches like every other ambient canvas.
+                RegisterTabFx("exclusives", ExclusivesTab.ExclusivesAmbientFx);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Exclusives shelf build failed");
+            }
+        }
+
+        private Border BuildExclusiveCard(ExclusiveFeature feature)
+        {
+            var host = new Grid();
+
+            // --- art, rounded-clipped, slightly zoomable on hover ---
+            var art = new Image
+            {
+                Source = LoadPackImage(feature.ArtResource),
+                Stretch = Stretch.UniformToFill,
+                RenderTransformOrigin = new Point(0.5, 0.5),
+            };
+            var artHost = new Border { Child = art };
+            Views.Tabs.ExclusivesTabView.RoundClipOnResize(artHost, 12);
+            host.Children.Add(artHost);
+
+            // --- bottom plate: gradient scrim + title + tagline ---
+            var title = new TextBlock
+            {
+                Text = $"{feature.Emoji} {ExclusiveTitle(feature)}",
+                FontFamily = FredokaFont,
+                FontWeight = FontWeights.SemiBold,
+                FontSize = 15,
+                Foreground = Brushes.White,
+                Effect = new DropShadowEffect
+                {
+                    Color = Color.FromRgb(0xFF, 0x69, 0xB4),
+                    BlurRadius = 10,
+                    ShadowDepth = 0,
+                    Opacity = 0.7,
+                },
+            };
+            var tagline = new TextBlock
+            {
+                Text = Loc.Get(feature.TaglineLocKey),
+                Foreground = new SolidColorBrush(Color.FromRgb(0x9A, 0x93, 0xB8)),
+                FontSize = 11,
+                TextWrapping = TextWrapping.Wrap,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxHeight = 30,
+                Margin = new Thickness(0, 2, 0, 0),
+            };
+            var plateStack = new StackPanel { Children = { title, tagline } };
+            var plate = new Border
+            {
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Padding = new Thickness(12, 26, 12, 10),
+                Child = plateStack,
+                Background = new LinearGradientBrush(
+                    new GradientStopCollection
+                    {
+                        new(Color.FromArgb(0x00, 0x0C, 0x0A, 0x18), 0.0),
+                        new(Color.FromArgb(0xE0, 0x0C, 0x0A, 0x18), 0.55),
+                        new(Color.FromArgb(0xF2, 0x0C, 0x0A, 0x18), 1.0),
+                    },
+                    new Point(0.5, 0), new Point(0.5, 1)),
+            };
+            host.Children.Add(plate);
+
+            // --- entitlement chip (top-right; colors set per state in refresh) ---
+            var chipText = new TextBlock { FontSize = 10, FontWeight = FontWeights.Bold };
+            var chip = new Border
+            {
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, 8, 8, 0),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(8, 3, 8, 3),
+                BorderThickness = new Thickness(1),
+                Child = chipText,
+            };
+            host.Children.Add(chip);
+
+            // Optional NEW/BETA badge, top-left, in the brand gradient.
+            if (feature.BadgeLocKey != null)
+            {
+                host.Children.Add(new Border
+                {
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    VerticalAlignment = VerticalAlignment.Top,
+                    Margin = new Thickness(8, 8, 0, 0),
+                    CornerRadius = new CornerRadius(10),
+                    Padding = new Thickness(8, 2, 8, 2),
+                    Background = new LinearGradientBrush(
+                        Color.FromRgb(0xFF, 0x69, 0xB4), Color.FromRgb(0xB4, 0x78, 0xFF), 45),
+                    Child = new TextBlock
+                    {
+                        Text = Loc.Get(feature.BadgeLocKey),
+                        Foreground = Brushes.White,
+                        FontSize = 9,
+                        FontWeight = FontWeights.Bold,
+                    },
+                });
+            }
+
+            // --- locked veil: fog scrim + breathing padlock + unlock pill.
+            //     Decoration only - the card still navigates, the destination gates. ---
+            var veilLock = new TextBlock
+            {
+                Text = "🔒",
+                FontSize = 34,
+                HorizontalAlignment = HorizontalAlignment.Center,
+            };
+            var veil = new Border
+            {
+                Visibility = Visibility.Collapsed,
+                IsHitTestVisible = false,
+                Background = new RadialGradientBrush(
+                    Color.FromArgb(0x86, 0x1E, 0x16, 0x32),
+                    Color.FromArgb(0xD6, 0x0C, 0x0A, 0x18)),
+                Child = new StackPanel
+                {
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Children =
+                    {
+                        veilLock,
+                        new Border
+                        {
+                            Margin = new Thickness(0, 8, 0, 0),
+                            CornerRadius = new CornerRadius(10),
+                            Padding = new Thickness(10, 4, 10, 4),
+                            HorizontalAlignment = HorizontalAlignment.Center,
+                            Background = new LinearGradientBrush(
+                                Color.FromArgb(0xE6, 0xFF, 0x69, 0xB4),
+                                Color.FromArgb(0xD9, 0xB4, 0x78, 0xFF), 45),
+                            Child = new TextBlock
+                            {
+                                Text = Loc.Get("exclusives_chip_lab"),
+                                Foreground = Brushes.White,
+                                FontSize = 10,
+                                FontWeight = FontWeights.Bold,
+                            },
+                        },
+                    },
+                },
+            };
+            Views.Tabs.ExclusivesTabView.RoundClipOnResize(veil, 12);
+            host.Children.Add(veil);
+
+            var card = new Border
+            {
+                Width = 336,
+                Height = 200,
+                Margin = new Thickness(0, 0, 16, 16),
+                CornerRadius = new CornerRadius(12),
+                Background = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x2E)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x4D, 0xB4, 0x78, 0xFF)),
+                BorderThickness = new Thickness(1),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Child = host,
+            };
+
+            card.MouseEnter += (_, _) => OnExclusiveCardHover(card, art, true);
+            card.MouseLeave += (_, _) => OnExclusiveCardHover(card, art, false);
+            card.MouseLeftButtonUp += (_, _) => ShowTab(feature.Key);
+
+            _exclusiveCards.Add(new ExclusiveCardUi
+            {
+                Feature = feature,
+                Card = card,
+                Art = art,
+                Title = title,
+                Chip = chip,
+                ChipText = chipText,
+                Veil = veil,
+                VeilLock = veilLock,
+            });
+            return card;
+        }
+
+        private static void OnExclusiveCardHover(Border card, Image art, bool on)
+        {
+            try
+            {
+                MotionFx.HoverLift(card, on);
+
+                if (on && PerformanceProfile.AllowGlow(PerformanceProfile.CurrentTier))
+                {
+                    card.Effect ??= new DropShadowEffect
+                    {
+                        Color = FxTheme.GlowColor,
+                        BlurRadius = Math.Min(24, PerformanceProfile.MaxGlowBlurRadius(PerformanceProfile.CurrentTier)),
+                        ShadowDepth = 0,
+                        Opacity = 0.55,
+                    };
+                }
+                else
+                {
+                    card.ClearValue(UIElement.EffectProperty);
+                }
+
+                // Gentle art zoom under the rounded clip.
+                if (MotionFx.AllowTransitions)
+                {
+                    if (art.RenderTransform is not ScaleTransform s)
+                        art.RenderTransform = s = new ScaleTransform(1, 1);
+                    var anim = new DoubleAnimation(on ? 1.05 : 1.0, TimeSpan.FromMilliseconds(220))
+                    {
+                        EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+                    };
+                    s.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
+                    s.BeginAnimation(ScaleTransform.ScaleYProperty, anim);
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("Exclusives card hover: {E}", ex.Message); }
+        }
+
+        // ============================== refresh ==============================
+
+        /// <summary>
+        /// Repaints every entitlement surface on the tab (chips, veils, tier plates,
+        /// mod-aware Takeover title). Called from UpdatePatreonUI and on tab show,
+        /// mirroring the old RefreshExclusivesSubmenuLocks contract.
+        /// </summary>
+        internal void RefreshExclusivesTab()
+        {
+            // Lazily built on first tab show (ShowTab calls EnsureExclusivesBuilt);
+            // until then there is nothing to repaint and startup pays nothing.
+            if (ExclusivesTab == null || !_exclusivesBuilt) return;
+
+            try
+            {
+                foreach (var ui in _exclusiveCards)
+                {
+                    // Mod-aware titles (Drone mod -> "Drone Takeover", etc.).
+                    ui.Title.Text = $"{ui.Feature.Emoji} {ExclusiveTitle(ui.Feature)}";
+                    ApplyExclusiveCardState(ui, ui.Feature.GateState());
+                }
+
+                // Spotlight veil follows the same probe.
+                var spot = ExclusiveFeature.All[0];
+                ExclusivesTab.TxtSpotTitle.Text = $"{spot.Emoji} {ExclusiveTitle(spot)}";
+                ExclusivesTab.SpotVeil.Visibility =
+                    spot.GateState() == ExclusiveGateState.Locked ? Visibility.Visible : Visibility.Collapsed;
+                ApplyVeilLockBreath(ExclusivesTab.SpotVeilLock, ExclusivesTab.SpotVeil.Visibility == Visibility.Visible);
+
+                RefreshExclusiveTierPlates();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "RefreshExclusivesTab failed");
+            }
+        }
+
+        private void ApplyExclusiveCardState(ExclusiveCardUi ui, ExclusiveGateState state)
+        {
+            switch (state)
+            {
+                case ExclusiveGateState.Unlocked:
+                    ui.Veil.Visibility = Visibility.Collapsed;
+                    ui.Art.Opacity = 1.0;
+                    ui.Chip.Visibility = Visibility.Visible;
+                    ui.ChipText.Text = Loc.Get("exclusives_chip_unlocked");
+                    ui.ChipText.Foreground = new SolidColorBrush(Color.FromRgb(0x7F, 0xE7, 0xE0));
+                    ui.Chip.Background = new SolidColorBrush(Color.FromArgb(0x2E, 0x7F, 0xE7, 0xE0));
+                    ui.Chip.BorderBrush = new SolidColorBrush(Color.FromArgb(0x66, 0x7F, 0xE7, 0xE0));
+                    break;
+
+                case ExclusiveGateState.PassReady:
+                    ui.Veil.Visibility = Visibility.Collapsed;
+                    ui.Art.Opacity = 1.0;
+                    ui.Chip.Visibility = Visibility.Visible;
+                    ui.ChipText.Text = Loc.Get("exclusives_chip_pass_ready");
+                    ui.ChipText.Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0xD2, 0x7A));
+                    ui.Chip.Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xD2, 0x7A));
+                    ui.Chip.BorderBrush = new SolidColorBrush(Color.FromArgb(0x73, 0xFF, 0xD2, 0x7A));
+                    break;
+
+                default:
+                    ui.Veil.Visibility = Visibility.Visible;
+                    ui.Art.Opacity = 0.75;
+                    ui.Chip.Visibility = Visibility.Collapsed;
+                    break;
+            }
+            ApplyVeilLockBreath(ui.VeilLock, ui.Veil.Visibility == Visibility.Visible);
+        }
+
+        /// <summary>
+        /// Breathing glow behind a veil padlock - same recipe as PremiumGateFx
+        /// (DropShadow at zero depth, opacity-only animation), same park rules.
+        /// </summary>
+        private static void ApplyVeilLockBreath(TextBlock padlock, bool on)
+        {
+            try
+            {
+                var tier = PerformanceProfile.CurrentTier;
+                bool want = on && MotionFx.AllowAmbientLoops && PerformanceProfile.AllowGlow(tier);
+                if (!want)
+                {
+                    if (padlock.Effect is DropShadowEffect old)
+                        old.BeginAnimation(DropShadowEffect.OpacityProperty, null);
+                    padlock.ClearValue(UIElement.EffectProperty);
+                    return;
+                }
+
+                if (padlock.Effect is not DropShadowEffect glow)
+                {
+                    padlock.Effect = glow = new DropShadowEffect
+                    {
+                        Color = FxTheme.GlowColor,
+                        BlurRadius = Math.Min(20, PerformanceProfile.MaxGlowBlurRadius(tier)),
+                        ShadowDepth = 0,
+                        Opacity = 0.8,
+                    };
+                }
+                var anim = new DoubleAnimation(0.35, 0.9, TimeSpan.FromSeconds(3.4))
+                {
+                    AutoReverse = true,
+                    RepeatBehavior = RepeatBehavior.Forever,
+                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+                };
+                Timeline.SetDesiredFrameRate(anim, AmbientFrameRate);
+                glow.BeginAnimation(DropShadowEffect.OpacityProperty, anim);
+            }
+            catch (Exception ex) { App.Logger?.Debug("Exclusives lock breath: {E}", ex.Message); }
+        }
+
+        private void RefreshExclusiveTierPlates()
+        {
+            var p1 = ExclusivesTab.TierPlate1;
+            var p2 = ExclusivesTab.TierPlate2;
+            if (p1 == null || p2 == null) return;
+
+            var tier = App.Patreon?.CurrentTier ?? PatreonTier.None;
+            // Whitelist is permanent top tier by policy.
+            bool topTier = tier >= PatreonTier.Level2 || App.Patreon?.IsWhitelisted == true;
+            bool premium = App.Patreon?.HasPremiumAccess == true;
+
+            MotionFx.Stop(p1);
+            MotionFx.Stop(p2);
+            if (topTier)
+            {
+                p1.Opacity = 0.55;
+                p2.Opacity = 1.0;
+                MotionFx.GlowBreath(p2, 0.75, 1.0);
+            }
+            else if (premium)
+            {
+                p1.Opacity = 1.0;
+                p2.Opacity = 0.3;
+                MotionFx.GlowBreath(p1, 0.75, 1.0);
+            }
+            else
+            {
+                p1.Opacity = 0.3;
+                p2.Opacity = 0.3;
+            }
+        }
+
+        // ============================== motion ==============================
+
+        /// <summary>
+        /// Starts the tab's ambient motion: the room's fog/dust/aurora canvas, the
+        /// spotlight's Ken Burns drift, and the card sheen adorners. Everything here
+        /// is gated on MotionFx/PerformanceProfile and parked again by
+        /// StopExclusivesMotion on the way out of the tab.
+        /// </summary>
+        private void StartExclusivesMotion()
+        {
+            if (!_exclusivesBuilt) return;
+            try
+            {
+                ExclusivesTab.ExclusivesAmbientFx.StartLayers(new AmbientFxConfig
+                {
+                    Layers = AmbientFxLayers.FogDrift | AmbientFxLayers.DustField | AmbientFxLayers.AuroraWash,
+                    Intensity = 0.55,
+                    FogPuffs = 3,
+                });
+
+                if (MotionFx.AllowAmbientLoops)
+                {
+                    var drift = new DoubleAnimation(1.0, 1.07, TimeSpan.FromSeconds(26))
+                    {
+                        AutoReverse = true,
+                        RepeatBehavior = RepeatBehavior.Forever,
+                        EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+                    };
+                    Timeline.SetDesiredFrameRate(drift, AmbientFrameRate);
+                    ExclusivesTab.SpotArtScale.BeginAnimation(ScaleTransform.ScaleXProperty, drift);
+                    ExclusivesTab.SpotArtScale.BeginAnimation(ScaleTransform.ScaleYProperty, drift);
+
+                    AttachExclusiveSheens();
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("StartExclusivesMotion: {E}", ex.Message); }
+        }
+
+        /// <summary>Parks every loop this tab started. Runs at the top of ShowTab.</summary>
+        private void StopExclusivesMotion()
+        {
+            if (!_exclusivesBuilt) return;
+            try
+            {
+                ExclusivesTab.SpotArtScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                ExclusivesTab.SpotArtScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                foreach (var ui in _exclusiveCards) ui.Sheen?.Stop();
+                // The AmbientFxCanvas parks itself via SwitchTabFx (it's registered).
+            }
+            catch (Exception ex) { App.Logger?.Debug("StopExclusivesMotion: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// The periodic glass sheen every card wears. Adorner layers don't exist until
+        /// the shelf has rendered once, so this retries a bounded number of times at
+        /// Background priority. Background is BELOW Render on purpose: a self-requeue
+        /// at Normal priority (which outranks Render) never lets the first render
+        /// happen and freezes the UI thread - that exact livelock shipped in the first
+        /// cut of this tab. The retry counter resets once every card has its sheen,
+        /// and a tab revisit calls this again anyway.
+        /// </summary>
+        private int _exclusivesSheenRetries;
+
+        private void AttachExclusiveSheens()
+        {
+            bool missing = false;
+            foreach (var ui in _exclusiveCards)
+            {
+                if (ui.Sheen != null)
+                {
+                    ui.Sheen.Start();
+                    continue;
+                }
+                var layer = AdornerLayer.GetAdornerLayer(ui.Card);
+                if (layer == null) { missing = true; continue; }
+                ui.Sheen = new CardSheenAdorner(ui.Card, 12);
+                layer.Add(ui.Sheen);
+                ui.Sheen.Start();
+            }
+
+            if (!missing)
+            {
+                _exclusivesSheenRetries = 0;
+                return;
+            }
+
+            if (!_exclusivesSheenRetryQueued && _exclusivesSheenRetries < 5)
+            {
+                _exclusivesSheenRetryQueued = true;
+                _exclusivesSheenRetries++;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _exclusivesSheenRetryQueued = false;
+                    try
+                    {
+                        if (ExclusivesTab?.Visibility == Visibility.Visible && MotionFx.AllowAmbientLoops)
+                            AttachExclusiveSheens();
+                    }
+                    catch (Exception ex) { App.Logger?.Debug("Exclusives sheen retry: {E}", ex.Message); }
+                }), System.Windows.Threading.DispatcherPriority.Background);
+            }
+        }
+
+        // ============================== helpers ==============================
+
+        private static string ExclusiveTitle(ExclusiveFeature feature) =>
+            feature.Key == "bambitakeover"
+                ? App.Mods?.GetTakeoverLabel() ?? Loc.Get(feature.TitleLocKey)
+                : Loc.Get(feature.TitleLocKey);
+
+        private static ImageSource? LoadPackImage(string relativePath)
+        {
+            try
+            {
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.UriSource = new Uri("pack://application:,,,/" + relativePath, UriKind.Absolute);
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                // Card art renders at ~340 wide inside the Viewbox; a bounded decode
+                // keeps eight 1376x768 sources from costing ~32 MB of bitmaps.
+                bmp.DecodePixelWidth = 700;
+                bmp.EndInit();
+                bmp.Freeze();
+                return bmp;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Exclusives art missing: {Path} ({E})", relativePath, ex.Message);
+                return null;
+            }
+        }
+    }
+}

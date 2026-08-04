@@ -1,0 +1,896 @@
+/* ============================================================================
+ * KAWAII KIT — the shared visual language for the intake's SHELL screens only:
+ * the main menu, the Options panel and the in-game pause menu.
+ *
+ * Deliberately NOT applied to the run itself. The whole point of the aesthetic
+ * is the clash: a bouncy pastel storefront wrapped around a clinical descent.
+ * The moment the run starts, the page reverts to styles.css's theme tokens.
+ *
+ * Ownership: this file is shared by ui/menu.js, ui/options.js and ui/pause.js.
+ * ADD tokens/utilities here rather than redefining pinks in three modules.
+ * Everything is namespaced `kw-` / `--kw-` so it cannot collide with the run's
+ * `intake-` / `ix-` classes or the bank-driven --intake-accent theme vars.
+ *
+ * Offline-safe: no @font-face, no remote assets. The "bubbly" face is Comic
+ * Sans MS, which ships with every Windows install (this app is Windows-only)
+ * and is the closest stock match to the DDLC-adjacent storefront look.
+ * ========================================================================== */
+
+:root {
+  /* --- palette: pastel storefront ---------------------------------------- */
+  --kw-pink:      #ff8fc7;
+  --kw-pink-deep: #e75fa8;
+  --kw-lilac:     #b79bff;
+  --kw-mint:      #8ff0d4;
+  --kw-lemon:     #ffe98f;
+  --kw-cream:     #fff4fa;
+  --kw-ink:       #5b2a48;   /* body text on cream — never pure black */
+  --kw-ink-soft:  #8a5c78;
+
+  /* --- the menacing register: used ONLY for the disclaimer ---------------- */
+  --kw-red:       #d8112b;
+  --kw-red-glow:  rgba(216, 17, 43, .55);
+
+  /* --- surfaces ----------------------------------------------------------- */
+  --kw-panel-bg:     rgba(255, 244, 250, .96);
+  --kw-panel-border: rgba(255, 143, 199, .9);
+  --kw-panel-shadow: 0 18px 48px rgba(120, 40, 90, .38), 0 0 0 6px rgba(255, 143, 199, .22);
+  --kw-scrim:        rgba(38, 12, 32, .62);
+
+  /* --- type --------------------------------------------------------------- */
+  --kw-font: 'Comic Sans MS', 'Comic Neue', 'Chalkboard SE', 'Segoe UI', system-ui, cursive;
+  --kw-radius: 22px;
+}
+
+/* ----------------------------------------------------------------------------
+ * SURFACES
+ * -------------------------------------------------------------------------- */
+.kw-root {
+  font-family: var(--kw-font);
+  color: var(--kw-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Full-page scrim behind a shell screen. Menu uses it opaque-ish; pause uses it
+   translucent so the frozen run stays visible (and unnerving) underneath. */
+.kw-scrim {
+  position: fixed; inset: 0;
+  background: var(--kw-scrim);
+  backdrop-filter: blur(6px) saturate(.85);
+  -webkit-backdrop-filter: blur(6px) saturate(.85);
+}
+
+.kw-panel {
+  background: var(--kw-panel-bg);
+  border: 4px solid var(--kw-panel-border);
+  border-radius: var(--kw-radius);
+  box-shadow: var(--kw-panel-shadow);
+  padding: 26px 30px;
+}
+
+/* The soft rainbow hairline used along panel tops / section rules. */
+.kw-rainbow-rule {
+  height: 6px; border-radius: 999px; border: 0;
+  background: linear-gradient(90deg,
+    #ff9ec4, #ffd28f, #fff28f, #a8f0b8, #8fd8ff, #b79bff, #ff9ec4);
+  background-size: 200% 100%;
+  animation: kw-rainbow-slide 6s linear infinite;
+}
+@keyframes kw-rainbow-slide {
+  from { background-position:   0% 50%; }
+  to   { background-position: 200% 50%; }
+}
+
+/* ----------------------------------------------------------------------------
+ * BUTTONS — chunky, rounded, springy.
+ * -------------------------------------------------------------------------- */
+.kw-btn {
+  font-family: var(--kw-font);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(180deg, var(--kw-pink), var(--kw-pink-deep));
+  border: 3px solid #fff;
+  border-radius: 999px;
+  padding: 12px 30px;
+  cursor: pointer;
+  box-shadow: 0 6px 0 rgba(180, 60, 125, .55), 0 10px 20px rgba(120, 40, 90, .3);
+  transition: transform 120ms cubic-bezier(.34, 1.56, .64, 1), box-shadow 120ms ease, filter 120ms ease;
+  text-shadow: 0 2px 0 rgba(160, 50, 110, .45);
+}
+.kw-btn:hover  { transform: translateY(-2px) scale(1.04); filter: saturate(1.1) brightness(1.04); }
+.kw-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 rgba(180, 60, 125, .55); }
+.kw-btn:focus-visible { outline: 3px dashed var(--kw-lilac); outline-offset: 4px; }
+
+/* Quieter variant for secondary actions (Back / Reset / Quit). */
+.kw-btn--soft {
+  background: linear-gradient(180deg, #fff, #ffe6f2);
+  color: var(--kw-ink);
+  text-shadow: none;
+  box-shadow: 0 6px 0 rgba(200, 150, 180, .5), 0 10px 20px rgba(120, 40, 90, .18);
+}
+
+/* ----------------------------------------------------------------------------
+ * TEXT ANIMATIONS
+ * -------------------------------------------------------------------------- */
+
+/* Per-letter bounce for the welcome copy. Wrap each glyph in a <span class="kw-bl">
+   and set --kw-i to its index; the stagger falls out of the delay calc. */
+.kw-bounce-line { display: inline-block; }
+
+/* Word wrapper: keeps a word from being split across lines. See bounceLine()
+   in ui/menu.js — without this the per-glyph inline-blocks wrap mid-word. */
+.kw-word { display: inline-block; white-space: nowrap; }
+
+.kw-bl {
+  display: inline-block;
+  white-space: pre;
+  /* Slow and shallow on purpose. The copy has to stay READABLE — it is a
+     paragraph, not a logo. A fast, tall bounce turns five lines of text into
+     churn, and the eye can't settle long enough to actually read the words.
+     Long cycle + small stagger = a wave that drifts along the line rather
+     than a row of letters pogoing. */
+  animation: kw-letter-bounce 4.2s ease-in-out infinite;
+  animation-delay: calc(var(--kw-i, 0) * 32ms);
+}
+@keyframes kw-letter-bounce {
+  0%, 78%, 100% { transform: translateY(0)     rotate(0deg); }
+  86%           { transform: translateY(-3px)  rotate(-1.2deg); }
+  93%           { transform: translateY(-1px)  rotate(.8deg); }
+}
+
+/* Gentle whole-block float, for the panel or a mascot. */
+.kw-float { animation: kw-float 4.5s ease-in-out infinite; }
+@keyframes kw-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-9px); }
+}
+
+/* Spring entrance. */
+.kw-pop-in { animation: kw-pop-in 420ms cubic-bezier(.34, 1.56, .64, 1) both; }
+@keyframes kw-pop-in {
+  from { transform: scale(.86); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+/* ----------------------------------------------------------------------------
+ * THE DISCLAIMER — the tonal knife. Small, red, and very slightly wrong.
+ * Never bouncy: it holds still while everything around it bobs.
+ * -------------------------------------------------------------------------- */
+.kw-disclaimer {
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: .78rem;
+  letter-spacing: .02em;
+  line-height: 1.45;
+  color: var(--kw-red);
+  text-shadow: 0 0 10px var(--kw-red-glow);
+  animation: kw-disclaimer-pulse 5.5s ease-in-out infinite;
+}
+@keyframes kw-disclaimer-pulse {
+  0%, 100% { opacity: .82; }
+  50%      { opacity: 1; }
+}
+
+/* ----------------------------------------------------------------------------
+ * DECOR — sparkles / rainbows / hearts. All pointer-events:none, all suppressed
+ * by the `sparkles` pref (add .kw-no-decor on the root) and by reduced-motion.
+ * -------------------------------------------------------------------------- */
+.kw-decor-layer {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.kw-sparkle {
+  position: absolute;
+  width: 14px; height: 14px;
+  opacity: 0;
+  background:
+    radial-gradient(circle, #fff 0 12%, transparent 13%),
+    conic-gradient(from 0deg, transparent 0 43%, #fff6fb 45% 55%, transparent 57% 93%, #fff6fb 95%);
+  -webkit-mask: radial-gradient(circle, #000 60%, transparent 61%) center/100% 100%;
+  filter: drop-shadow(0 0 6px var(--kw-pink));
+  animation: kw-twinkle 2.6s ease-in-out infinite;
+}
+@keyframes kw-twinkle {
+  0%, 100% { opacity: 0;  transform: scale(.4) rotate(0deg); }
+  45%      { opacity: 1;  transform: scale(1.1) rotate(70deg); }
+  70%      { opacity: .4; transform: scale(.75) rotate(120deg); }
+}
+
+.kw-heart {
+  position: absolute;
+  font-size: 1rem;
+  opacity: .75;
+  animation: kw-heart-rise 7s linear infinite;
+}
+@keyframes kw-heart-rise {
+  from { transform: translateY(20px) rotate(-8deg); opacity: 0; }
+  15%  { opacity: .8; }
+  to   { transform: translateY(-120px) rotate(10deg); opacity: 0; }
+}
+
+.kw-no-decor .kw-decor-layer { display: none; }
+
+/* ----------------------------------------------------------------------------
+ * FORM CONTROLS — shared by the Options panel wherever it is mounted.
+ * -------------------------------------------------------------------------- */
+.kw-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 9px 2px;
+}
+.kw-row__label { flex: 0 0 8.5rem; font-weight: 700; color: var(--kw-ink); }
+.kw-row__value { flex: 0 0 3rem; text-align: right; color: var(--kw-ink-soft); font-variant-numeric: tabular-nums; }
+
+.kw-slider {
+  -webkit-appearance: none; appearance: none;
+  flex: 1 1 auto; height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--kw-pink), var(--kw-lilac));
+  border: 2px solid #fff;
+  box-shadow: inset 0 1px 3px rgba(120, 40, 90, .25);
+  cursor: pointer;
+}
+.kw-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--kw-pink-deep);
+  box-shadow: 0 2px 6px rgba(120, 40, 90, .45);
+  transition: transform 120ms cubic-bezier(.34, 1.56, .64, 1);
+}
+.kw-slider:active::-webkit-slider-thumb { transform: scale(1.22); }
+.kw-slider:disabled { filter: grayscale(.7); opacity: .5; cursor: not-allowed; }
+
+/* Chunky pill toggle for the boolean prefs. */
+.kw-toggle {
+  position: relative;
+  width: 62px; height: 30px;
+  border-radius: 999px;
+  border: 3px solid #fff;
+  background: #d9c7d4;
+  cursor: pointer;
+  transition: background 160ms ease;
+  box-shadow: 0 3px 0 rgba(180, 140, 165, .55);
+}
+.kw-toggle[aria-checked="true"] { background: linear-gradient(90deg, var(--kw-pink), var(--kw-pink-deep)); }
+.kw-toggle::after {
+  content: '';
+  position: absolute; top: 2px; left: 2px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(120, 40, 90, .4);
+  transition: transform 180ms cubic-bezier(.34, 1.56, .64, 1);
+}
+.kw-toggle[aria-checked="true"]::after { transform: translateX(32px); }
+.kw-toggle:focus-visible { outline: 3px dashed var(--kw-lilac); outline-offset: 4px; }
+
+/* ----------------------------------------------------------------------------
+ * REDUCED MOTION — the storefront still reads as cute, it just stops moving.
+ * -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .kw-bl, .kw-float, .kw-pop-in, .kw-sparkle, .kw-heart,
+  .kw-rainbow-rule, .kw-disclaimer {
+    animation: none !important;
+  }
+  .kw-bl { transform: none !important; }
+  .kw-decor-layer { display: none; }
+}
+
+/* ============================================================================
+ * MAIN MENU  (owner: ui/menu.js)
+ *
+ * Everything below is namespaced `.kw-menu-*` (plus the two decor shapes the
+ * menu contributes to the shared kit, `.kw-cloud` / `.kw-rainbow-arc`, which the
+ * pause screen is welcome to reuse). Appended at the END of the file on purpose:
+ * options.js / pause.js own their own trailing sections, so three agents can
+ * edit this stylesheet without ever touching the same lines.
+ * ========================================================================== */
+
+/* The storefront sits above EVERYTHING the run draws — loader (z 10), blackout
+   (z 7), stage (z 2) — because it must be the first and only thing on screen. */
+.kw-menu-root {
+  position: fixed; inset: 0;
+  z-index: 60;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+
+.kw-menu-panel {
+  position: relative;
+  z-index: 2;
+  width: min(680px, 88vw);
+  max-height: 92vh;
+  overflow-y: auto;
+  text-align: center;
+}
+
+.kw-menu-title {
+  margin: 2px 0 10px;
+  font-size: clamp(2rem, 5.2vw, 3.1rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: .01em;
+  color: var(--kw-pink-deep);
+  text-shadow:
+    0 2px 0 #fff,
+    0 5px 0 rgba(255, 143, 199, .55),
+    0 12px 22px rgba(120, 40, 90, .28);
+}
+.kw-menu-subtitle {
+  margin: 0 0 14px;
+  font-size: .82rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--kw-ink-soft);
+}
+
+.kw-menu-welcome {
+  margin: 14px auto 16px;
+  /* Wide enough that the longest line ("I'm gonna ask you some questions now
+     to get to know you better!") sits on ONE line — at 42ch it wrapped, and a
+     wrapped line of bouncing glyphs reads as broken rather than playful. */
+  max-width: 54ch;
+  font-size: clamp(1rem, 2.1vw, 1.18rem);
+  /* Tightened from 1.9 now that the bounce is 3px instead of 7px: the letters
+     no longer need that much vertical air, and 1.9 spread five short lines
+     into something that read as a list instead of a speech. */
+  line-height: 1.52;
+  color: var(--kw-ink);
+}
+
+.kw-menu-disclaimer {
+  margin: 18px auto 20px;
+  max-width: 52ch;
+  padding: 9px 12px;
+  border: 1px solid rgba(216, 17, 43, .45);
+  border-radius: 8px;
+  background: rgba(216, 17, 43, .06);
+  text-align: left;
+}
+
+.kw-menu-btns {
+  display: flex; flex-wrap: wrap;
+  align-items: center; justify-content: center;
+  gap: 14px;
+  margin-top: 6px;
+}
+
+/* Inline fallback line — shown only when ui/options.js is missing or throws. */
+.kw-menu-note {
+  min-height: 1.2em;
+  margin: 12px 0 0;
+  font-size: .82rem;
+  color: var(--kw-ink-soft);
+}
+.kw-menu-note[data-warn="1"] { color: var(--kw-red); }
+
+/* Shell-music mute — a one-click kill switch for the menu song, parked on the
+   panel corner. Small and quiet: it must be findable at a glance without
+   competing with Begin for attention. Muted state greys out and strikes the
+   note glyph so the state reads without relying on the glyph alone. */
+.kw-menu-music {
+  position: absolute;
+  top: 14px; right: 16px;
+  width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--kw-font);
+  font-size: 1.15rem;
+  line-height: 1;
+  color: #fff;
+  background: linear-gradient(180deg, var(--kw-lilac), #9878f0);
+  border: 3px solid #fff;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 4px 0 rgba(120, 90, 190, .55), 0 6px 14px rgba(120, 40, 90, .25);
+  transition: transform 120ms cubic-bezier(.34, 1.56, .64, 1), filter 120ms ease, background 160ms ease;
+}
+.kw-menu-music:hover  { transform: translateY(-2px) scale(1.06); filter: brightness(1.06); }
+.kw-menu-music:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(120, 90, 190, .55); }
+.kw-menu-music:focus-visible { outline: 3px dashed var(--kw-lilac); outline-offset: 3px; }
+.kw-menu-music[data-off="1"] {
+  background: linear-gradient(180deg, #cfc4d8, #b3a6c0);
+  color: rgba(255, 255, 255, .85);
+}
+
+/* Screen-reader copy for the bouncing headline (whose glyph spans are hidden). */
+.kw-sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip: rect(0, 0, 0, 0); clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---- decor shapes ---------------------------------------------------------
+ * Pure CSS, zero images, zero JS animation loops: every one of these is a plain
+ * CSS keyframe with a randomized inline delay/position, so the menu costs one
+ * static DOM subtree and no rAF while the three.js tube is running behind it.
+ * -------------------------------------------------------------------------- */
+
+/* Sized in `em` off its own font-size so menu.js can scale a whole cloud —
+   body AND both puffs — with one inline property, leaving `transform` free for
+   the drift keyframe. */
+.kw-cloud {
+  position: absolute;
+  font-size: 16px;
+  width: 8em; height: 2.625em;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .82);
+  filter: drop-shadow(0 8px 16px rgba(120, 40, 90, .18));
+  animation: kw-cloud-drift 52s linear infinite;
+}
+.kw-cloud::before,
+.kw-cloud::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  background: inherit;
+}
+.kw-cloud::before { width: 3.875em; height: 3.875em; left: 1.125em;  top: -1.625em; }
+.kw-cloud::after  { width: 2.75em;  height: 2.75em;  right: 1.25em;  top: -1.125em; }
+@keyframes kw-cloud-drift {
+  from { transform: translateX(-34vw); }
+  to   { transform: translateX(112vw); }
+}
+
+/* A soft "∩" rainbow: concentric bands of a huge circle whose centre sits far
+   below the viewport, so only the crown of the arc is on screen. */
+.kw-rainbow-arc {
+  position: absolute;
+  left: 50%;
+  width: 150vmax; height: 150vmax;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  opacity: .26;
+  filter: blur(1.5px);
+  background: radial-gradient(circle at 50% 50%,
+    transparent 0 41%,
+    #ff9ec4 41% 43.4%,
+    #ffd28f 43.4% 45.8%,
+    #fff28f 45.8% 48.2%,
+    #a8f0b8 48.2% 50.6%,
+    #8fd8ff 50.6% 53%,
+    #b79bff 53% 55.4%,
+    transparent 55.4%);
+  animation: kw-arc-breathe 11s ease-in-out infinite;
+}
+@keyframes kw-arc-breathe {
+  0%, 100% { opacity: .2; }
+  50%      { opacity: .34; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kw-cloud, .kw-rainbow-arc { animation: none !important; }
+}
+
+/* ============================================================================
+ * OPTIONS PANEL (ui/options.js) — layout only. Every control in here is one of
+ * the shared .kw-row / .kw-slider / .kw-toggle / .kw-btn primitives above; this
+ * section just arranges them into a modal card and adds the per-row hint copy.
+ * The panel is mounted by BOTH the main menu and the pause menu, so it owns a
+ * fixed, centred, self-scrolling card rather than assuming either host's layout.
+ * ========================================================================== */
+.kw-options {
+  position: fixed; inset: 0;
+  z-index: 40;                       /* over the menu / frozen run, under nothing */
+  display: flex; align-items: center; justify-content: center;
+}
+
+.kw-options__panel {
+  position: relative;
+  width: min(560px, calc(100vw - 40px));
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 10px;
+}
+
+.kw-options__title {
+  margin: 0;
+  font-size: 1.9rem;
+  font-weight: 800;
+  text-align: center;
+  color: var(--kw-pink-deep);
+  text-shadow: 0 2px 0 #fff, 0 4px 10px rgba(231, 95, 168, .28);
+}
+
+.kw-options__body { display: flex; flex-direction: column; }
+
+/* Hint copy: the trailing note on a toggle row, or a full-width line tucked
+   under a slider row (sliders eat the whole middle column). */
+.kw-options__hint {
+  flex: 1 1 auto;
+  font-size: .82rem;
+  line-height: 1.25;
+  color: var(--kw-ink-soft);
+}
+.kw-options__hint--under {
+  margin: -6px 0 4px 8.5rem;         /* aligns with .kw-row__label's fixed column */
+  opacity: .85;
+}
+
+.kw-options__sep {
+  height: 3px; border: 0; border-radius: 999px;
+  margin: 12px 0 4px;
+  background: rgba(255, 143, 199, .35);
+}
+
+.kw-options__foot {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 14px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.kw-options__foot .kw-btn { flex: 0 0 auto; }
+
+/* Narrow hosts: let the label column collapse so a slider keeps a usable track. */
+@media (max-width: 460px) {
+  .kw-row__label { flex-basis: 6rem; }
+  .kw-options__hint--under { margin-left: 6rem; }
+  .kw-options__foot { justify-content: center; }
+}
+
+/* ============================================================================
+ * PAUSE MENU — ui/pause.js
+ *
+ * The in-run shell. Unlike the main menu this scrim stays TRANSLUCENT: the
+ * frozen run has to remain readable behind the pastel, still lit, still staring.
+ * Both layers hang off <body> (beats.js wipes #intake-stage every render), so
+ * everything here is position:fixed with its own z-index band, chosen to sit
+ * above the run's effect layers but below the jumpscare ceremony's 2147483000.
+ * ========================================================================== */
+
+/* --- the HUD corner button ------------------------------------------------ */
+.kw-pause-btn {
+  position: fixed;
+  top: 12px; right: 14px;
+  z-index: 2147480900;                 /* above the run's fx, below the jumpscare */
+  width: 46px; height: 46px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  cursor: pointer;
+  background: linear-gradient(180deg, var(--kw-pink), var(--kw-pink-deep));
+  box-shadow: 0 5px 0 rgba(180, 60, 125, .55), 0 8px 18px rgba(120, 40, 90, .35);
+  opacity: .58;
+  transition: transform 140ms cubic-bezier(.34, 1.56, .64, 1),
+              opacity 200ms ease, box-shadow 140ms ease;
+}
+.kw-pause-btn:hover  { opacity: 1; transform: translateY(-2px) scale(1.07); }
+.kw-pause-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 rgba(180, 60, 125, .55); }
+.kw-pause-btn:focus-visible { opacity: 1; outline: 3px dashed var(--kw-lilac); outline-offset: 4px; }
+.kw-pause-btn.is-hidden { display: none; }
+
+/* the two chunky bars, drawn rather than typed so no glyph coverage is assumed */
+.kw-pause-btn__bars {
+  display: block;
+  width: 15px; height: 17px;
+  background:
+    linear-gradient(#fff, #fff) left  / 5px 100% no-repeat,
+    linear-gradient(#fff, #fff) right / 5px 100% no-repeat;
+  border-radius: 2px;
+  filter: drop-shadow(0 1px 0 rgba(160, 50, 110, .5));
+}
+
+/* --- the menu itself ------------------------------------------------------ */
+.kw-pause-root {
+  position: fixed; inset: 0;
+  z-index: 2147482900;
+  display: flex; align-items: center; justify-content: center;
+}
+.kw-pause-root[hidden] { display: none; }
+
+/* Deliberately lighter than the main menu's scrim, and a softer blur: the run
+   must stay legible underneath. */
+.kw-pause-scrim {
+  background: rgba(38, 12, 32, .46);
+  backdrop-filter: blur(3px) saturate(.9);
+  -webkit-backdrop-filter: blur(3px) saturate(.9);
+}
+
+.kw-pause-panel {
+  position: relative;
+  width: min(420px, 88vw);
+  text-align: center;
+  display: flex; flex-direction: column; gap: 12px;
+}
+
+.kw-pause-title {
+  margin: 2px 0 0;
+  font-size: 2.1rem;
+  line-height: 1.1;
+  color: var(--kw-pink-deep);
+  text-shadow: 0 2px 0 #fff, 0 4px 12px rgba(231, 95, 168, .45);
+}
+.kw-pause-sub {
+  margin: 0;
+  font-size: .98rem;
+  color: var(--kw-ink-soft);
+}
+
+.kw-pause-actions {
+  display: flex; flex-direction: column; gap: 11px;
+  margin: 6px 0 2px;
+}
+.kw-pause-actions .kw-btn { width: 100%; }
+
+/* Quit is the quiet one until it is armed, then it borrows the disclaimer's red. */
+.kw-pause-quit { font-size: 1rem; }
+.kw-pause-quit--armed {
+  background: linear-gradient(180deg, #fff, #ffe0e4);
+  color: var(--kw-red);
+  border-color: #ffc9d1;
+  animation: kw-pause-quit-throb 1.1s ease-in-out infinite;
+}
+@keyframes kw-pause-quit-throb {
+  0%, 100% { box-shadow: 0 6px 0 rgba(200, 150, 180, .5), 0 0 0 0 rgba(216, 17, 43, 0); }
+  50%      { box-shadow: 0 6px 0 rgba(200, 150, 180, .5), 0 0 0 6px rgba(216, 17, 43, .16); }
+}
+
+.kw-pause-disclaimer { margin: 0; }
+
+/* ----------------------------------------------------------------------------
+ * THE VISUAL FREEZE. `body.ix-paused` holds every CSS animation on the page —
+ * the JS side (ui/pause.js) freezes the timers and the clocks, but CSS keyframes
+ * run off the compositor and need this. Mirrors the existing `body.ix-freeze`
+ * rule in beats.js, only wider (steering / effects park nodes on <body> too).
+ *
+ * The un-pause rules MUST stay last: they tie on specificity with the blanket
+ * rule, so source order is what keeps the menu itself alive and bouncing.
+ * -------------------------------------------------------------------------- */
+body.ix-paused *,
+body.ix-paused *::before,
+body.ix-paused *::after { animation-play-state: paused !important; }
+
+body.ix-paused .kw-pause-root,
+body.ix-paused .kw-pause-root *,
+body.ix-paused .kw-pause-root *::before,
+body.ix-paused .kw-pause-root *::after,
+body.ix-paused .kw-pause-btn,
+body.ix-paused .kw-pause-btn *,
+body.ix-paused .kw-pause-btn::before,
+body.ix-paused .kw-pause-btn::after { animation-play-state: running !important; }
+
+/* --- short hosts: let the panel scroll rather than clip the Quit button ---- */
+@media (max-height: 520px) {
+  .kw-pause-panel { max-height: 92vh; overflow-y: auto; padding: 18px 22px; }
+  .kw-pause-title { font-size: 1.6rem; }
+}
+
+/* ============================================================================
+ * CORRUPTION  (owner: ui/corruption.js)
+ *
+ * The storefront rots as the descent goes deeper. Appended at the END of the
+ * file, after the menu / options / pause sections, so this agent's work never
+ * shares a line with theirs.
+ *
+ * SPLIT OF RESPONSIBILITY — read this before adding anything here:
+ *   · ui/corruption.js owns the COLOURS. It writes the `--kw-*` palette tokens
+ *     as inline custom properties on <html>, because the values depend on the
+ *     ACTIVE MOD's accent (an arbitrary colour out of banks/<niche>.json, read
+ *     back from boot.js's `--intake-accent`) blended continuously against a
+ *     0..1 level. No CSS class set can encode that. Nothing below re-specifies
+ *     a colour that a token already carries.
+ *   · THIS FILE owns everything that falls out of the single scalar `--kw-c`
+ *     (0..1, also written by that module, alongside the marker class
+ *     `.kw-corrupt` and `data-kw-band` on <html>): opacities, filters, the
+ *     overlay atmospherics, and the animation slow-down that mirrors the song
+ *     losing speed.
+ *
+ * LEGIBILITY IS A HARD RULE. The pause menu is the screen someone opens because
+ * they want out. Nothing here may touch the contrast of the panel's text or
+ * hide/deprioritise Resume, Options or Quit. The darkness lives in the SURROUND
+ * — scrim, vignette, decor, button faces — while the panel interior stays a lit
+ * surface with ink pushed toward black (see the CONTRAST INVARIANT note in
+ * ui/corruption.js: contrast rises with corruption, it never dips).
+ * ========================================================================== */
+
+/* Buttons: two hardcoded whites the tokens could not reach. The soft variant's
+   gradient and every chunky white border now follow the rot. Text on both stays
+   var(--kw-ink) / #fff, both of which the palette keeps clear of the face. */
+.kw-corrupt .kw-btn--soft {
+  background: linear-gradient(180deg, var(--kw-soft-1, #fff), var(--kw-soft-2, #ffe6f2));
+}
+.kw-corrupt .kw-btn,
+.kw-corrupt .kw-pause-btn,
+.kw-corrupt .kw-toggle,
+.kw-corrupt .kw-slider { border-color: var(--kw-btn-edge, #fff); }
+
+/* The in-run pause button is the ONLY corrupted thing visible outside the menu:
+   an early, quiet tell that the shop is going wrong. */
+.kw-corrupt .kw-pause-btn { filter: saturate(calc(1 - 0.45 * var(--kw-c, 0))); }
+
+/* The pause scrim hardcodes a lighter background than --kw-scrim so the frozen
+   run stays visible through it; corruption.js gives it its own token to darken
+   toward, and the blur thickens with the level. */
+.kw-corrupt .kw-pause-scrim {
+  background: var(--kw-pause-scrim, rgba(38, 12, 32, .46));
+  backdrop-filter: blur(calc(3px + 5px * var(--kw-c, 0))) saturate(calc(0.9 - 0.55 * var(--kw-c, 0)));
+  -webkit-backdrop-filter: blur(calc(3px + 5px * var(--kw-c, 0))) saturate(calc(0.9 - 0.55 * var(--kw-c, 0)));
+}
+
+/* VIGNETTE + ACCENT BLEED. A layer on the scrim (therefore BEHIND the panel,
+   which paints later in the root) so it can never wash over the buttons or the
+   copy. The mod's own colour seeps in from the edges as the level climbs. */
+.kw-corrupt .kw-pause-scrim::after {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none;
+  opacity: var(--kw-c, 0);
+  background:
+    radial-gradient(ellipse at 50% 45%, transparent 34%, rgba(0, 0, 0, .55) 88%),
+    radial-gradient(ellipse at 50% 118%, var(--kw-bleed, #ff69b4) 0%, transparent 62%);
+  mix-blend-mode: multiply;
+}
+
+/* SCANLINE GRAIN — the only ADDED motion. Suppressed by the `sparkles` pref
+   (.kw-no-decor, set on the pause root by pause.js) and by reduced-motion,
+   exactly like the sparkles it replaces. */
+.kw-corrupt .kw-pause-scrim::before {
+  content: '';
+  position: absolute; inset: -20%;
+  pointer-events: none;
+  opacity: calc(var(--kw-c, 0) * .3);
+  background: repeating-linear-gradient(
+    0deg, rgba(0, 0, 0, .55) 0 1px, transparent 1px 3px);
+  animation: kw-corrupt-drift 5.5s linear infinite;
+}
+.kw-corrupt .kw-no-decor .kw-pause-scrim::before,
+.kw-corrupt .kw-pause-root.kw-no-decor .kw-pause-scrim::before { display: none; }
+@keyframes kw-corrupt-drift {
+  from { transform: translateY(0); }
+  to   { transform: translateY(9px); }
+}
+
+/* THE SLOW-DOWN. Every shell animation stretches with the level, the same way
+   the song's playbackRate sags (ui/menuMusic.js RATE_DROP): at level 1 the
+   storefront's bounce runs at ~40% speed and reads as drugged rather than
+   broken. Durations only — no keyframe is redefined, so nothing moves further
+   or lands anywhere new. */
+.kw-corrupt .kw-bl        { animation-duration: calc(4.2s * (1 + 1.5 * var(--kw-c, 0))); }
+.kw-corrupt .kw-float     { animation-duration: calc(4.5s * (1 + 1.5 * var(--kw-c, 0))); }
+.kw-corrupt .kw-sparkle   { animation-duration: calc(2.6s * (1 + 1.5 * var(--kw-c, 0))); }
+.kw-corrupt .kw-heart     { animation-duration: calc(7s   * (1 + 1.5 * var(--kw-c, 0))); }
+.kw-corrupt .kw-rainbow-rule {
+  animation-duration: calc(6s * (1 + 2.2 * var(--kw-c, 0)));
+  /* The rainbow is the single most "innocent" element in the kit — it loses its
+     colour first, and what is left is tinted with the mod's accent. */
+  filter: saturate(calc(1 - 0.85 * var(--kw-c, 0))) brightness(calc(1 - 0.4 * var(--kw-c, 0)));
+  box-shadow: 0 0 calc(14px * var(--kw-c, 0)) var(--kw-bleed, transparent);
+}
+
+/* Decor drains toward the mod's colour instead of pastel sparkle. */
+.kw-corrupt .kw-sparkle { filter: drop-shadow(0 0 6px var(--kw-bleed, #ff8fc7)); }
+.kw-corrupt .kw-heart   { opacity: calc(.75 - .45 * var(--kw-c, 0)); }
+
+/* THE DISCLAIMER gets a plate. Red on a rotting pale panel would LOSE contrast
+   as the panel darkens, which is the one direction this file is not allowed to
+   go — so the red text gets its own near-black backing that fades in with the
+   level. Contrast goes UP, and it reads as an LED strip bolted to the shop. */
+.kw-corrupt .kw-disclaimer {
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: rgba(10, 2, 7, calc(var(--kw-c, 0) * .88));
+  animation-duration: calc(5.5s * (1 - .6 * var(--kw-c, 0)));
+}
+
+/* The title stops sitting on a clean white outline and starts glowing wrong. */
+.kw-corrupt .kw-pause-title,
+.kw-corrupt .kw-menu-title {
+  text-shadow:
+    0 2px 0 var(--kw-cream, #fff),
+    0 0 calc(18px * var(--kw-c, 0)) var(--kw-bleed, transparent),
+    0 12px 22px rgba(10, 2, 8, calc(.28 + .4 * var(--kw-c, 0)));
+}
+
+/* ---- reduced motion: the rot still happens, it just holds still ----------- */
+@media (prefers-reduced-motion: reduce) {
+  .kw-corrupt .kw-pause-scrim::before { display: none; }
+  .kw-corrupt .kw-bl,
+  .kw-corrupt .kw-float,
+  .kw-corrupt .kw-sparkle,
+  .kw-corrupt .kw-heart,
+  .kw-corrupt .kw-rainbow-rule,
+  .kw-corrupt .kw-disclaimer { animation: none !important; }
+}
+
+/* ---- THE QUIT BUTTON FALLING OFF  (owner: ui/pause.js) --------------------
+ * From band 3 onward a confirmed Quit has a 1-in-10 chance of the button simply
+ * coming off in your hand. The real button keeps its box and goes invisible
+ * (visibility, NOT display — the actions column must not close the gap and
+ * shuffle Resume/Options upward), while a body-parented clone tumbles away.
+ * Same trick, and the same reasoning, as boot.js's falling HUD counter. */
+.kw-quit-gone { visibility: hidden !important; }
+
+.kw-quit-fall {
+  position: fixed;
+  margin: 0;
+  z-index: 2147482950;          /* above .kw-pause-root, below the jumpscare */
+  pointer-events: none;
+  will-change: transform;
+  transform-origin: 50% 50%;
+  /* .kw-btn ships a 120ms transform transition for its hover spring. The fall
+     writes `transform` every frame, so leaving it on would run each step
+     through a 120ms ease and smear the tumble into mush. Source order (this
+     block is later, same specificity) is what turns it off. */
+  transition: none;
+}
+/* Reduced motion: no tumble, just gone. Declared AFTER the rule above so its
+   transition wins for this one variant. */
+.kw-quit-fall--plain { transition: opacity 380ms ease, transform 380ms ease; }
+
+/* ---- "YOUR QUIT BUTTON IS GENERATING"  (owner: ui/pause.js) ---------------
+ * The confirming press does not quit, it places an order. The spent original
+ * stays in the column, greyed, and this block appears under it with a countdown
+ * that gets slower the closer it gets and a 1-in-3 chance of failing the build
+ * outright at three seconds. Styled as a polite little progress panel, because
+ * the joke only lands if it first looks completely routine. */
+.kw-quit-spent {
+  opacity: .5;
+  filter: saturate(.5);
+  cursor: default;
+}
+
+.kw-quit-gen {
+  display: flex; flex-direction: column; gap: 8px;
+  margin-top: 2px;
+  padding: 10px 12px 12px;
+  border: 2px dashed #ffc9d1;
+  border-radius: var(--kw-radius, 14px);
+  background: rgba(255, 255, 255, .55);
+}
+.kw-quit-gen__line {
+  margin: 0;
+  font-size: .86rem;
+  line-height: 1.35;
+  color: var(--kw-ink-soft);
+}
+.kw-quit-gen__bar {
+  position: relative;
+  height: 8px;
+  border-radius: 99px;
+  background: rgba(231, 95, 168, .16);
+  overflow: hidden;
+}
+.kw-quit-gen__fill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--kw-pink, #ff8ec4), var(--kw-pink-deep, #e75fa8));
+  /* Eased, so a tick that took four real seconds still slides like a tick that
+     took one. The bar is what sells the ramp as normal. */
+  transition: width 320ms ease;
+}
+
+/* The build failing. The panel jitters, the bar goes to noise (JS drives the
+   width), and the border borrows the disclaimer's red for the moment. */
+.kw-quit-gen.is-glitching {
+  border-color: rgba(216, 17, 43, .55);
+  animation: kw-quit-gen-glitch 180ms steps(2, end) infinite;
+}
+.kw-quit-gen.is-glitching .kw-quit-gen__line { color: var(--kw-red, #d8112b); }
+.kw-quit-gen.is-glitching .kw-quit-gen__fill {
+  transition: none;                       /* the scramble must read as noise */
+  background: repeating-linear-gradient(90deg, #d8112b 0 6px, #ff8ec4 6px 12px);
+}
+@keyframes kw-quit-gen-glitch {
+  0%   { transform: translate3d(0, 0, 0); }
+  25%  { transform: translate3d(-2px, 1px, 0); }
+  50%  { transform: translate3d(2px, -1px, 0); }
+  75%  { transform: translate3d(-1px, -1px, 0); }
+  100% { transform: translate3d(1px, 1px, 0); }
+}
+
+.kw-quit-gen.is-ready { border-style: solid; border-color: #ffc9d1; }
+.kw-quit-gen.is-ready .kw-quit-gen__line { color: var(--kw-pink-deep, #e75fa8); }
+.kw-quit-gen__btn { width: 100%; animation: kw-pop-in 260ms ease both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .kw-quit-gen__fill { transition: none; }
+  .kw-quit-gen.is-glitching { animation: none; }
+  .kw-quit-gen__btn { animation: none; }
+}

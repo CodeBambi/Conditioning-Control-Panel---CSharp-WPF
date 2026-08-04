@@ -452,8 +452,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 // hostile page (or HT phishing redirect) read the user's
                 // signed-in HT cookies via document.cookie / authenticated fetch.
                 var userDataFolder = System.IO.Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "ConditioningControlPanel",
+                    App.UserDataPath,
                     "browser_data_deeper_editor");
                 System.IO.Directory.CreateDirectory(userDataFolder);
 
@@ -3544,8 +3543,10 @@ namespace ConditioningControlPanel.Views.Deeper
                 te.DurationMs, v => te.DurationMs = Math.Max(50, v));
         }
 
-        // Overlay-kind combo for TriggerEffect. Pink Filter / Spiral / Brain
-        // Drain; matches the inline overlay editor's CmbOverlayKind.
+        // Overlay-kind combo for TriggerEffect. Pink Filter / Spiral; matches the inline
+        // overlay editor's CmbOverlayKind (same order, same friendly labels, same Tag = raw
+        // kind constant round-trip). Brain Drain / Brain Melt are withheld while the effect
+        // is reworked and are only listed when THIS action already uses one.
         private void AddOverlayKindCombo(Panel host, TriggerEffectAction te)
         {
             host.Children.Add(new TextBlock
@@ -3558,15 +3559,25 @@ namespace ConditioningControlPanel.Views.Deeper
                 Style = (Style)FindResource("EditorComboBox"),
                 ItemContainerStyle = (Style)FindResource("EditorComboBoxItem")
             };
-            // Brain Drain temporarily withheld from the editor while we test/verify the blur
-            // feature. Constant + runtime kept so existing saved scripts still load/run.
-            string[] kinds = { OverlayKinds.PinkFilter, OverlayKinds.Spiral };
-            foreach (var k in kinds)
-            {
-                combo.Items.Add(new ComboBoxItem { Content = k, Tag = k });
-            }
+            // Tag stays the raw kind constant (what gets serialized); Content is the
+            // friendly label the inline CmbOverlayKind picker shows.
+            var kinds  = new List<string> { OverlayKinds.PinkFilter, OverlayKinds.Spiral };
+            var labels = new List<string> { "Pink Filter", "Spiral" };
             var curK = te.OverlayKind ?? OverlayKinds.PinkFilter;
-            var idx = Array.IndexOf(kinds, curK);
+            // Keep an already-authored withheld kind selectable so a rule that uses one still
+            // displays honestly and round-trips on save, without offering it for new actions.
+            if (OverlayKinds.IsWithheld(curK))
+            {
+                kinds.Add(curK);
+                labels.Add(curK == OverlayKinds.BrainDrainMelt
+                    ? "Brain Melt (unavailable)"
+                    : "Brain Drain (unavailable)");
+            }
+            for (int i = 0; i < kinds.Count; i++)
+            {
+                combo.Items.Add(new ComboBoxItem { Content = labels[i], Tag = kinds[i] });
+            }
+            var idx = kinds.IndexOf(curK);
             combo.SelectedIndex = idx >= 0 ? idx : 0;
             combo.SelectionChanged += (_, _) =>
             {

@@ -296,33 +296,11 @@ namespace ConditioningControlPanel
             App.Settings.Current.AutonomyCanTriggerFlash = BambiTakeoverTab.ChkAutonomyFlash.IsChecked ?? false;
             App.Settings.Current.AutonomyCanTriggerVideo = BambiTakeoverTab.ChkAutonomyVideo.IsChecked ?? false;
             App.Settings.Current.AutonomyCanTriggerWebVideo = BambiTakeoverTab.ChkAutonomyWebVideo.IsChecked ?? false;
+            App.Settings.Current.ProtectBrowserVideoPlayback = BambiTakeoverTab.ChkProtectBrowserVideo.IsChecked ?? false;
 
-            // Strict takeover videos are a no-escape amplifier (surprise fullscreen videos
-            // with no skip/ESC; combined with a disabled panic key there is NO way out) —
-            // gate enabling behind the same double warning the NoPanic toggle uses.
-            var strictRequested = BambiTakeoverTab.ChkTakeoverVideosStrict.IsChecked ?? false;
-            if (strictRequested && !App.Settings.Current.TakeoverVideosStrict)
-            {
-                var confirmed = WarningDialog.ShowDoubleWarning(this,
-                    "Strict Takeover Videos",
-                    "• Takeover videos will be UNSKIPPABLE (no ESC, no close)\n" +
-                    "• They fire WITHOUT warning at random moments\n" +
-                    "• With the Panic Key disabled there is NO way to end them early\n" +
-                    "• You must watch every video to the end");
-                if (!confirmed)
-                {
-                    strictRequested = false;
-                    // Defer the revert so it runs after the dialog's event stack unwinds
-                    // (same pattern as the NoPanic toggle).
-                    Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        _isLoading = true;
-                        BambiTakeoverTab.ChkTakeoverVideosStrict.IsChecked = false;
-                        _isLoading = false;
-                    }));
-                }
-            }
-            App.Settings.Current.TakeoverVideosStrict = strictRequested;
+            // Takeover no longer has its own strictness toggle (and so no longer needs its own
+            // double-warning consent gate): a Takeover video is a plain mandatory video and
+            // follows the global StrictLockEnabled flag, which carries its own warning.
             App.Settings.Current.AutonomyCanTriggerSubliminal = BambiTakeoverTab.ChkAutonomySubliminal.IsChecked ?? false;
             App.Settings.Current.AutonomyCanTriggerBubbles = BambiTakeoverTab.ChkAutonomyBubbles.IsChecked ?? false;
             App.Settings.Current.AutonomyCanComment = BambiTakeoverTab.ChkAutonomyComment.IsChecked ?? false;
@@ -332,6 +310,109 @@ namespace ConditioningControlPanel
             App.Settings.Current.AutonomyCanTriggerPinkFilter = BambiTakeoverTab.ChkAutonomyPinkFilter.IsChecked ?? false;
             App.Settings.Current.AutonomyCanTriggerBouncingText = BambiTakeoverTab.ChkAutonomyBouncingText.IsChecked ?? false;
             App.Settings.Current.AutonomyCanTriggerBubbleCount = BambiTakeoverTab.ChkAutonomyBubbleCount.IsChecked ?? false;
+            App.Settings.Current.AutonomyCanTriggerWallpaper = BambiTakeoverTab.ChkAutonomyWallpaper.IsChecked ?? false;
+            App.Settings.Save();
+        }
+
+        /// <summary>
+        /// Pick the folder the wallpaper takeover pulls desktop wallpapers from.
+        /// Empty setting falls back to the assets/wallpapers folder (see WallpaperService).
+        /// </summary>
+        internal void BtnWallpaperFolder_Click(object sender, RoutedEventArgs e)
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            using var dlg = new System.Windows.Forms.FolderBrowserDialog
+            {
+                Description = "Pick the folder she pulls desktop wallpapers from",
+                ShowNewFolderButton = true,
+                UseDescriptionForTitle = true
+            };
+
+            var current = s.WallpaperSourceFolder;
+            dlg.SelectedPath = !string.IsNullOrWhiteSpace(current) && System.IO.Directory.Exists(current)
+                ? current
+                : System.IO.Path.Combine(App.EffectiveAssetsPath, "wallpapers");
+
+            if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+            if (string.IsNullOrWhiteSpace(dlg.SelectedPath)) return;
+
+            s.WallpaperSourceFolder = dlg.SelectedPath;
+            App.Settings?.Save();
+            RefreshWallpaperFolderLabel();
+        }
+
+        /// <summary>
+        /// Restore the whole wallpaper block from settings: the chosen source folder (or the
+        /// default) under the picker button, plus the "keep it" toggle and pulse-duration bar.
+        /// This is the wallpaper block's load hook - called from LoadSettingsIntoUI.
+        /// </summary>
+        internal void RefreshWallpaperFolderLabel()
+        {
+            var tab = BambiTakeoverTab;
+            var s = App.Settings?.Current;
+            if (tab == null || s == null) return;
+
+            if (tab.TxtWallpaperFolder != null)
+            {
+                tab.TxtWallpaperFolder.Text = string.IsNullOrWhiteSpace(s.WallpaperSourceFolder)
+                    ? Loc.Get("label_wallpaper_folder_default")
+                    : s.WallpaperSourceFolder;
+            }
+
+            if (tab.ChkWallpaperKeep != null)
+                tab.ChkWallpaperKeep.IsChecked = s.WallpaperEnabled;
+            if (tab.SliderWallpaperDuration != null)
+            {
+                // Clamp before assigning, like the other Takeover bars (#485): a saved value outside
+                // the bar's range would silently snap and then write the snapped number back.
+                s.WallpaperPulseSeconds = Math.Clamp(s.WallpaperPulseSeconds,
+                    (int)tab.SliderWallpaperDuration.Minimum, (int)tab.SliderWallpaperDuration.Maximum);
+                tab.SliderWallpaperDuration.Value = s.WallpaperPulseSeconds;
+            }
+            // The Slider_Changed handler bails while _isLoading, so set the label explicitly.
+            if (tab.TxtWallpaperDuration != null)
+                tab.TxtWallpaperDuration.Text = $"{s.WallpaperPulseSeconds}s";
+            RefreshWallpaperDurationVisibility();
+        }
+
+        /// <summary>The pulse duration is meaningless while "keep it" is on - hide it rather than lie.</summary>
+        private void RefreshWallpaperDurationVisibility()
+        {
+            var panel = BambiTakeoverTab?.PanelWallpaperDuration;
+            if (panel == null) return;
+            panel.Visibility = App.Settings?.Current?.WallpaperEnabled == true
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+        }
+
+        /// <summary>
+        /// "Keep the wallpaper": her changes stay on the desktop instead of reverting after a few
+        /// seconds (#694). Turning it back off puts the original wallpaper back right away, so the
+        /// toggle doubles as the manual undo.
+        /// </summary>
+        internal void ChkWallpaperKeep_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            s.WallpaperEnabled = BambiTakeoverTab.ChkWallpaperKeep.IsChecked ?? false;
+            App.Settings?.Save();
+            RefreshWallpaperDurationVisibility();
+
+            if (!s.WallpaperEnabled && App.Wallpaper?.IsActive == true)
+                App.Wallpaper?.Deactivate();
+        }
+
+        /// <summary>How long a wallpaper change sticks before the original comes back.</summary>
+        internal void SliderWallpaperDuration_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || BambiTakeoverTab.TxtWallpaperDuration == null) return;
+            var seconds = (int)e.NewValue;
+            BambiTakeoverTab.TxtWallpaperDuration.Text = $"{seconds}s";
+            App.Settings.Current.WallpaperPulseSeconds = seconds;
             App.Settings.Save();
         }
 

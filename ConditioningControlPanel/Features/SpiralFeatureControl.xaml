@@ -1,7 +1,8 @@
 <UserControl x:Class="ConditioningControlPanel.Features.SpiralFeatureControl"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization">
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:feat="clr-namespace:ConditioningControlPanel.Features">
 
     <Grid>
         <StackPanel>
@@ -31,11 +32,69 @@
                     </StackPanel>
                     <CheckBox Grid.Column="1"
                               x:Name="ChkEnable"
+                              feat:SessionLock.Owned="True"
                               Style="{StaticResource ToggleStyle}"
                               VerticalAlignment="Center"
                               Checked="ChkEnable_Changed"
                               Unchecked="ChkEnable_Changed"/>
                 </Grid>
+            </Border>
+
+            <!-- Randomize toggle (#641): pick a random spiral from the library each start -->
+            <Border Background="{DynamicResource SurfaceBgBrush}"
+                    BorderBrush="{DynamicResource GlassBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="16,12"
+                    Margin="0,0,0,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str setting_spiral_randomize}"
+                                   Foreground="White"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Text="{loc:Str tooltip_spiral_randomize}"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1"
+                              x:Name="ChkRandomize"
+                              Style="{StaticResource ToggleStyle}"
+                              VerticalAlignment="Center"
+                              Checked="ChkRandomize_Changed"
+                              Unchecked="ChkRandomize_Changed"/>
+                </Grid>
+            </Border>
+
+            <!-- Display monitor picker (#639): per-effect screen target -->
+            <Border Background="{DynamicResource SurfaceBgBrush}"
+                    BorderBrush="{DynamicResource GlassBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="16,14"
+                    Margin="0,0,0,10">
+                <StackPanel>
+                    <TextBlock Text="{loc:Str setting_effect_monitor}"
+                               Foreground="White"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Margin="0,0,0,6"/>
+                    <ComboBox x:Name="CmbMonitor"
+                              Style="{DynamicResource DarkComboBoxStyle}"
+                              DropDownOpened="CmbMonitor_DropDownOpened"
+                              SelectionChanged="CmbMonitor_Changed"/>
+                    <TextBlock Text="{loc:Str tooltip_effect_monitor}"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="10"
+                               TextWrapping="Wrap"
+                               Margin="0,4,0,0"/>
+                </StackPanel>
             </Border>
 
             <!-- Opacity slider -->
@@ -61,6 +120,7 @@
                     </Grid>
                     <Slider x:Name="SliderOpacity"
                             Minimum="5" Maximum="50" Value="15"
+                            feat:SessionLock.Owned="True"
                             ValueChanged="SliderOpacity_Changed"/>
                     <TextBlock Text="{loc:Str tooltip_spiral_opacity_5_50}"
                                Foreground="{DynamicResource TextMutedBrush}"
@@ -69,6 +129,31 @@
                                Margin="0,4,0,0"/>
                 </StackPanel>
             </Border>
+
+            <!-- Actions (kept above the library so they're reachable without scrolling) -->
+            <!-- THE LOOM: weave your own spiral (also craftable inside DtRH) -->
+            <Button x:Name="BtnOpenLoom"
+                    Content="🌀 THE LOOM — weave your own spiral"
+                    Style="{DynamicResource OutlineButton}"
+                    Padding="12,10"
+                    Margin="0,0,0,10"
+                    Click="BtnOpenLoom_Click"/>
+
+            <!-- Standalone corner-GIF overlays (independent of sessions) -->
+            <Button x:Name="BtnCornerGifs"
+                    Content="🖼 CORNER GIFs — pin a GIF to a screen corner"
+                    Style="{DynamicResource OutlineButton}"
+                    Padding="12,10"
+                    Margin="0,0,0,10"
+                    Click="BtnCornerGifs_Click"/>
+
+            <!-- Select GIF (browse anywhere) -->
+            <Button x:Name="BtnSelectGif"
+                    Content="{loc:Str btn_select_gif}"
+                    Style="{DynamicResource OutlineButton}"
+                    Padding="12,10"
+                    Margin="0,0,0,10"
+                    Click="BtnSelectGif_Click"/>
 
             <!-- Spiral library -->
             <Border Background="{DynamicResource SurfaceBgBrush}"
@@ -128,13 +213,6 @@
                                Margin="0,8,0,0"/>
                 </StackPanel>
             </Border>
-
-            <!-- Select GIF (browse anywhere) -->
-            <Button x:Name="BtnSelectGif"
-                    Content="{loc:Str btn_select_gif}"
-                    Style="{DynamicResource OutlineButton}"
-                    Padding="12,10"
-                    Click="BtnSelectGif_Click"/>
 
             <TextBlock Text="{loc:Str label_if_you_have_display_problems_try_setting_your}"
                        Foreground="#FFA500"

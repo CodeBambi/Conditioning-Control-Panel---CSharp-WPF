@@ -699,6 +699,28 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Re-applies the tube layout after the user edits it (Mod Manager → Tube Fit). Public so the
+        /// dialog can hot-refresh the live tube without a mod reload.
+        /// </summary>
+        public void RefreshTubeLayout()
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(RefreshTubeLayout));   // async: the tube may run on its own thread
+                return;
+            }
+
+            try
+            {
+                ApplyTubeLayoutOffsets();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "RefreshTubeLayout failed");
+            }
+        }
+
+        /// <summary>
         /// Applies the active mod's tube layout offsets to avatar, title, input, and speech bubble positions.
         /// Mod tube images may have the glass cylinder in a different position than the default,
         /// so the offset shifts all UI elements horizontally to align with the glass.

@@ -588,6 +588,12 @@ public class BubbleService : IDisposable
     // 4s, a 10% one-shot roll sends the companion gliding over to narrate + pop it. Skipped while a
     // fullscreen video is up (we'd be popping an invisible bubble), and rate-limited by a 60s cooldown.
 
+    /// <summary>#628: the avatar bubble-pop egg must never claim a fullscreen-takeover payload. Popping a
+    /// "video"/"htlink" bubble opens a fullscreen LibVLC/browser window mid-choreography, which wedges the
+    /// render thread. Every other (benign) ambient payload is fair game. Null/empty ids are claimable.</summary>
+    internal static bool IsEggClaimableEffect(string effectKindId)
+        => effectKindId is not ("video" or "htlink");
+
     /// <summary>Per-frame scan: latch the 10% roll on any ambient effect bubble crossing 4s, and if it
     /// hits, hand the bubble to the companion. One egg at a time; the loop runs on the UI thread.</summary>
     private void TryTriggerAvatarBubbleEgg()
@@ -607,6 +613,9 @@ public class BubbleService : IDisposable
         {
             var b = _bubbles[i];
             if (b.RolledForEgg || !b.IsAmbientEffectBubble || b.AgeMs <= AVATAR_EGG_AGE_MS) continue;
+            // Never claim fullscreen-takeover payloads (#628): popping a "video"/"htlink" bubble opens a
+            // fullscreen LibVLC/browser window mid-choreography, hanging the render thread.
+            if (!IsEggClaimableEffect(b.EffectKindId)) continue;
             b.RolledForEgg = true;                                      // one-shot latch at the 4s crossing
             if (_random.Next(100) < AVATAR_EGG_CHANCE_PCT)
             {
@@ -1050,14 +1059,60 @@ public class BubbleService : IDisposable
                           onBenignPop: b =>
                           {
                               AwardAmbientPop(b);
-                              var sw = System.Diagnostics.Stopwatch.StartNew();
-                              try { b.Spec?.Payload?.Fire(); } catch { }
-                              sw.Stop();
-                              if (sw.ElapsedMilliseconds >= 20)
-                                  App.Logger?.Information("[POPLAG] payload {Kind} Fire() took {Ms}ms",
-                                      b.Spec?.Payload?.DisplayName ?? "?", sw.ElapsedMilliseconds);
+                              FireAmbientPayload(b);
                           },
                           forceWindowMode: !hostUp, ambientTrigger: true);
+    }
+
+    /// <summary>
+    /// #732: fire a popped ambient trigger bubble's payload without wedging the click.
+    ///
+    /// A "video" trigger is in the default variant pool, and its payload used to run inline in the
+    /// mouse handler: <c>VideoService.TriggerVideo</c> selects the clip on the calling thread, and
+    /// for a content-pack video that means reading the whole encrypted file, AES-decrypting it into
+    /// a second copy and writing it back to disk - tens of seconds of dead UI for a large clip,
+    /// with no exception and so no crash log. Popping a second video bubble over a running video
+    /// was worse: it forced a cleanup the code itself documents as blocking the dispatcher for up
+    /// to ~4.9s, which can then land on a native LibVLC rebuild that no DispatcherTimer watchdog
+    /// can rescue. Both read to the user as "I clicked a bubble and it froze".
+    ///
+    /// The codebase already treats these payloads as wedge risks - <see cref="IsEggClaimableEffect"/>
+    /// keeps the avatar egg away from exactly these two kinds (#628) - but the user's own click
+    /// reached the same Fire() unguarded.
+    /// </summary>
+    private void FireAmbientPayload(Bubble b)
+    {
+        var payload = b.Spec?.Payload;
+        if (payload == null) return;
+
+        var heavy = payload.Kind is EffectBubblePayloadKind.Video or EffectBubblePayloadKind.HtLink;
+
+        // One fullscreen takeover at a time, mirroring the chaos detonation path's gate. Without
+        // it a second pop forces ForceCleanup/CloseAll from inside the input handler.
+        if (heavy && App.Video?.IsPlaying == true)
+        {
+            App.Logger?.Information("Bubble: dropped {Kind} pop — a video is already playing", payload.Kind);
+            return;
+        }
+
+        if (heavy)
+        {
+            // Let the click return first; the payload opens a fullscreen window either way.
+            DispatcherHelper.RunOnUI(() => FireAndLogPayload(payload), DispatcherPriority.Background);
+            return;
+        }
+
+        FireAndLogPayload(payload);
+    }
+
+    private static void FireAndLogPayload(EffectPayload payload)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try { payload.Fire(); } catch { }
+        sw.Stop();
+        if (sw.ElapsedMilliseconds >= 20)
+            App.Logger?.Information("[POPLAG] payload {Kind} Fire() took {Ms}ms",
+                payload.DisplayName ?? "?", sw.ElapsedMilliseconds);
     }
 
     private void OnMiss(Bubble bubble)
@@ -1877,92 +1932,19 @@ public class BubbleService : IDisposable
         }
     }
 
-    // Performance: Pool of audio devices to avoid creating new ones for each sound
-    private static readonly Queue<WaveOutEvent> _audioDevicePool = new();
-    private static readonly object _audioPoolLock = new();
-    private const int MAX_POOLED_DEVICES = 4;
-
-    private WaveOutEvent GetPooledAudioDevice()
-    {
-        lock (_audioPoolLock)
-        {
-            if (_audioDevicePool.Count > 0)
-            {
-                return _audioDevicePool.Dequeue();
-            }
-        }
-        // Apply user's chosen output device on construction. Pool is drained when the
-        // setting changes (see DrainAudioDevicePool) so we never need to reapply on Get.
-        var w = new WaveOutEvent();
-        App.Audio?.ApplyPreferredDevice(w);
-        return w;
-    }
-
     /// <summary>
-    /// Disposes all pooled audio devices. Call after the user changes the output device
-    /// setting so the next pop-sound playback re-creates devices on the new endpoint
-    /// (DeviceNumber can't be changed once Init() has been called).
+    /// No-op kept for the settings hook: the WaveOutEvent pool this used to drain is gone.
+    /// Device selection is re-resolved by AudioService per clip, and its cache is invalidated
+    /// by the output-device setter and by the endpoint watcher (#778/#779).
     /// </summary>
-    public static void DrainAudioDevicePool()
-    {
-        lock (_audioPoolLock)
-        {
-            while (_audioDevicePool.Count > 0)
-            {
-                try { _audioDevicePool.Dequeue().Dispose(); } catch { }
-            }
-        }
-    }
-
-    private void ReturnAudioDevice(WaveOutEvent device)
-    {
-        lock (_audioPoolLock)
-        {
-            if (_audioDevicePool.Count < MAX_POOLED_DEVICES)
-            {
-                _audioDevicePool.Enqueue(device);
-            }
-            else
-            {
-                device.Dispose();
-            }
-        }
-    }
+    public static void DrainAudioDevicePool() { }
 
     private void PlaySoundAsync(string path, float volume)
     {
-        Task.Run(() =>
-        {
-            WaveOutEvent? outputDevice = null;
-            AudioFileReader? audioFile = null;
-            try
-            {
-                audioFile = new AudioFileReader(path);
-                audioFile.Volume = volume;
-
-                outputDevice = GetPooledAudioDevice();  // Performance: Reuse pooled device
-                outputDevice.Init(audioFile);
-                outputDevice.Play();
-
-                while (outputDevice.PlaybackState == PlaybackState.Playing)
-                {
-                    Thread.Sleep(50);
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning("Audio playback failed: {Error}", ex.Message);
-            }
-            finally
-            {
-                audioFile?.Dispose();
-                if (outputDevice != null)
-                {
-                    try { outputDevice.Stop(); } catch { }
-                    ReturnAudioDevice(outputDevice);  // Performance: Return to pool
-                }
-            }
-        });
+        // Pop sounds fire in bursts, which is exactly the pattern that used to park two
+        // thread-pool threads per bubble. AudioService owns the device, the concurrency cap
+        // and the disposal now (#778/#779).
+        App.Audio?.PlayOneShot(path, volume, "bubble-pop");
     }
 
     public void PopAllBubbles()
@@ -2021,14 +2003,8 @@ public class BubbleService : IDisposable
         // Close pooled bubble window shells (static pool holds hidden HWNDs for the process life).
         try { DispatcherHelper.RunOnUI(Bubble.DrainWindowPool); } catch { }
 
-        // Drain and dispose pooled audio devices (static pool persists across service restarts)
-        lock (_audioPoolLock)
-        {
-            while (_audioDevicePool.Count > 0)
-            {
-                try { _audioDevicePool.Dequeue().Dispose(); } catch { }
-            }
-        }
+        // Audio devices are no longer pooled here — AudioService owns every one-shot device
+        // and disposes it deterministically (#778/#779).
     }
 }
 

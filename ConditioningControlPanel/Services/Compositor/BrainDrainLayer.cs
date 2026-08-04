@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using SkiaSharp;
 
 namespace ConditioningControlPanel.Services.Compositor;
@@ -8,39 +7,72 @@ namespace ConditioningControlPanel.Services.Compositor;
 /// screen into a persistent DIB section (1/downscale size), the small frame is blurred ONCE per
 /// capture tick on a small raster surface, and Render just upscales the blurred image over the
 /// monitor - the upscale is part of the blur, exactly like the legacy Image Stretch=Fill path.
-/// Blur radius parity with the legacy WPF BlurEffect: an on-screen radius R renders here as a
-/// source-space gaussian of sigma R/(3*downscale) applied before the xdownscale upscale.
+/// Blur radius parity with the legacy WPF BlurEffect: the legacy path set BlurEffect.Radius on the
+/// ALREADY-DOWNSCALED bitmap, so the radius SetIntensity stores is a SOURCE-space radius - the
+/// gaussian applied here is simply sigma = radius/3 (WPF's radius-to-sigma ratio), and the
+/// xdownscale upscale that follows widens it on screen exactly as it did for the legacy Image.
+/// A second /downscale here would be double-counting (it was, and it made every blur invisible).
 /// Renders on the capture-EXCLUDED surface (self-capture guard); plain SRCCOPY StretchBlt also
 /// skips layered windows entirely, so other overlays never feed back into the blur (legacy same).
 /// OverlayService owns all intensity/ramp/pulse math and pushes values; this layer only
-/// captures and draws. All methods UI thread (engine tick + OverlayService RunOnUISync).
+/// captures and draws.
+///
+/// THREADING (#777): the capture and the blur run on <see cref="BrainDrainCapturePump"/>'s own
+/// thread, NOT here. A full-screen StretchBlt off the live desktop DC cannot be time-bounded, and
+/// running it on the dispatcher every ~33ms - concurrently with the compositor present thread's
+/// UpdateLayeredWindow against windows on that same desktop - is a frozen app waiting to happen
+/// (#777: both screens frozen, audio still running, killed from Task Manager). What is left on the
+/// UI thread is this class: Start/Stop/SetIntensity/Pulse (parameter pushes, all non-blocking) and
+/// Render, which takes the newest finished frame from the pump under a 2ms bounded lock and draws
+/// it. A stalled capture now costs a repeated frame, never the dispatcher.
 /// </summary>
 public sealed class BrainDrainLayer : BaseLayer
 {
-    private sealed class ScreenCapture
+    /// <summary>The frame the UI thread currently owns for one monitor. Ownership transfers from
+    /// the pump on a successful take, and nothing but the UI thread ever touches these images -
+    /// so there is no disposal race with the capture thread by construction.</summary>
+    private sealed class UiFrame
     {
-        public System.Drawing.Rectangle Bounds; // monitor rect, virtual-desktop device px
-        public int W, H;                        // downscaled capture size
-        public IntPtr MemDc, HBitmap, Bits, OldObj;
-        public SKSurface? Surface;              // small blur target
-        public SKImage? Blurred;                // latest blurred frame (drawn by Render)
+        public System.Drawing.Rectangle Bounds;
+        public SKImage? Image;
     }
 
-    private readonly List<ScreenCapture> _captures = new();
-    private readonly SKPaint _blurPaint = new();
+    private readonly List<UiFrame> _uiFrames = new();   // UI thread only
+    private BrainDrainCapturePump? _pump;
+
     private readonly SKPaint _drawPaint = new() { FilterQuality = SKFilterQuality.Low }; // bilinear = WPF Image default
-    private SKImageFilter? _blurFilter;
-    private float _lastSigma = -1f;
 
     private int _downscale = 4;
-    private double _screenRadius;               // WPF-BlurEffect-equivalent on-screen radius
-    private TimeSpan _captureInterval = TimeSpan.FromMilliseconds(33);
-    private TimeSpan _sinceCapture;
+    private double _sourceRadius;               // WPF-BlurEffect-equivalent radius ON THE DOWNSCALED SOURCE
+    // Alpha-mix axis (compositor path only). At low intensity the gaussian is a fraction of a
+    // source pixel wide - i.e. nothing - so the *strength* has to come from how much of the blurred
+    // copy we paint over the real screen. Intensity 1..100 ramps the draw alpha linearly 0.30 -> 0.85:
+    // the real screen ALWAYS ghosts through (owner call, 2026-07-31: the effect must stay subtle -
+    // full-opacity blur read as "basically illegible"). Sigma rises alongside, so perceived strength
+    // is continuous across 1 -> 100 while the ceiling stays a dreamy haze, not a wall.
+    // Pulse still paints at full alpha - a pulse is a deliberate 1-second slam.
+    private const int AlphaFullIntensity = 100;
+    private const double AlphaFloor = 0.30;
+    private const double AlphaCeiling = 0.85;
+    private byte _drawAlpha = 255;
+    // Melt variant ("braindrain_melt"): shares this layer and ALL of OverlayService's hold/ramp
+    // state - a melt band and a plain blur band never co-exist by design.
+    // Melt = the same blur PLUS a slowly-flowing Perlin displacement warp ("melting glass"),
+    // composed into ONE filter chain on the pump's small-surface draw. It never touches Render:
+    // warping at monitor resolution on a CPU raster surface is not affordable, and the capture
+    // cadence (30fps default) is smooth enough for a drift this slow. The warp's phase is wall
+    // clock owned by the pump thread, so the flow speed stays independent of both the engine tick
+    // rate and the capture cadence (it used to be accumulated from the engine's delta here). The
+    // melt FLAG itself now lives only on the pump - it is fixed for the lifetime of one run.
+    private float _meltAmplitude;               // displacement scale, SOURCE px (see SetIntensity)
 
-    // Topology drift is rare; checking (and allocating target rects) every capture tick at
-    // 30-60Hz is pure waste. ~1s detection latency on a monitor change is imperceptible.
+    private TimeSpan _captureInterval = TimeSpan.FromMilliseconds(33);
+
+    // Topology drift is rare; re-targeting the pump every engine tick at 60Hz is pure waste.
+    // ~1s detection latency on a monitor change is imperceptible.
     private static readonly TimeSpan DriftCheckInterval = TimeSpan.FromSeconds(1);
     private TimeSpan _sinceDriftCheck;
+    private System.Drawing.Rectangle[] _requestedScreens = Array.Empty<System.Drawing.Rectangle>();
 
     public BrainDrainLayer(CompositorEngine engine) : base(engine) { }
 
@@ -48,9 +80,13 @@ public sealed class BrainDrainLayer : BaseLayer
     public override bool ExcludeFromCapture => true;
     public override bool WorldSpacePx => true;
 
-    /// <summary>Start capturing + blurring at the given intensity (legacy 1..200 scale).</summary>
-    public void Start(int intensity)
+    /// <summary>Start capturing + blurring at the given intensity (legacy 1..200 scale).
+    /// <paramref name="melt"/> selects the "braindrain_melt" variant - same blur plus an animated
+    /// Perlin displacement warp.</summary>
+    public void Start(int intensity, bool melt = false)
     {
+        StopPump();   // defensive: a re-Start must never strand a live capture thread
+
         var settings = App.Settings?.Current;
         var tier = PerformanceProfile.CurrentTier;
         _downscale = PerformanceProfile.BrainDrainDownscale(tier);
@@ -58,9 +94,11 @@ public sealed class BrainDrainLayer : BaseLayer
                            PerformanceProfile.BrainDrainFps(tier));
         _captureInterval = TimeSpan.FromMilliseconds(1000.0 / Math.Max(1, fps));
         SetIntensity(intensity);
-        RebuildCaptures(GetTargetScreens());
-        _sinceCapture = _captureInterval; // capture on the very first tick
-        _sinceDriftCheck = TimeSpan.Zero; // captures just rebuilt - no immediate drift check
+
+        _requestedScreens = GetTargetScreens();
+        _sinceDriftCheck = TimeSpan.Zero;   // just targeted - no immediate drift check
+        _pump = new BrainDrainCapturePump(_downscale, _captureInterval, melt,
+                                          _requestedScreens, Sigma, _meltAmplitude);
         SetActive(true);
     }
 
@@ -70,49 +108,140 @@ public sealed class BrainDrainLayer : BaseLayer
         ReleaseCaptures();
     }
 
-    /// <summary>Normal/ramp/restore path - legacy on-screen radius is intensity*0.4/downscale
-    /// (the WPF BlurEffect radius was tuned against the downscaled source).</summary>
-    public void SetIntensity(int intensity) => _screenRadius = intensity * 0.4 / Math.Max(1, _downscale);
+    // Blur strength per intensity point, SOURCE px per unit. The legacy constant was 0.4 (radius
+    // parity with the pre-compositor BlurEffect); retuned to 0.14 on the 2026-07-31 subtle pass -
+    // max intensity is now sigma ~4.7 screen px at downscale 4 (a dreamy haze the screen structure
+    // survives) instead of ~13 (illegible). The legacy windowed path in OverlayService reads this
+    // same constant - keep them identical.
+    internal const double RadiusScale = 0.14;
 
-    /// <summary>Pulse boost - legacy PulseOverlays sets the raw radius boosted*0.4 with NO
-    /// downscale divide (deliberately much heavier than the steady state).</summary>
-    public void Pulse(int boostedIntensity) => _screenRadius = boostedIntensity * 0.4;
+    /// <summary>Gaussian sigma handed to the pump. WPF's BlurEffect radius-to-sigma ratio is 3, and
+    /// <see cref="_sourceRadius"/> is ALREADY source-space (see <see cref="SetIntensity"/>) - a
+    /// second divide by the downscale here is what once made every steady-state blur invisible
+    /// (max intensity landed at sigma ~0.83px, 1..6 at literally zero).</summary>
+    private float Sigma => (float)(_sourceRadius / 3.0);
+
+    /// <summary>Normal/ramp/restore path - a SOURCE-space radius (the pre-compositor BlurEffect
+    /// radius was applied to the downscaled bitmap; the pump turns it into sigma = radius/3).
+    /// Strength curve retuned subtle 2026-07-31, see <see cref="RadiusScale"/>.</summary>
+    public void SetIntensity(int intensity)
+    {
+        _sourceRadius = intensity * RadiusScale / Math.Max(1, _downscale);
+        _drawAlpha = AlphaFor(intensity);
+        // Melt amplitude curve (SOURCE px, quoted at downscale 4 then divided by the actual
+        // downscale so the on-screen warp is tier-independent):  amp = 1 + intensity * 0.045.
+        // A displacement map offsets by +/- amp/2, so on screen at x4 that is +/- 2*amp px:
+        //   intensity 30  -> amp 2.35 -> +/-4.7 screen px  = a whisper of shimmer
+        //   intensity 60  -> amp 3.7  -> +/-7.4 screen px  = gently liquid
+        //   intensity 100 -> amp 5.5  -> +/-11 screen px   = clearly melting, still readable
+        // (Subtle retune 2026-07-31; the original 2 + i*0.12 read as "basically illegible".)
+        // Clamped at the legacy 200 ceiling (amp 10) so a runaway value cannot eat the frame.
+        _meltAmplitude = (float)((1.0 + Math.Clamp(intensity, 0, 200) * 0.045) * 4.0 / Math.Max(1, _downscale));
+        _pump?.SetBlur(Sigma, _meltAmplitude);
+    }
+
+    /// <summary>Pulse boost - a deliberate 1-second slam: full draw alpha and the boosted radius
+    /// WITHOUT the downscale divide was the legacy behavior, but post subtle-retune that would be
+    /// a white-out (sigma ~9 SOURCE px). The pulse now keeps the divide and simply rides the
+    /// boosted (2x, capped 200) intensity: ~2x the steady sigma at full alpha - still a clear kick
+    /// against an 0.85-alpha steady state.</summary>
+    public void Pulse(int boostedIntensity)
+    {
+        _sourceRadius = boostedIntensity * RadiusScale / Math.Max(1, _downscale);
+        _drawAlpha = 255;
+        _pump?.SetBlur(Sigma, _meltAmplitude);
+    }
+
+    /// <summary>Draw alpha for an intensity: <see cref="AlphaFloor"/> at 1, linear to
+    /// <see cref="AlphaCeiling"/> at <see cref="AlphaFullIntensity"/> and above - never fully
+    /// opaque. See the field comment for why.</summary>
+    private static byte AlphaFor(int intensity)
+    {
+        int i = Math.Clamp(intensity, 1, AlphaFullIntensity);
+        double a = AlphaFloor + (AlphaCeiling - AlphaFloor) * (i - 1) / (AlphaFullIntensity - 1.0);
+        return (byte)Math.Clamp(Math.Round(a * 255.0), 0, 255);
+    }
 
     public override void OnDeactivated() => ReleaseCaptures();
 
+    /// <summary>
+    /// UI thread, once per engine tick. All this does now is re-target the pump when the display
+    /// topology drifts - the capture itself is the pump thread's job and the melt phase is its wall
+    /// clock. Cheap enough that it can never be what a hang report is pointing at.
+    /// </summary>
     public override void Update(TimeSpan delta)
     {
-        _sinceCapture += delta;
         _sinceDriftCheck += delta;
-        if (_sinceCapture < _captureInterval) return;
-        _sinceCapture = TimeSpan.Zero;
+        if (_sinceDriftCheck < DriftCheckInterval) return;
+        _sinceDriftCheck = TimeSpan.Zero;
 
         try
         {
-            if (_sinceDriftCheck >= DriftCheckInterval)
-            {
-                _sinceDriftCheck = TimeSpan.Zero;
-                EnsureCapturesMatchScreens();
-            }
-            CapturePass();
+            var pump = _pump;
+            if (pump == null) return;
+            var screens = GetTargetScreens();
+            if (screens.Length == 0) return;   // display transition - keep capturing what we have
+            if (SameScreens(screens, _requestedScreens)) return;
+
+            _requestedScreens = screens;
+            pump.SetScreens(screens);
+            // The frames we hold describe monitors that may no longer exist (or have moved); drop
+            // them rather than keep stretching a stale grab over a new rectangle.
+            ReleaseUiFrames();
         }
         catch (Exception ex)
         {
-            App.Logger?.Debug("BrainDrainLayer capture failed: {Error}", ex.Message);
+            App.Logger?.Debug("BrainDrainLayer drift check failed: {Error}", ex.Message);
         }
     }
 
     public override void Render(SKCanvas canvas, SKRectI boundsPx, double dpiScale, TimeSpan elapsed)
     {
+        // BREADCRUMB: the ONLY brain-drain work still on the UI thread. The desktop StretchBlt this
+        // mark used to name moved to the capture thread in #777, so the mark moved with it - if a
+        // hang report's "last UI mark" is THIS, the wedge is the hand-off or the Skia draw, and NOT
+        // the screen grab. Two volatile writes; safe on a per-frame path.
+        using var _ = VideoDiag.UiScope("BrainDrainLayer.Render(take frame + draw)");
+
+        var pump = _pump;
+        if (pump == null) return;
+
         // World-space: boundsPx is this monitor's rect; draw only its own capture.
         int cx = (boundsPx.Left + boundsPx.Right) / 2, cy = (boundsPx.Top + boundsPx.Bottom) / 2;
-        foreach (var c in _captures)
+        if (!pump.TryTakeFrame(cx, cy, out var fresh, out var captureBounds)) return;
+
+        var frame = GetOrAddFrame(captureBounds);
+        if (fresh != null)
         {
-            if (c.Blurred == null || !c.Bounds.Contains(cx, cy)) continue;
-            canvas.DrawImage(c.Blurred,
-                new SKRect(c.Bounds.X, c.Bounds.Y, c.Bounds.Right, c.Bounds.Bottom), _drawPaint);
-            return;
+            frame.Image?.Dispose();   // UI-thread-owned: the pump provably is not looking at it
+            frame.Image = fresh;
         }
+        if (frame.Image == null) return;   // first tick(s): the pump has not produced one yet
+
+        // Alpha mix: white-with-alpha modulates the image draw (RGB is ignored for DrawImage).
+        // Set per frame - Render, SetIntensity and Pulse are all on the UI thread, so this can
+        // never read a half-written value, and it keeps the ramp path free of paint bookkeeping.
+        _drawPaint.Color = SKColors.White.WithAlpha(_drawAlpha);
+        canvas.DrawImage(frame.Image,
+            new SKRect(captureBounds.X, captureBounds.Y, captureBounds.Right, captureBounds.Bottom),
+            _drawPaint);
+    }
+
+    private UiFrame GetOrAddFrame(System.Drawing.Rectangle bounds)
+    {
+        foreach (var f in _uiFrames)
+            if (f.Bounds == bounds) return f;
+        var added = new UiFrame { Bounds = bounds };
+        _uiFrames.Add(added);
+        return added;
+    }
+
+    private static bool SameScreens(System.Drawing.Rectangle[] a, System.Drawing.Rectangle[] b)
+    {
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++)
+            if (a[i] != b[i]) return false;
+        return true;
     }
 
     private static System.Drawing.Rectangle[] GetTargetScreens()
@@ -129,169 +258,30 @@ public sealed class BrainDrainLayer : BaseLayer
         catch { return Array.Empty<System.Drawing.Rectangle>(); }
     }
 
-    /// <summary>Throttled (~1s) drift check so display topology / dual-monitor changes
-    /// mid-run re-target the captures without a restart.</summary>
-    private void EnsureCapturesMatchScreens()
-    {
-        var screens = GetTargetScreens();
-        if (screens.Length == 0) return; // display transition - keep last frames
-        if (screens.Length == _captures.Count)
-        {
-            bool same = true;
-            for (int i = 0; i < screens.Length; i++)
-                if (_captures[i].Bounds != screens[i]) { same = false; break; }
-            if (same) return;
-        }
-        RebuildCaptures(screens);
-    }
-
-    private void RebuildCaptures(System.Drawing.Rectangle[] screens)
-    {
-        ReleaseCaptures();
-        foreach (var bounds in screens)
-        {
-            var c = CreateCapture(bounds);
-            if (c != null) _captures.Add(c);
-        }
-    }
-
-    private ScreenCapture? CreateCapture(System.Drawing.Rectangle bounds)
-    {
-        int divisor = Math.Max(1, _downscale);
-        int dw = Math.Max(2, (bounds.Width / divisor) & ~1);
-        int dh = Math.Max(2, (bounds.Height / divisor) & ~1);
-
-        var memDc = CreateCompatibleDC(IntPtr.Zero);
-        if (memDc == IntPtr.Zero) return null;
-
-        var bmi = new BITMAPINFOHEADER
-        {
-            biSize = Marshal.SizeOf<BITMAPINFOHEADER>(),
-            biWidth = dw,
-            biHeight = -dh, // top-down so the pixel pointer reads row 0 first
-            biPlanes = 1,
-            biBitCount = 32,
-            biCompression = 0, // BI_RGB
-        };
-        var hBitmap = CreateDIBSection(memDc, ref bmi, 0 /*DIB_RGB_COLORS*/, out var bits, IntPtr.Zero, 0);
-        if (hBitmap == IntPtr.Zero || bits == IntPtr.Zero)
-        {
-            DeleteDC(memDc);
-            return null;
-        }
-
-        return new ScreenCapture
-        {
-            Bounds = bounds,
-            W = dw,
-            H = dh,
-            MemDc = memDc,
-            HBitmap = hBitmap,
-            Bits = bits,
-            OldObj = SelectObject(memDc, hBitmap),
-            Surface = SKSurface.Create(new SKImageInfo(dw, dh, SKColorType.Bgra8888, SKAlphaType.Premul)),
-        };
-    }
-
-    private void CapturePass()
-    {
-        if (_captures.Count == 0) return;
-
-        // Rebuild the blur filter only when the radius actually changed.
-        float sigma = (float)(_screenRadius / (3.0 * Math.Max(1, _downscale)));
-        if (Math.Abs(sigma - _lastSigma) > 0.01f)
-        {
-            _lastSigma = sigma;
-            _blurFilter?.Dispose();
-            _blurFilter = sigma > 0.05f ? SKImageFilter.CreateBlur(sigma, sigma) : null;
-            _blurPaint.ImageFilter = _blurFilter;
-        }
-
-        var screenDc = GetDC(IntPtr.Zero);
-        if (screenDc == IntPtr.Zero) return;
-        try
-        {
-            foreach (var c in _captures)
-            {
-                if (c.Surface == null) continue;
-                SetStretchBltMode(c.MemDc, HALFTONE);
-                if (!StretchBlt(c.MemDc, 0, 0, c.W, c.H,
-                                screenDc, c.Bounds.X, c.Bounds.Y, c.Bounds.Width, c.Bounds.Height, SRCCOPY))
-                    continue;
-                GdiFlush();
-
-                var info = new SKImageInfo(c.W, c.H, SKColorType.Bgra8888, SKAlphaType.Opaque);
-                using var raw = SKImage.FromPixels(info, c.Bits, c.W * 4); // zero-copy wrap; consumed synchronously below
-                if (raw == null) continue;
-
-                var canvas = c.Surface.Canvas;
-                canvas.Clear(SKColors.Transparent);
-                canvas.DrawImage(raw, 0, 0, _blurFilter != null ? _blurPaint : null);
-                c.Blurred?.Dispose();
-                c.Blurred = c.Surface.Snapshot();
-            }
-        }
-        finally
-        {
-            ReleaseDC(IntPtr.Zero, screenDc);
-        }
-    }
-
+    /// <summary>Tear the capture down. UI thread, and deliberately NON-BLOCKING: the pump thread
+    /// frees its own GDI handles and Skia surfaces as its last act, because joining a thread that
+    /// may be inside a stalled desktop blt would re-create the very freeze #777 is about.</summary>
     private void ReleaseCaptures()
     {
-        foreach (var c in _captures)
-        {
-            try
-            {
-                c.Blurred?.Dispose();
-                c.Surface?.Dispose();
-                if (c.MemDc != IntPtr.Zero)
-                {
-                    if (c.OldObj != IntPtr.Zero) SelectObject(c.MemDc, c.OldObj);
-                    DeleteDC(c.MemDc);
-                }
-                if (c.HBitmap != IntPtr.Zero) DeleteObject(c.HBitmap);
-            }
-            catch { /* GDI cleanup best-effort */ }
-        }
-        _captures.Clear();
+        StopPump();
+        ReleaseUiFrames();
+        _requestedScreens = Array.Empty<System.Drawing.Rectangle>();
     }
 
-    #region Win32
-
-    private const int SRCCOPY = 0x00CC0020;
-    private const int HALFTONE = 4;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct BITMAPINFOHEADER
+    private void StopPump()
     {
-        public int biSize;
-        public int biWidth;
-        public int biHeight;
-        public short biPlanes;
-        public short biBitCount;
-        public int biCompression;
-        public int biSizeImage;
-        public int biXPelsPerMeter;
-        public int biYPelsPerMeter;
-        public int biClrUsed;
-        public int biClrImportant;
+        var pump = _pump;
+        _pump = null;
+        pump?.Shutdown();
     }
 
-    [DllImport("user32.dll")] private static extern IntPtr GetDC(IntPtr hwnd);
-    [DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr hwnd, IntPtr hdc);
-    [DllImport("gdi32.dll")] private static extern IntPtr CreateCompatibleDC(IntPtr hdc);
-    [DllImport("gdi32.dll")] private static extern bool DeleteDC(IntPtr hdc);
-    [DllImport("gdi32.dll")] private static extern IntPtr SelectObject(IntPtr hdc, IntPtr obj);
-    [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr obj);
-    [DllImport("gdi32.dll")] private static extern bool GdiFlush();
-    [DllImport("gdi32.dll")] private static extern int SetStretchBltMode(IntPtr hdc, int mode);
-    [DllImport("gdi32.dll")]
-    private static extern IntPtr CreateDIBSection(IntPtr hdc, ref BITMAPINFOHEADER pbmi, uint usage,
-        out IntPtr ppvBits, IntPtr hSection, uint offset);
-    [DllImport("gdi32.dll")]
-    private static extern bool StretchBlt(IntPtr hdcDest, int xDest, int yDest, int wDest, int hDest,
-        IntPtr hdcSrc, int xSrc, int ySrc, int wSrc, int hSrc, int rop);
-
-    #endregion
+    private void ReleaseUiFrames()
+    {
+        foreach (var f in _uiFrames)
+        {
+            try { f.Image?.Dispose(); } catch { }
+            f.Image = null;
+        }
+        _uiFrames.Clear();
+    }
 }

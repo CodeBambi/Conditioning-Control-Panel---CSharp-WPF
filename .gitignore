@@ -166,6 +166,12 @@ nul
 # scripts that make them are not. See tools/avatar-emotes/README.md (local only).
 tools/
 
+# ...except the Bureau pack-indexer (builds packs-index.json / bureau-catalogue.json
+# for the labeling game — no secrets, meant to be re-runnable by anyone).
+!ConditioningControlPanel/tools/
+ConditioningControlPanel/tools/*
+!ConditioningControlPanel/tools/pack-indexer/
+
 # Redistributables (re-downloadable from Microsoft; do not bloat the repo)
 redist/
 
@@ -180,3 +186,15 @@ redist/
 # Session metadata (engine/pi runtime debris — never track; SP-023 land standing order)
 .pi/loops/
 .pi/tasks/
+
+# Node tooling for local automation scripts (puppeteer-core for /x-drafts + capture
+# work). Local-only; nothing in the shipped app uses node.
+node_modules/
+package.json
+package-lock.json
+
+# Marketing pipeline (/x-drafts) - ENTIRELY local, never publish.
+# origin is a PUBLIC repo. archive-index.json embeds the Windows username in ~75 paths and
+# describes explicit screenshots; topics.json describes unannounced features. Media is large
+# and some of it is suggestive. Nothing in here belongs on GitHub.
+marketing/

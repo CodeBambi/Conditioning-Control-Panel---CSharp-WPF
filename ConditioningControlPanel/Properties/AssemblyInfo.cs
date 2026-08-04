@@ -1,6 +1,12 @@
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Windows;
+
+// Expose internal decision helpers (flash cap, ambient flash duration, vout mid-play state machine,
+// overlay z-order) to the unit-test assembly. GenerateAssemblyInfo is off, so this lives here rather
+// than as an MSBuild <InternalsVisibleTo> item.
+[assembly: InternalsVisibleTo("ConditioningControlPanel.Tests")]
 
 [assembly: AssemblyTitle("Conditioning Control Panel")]
 [assembly: AssemblyDescription("A professional visual conditioning application with gamification features.")]

@@ -1,0 +1,45 @@
+v6.4.0 - The Boudoir
+
+This one's a big drop. Down the Rabbit Hole gets a whole crafting system, you can now weave your own spirals right from the Spiral card, and there's a fresh pile of fixes underneath it all.
+
+DOWN THE RABBIT HOLE: CRAFTING
+- Raw materials now fall in the tube (silicone, makeup, pills, lace, lube, chrome). Grab them and they bank into your bag.
+- THE BOUDOIR, a new 4th hub station that opens up at 5 runs. It's home to your haul, your crafted things, and THE WORKTABLE.
+- THE WORKTABLE is a Minecraft-style crafting grid with 21 pictogram recipes. The shape you lay out is the recipe, figure them out and make them yours. Press-and-drag to lay materials across cells, click to place or swap, right-click to erase.
+- Real crafted gear with real effects: the Skeleton Key (extra reroll), Locked Collar (extra save), the Corset (extra resistance), the Timepiece (deeper descents), the Shot (stacking payout), THE CAGE (arms Denial, no hearts fall but pay jumps 50%), THE PADLOCK (pins a mantra every descent), the dolls that stitch open save slots 2 and 3, plus the Compact, Ring Box, Headphones, Lipstick and the Ballerina music box.
+- Consumables dock as single-use pink toys outside your pocket count: Slippery Slope, Rubber Up, and the Sugar Cube.
+- THE PAPERWALL, torn Lookbook sketches that pin up one per descent and tease the recipes you haven't found yet. The shape's the hint, the torn corner's the puzzle.
+
+THE SPIRAL CREATOR (THE LOOM)
+- You can now design your own spiral GIF in a full studio, reachable straight from the Spiral Overlay card (and inside the Boudoir). Presets, dials for weave/threads/motion/effects/centerpiece, undo, fullscreen preview, and export in square, landscape, or TikTok shapes.
+- Spirals you weave save into your CCP Spirals library and drop right into the in-run pool and the overlay picker, no extra setup.
+- New standalone corner-GIF overlays: pick a GIF for up to 2 corners, always-on, click-through, set from the Spiral card. Leave a slot on the built-in and it just follows your active spiral.
+- Want to try the Loom without the app? It's also live as a free webapp: https://cclabs.app/loom/
+
+MORE DOWN THE RABBIT HOLE
+- The Bottomless Fall (endless mode): a run that never surfaces. Regions and biomes cycle and each lap pulls you deeper. Exit is a held Esc.
+- The Hourglass: a free length dial from 2 minutes to 2 hours, presets stay as quick-picks.
+- Grand Boon Rooms: every 10th room opens wide into a temptation chamber with 4-5 boon doors, all of them a gift.
+- The Surfacing: the end of a run is now told by the world instead of a 3-2-1 banner. Time thickens, the tube throbs, the field smears, and everything washes white as you come up.
+- Biome dressing everywhere: doorway tubes wear a different look for each of the 16 biomes, the dome takes on the biome's own art and palette, and recipe pages plaster the walls pin-board style when you discover one.
+- Worktable quality-of-life, a crafted-loadout rail under your score in the fall, and a pocket-watch timer that only shows the clock once you've made the Timepiece (timeless without it).
+- Incognito room now disguises the whole field so you can't tell the live bubbles apart, and the Undertow feels properly underwater with a denser bubble drift.
+- Fixed the phantom sp8.gif that popped a blank overlay, a stranded boon draft that could ghost into the recap, and a muted video blipping at full volume for a frame.
+
+MODS
+- The mod editor got a big overhaul: you can now author barks, mantras, portraits, animated emotes, personalities, and pools/triggers, with a full manifest.
+- Share your mods to the in-app catalogue and install a .ccpmod just by dropping it on the window.
+- Mods can ship animated avatar emote sets and even their own custom Rabbit Hole descent (voice, images, video, portraits).
+
+PERFORMANCE & STABILITY
+- Fixed the multi-monitor video mess from 6.3.4 where a video would only play on one of your two screens and jump to the other one next time, and sometimes froze the whole app right after starting. Videos now heal themselves if a screen fails to show output, and a wedged video can't lock up the app or poison the ones after it anymore. There's also a new Force video GPU decode toggle in System settings if you want to pick the decoder yourself.
+- The unified overlay renderer is back ON by default. The lag that forced it off in 6.3.4 is fixed, and there's a proper Settings toggle now if you ever want the old per-effect windows.
+- Lock-card dead-man's switch: if the UI thread ever wedges behind a lock card, a background heartbeat drops the cover so you get your screen back instead of a forced reboot.
+- Smoother bubbles under heavy load, they no longer lurch when the app is busiest.
+
+BUG FIXES
+- Deeper overlay bands no longer freeze, stomp, or wipe out your base overlays.
+- Flashes handle slow-loading files and more image formats, and won't crash on an unsupported one.
+- Server whitelist now reaches Discord-only users who were getting locked out after a season reset.
+
+Season: Jelly July

@@ -13,7 +13,7 @@
 ; - Store install path in registry for Velopack updates
 
 #define MyAppName "Conditioning Control Panel"
-#define MyAppVersion "6.3.4"
+#define MyAppVersion "6.6.3"
 #define MyAppPublisher "CodeBambi"
 #define MyAppURL "https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF"
 #define MyAppExeName "ConditioningControlPanel.exe"
@@ -112,6 +112,46 @@ Source: "{#PublishDir}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb,cs\*,de\*,es\*,fr\*,it\*,ja\*,ko\*,pl\*,pt-BR\*,ru\*,tr\*,zh-Hans\*,zh-Hant\*"
 
 ; NOTE: Don't include user data files - those go to %APPDATA%
+
+[InstallDelete]
+; =============================================================================================
+; CONTENT PACKS - upgrader convergence.  See ConditioningControlPanel\docs\CONTENT_PACKS_PLAN.md
+; sections 1 (what moves) and 5 (why this section exists).
+;
+; From 6.7 on, ~1.36 GB of version-stable audio and the two bundled .ccpmod archives no longer
+; ship in the installer (stripped in ConditioningControlPanel.csproj via the
+; ContentPack*Exclude properties) and are downloaded instead into
+;   %LOCALAPPDATA%\ConditioningControlPanel\content\.
+; Inno leaves behind files it did not install, so without this section an upgrader keeps the old
+; bundled copies under {app} forever - and ContentLocator probes BaseDirectory first, so those
+; stale copies would permanently shadow every downloaded pack.  [InstallDelete] runs before
+; [Files], so this is a clean sweep followed by a fresh install.
+;
+; RULES:
+;   * The deletion list is GENERATED - installer-content-deletions.iss (#included below) names
+;     every moved file EXPLICITLY, one exact path per line, NO wildcards.  A file a USER
+;     hand-dropped into one of these folders is therefore never matched and survives the
+;     upgrade - and keeps working, because ContentLocator unions the install dir with the
+;     downloaded content root.  Shipped manifests (bark_rules.json, mantras.json,
+;     avatar_manifest.json, vo_manifest.json, sfx_manifest.json, dtrh barks\manifest.js,
+;     vn\manifest.json) are not pack payload, so they can never appear in the list; a missing
+;     manifest is not a graceful degrade, it is a hang or a crash.
+;   * NEVER hand-edit installer-content-deletions.iss and NEVER add wildcard deletions here -
+;     a wildcard cannot tell a hand-added user file from a shipped one.  Regenerate (and
+;     commit) after any change to the pack file set:
+;       powershell -ExecutionPolicy Bypass -File ConditioningControlPanel\Scripts\build-content-packs.ps1 -DeletionsOnly
+;     (a full pack build regenerates it too, and hard-fails on strip/pack drift first).
+;   * Never touch %LOCALAPPDATA%\ConditioningControlPanel - user settings, progress, assets,
+;     mods and downloaded packs all live there.  Everything in the list is {app}-only.
+;   * "dirifempty" only removes a folder that the sweep left empty, so a surviving user file
+;     also keeps its folder alive.
+; =============================================================================================
+
+; NOTE the include also covers the two bundled .ccpmod archives ({app}\DroneMod\,
+; {app}\LockedMod\).  ModService's already-extracted copies under %LOCALAPPDATA%\...\builtin_mods\
+; are user data and are deliberately left alone - phase C re-stamps them from the downloaded
+; pack instead.
+#include "installer-content-deletions.iss"
 
 [Icons]
 ; Start Menu shortcut

@@ -415,6 +415,10 @@ namespace ConditioningControlPanel
             fadeInTarget.IsHitTestVisible = true;
 
             _bannerCurrentIndex = nextIndex;
+
+            // Chrome FX: a light sheen rides the crossfade. Throttled inside (the rotation is a
+            // 4s timer; a pass every 4s would be an ambient strobe, not a change cue).
+            SweepBannerSheen();
         }
 
         /// <summary>
@@ -425,6 +429,9 @@ namespace ConditioningControlPanel
             if (string.IsNullOrEmpty(message)) return;
 
             TxtBannerSecondary.Text = message;
+
+            // A genuinely new message, so it bypasses the rotation throttle.
+            SweepBannerSheen(force: true);
 
             // Ensure timer is running
             if (_bannerRotationTimer != null && !_bannerRotationTimer.IsEnabled)
@@ -487,6 +494,19 @@ namespace ConditioningControlPanel
                     {
                         if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
                         Dispatcher.Invoke(CheckServerAnnouncement);
+                    });
+                }));
+
+                // Weekly intake pass nudge. Deliberately LAST and well behind the server
+                // announcement's 7s: the two use the same popup window, and stacking them on
+                // one launch turns a nudge into an ambush. CheckIntakePassNudge bails outright
+                // if the announcement above actually fired.
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _ = Task.Delay(14000).ContinueWith(_ =>
+                    {
+                        if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
+                        Dispatcher.Invoke(CheckIntakePassNudge);
                     });
                 }));
 
@@ -662,6 +682,10 @@ namespace ConditioningControlPanel
 
                         Dispatcher.Invoke(() =>
                         {
+                            // Claim the launch's one popup slot so the weekly intake nudge
+                            // stands down - see CheckIntakePassNudge.
+                            _serverAnnouncementShownThisLaunch = true;
+
                             var popup = new AnnouncementPopup(
                                 result.id!,
                                 result.title!,
@@ -678,6 +702,151 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Debug("Failed to check server announcement: {Error}", ex.Message);
             }
+        }
+
+        #endregion
+
+        #region Weekly Intake Pass Nudge
+
+        /// <summary>A server announcement already used this launch's popup budget.</summary>
+        private bool _serverAnnouncementShownThisLaunch;
+
+        /// <summary>
+        /// Once a week, tell a free user their Graded Intake pass is waiting.
+        ///
+        /// This is deliberately LOCAL rather than riding the server announcement pipeline, for
+        /// two reasons. The endpoint serves ONE global announcement, so it cannot express
+        /// "whichever week this particular user is on"; and the client remembers exactly one
+        /// <c>DismissedAnnouncementId</c>, so a recurring popup routed through it would eat the
+        /// slot the real announcements need. It borrows only the window - with its own dismissal
+        /// record, via the popup's onDismiss hook.
+        ///
+        /// Every condition below is a reason NOT to interrupt someone. A weekly popup earns its
+        /// place by being rare and well-timed; one that fires during a session, or twice in a
+        /// launch, or after being told no, is just noise the user will file a bug about.
+        /// </summary>
+        private void CheckIntakePassNudge()
+        {
+            try
+            {
+                var settings = App.Settings?.Current;
+                var pass = App.IntakePass;
+                if (settings == null || pass == null) return;
+
+                // Turned off by the user.
+                if (!settings.IntakeNudgeEnabled) return;
+
+                // Nothing to advertise: patron, signed out, or already ran it this week.
+                if (!pass.IsPassAvailable) return;
+
+                // Already dismissed for this week.
+                var week = Services.IntakePassService.CurrentWeekKey();
+                if (string.Equals(settings.IntakeNudgeDismissedWeek, week, StringComparison.Ordinal)) return;
+
+                // One popup per launch, and the server's announcement outranks ours.
+                if (_serverAnnouncementShownThisLaunch) return;
+
+                // Never on top of something the user is in the middle of. The intake itself is
+                // in the list because the nudge would otherwise fire behind a run already in
+                // progress and be waiting when they came back out.
+                if (App.IsSessionRunning) return;
+                if (Services.Chaos.DtrhHostService.IsActive) return;
+                if (Services.Quiz.IntakeHostService.IsActive) return;
+                // Catch-all for the rest of the WebView2 game hosts (Bureau, Loom, the DtRH web
+                // page). They are all fullscreen-ish and all sit above MainWindow, so a Topmost
+                // popup would land on top of whatever the user is actually doing.
+                if (ChaosWebViewHost.AnyHostActive) return;
+
+                _serverAnnouncementShownThisLaunch = true;   // our popup now owns the slot too
+
+                // Card art for the user's CURRENT mod, via the shared IntakeNiche mapping so the
+                // face they see is the intake they would actually get. Null is a normal outcome
+                // (resource missing / mod override broken) and drops the popup back to the
+                // text-only layout rather than rendering an empty frame.
+                var cardArt = Services.Quiz.IntakeNiche.PassCardImage();
+
+                var popup = new AnnouncementPopup(
+                    $"intake-pass-{week}",
+                    LocOr("intake_nudge_title", "Your weekly intake pass is ready"),
+                    // Deliberately a NEW key rather than a rewrite of "intake_nudge_body": that key
+                    // already carries the old terse copy in en.json, so reusing it would keep
+                    // showing the old line until someone remembered to edit the value, whereas a
+                    // key that does not exist yet falls through LocOr to the English below.
+                    // "intake_nudge_body" is now orphaned and can be deleted. The punch-free
+                    // variant runs while the card is hidden (IntakePunchCardService.UiEnabled) -
+                    // this pitch must not promise a stamp the user can never see.
+                    Services.IntakePunchCardService.UiEnabled
+                        ? LocOr("intake_nudge_pitch",
+                            "Your free Graded Intake just unlocked. It interviews you, drafts a session tuned to you - and stamps your punch card when you run it.")
+                        : LocOr("intake_nudge_pitch_nopunch",
+                            "Your free Graded Intake just unlocked. It interviews you and drafts a session tuned to you."),
+                    imageUrl: null,
+                    linkUrl: null,
+                    theme: null,
+                    onDismiss: () =>
+                    {
+                        // OUR record, not DismissedAnnouncementId.
+                        try
+                        {
+                            var s = App.Settings?.Current;
+                            if (s == null) return;
+                            s.IntakeNudgeDismissedWeek = week;
+                            App.Settings?.Save();
+                        }
+                        catch (Exception ex) { App.Logger?.Debug("Intake nudge dismiss: {E}", ex.Message); }
+                    },
+                    cardImage: cardArt,
+                    actionText: LocOr("intake_nudge_action", "Start my intake"),
+                    onAction: StartIntakeFromNudge,
+                    dismissText: LocOr("intake_nudge_later", "Maybe later"))
+                {
+                    Owner = this,
+                };
+                popup.Show();
+
+                App.Logger?.Information("Intake pass nudge shown for {Week} (art={HasArt})", week, cardArt != null);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("CheckIntakePassNudge failed: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// The nudge's call to action. Routed through the SAME entry point as the Exclusives
+        /// button rather than calling IntakeHostService directly, so the login / AI-availability /
+        /// pass gates stay in exactly one place - a second launch path is how "the popup let me in
+        /// but the button didn't" bugs are born.
+        /// </summary>
+        private void StartIntakeFromNudge()
+        {
+            try
+            {
+                if (Application.Current?.Dispatcher == null) return;
+                if (Application.Current.Dispatcher.HasShutdownStarted) return;
+                BtnStartIntake_Click(this, new RoutedEventArgs());
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Intake nudge launch failed: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// <c>Loc.Get</c> returns the KEY when a string is missing, which would put
+        /// "intake_nudge_action" on a button face. These keys are added to the language files in a
+        /// separate pass, so fall back to the shipped English until they land.
+        /// </summary>
+        private static string LocOr(string key, string english)
+        {
+            try
+            {
+                var value = Loc.Get(key);
+                return string.IsNullOrEmpty(value) || string.Equals(value, key, StringComparison.Ordinal)
+                    ? english
+                    : value;
+            }
+            catch { return english; }
         }
 
         #endregion
@@ -727,6 +896,20 @@ namespace ConditioningControlPanel
                 var fullText = string.Concat(Enumerable.Repeat(singleSegment, segmentsNeeded));
                 SettingsTab.MarqueeText.Text = fullText;
 
+                // Ambient loop: at the Performance tier or under reduced motion the banner shows a
+                // single static segment parked at the origin rather than scrolling forever.
+                if (!Services.MotionFx.AllowAmbientLoops)
+                {
+                    SettingsTab.MarqueeText.Text = singleSegment;
+                    if (SettingsTab.MarqueeText.RenderTransform is TranslateTransform park)
+                    {
+                        park.BeginAnimation(TranslateTransform.XProperty, null);
+                        park.X = 0;
+                    }
+                    _marqueeStoryboard = null;
+                    return;
+                }
+
                 // Animation: scroll exactly one segment width, then loop back seamlessly
                 // From 0 to -segmentWidth creates perfect loop since next segment is identical
                 var animation = new System.Windows.Media.Animation.DoubleAnimation
@@ -736,6 +919,7 @@ namespace ConditioningControlPanel
                     Duration = TimeSpan.FromSeconds(segmentWidth / 80), // Speed: 80 pixels per second
                     RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
                 };
+                System.Windows.Media.Animation.Timeline.SetDesiredFrameRate(animation, AmbientFrameRate);
 
                 _marqueeStoryboard = new System.Windows.Media.Animation.Storyboard();
                 _marqueeStoryboard.Children.Add(animation);

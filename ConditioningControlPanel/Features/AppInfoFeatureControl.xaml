@@ -37,6 +37,19 @@
         <Button x:Name="BtnReportBug" Content="{loc:Str btn_report_bug}"
                 Style="{DynamicResource OutlineButton}"
                 Padding="14,12" FontSize="14"
-                Click="BtnReportBug_Click"/>
+                Click="BtnReportBug_Click"
+                Margin="0,0,0,8"/>
+
+        <Button x:Name="BtnSuggestion" Content="{loc:Str btn_suggestion}"
+                Style="{DynamicResource OutlineButton}"
+                Padding="14,12" FontSize="14"
+                Click="BtnSuggestion_Click"
+                Margin="0,0,0,8"/>
+
+        <!-- #769: report numbers persist, so they can be looked up long after the success panel. -->
+        <Button x:Name="BtnMyReports" Content="{loc:Str btn_my_reports}"
+                Style="{DynamicResource OutlineButton}"
+                Padding="14,12" FontSize="14"
+                Click="BtnMyReports_Click"/>
     </StackPanel>
 </UserControl>

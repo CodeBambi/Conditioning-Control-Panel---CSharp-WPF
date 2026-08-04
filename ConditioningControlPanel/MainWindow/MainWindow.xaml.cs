@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -110,6 +110,10 @@ namespace ConditioningControlPanel
         private Brush? _preLockdownWindowBg;
         private Brush? _preLockdownTitleBarBg;
         private bool _isStreakFixMode = false;
+        // Guards the manual streak-fix spend. MessageBox.Show pumps messages, so without this a
+        // double-click (or a click on a second day while the first day's server call is in flight)
+        // re-enters StreakFixDay_Click and spends twice from one balance check.
+        private bool _streakFixInFlight = false;
         private DispatcherTimer? _remoteNotificationTimer;
         private DispatcherTimer? _remoteSessionInfoTimer;
 
@@ -166,8 +170,7 @@ namespace ConditioningControlPanel
         
         // Avatar Tube Window
         private AvatarTubeWindow? _avatarTubeWindow;
-        private WaveOutEvent? _levelUpSoundDevice;
-        private AudioFileReader? _levelUpSoundFile;
+        private Services.AudioPlaybackHandle? _levelUpSoundHandle;
         private bool _avatarWasAttachedBeforeMaximize = false;
         private bool _avatarWasAttachedBeforeBrowserFullscreen = false;
 
@@ -242,10 +245,25 @@ namespace ConditioningControlPanel
                 AvatarTubeWindow.ApplyChatShortcutTo(this);
                 RefreshChatShortcutLabel();
                 ApplyGlobalChatHotkey();
+                ApplyCameraShortcutTo();
+                RefreshCameraShortcutLabel();
+                ApplyGlobalCameraHotkey();
                 HookFocusGazeService();
                 HookBlinkTrainerService();
+                // Tooltip hygiene: start tracking before the user can hover anything, so no tooltip
+                // is ever opened untracked (the lazy hook this replaced installed its handlers on
+                // the first tab switch, i.e. potentially after the first tooltip was already up).
+                // See MainWindow.ToolTipHygiene.cs.
+                EnsureToolTipHygiene();
+                // Chrome FX (PR-1): nav hover/active glow, START breath + sheen, XP gloss.
+                // After load, so every templated nav button is real before we touch it.
+                InitializeChromeFx();
+                // Dashboard FX (PR-2): mosaic ambient canvas, tile hover/active breath, logo
+                // drift, rail hover, browser frame. Same reason for being here, and it must
+                // follow InitializeChromeFx - it rides that file's loop funnel.
+                InitializeDashboardFx();
             };
-            Closing += (_, _) => Services.GlobalHotkeyService.Unregister();
+            Closing += (_, _) => Services.GlobalHotkeyService.UnregisterAll();
             // The title-bar X now MINIMIZES TO TRAY (see OnClosing) instead of quitting — users expect
             // the app to keep running in the background (#446/#438). Real exit is the tray-menu Exit and
             // the in-app Exit button, which both set _exitRequested and call Application.Current.Shutdown()
@@ -382,6 +400,16 @@ namespace ConditioningControlPanel
                 App.Quests.QuestsRefreshed += (s, e) => Dispatcher.Invoke(() => RefreshQuestUI());
             }
 
+            // Repaint the quests tab whenever the streak-fix balance moves. StreakFixCharges is
+            // written imperatively (stats tile + button caption), not bound, and it changes from four
+            // places — sync adoption, the manual spend, the automatic spend and the skill purchase —
+            // most of them off the UI thread. Riding the settings INPC catches all four with one
+            // subscription and keeps the services out of MainWindow.
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.PropertyChanged += OnSettingsPropertyChangedForQuests;
+            }
+
             // Subscribe to skill tree events
             if (App.SkillTree != null)
             {
@@ -410,7 +438,15 @@ namespace ConditioningControlPanel
             App.BouncingText.Stop();
             App.Overlay.Stop();
 
-            // v6.0: fresh installs land on CCP Default (neutral baseline). No first-launch mod picker.
+            // v6.0: fresh installs land on CCP Default (neutral baseline).
+            // Content packs (docs/CONTENT_PACKS_PLAN.md §4 + §5): the mod media no longer ships in the
+            // installer, so the picker is back — for BOTH populations. First launch gets it below,
+            // before the tutorial; every ALREADY-Welcomed install gets it from the else branch,
+            // because the modular installer's [InstallDelete] sweep just took their bundled mod audio
+            // away and they would otherwise never be offered it back. ModPickerDialog.ShowIfNeeded
+            // owns the one-shot guards (ModPickerShown / IsFullInstall / null service), so it no-ops
+            // for everyone who should not see it — including every install that still has its
+            // bundled audio.
 
             // Show welcome dialog on first launch, then start tutorial
             // But delay tutorial if update dialog is being shown
@@ -425,18 +461,79 @@ namespace ConditioningControlPanel
                         await Task.Delay(500);
                     }
 
-                    // Only start tutorial if update dialog is done
-                    if (!App.IsUpdateDialogActive)
+                    // The spotlight overlay measures this window's controls, so it must not
+                    // start against a window that hasn't loaded yet (up to 10s).
+                    for (int i = 0; i < 20 && !IsLoaded; i++)
                     {
+                        await Task.Delay(500);
+                    }
+
+                    // Only start tutorial if update dialog is done
+                    if (!App.IsUpdateDialogActive && IsLoaded)
+                    {
+                        // Mod picker first: it is modal and the tutorial's spotlight overlay measures
+                        // THIS window's controls, so the two must never be on screen together. No-ops
+                        // on a full/dev install, when the pack service is missing, or after the
+                        // ModPickerShown flag is set.
+                        ModPickerDialog.ShowIfNeeded(this);
+
                         StartTutorial();
                     }
-                }), System.Windows.Threading.DispatcherPriority.Loaded);
+                    // Normal, NOT Loaded: this app keeps the dispatcher busy enough (compositor
+                    // host + avatar animations) that Loaded-priority items are starved and never
+                    // run - the first-launch tour silently never started at Loaded priority.
+                }), System.Windows.Threading.DispatcherPriority.Normal);
             }
             else
             {
                 // Not first launch - check if we need to show "What's New" after an update
                 ShowWhatsNewIfNeeded();
                 TryPresentSeasonRecap();
+
+                // Upgraders into the modular build get the SAME picker, once, at the equivalent safe
+                // point: after the update dialog AND the What's New / season-recap dialogs are done,
+                // and once this window has actually loaded. No tutorial follows here - existing users
+                // already had it.
+                Dispatcher.BeginInvoke(new Action(async () =>
+                {
+                    try
+                    {
+                        // Let the startup dialogs that were queued just above actually claim the
+                        // flag before we start watching it - What's New posts itself and has not
+                        // raised IsStartupDialogShowing yet at this instant.
+                        await Task.Delay(1500);
+
+                        // Same waiting idiom as the first-launch branch, plus IsStartupDialogShowing:
+                        // What's New is modal and posts itself onto the dispatcher, so it can still be
+                        // pending when this runs. Every modular upgrader ARRIVES with a What's New to
+                        // read, so wait out minutes of reading, not seconds - at 30s a user still on
+                        // the patch notes silently lost the picker until the next launch (play-test
+                        // scenario C caught exactly that). Past 5 min we still defer to next launch,
+                        // which ModPickerShown=false keeps armed.
+                        for (int i = 0; i < 600 && (App.IsUpdateDialogActive || IsStartupDialogShowing); i++)
+                        {
+                            await Task.Delay(500);
+                        }
+
+                        for (int i = 0; i < 20 && !IsLoaded; i++)
+                        {
+                            await Task.Delay(500);
+                        }
+
+                        if (!App.IsUpdateDialogActive && !IsStartupDialogShowing && IsLoaded)
+                        {
+                            // Pre-ticks the card for the mod they were already running, so one press
+                            // restores what the installer removed.
+                            ModPickerDialog.ShowIfNeeded(this, preselectActiveMod: true);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "Failed to offer the mod picker to an upgrading install");
+                    }
+                    // Normal, NOT Loaded - Loaded-priority work is starved in this app and silently
+                    // never runs (same reason as the first-launch branch above).
+                }), System.Windows.Threading.DispatcherPriority.Normal);
             }
 
             // Initialize scheduler timer (checks every 30 seconds)
@@ -516,38 +613,9 @@ namespace ConditioningControlPanel
                 }
             });
 
-            // Close the Exclusives submenu popup on Alt+Tab / focus loss.
-            // MouseLeave doesn't fire during Alt+Tab, so without this the popup
-            // stays pinned on top of whatever app the user switched to.
-            Deactivated += (_, __) =>
-            {
-                if (ExclusivesSubmenuPopup != null && ExclusivesSubmenuPopup.IsOpen)
-                {
-                    _exclusivesMenuCloseTimer?.Stop();
-                    _exclusivesPinned = false;
-                    ExclusivesSubmenuPopup.IsOpen = false;
-                }
-            };
-
-            // The Exclusives popup uses StaysOpen=True (to avoid WPF's mouse-capture
-            // quirk where StaysOpen=False swallows clicks on the placement target
-            // and holds capture until the window loses+regains focus). We close
-            // it manually here when the user clicks outside both the launcher AND
-            // the popup content. Clicks inside the popup DO reach this handler
-            // (input is routed through the main window), so we must also bail on
-            // them — otherwise the popup closes before the sub-item Click can
-            // run and the tab-switch is swallowed.
-            PreviewMouseDown += (_, e) =>
-            {
-                if (ExclusivesSubmenuPopup == null || !ExclusivesSubmenuPopup.IsOpen) return;
-                if (BtnPatreonExclusives == null) return;
-                if (e.OriginalSource is not DependencyObject src) return;
-                if (IsVisualDescendant(src, BtnPatreonExclusives)) return;
-                if (ExclusivesSubmenuPopup.Child is DependencyObject popupChild
-                    && IsVisualDescendant(src, popupChild)) return;
-                _exclusivesPinned = false;
-                ExclusivesSubmenuPopup.IsOpen = false;
-            };
+            // (The Exclusives submenu popup and its Alt+Tab / outside-click close
+            // handlers were removed when the launcher became a real tab — see
+            // MainWindow.Exclusives.cs.)
 
             // velvet-mosaic: highlight dashboard cards whose feature is enabled, and
             // keep them in sync when settings change anywhere else.
@@ -614,6 +682,9 @@ namespace ConditioningControlPanel
         {
             Dispatcher.Invoke(() =>
             {
+                // Event FX (PR-5) FIRST, while the XP bar is still standing at the cap it just
+                // reached - UpdateLevelDisplay wraps it back to a sliver. Fire-and-forget.
+                CelebrateLevelUp();
                 UpdateLevelDisplay();
                 // Show level up notification
                 _trayIcon?.ShowNotification("Level Up!", $"You reached Level {newLevel}!", System.Windows.Forms.ToolTipIcon.Info);
@@ -646,52 +717,17 @@ namespace ConditioningControlPanel
                 // Stop any previous level up sound still playing
                 StopLevelUpSound();
 
-                Task.Run(() =>
-                {
-                    try
-                    {
-                        var audioFile = new AudioFileReader(soundPath);
-                        var outputDevice = new WaveOutEvent();
-                        App.Audio?.ApplyPreferredDevice(outputDevice);
+                var masterVolume = App.Settings.Current.MasterVolume / 100f;
+                var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.2625f;
 
-                        var masterVolume = App.Settings.Current.MasterVolume / 100f;
-                        var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.2625f;
-                        audioFile.Volume = Math.Max(0.01f, curvedVolume);
+                // AudioService owns the device + its disposal (deferred past NAudio's own unwind,
+                // which is what the old "Handle is not initialized" workaround here was for), and
+                // it never opens the device on the dispatcher — #778/#779.
+                // Stop() on an already-finished handle is a no-op, so no completion bookkeeping is
+                // needed — StopLevelUpSound above already ran before this one started.
+                _levelUpSoundHandle = App.Audio?.PlayOneShot(soundPath, Math.Max(0.01f, curvedVolume), "level-up");
 
-                        outputDevice.Init(audioFile);
-                        outputDevice.PlaybackStopped += (s, e) =>
-                        {
-                            // Defer disposal — disposing inside PlaybackStopped causes
-                            // "Handle is not initialized" when NAudio's internal cleanup
-                            // races with our Dispose call.
-                            Task.Run(() =>
-                            {
-                                try
-                                {
-                                    Thread.Sleep(50); // Let NAudio finish its internal cleanup
-                                    outputDevice.Dispose();
-                                    audioFile.Dispose();
-                                    if (_levelUpSoundDevice == outputDevice)
-                                    {
-                                        _levelUpSoundDevice = null;
-                                        _levelUpSoundFile = null;
-                                    }
-                                }
-                                catch (Exception) { }
-                            });
-                        };
-
-                        _levelUpSoundDevice = outputDevice;
-                        _levelUpSoundFile = audioFile;
-                        outputDevice.Play();
-
-                        App.Logger?.Debug("Level up sound played from: {Path}", soundPath);
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Warning("Failed to play level up sound: {Error}", ex.Message);
-                    }
-                });
+                App.Logger?.Debug("Level up sound played from: {Path}", soundPath);
             }
             catch (Exception ex)
             {
@@ -703,11 +739,8 @@ namespace ConditioningControlPanel
         {
             try
             {
-                _levelUpSoundDevice?.Stop();
-                _levelUpSoundDevice?.Dispose();
-                _levelUpSoundFile?.Dispose();
-                _levelUpSoundDevice = null;
-                _levelUpSoundFile = null;
+                _levelUpSoundHandle?.Stop();
+                _levelUpSoundHandle = null;
             }
             catch { }
         }
@@ -748,23 +781,79 @@ namespace ConditioningControlPanel
                 var panicKey = settings.PanicKey;
                 if (key.ToString() == panicKey)
                 {
+                    // #616/#617/#621/#622/#623 — "I pressed the panic key and nothing happened".
+                    // Three things can be true and we could not tell them apart:
+                    //   (a) the WH_KEYBOARD_LL callback never ran (this line missing) — either the
+                    //       UI thread that owns the hook was wedged, or Windows had already dropped
+                    //       our hook for exceeding LowLevelHooksTimeout during an earlier stall;
+                    //   (b) the callback ran but the dispatcher never drained the BeginInvoke below
+                    //       ("received"/"queued" present, "handling" missing) — a wedged UI thread;
+                    //   (c) the handler ran and the teardown itself hung ("handling" but no "handled").
+                    // Note this callback executes ON THE UI THREAD (LL hooks are delivered to the
+                    // installing thread's message loop), so the stall column on this very line is
+                    // itself evidence.
+                    VideoDiag.Log("PANIC", $"panic key '{key}' RECEIVED by the global hook - queueing handler");
                     Dispatcher.BeginInvoke(() => HandlePanicKeyPress());
+                    VideoDiag.Log("PANIC", "handler queued on the dispatcher");
                 }
             }
         }
 
         private void HandlePanicKeyPress()
         {
+            VideoDiag.Log("PANIC", $"handling panic press (engineRunning={_isRunning}, uiStall={VideoDiag.UiStallMs}ms)");
             // A live Rabbit Hole descent owns the panic key: the chaos key hook pauses the
             // run (and a second press surfaces it). Without this hand-off a mid-run panic
             // fell into the "not running" branch below — where a second press EXITS the app.
-            if (App.Chaos?.IsDescending == true) return;
+            if (App.Chaos?.IsDescending == true) { VideoDiag.Log("PANIC", "handed off to the Rabbit Hole descent (chaos owns the key)"); return; }
 
             // The web DtRH game (its own WebView2 window) owns Esc while it's up: the page
             // runs a pause → exit-fullscreen → close ladder. Swallow the panic double-tap so
             // those presses can't fall into the "not running" branch and exit the whole app.
             // Reactivates on its own once the game window closes (IsActive flips false).
-            if (Services.Chaos.DtrhHostService.IsActive) return;
+            if (Services.Chaos.DtrhHostService.IsActive) { VideoDiag.Log("PANIC", "handed off to the DtRH web game window"); return; }
+
+            // For You feed: a two-rung ladder. Press 1 drops ghost mode if the feed is parked as a
+            // see-through mirror (otherwise the user is staring at a translucent pane they cannot
+            // grab — the mouse passes straight through it, its own close button included), press 2
+            // closes the feed. The press is consumed either way (no fall-through into the "not
+            // running" exit branch). The panic key reaches us regardless of focus: it rides the
+            // WH_KEYBOARD_LL hook in OnGlobalKeyPressed, not a window-level handler.
+            if (Services.Fyp.FypHostService.IsActive)
+            {
+                if (Services.Fyp.FypHostService.IsGhosted)
+                {
+                    VideoDiag.Log("PANIC", "For You feed: ghost mode dropped (press again to close)");
+                    Services.Fyp.FypHostService.ExitGhost();
+                    return;
+                }
+                if (Services.Fyp.FypHostService.RecentlyUnghosted)
+                {
+                    // The reflexive double-tap right after rung 1 — swallow it instead of
+                    // taking the whole feed down (play-tested: one Esc-Esc closed everything).
+                    VideoDiag.Log("PANIC", "For You feed: press ignored (just un-ghosted)");
+                    return;
+                }
+                VideoDiag.Log("PANIC", "closing the For You feed window");
+                Services.Fyp.FypHostService.Close();
+                return;
+            }
+
+            // #735 "grace pause": while a mandatory video is really on screen, the FIRST panic press
+            // pauses it behind a small Paused/Resume card instead of stopping the engine — the user
+            // may be pausing because someone walked in, and a bark, an achievement track and a whole
+            // session teardown are all the wrong answer to that. Deliberately placed AFTER the two
+            // chaos/DtRH hand-offs (their panic behaviour must not change) and BEFORE the bark, so a
+            // grace pause is silent. One per video run; press 2 falls straight through to everything
+            // below, press 3 exits the app — three taps from a playing video to exit, as before + 1.
+            //
+            // The early return leaves _panicPressCount/_lastPanicTime untouched ON PURPOSE: the pause
+            // is not a rung of the ladder, so it must not advance (or reset) it.
+            if (App.Video?.TryGracePauseFromPanic() == true)
+            {
+                VideoDiag.Log("PANIC", "press consumed as video grace pause");
+                return;
+            }
 
             // Let the companion say a calm, persona-neutral safety line (highest priority,
             // bypasses the bark gate). Fired before the stop flow so it's not suppressed.
@@ -882,6 +971,10 @@ namespace ConditioningControlPanel
                 _browser?.Dispose();
                 Application.Current.Shutdown();
             }
+
+            // Panic action COMPLETED. Its absence after a "handling panic press" line is the proof
+            // that the panic teardown itself hung rather than the keystroke being lost (#616-#623).
+            VideoDiag.Log("PANIC", $"panic press handled (press #{_panicPressCount})");
         }
 
         /// <summary>
@@ -1320,6 +1413,12 @@ namespace ConditioningControlPanel
 
                 // Mod selector ComboBox repopulates itself in InitializeModSelector — no per-element refresh here.
 
+                // Chrome + dashboard FX: the Fx* dynamic resources have already been rewritten by
+                // FxTheme, so the XAML-bound sheen bands, tile rings and browser frame re-tint
+                // themselves; the code-built glow effects (active nav button, START) hold a Color
+                // and need this nudge to follow the mod. RefreshChromeFx drives both passes.
+                RefreshChromeFx();
+
                 App.Logger?.Debug("Theme-aware UI elements refreshed for mod {ModId}", App.Mods?.ActiveModId);
             }
             catch (Exception ex)
@@ -1387,11 +1486,16 @@ namespace ConditioningControlPanel
                 _suppressModSelectorChange = false;
             }
 
-            // Hide BambiCloud option if mod doesn't want it
-            var showBambiCloud = App.Mods?.ShowBambiCloudOption() ?? true;
+            // Hide BambiCloud option if mod doesn't want it — unless the user override
+            // (Settings > Show BambiCloud everywhere) forces it visible.
+            var modWantsBambiCloud = App.Mods?.ShowBambiCloudOption() ?? true;
+            var showBambiCloud = modWantsBambiCloud || (App.Settings?.Current?.ForceShowBambiCloud ?? false);
             SettingsTab.RbBambiCloud.Visibility = showBambiCloud ? Visibility.Visible : Visibility.Collapsed;
 
-            if (!showBambiCloud)
+            // Keep the mod's own default site (HypnoTube) selected when the button is
+            // only visible because of the user override — the override reveals BambiCloud,
+            // it doesn't switch to it.
+            if (!modWantsBambiCloud)
                 SettingsTab.RbHypnoTube.IsChecked = true;
 
             RefreshBrowserLoadingText();
@@ -1415,8 +1519,10 @@ namespace ConditioningControlPanel
         private void RefreshBrowserLoadingText()
         {
             if (SettingsTab.BrowserLoadingText == null) return;
-            var showBambiCloud = App.Mods?.ShowBambiCloudOption() ?? false;
-            var siteName = showBambiCloud
+            // Reflect the actually-selected site radio, not just the mod's preference —
+            // the BambiCloud button can now be visible via user override without being selected.
+            var onBambiCloud = SettingsTab.RbBambiCloud?.IsChecked == true;
+            var siteName = onBambiCloud
                 ? "BambiCloud"
                 : (App.Mods?.ActiveMod.Manifest.Browser?.SiteName ?? "HypnoTube");
             SettingsTab.BrowserLoadingText.Text = $"🌐 Click to connect to {siteName}";
@@ -1490,6 +1596,7 @@ namespace ConditioningControlPanel
                     ("features/awareness.png", AwarenessTab.ImgAwarenessFeature),
                     ("features/remote_control.png", RemoteControlTab.ImgRemoteControlFeature),
                     ("features/blink_trainer.png", BlinkTrainerTab.ImgBlinkTrainerFeature),
+                    ("lockdown_icon.png", LockdownTab.ImgLockdownFeature),
                 };
                 foreach (var (path, img) in descImageMap)
                 {
@@ -1499,11 +1606,41 @@ namespace ConditioningControlPanel
                         img.Source = resolved;
                 }
 
+                // Premium quick-launch rail chip art. These live as ImageBrush resources
+                // inside PremiumRail.Resources with a hardcoded pack:// UriSource, so the
+                // rail was the one place on the Dashboard that kept the base art after a
+                // mod switch. Mutate each brush's ImageSource in place — the chips bind to
+                // them with {StaticResource}, so they all repaint from the one assignment.
+                // The DecodePixelWidth values mirror the XAML: the rail only ever shows
+                // these ~170px wide, and re-resolving without a decode cap would pull the
+                // full-size neon PNGs into memory.
+                var railArtMap = new (string key, string resourcePath, int decodeWidth)[]
+                {
+                    ("ArtTakeover",  "features/takeover.png",       384),
+                    ("ArtAwareness", "features/awareness.png",      512),
+                    ("ArtHaptics",   "features/vibe.png",           384),
+                    ("ArtIntake",    "features/lab_quiz_hero.png",  512),
+                    ("ArtRemote",    "features/remote_control.png", 768),
+                    ("ArtBlink",     "features/blink_trainer.png",  512),
+                    ("ArtLockdown",  "lockdown_icon.png",          1024),
+                };
+                var railResources = SettingsTab.PremiumRail?.Resources;
+                if (railResources != null)
+                {
+                    foreach (var (key, path, decodeWidth) in railArtMap)
+                    {
+                        if (railResources[key] is not ImageBrush brush || brush.IsFrozen) continue;
+                        var image = LoadModImageDecoded(path, decodeWidth);
+                        if (image != null)
+                            brush.ImageSource = image;
+                    }
+                }
+
                 // Lab hero headers (mod-sensitive): drone-mode ships green versions under
                 // resources/features/lab_*_hero.png; the embedded pink ones are the fallback.
                 var labHeroMap = new (string resourcePath, ImageBrush? brush)[]
                 {
-                    ("features/lab_quiz_hero.png", LabTab.LabQuizHeroBrush),
+                    ("features/lab_quiz_hero.png", GradedIntakeTab.GradedIntakeHeroBrush),
                     ("features/lab_aimemory_hero.png", LabTab.LabAiMemoryHeroBrush),
                     ("features/lab_gaze_hero.png", LabTab.LabGazeHeroBrush),
                     ("features/lab_focusgaze_hero.png", LabTab.LabFocusHeroBrush),
@@ -1519,6 +1656,32 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to load some feature images");
+            }
+        }
+
+        /// <summary>
+        /// Loads a resource image (mod override first, embedded fallback) at a capped decode
+        /// size. ModResourceResolver.ResolveImage decodes at full resolution and caches, which
+        /// is wrong for the rail's marquee PNGs — this goes through ResolveUri instead so the
+        /// mod override still wins but DecodePixelWidth is honoured. Returns null on failure.
+        /// </summary>
+        private static BitmapImage? LoadModImageDecoded(string resourcePath, int decodeWidth)
+        {
+            try
+            {
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = new Uri(ModResourceResolver.ResolveUri(resourcePath), UriKind.Absolute);
+                bitmap.DecodePixelWidth = decodeWidth;
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.EndInit();
+                bitmap.Freeze();
+                return bitmap;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("LoadModImageDecoded failed for {Path}: {Error}", resourcePath, ex.Message);
+                return null;
             }
         }
 
@@ -1568,10 +1731,13 @@ namespace ConditioningControlPanel
             PopulateAchievementGrid();
             DrawSkillTree();
 
-            var showBambiCloud = App.Mods.ShowBambiCloudOption();
+            var modWantsBambiCloud = App.Mods.ShowBambiCloudOption();
+            var showBambiCloud = modWantsBambiCloud || (App.Settings?.Current?.ForceShowBambiCloud ?? false);
             SettingsTab.RbBambiCloud.Visibility = showBambiCloud ? Visibility.Visible : Visibility.Collapsed;
-            if (!showBambiCloud)
+            if (!modWantsBambiCloud)
             {
+                // Mod doesn't want BambiCloud as its site: keep HypnoTube selected and
+                // navigate to the mod's default even if the override reveals the button.
                 SettingsTab.RbHypnoTube.IsChecked = true;
                 if (_browser != null && _browserInitialized)
                 {
@@ -2011,6 +2177,12 @@ namespace ConditioningControlPanel
                 App.Logger?.Warning(ex, "Blink Trainer flagship sticky: failed");
             }
 
+            // One-time premium celebration for entitlements granted silently (cached state
+            // restored in the ctor, the grace window, V2-linked accounts). The provider
+            // TierChanged handlers cover the loud grant paths; this covers the quiet ones
+            // on the next launch.
+            MaybeShowPremiumCelebration();
+
             // Catalogue submission feedback: poll for any pending Deeper
             // submissions that have been accepted/published since last launch and
             // surface a one-time notification. Host is attached above, so a
@@ -2064,6 +2236,8 @@ namespace ConditioningControlPanel
             {
                 if (SettingsTab.ToggleEnhanceIfPossible != null)
                     SettingsTab.ToggleEnhanceIfPossible.IsChecked = App.Settings?.Current?.BrowserEnhanceIfPossible ?? true;
+                if (SettingsTab.ChkForceShowBambiCloud != null)
+                    SettingsTab.ChkForceShowBambiCloud.IsChecked = App.Settings?.Current?.ForceShowBambiCloud ?? false;
             }
             catch { }
 
@@ -2095,18 +2269,14 @@ namespace ConditioningControlPanel
             // Load past quizzes list
             RefreshPastQuizzes();
 
-            // Initialize wallpaper override from settings
-            if (LabTab.ChkWallpaperEnabled != null && App.Settings.Current.WallpaperEnabled)
-                LabTab.ChkWallpaperEnabled.IsChecked = true;
-
             // Initialize pop quiz UI from settings
-            if (LabTab.ChkPopQuizEnabled != null)
-                LabTab.ChkPopQuizEnabled.IsChecked = App.Settings.Current.PopQuizEnabled;
-            if (LabTab.SliderPopQuizFrequency != null)
+            if (GradedIntakeTab.ChkPopQuizEnabled != null)
+                GradedIntakeTab.ChkPopQuizEnabled.IsChecked = App.Settings.Current.PopQuizEnabled;
+            if (GradedIntakeTab.SliderPopQuizFrequency != null)
             {
-                LabTab.SliderPopQuizFrequency.Value = App.Settings.Current.PopQuizFrequency;
-                if (LabTab.TxtPopQuizFrequency != null)
-                    LabTab.TxtPopQuizFrequency.Text = $"{App.Settings.Current.PopQuizFrequency}/session hr";
+                GradedIntakeTab.SliderPopQuizFrequency.Value = App.Settings.Current.PopQuizFrequency;
+                if (GradedIntakeTab.TxtPopQuizFrequency != null)
+                    GradedIntakeTab.TxtPopQuizFrequency.Text = $"{App.Settings.Current.PopQuizFrequency}/session hr";
             }
 
             // Handle start minimized (to tray) - delay briefly to let window render properly first
@@ -2166,8 +2336,9 @@ namespace ConditioningControlPanel
             }
             finally { _isLoading = false; }
 
-            // Initialize Audio Sync checkbox and sliders
-            HapticsTab.ChkHapticAudioSync.IsChecked = App.Settings.Current.Haptics.AudioSync.Enabled;
+            // Audio-sync ENABLE moved onto the Haptics tab's routing matrix (Media > Audio sync)
+            // in the Phase E rebuild, and the Haptics tab's own delay/power sliders are loaded by
+            // LoadHapticsSettingsToUi(). Only the Settings-tab mirrors are initialised here.
             if (SettingsTab.SliderAudioSyncLatency != null)
             {
                 SettingsTab.SliderAudioSyncLatency.Value = App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs;
@@ -2184,28 +2355,6 @@ namespace ConditioningControlPanel
             if (SettingsTab.AudioSyncLatencyPanel != null)
             {
                 SettingsTab.AudioSyncLatencyPanel.Visibility = App.Settings.Current.Haptics.AudioSync.Enabled
-                    ? Visibility.Visible : Visibility.Collapsed;
-            }
-
-            // Initialize Video Haptic Sync enhanced UI sliders
-            if (HapticsTab.SliderVideoHapticDelay != null)
-            {
-                HapticsTab.SliderVideoHapticDelay.Value = App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs;
-                var latencyMs = App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs;
-                var sign = latencyMs >= 0 ? "+" : "";
-                if (HapticsTab.TxtVideoHapticDelay != null)
-                    HapticsTab.TxtVideoHapticDelay.Text = $"{sign}{latencyMs}ms";
-            }
-            if (HapticsTab.SliderVideoHapticPower != null)
-            {
-                var intensityPercent = (int)(App.Settings.Current.Haptics.AudioSync.LiveIntensity * 100);
-                HapticsTab.SliderVideoHapticPower.Value = intensityPercent;
-                if (HapticsTab.TxtVideoHapticPower != null)
-                    HapticsTab.TxtVideoHapticPower.Text = $"{intensityPercent}%";
-            }
-            if (HapticsTab.VideoHapticSyncSliders != null)
-            {
-                HapticsTab.VideoHapticSyncSliders.Visibility = App.Settings.Current.Haptics.AudioSync.Enabled
                     ? Visibility.Visible : Visibility.Collapsed;
             }
 
@@ -2231,6 +2380,27 @@ namespace ConditioningControlPanel
                     catch (Exception ex)
                     {
                         App.Logger?.Warning(ex, "Failed to start Deeper tab pulse");
+                    }
+                });
+            }
+
+            // Programs tab first-launch pulse — the same one-shot announcement the Deeper tab got.
+            // No feature toggle to check: the Programs tab is always present, so HasSeenProgramsTab
+            // is the only gate. Started independently of the Deeper pulse rather than in an else-if,
+            // because a user who has already found Deeper still has to be told about this one.
+            var programsSettings = App.Settings?.Current;
+            if (programsSettings != null && !programsSettings.HasSeenProgramsTab)
+            {
+                _ = Dispatcher.InvokeAsync(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(1200);
+                        StartProgramsTabPulse();
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "Failed to start Programs tab pulse");
                     }
                 });
             }
@@ -2397,15 +2567,28 @@ namespace ConditioningControlPanel
             // Fix maximized window extending behind taskbar (buttons cut off)
             if (msg == WM_GETMINMAXINFO)
             {
-                var mmi = System.Runtime.InteropServices.Marshal.PtrToStructure<MINMAXINFO>(lParam);
-
-                // Get the monitor this window is on
+                // Get the monitor this window is on. Screen enumeration can transiently fail
+                // (see CLAUDE.md Known Issues #5) - if we can't resolve a monitor, leave the
+                // struct untouched and `handled` false so Windows applies its own defaults.
                 var monitor = System.Windows.Forms.Screen.FromHandle(hwnd);
+                if (monitor == null) return IntPtr.Zero;
+
+                var mmi = System.Runtime.InteropServices.Marshal.PtrToStructure<MINMAXINFO>(lParam);
                 var workingArea = monitor.WorkingArea;
+                var bounds = monitor.Bounds;
+
+                // Bug #620: ptMaxPosition is in coordinates RELATIVE TO THE TARGET MONITOR'S
+                // ORIGIN, not virtual-desktop coordinates. Assigning workingArea.Left/Top raw
+                // only happens to work on the primary monitor (origin 0,0); on a secondary
+                // monitor at e.g. x=1920 it pushed the maximized window a further 1920px away
+                // and the window vanished off-screen (alive in the taskbar, blank preview).
+                // Subtracting the monitor's own bounds origin yields the correct offset - which
+                // is normally (0,0), or non-zero only where the taskbar is docked left/top.
+                // Do NOT "simplify" this back to raw working-area coordinates.
+                mmi.ptMaxPosition.X = workingArea.Left - bounds.Left;
+                mmi.ptMaxPosition.Y = workingArea.Top - bounds.Top;
 
                 // Constrain maximized size to working area (excludes taskbar)
-                mmi.ptMaxPosition.X = workingArea.Left;
-                mmi.ptMaxPosition.Y = workingArea.Top;
                 mmi.ptMaxSize.X = workingArea.Width;
                 mmi.ptMaxSize.Y = workingArea.Height;
 

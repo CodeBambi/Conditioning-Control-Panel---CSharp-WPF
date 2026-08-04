@@ -5,6 +5,28 @@ using ConditioningControlPanel.Models;
 namespace ConditioningControlPanel.Services
 {
     /// <summary>
+    /// Source of XP for tracking companion bonuses.
+    /// </summary>
+    public enum XPSource
+    {
+        Flash,
+        Video,
+        Subliminal,
+        Bubble,
+        LockCard,
+        Session,
+        BubbleCount,
+        BouncingText,
+        AvatarInteraction,
+        KeywordTrigger,
+        Mantra,
+        AttentionCheck,
+        Chaos,
+        Fyp,
+        Other
+    }
+
+    /// <summary>
     /// Context for XP calculation - provides info about how the XP was earned.
     /// </summary>
     public class XPContext

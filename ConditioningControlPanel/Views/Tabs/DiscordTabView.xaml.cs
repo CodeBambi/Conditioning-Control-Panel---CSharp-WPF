@@ -10,6 +10,15 @@ namespace ConditioningControlPanel.Views.Tabs
         public DiscordTabView()
         {
             InitializeComponent();
+            // FX lifecycle (PR-4b): entrance stagger on the profile column, and the search box's
+            // focus glow wiring. No ambient loop is added here - the OG border already owns that.
+            IsVisibleChanged += DiscordTabView_IsVisibleChanged;
+        }
+
+        private void DiscordTabView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.OnProfileTabVisibilityChanged(IsVisible);
         }
 
         private void BtnChangeDisplayName_Click(object sender, RoutedEventArgs e)

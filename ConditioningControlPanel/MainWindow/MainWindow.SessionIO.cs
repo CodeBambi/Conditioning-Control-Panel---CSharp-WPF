@@ -51,6 +51,59 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// Register a session that was written to disk by something OTHER than the session
+        /// editor with the LIVE <see cref="Services.SessionManager"/>, so the Sessions tab
+        /// lists it immediately.
+        ///
+        /// BUG #614: the Graded Intake drafts a session and auto-saves it straight into the
+        /// CustomSessions folder (see IntakeHostService.OnQuizResult - deliberately no
+        /// SaveFileDialog). Nothing told the running SessionManager about the new file, and
+        /// <see cref="Services.SessionManager.LoadAllSessions"/> only ever runs once, from
+        /// <see cref="InitializeSessionManager"/> at startup. So the session existed on disk
+        /// but was invisible in the UI until the next app launch - which read, to the user,
+        /// as "the intake didn't create a session at all".
+        ///
+        /// This reuses the existing AddNewSession path (the one the editor's "save as new"
+        /// uses) rather than inventing a parallel one: it sets Source/SourceFilePath, resolves
+        /// an Id collision, re-writes the file at <paramref name="filePath"/> (idempotent - the
+        /// caller already wrote identical bytes there) and raises SessionAdded, which lands in
+        /// <see cref="OnSessionAdded"/> and builds the card + selects it.
+        ///
+        /// Safe to call before the manager exists (it is created on demand) and safe to call
+        /// off the UI thread. It NEVER throws at the caller: the file is already safely on disk
+        /// by the time we get here, and a failure to refresh a list must not be reported as a
+        /// failure to draft the session.
+        /// </summary>
+        public bool RegisterExternallySavedSession(Models.Session session, string filePath)
+        {
+            if (session == null || string.IsNullOrWhiteSpace(filePath)) return false;
+
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(() => RegisterExternallySavedSession(session, filePath)));
+                return true;
+            }
+
+            try
+            {
+                if (_sessionManager == null) InitializeSessionManager();
+                if (_sessionManager == null) return false;
+
+                // Already known (e.g. a LoadAllSessions raced us, or a double-register)?
+                // Adding twice would leave two identical cards in the Sessions tab.
+                if (_sessionManager.GetSession(session.Id) != null) return true;
+
+                _sessionManager.AddNewSession(session, filePath);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "RegisterExternallySavedSession failed for '{Name}'", session.Name);
+                return false;
+            }
+        }
+
         private void OnSessionAdded(Models.Session session)
         {
             Dispatcher.Invoke(() =>
@@ -97,6 +150,7 @@ namespace ConditioningControlPanel
             border.MouseEnter += (s, e) => border.BorderBrush = FindResource("PinkBrush") as SolidColorBrush;
             border.MouseLeave += (s, e) => border.BorderBrush = Application.Current.Resources["PanelAccentBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(64, 64, 96));
             border.MouseLeftButtonUp += SessionCard_Click;
+            PrepareSessionRowFx(border);
 
             var grid = new Grid();
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -365,6 +419,9 @@ namespace ConditioningControlPanel
             PresetsTab.BtnStartSession.IsEnabled = session.IsAvailable;
             PresetsTab.BtnStartSession.Content = session.IsAvailable ? "▶ Start Session" : "🔒 Coming Soon";
             PresetsTab.BtnExportSession.IsEnabled = true;
+
+            // Move the tab's one ambient loop onto the row that is now selected.
+            RefreshCardSheen();
         }
 
         private string GenerateSessionTimelineDescription(Models.Session session)
@@ -548,7 +605,7 @@ namespace ConditioningControlPanel
             // or other foreground app.
             if (s?.ChatShortcutGlobal == false)
             {
-                Services.GlobalHotkeyService.Unregister();
+                Services.GlobalHotkeyService.Unregister(Services.GlobalHotkeyService.ChatHotkeyId);
                 return;
             }
 
@@ -566,7 +623,7 @@ namespace ConditioningControlPanel
             }
             if (mods == ModifierKeys.None) mods = ModifierKeys.Control;
 
-            Services.GlobalHotkeyService.Register(this, mods, key, () =>
+            Services.GlobalHotkeyService.Register(Services.GlobalHotkeyService.ChatHotkeyId, this, mods, key, () =>
             {
                 // Marshal to UI thread — Win32 hotkeys arrive on the message-pump thread
                 // (which is the dispatcher in WPF, but the helper API doesn't enforce it).
@@ -618,6 +675,177 @@ namespace ConditioningControlPanel
                     CompanionTab.TxtChatShortcutLabel.Text = AvatarTubeWindow.FormatChatShortcut();
             }
             catch { /* Tab not yet realized, fine */ }
+        }
+
+        // ---------------------------------------------------------------------
+        // Camera start/stop shortcut (suggestion #674). Mirrors the chat shortcut
+        // above: a system-wide Win32 hotkey plus an in-window KeyBinding fallback.
+        // The in-window binding lives on MainWindow only (that's where the toggle
+        // command handler is) so it fires whenever the main window has focus.
+        // ---------------------------------------------------------------------
+
+        /// <summary>Routed command bound to the camera-shortcut KeyBinding.</summary>
+        public static readonly RoutedUICommand ToggleCameraCommand =
+            new RoutedUICommand("Toggle Camera Tracking", "ToggleCamera", typeof(MainWindow));
+
+        private bool _cameraCommandBound;
+
+        /// <summary>
+        /// Rebuilds the in-window camera-shortcut KeyBinding from the user's setting.
+        /// Ensures the backing CommandBinding is wired once. Mirrors
+        /// <see cref="AvatarTubeWindow.ApplyChatShortcutTo"/> but for this window only.
+        /// </summary>
+        private void ApplyCameraShortcutTo()
+        {
+            // Wire the command handler exactly once.
+            if (!_cameraCommandBound)
+            {
+                CommandBindings.Add(new CommandBinding(ToggleCameraCommand, (_, e) =>
+                {
+                    ToggleWebcamFromHotkey();
+                    e.Handled = true;
+                }));
+                _cameraCommandBound = true;
+            }
+
+            var s = App.Settings?.Current?.CompanionPrompt;
+            var keyName = string.IsNullOrWhiteSpace(s?.CameraShortcutKey) ? "K" : s!.CameraShortcutKey;
+            var modsName = s?.CameraShortcutModifiers ?? "Control,Alt";
+
+            if (!Enum.TryParse<Key>(keyName, ignoreCase: true, out var key)) key = Key.K;
+            var mods = ParseModifiers(modsName, ModifierKeys.Control | ModifierKeys.Alt);
+
+            // Remove any existing camera-shortcut bindings so repeated calls don't stack.
+            for (int i = InputBindings.Count - 1; i >= 0; i--)
+            {
+                if (InputBindings[i] is KeyBinding kb && kb.Command == ToggleCameraCommand)
+                    InputBindings.RemoveAt(i);
+            }
+
+            // KeyGesture rejects a handful of unusual combos; fall back to Ctrl+Alt+K
+            // rather than throwing out of the load/settings-change path.
+            try
+            {
+                InputBindings.Add(new KeyBinding(ToggleCameraCommand, key, mods));
+            }
+            catch (NotSupportedException)
+            {
+                App.Logger?.Warning("ApplyCameraShortcutTo: rejected combo {Mods}+{Key}, falling back to Ctrl+Alt+K", mods, key);
+                try
+                {
+                    InputBindings.Add(new KeyBinding(ToggleCameraCommand, Key.K, ModifierKeys.Control | ModifierKeys.Alt));
+                }
+                catch { }
+            }
+        }
+
+        /// <summary>
+        /// Reads the saved camera-shortcut combo and registers it as a system-wide
+        /// hotkey. Honours the per-shortcut Global toggle; falls back silently to the
+        /// in-window KeyBinding when off or when the OS rejects the combo. Mirrors
+        /// <see cref="ApplyGlobalChatHotkey"/>.
+        /// </summary>
+        private void ApplyGlobalCameraHotkey()
+        {
+            var s = App.Settings?.Current?.CompanionPrompt;
+
+            if (s?.CameraShortcutGlobal == false)
+            {
+                Services.GlobalHotkeyService.Unregister(Services.GlobalHotkeyService.CameraHotkeyId);
+                return;
+            }
+
+            var keyName = string.IsNullOrWhiteSpace(s?.CameraShortcutKey) ? "K" : s!.CameraShortcutKey;
+            var modsName = s?.CameraShortcutModifiers ?? "Control,Alt";
+
+            if (!Enum.TryParse<Key>(keyName, ignoreCase: true, out var key)) key = Key.K;
+            var mods = ParseModifiers(modsName, ModifierKeys.Control | ModifierKeys.Alt);
+
+            Services.GlobalHotkeyService.Register(Services.GlobalHotkeyService.CameraHotkeyId, this, mods, key, () =>
+            {
+                // Win32 hotkeys arrive on the message-pump thread — marshal to the UI thread.
+                Dispatcher.BeginInvoke(new Action(ToggleWebcamFromHotkey));
+            });
+        }
+
+        /// <summary>Shared modifier-string parser for the shortcut combos.</summary>
+        private static ModifierKeys ParseModifiers(string? modsName, ModifierKeys fallback)
+        {
+            var mods = ModifierKeys.None;
+            if (!string.IsNullOrWhiteSpace(modsName))
+            {
+                foreach (var part in modsName.Split(new[] { ',', '+', ' ' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (Enum.TryParse<ModifierKeys>(part, ignoreCase: true, out var mk)) mods |= mk;
+                }
+            }
+            return mods == ModifierKeys.None ? fallback : mods;
+        }
+
+        /// <summary>"Ctrl+Alt+K" — for the camera-shortcut pill label.</summary>
+        private static string FormatCameraShortcut()
+        {
+            var s = App.Settings?.Current?.CompanionPrompt;
+            var keyName = string.IsNullOrWhiteSpace(s?.CameraShortcutKey) ? "K" : s!.CameraShortcutKey;
+            var modsName = s?.CameraShortcutModifiers ?? "Control,Alt";
+
+            if (!Enum.TryParse<Key>(keyName, ignoreCase: true, out var key)) key = Key.K;
+            var mods = ParseModifiers(modsName, ModifierKeys.Control | ModifierKeys.Alt);
+
+            var parts = new List<string>();
+            if ((mods & ModifierKeys.Control) != 0) parts.Add("Ctrl");
+            if ((mods & ModifierKeys.Alt) != 0) parts.Add("Alt");
+            if ((mods & ModifierKeys.Shift) != 0) parts.Add("Shift");
+            if ((mods & ModifierKeys.Windows) != 0) parts.Add("Win");
+            parts.Add(key.ToString());
+            return string.Join("+", parts);
+        }
+
+        /// <summary>Updates the hero pill text to match the saved camera shortcut.</summary>
+        public void RefreshCameraShortcutLabel()
+        {
+            try
+            {
+                if (CompanionTab.TxtCameraShortcutLabel != null)
+                    CompanionTab.TxtCameraShortcutLabel.Text = FormatCameraShortcut();
+            }
+            catch { /* Tab not yet realized, fine */ }
+        }
+
+        /// <summary>
+        /// Click on the Companion-tab camera-shortcut pill — opens the same capture
+        /// dialog the chat shortcut uses, saves the new combo, then re-applies both the
+        /// in-window binding and the system-wide hotkey without a restart.
+        /// </summary>
+        internal void BtnCameraShortcut_Click(object sender, RoutedEventArgs e)
+        {
+            var settings = App.Settings?.Current?.CompanionPrompt;
+            if (settings == null) return;
+
+            var dlg = new ChatShortcutCaptureDialog
+            {
+                Owner = this,
+                GlobalHotkey = settings.CameraShortcutGlobal,
+            };
+            var ok = dlg.ShowDialog();
+            if (ok != true) return;
+
+            if (dlg.ResetToDefault)
+            {
+                settings.CameraShortcutKey = "K";
+                settings.CameraShortcutModifiers = "Control,Alt";
+            }
+            else
+            {
+                settings.CameraShortcutKey = dlg.CapturedKey.ToString();
+                settings.CameraShortcutModifiers = AvatarTubeWindow.SerializeModifiers(dlg.CapturedModifiers);
+            }
+            settings.CameraShortcutGlobal = dlg.GlobalHotkey;
+            App.Settings?.Save();
+
+            ApplyCameraShortcutTo();
+            ApplyGlobalCameraHotkey();
+            RefreshCameraShortcutLabel();
         }
 
         private void Window_DragOver(object sender, DragEventArgs e)
@@ -1053,6 +1281,64 @@ namespace ConditioningControlPanel
 
             // Fall back to hardcoded sessions
             return Models.Session.GetAllSessions().FirstOrDefault(s => s.Id == sessionId);
+        }
+
+        /// <summary>
+        /// Bring a session up in the Sessions tab: switch to it, make the session the selected
+        /// one, and scroll its card into view. Returns false when the session is not known.
+        ///
+        /// Exists because <see cref="SelectSession"/> is private and the Graded Intake needs a
+        /// safe way to hand the user to the session it just drafted. Re-selecting by id here
+        /// rather than trusting the selection left behind by <see cref="OnSessionAdded"/> is the
+        /// whole point: the toast that calls this can sit on screen for eight seconds, and if the
+        /// user clicks another session card in the meantime, acting on the stale selection would
+        /// hand them - or start - the wrong session entirely.
+        /// </summary>
+        internal bool RevealSessionInLibrary(string sessionId)
+        {
+            if (string.IsNullOrWhiteSpace(sessionId)) return false;
+
+            if (!Dispatcher.CheckAccess())
+                return Dispatcher.Invoke(() => RevealSessionInLibrary(sessionId));
+
+            try
+            {
+                var session = GetSessionById(sessionId);
+                if (session == null)
+                {
+                    App.Logger?.Debug("RevealSessionInLibrary: no session with id {Id}", sessionId);
+                    return false;
+                }
+
+                ShowTab("presets");
+                SelectSession(session);
+
+                // Scroll the matching card into view. Cards carry their session id in Tag; a
+                // miss here is cosmetic only, so it never fails the call.
+                try
+                {
+                    var panel = PresetsTab?.CustomSessionsPanel;
+                    if (panel != null)
+                    {
+                        foreach (var child in panel.Children)
+                        {
+                            if (child is Border card && (card.Tag as string) == sessionId)
+                            {
+                                card.BringIntoView();
+                                break;
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex) { App.Logger?.Debug("RevealSessionInLibrary: BringIntoView: {E}", ex.Message); }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "RevealSessionInLibrary failed for {Id}", sessionId);
+                return false;
+            }
         }
 
         internal void SessionDropZone_Drop(object sender, DragEventArgs e)

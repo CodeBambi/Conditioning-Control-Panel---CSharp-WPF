@@ -85,6 +85,13 @@ namespace ConditioningControlPanel.Services
         public event EventHandler<string>? TitleChanged;
         public event EventHandler<bool>? FullscreenChanged;
         public event EventHandler<CoreWebView2ProcessFailedEventArgs>? BrowserProcessFailed;
+        /// <summary>CoreWebView2 never came up (EnsureCoreWebView2Async threw or returned a null
+        /// core). Consumers holding their own "browser is ready" flag must clear it here, or the
+        /// browser stays wedged for the process lifetime with every Navigate silently dropped.</summary>
+        public event EventHandler<string>? BrowserInitFailed;
+        /// <summary>Web messages posted from a subframe (iframe-hosted players). The top-level
+        /// CoreWebView2.WebMessageReceived never sees these, so consumers must handle both.</summary>
+        public event EventHandler<CoreWebView2WebMessageReceivedEventArgs>? FrameWebMessageReceived;
 
         public bool IsInitialized => _isInitialized;
         public bool IsFullscreen { get; private set; }
@@ -115,8 +122,7 @@ namespace ConditioningControlPanel.Services
         {
             // Store browser data in AppData (not install folder) to avoid lock issues during updates/uninstall
             _userDataFolder = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "ConditioningControlPanel",
+                App.UserDataPath,
                 "browser_data"
             );
             Directory.CreateDirectory(_userDataFolder);
@@ -209,6 +215,7 @@ namespace ConditioningControlPanel.Services
                 if (_webView.CoreWebView2 == null)
                 {
                     App.Logger?.Error("CoreWebView2 is null after EnsureCoreWebView2Async");
+                    RaiseInitFailed("CoreWebView2 null after EnsureCoreWebView2Async");
                     return;
                 }
 
@@ -317,6 +324,157 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Warning(scriptEx, "Failed to inject CCP forced-fullscreen exit detector");
                 }
 
+                // Always-on media reporter. This used to live inside MainWindow's one-shot
+                // AutoPlayAndFullscreenVideoAsync injection, which only ran for navigations made
+                // with autoPlayFullscreen:true — so a video the USER started by browsing to a page
+                // and clicking play was completely invisible to the app, and every other subsystem
+                // happily fired on top of it. As a document-created script it binds on every page,
+                // for app- and user-started playback alike, and feeds BrowserMediaService.
+                try
+                {
+                    await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(@"
+                        (function() {
+                            if (window.__ccpMediaBound) return;
+                            window.__ccpMediaBound = true;
+
+                            function post(o) {
+                                try { window.chrome.webview.postMessage(JSON.stringify(o)); } catch (_) {}
+                            }
+                            function durOf(m) {
+                                var d = m.duration;
+                                return (isFinite(d) && d > 0) ? d : 0;   // live streams report 0/Infinity
+                            }
+                            // Thumbnail hover-previews on HypnoTube are muted, tiny, autoplaying
+                            // <video> elements. Treating those as 'the user is watching something'
+                            // would suppress the whole app while merely mousing over a grid, so a
+                            // session requires audible playback in a real player-sized element.
+                            function isRealPlayback(m) {
+                                if (!m || m.muted) return false;
+                                if (m.tagName === 'AUDIO') return true;
+                                return (m.offsetWidth || 0) >= 200;
+                            }
+
+                            var active = null, beat = null, pauseTimer = null;
+
+                            function startBeat() {
+                                if (beat) return;
+                                beat = setInterval(function() {
+                                    if (!active || active.paused || active.ended) return;
+                                    post({ type: 'ccpMedia', state: 'progress',
+                                           pos: active.currentTime || 0, dur: durOf(active) });
+                                }, 5000);
+                            }
+                            function stopBeat() {
+                                if (beat) { clearInterval(beat); beat = null; }
+                            }
+                            function report(reason) {
+                                active = null;
+                                stopBeat();
+                                post({ type: 'ccpMedia', state: 'stopped', reason: reason });
+                            }
+                            function cancelPendingStop() {
+                                if (pauseTimer) { clearTimeout(pauseTimer); pauseTimer = null; }
+                            }
+
+                            function onPlaying(e) {
+                                var m = e.target;
+                                if (!isRealPlayback(m)) return;
+                                cancelPendingStop();
+                                active = m;
+                                post({ type: 'ccpMedia', state: 'playing',
+                                       pos: m.currentTime || 0, dur: durOf(m) });
+                                startBeat();
+                            }
+                            function onEnded(e) {
+                                if (active && e.target !== active) return;
+                                cancelPendingStop();
+                                report('ended');
+                            }
+                            // pause/emptied also fire during seeks, buffering, ad breaks and
+                            // quality switches, so a stop must persist before we believe it —
+                            // but only briefly. A paused video counts as done: the user has
+                            // stopped watching, and holding the app back while a video sits
+                            // paused indefinitely is worse than resuming a little early. A
+                            // resume simply opens a fresh session.
+                            function onMaybeStop(e) {
+                                if (!active || e.target !== active) return;
+                                cancelPendingStop();
+                                pauseTimer = setTimeout(function() {
+                                    pauseTimer = null;
+                                    if (active && active.paused && !active.ended) report('paused');
+                                }, 2000);
+                            }
+
+                            function bind(m) {
+                                if (!m || m.__ccpMediaHooked) return;
+                                m.__ccpMediaHooked = true;
+                                m.addEventListener('playing', onPlaying);
+                                m.addEventListener('ended', onEnded);
+                                m.addEventListener('pause', onMaybeStop);
+                                // NOT 'emptied': players fire it whenever they swap the source
+                                // (ad roll, quality switch, next-in-playlist) and the element is
+                                // momentarily paused, which reported a stop ~6-8s into every
+                                // video. The heartbeat covers a source swap that never resumes.
+                                // Already mid-playback when we bound (SPA route change, late inject).
+                                if (!m.paused && !m.ended && m.readyState >= 3) onPlaying({ target: m });
+                            }
+                            function scan() {
+                                try {
+                                    var all = document.querySelectorAll('video,audio');
+                                    for (var i = 0; i < all.length; i++) bind(all[i]);
+                                } catch (_) {}
+                            }
+
+                            function init() {
+                                scan();
+                                try {
+                                    new MutationObserver(scan).observe(
+                                        document.documentElement, { childList: true, subtree: true });
+                                } catch (_) {}
+                                // Belt and braces for players that swap elements without mutating
+                                // the observed tree (some use shadow DOM / canvas-backed hosts).
+                                setInterval(scan, 3000);
+                            }
+                            if (document.readyState === 'loading')
+                                document.addEventListener('DOMContentLoaded', init);
+                            else
+                                init();
+
+                            // Leaving the page ends the session immediately rather than waiting
+                            // for the C# heartbeat timeout.
+                            window.addEventListener('pagehide', function() { report('navigated'); });
+                        })();
+                    ");
+                }
+                catch (Exception scriptEx)
+                {
+                    App.Logger?.Warning(scriptEx, "Failed to inject CCP media reporter");
+                }
+
+                // Document-created scripts run in subframes too, but a subframe's
+                // postMessage raises CoreWebView2Frame.WebMessageReceived — NOT the top-level
+                // event — so without this an <iframe>-hosted player reports nothing and its
+                // playback stays invisible. Forward frame messages to the same consumer.
+                try
+                {
+                    _webView.CoreWebView2.FrameCreated += (s, args) =>
+                    {
+                        try
+                        {
+                            args.Frame.WebMessageReceived += (fs, fe) =>
+                                FrameWebMessageReceived?.Invoke(this, fe);
+                        }
+                        catch (Exception frameEx)
+                        {
+                            App.Logger?.Debug("Failed to hook frame web message: {Error}", frameEx.Message);
+                        }
+                    };
+                }
+                catch (Exception frameHookEx)
+                {
+                    App.Logger?.Warning(frameHookEx, "Failed to hook FrameCreated for media reporting");
+                }
+
                 // Navigate to URL
                 var url = _pendingUrl ?? _defaultUrl;
                 App.Logger?.Information("Navigating to: {Url}", url);
@@ -330,7 +488,18 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Error("Failed to initialize CoreWebView2: {Type} - {Error}", ex.GetType().Name, ex.Message);
+                // This catch also covers BrowserReady?.Invoke above, which runs consumer code
+                // AFTER _isInitialized is already true. A handler throwing there must not tear a
+                // working browser down, so only a genuine bring-up failure clears readiness.
+                if (!_isInitialized) RaiseInitFailed($"{ex.GetType().Name}: {ex.Message}");
             }
+        }
+
+        private void RaiseInitFailed(string reason)
+        {
+            _isInitialized = false;
+            try { BrowserInitFailed?.Invoke(this, reason); }
+            catch (Exception ex) { App.Logger?.Debug("BrowserInitFailed handler threw: {Error}", ex.Message); }
         }
 
         /// <summary>
@@ -1014,11 +1183,18 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Navigate to a URL (only HTTPS allowed for security)
+        /// Navigate to a URL (only HTTPS allowed for security).
+        /// Returns true only when the request actually reached CoreWebView2 — callers use this
+        /// to decide whether to fall back instead of reporting a navigation that never happened.
         /// </summary>
-        public void Navigate(string url)
+        public bool Navigate(string url)
         {
-            if (_disposed || !_isInitialized || _webView?.CoreWebView2 == null) return;
+            if (_disposed || !_isInitialized || _webView?.CoreWebView2 == null)
+            {
+                App.Logger?.Warning("Navigate dropped - browser not ready (disposed={Disposed}, init={Init}, core={HasCore}): {Url}",
+                    _disposed, _isInitialized, _webView?.CoreWebView2 != null, url);
+                return false;
+            }
 
             try
             {
@@ -1033,7 +1209,7 @@ namespace ConditioningControlPanel.Services
                     lowerUrl.StartsWith("vbscript:"))
                 {
                     App.Logger?.Warning("Blocked potentially dangerous URL scheme: {Url}", url);
-                    return;
+                    return false;
                 }
 
                 // Force HTTPS for security
@@ -1055,15 +1231,17 @@ namespace ConditioningControlPanel.Services
                     (uri.Scheme != Uri.UriSchemeHttps))
                 {
                     App.Logger?.Warning("Invalid URL rejected: {Url}", url);
-                    return;
+                    return false;
                 }
 
                 _webView.CoreWebView2.Navigate(url);
                 App.Logger?.Debug("Navigating to: {Url}", url);
+                return true;
             }
             catch (Exception ex)
             {
                 App.Logger?.Error("Navigation failed: {Error}", ex.Message);
+                return false;
             }
         }
 

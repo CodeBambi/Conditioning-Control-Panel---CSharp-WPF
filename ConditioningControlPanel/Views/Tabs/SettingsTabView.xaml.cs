@@ -2,14 +2,60 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace ConditioningControlPanel.Views.Tabs
 {
     public partial class SettingsTabView : UserControl
     {
+        /// <summary>Width of the marquee's edge fade, in the banner's own units.</summary>
+        private const double MarqueeFadePx = 40;
+
         public SettingsTabView()
         {
             InitializeComponent();
+        }
+
+        /// <summary>
+        /// Rebuilds the marquee's edge-fade mask whenever the banner is resized.
+        ///
+        /// Self-contained on purpose (no MainWindow hop): it needs nothing but its own width, and
+        /// the banner resizes with every window resize. The brush uses
+        /// <see cref="BrushMappingMode.Absolute"/> so its start/end points are this element's own
+        /// coordinates rather than a bounding box - the shipped relative-mapped version was
+        /// stretched across the marquee text's full (thousands of pixels wide) bounds, which put
+        /// its 6% fade entirely off-screen and made the effect invisible. Absolute mapping also
+        /// means the fade stays a constant ~40px instead of growing with the window.
+        /// </summary>
+        private void MarqueeFadeHost_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            try
+            {
+                if (sender is not FrameworkElement host) return;
+                double w = e.NewSize.Width;
+                if (double.IsNaN(w) || w <= 16) { host.OpacityMask = null; return; }
+
+                // Never eat more than a quarter of the banner from each side on a narrow window.
+                double fade = Math.Min(MarqueeFadePx, w / 4.0);
+                double stop = fade / w;
+
+                var brush = new LinearGradientBrush
+                {
+                    MappingMode = BrushMappingMode.Absolute,
+                    StartPoint = new Point(0, 0),
+                    EndPoint = new Point(w, 0),
+                };
+                brush.GradientStops.Add(new GradientStop(Colors.Transparent, 0.0));
+                brush.GradientStops.Add(new GradientStop(Colors.Black, stop));
+                brush.GradientStops.Add(new GradientStop(Colors.Black, 1.0 - stop));
+                brush.GradientStops.Add(new GradientStop(Colors.Transparent, 1.0));
+                brush.Freeze();
+                host.OpacityMask = brush;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("MarqueeFadeHost_SizeChanged: {E}", ex.Message);
+            }
         }
 
         private void BrowserLoadingText_Click(object sender, MouseButtonEventArgs e)
@@ -31,6 +77,19 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnAudioOutputRefresh_Click(sender, e);
+        }
+        // Suggestion #659 — open the Audio Layers config window (self-contained, no MainWindow dep).
+        private void BtnAudioLayers_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var win = new LayeredAudioWindow { Owner = Window.GetWindow(this) };
+                win.Show();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Settings: Audio Layers window launch failed");
+            }
         }
         private void BtnClearStartupVideo_Click(object sender, RoutedEventArgs e)
         {
@@ -91,6 +150,11 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.PremiumChip_Click(PremiumFeature.Haptics);
+        }
+        private void ChipGradedIntake_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.PremiumChip_Click(PremiumFeature.GradedIntake);
         }
         private void ChipVoice_Click(object sender, RoutedEventArgs e)
         {
@@ -302,6 +366,11 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkFlashAudio_Changed(sender, e);
         }
+        private void ChkFlashAvoidCenter_Changed(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.ChkFlashAvoidCenter_Changed(sender, e);
+        }
         private void ChkFlashEnabled_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -336,6 +405,11 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkPerformanceMode_Changed(sender, e);
+        }
+        private void CmbMotionLevel_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.CmbMotionLevel_SelectionChanged(sender, e);
         }
         private void ChkRandomizeTargets_Changed(object sender, RoutedEventArgs e)
         {
@@ -386,6 +460,14 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ImgLogo_MouseLeftButtonDown(sender, e);
+        }
+        // Weekly intake pass card face (the flipped-over centre logo tile). Sits INSIDE
+        // LogoBrandFrame, so the click would otherwise bubble on into the logo's click-pulse
+        // easter egg; MainWindow's handler marks the event Handled to stop that.
+        private void IntakePassFace_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.IntakePassFace_MouseLeftButtonDown(sender, e);
         }
         private void SliderAudioSyncIntensity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
@@ -452,6 +534,11 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.SliderPerMin_Changed(sender, e);
         }
+        private void SliderCenterExclusion_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.SliderCenterExclusion_Changed(sender, e);
+        }
         private void SliderSize_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -492,6 +579,11 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ToggleEnhanceIfPossible_Changed(sender, e);
         }
+        private void ChkForceShowBambiCloud_Changed(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.ChkForceShowBambiCloud_Changed(sender, e);
+        }
         private void VelvetBtnAppInfo_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -511,6 +603,19 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnCatalogue_Click(sender, e);
+        }
+
+        // Training Programs "Today" card (row 0). Loaded is the card's own first-paint hook so
+        // the dashboard can show it without the user visiting the Programs tab first.
+        private void ProgramTodayCard_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.ProgramTodayCard_Loaded(sender, e);
+        }
+        private void ProgramTodayCard_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.ProgramTodayCard_Click(sender, e);
         }
     }
 }
