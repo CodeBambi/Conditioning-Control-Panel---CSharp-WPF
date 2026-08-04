@@ -67,6 +67,8 @@ namespace ConditioningControlPanel.Services
                     engine.Failed += OnBrowserFailed;
                     engine.Clicked += OnBrowserClicked;
                     engine.KeyPressed += OnBrowserKey;
+                    engine.AttentionClicked += OnBrowserAttentionClicked;
+                    engine.AttentionMoved += OnBrowserAttentionMoved;
                 }
                 return engine;
             }
@@ -303,6 +305,7 @@ namespace ConditioningControlPanel.Services
                 foreach (var t in _targets.ToList()) t.Destroy();
                 _targets.Clear();
             }
+            _spawnExpiries.Clear();
             _hits = _total = _spawned = 0;
             _spawnTimes.Clear();
             _duration = 0;
@@ -461,6 +464,58 @@ namespace ConditioningControlPanel.Services
             // Window-level PreviewMouseDown never fires over a WebView2 child HWND, so this message
             // is what keeps the attention targets clickable on top of the video.
             BringTargetsToFront();
+        }
+
+        /// <summary>
+        /// The user pressed an attention-check target rendered inside the page. The page reports this
+        /// INSTEAD of the generic <c>click</c>, so <see cref="BringTargetsToFront"/> deliberately does
+        /// not run for it - there is nothing to lift, the target lives in the surface it would be
+        /// lifted over.
+        /// </summary>
+        private void OnBrowserAttentionClicked(string id)
+        {
+            if (!_browserActive || string.IsNullOrEmpty(id)) return;
+            // Hit() plays the pop sound, runs the spawn's onHit (XP, hit tally, clearing the mirror
+            // targets on the other monitors) and posts the fade - all of which shows windows and
+            // raises app events, so none of it may happen inside the page's message callback.
+            PostAfterPageMessage(() =>
+            {
+                if (!BrowserEventIsCurrent()) return;
+                IAttentionTarget? hit = null;
+                lock (_targets)
+                {
+                    foreach (var t in _targets)
+                    {
+                        if (t is BrowserAttentionTarget b && string.Equals(b.Id, id, StringComparison.Ordinal))
+                        {
+                            hit = b;
+                            break;
+                        }
+                    }
+                }
+                hit?.Hit();
+            });
+        }
+
+        /// <summary>
+        /// Position report for a live DOM target, consumed only by Focus Gaze hit-testing. Applied
+        /// inline on purpose: it is a field write on one object, raises nothing and shows nothing, so
+        /// a dispatcher hop per report at 10 Hz per target would be pure overhead.
+        /// </summary>
+        private void OnBrowserAttentionMoved(string id, double xPct, double yPct, double wPct, double hPct)
+        {
+            if (!_browserActive || string.IsNullOrEmpty(id)) return;
+            lock (_targets)
+            {
+                foreach (var t in _targets)
+                {
+                    if (t is BrowserAttentionTarget b && string.Equals(b.Id, id, StringComparison.Ordinal))
+                    {
+                        b.UpdateBounds(xPct, yPct, wPct, hPct);
+                        return;
+                    }
+                }
+            }
         }
 
         /// <summary>

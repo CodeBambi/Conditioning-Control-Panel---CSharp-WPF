@@ -163,6 +163,18 @@ namespace ConditioningControlPanel.Services.Video.Browser
         /// <summary>The audio-bearing window, or null when no session is live.</summary>
         public Window? PrimaryWindow => _primary;
 
+        /// <summary>The session window covering <paramref name="screen"/>, or null when this monitor
+        /// has none (secondaries are capped on high monitor counts, #389). The attention-check
+        /// spawner asks per screen and falls back to a floating window when the answer is null, which
+        /// is what keeps multi-monitor placement identical to the LibVLC path.</summary>
+        public BrowserVideoWindow? WindowForScreen(Screen screen)
+        {
+            if (screen == null) return null;
+            foreach (var w in _windows)
+                if (string.Equals(w.Screen.DeviceName, screen.DeviceName, StringComparison.Ordinal)) return w;
+            return null;
+        }
+
         // ---- events (all raised on the UI thread, from the WebView2 message callback) ----
 
         /// <summary>durationMs (0 = unknowable), width, height. Can fire MORE THAN ONCE per clip:
@@ -191,6 +203,14 @@ namespace ConditioningControlPanel.Services.Video.Browser
         /// <summary>key, alt, ctrl, shift - every non-repeat keydown the page saw. Keyboard over a
         /// focused WebView2 goes to Chromium, so this is how strict-mode/ESC decisions still reach C#.</summary>
         public event Action<string, bool, bool, bool>? KeyPressed;
+
+        /// <summary>An attention-check target was pressed (target id). Never accompanied by
+        /// <see cref="Clicked"/> for the same press - the page routes one or the other.</summary>
+        public event Action<string>? AttentionClicked;
+
+        /// <summary>Target id + its viewport-fraction rectangle, ~10 Hz while the target bounces and
+        /// only when the show message asked for it (gaze click enabled). Pure position bookkeeping.</summary>
+        public event Action<string, double, double, double, double>? AttentionMoved;
 
         // ===================== environment =====================
 
@@ -517,6 +537,23 @@ namespace ConditioningControlPanel.Services.Video.Browser
             try
             {
                 var type = (string?)o["type"];
+
+                // Attention-check traffic is window-scoped, not session-scoped: with dual monitors
+                // every screen carries its OWN target and the user may click any of them, so these
+                // two must be handled before the primary-only gate below or a secondary's target
+                // could never be hit. Each message names the target, so nothing doubles up.
+                switch (type)
+                {
+                    case "attentionClick":
+                        AttentionClicked?.Invoke((string?)o["id"] ?? "");
+                        return;
+                    case "attentionMove":
+                        AttentionMoved?.Invoke((string?)o["id"] ?? "",
+                            (double?)o["xPct"] ?? 0, (double?)o["yPct"] ?? 0,
+                            (double?)o["wPct"] ?? 0, (double?)o["hPct"] ?? 0);
+                        return;
+                }
+
                 // Only the audio-bearing window drives the session, exactly like the LibVLC primary
                 // player - a secondary's events would double every callback.
                 if (!win.IsPrimary)
