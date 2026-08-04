@@ -72,8 +72,7 @@ public class QuestService : IDisposable
     public QuestService()
     {
         _progressPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ConditioningControlPanel",
+            App.UserDataPath,
             "quests.json");
 
         Progress = LoadProgress();

@@ -47,13 +47,11 @@ public class RoadmapService : IDisposable
     public RoadmapService()
     {
         _progressPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ConditioningControlPanel",
+            App.UserDataPath,
             "roadmap.json");
 
         _diaryFolderPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ConditioningControlPanel",
+            App.UserDataPath,
             "roadmap_diary");
 
         Progress = LoadProgress();

@@ -149,11 +149,26 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// User data folder path in LocalAppData - persists across updates
+        /// User data folder path in LocalAppData - persists across updates.
+        /// CCP_USERDATA_DIR redirects the whole tree (settings, logs, content, mods) so test
+        /// harnesses can run against a sandbox instead of the real profile; same env-hook
+        /// pattern as the CCP_STRESS_* knobs.
         /// </summary>
-        public static string UserDataPath { get; } = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ConditioningControlPanel");
+        public static string UserDataPath { get; } = ResolveUserDataPath();
+
+        private static string ResolveUserDataPath()
+        {
+            try
+            {
+                var overrideDir = Environment.GetEnvironmentVariable("CCP_USERDATA_DIR");
+                if (!string.IsNullOrWhiteSpace(overrideDir) && Path.IsPathRooted(overrideDir))
+                    return overrideDir;
+            }
+            catch { }
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "ConditioningControlPanel");
+        }
 
         /// <summary>
         /// User assets folder path - for user-added content that persists across updates

@@ -452,8 +452,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 // hostile page (or HT phishing redirect) read the user's
                 // signed-in HT cookies via document.cookie / authenticated fetch.
                 var userDataFolder = System.IO.Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "ConditioningControlPanel",
+                    App.UserDataPath,
                     "browser_data_deeper_editor");
                 System.IO.Directory.CreateDirectory(userDataFolder);
 

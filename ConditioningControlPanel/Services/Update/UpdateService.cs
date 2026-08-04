@@ -226,8 +226,7 @@ Season: Airhead August";
 
         private static string GetSkipFilePath()
         {
-            var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            return Path.Combine(appData, "ConditioningControlPanel", "update_skip.txt");
+            return Path.Combine(App.UserDataPath, "update_skip.txt");
         }
 
         private static string? GetSkippedUpdateVersion()
@@ -534,8 +533,7 @@ Season: Airhead August";
                 : (Process.GetCurrentProcess().MainModule?.FileName ?? "");
 
             var logPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "ConditioningControlPanel", "logs", "update-helper.log");
+                App.UserDataPath, "logs", "update-helper.log");
 
             var helperPath = WriteUpdateHelperScript(installerPath, installPath, pid, appExe, logPath);
 
@@ -657,8 +655,7 @@ Season: Airhead August";
 
                 // Also clean up Velopack install location if different
                 var velopackPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "ConditioningControlPanel",
+                    App.UserDataPath,
                     "current",
                     "browser_data");
 
