@@ -70,3 +70,10 @@ The "extra usage" 400 on every anthropic fresh subprocess was Anthropic's first-
 ## 2026-08-04 (addendum 2) — wave-4 merge-stage GitignoredDirtyWorktree saga
 
 The wave-4 land needed 4 clean+retry cycles: bin/obj build outputs regenerate per contract re-run (clean `client/src` + `client/tests` + `client/tools` — ALL build dirs, or the failure list just advances), then a 0-byte Windows-reserved `nul` file in the lane root as the sole blocker (git clean skips it; MSYS `rm -f nul` works; cause unexplained, never entered a branch). Verdicts stay journal-durable throughout — capture-before-clean holds. T-14 filed: lane-local pi-spine always needs apply.mjs (worktree-setup hook candidate). bpx-consult has TWO configs (global fable-5 / project opus-5 — project governs; SP-036 worker cited the wrong one as provenance).
+
+## 2026-08-04 (addendum 3) — wave-5 land forensics + T-14 hook landed
+
+- **T-14 DISCHARGED-ish (SP-039, named gate armed):** the engine's worktreeSetupHook now pre-stages lanes with the main checkout's PATCHED .pi/npm at creation (pi needsInstall satisfies-gate keeps it); committed `scripts/spine-worktree-setup.exe` (Windows no-shell spawn needs a real exe) + `.spine/patches/worktree-setup-hook.mjs`; fail-safe always-exit-0 per the engine contract. NAMED GATE: next real wave must show zero mid-task verify reds, row reopens if red. Main checkout must stay patched (standing verify rule) — the hook copies whatever main carries.
+- **Zombie test-host flake class:** progressive 1→2→3 red across identical runs = leaked dotnet test hosts holding loopback ports; kill zombies first, then judge the floor. TRX logger for failing test names (console truncates). T-15 filed for the c2 lab harness.
+- **Consult provenance anomaly (T-7 class):** SP-039's worker consults self-reported "GPT-5" — self-report is non-evidence; route pin says opus-5. Substance applied; engine reviews independently green. Flagged to owner.
+- **3rd gate-history edit slip today (recurrence):** structure audit after EVERY board edit before the next one; standing-order candidate.
