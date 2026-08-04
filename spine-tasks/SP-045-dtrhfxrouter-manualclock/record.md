@@ -103,6 +103,18 @@ narrowed claim, no residual discovery.
   below at each boundary. Step 3 advisory: run the contract testCommand verbatim; any counts
   other than exactly 564/29 → stop and report real numbers.
 
-**Step 2 review presence:** `spine_review_step` (step 2, type plan) → (appended at boundary).
+**Step 2 review presence:** `spine_review_step` (step 2, type plan) → PRESENT-but-SKIPPED
+(`skipped: true, spawnFailed: false`, SP-195 nested-spawn block; artifact
+`.reviews/2-20260804T231143.md`).
 
-**Step 3 (contract) evidence:** (appended after the verbatim testCommand run).
+**Step 3 (contract) evidence — `testCommand` run verbatim:**
+- `node .spine/patches/verify.mjs` → `OK — all patches applied on all roots` (exit 0).
+- `dotnet build client/CcpClient.sln -c Debug --nologo` → `0 Warning(s), 0 Error(s)`.
+- `dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo` →
+  `Passed! - Failed: 0, Passed: 564, Skipped: 0, Total: 564` — exactly the 564 floor, zero new tests.
+- `dotnet test client/tests/CcpClient.HeadlessTests/CcpClient.HeadlessTests.csproj -c Debug --nologo` →
+  `Passed! - Failed: 0, Passed: 29, Skipped: 0, Total: 29` — exactly the 29 floor.
+- `git diff --check` → clean.
+- `git status --short` → only File Scope paths (`spine-tasks/SP-045-dtrhfxrouter-manualclock/*`).
+
+**Step 3 review presence:** `spine_review_step` (step 3, type plan) → (appended at boundary).
