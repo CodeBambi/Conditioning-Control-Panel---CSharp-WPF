@@ -1,14 +1,14 @@
 ## STATUS: SP-039 — T-14: lane-local patch application at worktree creation
-**Current Step:** Step 1 — engine archaeology + mechanism decision + pre-approach consult
-**Last Updated:** 2026-08-04 (authored)
+**Current Step:** Step 1 — complete (pending plan review); Step 2 next
+**Last Updated:** 2026-08-04 (step 1 work done)
 **Blockers:** none
 
 ### Step 1: engine archaeology + mechanism decision + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] Worktree-setup-hook contract (resolution, invocation, args/env, timeout, exit semantics)
-- [ ] Lane .pi/npm install timing (engine source evidence)
-- [ ] Mechanism decision in record.md (chosen seam + rejected alternatives + fail-safe exit semantics)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Update STATUS.md before starting work
+- [x] Worktree-setup-hook contract (resolution, invocation, args/env, timeout, exit semantics)
+- [x] Lane .pi/npm install timing (engine source evidence)
+- [x] Mechanism decision in record.md (chosen seam + rejected alternatives + fail-safe exit semantics)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: implement + scratch verification
 - [ ] Hook script + config wiring (idempotent, engine exit contract, presence+shape logging)
