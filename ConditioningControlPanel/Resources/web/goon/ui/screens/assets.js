@@ -28,9 +28,16 @@
 import { createLedger, el, button } from '../router.js';
 import { S } from '../strings.js';
 import {
-  CONFIRM_ETA_MS, CONFIRM_INPUT_BYTES, FILTERS, GB, NEEDS_STATES,
+  CONFIRM_ETA_MS, CONFIRM_INPUT_BYTES, FILTERS, GB, LOCAL_MAX_BYTES, NEEDS_STATES,
   capGb, etaMinutes, formatBytes, formatUsage, matchesFilter, normalizeState, pendingInputBytes,
 } from '../assetsStore.js';
+
+/** What the picker offers the OS file sheet — mirror of the wire's allowlist,
+ * plus .zip: a phone cannot hand over a folder, so an archive is the only way
+ * a player on a phone gives us a whole library (assetsStore expands it). */
+const LOCAL_ACCEPT = '.png,.jpg,.jpeg,.gif,.webp,.mp4,.m4v,.webm,.zip,'
+  + 'image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,'
+  + 'application/zip,application/x-zip-compressed';
 
 /** Hard ceiling on simultaneously playing micro-previews. */
 const MAX_LIVE_PREVIEWS = 24;
@@ -535,7 +542,9 @@ export function mount(container, ctx) {
   function showUnavailable() {
     if (unavailableShown) return;
     unavailableShown = true;
-    container.replaceChildren(unavailableCard(actions ? () => actions.goTitle?.() : null, ledger, audio));
+    // No host cache does NOT mean no library any more: standalone gets a picker
+    // and its files ride the exempt path straight into the transfer queue.
+    container.replaceChildren(localMediaCard({ store, ledger, audio, actions, logger }));
   }
 
   ledger.sub(store.onState((s) => {
@@ -586,6 +595,92 @@ function unavailableCard(onBack, ledger, audio) {
     ]));
   }
   return el('div', { class: 'gg-card gg-assets gg-assets--off' }, kids);
+}
+
+/* ---------------------------------------------------------------------------
+ * STANDALONE — the device-picker library. No queue, no cache, no host: files
+ * are adopted in-memory (store.addLocalFiles), sent as exempt originals, and
+ * die with the page. Everything renders from store.items so a match screen
+ * asking listSendable() and this card can never disagree about what exists.
+ * ------------------------------------------------------------------------ */
+function localMediaCard({ store, ledger, audio, actions, logger }) {
+  const L = S.assets.local;
+  const maxText = formatBytes(LOCAL_MAX_BYTES);
+
+  const input = el('input', { type: 'file', class: 'gg-sr-only', multiple: true, accept: LOCAL_ACCEPT, 'aria-hidden': 'true', tabindex: '-1' });
+  const addBtn = button(ledger, L.add, () => { try { input.click(); } catch (_e) { /* ignore */ } }, { variant: 'primary', audio });
+  const status = el('p', { class: 'gg-assets-eta', text: '', role: 'status', hidden: true });
+  const list = el('div', { class: 'gg-local-list', role: 'list' });
+
+  ledger.listen(input, 'change', () => {
+    const files = input.files;
+    if (!files || !files.length) return;
+    addBtn.disabled = true;
+    store.addLocalFiles(files).then((r) => {
+      addBtn.disabled = false;
+      try { input.value = ''; } catch (_e) { /* ignore */ }
+      const bits = [];
+      if (r.added) bits.push(L.added(r.added));
+      if (r.dupes) bits.push(L.skipDupe(r.dupes));
+      if (r.tooBig) bits.push(L.skipBig(r.tooBig, maxText));
+      if (r.badType) bits.push(L.skipType(r.badType));
+      if (r.failed) bits.push(L.skipFailed(r.failed));
+      // An archive that opened and held nothing sendable would otherwise say
+      // nothing at all, which reads as "the button is broken".
+      if (!bits.length && r.zips) bits.push(L.zipNone);
+      status.textContent = bits.join(' · ');
+      status.hidden = bits.length === 0;
+      if (r.added) { try { audio?.sfx?.('ui-select'); } catch (_e) { /* stub bus */ } }
+    }).catch((e) => {
+      addBtn.disabled = false;
+      logger?.warn?.('[GG assets] local add threw: ' + ((e && e.message) || e));
+    });
+  });
+
+  function row(it) {
+    const thumb = el('div', { class: 'gg-local-thumb' });
+    if (it.srcUrl && it.kind === 'image') {
+      thumb.appendChild(el('img', { src: it.srcUrl, alt: '', decoding: 'async', loading: 'lazy' }));
+    } else {
+      thumb.appendChild(el('span', { class: 'gg-local-thumb-kind', text: it.kind === 'video' ? 'video' : 'image' }));
+    }
+    const name = el('span', { class: 'gg-local-name' });
+    name.textContent = String(it.name || '');          // user data — text, always
+    name.title = String(it.name || '');
+    const size = el('span', { class: 'gg-local-size', text: formatBytes(it.bytes) });
+    const rm = el('button', { type: 'button', class: 'gg-asset-act', text: L.remove });
+    ledger.listen(rm, 'click', () => {
+      try { audio?.sfx?.('ui-back'); } catch (_e) { /* stub bus */ }
+      store.removeLocal(it.id);
+    });
+    return el('div', { class: 'gg-local-row', role: 'listitem' }, [thumb, name, size, rm]);
+  }
+
+  function paint() {
+    const locals = (store.items || []).filter((it) => it && String(it.id).indexOf('local:') === 0);
+    list.replaceChildren();
+    if (!locals.length) {
+      list.appendChild(el('p', { class: 'gg-assets-empty', text: L.empty }));
+      return;
+    }
+    for (const it of locals) list.appendChild(row(it));
+  }
+  ledger.sub(store.onItems(() => paint()));
+  paint();
+
+  return el('div', { class: 'gg-card gg-assets gg-assets--local' }, [
+    el('div', { class: 'gg-eyebrow' }, [el('i'), el('span', { text: S.assets.eyebrow })]),
+    el('h2', { class: 'gg-assets-standalone-head', text: L.headline }),
+    el('p', { class: 'gg-lead', text: L.line }),
+    el('div', { class: 'gg-assets-tools-row gg-local-tools' }, [addBtn, input]),
+    el('p', { class: 'gg-assets-note', text: L.limits(maxText) }),
+    status,
+    list,
+    el('p', { class: 'gg-assets-note', text: L.note }),
+    el('div', { class: 'gg-assets-foot-actions' }, [
+      button(ledger, S.assets.back, () => { actions?.goTitle?.(); }, { variant: 'ghost', audio, sfx: 'ui-back' }),
+    ]),
+  ]);
 }
 
 export default { mount };

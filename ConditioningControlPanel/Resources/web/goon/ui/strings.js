@@ -349,6 +349,24 @@ export const S = Object.freeze({
     standaloneHeadline: 'compression lives in the app',
     standaloneLine: 'this page is running in a plain browser, so there is no library to compress. open the goon game from the app to use this screen.',
 
+    /** Standalone's OWN library: files picked straight off the device. */
+    local: {
+      headline: 'add media to send',
+      line: 'pick files from this device and they can travel to your opponent mid-duel, straight from you to them. nothing is uploaded anywhere.',
+      add: 'add files',
+      limits: (max) => 'up to ' + max + ' each · jpg, png, gif, webp, mp4, webm · or a zip of them',
+      empty: 'nothing added yet.',
+      note: 'your picks last until this page closes — add them again next visit.',
+      remove: 'remove',
+      skipDupe: (n) => n + ' already added',
+      skipBig: (n, max) => n + ' over ' + max,
+      skipType: (n) => n + ' of an unsupported type',
+      skipFailed: (n) => n + ' unreadable',
+      added: (n) => n + ' added',
+      /** A zip opened fine and held nothing we can send — say so, never stay silent. */
+      zipNone: 'no media in that zip',
+    },
+
     statReady: (n) => n + ' ready',
     statNeeds: (n) => n + ' to compress',
     statFailed: (n) => n + ' failed',

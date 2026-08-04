@@ -155,6 +155,14 @@
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
+/* The cell's `background:` shorthand above resets background-clip, which turns
+ * .gg-grad glyphs invisible (text-fill stays transparent). Re-clip the gradient
+ * to the text here; the cell look survives via border + is-live inset glow. */
+.gg-code-cell.gg-grad {
+  background: linear-gradient(135deg, var(--gg-pink), var(--gg-violet));
+  -webkit-background-clip: text;
+  background-clip: text;
+}
 .gg-code.is-live .gg-code-cell {
   border-color: rgba(255, 105, 180, 0.55);
   box-shadow: inset 0 0 22px rgba(var(--gg-pink-rgb), 0.16);
@@ -759,6 +767,29 @@
 .gg-assets { min-width: min(58rem, 96vw); max-width: min(58rem, 96vw); text-align: left; }
 .gg-assets--off { text-align: center; }
 .gg-assets-standalone-head { margin: 0.4rem 0 0; font-size: 1.1rem; font-weight: 700; }
+
+/* Standalone device-picker: narrow card, simple rows — a phone screen, mostly. */
+.gg-assets--local { min-width: min(30rem, 96vw); max-width: min(30rem, 96vw); text-align: center; }
+.gg-local-tools { justify-content: center; margin-top: 0.8rem; }
+.gg-local-list { display: flex; flex-direction: column; gap: 0.45rem; margin: 0.8rem 0; text-align: left; }
+.gg-local-row {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--gg-radius-plate);
+  background: rgba(255, 255, 255, 0.03);
+}
+.gg-local-thumb {
+  flex: 0 0 auto; width: 2.6rem; height: 2.6rem;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: calc(var(--gg-radius-plate) * 0.7);
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+.gg-local-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.gg-local-thumb-kind { font-size: 0.62rem; letter-spacing: 0.08em; color: var(--gg-text-4); text-transform: uppercase; }
+.gg-local-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.84rem; }
+.gg-local-size { flex: 0 0 auto; font-size: 0.74rem; color: var(--gg-text-3); font-variant-numeric: tabular-nums; }
 
 .gg-assets-head { text-align: center; }
 .gg-assets-stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4rem; margin-bottom: 0.9rem; }

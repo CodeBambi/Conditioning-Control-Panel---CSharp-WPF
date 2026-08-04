@@ -460,7 +460,9 @@ function createArtifactSource() {
         if (!sha) continue;                       // no identity, nothing to offer
         const url = exempt ? it.srcUrl : (it.artUrl || '');
         if (!url) continue;
-        const mime = mimeOf(url);
+        // Browser-picked files sit behind blob: URLs (no extension to sniff) and
+        // carry their mime on the item; host items keep the URL-derived answer.
+        const mime = String(it.mime || '') || mimeOf(url);
         if (!mime) continue;
         const bytes = exempt ? (it.srcBytes || it.bytes || 0) : (it.bytes || 0);
         if (!bytes) continue;

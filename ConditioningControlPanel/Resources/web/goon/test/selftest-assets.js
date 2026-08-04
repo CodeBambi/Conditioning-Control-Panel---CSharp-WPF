@@ -187,6 +187,7 @@ const titleMod = await import('../ui/screens/title.js');
 const routerMod = await import('../ui/router.js');
 const stringsMod = await import('../ui/strings.js');
 const sheetsMod = await import('../ui/sheets.js');
+const zipMod = await import('../ui/zipReader.js');
 
 const {
   createAssetsStore, probeEncode, clampCapBytes, capGb, formatBytes, formatUsage,
@@ -201,6 +202,18 @@ ok(typeof screenMod.mount === 'function', 'ui/screens/assets.js exports mount()'
 ok(screenMod.default && typeof screenMod.default.mount === 'function', 'and the default {mount} the router takes');
 ok(typeof titleMod.mount === 'function', 'ui/screens/title.js still mounts after the menu edit');
 ok(typeof sheetsMod.createSheets === 'function', 'ui/sheets.js still imports (the confirm sheets ride it)');
+ok(typeof zipMod.readZipMedia === 'function', 'ui/zipReader.js imports clean and exports readZipMedia()');
+
+{
+  // The archive reader must cost NOTHING until a player picks a zip, and it
+  // must never be the module that takes the page down at import.
+  const src = await read('../ui/zipReader.js');
+  ok(!/^\s*import\s[^\n]*fflate/m.test(src), 'zipReader loads fflate LAZILY — 90 KB does not ride every page load');
+  ok(/import\('\.\.\/vendor\/fflate\/fflate\.module\.js'\)/.test(src), 'by dynamic import, from the vendored copy, never a CDN');
+  ok(/\.catch\(\(\) => null\)/.test(src), 'and a lib that will not load is an answer, not a throw');
+  const lic = await read('../vendor/fflate/LICENSE');
+  ok(/MIT License/.test(lic), 'the vendored fflate ships its MIT license, like vendor/mp4-muxer');
+}
 
 // ------------------------------------------------------- 2. reachability
 
@@ -551,19 +564,51 @@ function fakeSheets() {
 }
 
 {
-  // --- standalone renders the explanation, immediately -------------------
+  // --- standalone renders the device picker, immediately ------------------
   const b = fakeBridge({ hosted: false });
   const store = createAssetsStore({ bridge: b, logger: null });
   await sleep(5);
   const container = dom.doc.getElementById('scr-assets');
   container.replaceChildren();
   const handle = screenMod.mount(container, { assets: store, actions: { goTitle() {} }, prefs: { get: () => false } });
-  ok(!!findOne(container, 'gg-assets--off'), 'standalone mounts the "compression lives in the app" card');
-  const text = findAll(container, 'gg-lead').map((p) => p.textContent).join(' ');
-  ok(text.indexOf('app') >= 0, 'which says where compression actually happens', text.slice(0, 60));
+  ok(!!findOne(container, 'gg-assets--local'), 'standalone mounts the local device-picker card');
+  ok(!!findOne(container, 'gg-local-list'), 'with the picked-files list');
   ok(findAll(container, 'gg-assets-grid').length === 0, 'and no grid, no spinner, nothing to wait for');
   handle.unmount();
   store.dispose();
+}
+
+{
+  // --- standalone local files: adopt, dedup, reject, remove ---------------
+  const b = fakeBridge({ hosted: false });
+  const store = createAssetsStore({ bridge: b, logger: null });
+  await sleep(5);
+  const file = (name, size, type) => ({
+    name, size, type,
+    arrayBuffer: () => Promise.resolve(new Uint8Array(Array.from({ length: size }, (_x, i) => i % 251)).buffer),
+  });
+  const r1 = await store.addLocalFiles([
+    file('a.png', 1000, 'image/png'),
+    file('b.mp4', 2000, 'video/mp4'),
+    file('typed-by-ext.GIF', 500, ''),                    // empty type — the extension decides
+    file('evil.exe', 100, 'application/x-msdownload'),    // wire would refuse: rejected here
+    file('huge.png', 9 * 1024 * 1024, 'image/png'),       // over the exempt cap
+  ]);
+  ok(r1.added === 3, 'three files adopted', JSON.stringify(r1));
+  ok(r1.badType === 1 && r1.tooBig === 1, 'the exe and the 9MB file were refused');
+  const locals = store.items.filter((it) => it.id.indexOf('local:') === 0);
+  ok(locals.length === 3, 'they surface through store.items');
+  ok(locals.every((it) => it.state === 'exempt' && /^[0-9a-f]{64}$/.test(it.sha)), 'as exempt items with a real sha');
+  const png = locals.find((it) => it.name === 'a.png');
+  ok(!!png && png.mime === 'image/png' && png.kind === 'image', 'mime rides the item (blob urls have no extension)');
+  const gif = locals.find((it) => it.name === 'typed-by-ext.GIF');
+  ok(!!gif && gif.mime === 'image/gif', 'an empty file.type falls back to the extension');
+  const r2 = await store.addLocalFiles([file('a-again.png', 1000, 'image/png')]);
+  ok(r2.added === 0 && r2.dupes === 1, 'identical bytes dedup by sha, whatever the filename');
+  ok(store.removeLocal(png.id) === true, 'removeLocal removes');
+  ok(store.items.filter((it) => it.id.indexOf('local:') === 0).length === 2, 'and the list agrees');
+  store.dispose();
+  ok(store.localCount === 0, 'dispose clears the local library');
 }
 
 {

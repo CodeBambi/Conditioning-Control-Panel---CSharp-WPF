@@ -28,6 +28,8 @@
 
 import * as defaultBridge from '../bridge.js';
 import { decodeFilmstrip, closeFilmstrip, mimeForKind, fitBox } from '../encode/gifDecode.js';
+import { ACCEPT_MIME, MAX_EXEMPT_BYTES } from '../net/mediaChannel.js';
+import { isZipFile, readZipMedia, ZIP_MAX_TOTAL_BYTES } from './zipReader.js';
 
 /* ----------------------------------------------------------------- units */
 
@@ -55,6 +57,39 @@ export const FILTERS = Object.freeze(['all', 'needs', 'ready', 'failed', 'exempt
 
 /** "needs compressing" — the three states that are not a finished answer. */
 export const NEEDS_STATES = Object.freeze(['pending', 'queued', 'working']);
+
+/* ------------------------------------------------------- local (browser) files
+ * Standalone has no host library, so the page can adopt files the player picks
+ * by hand. They ride the EXEMPT path: sent as-is, so they obey the exempt cap
+ * and the wire's mime allowlist — both imported from mediaChannel so this can
+ * never drift from what the receiver's offer gate will actually accept.
+ * ------------------------------------------------------------------------- */
+
+export const LOCAL_MAX_BYTES = MAX_EXEMPT_BYTES;
+
+/**
+ * A .zip is a pick too: phones cannot hand over a folder, so an archive is the
+ * only way a player on a phone gives us a library. It is expanded INLINE by
+ * ui/zipReader.js and every eligible entry walks the same adoption road as a
+ * hand-picked file — same mime gate, same per-file cap, same sha, same dedup.
+ * The archive is read into memory whole, so past this size we do not try.
+ */
+export const LOCAL_ZIP_MAX_BYTES = ZIP_MAX_TOTAL_BYTES;
+
+/** Phones love to hand over files with an empty `type`; the extension decides. */
+export const LOCAL_MIME_BY_EXT = Object.freeze({
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+  webp: 'image/webp', mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm',
+});
+
+/** The wire mime for a picked file, or '' when the wire would refuse it. */
+export function localMimeOf(file) {
+  const typed = String((file && file.type) || '').toLowerCase();
+  if (ACCEPT_MIME.has(typed)) return typed;
+  const m = /\.([a-z0-9]{2,5})$/i.exec(String((file && file.name) || ''));
+  const byExt = m ? (LOCAL_MIME_BY_EXT[m[1].toLowerCase()] || '') : '';
+  return ACCEPT_MIME.has(byExt) ? byExt : '';
+}
 
 /* -------------------------------------------------------- pure helpers
  * Exported because the selftest drives them directly: they are the only logic
@@ -699,6 +734,9 @@ function normalizeItem(raw) {
     // recover it from, so dropping these makes them silently un-sendable.
     sha: typeof o.sha === 'string' ? o.sha : '',
     ext: typeof o.ext === 'string' ? o.ext : '',
+    // Local (browser-picked) files live behind blob: URLs, which carry no
+    // extension for boot's mimeOf() to sniff — the mime must ride the item.
+    mime: typeof o.mime === 'string' ? o.mime : '',
     bytes: Math.max(0, Number(o.bytes) || 0),
     srcBytes: Math.max(0, Number(o.srcBytes) || 0),
     w: Math.max(0, Number(o.w) || 0),
@@ -723,6 +761,10 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
   const state = blankState();
   /** id -> item */
   const items = new Map();
+  /** id -> item for files the player picked IN THE BROWSER. A separate map on
+   * purpose: every hosted `cache-list` commit REPLACES `items` wholesale, and
+   * local picks must survive that. Merged into `itemsArr` by rebuildArr(). */
+  const localItems = new Map();
   let itemsArr = [];
   let listLoaded = false;
   let listRequested = false;
@@ -752,7 +794,7 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
   function emitItems() {
     for (const fn of Array.from(itemSubs)) { try { fn(itemsArr); } catch (e) { warn('items subscriber threw: ' + ((e && e.message) || e)); } }
   }
-  function rebuildArr() { itemsArr = Array.from(items.values()); }
+  function rebuildArr() { itemsArr = Array.from(items.values()).concat(Array.from(localItems.values())); }
 
   /* ---------------------------------------------------- frame handlers */
 
@@ -917,6 +959,133 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
 
   function setCap(capBytes) { return req('set-cap', { capBytes: clampCapBytes(capBytes) }); }
 
+  /* ---------------------------------------------------- local (browser) files */
+
+  const hex = (buf) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
+
+  /**
+   * ONE file (picked by hand, or lifted out of a zip) down the ONE adoption
+   * road. Every counter the summary line reads is written here, so a zip entry
+   * and a hand-picked file can never be judged by two different rules.
+   */
+  async function adoptLocalFile(f, report) {
+    if (!f || typeof f.arrayBuffer !== 'function') { report.failed++; return; }
+    const mime = localMimeOf(f);
+    if (!mime) { report.badType++; return; }
+    const bytes = Math.max(0, Number(f.size) || 0);
+    if (!bytes || bytes > LOCAL_MAX_BYTES) { report.tooBig++; return; }
+    let sha = '';
+    try {
+      sha = hex(await crypto.subtle.digest('SHA-256', await f.arrayBuffer()));
+    } catch (e) {
+      warn('could not hash "' + String(f.name || '?') + '": ' + ((e && e.message) || e));
+      report.failed++; return;
+    }
+    if (disposed) return;
+    const id = 'local:' + sha;
+    if (localItems.has(id)) { report.dupes++; return; }
+    let srcUrl = '';
+    try { srcUrl = URL.createObjectURL(f); } catch (_e) { /* node selftest — no object URLs */ }
+    const m = /\.([a-z0-9]{2,5})$/i.exec(String(f.name || ''));
+    localItems.set(id, normalizeItem({
+      id, name: String(f.name || sha.slice(0, 8)), kind: mime.startsWith('video/') ? 'video' : 'image',
+      state: 'exempt', srcUrl, sha, ext: m ? m[1].toLowerCase() : '', mime,
+      bytes, srcBytes: bytes,
+    }));
+    report.added++;
+  }
+
+  /**
+   * Wrap extracted bytes in something the adoption road can read. A real File
+   * is the good case (browsers, node 20+) because URL.createObjectURL on it
+   * gives the row a working preview; the fallbacks only have to survive.
+   */
+  function fileFromBytes(name, bytes, mime) {
+    const type = String(mime || '');
+    try {
+      if (typeof File === 'function') return new File([bytes], name, { type });
+    } catch (_e) { /* no File constructor here */ }
+    try {
+      const b = new Blob([bytes], { type });
+      b.name = name;                                   // Blob has none; the road reads f.name
+      return b;
+    } catch (_e) { /* no Blob either — node before the web streams landed */ }
+    return {
+      name, type, size: bytes.length,
+      arrayBuffer: () => Promise.resolve(bytes.slice().buffer),
+    };
+  }
+
+  /**
+   * Expand one picked archive. Everything the reader refuses lands in the same
+   * counters a hand-picked refusal would (an entry over the exempt cap is
+   * `tooBig`, a bomb-guard truncation and a corrupt archive are `failed`), so
+   * the summary line needs no zip-shaped vocabulary to stay honest.
+   */
+  async function expandLocalZip(file, report) {
+    if (!file || typeof file.arrayBuffer !== 'function') { report.failed++; return; }
+    const size = Math.max(0, Number(file.size) || 0);
+    if (size > LOCAL_ZIP_MAX_BYTES) {
+      warn('zip "' + String(file.name || '?') + '" is ' + formatBytes(size) + ' — too big to open');
+      report.tooBig++; return;
+    }
+    let res = null;
+    try {
+      res = await readZipMedia(await file.arrayBuffer(), {
+        // The mime table stays owned by this module: what the picker accepts,
+        // what the zip adopts and what the wire allows are ONE decision.
+        isEligible: (name) => !!localMimeOf({ name, type: '' }),
+        maxEntryBytes: LOCAL_MAX_BYTES,
+      });
+    } catch (e) {
+      warn('zip "' + String(file.name || '?') + '" threw: ' + ((e && e.message) || e));
+      res = null;
+    }
+    if (!res || !res.ok) { report.failed++; return; }
+    report.zips++;
+    report.tooBig += res.tooBig;
+    report.failed += res.failed;
+    info('zip "' + String(file.name || '?') + '": ' + res.entries.length + ' media entr(ies), '
+      + res.skipped + ' skipped' + (res.truncated ? ' (truncated — the archive is past the ceilings)' : ''));
+    for (const e of res.entries) {
+      if (disposed) return;
+      await adoptLocalFile(fileFromBytes(e.name, e.bytes, localMimeOf({ name: e.name, type: '' })), report);
+    }
+  }
+
+  /**
+   * Adopt player-picked files as sendable EXEMPT items. The sha-256 computed
+   * here is only the OFFER identity — the receiving host re-hashes what actually
+   * arrives, so lying about it buys nothing but a declined transfer.
+   * Session-only: blob URLs do not survive a reload, and neither do these.
+   *
+   * A picked .zip is EXPANDED, not adopted: its eligible media becomes items,
+   * one entry at a time, and the archive itself never becomes a sendable thing.
+   *
+   * @param {ArrayLike<File>} files
+   * @returns {Promise<{added:number, dupes:number, tooBig:number, badType:number, failed:number, zips:number}>}
+   */
+  async function addLocalFiles(files) {
+    const report = { added: 0, dupes: 0, tooBig: 0, badType: 0, failed: 0, zips: 0 };
+    for (const f of Array.from(files || [])) {
+      if (disposed) break;
+      if (isZipFile(f)) { await expandLocalZip(f, report); continue; }
+      await adoptLocalFile(f, report);
+    }
+    if (report.added) { rebuildArr(); emitItems(); }
+    return report;
+  }
+
+  function removeLocal(id) {
+    const it = localItems.get(String(id));
+    if (!it) return false;
+    localItems.delete(String(id));
+    try { if (it.srcUrl) URL.revokeObjectURL(it.srcUrl); } catch (_e) { /* ignore */ }
+    rebuildArr();
+    emitItems();
+    return true;
+  }
+
   /* --------------------------------------------------------- lifecycle */
 
   /**
@@ -995,9 +1164,13 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
     /** The lane-B driver, once the probe has answered. null = this runtime cannot encode. */
     get encoder() { return encoder; },
 
-    item(id) { return items.get(String(id)) || null; },
+    item(id) { return items.get(String(id)) || localItems.get(String(id)) || null; },
+
+    /** Files the player picked in the browser (standalone's whole library). */
+    get localCount() { return localItems.size; },
 
     requestList, compressAll, compress, cancel, pause, resume, deleteOne, deleteAll, setCap,
+    addLocalFiles, removeLocal,
 
     /** Test seam: feed a frame as if the host had sent it. */
     _inject(m) {
@@ -1013,6 +1186,10 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
       disposed = true;
       stateSubs.clear();
       itemSubs.clear();
+      for (const it of localItems.values()) {
+        try { if (it.srcUrl) URL.revokeObjectURL(it.srcUrl); } catch (_e) { /* ignore */ }
+      }
+      localItems.clear();
       encodeHandler = null;
       if (encoder) { try { encoder.dispose(); } catch (_e) { /* ignore */ } encoder = null; }
       for (const t of OWNED_TYPES) { try { bridge.off(t); } catch (_e) { /* ignore */ } }
