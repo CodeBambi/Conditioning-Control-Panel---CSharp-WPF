@@ -89,3 +89,10 @@ only with RATIFIED decree citation placed in evidence cells. Never flip without 
 - **T-15 + T-16 BOTH DONE** (tooling rows discharge on evidence; owner async-veto standing).
 - **Named limits carried on the AI row:** Reserved→Wired flip (c6 owns, coverage test explicitly in File Scope); bool-overload retirement condition; badge-accuracy headed = c7.
 - Next: SP-044 = AI c6 (command execution; none-admitted default; provable scope = canary + verdict round-trips + NotExecuted/ConsentGated).
+
+## Wave 8 (2026-08-04, integrate b1a5b5f8; floor now 581/581 + 29/29)
+
+- **SP-044 (c6 command execution):** AiCommandExecutor — generation-first per-command check (SP-019 limit 7 discharged); FromPolicy single consent source; none-admitted default + WPF divergence verbatim; type-level zero-execution + canary silence; Reserved flip LANDED; bool-door retirement blocked honestly (6 files, 3 out-of-scope — all-or-nothing condition recorded; assigned to c7). Row WIP.
+- **SP-045 (ManualClock hygiene):** done, grep-proven zero assertion/wall-clock changes.
+- **First ZERO-recovery wave** — no merge-stage T-5 cycles at all (T-14 hook + T-15 harness era).
+- **Next: SP-046 = c7 companion UI (FIRST UI SLICE)** — improve-don't-clone decree + avalonia-live evidence + A-013 advisory; carries the bool-overload retirement.
