@@ -1,5 +1,5 @@
 ## STATUS: SP-036 — Audit and admit bounded Avalonia MCP use
-**Current Step:** Step 5 — testing & verification
+**Current Step:** all steps complete — .DONE
 **Last Updated:** 2026-08-04
 **Blockers:** none
 
@@ -25,6 +25,6 @@
 - [x] STATUS.md accurate
 
 ### Step 5: verification
-- [ ] testCommand green (verify.mjs exit 0; 0W/0E; 466/29 exact, no drift)
-- [ ] git diff --check clean
-- [ ] git status shows File Scope only
+- [x] testCommand green (verify.mjs exit 0; 0W/0E; 466/29 exact, no drift)
+- [x] git diff --check clean
+- [x] git status shows File Scope only

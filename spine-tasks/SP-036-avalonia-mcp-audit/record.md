@@ -143,8 +143,20 @@ All probes run live 2026-08-04 through the gateway against `ValidateXaml` at `va
 | 1 | 1 | plan | **SKIPPED in-worker by design (SP-195)** — "Nested reviewer spawn blocked inside pi worker session"; reviewLevel echoed 2; spawnFailed=false; artifact `.reviews/1-20260804T133704.md`; engine runs reviews after .DONE |
 | 2 | 2 | plan | **SKIPPED in-worker by design (SP-195)** — same feedback; reviewLevel 2; spawnFailed=false; artifact `.reviews/2-20260804T133753.md` |
 | 3 | 3 | plan | **SKIPPED in-worker by design (SP-195)** — same feedback; reviewLevel 2; spawnFailed=false; artifact `.reviews/3-20260804T133753.md` |
+| 4 | 4 | plan | **SKIPPED in-worker by design (SP-195)** — same feedback; reviewLevel 2; spawnFailed=false; artifact `.reviews/4-20260804T134239.md` |
+| 5 | 5 | plan | (recorded at call time below) |
 
-<!-- end -->
+Note: the `.reviews/*.md` artifact paths above are as RETURNED by the `spine_review_step` tool; the skip path did not persist them on disk (`spine-tasks/SP-036-avalonia-mcp-audit/.reviews/` does not exist — consistent with the t5-reviews-autoclean patch).
+
+## 13. Step 5 — testing & verification evidence (2026-08-04)
+
+- **Incident (environment, not product; same class as SP-037 record.md:124-126):** first `node .spine/patches/verify.mjs` run FAILED — the worktree-local project pi-spine (`.pi/npm/node_modules/pi-spine` 2.10.0) had all 7 project patches missing ("reinstall removed it — run apply.mjs"); engine root was fine. Remediated with `node .spine/patches/apply.mjs` (7 applied across 2 roots) → re-run **verify.mjs OK — all patches applied on all roots, exit 0**. `.pi/` is git-ignored runtime state; no File Scope impact. Recorded so the orchestrator knows lane-2's local pi-spine needed re-patching mid-task.
+- `dotnet build client/CcpClient.sln -c Debug --nologo` → **0 Warning(s), 0 Error(s)**.
+- `dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo` → **Passed: 466, Failed: 0, Total: 466**.
+- `dotnet test client/tests/CcpClient.HeadlessTests/CcpClient.HeadlessTests.csproj -c Debug --nologo` → **Passed: 29, Failed: 0, Total: 29**.
+- Counts **EXACTLY the 466/29 floor** (SP-037-restored) — zero drift, as required for a zero-product-change audit packet.
+- `git diff --check` → clean (exit 0).
+- `git status --short` → clean tree; every changed path across the packet is under `spine-tasks/SP-036-avalonia-mcp-audit/**` (record.md, STATUS.md, evidence/). `client/docs/task-board.md` and `client/docs/port-lessons.md` untouched (enabler 2); no product/test/spike/runtime file touched.
 
 ## 11. The bounded admission record (Step 4 deliverable)
 
