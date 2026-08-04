@@ -1,5 +1,5 @@
 ## STATUS: SP-038 â€” AI companion slice c3: moderation boundary
-**Current Step:** Step 4 — evidence consolidation + pre-completion consult (IN PROGRESS; Steps 1-3 COMPLETE)
+**Current Step:** Step 5 — Testing & Verification (IN PROGRESS; Steps 1-4 COMPLETE)
 **Last Updated:** 2026-08-04 (worker, Step 1 started)
 **Blockers:** none
 
@@ -20,9 +20,9 @@
 - [x] Escalation transitions (warning/cooldown typed, consulted at admission)
 - [x] Offline zero-network + content-free diagnostics + redaction registry
 
-### Step 4: evidence consolidation + pre-completion consult
-- [ ] record.md (archaeology, inventory table, design, consults, review presence)
-- [ ] Pre-completion solo consult (verdict + actual model in record.md)
+### Step 4: evidence consolidation + pre-completion consult — COMPLETE
+- [x] record.md (archaeology, inventory table, design, consults, review presence)
+- [x] Pre-completion solo consult (verdict + actual model in record.md)
 - [ ] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification

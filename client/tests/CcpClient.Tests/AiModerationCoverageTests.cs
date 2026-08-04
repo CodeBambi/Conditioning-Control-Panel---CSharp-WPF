@@ -115,8 +115,9 @@ public class AiModerationCoverageTests
                 case "command-free-text":
                 {
                     // Every free-text command field pre-execution (contract §7 rule 2),
-                    // through the real validator with the boundary composed into the seam.
-                    var envelopePolicy = AiEnvelopePolicy.PermitAll with { ModerateText = h.Boundary.ModerateCommandField };
+                    // through the real validator composed with the boundary via the
+                    // PRODUCT composition factory (ForBoundary — the shape c6 consumes).
+                    var envelopePolicy = AiEnvelopePolicy.ForBoundary(h.Boundary, masterEffectsEnabled: true, _ => true);
                     string[] envelopes =
                     [
                         """{"commands":[{"command":"subliminal","data":{"text":"forbidden-token","opacity":10}}]}""",
