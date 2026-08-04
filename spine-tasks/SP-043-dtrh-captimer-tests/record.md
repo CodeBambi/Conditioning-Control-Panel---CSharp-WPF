@@ -219,4 +219,35 @@ chain is expected, not lucky.
    — a latent non-observed 15s timer. Zero flake potential (synchronous assertions,
    per-test instances), but the next touch of that file should inject a `ManualClock`.
 
-<!-- Pre-completion consult appended below before .DONE. -->
+### Pre-completion solo consult (Step 3)
+
+- **Route:** in-session `consult` tool, mode `solo`. As with the pre-approach call, the
+  tool response does not echo its answering-model identity — **actual answering model
+  honestly unidentifiable from tool output** (SP-037 record precedent).
+- **Verdict:** **DONE — evidence holds, no assertion-meaning drift found.** The advisor
+  independently re-derived the original assertion chain and confirmed it preserved and
+  strengthened (started/played/non-consumed unchanged; cap-stops-tape + VideoEnded-rides-
+  stop unchanged; never-immediate/never-early assertions are pure strengthenings). Checked
+  and cleared: `TimeSpan.FromSeconds(14.9)+FromSeconds(0.1)` is exact in ticks (no float
+  hazard — and 10 empirical greens corroborate); `SystemSoundClock.Schedule` preserves the
+  real `Timer` semantics (same one-shot due, same pool-thread callback, returned Timer is
+  the handle so GC cannot collect it early; the only behavioral delta is due<=0 clamping,
+  which widens tolerance for a negative cap no call site can produce — cap is a positive
+  literal); `ManualClock.Advance` removes the entry before firing so the `StopVideo`→
+  `Dispose` reentrancy is safe; the due value is genuinely verified by the exact-15s
+  advance window; no other test's behavior changed (no other test ever observed the cap
+  timer firing).
+- **Adopted strengthening:** capture the structural "zero wall-clock remains" grep as a
+  durable artifact → `evidence/zero-wallclock-proof.txt` (only matches: the fake clock's
+  own deterministic fields + comments; no `Thread.Sleep`/`DateTime.UtcNow`/`Task.Delay`/
+  real `Timer` anywhere in the class or the product file).
+- **Noted, no action (advisor reasoning accepted):** with every test on `ManualClock`, the
+  production default (`SystemSoundClock`) path is test-dark — but it is pre-existing,
+  shipped since 2026-07-22 (SP-029), consumed by `BarkPipeline` in production, and thin by
+  construction; adding a wall-clock test for it would reintroduce the exact class this
+  task kills. Recorded honestly here.
+
+### Step 3/4 completion
+
+Pre-completion consult verdict recorded above; STATUS.md accurate; contract green (§6);
+engine-review presence logged per call (Review Level heading, T-2 format).

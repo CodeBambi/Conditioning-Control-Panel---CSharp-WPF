@@ -1,0 +1,9 @@
+# Zero-wall-clock proof — DtrhNativeEffectsTests.cs (SP-043, 2026-08-04T18:39Z)
+
+## grep -n "Thread.Sleep\|DateTime\|Task.Delay\|Stopwatch\|Timer" client/tests/CcpClient.Tests/DtrhNativeEffectsTests.cs
+41:        // injected ManualClock — no real System.Threading.Timer is ever armed here
+339:            public DateTimeOffset Due;
+346:        public DateTimeOffset UtcNow { get; private set; } = new DateTimeOffset(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
+
+## grep -n "new Timer\|System.Threading.Timer" client/src/CcpClient.Desktop/Features/Dtrh/DtrhNativeEffects.cs
+51:        // default is the REAL clock (SystemSoundClock = System.Threading.Timer) — product
