@@ -1,4 +1,5 @@
 using Avalonia.Media.Imaging;
+using CcpClient.Desktop.Audio;
 using CcpClient.Desktop.Features.Dtrh;
 using Xunit;
 
@@ -31,12 +32,16 @@ public sealed class DtrhFxRouterTests : IDisposable
     {
         var audio = new FakeAudio();
         var video = new FakeVideo();
+        // SP-045 (the SP-043 class-wide pattern, closing the SP-043 §7 item 4 discovery):
+        // inject a ManualClock so no test in this file arms a real System.Threading.Timer —
+        // the fire-payload 15s segment-cap timer is captured, never run on a pool thread.
+        var clock = new ManualClock();
         var fx = new DtrhNativeEffects(audio, video, new DtrhNativeEffectsOptions
         {
             SfxRoots = [Path.Combine(_root, "sfx")],
             VideoRoots = [Path.Combine(_root, "videos")],
             WhisperRoots = [Path.Combine(_root, "voices")],
-        }, _log.Add);
+        }, _log.Add, clock);
         return (new DtrhFxRouter(fx, _log.Add), fx, audio, video);
     }
 
@@ -135,6 +140,55 @@ public sealed class DtrhFxRouterTests : IDisposable
     }
 
     // ---------- fakes (minimal — the effects-core suite covers the deep semantics) ----------
+
+    /// <summary>Manual <see cref="ISoundClock"/> (SP-043; the SoundArbitrationTests.cs:551
+    /// pattern, copied file-local per the SP-043 convention): Schedule captures due+fire,
+    /// Advance fires due timers in due order, Dispose cancels. Zero wall-clock.</summary>
+    private sealed class ManualClock : ISoundClock
+    {
+        private sealed class Entry
+        {
+            public DateTimeOffset Due;
+            public required Action Fire;
+            public bool Cancelled;
+        }
+
+        private readonly List<Entry> _timers = [];
+
+        public DateTimeOffset UtcNow { get; private set; } = new DateTimeOffset(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
+
+        public IDisposable Schedule(TimeSpan due, Action fire)
+        {
+            var entry = new Entry { Due = UtcNow + due, Fire = fire };
+            _timers.Add(entry);
+            return new CancelHandle(entry);
+        }
+
+        public void Advance(TimeSpan by)
+        {
+            UtcNow += by;
+            // Fire due timers in due order; timers scheduled by callbacks fire in the same pass.
+            while (true)
+            {
+                var next = _timers
+                    .Where(t => !t.Cancelled && t.Due <= UtcNow)
+                    .OrderBy(t => t.Due)
+                    .FirstOrDefault();
+                if (next is null)
+                {
+                    return;
+                }
+
+                _timers.Remove(next);
+                next.Fire();
+            }
+        }
+
+        private sealed class CancelHandle(Entry entry) : IDisposable
+        {
+            public void Dispose() => entry.Cancelled = true;
+        }
+    }
 
     private sealed class FakeAudio : IDtrhAudioBackend
     {
