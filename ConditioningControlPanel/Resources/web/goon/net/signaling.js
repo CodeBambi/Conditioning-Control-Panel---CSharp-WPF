@@ -172,7 +172,7 @@ export class GoonSignalingClient {
     };
   }
 
-  /** @returns {Promise<{token, expiresInSec, peerDisplayName, peerAppVersion, pass, relayAllowed}|null>} */
+  /** @returns {Promise<{token, expiresInSec, peerDisplayName, peerAppVersion, pass, relayAllowed, rejoin, selfDuel}|null>} */
   async join(code, displayName = null) {
     const json = await this._call(GOON_PATHS.join, {
       unified_id: this.unifiedId,
@@ -200,6 +200,15 @@ export class GoonSignalingClient {
       peerCardVer: this._notePeerCard(json),
       /** True when the server handed back a seat this uid already held. */
       rejoin: json.rejoin === true,
+      /**
+       * True when this account is sitting in BOTH seats — the whitelist-only
+       * self-duel affordance (one account, two devices, the owner's play-test).
+       * Advisory only: the server put the guest seat under a shadow identity, so
+       * nothing about the match, the transports or the recap differs. Surfaced
+       * because a client that cannot SAY "you are duelling yourself" would leave
+       * the tester guessing which device is which.
+       */
+      selfDuel: json.self_duel === true,
     };
   }
 

@@ -2896,6 +2896,171 @@ const audioMod = await import('../ui/audio.js');
     'but its four stops keep their 48px touch target — the plate shrank, the targets did not');
 }
 
+/* ===========================================================================
+ * 16. THE PHONE PASS (owner, 2026-08-04, with two screenshots).
+ *
+ * "this mess is waaaaay too cluttered, we need space to see the animations and
+ * effects." Two separate faults, and this section pins the fix for each so a
+ * later tidy cannot quietly reintroduce either:
+ *
+ *   A. THE RIGHT EDGE. `.gg-hud-frame` is a grid with ONE implicit column, and
+ *      an `auto` track takes the largest min-content contribution among its
+ *      items as its base size — it may exceed the container. `.gg-hud-top` is
+ *      `1fr auto 1fr` (each `1fr` is `minmax(auto, 1fr)`, i.e. floored at
+ *      min-content) plus a `min-width` on the timer, so on a 428pt phone the
+ *      row's floor came to ~442px against a 408px content box. The whole
+ *      column took that width, so EVERY row did, and the monitor, the "they
+ *      claim" panel, the receipt strip and the closeness dial were all laid out
+ *      ~34px past the right edge of the screen. `minmax(0, 1fr)` is the fix.
+ *
+ *   B. THE BOTTOM THIRD. Two tall arsenal rows, the dial UNDER them in the
+ *      flow (so it landed on top of them), the effect chips in a third corner,
+ *      and a MERCY button the portrait rule had quietly inflated back to 20rem.
+ *
+ * Everything below is asserted off the stylesheet: these are layout facts with
+ * no JS to observe them, and a HUD whose CSS says nothing is an invisible bug.
+ * ======================================================================== */
+{
+  const fs16 = await import('node:fs/promises');
+  const url16 = await import('node:url');
+  // Comments come out FIRST and stay out: this tier's comments carry both
+  // braces and commas (they quote selectors at each other), and either one
+  // derails a brace-counting or a selector-list parse.
+  const css16 = (await fs16.readFile(url16.fileURLToPath(new URL('../ui/hud.css', import.meta.url)), 'utf8'))
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+
+  /** Pull one balanced `@media …{ … }` body out of the sheet by a marker inside it. */
+  function mediaBlock(src, marker) {
+    let at = 0;
+    for (;;) {
+      const open = src.indexOf('@media', at);
+      if (open < 0) return '';
+      const brace = src.indexOf('{', open);
+      if (brace < 0) return '';
+      let depth = 0;
+      let i = brace;
+      for (; i < src.length; i++) {
+        if (src[i] === '{') depth++;
+        else if (src[i] === '}') { depth--; if (depth === 0) break; }
+      }
+      const body = src.slice(brace + 1, i);
+      if (body.includes(marker)) return body;
+      at = i + 1;
+    }
+  }
+  /** The declarations of every rule whose selector list contains EXACTLY `sel`.
+   *  Exact, not substring: `.gg-hud-frame` must not pick up the
+   *  `#gg-hud > .gg-hud-frame` pointer-events opt-out that sits above it. */
+  function ruleFor(src, sel) {
+    const out = [];
+    const re = /([^{}]+)\{([^{}]*)\}/g;
+    let m;
+    while ((m = re.exec(src))) {
+      const list = m[1].split(',').map((s) => s.replace(/\/\*[\s\S]*?\*\//g, '').trim());
+      if (list.includes(sel)) out.push(m[2]);
+    }
+    return out.join(';');
+  }
+  const num = (s, re, dflt) => { const m = String(s).match(re); return m ? Number(m[1]) : dflt; };
+
+  const phone = mediaBlock(css16, '--gg-mon-w');
+  ok(phone.length > 0, 'hud.css still carries the portrait/narrow block');
+
+  /* ---- A. the right edge ------------------------------------------------ */
+  const frame16 = ruleFor(css16, '.gg-hud-frame');
+  ok(/grid-template-columns:\s*minmax\(\s*0\s*,\s*1fr\s*\)/.test(frame16),
+    'the frame pins its one column to minmax(0, 1fr) — an auto track floors at min-content and takes every row off the right edge with it',
+    frame16);
+  ok(/min-width:\s*0/.test(ruleFor(css16, '.gg-hud-bottom')) || /\.gg-hud-top[^{}]*,[\s\S]{0,120}\.gg-hud-bottom\s*\{[^}]*min-width:\s*0/.test(css16),
+    'and the three rows may be narrower than their own contents want to be');
+  for (const side of ['left', 'right', 'bottom']) {
+    ok(new RegExp('padding-' + side + ':[^;]*env\\(safe-area-inset-' + side).test(frame16),
+      `the frame respects safe-area-inset-${side}`);
+  }
+  // the monitor column: capped, never a hard width that can outgrow its host
+  ok(/max-width:\s*var\(--gg-mon-w\)/.test(ruleFor(css16, '.gg-mon')),
+    'the monitor is capped by --gg-mon-w rather than hard-sized to it');
+  ok(/\.gg-mon-name\s*\{[^}]*min-width:\s*0/.test(css16),
+    'and their name may ellipsise instead of shoving the score and pips off the end');
+  const monW = num(phone, /--gg-mon-w:\s*min\([^,]+,\s*(\d+)px\)/, 999);
+  ok(monW <= 200, 'on a phone the monitor is at most 200px wide — it was half off-screen at 220', String(monW));
+
+  /* ---- B. the bottom third ---------------------------------------------- */
+  const item16 = num(phone, /--gg-item:\s*(\d+)px/, 0);
+  ok(item16 >= 48, 'an arsenal tile keeps a 48px finger even after the compression pass', String(item16));
+  ok(/\.gg-item-state\s*\{[^}]*min-height:\s*0/.test(phone),
+    'the state line stops reserving a row when it has nothing to say');
+  const lockedState = ruleFor(phone, '.gg-item.is-locked .gg-item-state');
+  ok(/clip-path:\s*inset\(50%\)/.test(lockedState) && !/display:\s*none/.test(lockedState),
+    'and "locked" leaves the LAYOUT, not the DOM — colour never travels alone in this tier',
+    lockedState);
+
+  const railRight = ruleFor(phone, '.gg-rail--right');
+  const railLeft = ruleFor(phone, '.gg-rail--left');
+  const deck16 = ruleFor(phone, '.gg-hud-bottom');
+  const bRight = num(railRight, /bottom:\s*([\d.]+)rem/, 0);
+  const bLeft = num(railLeft, /bottom:\s*([\d.]+)rem/, 0);
+  const deckPad = num(deck16, /padding-bottom:\s*([\d.]+)rem/, 0);
+  ok(bRight >= deckPad, 'the lower arsenal band starts at or above the deck floor', `${bRight} vs ${deckPad}`);
+  ok(bLeft >= bRight + 3.5, 'and the upper band clears the lower one by a whole tile', `${bLeft} vs ${bRight}`);
+  ok(/right:\s*auto/.test(railRight) && /max-width:\s*calc\(100% - [\d.]+rem\)/.test(railRight),
+    'the lower band comes in from the LEFT and is capped, so it shares its row with the dial instead of being buried under it',
+    railRight);
+  const dialW = num(ruleFor(phone, '.gg-dial'), /width:\s*min\([^,]+,\s*([\d.]+)rem\)/, 99);
+  const railCap = num(railRight, /max-width:\s*calc\(100% - ([\d.]+)rem\)/, 0);
+  ok(railCap >= dialW + 1, 'and the cap leaves the dial its own width plus daylight', `${railCap} vs ${dialW}`);
+  ok(/flex-direction:\s*row/.test(deck16),
+    'the deck is one row on a phone — the dial stacked under the chips is what pushed it onto the rails');
+
+  // the live-effect chips move out of the bottom-left corner entirely…
+  const fxrail16 = ruleFor(phone, '.gg-fxrail');
+  ok(/position:\s*absolute/.test(fxrail16) && /top:\s*[\d.]+rem/.test(fxrail16),
+    'the effect chips leave the mercy strip for the top-left, under the score column', fxrail16);
+  // …but stay INSIDE the deck in the DOM, which is how .is-sd and zen still reach them
+  {
+    const match16 = makeFakeMatch();
+    const hud16 = hudMod.mountHud({ match: match16, audio: { sfx() {} } });
+    const host16 = dom.byId.get('gg-hud');
+    const rail16 = findOne(host16, 'gg-fxrail');
+    ok(!!rail16 && hasClass(rail16.parentNode, 'gg-hud-bottom'),
+      'the chip rail is still a child of the bottom deck — .is-sd and zen both reach it through the parent');
+    hud16.unmount();
+  }
+
+  // MERCY: the portrait rule used to INFLATE it back to 20rem on a 428pt phone
+  const mercy16 = ruleFor(phone, '.gg-mercy-btn');
+  const mercyRem = num(mercy16, /width:\s*min\([^,]+,\s*([\d.]+)rem\)/, 99);
+  const mercyH16 = num(mercy16, /height:\s*(\d+)px/, 0);
+  ok(mercyRem <= 15, 'the phone MERCY is no wider than 15rem — the old rule blew it back up to 20', String(mercyRem));
+  ok(mercyH16 >= 48 && mercyH16 <= 56, 'and it is still a finger tall', String(mercyH16));
+  ok(!/animation/.test(mercy16), 'and the isolation contract is untouched — no motion is added to it here');
+
+  /* ---- the top bar cannot overflow either -------------------------------- */
+  const top16 = ruleFor(phone, '.gg-hud-top');
+  ok(/grid-template-columns:\s*minmax\(\s*0\s*,\s*1fr\s*\)\s+auto\s+auto/.test(top16),
+    'on a phone only the score column is compressible; the timer and the attention/zen/gear cluster are content-sized',
+    top16);
+  ok(num(ruleFor(phone, '.gg-timer'), /min-width:\s*(\d+)px/, 999) <= 104,
+    'and the timer gives back part of its desktop min-width');
+  ok(/\.gg-zen\s*\{[^}]*width:\s*48px/.test(css16) && !/\.gg-zen\s*\{[^}]*width/.test(phone),
+    'the zen toggle is never one of the things that shrinks — it is the only way back');
+
+  /* ---- zen, extended (owner: hide the claim panel and the chips too) ------ */
+  const zenText16 = (css16.match(/[^{}]*\.gg-hud--zen[^{}]*\{[^}]*\}/g) || []).join('\n');
+  for (const sel of ['.gg-mon-close', '.gg-fxrail']) {
+    ok(zenText16.includes(sel), `zen also hides ${sel}`);
+  }
+  ok(!/\.gg-hud--zen[^{}]*\.gg-mon-close[^{}]*\{[^}]*(opacity|filter|transform|animation)/.test(css16),
+    'and it hides them with display only, like everything else the toggle takes away');
+  // the claim panel and the dial are the two halves of one readout: never split
+  ok(zenText16.includes('.gg-dial-host') && zenText16.includes('.gg-mon-close'),
+    'both halves of the closeness readout leave together — hiding one and keeping the other reads as a bug');
+  // what still must survive zen on a phone: the rails drop, they do not vanish
+  const zenRail = ruleFor(phone, '.gg-hud-frame.gg-hud--zen .gg-rail--left');
+  ok(/bottom:\s*[\d.]+rem/.test(zenRail) && !/display:\s*none/.test(zenRail),
+    'zen moves the arsenal down into the freed space rather than taking it away', zenRail);
+}
+
 await sleep(60);
 console.log(`\nselftest-hud: ${n - failures}/${n} checks passed`);
 if (failures > 0) {

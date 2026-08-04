@@ -585,10 +585,17 @@ function createArtifactSource() {
 let syncedLocalVersion = -1;
 let loggedLocalDeck = -1;
 
-function syncLocalDeck() {
+/**
+ * @param {boolean} [force] re-feed the pool even when `localVersion` has not
+ *   moved. The version guard is an optimisation against hosted `cache-list`
+ *   churn, and it is the ONE thing that can turn a missed `onItems` emit into a
+ *   permanently empty deck — so every road INTO a match (attachMatch, startSolo)
+ *   forces one, which costs one array map and closes the hole for good.
+ */
+function syncLocalDeck(force) {
   if (!assets) return;
   const v = Number(assets.localVersion) || 0;
-  if (v === syncedLocalVersion) return;      // a hosted cache-list, not a pick
+  if (v === syncedLocalVersion && !force) return;   // a hosted cache-list, not a pick
   syncedLocalVersion = v;
   try {
     const list = localPlayableEntries(assets.localItems);
@@ -597,6 +604,15 @@ function syncLocalDeck() {
       loggedLocalDeck = list.length;
       logger.info('local library: ' + list.length + ' playable item(s) — pool now '
         + c.images + ' images, ' + c.videos + ' videos');
+    }
+    // THE ONE CASE WORTH A WARN, and it has to be a warn: `logger.info` does not
+    // reach the ?debug=1 overlay (see teeDebug — only warn/error do), so on a
+    // phone an info line is a line nobody can read. Picks that produce no
+    // playable entry means the store adopted rows with no URL or no kind, which
+    // looks exactly like "my uploads do nothing" and is otherwise invisible.
+    if (!list.length && (assets.localCount | 0) > 0) {
+      logger.warn('local library: ' + assets.localCount + ' pick(s) but NOTHING playable — '
+        + 'no url/kind survived adoption, so every effect will draw from an empty deck');
     }
   } catch (e) {
     logger.warn('could not fold the local library into the media pool: ' + ((e && e.message) || e));
@@ -807,6 +823,14 @@ function attachMatch(match, transport) {
   currentMatch = match;
   currentTransport = transport || (goonSession ? goonSession.transport : null);
   escMercied = false;
+
+  // EVERY match starts with the player's picks in the deck, proven rather than
+  // assumed. `onItems` is the reactive path and it is the one that normally does
+  // this; forcing it here is the belt to its braces, because "the effects ran and
+  // the screen stayed blank" is the failure mode with no symptom of its own.
+  // Hosted this is a no-op: there are no local picks, and setLocalLibrary([])
+  // leaves the host's manifest half of the deck exactly where it was.
+  syncLocalDeck(true);
 
   try { executor?.attach?.(match); } catch (e) { logger.error('executor.attach threw: ' + ((e && e.stack) || e)); }
   try { matchLog.attach(match); } catch (e) { logger.error('matchLog.attach threw: ' + ((e && e.stack) || e)); }
@@ -1345,6 +1369,68 @@ const actions = {
   },
 };
 
+/**
+ * ONE LINE THAT SAYS WHAT THE DECK IS, and it is a WARN on purpose.
+ *
+ * `logger.info` goes to console.info and to the C# tunnel — neither of which
+ * exists on a phone running this page standalone. Only warn/error reach the
+ * ?debug=1 overlay (see teeDebug above), which is the only console an owner with
+ * an iPhone has. Two blind round-trips on "practice fires no assets" were spent
+ * guessing at exactly this number; do not demote it to info.
+ *
+ * It separates the three things that were indistinguishable from a screenshot:
+ * what the HOST's preset gave us, what the PLAYER picked in this browser, and
+ * how much of what they picked was actually playable.
+ */
+function logDeck(why) {
+  try {
+    const c = media.counts();
+    const local = media.localCount();
+    const host = Math.max(0, (c.images + c.videos) - local);
+    const picked = assets ? (assets.localCount | 0) : 0;
+    logger.warn(why + ' deck: ' + host + ' host + ' + local + ' local'
+      + ' (' + c.images + ' img / ' + c.videos + ' vid)'
+      + ' from ' + picked + ' pick(s), ' + media.receivedCount() + ' received');
+  } catch (_e) { /* a diagnostic can never be the thing that breaks practice */ }
+}
+
+/* ----------------------------------------------------------------------------
+ * THE PRACTICE SEED — the media-carrying slots start ARMED, in practice only.
+ *
+ * Owner report, 2026-08-04: "from mobile it's not triggering any asset even if I
+ * uploaded them and went to practice", with every arsenal chip reading `locked`.
+ * That reading was correct and the economy was working as designed: a slot is
+ * earned by popping bubbles (ui/drops.js), and on a fresh match nothing is
+ * earned yet. In a DUEL that ramp is the game. In PRACTICE it is a wall in front
+ * of the one question practice exists to answer — "does my library work?" — so
+ * practice hands over the two slots that draw from the library, plus the charges
+ * to spend them, and lets the player find out in the first ten seconds.
+ *
+ * DUEL GATING IS UNTOUCHED: this is reached from startSolo's own phase
+ * subscription and from nowhere else, and it goes through the public seams
+ * ui/drops.js already uses (creditCharges then armDrop), so the wire truth and
+ * the local truth cannot disagree.
+ * -------------------------------------------------------------------------- */
+const PRACTICE_SEED = Object.freeze([
+  Object.freeze({ id: 'flash', cost: 1 }),    // images, the cheap one
+  Object.freeze({ id: 'video', cost: 2 }),    // a clip, in a floating window
+]);
+
+function seedPracticeArsenal(match) {
+  const arsenal = hudHandle && hudHandle.parts && hudHandle.parts.arsenal;
+  if (!arsenal || typeof arsenal.armDrop !== 'function') return;
+  let charges = 0;
+  let armed = 0;
+  for (const seed of PRACTICE_SEED) {
+    // `silent` — the drop flourish is a reward animation and this is a gift, not
+    // a reward. It would also fire before the HUD has finished its entrance.
+    if (arsenal.armDrop(seed.id, { count: 1, silent: true })) { armed++; charges += seed.cost; }
+  }
+  if (!armed) return;
+  try { match.creditCharges(charges, 'practice-seed'); } catch (_e) { /* the slot still lights */ }
+  logger.info('practice: seeded ' + armed + ' arsenal slot(s) and ' + charges + ' charge(s)');
+}
+
 /* ----------------------------------------------------------------------------
  * PRACTICE — a loopback pair and a scripted opponent (ui/soloDriver.js).
  *
@@ -1371,6 +1457,12 @@ async function startSolo() {
   soloDriver = createSoloDriver({ match: soloOpponent, logger });
 
   attachMatch(local, soloPair.host);
+  /* THE PRACTICE SEED — see seedPracticeArsenal. Registered AFTER attachMatch so
+   * it runs after boot's own phase handler, i.e. after mountHudNow() has built
+   * the arsenal it seeds. On phaseUnsubs so it dies with the match. */
+  phaseUnsubs.push(local.onPhaseChanged((p) => {
+    if (p === GoonMatchPhase.Live) seedPracticeArsenal(local);
+  }));
   /* PRACTICE HAS A FACE TOO — a tile, a name and dm:false (contract §6). It is
    * set AFTER attachMatch, which clears the peer, and it is the only way the
    * splash, the HUD minis and the recap plates are exercisable with no server
@@ -1381,6 +1473,7 @@ async function startSolo() {
   soloDriver.start();
 
   logger.info('practice: loopback "' + profile + '" latency ' + opts.latencyMs + 'ms skew ' + opts.guestClockSkewMs + 'ms');
+  logDeck('practice');
   try {
     const ok = await soloPair.connect();
     if (!ok) logger.warn('practice: clock sync did not converge');

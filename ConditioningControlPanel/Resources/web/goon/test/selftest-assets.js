@@ -1746,17 +1746,149 @@ function fakeSheets() {
     store.dispose();
   }
 
+  /* --- THE OWNER'S SEQUENCE, END TO END ----------------------------------
+   * Round 3 pinned the PARTS. This walks the exact road the report describes,
+   * in order, through boot's real seam (onItems -> syncLocalDeck -> the pool),
+   * because both round-3 halves passed and the phone still came back empty:
+   *
+   *   standalone init (empty manifest)  ->  assets screen  ->  add files
+   *   ->  BACK (no dispose, no re-dispatch)  ->  start practice
+   *
+   * Every step asserts the deck, so whichever one ever loses the library says so
+   * by name instead of arriving as "practice fires nothing".
+   * ---------------------------------------------------------------------- */
+  {
+    const fill3 = (nb, seed) => {
+      const u = new Uint8Array(nb);
+      for (let i = 0; i < nb; i++) u[i] = (i * 13 + seed) % 253;
+      return u;
+    };
+    const { createGoonMediaPool } = await import('../exec/media.js');
+    const pool = createGoonMediaPool();
+    const b = fakeBridge({ hosted: false });
+    const store = createAssetsStore({ bridge: b, logger: null });
+    await sleep(5);
+
+    // boot's seam, verbatim (boot.js syncLocalDeck + the onItems subscription).
+    let syncedLocalVersion = -1;
+    let syncs = 0;
+    const syncLocalDeck = (force) => {
+      const v = Number(store.localVersion) || 0;
+      if (v === syncedLocalVersion && !force) return;
+      syncedLocalVersion = v;
+      syncs++;
+      pool.setLocalLibrary(localPlayableEntries(store.localItems));
+    };
+    store.onItems(() => syncLocalDeck());
+
+    // 1. standalone init: bridge.js synthesizes ONE empty manifest frame.
+    pool.setManifest({ images: [], videos: [], skipped: 0, truncated: false });
+    syncLocalDeck();
+    ok(pool.hasMedia() === false, '1. standalone starts with an empty deck (the synthesized manifest)');
+
+    // 2. the assets screen: the player adds a zip's worth of files.
+    const r2 = await store.addLocalFiles([
+      new File([fill3(4000, 1)], 'a.png', { type: 'image/png' }),
+      new File([fill3(4200, 2)], 'b.jpg', { type: 'image/jpeg' }),
+      new File([fill3(4400, 3)], 'c.gif', { type: 'image/gif' }),
+      new File([fill3(9000, 4)], 'd.mp4', { type: 'video/mp4' }),
+    ]);
+    ok(r2.added === 4, '2. four picks adopted on the assets screen', JSON.stringify(r2));
+    ok(pool.counts().images === 3 && pool.counts().videos === 1,
+      '   and boot\'s onItems seam already folded them into the deck — no extra step, no screen to visit',
+      pool.counts().images + 'i/' + pool.counts().videos + 'v');
+
+    // 3. BACK to the title. Nothing on that road may dispose the store or revoke
+    //    a URL — teardownEverything() deliberately does not touch `assets`.
+    const urlsBefore = store.localDeck().map((e) => e.url).join(',');
+    ok(store.localItems.length === 4 && store.localDeck().length === 4,
+      '3. leaving the assets screen keeps every pick (the store outlives the screen)');
+
+    // 4. a LATE manifest frame — a host re-scan, or the synthesized one arriving
+    //    twice — must not empty the player's half. This is the round-3 contract.
+    pool.setManifest({ images: [], videos: [], skipped: 0, truncated: false });
+    ok(pool.localCount() === 4 && pool.counts().images === 3,
+      '4. a second manifest frame resets the HOST half and leaves the local half alone',
+      pool.localCount() + ' local');
+
+    // 5. practice starts: attachMatch forces a re-feed even though localVersion
+    //    has not moved. It has to be a no-op that still proves the deck.
+    const syncsBefore = syncs;
+    syncLocalDeck();          // the guard swallows this one
+    ok(syncs === syncsBefore, '5. the version guard swallows a redundant sync…');
+    syncLocalDeck(true);      // …and the forced one at attachMatch does not
+    ok(syncs === syncsBefore + 1 && pool.localCount() === 4,
+      '   …while the forced re-feed at match start always re-proves it', String(pool.localCount()));
+    ok(store.localDeck().map((e) => e.url).join(',') === urlsBefore,
+      '   with the SAME object URLs — nothing on this road revoked a blob the deck is holding');
+
+    // 6. what the effects actually ask for. The media-carrying renderers call
+    //    drawKind('image') (flashes, brain drain, bubble pop-flashes) and
+    //    drawKind('video') (the floating windows); both must answer.
+    const img = pool.drawKind('image');
+    const vid = pool.drawKind('video');
+    ok(img && img.url.indexOf('blob:') === 0 && img.kind === 'image',
+      '6. drawKind("image") — what flashes/brainDrain/bubbles ask for — hands back a pick',
+      img ? img.url.slice(0, 12) : 'NULL');
+    ok(vid && vid.url.indexOf('blob:') === 0 && vid.kind === 'video',
+      '   and drawKind("video") — what the floating windows ask for — does too',
+      vid ? vid.url.slice(0, 12) : 'NULL');
+    const h = pool.acquire(img);
+    ok(h && h.url === img.url && h.provenance === 'local',
+      '   and acquire() gives the renderer a usable handle on it');
+
+    // 7. KIND PARITY. Every kind the store can emit has to be a kind an effect
+    //    asks for — a third string here (a 'gif' lane, say) would fill the deck
+    //    with entries nothing ever matches, which looks exactly like an empty one.
+    const kinds = new Set(store.localDeck().map((e) => e.kind));
+    ok(Array.from(kinds).every((k) => k === 'image' || k === 'video'),
+      '7. localPlayableEntries only ever emits image|video — the two kinds drawKind is called with',
+      Array.from(kinds).join(','));
+    const execKinds = new Set();
+    for (const rel of ['../exec/flashes.js', '../exec/videos.js', '../exec/bubbles.js', '../exec/brainDrain.js']) {
+      const src = await read(rel);
+      for (const m of src.matchAll(/draw(?:Kind|For)\(\s*'([a-z]+)'/g)) execKinds.add(m[1]);
+    }
+    ok(execKinds.size === 2 && execKinds.has('image') && execKinds.has('video'),
+      '   and exec/ asks for exactly those two and nothing else', Array.from(execKinds).join(','));
+
+    store.dispose();
+  }
+
   /* --- boot really wires it ---------------------------------------------- */
   {
     const bootSrc = await read('../boot.js');
     ok(/import \{ createAssetsStore, localPlayableEntries \} from '\.\/ui\/assetsStore\.js'/.test(bootSrc),
       'boot.js imports the mapper from the store (one definition of "playable", not two)');
-    ok(/function syncLocalDeck\(\)/.test(bootSrc), 'boot.js has syncLocalDeck()');
+    ok(/function syncLocalDeck\(force\)/.test(bootSrc), 'boot.js has syncLocalDeck(force)');
     ok(/media\.setLocalLibrary\(/.test(bootSrc), 'which feeds exec/media.js the local half of the deck');
     ok(/assets\.onItems\(\(\) => syncLocalDeck\(\)\)/.test(bootSrc),
       'and is re-run on every store change, so a pick made mid-session lands in the deck');
-    ok(/if \(v === syncedLocalVersion\) return;/.test(bootSrc),
-      'guarded on localVersion, so a hosted cache-list never re-deals the pool');
+    ok(/if \(v === syncedLocalVersion && !force\) return;/.test(bootSrc),
+      'guarded on localVersion, so a hosted cache-list never re-deals the pool…');
+    /* ROUND 4 (2026-08-04). The reactive path above shipped, and the owner STILL
+     * reported no assets in practice from a phone with no way to see why. The
+     * version guard is the one thing that can turn a missed `onItems` emit into a
+     * permanently empty deck, so every road into a match forces a re-feed past
+     * it: the guard is an optimisation, never a gate on correctness. */
+    ok(/syncLocalDeck\(true\);/.test(bootSrc),
+      '…and a FORCED re-feed exists, so a missed emit cannot strand the deck empty');
+    ok(/function attachMatch\(match, transport\) \{[\s\S]{0,1600}?syncLocalDeck\(true\);/.test(bootSrc),
+      'attachMatch — the one funnel every match goes through — forces it');
+    ok(/logDeck\('practice'\);/.test(bootSrc), 'and startSolo logs the deck it is about to play with');
+    /* THE LINE THAT ENDS THE BLIND ROUND-TRIPS. `logger.info` reaches console.info
+     * and the C# tunnel; a phone standalone has NEITHER, and ui/debugOverlay.js —
+     * the only console that phone has — is fed by teeDebug from warn/error ONLY.
+     * A deck diagnostic at info is a deck diagnostic nobody can screenshot. */
+    ok(/function logDeck\(why\) \{[\s\S]{0,900}?logger\.warn\(why \+ ' deck: '/.test(bootSrc),
+      'logDeck speaks at WARN, because only warn/error reach the ?debug=1 overlay');
+    ok(/warn: \(m\) => \{[^\n]*teeDebug\('warn', m\)/.test(bootSrc)
+      && !/info: \(m\) => \{[^\n]*teeDebug/.test(bootSrc),
+      'and that is still true of the logger it goes through — info is NOT teed');
+    ok(/' host \+ ' \+ local \+ ' local'/.test(bootSrc) && /' pick\(s\), '/.test(bootSrc),
+      'the line separates host entries, local entries and raw picks — the three a screenshot could not tell apart');
+    ok(/NOTHING playable/.test(bootSrc),
+      'and picks that produced no playable entry get their own warn, the one silent failure left on this path');
     const mediaSrc = await read('../exec/media.js');
     ok(/setLocalLibrary\(list\)/.test(mediaSrc) && /let localEntries = \[\]/.test(mediaSrc),
       'exec/media.js keeps the local half as its own list…');

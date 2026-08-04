@@ -36,6 +36,48 @@ const LOCKCARD_MS = [4200, 6800];
 /** Gap between bubble pops. */
 const BUBBLE_POP_MS = [420, 900];
 
+/* ----------------------------------------------------------------------------
+ * THE OPENING SALVO — practice only, and it exists because of one owner report:
+ * "from mobile it's not triggering any asset even if I uploaded them and went to
+ * practice" (2026-08-04).
+ *
+ * THE SHAPE OF THAT BUG. In a duel your arsenal shot lands on THEIR screen. In
+ * practice the opponent is this script, which has no exec/ renderer at all (see
+ * the fake-window block below), so a payload the player fires is a payload
+ * nobody ever sees. The only media that reaches the practice player's own screen
+ * is (a) the element ramp and (b) what the bot throws BACK — and an inbound
+ * payload resolves against the RECEIVER's library (exec/media.js drawFor falls
+ * through to drawKind), so the bot's flash burst is drawn from the player's OWN
+ * uploads. That is the loop that shows a phone player their library, and it used
+ * to depend on the bot first earning charges the slow way: `tryPayload` waits
+ * PAYLOAD_TRY_MS, skips 35% of its turns and needs `charges >= cost`, which on a
+ * fresh match can be minutes of nothing.
+ *
+ * So the bot opens on a clock instead of on its economy. The charges are still
+ * credited through the engine (`creditCharges`), so the wire truth the receiver
+ * validates is the truth — this buys the bot no shot it could not have taken.
+ *
+ * PRACTICE ONLY, structurally: createSoloDriver is constructed in exactly one
+ * place (boot.js startSolo). Duel balance cannot reach this file.
+ * ------------------------------------------------------------------------- */
+export const SALVO = Object.freeze([
+  // Images, almost immediately: the whole point is "I can see my own pictures".
+  Object.freeze({ atMs: 6000, kind: GoonPayloadKind.FlashBurst, durationMs: 6000, intensity: 0.7 }),
+  // …and a clip, past the engine's 30s payload gap, into a floating window.
+  Object.freeze({ atMs: 45000, kind: GoonPayloadKind.Video, durationMs: 45000, intensity: 0.6 }),
+]);
+
+/**
+ * How long BEFORE a salvo shot its charges are credited.
+ *
+ * THE RECEIVER IS THE AUTHORITY ON THE SENDER'S WALLET, and it reads that wallet
+ * off the last state tick, not off the payload frame — credit-then-fire in the
+ * same turn is rejected with `charge economy: claimed 0 < cost 1`, which is
+ * exactly what the first cut of this salvo did. GoonConsts.TickIntervalMs is
+ * 3000, so a lead comfortably past one tick is what makes the shot land.
+ */
+export const SALVO_CREDIT_LEAD_MS = 5000;
+
 /**
  * @param {object} o
  * @param {object} o.match the GUEST match (its transport is the loopback peer)
@@ -177,8 +219,15 @@ export function createSoloDriver({ match, name = 'Practice', seed = 0xB0BBn, log
     }, pick(DRAFT_THINK_MS));
   }
 
+  /** Salvo shots whose charges are credited and not yet spent (see fireSalvo). */
+  let salvoArmed = 0;
+
   function tryPayload() {
     if (match.phase !== GoonMatchPhase.Live && match.phase !== GoonMatchPhase.SuddenDeath) return;
+    // A salvo shot's charges are already credited and SPOKEN FOR. Letting the
+    // ordinary cadence spend them would turn "the practice player sees a clip at
+    // 45s" into a coin flip.
+    if (salvoArmed > 0) return;
     const charges = match.scoring.charges;
     const affordable = (match.availablePayloadKinds || [])
       .filter((k) => k !== GoonPayloadKind.BrainDrain && costOf(k) <= charges);
@@ -193,6 +242,43 @@ export function createSoloDriver({ match, name = 'Practice', seed = 0xB0BBn, log
       text: null,
     });
     log('payload ' + kind + (res.ok ? ' sent' : ' refused: ' + res.error));
+  }
+
+  /**
+   * Step one of a salvo shot: put the charges in the wallet, early enough that a
+   * state tick carries them to the receiver (SALVO_CREDIT_LEAD_MS). A kind the
+   * agreement left out never gets funded — the bot cannot send what the two of
+   * you did not allow, salvo or not.
+   */
+  function armSalvo(spec) {
+    if (ledger.isDisposed || match.phase !== GoonMatchPhase.Live) return;
+    if (!(match.availablePayloadKinds || []).includes(spec.kind)) {
+      log('salvo ' + spec.kind + ' skipped (not in the agreed pool)');
+      return;
+    }
+    const cost = costOf(spec.kind);
+    const have = (match.scoring && match.scoring.charges) | 0;
+    if (have < cost) match.creditCharges(cost - have, 'practice-salvo');
+    salvoArmed++;
+  }
+
+  /**
+   * Step two: fire, through the SAME public API tryPayload uses, so every engine
+   * gate (phase, rate limit, caps, the shared pool, the charge check) still
+   * applies. Whatever happens the shot stops being reserved.
+   */
+  function fireSalvo(spec) {
+    if (ledger.isDisposed) return;
+    if (salvoArmed > 0) salvoArmed--;
+    if (match.phase !== GoonMatchPhase.Live) return;
+    if (!(match.availablePayloadKinds || []).includes(spec.kind)) return;
+    const res = match.tryFirePayload({
+      kind: spec.kind,
+      durationMs: spec.durationMs,
+      intensity: spec.intensity,
+      text: null,
+    });
+    log('salvo ' + spec.kind + (res.ok ? ' sent' : ' refused: ' + res.error));
   }
 
   /* ------------------------------------------------ fake floating windows */
@@ -220,6 +306,14 @@ export function createSoloDriver({ match, name = 'Practice', seed = 0xB0BBn, log
       case GoonMatchPhase.Draft: doDraft(); break;
       case GoonMatchPhase.Live:
         match.setCloseness(1);
+        // The salvo BEFORE the economy timer: it is the only thing that puts the
+        // practice player's own library on the practice player's own screen on a
+        // predictable clock. Through the ledger, so leaving mid-match cannot land
+        // a flash burst on the recap.
+        for (const spec of SALVO) {
+          ledger.timer(() => armSalvo(spec), Math.max(0, spec.atMs - SALVO_CREDIT_LEAD_MS));
+          ledger.timer(() => fireSalvo(spec), spec.atMs);
+        }
         payloadTimer = ledger.interval(tryPayload, PAYLOAD_TRY_MS);
         ledger.interval(() => {
           if (match.phase !== GoonMatchPhase.Live) return;

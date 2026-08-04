@@ -10,7 +10,7 @@
 import fs from 'node:fs';
 
 import { GoonSignalingClient, GoonSignalError, normalizeCode } from '../net/signaling.js';
-import { GoonFakeSignalingServer } from '../net/fakeSignaling.js';
+import { GoonFakeSignalingServer, shadowGuestUid, isShadowUid } from '../net/fakeSignaling.js';
 import { createLoopbackPair, loopbackOptions, loopbackPresets } from '../net/loopbackTransport.js';
 import { GoonRelayTransport } from '../net/relayTransport.js';
 import { GoonSession } from '../net/session.js';
@@ -1087,6 +1087,99 @@ async function testSeatRelease() {
   }
 }
 
+/* ================================================================================
+ * 11. SELF-DUEL — one whitelisted account in both seats
+ *
+ * The owner play-tests GG with ONE account on two devices: the PC app hosts, the
+ * phone opens the standalone web build through a link that carries the same
+ * `?uid=`, so §10's `self_join` guard — correct for everyone else — refused the
+ * entire e2e run. Whitelisted accounts may therefore hold both seats, with the
+ * guest seat under the SHADOW id `<uid>#self`.
+ *
+ * The shadow is the whole safety argument, and it is a SERVER-side one (single
+ * ledger row, a self-report that names nobody, an intact room-by-uid lookup).
+ * What is pinned HERE is the half the client can be wrong about: the fake server
+ * models the same rule, and nothing in the client stack cares that the two seats
+ * are one account — no uid comparison, no ledger de-dup, no peercard assumption.
+ * ==============================================================================*/
+async function testSelfDuel() {
+  const OWNER = 'u_owner', OUTSIDER = 'u_outsider';
+  const SHADOW = shadowGuestUid(OWNER);
+  ok(isShadowUid(SHADOW) && !isShadowUid(OWNER) && SHADOW === `${OWNER}#self`,
+    'the shadow id is the uid plus a suffix a real unified_id can never contain');
+
+  // --- a non-whitelisted account is refused exactly as before -------------------
+  {
+    const fake = new GoonFakeSignalingServer();
+    const plain = new GoonSignalingClient({ post: fake.post, unifiedId: OWNER, logger: quiet });
+    const inv = await plain.createInvite('Owner');
+    const self = await plain.join(inv.code, 'Owner');
+    ok(self === null && plain.lastError === GoonSignalError.SelfJoin,
+      'without the whitelist the host still gets self_join', String(plain.lastError));
+    ok(fake.room(inv.code).joined === false, 'and the refusal did not take the seat');
+  }
+
+  // --- the affordance ----------------------------------------------------------
+  const fake = new GoonFakeSignalingServer();
+  fake.setWhitelisted(OWNER);
+  const pc = new GoonSignalingClient({ post: fake.post, unifiedId: OWNER, logger: quiet });
+  const phone = new GoonSignalingClient({ post: fake.post, unifiedId: OWNER, logger: quiet });
+  const other = new GoonSignalingClient({ post: fake.post, unifiedId: OUTSIDER, logger: quiet });
+
+  const inv = await pc.createInvite('Owner PC');
+  const seat = await phone.join(inv.code, 'Owner Phone');
+  ok(!!seat && !!seat.token, 'a whitelisted account may redeem its own code');
+  ok(seat.selfDuel === true && seat.rejoin === false, 'and the response says so', JSON.stringify(seat));
+  ok(fake.room(inv.code).guestUid === SHADOW,
+    'the guest seat is the SHADOW id, never the real uid', String(fake.room(inv.code).guestUid));
+  ok(fake.room(inv.code).hostUid === OWNER, 'the host seat is untouched');
+
+  // The two seats are still two peers as far as every mailbox is concerned.
+  const h = await pc.signal(inv.code, inv.token, 'host', 0, [{ kind: 'offer', data: 'OFFER' }]);
+  ok(h && h.messages.length === 0 && h.peerJoined === true, 'the host sees a joined peer and no self-echo');
+  const g = await phone.signal(inv.code, seat.token, 'guest', 0, [{ kind: 'answer', data: 'ANSWER' }]);
+  ok(g && g.messages.length === 1 && g.messages[0].data === 'OFFER', 'the shadow seat drains the offer');
+  const h2 = await pc.signal(inv.code, inv.token, 'host', h.cursor, []);
+  ok(h2 && h2.messages.length === 1 && h2.messages[0].data === 'ANSWER', 'and the host drains the answer back');
+  const r = await pc.relay(inv.code, inv.token, 'host', 0, ['{"t":"tick"}'], 10);
+  const r2 = await phone.relay(inv.code, seat.token, 'guest', 0, [], 10);
+  ok(r && r2 && r2.frames.length === 1 && r2.peerOnline === true, 'the relay ring works across the two seats');
+
+  // --- reclaim lands on the shadow, never on a second shadow -------------------
+  const back = await phone.join(inv.code, 'Owner Phone');
+  ok(!!back && back.rejoin === true && back.selfDuel === true, 'the self-duel guest reclaims its own seat');
+  ok(fake.room(inv.code).guestUid === SHADOW, 'still ONE shadow deep (never <uid>#self#self)',
+    String(fake.room(inv.code).guestUid));
+  ok(fake.room(inv.code).guestEpoch === 2, 'the reclaim is a new seat epoch', String(fake.room(inv.code).guestEpoch));
+  ok(back.token !== seat.token, 'and it gets a fresh room token');
+
+  // --- /leave frees the shadow seat -------------------------------------------
+  ok(await phone.leave(inv.code, back.token, 'guest') === true, 'the shadow seat can be handed back');
+  ok(fake.room(inv.code).joined === false && fake.room(inv.code).guestUid === null, 'the seat is free again');
+  const again = await phone.join(inv.code, 'Owner Phone');
+  ok(!!again && again.selfDuel === true && again.rejoin === false, 'and the owner walks straight back in');
+  ok(fake.room(inv.code).guestUid === SHADOW, 'on the same shadow id');
+
+  // --- the guard it is an exception to still holds -----------------------------
+  ok(await other.join(inv.code, 'Outsider') === null && other.lastError === GoonSignalError.AlreadyJoined,
+    'a stranger is still refused an occupied room');
+  const inv2 = await pc.createInvite('Owner PC');
+  ok((await other.join(inv2.code, 'Outsider')) !== null, 'a real second player joins a whitelisted host normally');
+  ok(fake.room(inv2.code).guestUid === OUTSIDER, 'and takes the seat under its OWN uid');
+  const late = await phone.join(inv2.code, 'Owner Phone');
+  ok(late === null && phone.lastError === GoonSignalError.AlreadyJoined,
+    'a whitelisted host cannot self-duel into an occupied room', String(phone.lastError));
+
+  // --- nothing in the client stack compares the two identities -----------------
+  // If any of these ever grow a uid comparison, a self-duel becomes a silent
+  // "you are your own opponent" bug rather than a working test rig.
+  for (const rel of ['../net/session.js', '../net/webrtcTransport.js', '../net/relayTransport.js',
+    '../net/transportBase.js', '../core/match.js']) {
+    ok(!/unified_?[Ii]d\s*[=!]==?/.test(readSource(rel)), `${rel} never compares unified ids`);
+  }
+  ok(/self_duel/.test(readSource('../net/signaling.js')), 'the client reads the self_duel flag off /join');
+}
+
 // ============================================================ run
 const main = async () => {
   await testSignaling();
@@ -1099,6 +1192,7 @@ const main = async () => {
   await testPeerCardVer();
   await testGuestFold();
   await testSeatRelease();
+  await testSelfDuel();
 
   console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);
   process.exit(failures === 0 ? 0 : 1);
