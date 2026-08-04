@@ -97,7 +97,7 @@ Provisioning a distro is an owner decision. Windows evidence only; no Linux evid
 
 ## Engine-review presence
 
-(recorded per spine_review_step call as they happen)
+- Step 1 plan review: `spine_review_step(step=1, type=plan)` → `skipped: true`, `spawnFailed: false`, verdict null — "Nested reviewer spawn blocked inside pi worker session… the batch engine runs reviews after worker success (SP-195)". Artifact: `.reviews/1-20260804T121421.md`. Review Level 2 honored by the engine post-.DONE.
 
 ## Durable-lesson candidates
 

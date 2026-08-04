@@ -107,6 +107,36 @@
       "trust": "full"
     },
     {
+      "id": "dtrh.payload/CLAUDE.md",
+      "source": "copied",
+      "path": "payload/dtrh/CLAUDE.md",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy DTRH payload tree ConditioningControlPanel/Resources/web/dtrh, added in main commit 51707be8 (docs(dtrh): commit DTRH primer doc) and flowed to the client via the v6.6.3 main-sync merge 56f156fc (SP-037 catalogue reconciliation), copied unmodified at build via linked Content glob (SP-023)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "dtrh.payload/LOOM_PRIMER.md",
+      "source": "copied",
+      "path": "payload/dtrh/LOOM_PRIMER.md",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy DTRH payload tree ConditioningControlPanel/Resources/web/dtrh, added in main commit b8683451 (docs(primers): Loom feature primer) and flowed to the client via the v6.6.3 main-sync merge 56f156fc (SP-037 catalogue reconciliation), copied unmodified at build via linked Content glob (SP-023)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
       "id": "dtrh.payload/assets/audio/drone1.mp3",
       "source": "copied",
       "path": "payload/dtrh/assets/audio/drone1.mp3",
@@ -16622,21 +16652,6 @@
       "trust": "full"
     },
     {
-      "id": "dtrh.payload/assets/bubbles/effects/spirals/sp8.gif",
-      "source": "copied",
-      "path": "payload/dtrh/assets/bubbles/effects/spirals/sp8.gif",
-      "required": true,
-      "provenance": {
-        "origin": "WPF legacy DTRH payload tree ConditioningControlPanel/Resources/web/dtrh @ git tree 40be29df822bbfece639b435b0820419aed54c19 (SP-011 trust anchor), copied unmodified at build via linked Content glob (SP-023)",
-        "license": "project-internal"
-      },
-      "heads": [
-        "desktop"
-      ],
-      "overridePolicy": "none",
-      "trust": "full"
-    },
-    {
       "id": "dtrh.payload/assets/bubbles/effects/subliminal.png",
       "source": "copied",
       "path": "payload/dtrh/assets/bubbles/effects/subliminal.png",
@@ -22832,6 +22847,36 @@
       "trust": "full"
     },
     {
+      "id": "dtrh.payload/loom.html",
+      "source": "copied",
+      "path": "payload/dtrh/loom.html",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy DTRH payload tree ConditioningControlPanel/Resources/web/dtrh, added in main commit f0c093f4 (feat(dtrh): Loom studio standalone host + gifenc export), promoted into the main app by d64860d4 (feat(dtrh): promote The Loom into the main app + studio UI overhaul), and flowed to the client via the v6.6.3 main-sync merge 56f156fc (SP-037 catalogue reconciliation), copied unmodified at build via linked Content glob (SP-023)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "dtrh.payload/loomBoot.js",
+      "source": "copied",
+      "path": "payload/dtrh/loomBoot.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy DTRH payload tree ConditioningControlPanel/Resources/web/dtrh, added in main commit f0c093f4 (feat(dtrh): Loom studio standalone host + gifenc export), promoted into the main app by d64860d4 (feat(dtrh): promote The Loom into the main app + studio UI overhaul), and flowed to the client via the v6.6.3 main-sync merge 56f156fc (SP-037 catalogue reconciliation), copied unmodified at build via linked Content glob (SP-023)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
       "id": "dtrh.payload/m2test.js",
       "source": "copied",
       "path": "payload/dtrh/m2test.js",
@@ -22892,6 +22937,21 @@
       "trust": "full"
     },
     {
+      "id": "dtrh.payload/shared/audioSrc.js",
+      "source": "copied",
+      "path": "payload/dtrh/shared/audioSrc.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy DTRH payload tree ConditioningControlPanel/Resources/web/dtrh, added in main commit 05f7714a (feat(packs): Wave 1 - ContentLocator plumbing, ccp.content host + JS shim, ReleaseContentService, csproj/installer strip) and flowed to the client via the v6.6.3 main-sync merge 56f156fc (SP-037 catalogue reconciliation), copied unmodified at build via linked Content glob (SP-023)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
       "id": "dtrh.payload/shared/capability.js",
       "source": "copied",
       "path": "payload/dtrh/shared/capability.js",
@@ -22913,6 +22973,21 @@
       "required": true,
       "provenance": {
         "origin": "WPF legacy DTRH payload tree ConditioningControlPanel/Resources/web/dtrh @ git tree 40be29df822bbfece639b435b0820419aed54c19 (SP-011 trust anchor), copied unmodified at build via linked Content glob (SP-023)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "dtrh.payload/shared/loomField.js",
+      "source": "copied",
+      "path": "payload/dtrh/shared/loomField.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy DTRH payload tree ConditioningControlPanel/Resources/web/dtrh, added in main commit f0c093f4 (feat(dtrh): Loom studio standalone host + gifenc export), promoted into the main app by d64860d4 (feat(dtrh): promote The Loom into the main app + studio UI overhaul), and flowed to the client via the v6.6.3 main-sync merge 56f156fc (SP-037 catalogue reconciliation), copied unmodified at build via linked Content glob (SP-023)",
         "license": "project-internal"
       },
       "heads": [
@@ -22988,6 +23063,21 @@
       "required": true,
       "provenance": {
         "origin": "WPF legacy DTRH payload tree ConditioningControlPanel/Resources/web/dtrh @ git tree 40be29df822bbfece639b435b0820419aed54c19 (SP-011 trust anchor), copied unmodified at build via linked Content glob (SP-023)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "dtrh.payload/vendor/gifenc/gifenc.esm.js",
+      "source": "copied",
+      "path": "payload/dtrh/vendor/gifenc/gifenc.esm.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy DTRH payload tree ConditioningControlPanel/Resources/web/dtrh, added in main commit f0c093f4 (feat(dtrh): Loom studio standalone host + gifenc export), promoted into the main app by d64860d4 (feat(dtrh): promote The Loom into the main app + studio UI overhaul), and flowed to the client via the v6.6.3 main-sync merge 56f156fc (SP-037 catalogue reconciliation), copied unmodified at build via linked Content glob (SP-023)",
         "license": "project-internal"
       },
       "heads": [

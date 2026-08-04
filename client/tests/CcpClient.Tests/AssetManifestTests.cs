@@ -126,11 +126,11 @@ public class AssetManifestTests
     public void CopiedDirection_RealManifest_AllCopiedEntriesPresentCaseExact_SweepClean()
     {
         // SP-023 (first copied consumer — the documented extension of the assert-empty
-        // direction): 1538 copied entries (1536 DTRH payload + 2 product overlay) verified
+        // direction): 1544 copied entries (1542 DTRH payload + 2 product overlay) verified
         // against the REAL output directory — existence, ordinal case-exactness, sweep.
         var entries = LoadRealManifest();
         var copied = entries.Where(e => e.Source == AssetSource.Copied).ToArray();
-        Assert.Equal(1538, copied.Length);
+        Assert.Equal(1544, copied.Length);
         Assert.Contains(copied, e => e.Id == "dtrh.payload/bridge.js"
             && e.Path == "payload/dtrh/bridge.js" && e.Required && e.Trust == "full");
         Assert.Contains(copied, e => e.Id == "dtrh.overlay/bridge.js"
