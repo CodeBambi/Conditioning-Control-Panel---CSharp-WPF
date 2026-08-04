@@ -89,7 +89,7 @@
  * monitor and the arsenal. One bit (ui/hud.js HUD_ZEN_CLASS/HUD_ZEN_ATTR), every
  * hide below it, nothing in JS.
  *
- * WHAT GOES: the score + its +1 flourish, the risk multiplier, your name plate,
+ * WHAT GOES: the score + its +1 flourish, the score multiplier, your name plate,
  * the closeness dial, the closeness THEY claim, the live-effect chips and MERCY.
  * WHAT STAYS: the monitor, the rails, the charge pips (they are the arsenal's
  * currency, not a readout), the timer, the attention ring and the toggle itself.
@@ -115,7 +115,7 @@
  * ------------------------------------------------------------------------ */
 .gg-hud-frame.gg-hud--zen .gg-score,
 .gg-hud-frame.gg-hud--zen .gg-plus1,
-.gg-hud-frame.gg-hud--zen .gg-risk,
+.gg-hud-frame.gg-hud--zen .gg-mult,
 .gg-hud-frame.gg-hud--zen .gg-me,
 .gg-hud-frame.gg-hud--zen .gg-dial-host,
 .gg-hud-frame.gg-hud--zen .gg-mon-close,
@@ -126,7 +126,7 @@
 html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
 
 /* ---------------------------------------------------------------------------
- * TOP BAR — score · charges · risk | timer | attention · gear
+ * TOP BAR — score · charges · ×mult | timer | attention · gear
  * ------------------------------------------------------------------------ */
 .gg-hud-top {
   display: grid;
@@ -144,7 +144,9 @@ html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
   color: #fff;
   text-shadow: 0 0 18px rgba(var(--gg-pink-rgb), 0.55), 0 2px 0 rgba(0, 0, 0, 0.45);
 }
-.gg-risk { font-size: 0.68rem; color: var(--gg-text-4); font-variant-numeric: tabular-nums; letter-spacing: 0.06em; }
+/* was .gg-risk ("×1.30 risk") until 2026-08-04 — same slot, same number, and no
+   longer named after a 0-7 tier the player was never shown a key for */
+.gg-mult { font-size: 0.68rem; color: var(--gg-text-4); font-variant-numeric: tabular-nums; letter-spacing: 0.06em; }
 .gg-me { font-size: 0.68rem; color: var(--gg-text-3); }
 
 .gg-pips { display: flex; gap: 6px; align-items: center; }
@@ -291,7 +293,7 @@ html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
 .gg-att-banner.is-in { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 /* ---------------------------------------------------------------------------
- * BODY — rails | well | monitor column
+ * BODY — arsenal sidebar | well | monitor column
  * ------------------------------------------------------------------------ */
 .gg-hud-body {
   display: grid;
@@ -303,6 +305,166 @@ html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
 .gg-well { pointer-events: none; }
 
 .gg-rail { display: flex; flex-direction: column; gap: 0.55rem; }
+
+/* ===========================================================================
+ * THE ARSENAL SIDEBAR — one collapsible panel for everything you can throw
+ * (owner, 2026-08-04: "the throwable items should live in a sidebar that can be
+ * collapsed", on desktop AND on the phone that joined by link).
+ *
+ * WHY THE LEFT. The right edge already carries three things — the opponent's
+ * monitor, the receipts under it, and exec/videos.js's keepOutRects(), which
+ * refuses to BEAR a floating window on the right 22vw or in the bottom-centre
+ * mercy gutter. The left gutter is the only structurally empty side of the desk
+ * and it is nowhere near MERCY's 0.28w..0.72w keep-out.
+ *
+ * FOUR RULES, ALL OF THEM LEARNED ON THIS DESK:
+ *
+ * 1. IT MAY NOT EAT THE FIELD. `.gg-arsenal` is pointer-events:none at the same
+ *    0,2,0 specificity as the `.gg-hud-frame .gg-plate { pointer-events: auto }`
+ *    rule near the top of this file, and LATER in the file, so a restyle that
+ *    reaches for .gg-plate cannot silently drop a dead 200px column onto the
+ *    desk. Only the tiles (`.gg-item`, already opted in) and the handle take
+ *    pointer input. Bubbles rise on #gg-fx BELOW #gg-hud, so one drifting behind
+ *    the panel is still poppable straight through it — which matters more here
+ *    than anywhere, since popping is the only thing that ever fills this panel.
+ *
+ * 2. NO SCRIM, EVER, ON ANY BREAKPOINT. An open sheet at Live once froze the
+ *    drop economy outright because its scrim owned the bubble-spawn strip, and a
+ *    z70 scrim would bury MERCY (z60) on top of that. The drawer is scrimless:
+ *    it is a panel, not a modal, and the match keeps running behind it.
+ *
+ * 3. COLLAPSED IS EMPTY, NOT INVISIBLE. `.gg-arsenal-panel` is display:none when
+ *    shut — no zero-opacity box, no off-screen transform still holding a hit
+ *    area over the field. What is left is the handle and its badge.
+ *
+ * 4. IT CANNOT REACH MERCY. #gg-hud is position:fixed with z-index 40, i.e. its
+ *    own stacking context, so NO z-index written in this file can climb past
+ *    #gg-mercy's z60 — not even the `position: fixed` the drawer takes on a
+ *    phone. That is a structural guarantee, not a number to keep in step.
+ * ======================================================================== */
+.gg-arsenal {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  min-height: 0;
+}
+/* rule 1, at 0,2,0 and after the .gg-plate rule it has to beat */
+.gg-hud-frame .gg-arsenal,
+.gg-hud-frame .gg-arsenal-panel,
+.gg-hud-frame .gg-arsenal-rails { pointer-events: none; }
+/* …and the two things inside it that ARE targets — same specificity again and
+   later still. A pointer-events:auto child of a none parent is hit-testable. */
+.gg-hud-frame .gg-arsenal-tab,
+.gg-hud-frame .gg-arsenal .gg-item { pointer-events: auto; }
+
+.gg-arsenal-panel {
+  display: none;              /* rule 3: shut means gone, not transparent */
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.5rem 0.45rem;
+  border-radius: 14px;
+  /* A PLATE-LOOK WITHOUT .gg-plate. Wearing the class would re-enable pointer
+     events at 0,2,0 and undo rule 1 in one word, so the treatment is copied
+     rather than inherited — deliberately, and it is why rule 1 is written where
+     it is. */
+  background: linear-gradient(180deg, rgba(20, 8, 32, 0.66), rgba(12, 5, 22, 0.56));
+  box-shadow: inset 0 0 0 1px rgba(var(--gg-pink-rgb), 0.16), 0 8px 26px rgba(0, 0, 0, 0.35);
+  /* AND NO backdrop-filter — the one plate treatment this deliberately drops.
+     Rule 1 leaves bubbles clickable straight THROUGH this panel; a bubble you
+     can click but cannot see well enough to aim at is rule 1 honoured in the
+     letter only. Translucent and unblurred: the field behind stays readable. */
+}
+.gg-arsenal.is-open .gg-arsenal-panel { display: flex; }
+
+/* TWO COLUMNS, NOT ONE. Eight tiles stacked vertically is ~720px, which does not
+   fit a laptop under the top bar; four-and-four is ~360px and keeps every tile a
+   full finger wide. The two rails keep their names — they are the sidebar's
+   columns now instead of the desk's two edges. */
+.gg-arsenal-rails {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.4rem;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ---- the handle: the one node that never hides -------------------------- */
+.gg-arsenal-tab {
+  position: relative;
+  flex: 0 0 auto;
+  /* >= 48px both ways. It is the only way back to your own items on a phone, so
+     it is never one of the things that shrinks — same rule as .gg-zen. */
+  width: 48px;
+  min-height: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  padding: 0.4rem 0;
+  cursor: pointer;
+  color: var(--gg-text-1);
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(28, 10, 42, 0.9), rgba(16, 6, 28, 0.86));
+  box-shadow: inset 0 0 0 1px rgba(var(--gg-pink-rgb), 0.3), 0 4px 16px rgba(0, 0, 0, 0.45);
+  -webkit-appearance: none;
+  appearance: none;
+  transition: box-shadow .18s ease, transform .12s ease, background .18s ease;
+}
+.gg-arsenal-tab:hover,
+.gg-arsenal-tab:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(var(--gg-pink-rgb), 0.7), 0 0 18px rgba(var(--gg-pink-rgb), 0.35);
+}
+.gg-arsenal-tab-glyph {
+  font-style: normal;
+  font-size: 0.9rem;
+  line-height: 1;
+  color: var(--gg-pink);
+}
+/* The badge is the whole readout of a shut drawer: how many shots are banked
+   across every sticker it is hiding. A number, with a labelled name on it for a
+   reader — colour and a glow are never the only channel here. */
+.gg-arsenal-tab-count {
+  min-width: 18px;
+  padding: 0 4px;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(10, 4, 18, 0.92);
+  box-shadow: 0 0 0 1px rgba(var(--gg-pink-rgb), 0.6);
+  color: #fff;
+  font-size: 0.64rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.gg-arsenal-tab-count[hidden] { display: none; }
+.gg-arsenal-tab.is-stocked { box-shadow: inset 0 0 0 1px rgba(var(--gg-pink-rgb), 0.55), 0 0 14px rgba(var(--gg-pink-rgb), 0.25); }
+/* ONE beat, then nothing: a key pressed into a shut drawer, or a drop landing
+   behind it, still has to be visible somewhere. No looping animation is left on
+   the handle — the mercy frame budget is not negotiable. */
+.gg-arsenal-tab.is-bump { animation: ggTabBump .3s ease-out 1; }
+/* NOT gated on --gg-deco-play, and neither is ggDrawerIn below. Both are the
+   same exemption .gg-mon-proj and the heat glow already carry: this is not
+   decoration, it is a control ARRIVING (or the only sign a key press behind a
+   shut drawer did anything). Parking them at html[data-gg-fx="hot"] would leave
+   the drawer stuck at its off-screen keyframe for most of a real match. The hard
+   off switch (prefers-reduced-motion) still wins with `animation: none`. */
+@keyframes ggTabBump {
+  0%   { transform: scale(1); box-shadow: inset 0 0 0 1px rgba(var(--gg-pink-rgb), 0.9), 0 0 22px rgba(var(--gg-pink-rgb), 0.75); }
+  55%  { transform: scale(1.09); }
+  100% { transform: scale(1); }
+}
+/* the armor rule's other half. goon.css turns .gg-plate opaque at full effect
+   pressure because a translucent surface over a flashing stage is unreadable;
+   the panel deliberately is not a .gg-plate (rule 1), so it opts into the same
+   treatment by name rather than going unarmored and unreadable. */
+html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
 /* max-width, not width, on every box between the grid cell and the bezel: the
    monitor column is the right-hand edge of the desk, so anything it cannot fit
    inside leaves the screen rather than wrapping. */
@@ -530,6 +692,11 @@ html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
   z-index: 3;
   pointer-events: none;
 }
+/* Inside the sidebar a CENTRED tip hangs ~30px off the left column and lands
+   half off the screen — the panel is at the frame's left edge and nothing clips
+   it back. Anchored to the tile's right it grows into the stage instead, which
+   has room to spare on both breakpoints. */
+.gg-arsenal .gg-item-tip { left: auto; right: -0.35rem; transform: none; }
 
 .gg-item-ghost {
   position: fixed;
@@ -553,6 +720,112 @@ html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
 .gg-cool {
   font-size: 0.68rem; color: var(--gg-text-3);
   font-variant-numeric: tabular-nums;
+}
+
+/* ===========================================================================
+ * THE HEAT GAUGE — the drop economy's face (ui/drops.js, ui/hud.js paintHeat).
+ *
+ * WHAT IT IS. Popping bubbles banks heat; the fuller the bar, the likelier the
+ * next pop drops an item into the arsenal; a drop spends a chunk of the bar
+ * back. It replaced an invisible flat 12%-per-pop coin flip, so being SEEN is
+ * the entire reason it exists — a gauge nobody notices is the bug it fixes.
+ *
+ * WHERE IT SITS. First thing inside .gg-arsenal-panel, directly on top of the
+ * two rails it fills. It moved here WITH the arsenal when the sidebar landed
+ * (2026-08-04): it is the item economy's meter, not the monitor's, so it belongs
+ * in the panel that collapses with the items — a gauge for stickers you cannot
+ * see is a readout with nothing to read. Same on a phone, where the panel is a
+ * drawer: the gauge is simply part of what slides in.
+ *
+ * IT NEVER TOUCHES MERCY. #gg-mercy is a separate fixed z60 layer (goon.css) and
+ * #gg-hud is its own z40 stacking context, so nothing in this file — the drawer's
+ * `position: fixed` included — can be raised above it. The gauge cannot cover
+ * the button, cannot gate it, and takes no pointer events at all.
+ *
+ * POINTER-EVENTS — THE 0,2,0 TRAP. `.gg-hud-frame .gg-plate { pointer-events:
+ * auto }` near the top of this file is specificity 0,2,0. The gauge deliberately
+ * does NOT wear .gg-plate, but the opt-out below is written at the same 0,2,0
+ * and later in the file anyway, so a future restyle that reaches for .gg-plate
+ * for the border treatment cannot silently drop a dead 190px box on the desk.
+ *
+ * MOTION. The fill is a TRANSITION, not an animation: transitions ignore
+ * `animation-play-state`, so the bar keeps tracking heat even when goon.css's
+ * armor rule parks decorative motion at html[data-gg-fx="hot"] — which is most
+ * of a real match. The only true animation is the glow pulse past two thirds,
+ * and it re-declares `--gg-deco-play: running` for the same reason .gg-mon-proj
+ * does: this is INFORMATION. It is one 8px box shadow on a 190px bar, nothing
+ * the mercy button's frame budget will ever notice. The hard off switches
+ * (prefers-reduced-motion below, .is-calm) still win with `animation: none`.
+ *
+ * COLOUR IS NEVER ALONE. The word "heat" is always in the DOM beside the bar and
+ * ui/hud.js keeps role=progressbar + aria-valuenow/valuetext in step with it.
+ * ======================================================================== */
+.gg-heat {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.gg-heat-label {
+  flex: 0 0 auto;
+  font-size: 0.56rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gg-text-4);
+  transition: color .3s ease;
+}
+.gg-heat-track {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 7px;
+  border-radius: var(--gg-radius-pill);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.gg-heat-fill {
+  display: block;
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--gg-violet), var(--gg-pink));
+  box-shadow: 0 0 8px rgba(var(--gg-pink-rgb), 0.55);
+  /* 180ms: fast enough that a pop lands ON the pop, slow enough that the
+     ~58-point drop spend reads as the bar DROPPING rather than teleporting. */
+  transition: width .18s ease-out, box-shadow .3s ease;
+}
+/* Past two thirds the next pop is properly likely — the bar says so before the
+   item does. Both channels move: the label brightens with the glow. */
+.gg-heat.is-hot .gg-heat-label { color: var(--gg-pink); }
+.gg-heat.is-hot .gg-heat-fill {
+  --gg-deco-play: running;
+  animation: ggHeatGlow 1.4s ease-in-out infinite;
+  animation-play-state: var(--gg-deco-play);
+}
+@keyframes ggHeatGlow {
+  0%, 100% { box-shadow: 0 0 8px rgba(var(--gg-pink-rgb), 0.55); }
+  50%      { box-shadow: 0 0 16px rgba(var(--gg-pink-rgb), 0.95); }
+}
+
+/* the 0,2,0 opt-out, written at the same specificity as the .gg-plate rule and
+   later in the file so it wins outright: the gauge is a readout, never a target */
+.gg-hud-frame .gg-heat { pointer-events: none; }
+
+/* ZEN KEEPS IT. Zen clears the READOUTS (score, multiplier, dial) and keeps what
+   the duel is played on — the monitor and the arsenal. The gauge is the arsenal's
+   own meter: hiding it would leave the rails filling for reasons the player can
+   no longer see, which is exactly the state this feature exists to end. */
+
+@media (orientation: portrait), (max-width: 720px) {
+  .gg-heat-label { font-size: 0.5rem; letter-spacing: 0.12em; }
+  .gg-heat-track { height: 6px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* the bar still tracks heat exactly — it just stops pulsing and stops sliding */
+  .gg-heat.is-hot .gg-heat-fill { animation: none !important; }
+  .gg-heat-fill { transition: none !important; }
 }
 
 /* receipts strip -------------------------------------------------------- */
@@ -586,6 +859,70 @@ html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
 .gg-mon.is-wobbly { opacity: 0.7; }
 .gg-mon.is-gone { opacity: 0.4; }
 
+/* ---------------------------------------------------------------------------
+ * THE LOOSE MONITOR — drag it, wheel it bigger (owner, 2026-08-04: "like the
+ * gifs"). The arithmetic, the traps and the decision to detach ON DEMAND rather
+ * than always are all documented in ui/opponent.js; this is only the styling
+ * half, and it is four rules.
+ *
+ * 1. THE GRAB SURFACE IS THE WHOLE CARD, and it is claimed while DOCKED too —
+ *    the drag has to be able to start before the monitor has ever left the
+ *    column. `touch-action: none` is what stops a finger's first 6px being read
+ *    as a page pan and stolen from us; `user-select: none` is the mouse's half
+ *    of the same claim, and it is also why the JS deliberately does NOT
+ *    preventDefault on pointerdown (which would have taken the arsenal's
+ *    armed-tap-to-fire path down with it).
+ *
+ * 2. WIDTH IS THE ONLY DIAL. --gg-mon-loose-w, written by the wheel, falling
+ *    back to the docked --gg-mon-w when nothing has written it. NEVER
+ *    `transform: scale`: a scale fights the drag offset and resamples the bezel
+ *    art instead of re-laying it out. Everything inside the frame is a
+ *    PERCENTAGE of it (--gg-mon-face-*, aspect-ratio: 16/9), so the minis, the
+ *    projection rect and the targeting ring all follow the width for free.
+ *
+ * 3. Z 45 — above the desk, under the way out. #gg-hud is z40 and a stacking
+ *    context, so nothing written here can climb past it: MERCY (z60), the mercy
+ *    takeover (z65), the toasts (z50) and the inbound projectile (z55, on
+ *    <body>) all stay on top by construction, which is exactly right — a
+ *    projectile thrown FROM the monitor should fly OVER it. Inside the layer, 45
+ *    puts a dragged monitor over the arsenal sidebar and the receipts, which is
+ *    what "picked up" looks like. It is a fixed box because it has to escape the
+ *    column; no ancestor between here and the viewport carries a transform,
+ *    filter or backdrop-filter, so `fixed` really is viewport-relative. IF ONE
+ *    IS EVER ADDED to .gg-hud-frame / .gg-hud-body / .gg-rightcol, this pins to
+ *    that element instead and the drag silently offsets — that is the one thing
+ *    to check first if it ever goes wrong.
+ *
+ * 4. `transform: none; animation: none` is the keyframes-outrank-inline-styles
+ *    guard exec/flashes.js and exec/videos.js both learned the hard way. There
+ *    is nothing on .gg-mon to kill TODAY — its only flourish is the throw flare,
+ *    which lives on the descendant .gg-mon-throw (one animation slot per node,
+ *    the rule this file already followed) — and these two lines are what keep
+ *    the inline left/top authoritative if a keyframe is ever put on the root.
+ * ------------------------------------------------------------------------ */
+.gg-mon {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.gg-mon.is-loose {
+  position: fixed;
+  z-index: 45;
+  width: var(--gg-mon-loose-w, var(--gg-mon-w));
+  max-width: none;
+  transform: none;
+  animation: none;
+}
+.gg-mon.is-grabbed { cursor: grabbing; }
+/* THE HOLE IT LEFT. ui/opponent.js writes a measured `min-height` on this host
+   so the receipts under it do not jump up the frame the monitor detaches. The
+   placeholder is an empty box over the desk, so it stops taking clicks — and the
+   monitor, which is still its CHILD in the DOM (no re-parenting, ever: a
+   re-append would release the drag's pointer capture), opts straight back in. */
+.gg-mon-host.is-mon-loose { pointer-events: none; }
+.gg-mon-host.is-mon-loose > .gg-mon { pointer-events: auto; }
+
 .gg-mon-head { display: flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; min-width: 0; }
 .gg-mon-dot {
   width: 8px; height: 8px; border-radius: 50%;
@@ -601,37 +938,123 @@ html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
 .gg-mon-score { margin-left: auto; padding-left: 0.3rem; font-variant-numeric: tabular-nums; color: var(--gg-text-2); flex: 0 0 auto; }
 .gg-mon-pips { display: flex; gap: 4px; flex: 0 0 auto; }
 
+/* THE MONITOR FRAME, AND THE FOUR NUMBERS EVERYTHING INSIDE IT IS MEASURED FROM.
+ *
+ * assets/monitor_frame.png is 935x667 with a TRANSPARENT SURROUND (2026-08-04 —
+ * it used to be 1376x768 fully opaque, with a painted city behind the set). What
+ * is in it, in the art's own pixels:
+ *
+ *     the television   x 148..786   y 114..568    (638 x 454, 1.405:1)
+ *     the CRT face     x 230..705   y 178..473    (475 x 295, 1.610:1)
+ *
+ * THE FRAME KEEPS ITS 16/9 BOX and the art is fitted INSIDE it, rather than the
+ * box being re-cut to the art. Two reasons, both load-bearing: the frame is the
+ * payload DROP TARGET (ui/arsenal.js hit-tests this exact rect), and it is a row
+ * in the HUD's right-hand column — a 1.405:1 frame is 27% taller and reflows the
+ * desk. So the <img> below is scaled and offset so the TELEVISION fills the
+ * frame's height and centres in its width, which costs only transparent gutters
+ * either side (0-10.5% and 89.5-100%) and distorts nothing: 115.8/146.9 of a
+ * 16/9 box is 1.4018:1, the art's own aspect to four figures.
+ *
+ * --gg-mon-face-* is then the CRT FACE in % of the frame, derived from those two
+ * rectangles, and it is the SINGLE SOURCE OF TRUTH: the projection rect and the
+ * glass backing both consume it, and .is-nobezel re-declares it instead of
+ * overriding four properties twice. RE-CUT THE ART -> re-measure the two
+ * rectangles above, redo the <img> box, redo these four. Nothing else moves.
+ */
 .gg-mon-frame {
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
   border-radius: 10px;
   overflow: hidden;
-  transition: box-shadow .2s ease;
+  /* the CRT face, in % of this box — see the derivation above */
+  --gg-mon-face-x: 20.6%;
+  --gg-mon-face-y: 14.1%;
+  --gg-mon-face-w: 58.9%;
+  --gg-mon-face-h: 65.0%;
+  /* …and the gutter either side of the television, for anything that wants to
+     hug the SET rather than the box (the targeting ring, the throw flare). */
+  --gg-mon-tv-gutter: 10.5%;
 }
-.gg-mon.is-targeted .gg-mon-frame { box-shadow: 0 0 0 2px var(--gg-pink), 0 0 28px rgba(var(--gg-pink-rgb), 0.5); }
-.gg-mon-bezel { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; pointer-events: none; z-index: 2; }
+/* The drop-target ring hugs the TELEVISION, not the frame: with a transparent
+   surround a rectangle drawn on the box would be a glowing outline around empty
+   space. ::after so the frame's own box-shadow stays free — and the ring is an
+   INSET shadow, because the set fills the frame's height exactly and an outward
+   one would be clipped away top and bottom by the frame's own overflow:hidden,
+   leaving two vertical bars and no ring at all. */
+.gg-mon-frame::after {
+  content: '';
+  position: absolute;
+  inset: 0 var(--gg-mon-tv-gutter);
+  z-index: 5;
+  border-radius: 10px;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: inset 0 0 0 2px var(--gg-pink), 0 0 28px rgba(var(--gg-pink-rgb), 0.5);
+  transition: opacity .2s ease;
+}
+.gg-mon.is-targeted .gg-mon-frame::after { opacity: 1; }
+/* No art loaded (the PNG 404'd): the dark glass IS the screen, there is no
+   television to hug, and the projection rect can have almost all of the box. One
+   place, four numbers, and everything downstream follows. */
+.gg-mon-frame.is-nobezel {
+  --gg-mon-tv-gutter: 0%;
+  --gg-mon-face-x: 9%;
+  --gg-mon-face-y: 9%;
+  --gg-mon-face-w: 82%;
+  --gg-mon-face-h: 82%;
+}
+/* NOT `inset: 0` and NOT `object-fit`. See the frame's banner: the box is 16/9,
+   the art is 1.402:1, and the television inside the art is what has to fill the
+   height. `fill` is exact here because the box below already has the art's own
+   aspect ratio — it is a placement, not a stretch. */
+.gg-mon-bezel {
+  position: absolute;
+  left: -7.9%;
+  top: -25.1%;
+  width: 115.8%;
+  height: 146.9%;
+  object-fit: fill;
+  pointer-events: none;
+  z-index: 2;
+}
+/* The dark glass BEHIND the painted face. The art's surround is a cutout now, so
+   this is cut to the face exactly: at its old 7%/6% inset it poked out either
+   side of the television as two dark slabs floating on the desk. It is invisible
+   while the art loads (the face is painted opaque black over it) and it is the
+   whole screen when the art does not. */
 .gg-mon-screen {
   position: absolute;
-  inset: 7% 6% 12% 6%;
+  left: var(--gg-mon-face-x);
+  top: var(--gg-mon-face-y);
+  width: var(--gg-mon-face-w);
+  height: var(--gg-mon-face-h);
   overflow: hidden;
   border-radius: 4px;
   background: radial-gradient(120% 120% at 50% 0%, #241033 0%, #100720 70%, #08040e 100%);
   z-index: 1;
 }
-.gg-mon-frame.is-nobezel .gg-mon-screen { inset: 0; border: 1px solid rgba(var(--gg-pink-rgb), 0.35); border-radius: 10px; }
+.gg-mon-frame.is-nobezel .gg-mon-screen {
+  left: 0; top: 0; width: 100%; height: 100%;
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.35);
+  border-radius: 10px;
+}
 
 /* THE PROJECTION RECT — the little screen inside their little screen. Every
    miniature plays in here and nothing else does.
 
-   z-index: 3 IS THE WHOLE FEATURE. monitor_frame.png (z2) is opaque art with a
-   painted pure-black CRT face, so the rect has to sit ON TOP of it — it is a
-   sibling of the <img>, appended after it in ui/opponent.js, and it is the only
-   thing in this block that must not be "tidied" back inside .gg-mon-screen (that
-   element's z-index:1 opens a stacking context the minis can never climb out of).
+   z-index: 3 IS THE WHOLE FEATURE. monitor_frame.png (z2) has a transparent
+   SURROUND since 2026-08-04, but its CRT face is still painted opaque black, so
+   the rect still has to sit ON TOP of it — it is a sibling of the <img>,
+   appended after it in ui/opponent.js, and it is the only thing in this block
+   that must not be "tidied" back inside .gg-mon-screen (that element's
+   z-index:1 opens a stacking context the minis can never climb out of).
 
-   The geometry is % of .gg-mon-frame, matched to the CRT face the art paints
-   (~26%-74% across, ~23%-71% down). Re-cut the art -> re-measure these four. */
+   The geometry is the --gg-mon-face-* set declared on .gg-mon-frame — that is
+   where the numbers and their derivation live, and .is-nobezel re-declares them
+   rather than overriding anything here. No aspect-ratio: the face is 1.61:1, not
+   16/9, and an explicit height is one fewer thing to keep in sync. */
 .gg-mon-proj {
   position: absolute;
   z-index: 3;
@@ -652,11 +1075,10 @@ html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
      The hard off switches (prefers-reduced-motion, .is-calm) use
      `animation: none !important` and still win over this. */
   --gg-deco-play: running;
-  left: 26%;
-  width: 48%;
-  top: 47%;
-  transform: translateY(-50%);
-  aspect-ratio: 16 / 9;
+  left: var(--gg-mon-face-x);
+  top: var(--gg-mon-face-y);
+  width: var(--gg-mon-face-w);
+  height: var(--gg-mon-face-h);
   overflow: hidden;
   border-radius: 3px;
   pointer-events: none;
@@ -666,9 +1088,8 @@ html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
     inset 0 0 18px rgba(0, 0, 0, 0.7),
     0 0 16px rgba(var(--gg-violet-rgb), 0.18);
 }
-/* No art loaded (the PNG 404'd): the dark glass IS the screen, so the rect can
-   have almost all of it. */
-.gg-mon-frame.is-nobezel .gg-mon-proj { left: 9%; width: 82%; top: 50%; }
+/* (The no-art case is handled where the numbers are: .gg-mon-frame.is-nobezel
+   re-declares --gg-mon-face-*, and this rect follows without a second rule.) */
 
 .gg-mini-idle {
   position: absolute; inset: 0;
@@ -1022,6 +1443,162 @@ html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
   0% { opacity: 0; }
   15%, 76% { opacity: 1; }
   100% { opacity: 0; }
+}
+
+/* ===========================================================================
+ * THE THROW — an inbound payload gets a sender, a flight and a landing.
+ * (ui/opponent.js markInbound, called from ui/hud.js onPayloadAccepted.)
+ *
+ * "when the opponent fires a payload at us the opponent monitor should
+ *  highlight, and the item should fly from the monitor to our field."
+ *
+ * FOUR NODES, FOUR ANIMATIONS, and that is not stylistic. `animation` is a
+ * shorthand: a second live rule on the same element replaces the first outright,
+ * silently. So the travel is split — .gg-throw carries X (linear), .gg-throw-arc
+ * carries Y (with a lob keyframe partway through, which is the entire arc), and
+ * .gg-throw-art carries the spin. The splash is a fourth node for the same
+ * reason, and the monitor's flare is a fifth on the monitor itself.
+ *
+ * NOTHING HERE IS REMOVED ON animationend. A parked animation (data-gg-fx="hot"),
+ * a reduced-motion override or a re-parented node all swallow that event; every
+ * one of these nodes leaves on a timer in ui/opponent.js, and a leaked one has to
+ * be impossible rather than unlikely (exec/videos.js's ghost rule, same reason).
+ *
+ * z55: above the HUD, UNDER mercy — the tier ui/arsenal.js's drag ghost and drop
+ * spark already live in. A projectile that could cover the mercy button would be
+ * a safety bug, not a cosmetic one.
+ * ======================================================================== */
+
+/* their monitor lighting up: THEY threw this. It is INFORMATION — it re-declares
+   --gg-deco-play so a hot local stack cannot park the one flourish that explains
+   where the next sixty seconds came from — and its .is-throwing state is a
+   VISIBLE glow on its own, so the reduced-motion `animation: none` leaves a
+   static highlight rather than nothing at all. */
+.gg-mon-throw {
+  --gg-deco-play: running;
+  position: absolute;
+  inset: 0 var(--gg-mon-tv-gutter);
+  z-index: 4;
+  border-radius: 8px;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(72% 58% at 50% 40%,
+    rgba(var(--gg-pink-rgb), 0.42) 0%,
+    rgba(var(--gg-pink-rgb), 0.12) 56%,
+    rgba(0, 0, 0, 0) 78%);
+  box-shadow: inset 0 0 26px rgba(var(--gg-pink-rgb), 0.5);
+}
+.gg-mon.is-throwing .gg-mon-throw {
+  opacity: 1;
+  animation: ggMonThrow .62s cubic-bezier(.2, .8, .3, 1) 1;
+  animation-play-state: var(--gg-deco-play);
+}
+@keyframes ggMonThrow {
+  0% { opacity: 0; transform: scale(1.06); }
+  18% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1); }
+}
+
+/* the projectile ---------------------------------------------------------- */
+.gg-throw {
+  --gg-deco-play: running;
+  --gg-throw-size: clamp(96px, 12vw, 152px);
+  --gg-throw-lift: 84px;
+  position: fixed;
+  z-index: 55;
+  width: var(--gg-throw-size);
+  height: var(--gg-throw-size);
+  /* centred on its own point with MARGINS, never a transform: the transform is
+     the animation's, and a translate here would be overwritten by frame one. */
+  margin: calc(var(--gg-throw-size) / -2) 0 0 calc(var(--gg-throw-size) / -2);
+  pointer-events: none;
+  animation: ggThrowX var(--gg-throw-ms, 760ms) linear 1 forwards;
+  animation-play-state: var(--gg-deco-play);
+}
+.gg-throw-arc {
+  position: absolute; inset: 0;
+  animation: ggThrowY var(--gg-throw-ms, 760ms) cubic-bezier(.35, .1, .5, 1) 1 forwards;
+  animation-play-state: var(--gg-deco-play);
+}
+/* The STICKER IS THE FLOOR: it is this node's background, painted from frame
+   one, and a live preview (if there is one) fades in over it. A clip that is
+   slow, broken or simply not applicable therefore degrades to the item art with
+   no timer and no branch — see ui/throwPreview.js. */
+.gg-throw-art {
+  position: absolute; inset: 0;
+  background-image: var(--gg-throw-sticker, none);
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 18px rgba(var(--gg-pink-rgb), 0.55));
+  animation: ggThrowSpin var(--gg-throw-ms, 760ms) ease-out 1 forwards;
+  animation-play-state: var(--gg-deco-play);
+}
+/* A live clip does not tumble — you are meant to be able to READ it on the way
+   in. Mutually exclusive with the rule above (one shorthand, one winner). */
+.gg-throw.is-live .gg-throw-art {
+  animation: ggThrowSwell var(--gg-throw-ms, 760ms) ease-out 1 forwards;
+}
+.gg-throw-live {
+  position: absolute; inset: 6%;
+  width: 88%; height: 88%;
+  object-fit: cover;
+  border-radius: 10px;
+  box-shadow: 0 0 0 2px rgba(var(--gg-pink-rgb), 0.75), inset 0 0 20px rgba(0, 0, 0, 0.5);
+  opacity: 0;                       /* the first decoded frame lifts this */
+  transition: opacity .18s ease;    /* a transition, not an animation: no slot taken */
+}
+.gg-throw-live.is-ready { opacity: 1; }
+@keyframes ggThrowX {
+  from { transform: translateX(0); }
+  to { transform: translateX(var(--gg-throw-dx, 0px)); }
+}
+@keyframes ggThrowY {
+  0% { transform: translateY(0); }
+  42% { transform: translateY(calc(var(--gg-throw-dy, 0px) * 0.3 - var(--gg-throw-lift))); }
+  100% { transform: translateY(var(--gg-throw-dy, 0px)); }
+}
+@keyframes ggThrowSpin {
+  0% { transform: rotate(0deg) scale(0.4); opacity: 0; }
+  14% { opacity: 1; }
+  100% { transform: rotate(var(--gg-throw-spin, 210deg)) scale(1.1); opacity: 1; }
+}
+@keyframes ggThrowSwell {
+  0% { transform: rotate(calc(var(--gg-throw-spin, 210deg) * 0.06)) scale(0.45); opacity: 0; }
+  14% { opacity: 1; }
+  100% { transform: rotate(0deg) scale(1.1); opacity: 1; }
+}
+
+/* …and where it hits. Its own node so the flight's animation slot is untouched. */
+.gg-throw-hit {
+  --gg-deco-play: running;
+  position: fixed;
+  z-index: 55;
+  width: 22px; height: 22px;
+  margin: -11px 0 0 -11px;
+  border-radius: 50%;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px rgba(var(--gg-pink-rgb), 0.9), 0 0 34px rgba(var(--gg-pink-rgb), 0.75);
+  animation: ggThrowHit .42s cubic-bezier(.2, .8, .3, 1) 1 forwards;
+  animation-play-state: var(--gg-deco-play);
+}
+@keyframes ggThrowHit {
+  0% { opacity: 0.95; transform: scale(0.3); }
+  60% { opacity: 0.5; }
+  100% { opacity: 0; transform: scale(4.6); }
+}
+
+/* the OUTBOUND half: the arsenal's drag ghost, upgraded to the same preview
+   (ui/throwPreview.js dressGhost). Same class as the sticker ghost so
+   moveGhost()/killGhost() keep working on it unchanged. */
+.gg-item-ghost--live {
+  object-fit: cover;
+  border-radius: 10px;
+  background-image: var(--gg-ghost-sticker, none);
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  box-shadow: 0 0 0 2px rgba(var(--gg-pink-rgb), 0.75), 0 6px 18px rgba(0, 0, 0, 0.6);
 }
 
 /* emote bubble + drop hint ------------------------------------------------ */
@@ -1457,20 +2034,24 @@ html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
  * against these five bands and nothing may be added without taking a band away:
  *
  *   0.0 - 5.5rem   MERCY (its own fixed layer) + its fineprint
- *   6.0 - 11.2rem  BAND A: the right rail (left-anchored) | the closeness dial
- *                  (right-anchored). Side by side, NOT stacked — the dial used
- *                  to sit in the flow underneath both rails and landed on top
- *                  of them, which is the overlap in the owner's screenshot.
- *  11.6 - 15.2rem  BAND B: the left rail, full width.
+ *   6.0 - 11.2rem  the closeness dial, right-anchored in the bottom deck.
+ *   6.0rem up      the ARSENAL DRAWER, left-anchored and SHUT by default: while
+ *                  it is shut this band is a single 48px handle, and while it is
+ *                  open it is an overlay ON the stage, not a slice out of it.
  *   7.2rem (top)   the live-effect chips, moved OUT of the bottom deck to under
  *                  the score column: they are a status readout, and they were
  *                  the third thing competing for the bottom-left corner.
  *   everything else  is #gg-stage, which is the entire point of the screen.
  *
- * WHAT IS NOT NEGOTIABLE HERE: every tile, every dial stop and both round
- * buttons keep a >= 48px hit area. The tiles got SHORTER (the icon and the
- * words shrank, the "locked" line stopped taking a row of its own), never
- * narrower than a finger.
+ * THE TWO RAIL BANDS ARE GONE (2026-08-04, the sidebar). They held eight tiles
+ * in two absolutely-placed strips at 6rem and 11.6rem and took ~9rem of stage
+ * height on every phone, permanently. The same eight tiles now live in the
+ * drawer, which starts collapsed here and hands all of it back.
+ *
+ * WHAT IS NOT NEGOTIABLE HERE: every tile, every dial stop, the drawer handle
+ * and both round buttons keep a >= 48px hit area. The tiles got SHORTER (the
+ * icon and the words shrank, the "locked" line stopped taking a row of its
+ * own), never narrower than a finger.
  * ======================================================================== */
 @media (orientation: portrait), (max-width: 720px) {
   :root { --gg-mon-w: min(42vw, 190px); --gg-item: 48px; }
@@ -1487,7 +2068,7 @@ html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
   .gg-hud-top { grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.35rem; }
   .gg-hud-top > * { min-width: 0; }
   .gg-scorebox { min-width: 0; }
-  .gg-risk, .gg-me { overflow-wrap: anywhere; }
+  .gg-mult, .gg-me { overflow-wrap: anywhere; }
   .gg-pip { width: 13px; height: 13px; }
   .gg-pips { gap: 5px; }
   .gg-timer { min-width: 92px; padding: 0.35rem 0.6rem 0.45rem; }
@@ -1511,34 +2092,44 @@ html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
      rather than reach back across the stage */
   .gg-receipt { max-width: 100%; flex-wrap: wrap; font-size: 0.6rem; }
 
-  /* ---- the arsenal: shorter tiles, two tight bands ---------------------- */
-  .gg-rail {
-    position: absolute;
+  /* ---- the arsenal: a slide-in DRAWER, not a squeeze --------------------- */
+  /* The two absolute rail bands that used to live down here are gone (2026-08-04,
+     with the sidebar). They cost the stage 9rem of its height on every phone,
+     permanently, for eight controls a player touches a handful of times a match.
+     The drawer costs the handle's 48px and nothing else, and it is SHUT by
+     default here (ui/prefs.js resolveArsenalOpen: 'auto' -> narrow means shut).
+
+     IT IS AN OVERLAY, NOT A COLUMN. position: fixed, so the play area keeps its
+     full width instead of being squeezed into whatever the panel leaves —
+     "space to see the animations and effects" is what this whole phone pass is
+     for. It floats over the field; it does NOT dim it, gate it, or scrim it
+     (rule 2), and #gg-hud's own z40 keeps it under MERCY no matter what. */
+  .gg-arsenal {
+    position: fixed;
     left: calc(0.4rem + env(safe-area-inset-left, 0px));
-    right: calc(0.4rem + env(safe-area-inset-right, 0px));
-    bottom: 11.6rem;
-    flex-direction: row;
-    align-items: flex-start;      /* the art lines up; only the words hang */
-    gap: 0.3rem;
-    padding: 0;
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
-  }
-  .gg-rail::-webkit-scrollbar { display: none; }
-  /* BAND A shares its row with the dial, so the right rail comes in from the
-     LEFT and stops at half the width — the two can never reach each other. */
-  .gg-rail--right {
-    bottom: 6rem;
     right: auto;
-    /* 13rem is the dial's own 11.5rem plus the frame's right padding and a
-       finger's worth of daylight. Four tiles need 206px and this hands them
-       220px on a 428pt phone; a narrower phone scrolls the rail instead of
-       letting it walk into the dial. */
-    max-width: calc(100% - 13rem);
-    justify-content: flex-start;
+    /* 6rem is the deck floor, i.e. the top of MERCY's keep-out: the drawer grows
+       UPWARD from there and can never reach the button. */
+    bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+    align-items: flex-end;
+    gap: 0.25rem;
   }
-  .gg-rail--left { bottom: 11.6rem; }
+  .gg-arsenal-panel {
+    /* Fits without scrolling by construction — see the short-viewport rule at
+       the end of this file. It may not become a scroller: a scrollable box needs
+       pointer events, and rule 1 (the panel is pointer-transparent so bubbles
+       stay poppable through it) outranks the convenience. */
+    max-height: calc(100vh - 13rem);
+    padding: 0.4rem 0.35rem;
+    gap: 0.35rem;
+  }
+  .gg-arsenal.is-open .gg-arsenal-panel { animation: ggDrawerIn .22s ease-out 1; }
+  @keyframes ggDrawerIn {
+    from { transform: translateX(-108%); opacity: 0; }
+    to   { transform: translateX(0); opacity: 1; }
+  }
+  .gg-arsenal-rails { gap: 0.3rem; }
+  .gg-arsenal-tab { min-height: 64px; }
 
   /* A tile is 48px wide and about 62px tall instead of ~90: the art is smaller,
      the words are smaller, and the state line no longer reserves a row when it
@@ -1592,7 +2183,12 @@ html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
   .gg-fxchip { font-size: 0.62rem; padding: 0.18rem 0.5rem; max-width: 100%; }
   .gg-fxchip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  .gg-emotes { right: 0.6rem; left: 0.6rem; width: auto; bottom: 16.5rem; }
+  /* The sheet used to span the full width above the upper rail band. The bands
+     are gone and the arsenal DRAWER is what opens on the left now — and it is
+     open whenever this sheet is, because the emote tile that opens it lives
+     inside it — so the sheet gives up the left half rather than landing on top
+     of the thing that summoned it. */
+  .gg-emotes { right: 0.6rem; left: auto; width: min(60vw, 17rem); bottom: 12rem; }
 
   /* SIZE, again (owner, 2026-08-04: it is STILL too big on this phone). The old
      portrait rule was the bug — `min(100vw - 1.6rem, 20rem)` INFLATED the
@@ -1603,13 +2199,26 @@ html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
   .gg-sd-react { width: 92vw; height: 40vh; }
 
   /* ZEN on a phone: the dial, the effect chips and the mercy strip are gone, so
-     both arsenal bands drop to the floor instead of leaving a hole where the
-     deck used to be. That is ~11rem of stage handed back — which is the whole
-     point of the toggle. The rails are absolutely placed, so this is the only
-     way they can follow the reflow at all. */
-  .gg-hud-frame.gg-hud--zen .gg-rail,
-  .gg-hud-frame.gg-hud--zen .gg-rail--right { bottom: 1.6rem; }
-  .gg-hud-frame.gg-hud--zen .gg-rail--left { bottom: 7.2rem; }
+     the arsenal drops to the floor instead of hovering over a hole where the
+     deck used to be. That is ~4.5rem of stage handed back on top of whatever the
+     drawer being shut already gave — which is the whole point of the toggle.
+     The drawer is fixed, so this is the only way it can follow the reflow at
+     all, and zen still NEVER takes the arsenal away: it moves it. */
+  .gg-hud-frame.gg-hud--zen .gg-arsenal { bottom: calc(1.6rem + env(safe-area-inset-bottom, 0px)); }
+  .gg-hud-frame.gg-hud--zen .gg-arsenal-panel { max-height: calc(100vh - 8.6rem); }
+}
+
+/* ---------------------------------------------------------------------------
+ * SHORT VIEWPORTS — a landscape phone, or a small window on a laptop. The drawer
+ * is TALL by design (two columns of four tiles, ~360px on a desk), and a 360px
+ * viewport has nowhere to put that. Rather than grow a scroller — which would
+ * need pointer events and break rule 1, the thing that keeps bubbles poppable
+ * through the panel — the rails simply turn ninety degrees: two rows of four
+ * instead of two columns of four, ~2 tiles tall instead of 4.
+ * ------------------------------------------------------------------------ */
+@media (max-height: 560px) {
+  .gg-arsenal-rails { flex-direction: column; gap: 0.3rem; }
+  .gg-rail { flex-direction: row; align-items: flex-start; gap: 0.3rem; }
 }
 
 /* ---------------------------------------------------------------------------
@@ -1627,6 +2236,11 @@ html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
   .gg-sd-track.is-close .gg-sd-notch.is-end,
   .gg-timer.is-urgent .gg-timer-clock { animation: none !important; }
   .gg-pip.is-pop, .gg-item.is-shake, .gg-sd-card.is-slip { animation: none !important; }
+  /* the drawer still ARRIVES and the handle still lights — they just stop
+     moving. Neither animation has a fill-mode, so removing it lands both nodes
+     on their finished state rather than on the off-screen keyframe. */
+  .gg-arsenal.is-open .gg-arsenal-panel,
+  .gg-arsenal-tab.is-bump { animation: none !important; }
   /* a drop still READS as a drop (the ×N badge, the word) — it just stops moving */
   .gg-item.is-dropped .gg-item-img,
   .gg-item.is-dropped .gg-item-fallback { animation: none !important; }
@@ -1640,7 +2254,19 @@ html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
      character-for-character by selftest-hud. It stays DRAWN either way: four
      still rects are still four windows you can count. */
   .gg-mon-vwin, .gg-mon-vwin * { animation: none !important; }
+  /* THE THROW: keep the highlight, lose the flight. The monitor's flare is a
+     visible glow in its own .is-throwing state, so stopping its animation leaves
+     a STATIC highlight — the cause is still shown, it just does not pulse. The
+     projectile has no static reading (a sticker parked over the desk for 760 ms
+     is litter, not information), so it does not spawn at all: it is hidden here
+     for the OS-level preference, and ui/opponent.js's isCalm() skips building it
+     for the in-app one, because the node lives on <body> where the HUD's
+     .is-calm class cannot reach it. */
+  .gg-mon.is-throwing .gg-mon-throw { animation: none !important; }
+  .gg-throw, .gg-throw *, .gg-throw-hit { animation: none !important; }
+  .gg-throw, .gg-throw-hit { display: none !important; }
 }
+.gg-hud-frame.is-calm .gg-mon.is-throwing .gg-mon-throw { animation: none !important; }
 .gg-hud-frame.is-calm .gg-mini.is-anim,
 .gg-hud-frame.is-calm .gg-mini.is-anim::before,
 .gg-hud-frame.is-calm .gg-mini.is-anim *,

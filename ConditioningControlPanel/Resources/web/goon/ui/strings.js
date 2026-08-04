@@ -195,8 +195,11 @@ export const S = Object.freeze({
     lock: 'Lock in',
     locked: 'locked — waiting for them',
     theirs: 'their picks',
-    risk: (n) => 'Match risk ' + n + ' / 7',
-    score: (mult) => 'score ×' + mult.toFixed(2),
+    /* The "match risk N/7" readout and its seven-segment meters were removed on
+     * 2026-08-04: the tier was an engine number wearing a player-facing hat, and
+     * nobody could tell you what a 4 meant. What survives is the consequence,
+     * which needs no glossary — a heavier agreement scores faster. */
+    score: (mult) => 'you both score ×' + mult.toFixed(2),
     unsupported: "your opponent's app can't do this",
     /* --- the agreement pass (2026-08-03 redesign) --- */
     confirm: "I'm good with this",
@@ -231,7 +234,7 @@ export const S = Object.freeze({
     abandonLine: 'Connection lost for a minute.',
     drawLine: 'You both let go at the same moment.',
     scoreline: 'scoreline',
-    scoreFineprint: (risk) => '1 pt/s · risk ×' + risk.toFixed(2),
+    scoreFineprint: (mult) => '1 pt/s · score ×' + mult.toFixed(2),
     survived: (ms) => 'survived ' + mmss(ms),
     payloads: 'payload log',
     noPayloads: 'nothing crossed the wire.',
@@ -547,7 +550,7 @@ export const S = Object.freeze({
 
   /* ------------------------------------------------------ the desk's chrome
    * The zen toggle (ui/hud.js): ONE button that clears the desk down to the
-   * opponent monitor and the arsenal — the score, the risk multiplier, the
+   * opponent monitor and the arsenal — the score, its multiplier, the
    * closeness dial and the mercy button all step off together.
    *
    * A glyph, because it sits in the top-right corner beside the gear where a
@@ -562,6 +565,19 @@ export const S = Object.freeze({
     zenHideGlyph: '⊟',
     zenShowGlyph: '⊞',
     zenShowTitle: 'show panels · escape still ends the match',
+    /**
+     * The pool's score bonus, in the top bar. It used to read "×1.30 risk" off a
+     * 0-7 "match risk tier" nobody could explain; the tiers are gone from every
+     * screen and what is left is the only part a player could ever act on —
+     * a heavier agreement scores faster.
+     */
+    scoreMult: (mult) => '×' + Number(mult || 1).toFixed(2) + ' score',
+    /* ---- the heat gauge (ui/drops.js) ----
+     * ONE word, because it sits over the arsenal rail and the bar is the rest of
+     * the sentence. `heatValue` is the aria-valuetext: colour never travels
+     * alone here, and "78% hot" is what a screen reader gets instead of a fill. */
+    heatLabel: 'heat',
+    heatValue: (pct) => Math.round(pct) + '% — pops fill it, drops spend it',
   },
 
   /* ------------------------------------------------- the opponent monitor */
@@ -610,6 +626,20 @@ export const S = Object.freeze({
    * state below is a WORD on the tile, because the greyed sticker alone is
    * colour and colour is never the only channel here. */
   arsenal: {
+    /* ---- the collapsible sidebar (ui/hud.js) ----
+     * The handle NEVER hides, so it has to say what it does in BOTH states and
+     * say it to a screen reader too. `tabCount` is the compact "you still have
+     * things" badge on a collapsed drawer — the only readout left once the
+     * stickers are gone — and it is a number with a labelled name beside it,
+     * never a bare dot. */
+    sidebarShow: 'show items',
+    sidebarHide: 'hide items',
+    /** ▸ shut (pull me open) · ◂ open (push me shut). */
+    sidebarShowGlyph: '▸',
+    sidebarHideGlyph: '◂',
+    sidebarTitle: 'items — keys 1-7 still fire while this is shut',
+    tabCount: (n) => String(n | 0),
+    tabCountLabel: (n) => (n | 0) + ((n | 0) === 1 ? ' item ready' : ' items ready'),
     locked: 'locked',
     lockedTip: 'pop bubbles to earn this',
     lockGlyph: '?',
@@ -633,21 +663,28 @@ export const S = Object.freeze({
 
 /**
  * The draftable elements, in the order the draft grid renders them.
- * `risk` mirrors core/draft.js riskTierOf — recomputed live from the engine at
- * render time; the value here is documentation and a fallback, never authority.
+ *
+ * THERE IS NO `risk` FIELD ANY MORE (2026-08-04). This table used to carry a
+ * hand-copied duplicate of core/draft.js's 0-3 riskTier, which the draft tile
+ * painted as three pips and selftest-hud cross-checked so the copy could not
+ * drift. The tier still exists inside the engine — it is what core/scoring.js
+ * multiplies the per-second score by, and it is C#-parity — but it is no longer
+ * shown to anyone, so the duplicate has no reason to exist. Do not add it back:
+ * a second copy of an engine number is a drift bug waiting for a quiet week.
+ * The BLURB is now the whole story a tile tells, so blurbs earn their keep.
  */
 export const ELEMENTS = Object.freeze([
-  { id: GoonElement.Flashes, name: 'flashes', risk: 0, blurb: 'constant. builds all match.' },
-  { id: GoonElement.BouncingText, name: 'bouncing text', risk: 0, blurb: 'always on your screen. slow burn.' },
-  { id: GoonElement.Subliminals, name: 'subliminals', risk: 1, blurb: 'quiet, and it climbs to the top.' },
+  { id: GoonElement.Flashes, name: 'flashes', blurb: 'constant. builds all match.' },
+  { id: GoonElement.BouncingText, name: 'bouncing text', blurb: 'always on your screen. slow burn.' },
+  { id: GoonElement.Subliminals, name: 'subliminals', blurb: 'quiet, and it climbs to the top.' },
   // Always on for both players, start to finish — not a toggle. The draft grid renders it as a
   // locked tile (core/draft.js ALWAYS_ON_ELEMENT); the blurb has to say so.
-  { id: GoonElement.Bubbles, name: 'bubbles', risk: 1, blurb: 'the whole match, both of you. thin at first, then not.' },
-  { id: GoonElement.Videos, name: 'videos', risk: 2, blurb: 'long takeovers. 1–2 minutes.' },
-  { id: GoonElement.LockCards, name: 'lock cards', risk: 2, blurb: "type it out. can't look away." },
-  { id: GoonElement.ToyPatterns, name: 'toy patterns', risk: 2, blurb: 'bursts, capped by your own limit.' },
-  { id: GoonElement.Spiral, name: 'spiral', risk: 2, blurb: "a slow spiral takes the whole screen. it doesn't blink. neither will they." },
-  { id: GoonElement.BrainDrain, name: 'brain drain', risk: 3, blurb: "late, heavy, and it doesn't stop." },
+  { id: GoonElement.Bubbles, name: 'bubbles', blurb: 'the whole match, both of you. thin at first, then not.' },
+  { id: GoonElement.Videos, name: 'videos', blurb: 'long takeovers. 1–2 minutes.' },
+  { id: GoonElement.LockCards, name: 'lock cards', blurb: "type it out. can't look away." },
+  { id: GoonElement.ToyPatterns, name: 'toy patterns', blurb: 'bursts, capped by your own limit.' },
+  { id: GoonElement.Spiral, name: 'spiral', blurb: "a slow spiral takes the whole screen. it doesn't blink. neither will they." },
+  { id: GoonElement.BrainDrain, name: 'brain drain', blurb: "late, heavy, and it doesn't stop." },
 ]);
 
 

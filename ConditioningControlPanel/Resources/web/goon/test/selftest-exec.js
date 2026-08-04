@@ -3807,6 +3807,59 @@ async function main() {
       'and the tag falls back the moment it is gone');
   }
 
+  /* --------------------------------------------- peekKind CONSUMES NOTHING
+   * ui/throwPreview.js shows the player a thumbnail of what a payload is about
+   * to play. If it got that thumbnail by DRAWING, it would spend the very draw
+   * the effect was going to make and the preview would be a picture of a clip
+   * that then never played — a bug the preview itself caused. So the peek is
+   * asserted to leave the deck, the echo guard and the draw ORDER untouched. */
+  {
+    const { createGoonMediaPool } = await import('../exec/media.js');
+
+    // Two identically seeded pools: one is peeked at hard, the other is not.
+    const run = (peek) => seeded(() => {
+      const p = createGoonMediaPool();
+      p.setManifest(ownManifest());
+      if (peek) for (let i = 0; i < 25; i++) { p.peekKind('video'); p.peekKind('image'); }
+      const out = [];
+      for (let i = 0; i < 10; i++) { const d = p.drawKind('video'); out.push(d ? d.name : '-'); }
+      return out.join(',');
+    });
+    ok(run(true) === run(false),
+      'peekKind leaves the deck EXACTLY as it found it — ten draws come out in the same order',
+      run(true) + ' vs ' + run(false));
+
+    const p = createGoonMediaPool();
+    p.setManifest(ownManifest());
+    const a = p.peekKind('video');
+    const b = p.peekKind('video');
+    ok(a && b && a.name === b.name && a.kind === 'video',
+      'a peek is stable and of the kind asked for', a ? `${a.kind} ${a.name}` : 'null');
+    // …and once the deck has actually been DEALT, the peek is the next draw.
+    // (Before the first deal there is no deck to read, so the peek falls back to
+    // pool order — representative, which is all it ever promises.)
+    p.drawKind('video');
+    ok(p.peekKind('video').name === p.drawKind('video').name,
+      'on a dealt deck it really is what the next drawKind hands back, which is the point of previewing it');
+    ok(p.peekKind('nonsense') === null && p.peekKind() === null, 'an unknown kind peeks at nothing');
+
+    const empty = createGoonMediaPool();
+    ok(empty.peekKind('image') === null, 'an empty pool peeks at nothing rather than throwing');
+    empty.setLocalLibrary([{ kind: 'image', name: 'phone-pick', url: 'blob:x' }]);
+    ok(empty.peekKind('image') && empty.peekKind('image').name === 'phone-pick',
+      'a deck that has never been dealt still peeks — the standalone/phone path');
+    ok(empty.peekKind('video') === null, 'and a kind the library has none of stays null');
+
+    // A peer artifact must not leak out of this door either (rule: their media
+    // appears where their payload asked for it and nowhere else).
+    const peers = createGoonMediaPool();
+    peers.setManifest(ownManifest());
+    peers.addReceived({ sha: SHA_VID, kind: 'video', mime: 'video/mp4', url: 'https://ccp.cache/recv/b.mp4' });
+    let leaked = 0;
+    for (let i = 0; i < 50; i++) { const v = peers.peekKind('video'); if (v && v.provenance !== 'local') leaked++; }
+    ok(leaked === 0, 'peekKind can never surface a received artifact', String(leaked));
+  }
+
   // -------------------------------- addReceived does not disturb the deck
   {
     const { createGoonMediaPool } = await import('../exec/media.js');

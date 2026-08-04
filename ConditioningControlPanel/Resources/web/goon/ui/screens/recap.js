@@ -552,7 +552,9 @@ export function mount(container, ctx) {
 
     /* --- scoreline --- */
     if (result) {
-      const risk = match?.scoring?.riskMultiplier || 1;
+      // `riskMultiplier` is the engine's frozen name for the pool's score bonus
+      // (core/scoring.js, C#-parity). The word never reaches the page any more.
+      const mult = match?.scoring?.riskMultiplier || 1;
       column.appendChild(el('section', { class: 'gg-card gg-recap-score' }, [
         el('h2', { class: 'gg-recap-h', text: S.recap.scoreline }),
         el('div', { class: 'gg-scoreline' }, [
@@ -560,7 +562,7 @@ export function mount(container, ctx) {
           el('span', { class: 'gg-scoredash', text: '·' }),
           el('span', { class: 'gg-scorenum is-them', text: String(result.remoteScore) }),
         ]),
-        el('p', { class: 'gg-recap-fine', text: S.recap.scoreFineprint(risk) }),
+        el('p', { class: 'gg-recap-fine', text: S.recap.scoreFineprint(mult) }),
         el('p', { class: 'gg-recap-fine', text: S.recap.survived(result.survivedMs) }),
       ]));
     }

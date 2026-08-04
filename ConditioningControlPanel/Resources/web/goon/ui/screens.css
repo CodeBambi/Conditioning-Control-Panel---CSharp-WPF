@@ -364,15 +364,10 @@
 .gg-draft-side--them { align-items: flex-end; }
 .gg-draft-who { font-size: 0.8rem; color: var(--gg-text-2); font-weight: 600; }
 
-.gg-riskmeter { display: flex; gap: 3px; }
-.gg-riskseg {
-  width: 100%; max-width: 2.2rem; height: 6px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.09);
-  transition: background .2s, box-shadow .2s;
-}
-.gg-riskseg.is-on { background: linear-gradient(135deg, var(--gg-pink), var(--gg-violet)); }
-.gg-riskseg.is-gold.is-on { background: var(--gg-gold); box-shadow: 0 0 12px rgba(255, 212, 94, 0.55); }
+/* The seven-segment RISK METERS that lived here (.gg-riskmeter/.gg-riskseg — one
+   per side of the header plus a third in the footer) were deleted on 2026-08-04
+   along with the player-facing risk tier. ui/screens/draft.js builds no such
+   node any more. */
 
 .gg-elems {
   display: grid;
@@ -403,11 +398,11 @@
 .gg-elem-blurb { font-size: 0.68rem; color: var(--gg-text-4); line-height: 1.4; }
 .gg-elem-why { display: none; font-size: 0.66rem; color: var(--gg-text-4); line-height: 1.4; }
 
-/* NOTE: named gg-riskpips, not gg-pips — ui/hud.css owns .gg-pips for the
-   charge meter and loads AFTER this file. Two owners, one name, silent bug. */
-.gg-riskpips { display: inline-flex; gap: 3px; }
-.gg-riskpips i { width: 5px; height: 5px; border-radius: 50%; background: rgba(255, 255, 255, 0.14); }
-.gg-riskpips i.is-on { background: var(--gg-pink); }
+/* The per-tile RISK PIPS (.gg-riskpips — three dots of the 0-3 tier) went the
+   same way on 2026-08-04. The warning they carried still applies to whatever
+   lands here next: do NOT name a draft-screen class .gg-pips — ui/hud.css owns
+   that for the charge meter and loads AFTER this file. Two owners, one name,
+   silent bug. */
 
 .gg-elem-badge {
   position: absolute;
@@ -461,9 +456,9 @@
   padding-top: 0.9rem;
   border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
+/* Once a meter, a "Match risk 4 / 7" label and a multiplier; since 2026-08-04
+   just the multiplier — the only one of the three a player could act on. */
 .gg-draft-meterwrap { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
-.gg-draft-meterwrap .gg-riskmeter { width: 9rem; }
-.gg-draft-risk { font-size: 0.8rem; color: var(--gg-text-2); font-variant-numeric: tabular-nums; }
 .gg-draft-mult { font-size: 0.8rem; color: var(--gg-gold); font-variant-numeric: tabular-nums; }
 
 .gg-draft-theirs { display: flex; align-items: center; gap: 0.5rem; }

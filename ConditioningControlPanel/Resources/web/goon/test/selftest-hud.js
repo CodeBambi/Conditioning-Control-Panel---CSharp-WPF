@@ -169,8 +169,7 @@ const hasClass = (node, className) => !!(node && node._classes && node._classes.
 
 const { GoonConsts, GoonElement, GoonMatchPhase, GoonPayloadKind, GoonRoundKind } = await import('../core/contracts.js');
 const { nullRoundInputs, nullRoundPresenter, GoonStimulusKind, GoonRoundVerdict } = await import('../core/rounds/model.js');
-const { riskTierOf } = await import('../core/draft.js');
-const { ELEMENTS } = await import('../ui/strings.js');
+const { ELEMENTS, S } = await import('../ui/strings.js');
 
 const hudMod = await import('../ui/hud.js');
 const mercyMod = await import('../ui/mercy.js');
@@ -335,12 +334,23 @@ function makeFakeMatch() {
     match,
     getDropTarget: () => mon,
   });
-  ok(left.children.length === 5, 'left rail renders 5 items', String(left.children.length));
+  ok(left.children.length === 4, 'left rail renders 4 items', String(left.children.length));
   ok(right.children.length === 4, 'right rail renders 4 items', String(right.children.length));
   ok(left.children.length + right.children.length === arsenalMod.ARSENAL_ITEMS.length,
-    'every arsenal item got a slot (9 with spiral)', String(left.children.length + right.children.length));
+    'every arsenal item got a slot (8: 7 payloads + emote)', String(left.children.length + right.children.length));
   ok(arsenalMod.ARSENAL_ITEMS.some((i) => i.id === 'spiral' && i.kind === GoonPayloadKind.Spiral),
     'the spiral slot is wired to GoonPayloadKind.Spiral');
+  // THE BUBBLE THROWABLE IS GONE (owner, 2026-08-04). Bubbles are the always-on
+  // baseline field, so a bubble payload item threw more of what was already
+  // running. It may not come back as a slot, a key or a drop candidate — but the
+  // WIRE kind stays frozen and inbound BubbleSwarm still renders (exec/bubbles.js).
+  ok(arsenalMod.ARSENAL_ITEMS.every((i) => i.kind !== GoonPayloadKind.BubbleSwarm),
+    'no BubbleSwarm slot: the bubble throwable is not obtainable');
+  ok(arsenalMod.ARSENAL_ITEMS.every((i) => i.id !== 'bubbles'),
+    'and its id is gone with it');
+  ok(arsenalMod.ARSENAL_ITEMS.filter((i) => i.kind !== null).length === 7,
+    'seven payload slots, i.e. keys 1-7',
+    String(arsenalMod.ARSENAL_ITEMS.filter((i) => i.kind !== null).length));
   ok(!!findOne(left, 'gg-item-fallback'), 'each tile carries a CSS art fallback for a missing PNG');
   ok(findAll(left, 'gg-plate').length === 0 && findAll(right, 'gg-plate').length === 0,
     'item tiles are chromeless: no .gg-plate anywhere on the rails');
@@ -522,24 +532,57 @@ function makeFakeMatch() {
   ars.unmount();
 }
 
-/* --- 2b-iii. ui/drops.js: the roller ---------------------------------------
- * Pure functions first (chance curve + rarity weighting), then the roller with
- * a scripted RNG so the whole pop -> credit -> arm chain is deterministic. */
+/* --- 2b-iii. ui/drops.js: the HEAT economy ---------------------------------
+ * The flat "12% per unit of worth" coin flip was replaced on 2026-08-04 by a
+ * heat gauge: pops bank heat, the chance ramps with the fill, a landed drop
+ * spends a chunk back. Pure functions first (heat gain, the chance ramp, decay,
+ * rarity weighting), then the roller with a scripted RNG and a scripted clock so
+ * the whole pop -> heat -> credit -> arm -> spend chain is deterministic.
+ *
+ * THE ONE ASSERTION THAT IS THE ECONOMY. Over a long run heat in must equal heat
+ * out, so drops-per-pop settles at HEAT_PER_WORTH / HEAT_DROP_COST x worth
+ * REGARDLESS of the curve's shape. That ratio is therefore the whole pacing
+ * knob, and it is pinned here against the old flat rate it replaced: 12%/worth.
+ * A curve retune must not move it; if it does, this fails, which is the point. */
 {
-  const { DROP_TUNING, dropChanceFor, weightOf, pickDrop, createDropRoller } = await import('../ui/drops.js');
+  const { DROP_TUNING, heatGainFor, dropChanceAt, decayHeat, weightOf, pickDrop, createDropRoller } =
+    await import('../ui/drops.js');
   const bub = await import('../exec/bubbles.js');
 
-  ok(typeof DROP_TUNING.CHANCE_PER_WORTH === 'number' && typeof DROP_TUNING.COST_BIAS === 'number',
+  ok(typeof DROP_TUNING.HEAT_PER_WORTH === 'number' && typeof DROP_TUNING.COST_BIAS === 'number',
     'ui/drops.js exports one tuning block');
-  ok(Math.abs(dropChanceFor(bub.POP_WORTH_NORMAL) - 0.12) < 1e-9,
-    'a normal bubble drops ~12% of the time', String(dropChanceFor(bub.POP_WORTH_NORMAL)));
-  ok(Math.abs(dropChanceFor(bub.POP_WORTH_EFFECT) - 0.30) < 1e-9,
-    'an effect bubble drops ~30% of the time', String(dropChanceFor(bub.POP_WORTH_EFFECT)));
-  ok(dropChanceFor(bub.POP_WORTH_EFFECT) > dropChanceFor(bub.POP_WORTH_NORMAL),
-    'effect bubbles are worth strictly more than plain ones');
-  ok(dropChanceFor(bub.POP_WORTH_PAYLOAD) === 0, 'a payload-minted bubble never rolls');
-  ok(dropChanceFor(undefined) === 0 && dropChanceFor(null) === 0, 'a malformed worth never rolls');
-  ok(dropChanceFor(999) <= DROP_TUNING.CHANCE_MAX, 'the chance is ceilinged', String(dropChanceFor(999)));
+
+  // the pacing pin: the equilibrium rate is the old flat 12%/worth, +-1 point
+  const rate = DROP_TUNING.HEAT_PER_WORTH / DROP_TUNING.HEAT_DROP_COST;
+  ok(Math.abs(rate - 0.12) <= 0.01,
+    'the heat economy paces to the ~12%-per-worth it replaced', rate.toFixed(4));
+  ok(Math.abs(rate * bub.POP_WORTH_EFFECT - 0.30) <= 0.03,
+    'and an effect bubble to its old ~30%', (rate * bub.POP_WORTH_EFFECT).toFixed(4));
+
+  // heat gain: worth in, heat out, clutter banks nothing
+  ok(heatGainFor(bub.POP_WORTH_EFFECT) > heatGainFor(bub.POP_WORTH_NORMAL),
+    'effect bubbles are worth strictly more heat than plain ones');
+  ok(heatGainFor(bub.POP_WORTH_PAYLOAD) === 0, 'a payload-minted bubble banks no heat');
+  ok(heatGainFor(undefined) === 0 && heatGainFor(null) === 0, 'a malformed worth banks no heat');
+
+  // the ramp: floored, ceilinged, and strictly climbing in between
+  ok(Math.abs(dropChanceAt(0) - DROP_TUNING.CHANCE_FLOOR) < 1e-9,
+    'an empty gauge sits at the floor', String(dropChanceAt(0)));
+  ok(Math.abs(dropChanceAt(DROP_TUNING.HEAT_MAX) - DROP_TUNING.CHANCE_PEAK) < 1e-9,
+    'a full gauge sits at the peak', String(dropChanceAt(DROP_TUNING.HEAT_MAX)));
+  ok(dropChanceAt(1e6) <= DROP_TUNING.CHANCE_PEAK && dropChanceAt(-50) >= DROP_TUNING.CHANCE_FLOOR,
+    'the ramp is clamped at both ends', dropChanceAt(1e6) + '/' + dropChanceAt(-50));
+  let climbs = true;
+  for (let h = 0; h < DROP_TUNING.HEAT_MAX; h += 5) { if (!(dropChanceAt(h + 5) > dropChanceAt(h))) climbs = false; }
+  ok(climbs, 'a fuller gauge is always a better chance, at every step');
+  ok(dropChanceAt(DROP_TUNING.HEAT_MAX) < 1, 'and a drop is never a certainty');
+
+  // decay: gentle, clamped at empty, a no-op for nonsense elapsed times
+  ok(decayHeat(50, 10000) === 50 - DROP_TUNING.HEAT_DECAY_PER_SEC * 10,
+    'heat cools on the wall clock', String(decayHeat(50, 10000)));
+  ok(decayHeat(3, 999999) === 0, 'and never goes below empty');
+  ok(decayHeat(40, 0) === 40 && decayHeat(40, -5) === 40, 'a zero or negative elapsed cools nothing');
+
   ok(weightOf(1) > weightOf(2) && weightOf(2) > weightOf(3), 'cheap items are commoner than expensive ones');
 
   // the weighted pick: roll 0 lands on the first candidate, roll ~1 on the last
@@ -597,6 +640,78 @@ function makeFakeMatch() {
   // a miss is a miss
   const missed = createDropRoller({ match, arsenal: fakeArsenal, random: () => 0.99 });
   ok(missed.onPop({ kind: 'normal', worth: bub.POP_WORTH_NORMAL }).reason === 'miss', 'a losing roll drops nothing');
+
+  /* --- the gauge itself: what fills it, what spends it, what leaves it alone -
+   * A scripted clock, because decay is lazy (read-time, no timer) and a real one
+   * would make every heat number here a race. */
+  {
+    let t = 0;
+    const clock = () => t;
+    const cold = createDropRoller({ match, arsenal: fakeArsenal, random: () => 0.99, now: clock });
+    ok(cold.heat === 0 && cold.heatFraction === 0, 'a fresh roller is stone cold', String(cold.heat));
+
+    cold.onPop({ kind: 'normal', worth: bub.POP_WORTH_NORMAL });
+    const afterOne = cold.heat;
+    ok(Math.abs(afterOne - heatGainFor(bub.POP_WORTH_NORMAL)) < 1e-9,
+      'a pop banks exactly its worth in heat', String(afterOne));
+    cold.onPop({ kind: 'flash', worth: bub.POP_WORTH_EFFECT });
+    ok(cold.heat > afterOne, 'and they add up', String(cold.heat));
+
+    // clutter is not a pop as far as the gauge is concerned
+    const beforeClutter = cold.heat;
+    cold.onPop({ kind: 'normal', worth: bub.POP_WORTH_PAYLOAD, payload: true });
+    ok(cold.heat === beforeClutter, 'a payload-minted pop banks nothing', String(cold.heat));
+
+    // it cools when nobody is popping, and never past empty
+    t += 10000;
+    ok(cold.heat < beforeClutter && cold.heat > 0, 'the gauge cools between pops', String(cold.heat));
+    t += 10 * 60 * 1000;
+    ok(cold.heat === 0, 'and bottoms out rather than going negative', String(cold.heat));
+
+    // the ceiling holds however hard you pop
+    const capped = createDropRoller({ match, arsenal: fakeArsenal, random: () => 0.99, now: clock });
+    for (let i = 0; i < 200; i++) capped.onPop({ kind: 'flash', worth: bub.POP_WORTH_EFFECT });
+    ok(capped.heat === DROP_TUNING.HEAT_MAX && capped.heatFraction === 1,
+      'heat is capped at a full gauge', String(capped.heat));
+
+    /* A LANDED drop spends the gauge down; a refused one must not.
+     * `win` is the scripted RNG both rollers share: 0.99 (never wins the roll)
+     * while the gauge is being filled, 0 (always wins, always the first
+     * candidate) once we want the drop. Rolling a win on every pop instead would
+     * spend the heat as fast as it arrived and prove nothing. */
+    let win = false;
+    const scripted = () => (win ? 0 : 0.99);
+
+    const spender = createDropRoller({ match, arsenal: fakeArsenal, random: scripted, now: clock });
+    for (let i = 0; i < 4; i++) spender.onPop({ kind: 'flash', worth: bub.POP_WORTH_EFFECT });
+    const hotBefore = spender.heat;
+    ok(hotBefore > DROP_TUNING.HEAT_DROP_COST,
+      'four effect pops bank more than one drop costs', String(hotBefore));
+    win = true;
+    const landed = spender.onPop({ kind: 'flash', worth: bub.POP_WORTH_EFFECT });
+    win = false;
+    ok(landed.dropped === true, 'the scripted roll lands a drop', JSON.stringify(landed));
+    ok(spender.heat < hotBefore, 'a drop spends heat back down', `${hotBefore} -> ${spender.heat}`);
+    ok(spender.heat >= 0, 'never below empty', String(spender.heat));
+
+    const refuser = createDropRoller({
+      match: { phase: GoonMatchPhase.Live, creditCharges: () => false },
+      arsenal: fakeArsenal, random: scripted, now: clock,
+    });
+    for (let i = 0; i < 2; i++) refuser.onPop({ kind: 'flash', worth: bub.POP_WORTH_EFFECT });
+    const heldBefore = refuser.heat;
+    ok(heldBefore < DROP_TUNING.HEAT_MAX, 'the gauge is below the cap, so a change would show');
+    win = true;
+    const refused = refuser.onPop({ kind: 'flash', worth: bub.POP_WORTH_EFFECT });
+    win = false;
+    ok(refused.reason === 'no-charge', 'the engine refuses the drop', JSON.stringify(refused));
+    ok(refuser.heat > heldBefore,
+      'and a drop the player never got does NOT spend the gauge', `${heldBefore} -> ${refuser.heat}`);
+
+    // the reset the HUD leans on between matches
+    spender.resetHeat();
+    ok(spender.heat === 0, 'resetHeat empties the gauge');
+  }
 }
 
 /* --- 2b-iv. the HUD glue: gg-bubble-pop -> roller -> armed sticker --------- */
@@ -641,13 +756,298 @@ function makeFakeMatch() {
     `${match._subs.released}/${match._subs.taken}`);
 }
 
-// -------------------------------- 2c. the risk table in ui/strings.js agrees
-// Two tables describe the same thing (core/draft.js is authority, strings.js
-// carries a copy for the tile). Nothing else cross-checks them.
+/* --- 2b-v. the HEAT GAUGE on the desk (owner, 2026-08-04) ------------------
+ * The economy is invisible unless this box is: the whole reason heat replaced a
+ * flat coin flip is that a player can WATCH it fill. So the gauge is pinned as
+ * DOM, in the arsenal's own column, painting off the roller — and pinned as a
+ * readout, because a gauge that ate clicks would be a dead 190px box on a desk
+ * whose bottom layer is MERCY. */
+{
+  const match = makeFakeMatch();
+  const hud = hudMod.mountHud({ match, audio: { sfx() {} } });
+  const heat = hud.parts.heat;
+
+  ok(heat && heat.box && heat.fill, 'mountHud builds the heat gauge');
+  ok(hasClass(heat.box, 'gg-heat'), 'under the name ui/hud.css styles');
+  ok(!hasClass(heat.box, 'gg-plate'),
+    'and NOT as a .gg-plate — that would re-enable pointer events at 0,2,0 over the desk');
+  ok(heat.box.getAttribute('role') === 'progressbar', 'it announces itself as a progressbar');
+  ok(typeof S.hud.heatLabel === 'string' && S.hud.heatLabel.length > 0,
+    'the gauge has a word beside the colour', String(S.hud.heatLabel));
+  ok(heat.box.getAttribute('aria-label') === S.hud.heatLabel, 'and it is the labelled name');
+
+  /* It lives INSIDE THE ARSENAL SIDEBAR, at the head of the panel, above the
+   * rails it fills — never in the bottom deck, which is the strip MERCY owns.
+   * It moved here with the sidebar (2026-08-04): it is the item economy's meter,
+   * so it collapses WITH the items rather than being left behind under a monitor
+   * it has nothing to do with. */
+  const col = heat.box.parentNode;
+  ok(hasClass(col, 'gg-arsenal-panel'), 'it rides inside the arsenal panel', col && col.className);
+  ok(hasClass(col.parentNode, 'gg-arsenal'), 'which is the collapsible sidebar itself');
+  const kids = col.children.map((n) => n.className);
+  ok(kids.indexOf('gg-heat') === 0 && kids.some((c) => /gg-arsenal-rails/.test(c)),
+    'sitting directly on top of the rails it fills', kids.join(' | '));
+  ok(col === hud.parts.sidebar.panel, 'so collapsing the panel takes the gauge with it');
+
+  // and it PAINTS: a forced drop-less pop must move the fill off zero
+  ok(heat.fill.style.width === '0.0%' || heat.fill.style.width === '0%' || !heat.fill.style.width,
+    'it starts empty', String(heat.fill.style.width));
+  const realRandom5 = Math.random;
+  Math.random = () => 0.999;   // bank heat, never win the roll
+  try {
+    for (let i = 0; i < 4; i++) {
+      document.dispatchEvent(new CustomEvent('gg-bubble-pop', {
+        detail: { kind: 'flash', worth: 2.5, payload: false, x: 40, y: 40 },
+      }));
+    }
+  } finally { Math.random = realRandom5; }
+  ok(hud.parts.drops.heat > 0, 'four pops bank heat on the roller', String(hud.parts.drops.heat));
+  ok(heat.fraction > 0 && heat.fraction <= 1, 'the gauge reads it back as a fraction', String(heat.fraction));
+  // the paint runs on the 200ms interval; drive it the way the interval would
+  const pct = parseFloat(heat.fill.style.width || '0');
+  ok(!Number.isNaN(pct), 'and the fill carries a width the CSS can transition', String(heat.fill.style.width));
+
+  hud.unmount();
+  ok(match._subs.released === match._subs.taken, 'the gauge leaks no subscriptions (it polls, never subscribes)',
+    `${match._subs.released}/${match._subs.taken}`);
+}
+
+/* --- 2b-vi. THE ARSENAL SIDEBAR (owner, 2026-08-04) ------------------------
+ * "The throwable items should live in a sidebar that can be collapsed", on the
+ * desktop panel AND on the phone that joined by link.
+ *
+ * The whole feature is one class on one node, so what is worth pinning is not
+ * the class — it is the four ways a collapsible control panel goes wrong on THIS
+ * desk, every one of which has already happened to something else here:
+ *
+ *   1. it covers or gates MERCY (it cannot: #gg-hud is a z40 stacking context);
+ *   2. collapsed leaves an invisible hit area over the field and the drop
+ *      economy quietly starves, the way an open sheet at Live once did;
+ *   3. the keyboard stops working when the tiles are not on screen, which turns
+ *      a tidy desk into a disarmed player;
+ *   4. the choice is not remembered, or is remembered so hard that a phone opens
+ *      a drawer over the field it is trying to pop bubbles in.
+ * ------------------------------------------------------------------------- */
+{
+  const match = makeFakeMatch();
+  const store = {};
+  const prefs = { get: (k) => store[k], set: (k, v) => { store[k] = v; return true; } };
+  const hud = hudMod.mountHud({ match, audio: { sfx() {} }, prefs });
+  const host = dom.byId.get('gg-hud');
+  const side = hud.parts.sidebar;
+
+  /* ---- the DOM ---------------------------------------------------------- */
+  ok(side && side.root && side.panel && side.tab, 'mountHud builds the sidebar');
+  ok(hasClass(side.root, 'gg-arsenal'), 'under the name ui/hud.css styles', side.root.className);
+  ok(hasClass(side.root.parentNode, 'gg-hud-body'), 'it is a cell of the desk body, not a layer of its own');
+  const bodyKids16 = side.root.parentNode.children.map((k) => k.className);
+  ok(bodyKids16[0].indexOf('gg-arsenal') === 0,
+    'and the FIRST one — the sidebar is on the left, where nothing structural lives', bodyKids16.join(' | '));
+  ok(bodyKids16.some((c) => /gg-rightcol/.test(c)),
+    'the right column (monitor · receipts · videos.js keep-out) is untouched by it');
+
+  const panelKids = side.panel.children.map((k) => k.className);
+  ok(panelKids.includes('gg-heat'), 'the panel carries the heat gauge', panelKids.join(' | '));
+  ok(panelKids.some((c) => /gg-arsenal-rails/.test(c)), 'and the rail box');
+  const railBox16 = findOne(side.panel, 'gg-arsenal-rails');
+  ok(!!findOne(railBox16, 'gg-rail--left') && !!findOne(railBox16, 'gg-rail--right'),
+    'which is the two four-tall rails, side by side — eight tiles stacked one-wide does not fit a laptop');
+  ok(findAll(side.panel, 'gg-item').length === arsenalMod.ARSENAL_ITEMS.length,
+    'every sticker is inside the panel', String(findAll(side.panel, 'gg-item').length));
+  ok(findAll(side.tab, 'gg-item').length === 0, 'and none of them is inside the handle');
+
+  // the handle is a real button, and it says what it does in both states
+  ok(side.tab.tagName === 'BUTTON' && side.tab.type === 'button', 'the handle is a button');
+  ok(String(side.tab.getAttribute('aria-label') || '').length > 0
+    && side.tab.getAttribute('aria-expanded') === 'true',
+    'that announces itself and its state', side.tab.getAttribute('aria-label'));
+  ok(!hasClass(side.root, 'gg-plate') && !hasClass(side.panel, 'gg-plate'),
+    'and NOTHING in the sidebar wears .gg-plate — that re-enables pointer events at 0,2,0 over the field');
+
+  /* ---- open by default on a desk ---------------------------------------- */
+  ok(side.open === true, 'a desktop desk starts EXPANDED — the gutter is going spare anyway');
+  ok(hasClass(side.root, hudMod.ARSENAL_OPEN_CLASS), 'and the class says so', side.root.className);
+  ok(store.arsenalOpen === undefined, 'without writing a preference nobody expressed');
+
+  /* ---- collapse: the tiles go, the handle stays ------------------------- */
+  side.tab.dispatchEvent({ type: 'click' });
+  ok(side.open === false, 'clicking the handle collapses it');
+  ok(!hasClass(side.root, hudMod.ARSENAL_OPEN_CLASS), 'the one bit is off');
+  ok(side.tab.parentNode === side.root && side.tab.disabled === false,
+    'the handle is still there and still live — a one-way door is exactly what a phone cannot have');
+  ok(store.arsenalOpen === 'shut', 'and the choice is remembered', String(store.arsenalOpen));
+  side.tab.dispatchEvent({ type: 'click' });
+  ok(side.open === true && store.arsenalOpen === 'open', 'clicking it again puts them back',
+    String(store.arsenalOpen));
+
+  /* ---- 3. THE KEYBOARD DOES NOT CARE ------------------------------------
+   * ui/arsenal.js binds 1-7 on `window` and never looks at the DOM, which is the
+   * whole reason a collapsed arsenal is safe. Armed first (every slot starts
+   * locked), then collapsed, then fired — twice, because the first press arms
+   * for a monitor tap and the second is the shot. */
+  const ars16 = hud.parts.arsenal;
+  ars16.armDrop('flash');
+  side.set(false);
+  ok(side.open === false, 'collapsed for the keyboard run');
+  const firesBefore = match._fires.length;
+  dom.win.dispatchEvent({ type: 'keydown', key: '1', repeat: false });
+  dom.win.dispatchEvent({ type: 'keydown', key: '1', repeat: false });
+  ok(match._fires.length === firesBefore + 1,
+    'keys 1-7 still fire from a COLLAPSED sidebar', String(match._fires.length - firesBefore));
+  ok(hasClass(side.tab, 'is-bump'),
+    'and the handle pulses, so a press behind a shut drawer is not silent');
+
+  /* ---- the count badge: the only readout a shut drawer has --------------- */
+  ars16.armDrop('subliminal');
+  ars16.armDrop('subliminal');
+  await sleep(260);            // the badge paints on the same 5 Hz poll as heat
+  ok(side.armed >= 2, 'the sidebar knows what is banked', String(side.armed));
+  ok(side.count.hidden === false && String(side.count.textContent) === String(side.armed),
+    'the handle carries the count while the stickers are hidden',
+    `${side.count.textContent} vs ${side.armed}`);
+  ok(String(side.count.getAttribute('aria-label') || '').indexOf('item') > 0,
+    'with a word on it, because a bare number beside a glow is colour travelling alone',
+    side.count.getAttribute('aria-label'));
+
+  hud.unmount();
+  ok(match._subs.released === match._subs.taken, 'the sidebar leaks no subscriptions',
+    `${match._subs.released}/${match._subs.taken}`);
+
+  /* ---- 4. the pref round-trip, and the auto policy ----------------------- */
+  const prefsMod16 = await import('../ui/prefs.js');
+  ok(prefsMod16.PREF_DEFAULTS.arsenalOpen === prefsMod16.ARSENAL_OPEN_AUTO,
+    "the pref exists and defaults to 'auto' — a boolean cannot say \"never asked\"",
+    String(prefsMod16.PREF_DEFAULTS.arsenalOpen));
+  const R = prefsMod16.resolveArsenalOpen;
+  ok(R(prefsMod16.ARSENAL_OPEN_AUTO, false) === true, 'auto on a desk: open');
+  ok(R(prefsMod16.ARSENAL_OPEN_AUTO, true) === false,
+    'auto on a phone: SHUT — a drawer over the field is not a starting position');
+  ok(R(prefsMod16.ARSENAL_OPEN_ON, true) === true && R(prefsMod16.ARSENAL_OPEN_OFF, false) === false,
+    'an explicit answer travels to whatever they play on next');
+  for (const junk of [undefined, null, '', 'yes', 0, 1, true, {}]) {
+    ok(R(junk, false) === true && R(junk, true) === false,
+      'a corrupt/legacy value falls through to the auto policy', JSON.stringify(junk));
+  }
+  // …and it survives the real store's coercion, which is where a string pref
+  // usually dies (coerce() reads the DEFAULT's type, and this one is a string)
+  const live16 = prefsMod16.createPrefs({ arsenalOpen: prefsMod16.ARSENAL_OPEN_OFF });
+  ok(live16.get('arsenalOpen') === prefsMod16.ARSENAL_OPEN_OFF,
+    'createPrefs keeps the seeded value as a string', String(live16.get('arsenalOpen')));
+  ok(live16.set('arsenalOpen', prefsMod16.ARSENAL_OPEN_ON) === true
+    && live16.get('arsenalOpen') === prefsMod16.ARSENAL_OPEN_ON,
+    'and set() round-trips it');
+
+  // a remembered 'shut' applies AT MOUNT, not on the first click
+  const match16b = makeFakeMatch();
+  const hud16b = hudMod.mountHud({
+    match: match16b, audio: { sfx() {} },
+    prefs: { get: (k) => (k === 'arsenalOpen' ? 'shut' : undefined), set() {} },
+  });
+  ok(hud16b.parts.sidebar.open === false,
+    'a remembered collapse is applied at mount — otherwise it reads as forgotten');
+  hud16b.unmount();
+
+  // …and a HUD with no pref store at all must still toggle
+  const match16c = makeFakeMatch();
+  const hud16c = hudMod.mountHud({ match: match16c, audio: { sfx() {} } });
+  const tab16c = findOne(dom.byId.get('gg-hud'), 'gg-arsenal-tab');
+  ok(!!tab16c, 'the handle exists with no prefs object');
+  tab16c.dispatchEvent({ type: 'click' });
+  ok(hud16c.parts.sidebar.open === false,
+    'and the toggle works without one — persistence is a nicety, not the state');
+  hud16c.unmount();
+  ok(host.children.length === 0, 'and the whole sidebar leaves with the HUD');
+}
+
+/* --- 2b-vii. the sidebar's CSS contract ------------------------------------
+ * Four rules, and every one of them is a bug this desk has already had:
+ *   1. the panel is pointer-transparent, so bubbles rising behind it stay
+ *      poppable — popping is the ONLY thing that ever fills this panel;
+ *   2. there is no scrim, on any breakpoint (a scrim over the bubble strip is
+ *      what froze the drop economy the last time a sheet opened at Live, and a
+ *      z70 one would bury MERCY at z60);
+ *   3. collapsed is display:none, not a transparent box still eating the field;
+ *   4. the handle keeps a >= 48px finger, because it is the only way back.
+ * ------------------------------------------------------------------------- */
+{
+  const fs17 = await import('node:fs/promises');
+  const url17 = await import('node:url');
+  const css17 = await fs17.readFile(url17.fileURLToPath(new URL('../ui/hud.css', import.meta.url)), 'utf8');
+  const rule = (sel) => {
+    const re = /([^{}]+)\{([^}]*)\}/g;
+    const out = [];
+    let m;
+    while ((m = re.exec(css17))) {
+      const list = m[1].split(',').map((s) => s.replace(/\/\*[\s\S]*?\*\//g, '').trim());
+      if (list.includes(sel)) out.push(m[2]);
+    }
+    return out.join(';');
+  };
+
+  // 1. the 0,2,0 opt-out, and it must come AFTER the .gg-plate rule it beats
+  ok(/\.gg-hud-frame\s+\.gg-arsenal[^{}]*\{[^}]*pointer-events:\s*none/.test(css17)
+    || /pointer-events:\s*none/.test(rule('.gg-hud-frame .gg-arsenal')),
+    'the sidebar surface takes no pointer input at all');
+  ok(/pointer-events:\s*none/.test(rule('.gg-hud-frame .gg-arsenal-panel')),
+    'nor does the panel — a bubble drifting behind it is still poppable through it');
+  const plateAt = css17.indexOf('.gg-hud-frame .gg-plate');
+  const optOutAt = css17.indexOf('.gg-hud-frame .gg-arsenal');
+  ok(plateAt >= 0 && optOutAt > plateAt,
+    'and the opt-out is written after the .gg-plate rule, at the same 0,2,0 — earlier and it silently loses',
+    `${plateAt} vs ${optOutAt}`);
+  ok(/pointer-events:\s*auto/.test(rule('.gg-hud-frame .gg-arsenal-tab')),
+    'the handle opts back in');
+  ok(/pointer-events:\s*auto/.test(rule('.gg-hud-frame .gg-arsenal .gg-item')),
+    'and so does every tile — a pointer-events:auto child of a none parent is still hit-testable');
+
+  // 2. no scrim, and nothing in this tier may climb toward MERCY's z60
+  ok(!/\.gg-arsenal[\w-]*\s*\{[^}]*position:\s*fixed[^}]*inset:\s*0/.test(css17),
+    'the drawer is never a full-bleed layer — that is a scrim by another name');
+  const zAll = (css17.match(/\.gg-arsenal[\w-]*[^{}]*\{[^}]*\}/g) || []).join('\n');
+  const zNums = (zAll.match(/z-index:\s*(\d+)/g) || []).map((s) => Number(s.replace(/\D/g, '')));
+  ok(zNums.every((z) => z < 60),
+    'and nothing in the sidebar reaches for a z-index near MERCY\'s 60', zNums.join(','));
+
+  // 3. collapsed is a real collapse
+  ok(/display:\s*none/.test(rule('.gg-arsenal-panel')),
+    'the panel is display:none by default — no invisible box left over the field');
+  ok(/display:\s*flex/.test(rule('.gg-arsenal.is-open .gg-arsenal-panel')),
+    'and the one bit is the only thing that brings it back');
+  ok(hudMod.ARSENAL_OPEN_CLASS === 'is-open',
+    'the class ui/hud.js writes is the class ui/hud.css reads', hudMod.ARSENAL_OPEN_CLASS);
+
+  // 4. the handle keeps a finger, and never shrinks on the breakpoint that
+  //    matters most — it is the only way back to your own items on a phone
+  const tab17 = rule('.gg-arsenal-tab');
+  ok(/width:\s*48px/.test(tab17), 'the handle is a 48px finger wide', tab17);
+  ok(/min-height:\s*(\d+)px/.test(tab17) && Number(tab17.match(/min-height:\s*(\d+)px/)[1]) >= 48,
+    'and at least 48 tall', tab17);
+
+  // the breakpoint the drawer behaviour hangs off is spelled ONCE
+  ok(css17.includes(hudMod.ARSENAL_NARROW_MQ),
+    'ui/hud.css uses the same media query ui/hud.js resolves the default from',
+    hudMod.ARSENAL_NARROW_MQ);
+
+  // zen keeps the arsenal, sidebar and all — it is what the duel is played on
+  ok(!new RegExp('\\.gg-hud--zen[^{}]*\\.gg-arsenal[^{}]*\\{[^}]*display:\\s*none').test(css17),
+    'zen never hides the sidebar, the same way it never hid the rails');
+}
+
+// ------------------------------- 2c. the draft tile table in ui/strings.js
+// THIS USED TO CROSS-CHECK A DUPLICATED RISK TABLE. ELEMENTS carried a
+// hand-copied `risk` tier that had to agree with core/draft.js riskTierOf(), and
+// nothing else compared them. On 2026-08-04 the player-facing risk system was
+// removed — no tier meters, no per-tile pips, no "match risk 4 / 7" — so the
+// duplicate was deleted at the source and there is nothing left to drift.
+// The tier itself is untouched inside core/draft.js + core/scoring.js (it still
+// multiplies the score, and it is C#-parity), so what is pinned here now is the
+// ABSENCE: a `risk` field growing back on these tiles means the duplicate is
+// back, and the next thing to arrive is a silent disagreement with the engine.
 {
   for (const meta of ELEMENTS) {
-    ok(meta.risk === riskTierOf(meta.id), `ELEMENTS risk matches core/draft.js for ${meta.name}`,
-      `${meta.risk} vs ${riskTierOf(meta.id)}`);
+    ok(!('risk' in meta), `no duplicated risk tier on the ${meta.name} tile`, JSON.stringify(meta));
+    ok(typeof meta.blurb === 'string' && meta.blurb.length > 10,
+      `and the ${meta.name} tile still says what it does`, meta.blurb);
   }
   const spiral = ELEMENTS.find((e) => e.id === GoonElement.Spiral);
   ok(!!spiral && spiral.name === 'spiral' && typeof spiral.blurb === 'string' && spiral.blurb.length > 10,
@@ -935,11 +1335,14 @@ function makeFakeMatch() {
 /* ===========================================================================
  * 9. REGRESSION — the opponent monitor was completely invisible (0803).
  *
- * assets/monitor_frame.png is OPAQUE art with a painted pure-black CRT face, and
- * the projection rect was a child of .gg-mon-screen (z-index:1 -> its own
+ * assets/monitor_frame.png paints its CRT face PURE BLACK (that is still true of
+ * the 2026-08-04 re-cut, whose SURROUND is transparent but whose screen is not),
+ * and the projection rect was a child of .gg-mon-screen (z-index:1 -> its own
  * stacking context) while the <img> sat at z-index:2. Every mini rendered under
  * the art. Structure and z-order are BOTH asserted, because either one alone
- * puts it back under the paint.
+ * puts it back under the paint. The GEOMETRY that goes with it — which four
+ * percentages that face is at — is re-derived from the art near the end of this
+ * file; this section is only about who is on top of whom.
  * ======================================================================== */
 {
   const match = makeFakeMatch();
@@ -1246,17 +1649,22 @@ function makeFakeMatch() {
  * mountHud -> arsenal.fire -> onFired -> markPayloadFired, with the engine's
  * `accepted` receipt arriving on the real event, at the real time. This is the
  * shape the shipped bug had: everything wired, every check above green, and the
- * mini still never lit. */
+ * mini still never lit.
+ *
+ * It used to fire the BUBBLE sticker; that item was removed on 2026-08-04 (see
+ * ARSENAL_ITEMS — bubbles are the always-on field, so the throwable was
+ * redundant), so this drives the subliminal slot instead. Nothing about the seam
+ * under test is kind-specific: any armed payload slot exercises the same path. */
 {
   const match = makeFakeMatch();
   match.opponent.activeEffects = [];
   const hud = hudMod.mountHud({ match, audio: { sfx() {} } });
   const proj = findOne(dom.byId.get('gg-hud'), 'gg-mon-proj');
-  const bub = findOne(proj, 'gg-mini-bubbles');
+  const bub = findOne(proj, 'gg-mini-sub');
 
-  hud.parts.arsenal.armDrop('bubbles');    // items are EARNED now (drop economy)
-  const res = hud.parts.arsenal.fire('bubbles');
-  ok(res && res.ok === true, 'the real desk fires a bubble swarm');
+  hud.parts.arsenal.armDrop('subliminal');  // items are EARNED now (drop economy)
+  const res = hud.parts.arsenal.fire('subliminal');
+  ok(res && res.ok === true, 'the real desk fires a subliminal storm');
   match._emit('pRec', { id: res.id, status: 'accepted' });    // ~60 ms in production
   ok(!hasClass(bub, 'is-on'), 'the mini is still dark while the payload is in the air');
 
@@ -2867,9 +3275,14 @@ const audioMod = await import('../ui/audio.js');
   const zenBlocks = hudCss13.match(/[^{}]*\.gg-hud--zen[^{}]*\{[^}]*\}/g) || [];
   ok(zenBlocks.length > 0, 'hud.css reads the modifier class at all');
   const zenText = zenBlocks.join('\n');
-  for (const sel of ['.gg-score', '.gg-risk', '.gg-dial-host']) {
+  // .gg-mult was .gg-risk until 2026-08-04 — same slot in the score column, same
+  // engine number, renamed with the rest of the player-facing risk system.
+  for (const sel of ['.gg-score', '.gg-mult', '.gg-dial-host']) {
     ok(zenText.includes(sel), `zen hides ${sel}`);
   }
+  // The heat gauge is NOT on that list and must not be: it is the arsenal's own
+  // meter, and zen keeps the arsenal.
+  ok(!zenText.includes('.gg-heat'), 'and zen keeps the heat gauge, like the rails it feeds');
   ok(/\.gg-hud--zen[^{}]*\{[^}]*display:\s*none/.test(zenText),
     'and it hides them with display, so the layout closes up instead of leaving holes');
 
@@ -3004,20 +3417,30 @@ const audioMod = await import('../ui/audio.js');
     'and "locked" leaves the LAYOUT, not the DOM — colour never travels alone in this tier',
     lockedState);
 
-  const railRight = ruleFor(phone, '.gg-rail--right');
-  const railLeft = ruleFor(phone, '.gg-rail--left');
+  /* THE TWO ABSOLUTE RAIL BANDS ARE GONE (2026-08-04, the arsenal sidebar).
+   * They pinned eight tiles into strips at 6rem and 11.6rem and cost the stage
+   * ~9rem of height on every phone, permanently, for controls a player touches a
+   * handful of times a match. What replaces them is a DRAWER, and what is pinned
+   * is the property that makes it worth the trade: it is an OVERLAY (fixed), it
+   * grows upward from the deck floor so it cannot reach MERCY, and it starts
+   * SHUT here so the default phone screen costs one 48px handle. */
+  const drawer16 = ruleFor(phone, '.gg-arsenal');
   const deck16 = ruleFor(phone, '.gg-hud-bottom');
-  const bRight = num(railRight, /bottom:\s*([\d.]+)rem/, 0);
-  const bLeft = num(railLeft, /bottom:\s*([\d.]+)rem/, 0);
   const deckPad = num(deck16, /padding-bottom:\s*([\d.]+)rem/, 0);
-  ok(bRight >= deckPad, 'the lower arsenal band starts at or above the deck floor', `${bRight} vs ${deckPad}`);
-  ok(bLeft >= bRight + 3.5, 'and the upper band clears the lower one by a whole tile', `${bLeft} vs ${bRight}`);
-  ok(/right:\s*auto/.test(railRight) && /max-width:\s*calc\(100% - [\d.]+rem\)/.test(railRight),
-    'the lower band comes in from the LEFT and is capped, so it shares its row with the dial instead of being buried under it',
-    railRight);
-  const dialW = num(ruleFor(phone, '.gg-dial'), /width:\s*min\([^,]+,\s*([\d.]+)rem\)/, 99);
-  const railCap = num(railRight, /max-width:\s*calc\(100% - ([\d.]+)rem\)/, 0);
-  ok(railCap >= dialW + 1, 'and the cap leaves the dial its own width plus daylight', `${railCap} vs ${dialW}`);
+  ok(!/\.gg-rail\s*\{[^}]*position:\s*absolute/.test(phone),
+    'the arsenal no longer nails two absolute bands across the bottom of a phone');
+  ok(/position:\s*fixed/.test(drawer16),
+    'the drawer floats OVER the field instead of taking a slice out of it', drawer16);
+  const drawerBottom = num(drawer16, /bottom:\s*calc\(([\d.]+)rem/, 0);
+  ok(drawerBottom >= deckPad,
+    'and it grows upward from the deck floor, so it can never reach MERCY', `${drawerBottom} vs ${deckPad}`);
+  ok(/left:\s*calc\([^)]*env\(safe-area-inset-left/.test(drawer16) && /right:\s*auto/.test(drawer16),
+    'it is anchored to the LEFT edge — the right one is the monitor, the receipts and videos.js\'s keep-out',
+    drawer16);
+  // no scrim, on this breakpoint or any other: an open sheet that owned the
+  // bubble-spawn strip is what froze the drop economy the last time
+  ok(!/gg-arsenal[^{}]*(scrim|backdrop)\s*\{/.test(css16) && !/\.gg-arsenal-scrim/.test(css16),
+    'and it is scrimless — a drawer, not a modal, with the match still live behind it');
   ok(/flex-direction:\s*row/.test(deck16),
     'the deck is one row on a phone — the dial stacked under the chips is what pushed it onto the rails');
 
@@ -3064,9 +3487,9 @@ const audioMod = await import('../ui/audio.js');
   // the claim panel and the dial are the two halves of one readout: never split
   ok(zenText16.includes('.gg-dial-host') && zenText16.includes('.gg-mon-close'),
     'both halves of the closeness readout leave together — hiding one and keeping the other reads as a bug');
-  // what still must survive zen on a phone: the rails drop, they do not vanish
-  const zenRail = ruleFor(phone, '.gg-hud-frame.gg-hud--zen .gg-rail--left');
-  ok(/bottom:\s*[\d.]+rem/.test(zenRail) && !/display:\s*none/.test(zenRail),
+  // what still must survive zen on a phone: the arsenal drops, it does not vanish
+  const zenRail = ruleFor(phone, '.gg-hud-frame.gg-hud--zen .gg-arsenal');
+  ok(/bottom:\s*calc\([\d.]+rem/.test(zenRail) && !/display:\s*none/.test(zenRail),
     'zen moves the arsenal down into the freed space rather than taking it away', zenRail);
 }
 
@@ -3744,6 +4167,766 @@ const audioMod = await import('../ui/audio.js');
   await sleep(0);
   ok(late.released === true && wl2.active === false,
     'wakelock: a sentinel that lands after stop() is released, not leaked');
+}
+
+/* ===========================================================================
+ * THE MONITOR GEOMETRY — assets/monitor_frame.png was re-cut (2026-08-04).
+ *
+ * The old art was 1376x768 and FULLY OPAQUE: a painted city with a television
+ * standing in it, and the projection rect was measured to the CRT face it
+ * painted (26% / 48% / 47%). The new art is 935x667 with a TRANSPARENT SURROUND
+ * — just the set — so every one of those numbers moved, the <img> can no longer
+ * be stretched to a 16/9 box, and the dark glass behind it is visible for the
+ * first time.
+ *
+ * The four face numbers are RE-DERIVED here from the art's own pixel rectangles
+ * rather than copied out of the stylesheet, so this is a check and not an echo:
+ * re-cut the art without re-measuring and this section says so.
+ * ======================================================================== */
+{
+  const fs = await import('node:fs/promises');
+  const url = await import('node:url');
+  const css = await fs.readFile(url.fileURLToPath(new URL('../ui/hud.css', import.meta.url)), 'utf8');
+
+  // The art, measured: the image, the television in it, and its screen face.
+  const ART = { w: 935, h: 667 };
+  const TV = { x: 148, y: 114, w: 638, h: 454 };
+  const FACE = { x: 230, y: 178, w: 475, h: 295 };
+
+  // …and the placement rule: the frame stays 16/9 (it is the drop target and a
+  // row in the HUD column), and the TELEVISION is fitted to its height.
+  const FRAME_H = 9 / 16;                                  // frame height, in frame widths
+  const imgWidthPct = (ART.h / TV.h) * FRAME_H * (ART.w / ART.h) * 100;
+  const imgHeightPct = (ART.h / TV.h) * 100;
+  const imgLeftPct = 50 - ((TV.x + TV.w / 2) / ART.w) * imgWidthPct;
+  const imgTopPct = 50 - ((TV.y + TV.h / 2) / ART.h) * imgHeightPct;
+  const want = {
+    x: imgLeftPct + (FACE.x / ART.w) * imgWidthPct,
+    w: (FACE.w / ART.w) * imgWidthPct,
+    y: imgTopPct + (FACE.y / ART.h) * imgHeightPct,
+    h: (FACE.h / ART.h) * imgHeightPct,
+  };
+
+  const blockOf = (sel) => {
+    const m = new RegExp(sel.replace(/\./g, '\\.') + '\\s*\\{([^}]*)\\}').exec(css);
+    return m ? m[1] : '';
+  };
+  const frameBlock = blockOf('.gg-mon-frame');
+  const pct = (block, prop) => {
+    const m = new RegExp('(?:^|;|\\s)' + prop + ':\\s*(-?[\\d.]+)%').exec(block);
+    return m ? Number(m[1]) : null;
+  };
+  const near = (a, b, tol = 0.15) => a !== null && Math.abs(a - b) <= tol;
+
+  ok(!!frameBlock, 'hud.css still has a .gg-mon-frame block');
+  ok(/aspect-ratio:\s*16\s*\/\s*9/.test(frameBlock),
+    'the frame keeps its 16/9 box — it is the arsenal drop target and a HUD column row');
+  for (const [name, wanted] of [['x', want.x], ['y', want.y], ['w', want.w], ['h', want.h]]) {
+    const got = pct(frameBlock, '--gg-mon-face-' + name);
+    ok(near(got, wanted),
+      `--gg-mon-face-${name} matches the CRT face the art actually paints`,
+      `${got} vs ${wanted.toFixed(2)}`);
+  }
+
+  // The <img> placement itself: NOT inset:0 at 100%, or the 1.402:1 art is
+  // stretched across a 1.778:1 box and every face number above is a lie.
+  const bezel = blockOf('.gg-mon-bezel');
+  ok(!!bezel, 'hud.css has a .gg-mon-bezel block');
+  ok(!/inset:\s*0/.test(bezel), 'the bezel is no longer pinned to the frame with inset: 0');
+  ok(near(pct(bezel, 'width'), imgWidthPct) && near(pct(bezel, 'height'), imgHeightPct),
+    'the bezel <img> is scaled so the TELEVISION fills the frame height',
+    `${pct(bezel, 'width')}/${pct(bezel, 'height')} vs ${imgWidthPct.toFixed(1)}/${imgHeightPct.toFixed(1)}`);
+  ok(near(pct(bezel, 'left'), imgLeftPct) && near(pct(bezel, 'top'), imgTopPct),
+    'and offset so it centres on the set rather than on the image',
+    `${pct(bezel, 'left')}/${pct(bezel, 'top')}`);
+  // Distortion check, straight off the declared box: whatever the two numbers
+  // are, their ratio must still be the art's.
+  const shownAspect = pct(bezel, 'width') / (pct(bezel, 'height') * FRAME_H);
+  ok(Math.abs(shownAspect - ART.w / ART.h) < 0.01,
+    'the art is placed, not stretched — the declared box is still 1.40:1', shownAspect.toFixed(4));
+
+  // The face numbers are declared ONCE and consumed by name, in both consumers.
+  const proj = blockOf('.gg-mon-proj');
+  ok(/left:\s*var\(--gg-mon-face-x\)/.test(proj) && /width:\s*var\(--gg-mon-face-w\)/.test(proj)
+    && /top:\s*var\(--gg-mon-face-y\)/.test(proj) && /height:\s*var\(--gg-mon-face-h\)/.test(proj),
+    'the projection rect is measured off --gg-mon-face-*, not off four literals of its own');
+  ok(!/aspect-ratio/.test(proj),
+    'and no longer claims 16/9 — the CRT face is 1.61:1 and the height is explicit');
+  ok(/var\(--gg-mon-face-/.test(blockOf('.gg-mon-screen')),
+    'the dark glass is cut to the same face — a 7%/6% inset now pokes out either side of the set');
+  ok(/\.gg-mon-frame\.is-nobezel\s*\{[^}]*--gg-mon-face-x/.test(css),
+    'the no-art fallback re-declares the face rather than overriding each consumer');
+
+  // z-order is still the whole feature (section 9's other half).
+  const zOf = (sel) => { const m = /z-index:\s*(-?\d+)/.exec(blockOf(sel)); return m ? Number(m[1]) : null; };
+  ok(zOf('.gg-mon-proj') > zOf('.gg-mon-bezel'),
+    'the projection rect still outranks the art — its FACE is still painted opaque black');
+  ok(zOf('.gg-mon-throw') > zOf('.gg-mon-proj'), 'and the throw flare sits above both');
+}
+
+/* ===========================================================================
+ * THE THROW — an inbound payload gets a sender, a flight and a landing.
+ *
+ * "when the opponent fires a payload at us the opponent monitor should
+ *  highlight, and the item should fly from the monitor to our field, and THEN
+ *  the effect triggers."
+ *
+ * The load-bearing property is that NONE of it may move the engine: the flight
+ * is fitted inside the schedule lead the engine already reserved, so the
+ * executor's render, the ACK and the receipts all happen exactly when they did.
+ * ======================================================================== */
+{
+  const previewMod = await import('../ui/throwPreview.js');
+  const { THROW_MS, THROW_MIN_MS, MINI_FOR_PAYLOAD } = opponentMod;
+
+  // --- the sticker map is the FLOOR under every preview, so it must be real
+  {
+    const fs = await import('node:fs/promises');
+    const url = await import('node:url');
+    for (const kind of Object.keys(MINI_FOR_PAYLOAD)) {
+      const art = previewMod.STICKER_FOR_PAYLOAD[kind];
+      ok(!!art, `every payload kind we can be thrown has a sticker (kind ${kind})`);
+      if (!art) continue;
+      let there = true;
+      try { await fs.stat(url.fileURLToPath(new URL('../assets/items/' + art + '.png', import.meta.url))); }
+      catch (_e) { there = false; }
+      ok(there, `assets/items/${art}.png exists`);
+    }
+    ok(previewMod.stickerUrl(GoonPayloadKind.Video) === './assets/items/item_video.png',
+      'stickerUrl builds the same path ui/arsenal.js does');
+    ok(previewMod.stickerUrl(9999) === null, 'and an unknown kind has no sticker rather than a broken one');
+  }
+
+  // --- the preview resolves the way the EXECUTOR will, and never by drawing
+  {
+    const SHA = 'a'.repeat(64);
+    let drew = 0;
+    let peeked = 0;
+    const released = [];
+    const pool = {
+      acquireByTag(tag) {
+        if (tag !== 'xfer:' + SHA) return null;
+        return { url: 'blob:peer-clip', mime: 'video/mp4', provenance: 'peer', release() { released.push('peer'); } };
+      },
+      peekKind(kind) {
+        peeked++;
+        if (kind !== 'video') return null;
+        return {
+          kind, name: 'own', url: 'blob:own-clip',
+          acquire: () => ({ url: 'blob:own-clip', provenance: 'local', release() { released.push('own'); } }),
+        };
+      },
+      drawKind() { drew++; return null; },
+      drawFor() { drew++; return null; },
+    };
+    previewMod.setPreviewMedia(pool);
+
+    const exact = previewMod.resolvePreview(GoonPayloadKind.Video, { tags: ['xfer:' + SHA] });
+    ok(exact && exact.exact === true && exact.url === 'blob:peer-clip' && exact.provenance === 'peer',
+      'a payload carrying an xfer: tag we hold previews THE clip that is about to play',
+      exact ? `${exact.provenance} ${exact.url}` : 'null');
+    if (exact) exact.release();
+
+    const rep = previewMod.resolvePreview(GoonPayloadKind.Video, { tags: [] });
+    ok(rep && rep.exact === false && rep.url === 'blob:own-clip',
+      'an untagged one previews our own library and says it is only representative');
+    if (rep) rep.release();
+    ok(released.length === 2, 'and both handles were given back', released.join(','));
+
+    ok(drew === 0,
+      'NOTHING here ever draws — a preview that spent a draw would change which clip then played',
+      String(drew));
+    ok(peeked > 0, 'it peeks instead', String(peeked));
+
+    // wrong kind on the tag -> skipped, exactly as exec/media.js drawFor does
+    const wrongKind = previewMod.resolvePreview(GoonPayloadKind.FlashBurst, { tags: ['xfer:' + SHA] });
+    ok(!wrongKind, 'a video tag on an image payload is not previewed as the image');
+
+    // the unbacked kinds fly as their sticker and nothing else
+    for (const kind of [GoonPayloadKind.LockCard, GoonPayloadKind.Spiral,
+      GoonPayloadKind.SubliminalStorm, GoonPayloadKind.ToyPattern]) {
+      ok(previewMod.resolvePreview(kind, null) === null,
+        `kind ${kind} has no media behind it and previews as its sticker`);
+    }
+    ok(previewMod.PREVIEW_MEDIA_KIND[GoonPayloadKind.Video] === 'video'
+      && previewMod.PREVIEW_MEDIA_KIND[GoonPayloadKind.FlashBurst] === 'image',
+      'the two kinds the P2P lane can carry are both previewable');
+
+    /* --- THE OUTBOUND HALF: the arsenal's drag ghost wears the same preview.
+     * What you are holding is what they are about to get. It is a ONE-LINE hook
+     * (`ghost = dressGhost(ghost, kind) || ghost`) precisely so the arsenal needs
+     * no branch and no knowledge of media — a null answer keeps its sticker. */
+    {
+      const sticker = document.createElement('img');
+      sticker.className = 'gg-item-ghost';
+      sticker.style.width = '64px';
+      sticker.style.height = '64px';
+      const live = previewMod.dressGhost(sticker, GoonPayloadKind.Video);
+      ok(!!live && live !== sticker, 'a media-backed item is dragged as a live preview, not a sticker');
+      ok(live && live.tagName === 'VIDEO', '…and a video payload drags the clip itself', live && live.tagName);
+      ok(live && live.style.width === '64px' && live.style.height === '64px',
+        'it inherits the ghost\'s size, so the arsenal\'s moveGhost/killGhost keep working unchanged');
+      ok(live && /item_video\.png/.test(String(live.style['--gg-ghost-sticker'] || '')),
+        'with the sticker still painted behind it until the first frame decodes');
+      const before = released.length;
+      live.remove();
+      ok(released.length > before,
+        'and removing it gives the refcount back — the arsenal cannot be expected to know that');
+
+      ok(previewMod.dressGhost(document.createElement('img'), GoonPayloadKind.LockCard) === null,
+        'an item with no content behind it keeps its sticker (null = no change)');
+      ok(previewMod.dressGhost(null, GoonPayloadKind.Video) === null, 'and a missing node is a no-op');
+    }
+
+    previewMod.setPreviewMedia(null);
+    ok(previewMod.resolvePreview(GoonPayloadKind.Video, null) === null,
+      'no pool -> no preview -> the sticker, with no throw');
+    ok(previewMod.dressGhost(document.createElement('img'), GoonPayloadKind.Video) === null,
+      'and with no pool the drag ghost stays exactly what it always was');
+  }
+
+  // --- both call sites really exist (the hooks are one line each, easy to lose)
+  {
+    const fs = await import('node:fs/promises');
+    const url = await import('node:url');
+    const read = async (p) => fs.readFile(url.fileURLToPath(new URL(p, import.meta.url)), 'utf8');
+    const arsenalSrc = await read('../ui/arsenal.js');
+    const hudSrc2 = await read('../ui/hud.js');
+    ok(/dressGhost\(ghost,\s*rec\.item\.kind\)/.test(arsenalSrc),
+      'ui/arsenal.js dresses its drag ghost — the OUTBOUND half of the same feature');
+    ok(/setPreviewMedia\(media\)/.test(hudSrc2),
+      'ui/hud.js is where the media pool reaches the preview, and the only place it does');
+    ok(/markInbound\(\{[^}]*payload:\s*p/.test(hudSrc2),
+      'and the inbound throw is handed the payload, not just the kind');
+  }
+
+  // --- the flight itself
+  {
+    const match = makeFakeMatch();
+    const host = document.createElement('div');
+    const mon = opponentMod.mountOpponent({ host, match });
+
+    ok(typeof mon.markInbound === 'function', 'the monitor exposes markInbound');
+    ok(mon.markInbound({ kind: null }) === false, 'a payload with no kind throws nothing');
+
+    ok(!!findOne(mon.root, 'gg-mon-throw'), 'the flare node is built with the monitor');
+    ok(mon.markInbound({ kind: GoonPayloadKind.LockCard, waitMs: 0 }) === true, 'markInbound accepts a kind');
+    ok(hasClass(mon.root, 'is-throwing'), 'their monitor lights up the moment they throw');
+
+    const fly = findOne(document.body, 'gg-throw');
+    ok(!!fly, 'a projectile is on the page');
+    const arc = fly && findOne(fly, 'gg-throw-arc');
+    const art = arc && findOne(arc, 'gg-throw-art');
+    ok(!!arc && !!art,
+      '…as THREE nested nodes: `animation` is a shorthand, so travel-x, travel-y and the spin '
+      + 'cannot share an element without cancelling each other');
+    ok(art && art.style && /item_lockcard\.png/.test(String(art.style['--gg-throw-sticker'] || '')),
+      'the item art is painted on it — the floor under every preview',
+      art && art.style ? String(art.style['--gg-throw-sticker']) : 'none');
+    ok(fly && fly.style && fly.style['--gg-throw-dx'] !== undefined
+      && fly.style['--gg-throw-dy'] !== undefined && fly.style['--gg-throw-ms'] !== undefined,
+      'and it carries its own travel vector and duration');
+
+    // it LANDS, and the splash is a node of its own (a fourth animation slot)
+    await sleep(THROW_MIN_MS + 140);
+    ok(!findOne(document.body, 'gg-throw'), 'the projectile is spent at impact');
+    ok(!!findOne(document.body, 'gg-throw-hit'), 'and leaves a splash where it hit');
+    await sleep(600);
+    ok(!findOne(document.body, 'gg-throw-hit'), 'which clears itself on a TIMER, not on animationend');
+
+    // the lead is respected: a long wait delays the LAUNCH, never the effect
+    mon.markInbound({ kind: GoonPayloadKind.FlashBurst, waitMs: 8000 });
+    ok(!findOne(document.body, 'gg-throw'),
+      'a payload scheduled 8s out does not throw anything yet — the flight is fitted INSIDE the lead');
+
+    // …and unmount sweeps whatever is still in the air
+    mon.markInbound({ kind: GoonPayloadKind.FlashBurst, waitMs: 0 });
+    ok(!!findOne(document.body, 'gg-throw'), 'one more in the air');
+    mon.unmount();
+    ok(!findOne(document.body, 'gg-throw'), 'unmount takes the projectile with it — nothing outlives the HUD');
+    ok(match._subs.released === match._subs.taken, 'and still leaks no subscriptions');
+    await sleep(THROW_MS + 140);
+    ok(!findOne(document.body, 'gg-throw-hit'), 'a swept projectile never lands either');
+  }
+
+  // --- ui/hud.js is what tells the monitor, off the engine's own accept event
+  {
+    const match = makeFakeMatch();
+    const hud = hudMod.mountHud({ match, audio: { sfx() {} } });
+    const mon = hud.parts.opponent;
+    const seen = [];
+    const real = mon.markInbound;
+    mon.markInbound = (o) => { seen.push(o); return real(o); };
+    match._emit('pAcc', {
+      payload: { id: 'in1', kind: GoonPayloadKind.Video, duration_ms: 45000, tags: ['xfer:' + 'b'.repeat(64)] },
+      fireAtLocalMs: 0,
+    });
+    mon.markInbound = real;
+    ok(seen.length === 1, 'onPayloadAccepted reaches opponent.markInbound', String(seen.length));
+    ok(seen[0] && seen[0].kind === GoonPayloadKind.Video, 'with the kind that is coming');
+    ok(seen[0] && seen[0].payload && Array.isArray(seen[0].payload.tags),
+      'and with the PAYLOAD, which is what makes an inbound preview exact rather than a guess');
+    hud.unmount();
+    ok(match._subs.released === match._subs.taken, 'the glue still leaks nothing');
+    await sleep(THROW_MS + 140);
+  }
+
+  // --- the CSS half: one animation per node, the heat exemption, reduced motion
+  {
+    const fs = await import('node:fs/promises');
+    const url = await import('node:url');
+    const css = await fs.readFile(url.fileURLToPath(new URL('../ui/hud.css', import.meta.url)), 'utf8');
+    const blockOf = (sel) => {
+      const m = new RegExp(sel.replace(/\./g, '\\.') + '\\s*\\{([^}]*)\\}').exec(css);
+      return m ? m[1] : '';
+    };
+    const animOf = (sel) => { const m = /animation:\s*([a-zA-Z]+)/.exec(blockOf(sel)); return m ? m[1] : null; };
+
+    const names = [animOf('.gg-throw'), animOf('.gg-throw-arc'), animOf('.gg-throw-art'), animOf('.gg-throw-hit')];
+    ok(names.every(Boolean), 'each throw node carries an animation of its own', names.join(','));
+    ok(new Set(names).size === names.length,
+      'and they are four DIFFERENT keyframes — one shorthand per element, or they cancel', names.join(','));
+    for (const kf of names) {
+      ok(new RegExp('@keyframes\\s+' + kf + '\\b').test(css), `@keyframes ${kf} is defined`);
+    }
+    ok(/\.gg-throw-live[^{]*\{[^}]*transition:\s*opacity/.test(css),
+      'the live preview fades in on a TRANSITION — an animation there would take the spin\'s slot');
+
+    // THE MONITOR IS INFORMATION: a throw flourish must survive the heat park.
+    ok(/--gg-deco-play:\s*running/.test(blockOf('.gg-mon-throw')),
+      'the flare re-declares --gg-deco-play — a throw is information, not chrome');
+    ok(/--gg-deco-play:\s*running/.test(blockOf('.gg-throw')), '…and so does the projectile');
+    ok(/animation-play-state:\s*var\(--gg-deco-play\)/.test(blockOf('.gg-throw')),
+      'which only means anything because it rides the property');
+
+    // reduced motion: the highlight stays, the flight goes
+    // hud.css carries SEVERAL prefers-reduced-motion blocks (they sit next to
+    // the features they stop), so every one of them is fair game.
+    const rm = (css.match(/@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\n\}/g) || []).join('\n');
+    ok(rm.length > 0, 'hud.css has a prefers-reduced-motion block at all');
+    ok(/\.gg-throw[^{]*\{[^}]*display:\s*none/.test(rm),
+      'reduced motion does not spawn a projectile at all');
+    ok(/is-throwing[^{]*\{[^}]*animation:\s*none/.test(rm),
+      '…but keeps the monitor highlight, statically — the cause is still shown');
+    ok(/is-calm[\s\S]{0,120}is-throwing[^{]*\{[^}]*animation:\s*none/.test(css),
+      'and the in-app reduced-motion pref stops the flare too');
+  }
+}
+
+/* ===========================================================================
+ * MON-DRAG. THE LOOSE MONITOR — drag it, wheel it bigger (owner, 2026-08-04:
+ * make the opponent monitor draggable and resizable "like the gifs").
+ *
+ * ONE SECTION, ONE LANE. Everything below belongs to ui/opponent.js, the
+ * opponent/monitor rules in ui/hud.css and the three monitorX/Y/Scale prefs;
+ * nothing in it touches the arsenal sidebar, the rails or the heat gauge.
+ *
+ * "Like the gifs" is the specification, so the pins are the gifs' invariants:
+ *   · 6px of slop, and a sub-slop press does NOTHING (the monitor has no click
+ *     action — the ONE exception is two of them, which is the reset);
+ *   · the wheel drives WIDTH through a custom property, 0.5x..2.5x, never a
+ *     transform scale;
+ *   · it stays on screen and off MERCY's 96px gutter, at every viewport;
+ *   · and the two things the monitor does that a gif does not — being the
+ *     payload DROP TARGET and being where an inbound projectile is thrown FROM —
+ *     both keep working after it has been moved, because both read a LIVE
+ *     getBoundingClientRect() rather than a cached one.
+ * ======================================================================== */
+{
+  const O = opponentMod;
+
+  /* ---- A. the arithmetic, pure ----------------------------------------- */
+  ok(O.MON_DRAG_SLOP_PX === 6, "the monitor uses the desk's 6px slop, same as a video window", String(O.MON_DRAG_SLOP_PX));
+  ok(O.MON_MIN_FACTOR === 0.5 && O.MON_MAX_FACTOR === 2.5,
+    "and the desk's 0.5x..2.5x wheel clamp", `${O.MON_MIN_FACTOR}..${O.MON_MAX_FACTOR}`);
+  ok(O.MON_MERCY_KEEPOUT_PX === 96,
+    "and MERCY's 96px gutter — the same number exec/videos.js keeps floating windows out of",
+    String(O.MON_MERCY_KEEPOUT_PX));
+
+  ok(O.monitorBaseWidth(1280) === 280, 'the docked width mirrors clamp(210px, 22vw, 280px) at desktop', String(O.monitorBaseWidth(1280)));
+  ok(O.monitorBaseWidth(600) === 210, '…floors at 210 on a narrow screen', String(O.monitorBaseWidth(600)));
+  ok(O.monitorBaseWidth(4000) === 280, '…and caps at 280 on a huge one', String(O.monitorBaseWidth(4000)));
+  ok(O.monitorBaseWidth(0) === 280 && O.monitorBaseWidth('x') === 280,
+    'a viewport it cannot read falls back to the desktop number, never NaN');
+
+  ok(O.clampMonitorScale(0.01) === 0.5 && O.clampMonitorScale(99) === 2.5,
+    'any number coerces to a legal scale');
+  ok(O.clampMonitorScale('nonsense') === 1 && O.clampMonitorScale(undefined) === 1,
+    'and garbage lands on 1, never NaN');
+  ok(Math.abs(O.monitorScaleStep(1, 1) - 1.08) < 1e-9, 'one notch up is exactly WHEEL_STEP', String(O.monitorScaleStep(1, 1)));
+  ok(O.monitorScaleStep(2.4, 3) === 2.5 && O.monitorScaleStep(0.6, -3) === 0.5,
+    'and a spin past either end simply stops there');
+  ok(O.monitorWidth(1, 1280) === O.monitorBaseWidth(1280), '1.0x IS the docked width');
+  ok(O.monitorWidth(2, 1280) === O.monitorBaseWidth(1280) * 2, 'and the width scales linearly with the factor');
+
+  // on-screen, with a pad
+  {
+    const p = O.clampMonitorPos(-500, -500, 200, 120, 1280, 720);
+    ok(p.x === O.MON_EDGE_PAD_PX && p.y === O.MON_EDGE_PAD_PX, 'the top-left corner is padded, never flush', JSON.stringify(p));
+    const q = O.clampMonitorPos(9999, 9999, 280, 300, 1280, 720);
+    ok(q.x === 1280 - 280 - 8 && q.y === 720 - 300 - 8, 'and so is the bottom-right', JSON.stringify(q));
+    const big = O.clampMonitorPos(400, 400, 4000, 4000, 1280, 720);
+    ok(big.x === O.MON_EDGE_PAD_PX && big.y === O.MON_EDGE_PAD_PX,
+      'a monitor bigger than the viewport pins to the reachable end instead of vanishing off it', JSON.stringify(big));
+  }
+  // …and off MERCY
+  {
+    const p = O.clampMonitorPos(500, 700, 200, 120, 1280, 720);
+    ok(p.y + 120 <= 720 - O.MON_MERCY_KEEPOUT_PX,
+      'the bottom-centre gutter is a hard wall: MERCY is never covered', JSON.stringify(p));
+    ok(p.x === 500, '…and it is resolved on ONE axis — pushed up, never shoved sideways', JSON.stringify(p));
+    const side = O.clampMonitorPos(1000, 700, 200, 120, 1280, 720);
+    ok(side.y === 720 - 120 - 8, 'a monitor clear of the mercy band may sit in the bottom gutter', JSON.stringify(side));
+  }
+
+  /* ---- B. it is DOCKED until the player asks --------------------------- */
+  const prefsOf = (init) => {
+    const v = Object.assign({ monitorX: -1, monitorY: -1, monitorScale: 1 }, init || {});
+    return { get: (k) => v[k], set: (k, x) => { v[k] = x; return true; }, _v: v };
+  };
+  const PID = 4200;
+  const ptr = (node, type, x, y) => {
+    const e = { type, button: 0, pointerId: PID, clientX: x, clientY: y, preventDefault() {}, stopPropagation() {} };
+    if (node && node.dispatchEvent) node.dispatchEvent(e);
+    return e;
+  };
+  const wheel = (node, dy) => {
+    if (node && node.dispatchEvent) node.dispatchEvent({ type: 'wheel', deltaY: dy, preventDefault() {}, stopPropagation() {} });
+  };
+
+  {
+    const match = makeFakeMatch();
+    const host = document.createElement('div');
+    const store = prefsOf();
+    const mon = O.mountOpponent({ host, match, prefs: store });
+    await sleep(50);                                  // the restore beat, deliberately let by
+
+    ok(mon.isLoose() === false, 'a fresh monitor is DOCKED — nothing changes until the player drags it');
+    ok(!hasClass(mon.root, 'is-loose'), 'and carries no detach class');
+    ok(!hasClass(host, 'is-mon-loose'), 'and the column host is untouched');
+    ok(mon.root.style[O.MON_WIDTH_VAR] === undefined, 'no width var is written while it is docked');
+    ok(mon.root.style.left === undefined && mon.root.style.top === undefined, 'and no position either');
+    ok(host.style['min-height'] === undefined, 'and no placeholder is reserved for a monitor that is still in the column');
+
+    // a press that never travels is not a drag, and there is no click action here
+    ptr(mon.root, 'pointerdown', 150, 150);
+    ptr(mon.root, 'pointermove', 153, 152);           // 3.6px — inside the slop
+    ptr(mon.root, 'pointerup', 153, 152);
+    ok(mon.isLoose() === false, 'a sub-slop press does nothing at all — it is not a drag and it is not a click');
+
+    mon.unmount();
+  }
+
+  /* ---- C. the drag: detach, follow, clamp, remember -------------------- */
+  {
+    const match = makeFakeMatch();
+    const host = document.createElement('div');
+    const store = prefsOf();
+    const mon = O.mountOpponent({ host, match, prefs: store });
+    await sleep(50);
+    // the stub's every rect is 200x120 at (100,100) — the docked box.
+
+    ptr(mon.root, 'pointerdown', 150, 150);
+    ptr(mon.root, 'pointermove', 400, 300);           // 250,150 — well past the slop
+    ok(mon.isLoose() === true, 'a drag past the slop takes the monitor off the shelf');
+    ok(hasClass(mon.root, 'is-loose') && hasClass(mon.root, 'is-grabbed'), 'and it is detached AND in hand');
+    ok(hasClass(host, 'is-mon-loose'), 'the column host is marked as holding a hole');
+    ok(host.style['min-height'] === '120px',
+      'and the hole is a MEASURED placeholder, so the receipts under it do not jump up', String(host.style['min-height']));
+
+    // DETACHING MOVES NOTHING: the size it leaves at is the size it was standing at.
+    ok(mon.root.style[O.MON_WIDTH_VAR] === '200px',
+      'the width it detaches at is the width it was measured at, not an assumed 1.0x', String(mon.root.style[O.MON_WIDTH_VAR]));
+
+    const p1 = mon.loosePlacement();
+    ok(p1 && p1.x === 350 && p1.y === 250, 'and it then follows the pointer 1:1', JSON.stringify(p1));
+    ok(mon.root.style.left === '350px' && mon.root.style.top === '250px',
+      'written as inline left/top — the position IS the layout, never a transform',
+      `${mon.root.style.left},${mon.root.style.top}`);
+
+    // dragged off the right/bottom edge: clamped back on screen
+    ptr(mon.root, 'pointermove', 5000, 5000);
+    const p2 = mon.loosePlacement();
+    ok(p2.x === 1280 - 200 - 8 && p2.y === 720 - 120 - 8,
+      'dragged off the edge, it is clamped back on screen', JSON.stringify(p2));
+
+    // dragged into the bottom-centre: pushed up off MERCY, and only up
+    ptr(mon.root, 'pointermove', 550, 700);
+    const p3 = mon.loosePlacement();
+    ok(p3.x === 500 && p3.y === 720 - O.MON_MERCY_KEEPOUT_PX - 120,
+      'dragged over MERCY, it slides along the top of the gutter instead of covering it', JSON.stringify(p3));
+
+    ok(store._v.monitorX === -1, 'a drag in flight has written nothing to the store yet');
+    ptr(mon.root, 'pointerup', 550, 700);
+    ok(!hasClass(mon.root, 'is-grabbed'), 'letting go releases it');
+    ok(store._v.monitorX === 500 && store._v.monitorY === 504,
+      'and a COMPLETED drag is what gets remembered', `${store._v.monitorX},${store._v.monitorY}`);
+
+    // a cancelled drag writes nothing new
+    const wasX = store._v.monitorX;
+    ptr(mon.root, 'pointerdown', 550, 700);
+    ptr(mon.root, 'pointermove', 900, 300);
+    ptr(mon.root, 'pointercancel', 900, 300);
+    ok(store._v.monitorX === wasX,
+      'a cancelled drag leaves the monitor where the hand let go and writes nothing', String(store._v.monitorX));
+
+    // …and the reset: two sub-slop taps put it back in the column
+    ptr(mon.root, 'pointerdown', 300, 300); ptr(mon.root, 'pointerup', 300, 300);
+    ok(mon.isLoose() === true, 'one tap is not the reset');
+    ptr(mon.root, 'pointerdown', 300, 300); ptr(mon.root, 'pointerup', 300, 300);
+    ok(mon.isLoose() === false, 'two of them inside the double-tap window re-dock it');
+    ok(!hasClass(mon.root, 'is-loose') && !hasClass(host, 'is-mon-loose'), 'both classes come off');
+    ok(mon.root.style.left === undefined && mon.root.style[O.MON_WIDTH_VAR] === undefined,
+      'and every inline override with them');
+    ok(host.style['min-height'] === undefined, 'the placeholder is released — the column gets its row back');
+    ok(store._v.monitorX === -1 && store._v.monitorY === -1 && store._v.monitorScale === 1,
+      'and the store is reset to the docked sentinel', JSON.stringify(store._v));
+
+    mon.unmount();
+  }
+
+  /* ---- D. the wheel: width, never scale -------------------------------- */
+  {
+    const match = makeFakeMatch();
+    const host = document.createElement('div');
+    const store = prefsOf();
+    const mon = O.mountOpponent({ host, match, prefs: store });
+    await sleep(50);
+
+    wheel(mon.root, -100);                            // wheel UP grows
+    ok(mon.isLoose() === true,
+      'a wheel notch over a DOCKED monitor takes it off the shelf first (the column cannot resize in place)');
+    const base = O.monitorBaseWidth(1280);
+    ok(mon.root.style[O.MON_WIDTH_VAR] === Math.round(200 * O.MON_WHEEL_STEP) + 'px',
+      'and one notch up is exactly one WHEEL_STEP wider', String(mon.root.style[O.MON_WIDTH_VAR]));
+
+    for (let i = 0; i < 40; i++) wheel(mon.root, 100);
+    ok(Math.abs(mon.loosePlacement().scale - O.MON_MIN_FACTOR) < 1e-9,
+      'spun all the way down it floors at 0.5x', String(mon.loosePlacement().scale));
+    ok(mon.root.style[O.MON_WIDTH_VAR] === Math.round(base * O.MON_MIN_FACTOR) + 'px',
+      'and the width var says so', String(mon.root.style[O.MON_WIDTH_VAR]));
+
+    for (let i = 0; i < 60; i++) wheel(mon.root, -100);
+    ok(Math.abs(mon.loosePlacement().scale - O.MON_MAX_FACTOR) < 1e-9,
+      'spun all the way up it caps at 2.5x', String(mon.loosePlacement().scale));
+    ok(mon.root.style[O.MON_WIDTH_VAR] === Math.round(base * O.MON_MAX_FACTOR) + 'px',
+      'and so does the width var', String(mon.root.style[O.MON_WIDTH_VAR]));
+    ok(mon.root.style.transform === undefined,
+      'NOTHING was written to transform — the resize is width, never a stacked scale');
+    ok(Math.abs(store._v.monitorScale - O.MON_MAX_FACTOR) < 1e-9,
+      'a wheel resize is remembered on the notch, not on a release it never gets', String(store._v.monitorScale));
+
+    // a wheel with no delta is not a gesture
+    const before = mon.root.style[O.MON_WIDTH_VAR];
+    wheel(mon.root, 0);
+    ok(mon.root.style[O.MON_WIDTH_VAR] === before, 'a wheel event with no delta changes nothing');
+
+    mon.unmount();
+  }
+
+  /* ---- E. the viewport moved under a parked monitor -------------------- */
+  {
+    const match = makeFakeMatch();
+    const host = document.createElement('div');
+    const store = prefsOf({ monitorX: 900, monitorY: 300, monitorScale: 2 });
+    const mon = O.mountOpponent({ host, match, prefs: store });
+    await sleep(50);
+    ok(mon.isLoose() === true, 'a stored position detaches the monitor on mount, with no gesture at all');
+    ok(mon.loosePlacement().x === 900 && Math.abs(mon.loosePlacement().scale - 2) < 1e-9,
+      'and it comes back exactly where and how big it was left', JSON.stringify(mon.loosePlacement()));
+    ok(mon.root.style[O.MON_WIDTH_VAR] === O.monitorWidth(2, 1280) + 'px',
+      'the width is RE-DERIVED from the factor, not restored as a stale pixel count', String(mon.root.style[O.MON_WIDTH_VAR]));
+
+    dom.win.innerWidth = 640;
+    dom.win.innerHeight = 400;
+    dom.win.dispatchEvent({ type: 'resize' });
+    const p = mon.loosePlacement();
+    ok(p.x <= 640 - 200 - 8 && p.y <= 400 - 120 - 8,
+      'shrinking the window drags the parked monitor back on screen', JSON.stringify(p));
+    ok(mon.root.style[O.MON_WIDTH_VAR] === O.monitorWidth(2, 640) + 'px',
+      'and 2x of the NEW --gg-mon-w, not 2x of the old one', String(mon.root.style[O.MON_WIDTH_VAR]));
+    dom.win.innerWidth = 1280;
+    dom.win.innerHeight = 720;
+    dom.win.dispatchEvent({ type: 'resize' });
+
+    mon.unmount();
+    ok(host.style['min-height'] === undefined,
+      "unmount releases the placeholder it wrote on somebody else's node");
+    ok(!hasClass(host, 'is-mon-loose'), '…and the class with it');
+  }
+
+  /* ---- F. a monitor that has MOVED is still where the throw comes from -- */
+  {
+    const match = makeFakeMatch();
+    const host = document.createElement('div');
+    const mon = O.mountOpponent({ host, match });
+    const frame = mon.dropTarget;
+    const flights = () => dom.doc.body.children.filter((c) => hasClass(c, 'gg-throw'));
+
+    mon.markInbound({ kind: GoonPayloadKind.FlashBurst, waitMs: 0 });
+    const a = flights()[flights().length - 1];
+    ok(!!a && a.style.left === '200px' && a.style.top === '160px',
+      'a projectile leaves the centre of the monitor as it is now', a && `${a.style.left},${a.style.top}`);
+
+    // …and the monitor moves. Nothing is re-mounted; only the rect changed.
+    frame.getBoundingClientRect = () => ({ left: 700, top: 500, right: 900, bottom: 620, width: 200, height: 120 });
+    mon.markInbound({ kind: GoonPayloadKind.FlashBurst, waitMs: 0 });
+    const b = flights()[flights().length - 1];
+    ok(!!b && b.style.left === '800px' && b.style.top === '560px',
+      'the NEXT one leaves from where the monitor is NOW — the launch rect is read live, never cached',
+      b && `${b.style.left},${b.style.top}`);
+
+    mon.unmount();
+    ok(flights().length === 0, 'and unmount sweeps every projectile still in the air');
+  }
+
+  /* ---- G. …and still the drop target, wherever it sits ----------------- */
+  {
+    const match = makeFakeMatch();
+    const hud = hudMod.mountHud({ match, audio: { sfx() {} } });
+    const mon = hud.parts.opponent;
+    const tile = findAll(dom.byId.get('gg-hud'), 'gg-item')
+      .find((t) => t.getAttribute('data-gg-item') === 'flash') || null;
+    ok(!!tile, 'the arsenal still has a flash tile to drag from');
+
+    // move the monitor, by the only thing the drop path can possibly read
+    mon.dropTarget.getBoundingClientRect = () => ({ left: 600, top: 400, right: 800, bottom: 520, width: 200, height: 120 });
+
+    let fires = match._fires.length;
+    hud.parts.arsenal.armDrop('flash');
+    ptr(tile, 'pointerdown', 20, 20);
+    ptr(tile, 'pointermove', 300, 300);
+    ptr(tile, 'pointerup', 700, 450);                 // inside the monitor's NEW rect
+    ok(match._fires.length === fires + 1,
+      'an item dropped on the monitor WHERE IT NOW IS still fires', String(match._fires.length - fires));
+
+    fires = match._fires.length;
+    hud.parts.arsenal.armDrop('flash');
+    ptr(tile, 'pointerdown', 20, 20);
+    ptr(tile, 'pointermove', 300, 300);
+    ptr(tile, 'pointerup', 150, 150);                 // the rect it used to have
+    ok(match._fires.length === fires,
+      'and the desk it used to stand on is just desk again', String(match._fires.length - fires));
+
+    // dragging the MONITOR is not firing anything
+    fires = match._fires.length;
+    ptr(mon.root, 'pointerdown', 150, 150);
+    ptr(mon.root, 'pointermove', 420, 320);
+    ptr(mon.root, 'pointerup', 420, 320);
+    ok(mon.isLoose() === true, 'the monitor drags inside a real mounted HUD too');
+    ok(match._fires.length === fires,
+      'and moving it fires nothing — the monitor is a drop TARGET, never a trigger', String(match._fires.length - fires));
+
+    hud.unmount();
+    ok(match._subs.released === match._subs.taken,
+      'the loose monitor leaks no subscriptions', `${match._subs.released}/${match._subs.taken}`);
+  }
+
+  /* ---- H. the CSS half ------------------------------------------------- */
+  {
+    const fs = await import('node:fs/promises');
+    const url = await import('node:url');
+    const css = await fs.readFile(url.fileURLToPath(new URL('../ui/hud.css', import.meta.url)), 'utf8');
+    const blockOf = (sel) => {
+      const m = new RegExp(sel.replace(/\./g, '\\.') + '\\s*\\{([^}]*)\\}').exec(css);
+      return m ? m[1] : '';
+    };
+    const loose = blockOf('.gg-mon.is-loose');
+    ok(loose.length > 0, 'hud.css has a .gg-mon.is-loose rule at all');
+    ok(/position:\s*fixed/.test(loose), 'a detached monitor is fixed — it has to escape the column');
+    ok(/width:\s*var\(--gg-mon-loose-w,\s*var\(--gg-mon-w\)\)/.test(loose),
+      'its width is the loose var, FALLING BACK to the docked one so an unwritten var is not a 0px monitor', loose);
+    ok(!/scale\s*\(/.test(loose),
+      'and there is no transform scale anywhere near it — a scale would fight the drag offset and resample the art');
+    ok(/transform:\s*none/.test(loose) && /animation:\s*none/.test(loose),
+      'the keyframes-outrank-inline-styles guard is declared, so inline left/top stays authoritative', loose);
+
+    const z = /z-index:\s*(\d+)/.exec(loose);
+    ok(!!z, 'the loose monitor gets an explicit z-index');
+    const zn = z ? Number(z[1]) : -1;
+    ok(zn > 40, 'it lifts above the rest of the desk', String(zn));
+    ok(zn < 50 && zn < 55 && zn < 60 && zn < 65,
+      'and stays under the toasts (50), the inbound projectile (55), MERCY (60) and its takeover (65) — a thing thrown FROM the monitor flies OVER it',
+      String(zn));
+
+    const monBlocks = (css.match(/\.gg-mon\s*\{[^}]*\}/g) || []).join('\n');
+    ok(/touch-action:\s*none/.test(monBlocks),
+      'the whole card claims the touch BEFORE it detaches, or the first 6px is read as a page pan');
+    ok(/user-select:\s*none/.test(monBlocks), "and the mouse's half of the same claim");
+    ok(/cursor:\s*grab/.test(monBlocks), 'and it looks grabbable');
+    ok(/\.gg-mon\.is-grabbed\s*\{[^}]*cursor:\s*grabbing/.test(css), 'and held while it is held');
+
+    ok(/\.gg-mon-host\.is-mon-loose\s*\{[^}]*pointer-events:\s*none/.test(css),
+      'the placeholder it leaves behind is an empty box that stops taking clicks');
+    ok(/\.gg-mon-host\.is-mon-loose\s*>\s*\.gg-mon\s*\{[^}]*pointer-events:\s*auto/.test(css),
+      '…and the monitor, still its CHILD (no re-parenting, ever — that would drop the pointer capture), opts back in');
+
+    // the minis scale for free, and that is only true while the geometry is %
+    ok(/aspect-ratio:\s*16\s*\/\s*9/.test(blockOf('.gg-mon-frame')),
+      'the frame is still a ratio, not a height — which is why a width-only resize takes the minis with it');
+    ok(/--gg-mon-face-x:\s*[\d.]+%/.test(blockOf('.gg-mon-frame')),
+      'and the CRT face is still a PERCENTAGE of it');
+  }
+
+  /* ---- I. the prefs the whole thing is remembered in ------------------- */
+  {
+    const prefsModM = await import('../ui/prefs.js');
+    ok(prefsModM.PREF_DEFAULTS.monitorX === -1 && prefsModM.PREF_DEFAULTS.monitorY === -1,
+      'monitorX/Y default to the DOCKED sentinel — a fresh player has never dragged it',
+      `${prefsModM.PREF_DEFAULTS.monitorX},${prefsModM.PREF_DEFAULTS.monitorY}`);
+    ok(prefsModM.PREF_DEFAULTS.monitorScale === 1, 'and monitorScale to 1.0x', String(prefsModM.PREF_DEFAULTS.monitorScale));
+    ok(prefsModM.PREF_DEFAULTS.monitorX === O.MON_DOCKED, 'and the sentinel is the one ui/opponent.js writes');
+
+    // a real store round-trips them, and coerce() does not clamp a scale to 0..1
+    const p = prefsModM.createPrefs({ monitorX: 300, monitorY: 210, monitorScale: 2.5 });
+    ok(p.get('monitorX') === 300 && p.get('monitorY') === 210, 'a seeded position survives createPrefs');
+    ok(p.get('monitorScale') === 2.5,
+      'and so does a scale ABOVE 1 — it is not a volume and must never be clamped like one', String(p.get('monitorScale')));
+    p.set('monitorScale', 'nonsense');
+    ok(p.get('monitorScale') === 1, 'a corrupt scale falls back to the default rather than poisoning the layout');
+  }
+
+  /* ---- J. the little screen keeps playing while it is in hand ---------- */
+  {
+    const match = makeFakeMatch();
+    match.opponent.activeEffects = [];
+    const host = document.createElement('div');
+    const mon = O.mountOpponent({ host, match, prefs: prefsOf() });
+    await sleep(50);
+    const proj = mon.projection;
+
+    // detach + resize to both ends of the wheel, then let their tick arrive
+    ptr(mon.root, 'pointerdown', 150, 150);
+    ptr(mon.root, 'pointermove', 500, 300);
+    ptr(mon.root, 'pointerup', 500, 300);
+    for (let i = 0; i < 30; i++) wheel(mon.root, -100);          // all the way up
+    match.opponent.activeEffects = ['Spiral', 'BrainDrain'];
+    match._emit('opp');
+
+    ok(findAll(proj, 'gg-mini').length === 10,
+      'all ten minis are still in the projection rect after a drag and a resize', String(findAll(proj, 'gg-mini').length));
+    ok(hasClass(findOne(proj, 'gg-mini-spiral'), 'is-on') && hasClass(findOne(proj, 'gg-mini-drain'), 'is-on'),
+      'and their tick still lights them — moving the monitor is not moving the SCREEN');
+    ok(findOne(proj, 'gg-mini-idle').hidden === true, 'the idle word still steps aside');
+    ok(proj.parentNode === mon.dropTarget,
+      'the projection rect is still the frame\'s post-<img> sibling — the drag never re-parents anything (§9)');
+    ok(mon.root.style[O.MON_WIDTH_VAR] !== undefined && mon.root.style.width === undefined,
+      'and the only size written is the width VAR — hud.css turns it into a box, so the % geometry inside follows for free');
+
+    mon.unmount();
+  }
+
+  /* ---- K. hud.js really threads the store through ---------------------- */
+  {
+    const seen = [];
+    const match = makeFakeMatch();
+    const store = { get: (k) => { seen.push(k); return -1; }, set() { return true; } };
+    const hud = hudMod.mountHud({ match, audio: { sfx() {} }, prefs: store });
+    await sleep(50);
+    ok(seen.indexOf('monitorX') >= 0,
+      'mountHud hands ui/prefs.js to the monitor — without it the position is remembered nowhere', seen.join(','));
+    hud.unmount();
+  }
 }
 
 await sleep(60);
