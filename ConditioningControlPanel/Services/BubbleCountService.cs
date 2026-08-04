@@ -121,7 +121,16 @@ public class BubbleCountService : IDisposable
     public void TriggerGame(bool forceTest = false)
     {
         // Allow forced test even when engine not running
-        if (!forceTest && (!_isRunning || _isBusy)) return;
+        if (!forceTest && (!_isRunning || _isBusy))
+        {
+            // A queued game can be dequeued AFTER the engine stopped (a stop mid-video now
+            // releases the Video slot, which dispatches us). Hand the fresh claim back or it
+            // blocks every interaction for the 5-minute stuck window. _isBusy claims stay: a
+            // live game owns its slot and completes through the window teardown funnel.
+            if (!_isBusy && App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.BubbleCount)
+                App.InteractionQueue.Complete(InteractionQueueService.InteractionType.BubbleCount);
+            return;
+        }
         if (_isBusy) return; // Still prevent double-triggering
 
         // The post-poisoning hold-off (#766: poisoning at 22:05, a bubble-count video built on the

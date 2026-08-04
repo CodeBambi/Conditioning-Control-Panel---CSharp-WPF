@@ -1380,6 +1380,13 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("VideoService.Stop: LibVLCSharp.WPF not loaded, skipping CloseAll");
             }
 
+            // Stop() is the one teardown funnel that never released the queue slot: a video cut
+            // off by an engine/feature/remote stop kept "Video" claimed for the full 5-minute
+            // stuck window, blocking every queued interaction (smoke test 2026-08-04). Placed
+            // after CloseAll so the slot is never released under a still-open video window;
+            // CompleteIfCurrent never clears a claim that isn't ours.
+            App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.Video);
+
             App.Logger?.Information("VideoService stopped");
         }
 
