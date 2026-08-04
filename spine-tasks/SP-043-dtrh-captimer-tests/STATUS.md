@@ -1,13 +1,13 @@
 ## STATUS: SP-043 — T-16: DTRH cap-timer tests deterministic timing
 **Current Step:** Step 1 — timing archaeology + fix design + pre-approach consult
-**Last Updated:** 2026-08-04 (authored)
+**Last Updated:** 2026-08-04 (step 1 in progress)
 **Blockers:** none
 
 ### Step 1: archaeology + design + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] Every timing dependency classified (wall-clock poll / real timer / sleeping assertion)
-- [ ] Design (deterministic shapes per dependency; loud classifier; conditional seam)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Update STATUS.md before starting work
+- [x] Every timing dependency classified (wall-clock poll / real timer / sleeping assertion)
+- [x] Design (deterministic shapes per dependency; loud classifier; conditional seam)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: implement the timing discipline
 - [ ] DtrhNativeEffectsTests.cs conversions (assertion meanings unchanged)
