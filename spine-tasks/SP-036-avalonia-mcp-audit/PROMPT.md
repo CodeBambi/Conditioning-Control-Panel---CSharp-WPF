@@ -9,13 +9,15 @@ Execute the `client/docs/task-board.md` P0 row **"Audit and admit bounded Avalon
 ## Dependencies
 
 - **Task:** SP-030 (wave-1 landed — sequencing; the A-013 advisory usage record spans SP-013/SP-014/SP-015 records)
+- **Task:** SP-037 (sequencing — the v6.6.3 manifest-drift repair must land first; this packet's full-suite contract demands counts EXACTLY the 466/29 floor, red until restored)
 
 ## Context to Read First
 
 - `client/docs/task-board.md` row "Audit and admit bounded Avalonia MCP use" (the exact acceptance text) + the 2026-07-21 decree entry (owner-decision ledger)
 - The recorded A-013 usages: `spine-tasks/SP-013-popup-scrolling/record.md` (ValidateXaml PASS; AnalyzePerformance REJECTED self-contradictory — 1st), `spine-tasks/SP-014-quick-toggle-dispatch/record.md` (2nd rejection), `spine-tasks/SP-015-avatartube-animation/record.md` (advisory usage notes)
 - The `avalonia-research` skill's MCP-advisory posture (`.pi/skills/avalonia-research/SKILL.md` if present — how the run's rules use advisory output)
-- The Pi MCP configuration surfaces on this box (`.pi/settings.json` / the avalonia MCP server registration — locate via the `mcp` gateway tool's server status + the Pi docs `docs/sdk.md` if needed)
+- **2026-08-04 reality (supersedes the packet's original single-server premise):** the THREE-seat registration on this laptop — `avalonia-docs` (official Build MCP, http `https://docs-mcp.avaloniaui.net/mcp`, free), `avalonia-live` (Keincheck 0.11.0 embedded, MIT, http `127.0.0.1:3001`, app-side `CCP_MCP=1` env-gated `UseMcpServer()` seam in `client/src/CcpClient.Desktop/Program.cs`), `avalonia-ui` (decriptor/AvaloniaUI.MCP local build, stdio `dotnet C:\Code\AvaloniaUI.MCP\src\AvaloniaUI.MCP\bin\Release\net9.0\AvaloniaUI.MCP.dll`, 46 tools verified 2026-08-04) — registered in `C:\Users\Micha\.pi\agent\mcp.json`; the committed deep-research report `.spine/mcp-avalonia-deepresearch.md` (identity, Sentry analysis: UNCONDITIONAL with hardcoded US DSN in Program.cs:22, patch-and-rebuild noted as the actionable mitigation — whether THE LAPTOP BUILD carries Sentry is an empirical audit question, not a transcription); the 2026-07-18 pilot admission record `client/docs/avalonia-mcp-admission.md`; the official DevTools MCP was REJECTED 2026-08-04 (paid Avalonia Plus feature — violates the free-OSS constraint)
+- The Pi MCP configuration surfaces on this box (`.pi/settings.json` / `C:\Users\Micha\.pi\agent\mcp.json` — locate via the `mcp` gateway tool's server status + the Pi docs `docs/sdk.md` if needed)
 
 ## File Scope
 
@@ -40,9 +42,9 @@ Call `spine_review_step` after each step. **T-2 heading format is load-bearing**
 ### Step 1: Installation inventory + config audit + pre-approach consult
 
 - [ ] Update STATUS.md before starting work
-- [ ] Locate the exact Pi-installed Avalonia MCP server (package/config/pin/version/commit-hash — probed on the live box: `.pi/settings.json`, npm package metadata, process cmdlines); verify the resolved package version + hash against the registry (live evidence)
-- [ ] Config audit (READ-ONLY): server registration, startup command, environment, any Sentry/telemetry settings + their state (the owner's Sentry-mitigation decision verified in the actual config); sensitive values presence+shape only
-- [ ] **Pre-approach solo consult** (Fable 5, solo) with the inventory + the audit plan; verdict text + ACTUAL answering model in record.md BEFORE checkbox
+- [ ] Locate and inventory ALL THREE registered seats on the live box (`avalonia-docs`, `avalonia-live`, `avalonia-ui` — registration config, package/pin/version/commit-hash where applicable, process cmdlines); verify the `avalonia-ui` build's version + upstream-HEAD equivalence against the registry/remote (live evidence); the deep-research report is INPUT to verify, never evidence to transcribe
+- [ ] Config audit (READ-ONLY): per-seat registration, startup command, environment, any Sentry/telemetry settings + their state (the owner's Sentry-mitigation decision verified in the actual config/build — the deep research found Sentry UNCONDITIONAL with a hardcoded DSN and no disable path; whether THIS laptop's build carries or strips it is answered empirically here); sensitive values presence+shape only
+- [ ] **Pre-approach solo consult** (per the 2026-08-04 rewire: Opus 5 main route; Fable 5 fallback per the pause protocol) with the inventory + the audit plan; verdict text + ACTUAL answering model in record.md BEFORE checkbox
 
 ### Step 2: Runtime health + outbound connections + tool inventory
 
@@ -60,7 +62,7 @@ Call `spine_review_step` after each step. **T-2 heading format is load-bearing**
 ### Step 4: The bounded admission record + pre-completion consult
 
 - [ ] Write the admission record section in record.md: decree verbatim; the audit findings per acceptance item (installation verified / startup health / outbound + Sentry posture / tool inventory / probe matrix / redaction); the **admitted tool subset** (which tools are admitted for advisory use, e.g. ValidateXaml-class) vs **rejected/not-admitted** (e.g. AnalyzePerformance-class, per the two recorded rejections + the probe matrix); the **advisory boundary rule** (no MCP output bypasses docs/compilation/K3 screenshots/headed gates; every advisory accepted-or-rejected WITH reasons recorded in the using packet's record.md)
-- [ ] **Pre-completion solo consult** (Fable 5, solo) on the audit + admission record; verdict text in record.md
+- [ ] **Pre-completion solo consult** (same route discipline as Step 1) on the audit + admission record; verdict text in record.md
 - [ ] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification
@@ -79,8 +81,8 @@ Call `spine_review_step` after each step. **T-2 heading format is load-bearing**
 
 ## Do NOT
 
-- Exfiltrate anything (synthetic seeds only; configs read-only; sensitive values presence+shape); re-decide the owner's Sentry admission (record it); use MCP output AS verification (advisory only — the boundary); make product-code or test changes (audit only); edit `client/docs/task-board.md` or `client/docs/port-lessons.md` (enabler 2); modify `ConditioningControlPanel/**`, `client/CcpClient.sln`, `client/spikes/**`, `.spine/runtime/**`; set any board row state
-- Use `consult` council mode (route broken — solo Fable 5 only)
+- Exfiltrate anything (synthetic seeds only; configs read-only; sensitive values presence+shape); re-decide the owner's Sentry admission (record it — the Sentry-live/patched state on THIS box + the owner question stay surfaced, never silently resolved); use MCP output AS verification (advisory only — the boundary); make product-code or test changes (audit only); edit `client/docs/task-board.md` or `client/docs/port-lessons.md` (enabler 2); modify `ConditioningControlPanel/**`, `client/CcpClient.sln`, `client/spikes/**`, `.spine/runtime/**`; set any board row state
+- Use `consult` council mode (T-7: council unproven; `kimi-api` provider unregistered on this laptop — solo only, Opus 5 main / Fable 5 fallback per the 2026-08-04 rewire)
 
 ## Git Commit Convention
 
@@ -95,3 +97,4 @@ Call `spine_review_step` after each step. **T-2 heading format is load-bearing**
 
 - 2026-07-22 (authoring): **row OPEN with the owner's Sentry-mitigation decision already made (2026-07-21 decree — recorded verbatim in the admission record).** The two recorded A-013 rejections (AnalyzePerformance self-contradictory ×2) fold into the probe matrix. Advisory boundary = the row's own text (no bypass of docs/compilation/screenshots/headed gates). Enabler 2 encoded. Headless audit; 4h budget exported at launch. **`## Review Level: 2` heading present + grep-verified ≥2 (SP-034 authoring rule).**
 - 2026-07-22 (authoring): Launch: validate → analyze → plan → preflight → detached wave batch (SP-035 + SP-036, 2 lanes) per owner cycle.
+- 2026-08-04 (orchestrator, pre-launch reconciliation): **premise corrections applied in-place.** (1) The audit subject is now the THREE-seat 2026-08-04 registration (avalonia-docs / avalonia-live / avalonia-ui), not a single Pi-installed server — inventory + classification covers all three; the admission record admits a bounded subset per seat. (2) The committed deep-research report + the 2026-08-04 registration session are INPUTS to verify empirically on this box (Sentry-carrying vs patched build answered HERE), never transcribed as evidence. (3) Consult route rewired 2026-08-04: solo = Opus 5 main, Fable 5 fallback; council stays unproven (T-7; kimi-api unregistered on this laptop). (4) Floor measured 464/466 + 29/29 (2 pre-existing red AssetManifestTests from merge `56f156fc`) — SP-037 repairs the floor and LANDS FIRST (sequencing dep added); the `counts EXACTLY the 466/29 floor` clause reads against the restored floor, any drift = red flag stands. (5) Wave-4 resume moot: the desktop's parked batch `20260722T152755` lane commits never reached this repo — this run is a FRESH execution of the packet. (6) Baseline is now Avalonia 12.1.1 (bccbabf3) — probe seeds use current v12 AXAML.
