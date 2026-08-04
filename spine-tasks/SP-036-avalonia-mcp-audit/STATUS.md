@@ -1,30 +1,30 @@
 ## STATUS: SP-036 — Audit and admit bounded Avalonia MCP use
-**Current Step:** Step 1 — installation inventory + config audit + pre-approach consult
-**Last Updated:** 2026-07-22 (authored)
+**Current Step:** all steps complete — .DONE
+**Last Updated:** 2026-08-04
 **Blockers:** none
 
 ### Step 1: inventory + config audit + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] Installation inventory (package/pin/version/hash probed + registry-verified)
-- [ ] Config audit (registration, startup, Sentry/telemetry state; secrets presence+shape)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Update STATUS.md before starting work
+- [x] Installation inventory (three seats probed live; version/commit/hash verified — DLL SHA256 42DAE31D…CC24, clean porcelain, HEAD==upstream 974ec59)
+- [x] Config audit (registration, startup, Sentry/telemetry state; secrets presence+shape) — Sentry UNCONDITIONAL + LIVE socket empirically confirmed
+- [x] Pre-approach solo consult (verdict + provenance in record.md; corrections executed)
 
 ### Step 2: runtime health + outbound + tool inventory
-- [ ] Startup health (gateway probe cycle, error surface)
-- [ ] Outbound connections (telemetry endpoints specifically answered)
-- [ ] Tool inventory classified (advisory-only criterion)
+- [x] Startup health (gateway connect cycle, GetServerInfo, PerformHealthCheck DEGRADED-on-internal-TelemetryService only)
+- [x] Outbound connections (PID 47796: exactly one ESTABLISHED TLS — o4509369388761088.ingest.us.sentry.io; no hosts block)
+- [x] Tool inventory classified (avalonia-ui 53 via tools.search; avalonia-docs 8 live; avalonia-live NEVER ENUMERATED, provisional)
 
 ### Step 3: seeded probes + matrix + redaction
-- [ ] Valid AXAML probe (no false positives)
-- [ ] Invalid probes (violation matrix: hits/misses/FP/FN with exact seeds)
-- [ ] Redaction behavior (fake secret-shaped seed)
+- [x] Valid AXAML probe (seed A: PASS, 0 false positives)
+- [x] Invalid probes (seeds B-F: 5 FN defect classes across 4 seeds, 1 true negative on malformed XML; seeds in evidence/)
+- [x] Redaction behavior (seed G: no output echo of fake secret strings; transport risk recorded — live Sentry socket; redact-BEFORE-calling binding)
 
 ### Step 4: admission record + pre-completion consult
-- [ ] Admission record (decree verbatim; per-item findings; admitted subset vs rejected; advisory boundary rule)
-- [ ] Pre-completion solo consult
-- [ ] STATUS.md accurate
+- [x] Admission record (decree verbatim; per-item findings; admitted subset vs rejected; advisory boundary rule + non-bypass proof §11.5)
+- [x] Pre-completion solo consult (4 corrections executed: no fabricated counts, verbatim labels, non-bypass proof, seed provenance)
+- [x] STATUS.md accurate
 
 ### Step 5: verification
-- [ ] testCommand green (verify.mjs exit 0; 0W/0E; 466/29 exact, no drift)
-- [ ] git diff --check clean
-- [ ] git status shows File Scope only
+- [x] testCommand green (verify.mjs exit 0; 0W/0E; 466/29 exact, no drift)
+- [x] git diff --check clean
+- [x] git status shows File Scope only
