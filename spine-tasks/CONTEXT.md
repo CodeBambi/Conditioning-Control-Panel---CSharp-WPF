@@ -20,12 +20,18 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 
 **Pause protocol:** if the Fable 5 consult route errors or times out, assume the 5-hour subscription window is exhausted — safely park in-flight work (spine state is durable), write `.spine/handoff.md`, delete/pause loops and monitors, and STOP until the owner resumes with the session prompt. Same response to unresolvable ambiguity, safety/privacy questions, or repeated failure: pause, never improvise past a gate.
 
-### Wave 6 (staged 2026-08-04)
+### Wave 6 (LANDED 2026-08-04, `6255a643`)
 
 | Task | Summary | Status | Deps |
 |------|---------|--------|------|
-| SP-040-ai-companion-c4 | Row: implement AI companion and awareness integration — slice c4 (memory: first `IAiMemoryStore` on SP-005 machinery with own named owner; consent-gated writes; moderation-gated persist with rollback (c3's row-6 seam discharged); explicit-clear with file-content proof; retention/disable schema shaped for both owner answers, no values decided) | Authored 2026-08-04 | SP-038 |
-| SP-041-ai-lab-harness | Tooling: T-15 c2 AI lab harness hardening (HttpListener in-flight-disposal tolerance + fresh-instance-per-bind per SP-023 rule; host-exit orphan-guard; leaked-listener self-check failing loud; 5 consecutive full-suite runs green — assertions never weakened) | Authored 2026-08-04 | SP-035 |
+| SP-040-ai-companion-c4 | Row: implement AI companion and awareness integration — slice c4 (memory: first `IAiMemoryStore` on SP-005 machinery with own named owner; consent-gated writes; moderation-gated persist with rollback (c3's row-6 seam discharged); explicit-clear with file-content proof; retention/disable schema shaped for both owner answers, no values decided) | **Done 2026-08-04** (landed `6255a643`; batch `20260804T163642` lane-1 — FULL review chain: code APPROVE + final PASS; null-on-disk retention discipline (consult); consent placeholder Denied; append-NEVER strengthening w/ byte-identical prior-clean proof; explicit-clear 3 consult hardenings; named non-claim: persists+clears, context consumption = c7; 537/537 + 29/29; row WIP — c5 = awareness next) | SP-038 |
+| SP-041-ai-lab-harness | Tooling: T-15 c2 AI lab harness hardening (HttpListener in-flight-disposal tolerance + fresh-instance-per-bind per SP-023 rule; host-exit orphan-guard; leaked-listener self-check failing loud; 5 consecutive full-suite runs green — assertions never weakened) | **Done 2026-08-04** (landed `6255a643`; batch `20260804T163642` lane-2 — FULL review chain: code APPROVE + final PASS; ctor ODE race root-caused w/ deterministic repro; fresh-instance-per-bind; leak self-check static registry + assembly fixture; 5 consecutive greens runs 5–9; zero assertion changes; 516/29 EXACT; row WIP — owner ratifies) | SP-035 |
+
+**T-14 NAMED GATE DISCHARGED 2026-08-04 (this wave):** hook fired all 3 lanes; lane-1's first red-free contract in 6 packets; zero worker remediations → row CLOSED.
+
+### Wave 7 (next)
+
+**Next claimable work:** SP-042 = AI companion c5 (awareness per admission §8/§5 — consent code-enforced, context packaging through c3's boundary, cooldown mechanism with placeholder values, keyword-routing as owned operations) + lane partner TBD (T-16 DTRH cap-timer flake class is a candidate). Next unused task ID: SP-042.
 
 ### Phase 5 — DTRH admit + host slices, quips/sound, AI companion, tail (ACTIVE — wave 6 in flight)
 

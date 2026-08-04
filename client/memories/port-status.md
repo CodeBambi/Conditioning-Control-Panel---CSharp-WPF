@@ -73,3 +73,11 @@ session: git repair + push + this memory export).
 
 Landed rows stay WIP until the owner ratifies them. 18 rows were flipped WIP→DONE
 only with RATIFIED decree citation placed in evidence cells. Never flip without it.
+
+## Wave 6 (2026-08-04, integrate 6255a643; floor now 537/537 + 29/29)
+
+- **SP-040 (c4 memory):** AiMemoryStore on SP-005 machinery (own owner; null-on-disk retention discipline; consent placeholder Denied; append-NEVER strengthening; explicit-clear with 3 consult hardenings; named non-claim: persists+clears, context consumption = c7). Row WIP — c5 = awareness next.
+- **SP-041 (T-15 lab harness):** ctor ODE race root-caused w/ deterministic repro; fresh-instance-per-bind; leak self-check (static registry + assembly fixture); 5 consecutive greens; zero assertion changes. Row WIP — owner ratifies.
+- **T-14 NAMED GATE DISCHARGED → row CLOSED:** hook fired all lanes; lane-1's first red-free contract in 6 packets. Fresh lanes now arrive pre-patched (keep MAIN checkout patched — the hook copies whatever main carries).
+- **T-16 filed** (DTRH cap-timer flake class). Next: SP-042 = AI c5 (awareness) + partner TBD.
+- **Owner decrees encoded (2026-08-04):** improve-freely mandate (no 1:1 copy anywhere; observable-outcome parity only; improvements a must); use all resources actively ALWAYS (MCP seats within SP-036 rules); hermes caps 5000→10000 (config, restart-effective); avalonia-live verified end-to-end (27 tools; laptop headed-evidence substitute for UI work).

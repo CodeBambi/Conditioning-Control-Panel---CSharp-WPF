@@ -41,6 +41,9 @@ continuous-run sessions).
 
 ## Owner preferences
 
+- **Improve-freely mandate (2026-08-04, chat — "remember this" + extensions):** the client does NOT copy WPF 1:1 ANYWHERE — UI visuals, function implementations, behavior implementations are ALL open design space; "you have full control"; **any improvement that can be made is a MUST.** The remaining constraint = user-observable outcome (what the app does; behavior-visible formulas/clamps/timings/ordering keep WPF parity). Better-than-WPF behavior changes go through evidence-cited board rows (retrospective rule), never silent redesign mid-port. WPF evidence = behavior contracts, not visual templates. dashboard-design's "preserve the five-theme grammar" posture becomes "evolve it". First applies to c7/dashboard packets.
+- **Use all resources actively, ALWAYS (2026-08-04, chat):** the Avalonia MCP seats (admitted subset per SP-036) + agents/workflows are standard instruments for orchestrator AND spine workers — docs lookups during avalonia-research passes, ValidateXaml on AXAML drafts, avalonia-live inspection for UI evidence. Within SP-036 binding rules (advisory-only; redact-BEFORE-calling; ValidateXaml PASS ≠ API-validity proof; usage recorded accept/reject + reasons in the using packet's record).
+- **Hermes memory caps raised 5000→10000 (owner-authorized 2026-08-04):** `~/.pi/agent/hermes-memory-config.json` (`memoryCharLimit`/`userCharLimit`/`projectCharLimit`) — applies at session restart; re-apply if a reinstall wipes it.
 - **Test media**: `Z:\CCP Vids` (desktop-only path) — real video/image/gif files.
   Use these for port work needing real media (video playback, image flash, GIF
   animation) instead of synthetic-only fixtures.
@@ -59,6 +62,7 @@ continuous-run sessions).
 - Every Avalonia MCP call is advisory-only and must be recorded accept/reject +
   reasons in the using packet's record.md. MCP never substitutes
   docs/compilation/K3 pixels/headed gates.
+- **avalonia-live VERIFIED END-TO-END 2026-08-04 (laptop):** 27 tools enumerated live (control query, semantic/visual/logical trees, window/control/set-of-marks screenshots, synthetic input, binding errors, wait-for) + `describe_screen` on the real dashboard (screenshot + semantic tree + bounds). **Laptop substitute for DISPLAY3-class headed evidence on UI work** — admission refined per SP-036 §7 (first live enumeration): the 27 tools = inspection/drive evidence tools, admitted-advisory for evidence work; env-gate binding condition stands (`CCP_MCP=1`).
 - dotnet is on the evidence allowlist (local patch post-SP-002).
 - WSL2 gates run from the desktop WSL install (Linux head evidence).
 

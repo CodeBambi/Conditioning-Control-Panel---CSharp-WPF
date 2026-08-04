@@ -42,5 +42,4 @@ grouped by phase, with accept criteria).
 
 ## Admission status
 
-SP-036 (staged for wave 4) is the audit task to admit bounded Avalonia MCP use
-(A-01...). Until that lands, treat all MCP output as unadmitted research input.
+**SP-036 LANDED 2026-08-04 (wave-4 lane-2) — bounded admission recorded in `spine-tasks/SP-036-avalonia-mcp-audit/record.md` §11:** avalonia-docs (8 tools) admitted advisory; **avalonia-live ADMITTED PROVISIONALLY → refined 2026-08-04 by first live enumeration (27 tools, end-to-end `describe_screen` proof on the dashboard — inspection/drive evidence tools, admitted-advisory; binding `CCP_MCP=1` env-gate condition stands — any unconditional port binding VOIDS the seat);** avalonia-ui: `ValidateXaml`/`DiagnoseCommonIssues`/server self-reports/7 `read_get*` admitted advisory; `AnalyzePerformance` + `GetPerformanceRecommendations` + `ConvertWpfXamlToAvalonia` + `CreateAvaloniaProject` + all 33 `Generate*` REJECTED. **Sentry empirically LIVE (one outbound TLS socket to the org ingest endpoint; unpatched build, no disable path) — mitigation = de-facto option 3 (redacted fragments only), OWNER QUESTION OPEN.** Binding rules run-wide: advisory-only; redact-BEFORE-calling; ValidateXaml PASS ≠ API-validity proof; unavailability never blocks; usage recorded accept/reject + reasons per use.
