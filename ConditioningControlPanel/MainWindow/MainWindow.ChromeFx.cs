@@ -514,7 +514,7 @@ namespace ConditioningControlPanel
             "companion" => BtnCompanion,
             "discord" => BtnDiscordTab,
             "lab" => BtnLab,
-            "bambitakeover" or "haptics" or "lockdown" or "blinktrainer"
+            "exclusives" or "bambitakeover" or "haptics" or "lockdown" or "blinktrainer"
                 or "shelistening" or "gradedintake" or "awareness" or "remotecontrol" => BtnPatreonExclusives,
             _ => null,
         };

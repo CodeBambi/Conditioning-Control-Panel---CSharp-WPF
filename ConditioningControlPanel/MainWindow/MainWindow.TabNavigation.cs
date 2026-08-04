@@ -99,6 +99,7 @@ namespace ConditioningControlPanel
             StopSeasonTitleShimmer();
             StopLockdownPulse();
             StopSkillTreeAnimations();
+            StopExclusivesMotion();
             // Every registered AmbientFxCanvas parks with its tab (see MainWindow.AmbientFx.cs) —
             // new per-tab canvases get the stop hook without touching this method again.
             SwitchTabFx(tab);
@@ -147,6 +148,7 @@ namespace ConditioningControlPanel
             if (SheListeningTab != null) SheListeningTab.Visibility = Visibility.Collapsed;
             if (GradedIntakeTab != null) GradedIntakeTab.Visibility = Visibility.Collapsed;
             if (ProgramsTab != null) ProgramsTab.Visibility = Visibility.Collapsed;
+            if (ExclusivesTab != null) ExclusivesTab.Visibility = Visibility.Collapsed;
 
             // Reset all button styles to inactive. activeStyle is the primary-nav-only v6 variant —
             // quest sub-tabs and roadmap tracks use TabButtonActive directly (see lines further down).
@@ -369,6 +371,14 @@ namespace ConditioningControlPanel
                     AnimateTabIn(GradedIntakeTab);
                     RefreshGradedIntakeGate();
                     RefreshPastQuizzes();
+                    break;
+
+                case "exclusives":
+                    ExclusivesTab.Visibility = Visibility.Visible;
+                    AnimateTabIn(ExclusivesTab);
+                    EnsureExclusivesBuilt();     // lazy: first visit builds the shelf
+                    RefreshExclusivesTab();      // chips/veils/tier plates from live state
+                    StartExclusivesMotion();     // fog canvas + Ken Burns + card sheens
                     break;
 
             }
