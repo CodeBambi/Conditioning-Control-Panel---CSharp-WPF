@@ -61,4 +61,4 @@ The engine contract HARD-requires the hook under `scripts/` (worktree-setup-hook
 
 ## Engine-review presence (T-2 heading format load-bearing)
 
-_Pending — recorded per spine_review_step call._
+- **Step 1 plan review (`spine_review_step` type=plan):** SKIPPED by the runtime — "Nested reviewer spawn blocked inside pi worker session ... the batch engine runs reviews after worker success (SP-195)"; `skipped: true`, `spawnFailed: false`, artifact `.reviews/1-20260804T150503.md`. Not a spawn failure → proceeded per the engine-owned review path.

@@ -1,6 +1,6 @@
 ## STATUS: SP-039 — T-14: lane-local patch application at worktree creation
-**Current Step:** Step 1 — complete (pending plan review); Step 2 next
-**Last Updated:** 2026-08-04 (step 1 work done)
+**Current Step:** Step 2 — implement + scratch verification
+**Last Updated:** 2026-08-04 (step 1 complete; plan review SKIPPED per SP-195, recorded)
 **Blockers:** none
 
 ### Step 1: engine archaeology + mechanism decision + pre-approach consult

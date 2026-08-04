@@ -87,7 +87,7 @@
       "TP-"
     ]
   },
-  "worktreeSetupHook": "",
+  "worktreeSetupHook": "scripts/spine-worktree-setup.exe",
   "worktreeSetupIgnorePaths": [
     ".venv"
   ],
