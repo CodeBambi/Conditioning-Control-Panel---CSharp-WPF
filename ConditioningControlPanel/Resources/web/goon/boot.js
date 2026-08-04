@@ -62,11 +62,14 @@ import { createAssetsStore, localPlayableEntries } from './ui/assetsStore.js';
 import { createDiscord, confirmOpenDm } from './ui/discord.js';
 import { emitAva, mountVsSplash } from './ui/avatar.js';
 import { createWakeLock } from './ui/wakeLock.js';
+import { consumeJoinCode } from './ui/inviteLink.js';
 import { S } from './ui/strings.js';
 
 import * as titleScreen from './ui/screens/title.js';
 import * as hostScreen from './ui/screens/host.js';
 import * as joinScreen from './ui/screens/join.js';
+import * as mediaSetupScreen from './ui/screens/mediaSetup.js';
+import { needsMediaSetup } from './ui/screens/mediaSetup.js';
 import * as lobbyScreen from './ui/screens/lobby.js';
 import * as draftScreen from './ui/screens/draft.js';
 import * as countdownScreen from './ui/screens/countdown.js';
@@ -364,9 +367,37 @@ function settle() {
       }
       const loader = el('gg-loader');
       if (loader) loader.hidden = true;
-      router.show('title');
+      openFirstScreen();
       bridge.log('boot ok');
     });
+}
+
+/* ----------------------------------------------------------------------------
+ * THE FIRST SCREEN — the title, unless somebody was LINKED here.
+ *
+ * `?join=ABC123` (ui/inviteLink.js) is the shareable half of hosting: a host
+ * copies a URL, the other player taps it, and the page opens on the join screen
+ * with the code already in and already submitted. The alternative — landing on a
+ * menu and being asked to type six characters that were RIGHT THERE in the link
+ * — is where invites die.
+ *
+ * `consumeJoinCode` reads AND strips the param in one call, before anything else
+ * can look at it. The strip is not cosmetic: a link left in the address bar is
+ * re-joined by every refresh, every back button and every home-screen pin made
+ * from this page, forever, against a room whose TTL is five minutes. Failure is
+ * the join screen's problem and it is well equipped for it — the code stays in
+ * the field and the reason is on screen.
+ * -------------------------------------------------------------------------- */
+function openFirstScreen() {
+  let code = '';
+  try { code = consumeJoinCode(typeof window !== 'undefined' ? window : null); }
+  catch (_e) { code = ''; }
+  if (code) {
+    bridge.log('invite link: joining ' + code);
+    router.show('join', { autoCode: code });
+    return;
+  }
+  router.show('title');
 }
 
 function showLoaderFailure(msg) {
@@ -410,6 +441,19 @@ let escMercied = false;
 let awaitingEntry = false;
 let lastConnectFailed = null;
 let recapFallbackTimer = 0;
+
+/* ---- THE FIRST-RUN MEDIA STEP (ui/screens/mediaSetup.js).
+ *
+ * Set on the JOIN that landed, when the deck is empty — the case that only ever
+ * happens to somebody who arrived on an invite link and has never opened this
+ * before. While it is true the phase router shows the media screen instead of
+ * the lobby; the ENGINE is untouched and walks Lobby -> Consent underneath it.
+ *
+ * `mediaPrepTold` is separate because the wire half is EDGE-triggered: onPhase
+ * fires several times on the way through the lobby and the peer must hear
+ * "preparing" once, not five times. */
+let mediaPrepPending = false;
+let mediaPrepTold = false;
 
 /* ---- Practice mode */
 let soloPair = null;
@@ -1109,6 +1153,10 @@ function forceRecap(why, sweep) {
 
 function detachMatch() {
   clearRecapFallback();
+  // The match this hold belonged to is going: there is nobody left to tell, and
+  // a flag that survived would hold the NEXT match's lobby behind a media screen
+  // the player already finished with.
+  clearMediaPrep(false);
   for (const off of phaseUnsubs) { try { off(); } catch (_e) { /* ignore */ } }
   phaseUnsubs = [];
   unmountHud();
@@ -1163,6 +1211,39 @@ function unmountMercy() {
 }
 
 /* ----------------------------------------------------------------------------
+ * THE MEDIA STEP, HELD IN FRONT OF THE LOBBY.
+ *
+ * Returns true when it took the screen, so the phase arms can `break` on it
+ * without knowing anything else about the feature. Deliberately NOT a phase and
+ * NOT a gate on the engine: the match reaches Consent underneath and simply
+ * waits, exactly as it would for a player who had wandered off to make tea.
+ *
+ * The `media_prep` frame is the other half — without it the host sits on
+ * "waiting for them" with no way to tell an empty room from a busy one, which
+ * is how a host gives up thirty seconds before the duel would have started.
+ * -------------------------------------------------------------------------- */
+function showMediaSetup() {
+  if (!mediaPrepPending || !router) return false;
+  if (!mediaPrepTold) {
+    mediaPrepTold = true;
+    try { currentMatch?.setMediaPrep?.(true); } catch (_e) { /* a status hint is never load-bearing */ }
+  }
+  if (router.current !== 'mediaSetup') router.show('mediaSetup');
+  return true;
+}
+
+/** Clears the step (and tells the peer), whatever the reason. Idempotent. */
+function clearMediaPrep(tellPeer) {
+  const wasPending = mediaPrepPending;
+  mediaPrepPending = false;
+  if (tellPeer && mediaPrepTold) {
+    try { currentMatch?.setMediaPrep?.(false); } catch (_e) { /* ignore */ }
+  }
+  mediaPrepTold = false;
+  return wasPending;
+}
+
+/* ----------------------------------------------------------------------------
  * PHASE ROUTING — the engine's phase is the single source of truth for what is
  * on screen. Nothing else calls router.show() for a match screen.
  * -------------------------------------------------------------------------- */
@@ -1176,15 +1257,28 @@ function onPhase(phase) {
   try { audio?.dronePhase?.(phase); } catch (_e) { /* the bed is never load-bearing */ }
   paintProbe();
 
+  /* THE HOLD CANNOT OUTLIVE THE LOBBY. It is only ever consulted by the Lobby
+   * and Consent arms, so a match that reached the draft with the flag still set
+   * would carry a dead hold around for the rest of the session and re-assert it
+   * on the next lobby. Clearing it here (and telling the peer, so their "picking
+   * their media…" line comes down) makes "past Consent" the one exit that needs
+   * no cooperation from the screen. */
+  if (mediaPrepPending && phase >= GoonMatchPhase.Draft) clearMediaPrep(true);
+
   switch (phase) {
     case GoonMatchPhase.Lobby:
       // The host/join screen stays up until there is a second person to show —
       // a lobby with one silhouette in it is worse than the code the player is
       // still reading aloud.
+      if (showMediaSetup()) break;
       if (router.current !== 'host' && router.current !== 'join') router.show('lobby');
       break;
 
     case GoonMatchPhase.Consent:
+      // A joiner with an empty deck is held here — see showMediaSetup. The
+      // engine has already reached Consent and stays there; the sheet is
+      // waiting for them the moment they lock their picks in.
+      if (showMediaSetup()) break;
       router.show('lobby');
       break;
 
@@ -1371,8 +1465,46 @@ const actions = {
     lastConnectFailed = null;
     let ok = false;
     try { ok = await s.join(inviteCode); } finally { awaitingEntry = false; }
-    if (ok) return { ok: true };
-    return { ok: false, error: errorInfo(lastConnectFailed) };
+    if (!ok) return { ok: false, error: errorInfo(lastConnectFailed) };
+
+    /* THE FIRST-RUN MEDIA STEP, decided HERE and nowhere else — one join, one
+     * answer. A duel plays the player's OWN library at them, so a joiner with an
+     * empty deck would watch every effect fire against a blank screen and read
+     * it as broken rather than as empty. Only the JOIN path asks: a host has
+     * been through the title screen (and, hosted, has a preset behind them), and
+     * this is squarely about the person who arrived on a link.
+     *
+     * `syncLocalDeck` first, because the answer is about the DECK and a pick
+     * made moments ago may still be sitting in the store un-fed. */
+    syncLocalDeck(true);
+    mediaPrepTold = false;
+    mediaPrepPending = needsMediaSetup(media);
+    if (mediaPrepPending) {
+      logger.info('joined with an empty deck — media setup first');
+      /* THE RACE THIS CLOSES. GoonSession.join() attaches the match and fires
+       * onPhase(Lobby) INSIDE the await above, i.e. before the flag exists. The
+       * Lobby arm happens to be harmless (it leaves the join screen up while
+       * `router.current === 'join'`) and Consent normally lands a moment later,
+       * after this line — but "normally" is doing the work in that sentence, and
+       * a rejoin that arrives already consented would sail straight past. One
+       * idempotent call here means the hold is applied to whatever phase the
+       * match is ALREADY in, whenever it got there. */
+      showMediaSetup();
+    }
+    return { ok: true };
+  },
+
+  /**
+   * The media step's "I'm set". Clears the hold, tells the peer, and hands the
+   * player to whatever phase the match reached while they were picking — the
+   * screen itself decides nothing about where it goes next.
+   */
+  mediaPrepDone() {
+    if (!clearMediaPrep(true)) return;
+    syncLocalDeck(true);
+    logDeck('media-setup');
+    if (currentMatch) onPhase(currentMatch.phase);
+    else router.show('title');
   },
 
   /** The host/join screen's Cancel: fold the pending room, stay on the page. */
@@ -1666,6 +1798,7 @@ function buildApp() {
       title: titleScreen,
       host: hostScreen,
       join: joinScreen,
+      mediaSetup: mediaSetupScreen,
       lobby: lobbyScreen,
       draft: draftScreen,
       countdown: countdownScreen,

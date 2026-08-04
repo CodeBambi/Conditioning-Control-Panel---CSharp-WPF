@@ -12,6 +12,14 @@
  * NOT fold Crockford's I/L->1 or O->0, so neither may we — silently rewriting a
  * character turns "you typed it wrong" into "that room does not exist", which is
  * the single most confusing failure this screen can produce.
+ *
+ * THE LINK PATH (`ctx.autoCode`, from boot.js's `?join=` handling). A player who
+ * tapped an invite link never sees this screen do anything: it mounts with the
+ * code already in, fires the join itself, and is gone. It only becomes a screen
+ * again when the join FAILS — and then it is exactly the screen it always was,
+ * with the code still in the field and the reason in red, because "the room is
+ * gone, ask for a fresh code" is the one thing a bounced-to-menu link joiner can
+ * never work out on their own.
  * ==========================================================================*/
 
 import { createLedger, el, button } from '../router.js';
@@ -25,6 +33,8 @@ export function mount(container, ctx) {
   ledger.logger = ctx?.logger || null;
 
   const { actions, audio, prefs, sheets } = ctx;
+  /** A code handed to us by a `?join=` link — prefilled and submitted for them. */
+  const autoCode = normalizeCode(ctx?.autoCode || '').slice(0, CODE_LEN);
   let busy = false;
 
   const cells = [];
@@ -53,7 +63,7 @@ export function mount(container, ctx) {
 
   const card = el('div', { class: 'gg-card gg-join' }, [
     el('div', { class: 'gg-eyebrow' }, [el('i'), el('span', { text: S.join.eyebrow })]),
-    el('p', { class: 'gg-lead', text: S.join.lead }),
+    el('p', { class: 'gg-lead', text: autoCode ? S.join.leadLinked : S.join.lead }),
     el('div', { class: 'gg-code-wrap' }, [input, cellRow]),
     error,
     el('div', { class: 'gg-join-actions' }, [backBtn, joinBtn]),
@@ -92,10 +102,18 @@ export function mount(container, ctx) {
   ledger.listen(input, 'blur', paint);
   ledger.listen(cellRow, 'click', () => { try { input.focus(); } catch (_e) { /* ignore */ } });
 
-  const remembered = prefs?.get?.('lastCode') || '';
+  // A link's code beats the remembered one: the player asked for THIS room.
+  const remembered = autoCode || prefs?.get?.('lastCode') || '';
   if (remembered) input.value = normalizeCode(remembered).slice(0, CODE_LEN);
   paint();
   ledger.timer(() => { try { input.focus(); } catch (_e) { /* ignore */ } }, 0);
+
+  /* THE LINK'S ONE SHOT. A timer rather than a straight call so mount() has
+   * returned and the router holds a handle before the join starts touching
+   * phases and screens; `submit()` is idempotent under `busy`, and a failure
+   * lands back here with the code still in the field. Deliberately NOT retried
+   * — a dead room re-attempted on a loop is a page that never lets go. */
+  if (autoCode.length === CODE_LEN) ledger.timer(() => { void submit(); }, 0);
 
   /* ----------------------------------------------------------------- flow */
 

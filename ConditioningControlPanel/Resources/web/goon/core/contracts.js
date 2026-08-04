@@ -364,6 +364,34 @@ export function makeEmote(o = {}) {
   };
 }
 
+/**
+ * "I am still getting my library together" (protocol §6, v1.4).
+ *
+ * A PRESENCE HINT, not a term and not a phase. A first-time guest who arrived on
+ * an invite link is sent through ui/screens/mediaSetup.js before the lobby, and
+ * without this the host stares at "waiting for them" with no way to tell an
+ * empty room from a busy one — which is exactly how a host gives up on a duel
+ * thirty seconds before it would have started.
+ *
+ * NOTHING WAITS ON IT. The engine does not gate a phase, a confirmation or a
+ * countdown on `preparing`; the lobby paints a line and that is the whole of it.
+ * A peer that never sends it (an older build, the C# client, a guest who already
+ * had a deck) reads as `false` — absent means "not preparing", exactly like
+ * tick's `vwin` — and a peer that only ever sends `true` and then vanishes costs
+ * nothing but a stale line on a screen that is already being torn down.
+ *
+ * APPEND-ONLY and unversioned by design: an older peer drops the whole frame as
+ * an unknown `t` (wire.js parse logs and returns null), which is the documented
+ * forward-compatible behaviour and needs no capability bit.
+ */
+export function makeMediaPrep(o = {}) {
+  return {
+    t: 'media_prep',
+    v: o.v ?? PROTOCOL_VERSION,
+    preparing: o.preparing ?? false,
+  };
+}
+
 export function makeResult(o = {}) {
   return {
     t: 'result',
@@ -409,6 +437,7 @@ export const MessageFactories = Object.freeze({
   round_result: makeRoundResult,
   mercy: makeMercy,
   emote: makeEmote,
+  media_prep: makeMediaPrep,
   result: makeResult,
   clock_ping: makeClockPing,
   clock_pong: makeClockPong,

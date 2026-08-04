@@ -60,7 +60,7 @@
 import {
   GoonAttentionMode, GoonElement, GoonEndReason, GoonMatchPhase, GoonPayloadKind, GoonTransportState,
   GoonConsts, clampWindowCount, costOf, enumName, isClockMessage,
-  makeConsent, makeDraft, makeEmote, makeHello, makeMatchStart, makeMercy,
+  makeConsent, makeDraft, makeEmote, makeHello, makeMatchStart, makeMediaPrep, makeMercy,
   makePayloadReceipt, makeResult, makeTick, makePayload,
 } from './contracts.js';
 import { GoonRng, combineSeeds, newSeedContribution } from './rng.js';
@@ -239,6 +239,13 @@ export class GoonMatchService {
     this._localMediaTransfer = false;
     this._remoteMediaTransfer = false;
 
+    // "Still assembling a library" (the `media_prep` frame). A PRESENCE HINT and
+    // nothing else: no phase, no confirmation and no countdown reads either of
+    // these, so a peer that never sends the frame — an older build, the C#
+    // client — simply stays `false` and the lobby behaves exactly as it did.
+    this._localMediaPrep = false;
+    this._remoteMediaPrep = false;
+
     this._localSeedContribution = null;
     this._remoteSeedContribution = null;
 
@@ -304,6 +311,7 @@ export class GoonMatchService {
       opponentStateChanged: makeEvent(),
       connectionHealthChanged: makeEvent(),
       emoteReceived: makeEvent(),
+      mediaPrepChanged: makeEvent(),
       interactionCheckDue: makeEvent(),
       lobbyFailed: makeEvent(),
       matchEnded: makeEvent(),
@@ -344,6 +352,11 @@ export class GoonMatchService {
   get mediaTransferAgreed() {
     return this._localMediaTransfer && this._remoteMediaTransfer && this._peerSupportsTransfer;
   }
+
+  /** Are WE the one still picking media (`media_prep`, as last declared)? */
+  get localMediaPrep() { return this._localMediaPrep; }
+  /** Are THEY? Absent frame -> false, so an older peer reads as "ready". */
+  get remoteMediaPrep() { return this._remoteMediaPrep; }
 
   /** What WE allow (canonical, always-on element excluded). */
   get localAllowedElements() { return this._localAllowed; }
@@ -437,6 +450,8 @@ export class GoonMatchService {
   onOpponentStateChanged(fn) { return this._ev.opponentStateChanged.on(fn); }
   onConnectionHealthChanged(fn) { return this._ev.connectionHealthChanged.on(fn); }
   onEmoteReceived(fn) { return this._ev.emoteReceived.on(fn); }
+  /** fn(preparing) whenever the OPPONENT's `media_prep` declaration changes. */
+  onMediaPrepChanged(fn) { return this._ev.mediaPrepChanged.on(fn); }
   /** No-cam only: prompt an interaction check, then call reportInteractionCheck(). */
   onInteractionCheckDue(fn) { return this._ev.interactionCheckDue.on(fn); }
   onLobbyFailed(fn) { return this._ev.lobbyFailed.on(fn); }
@@ -705,6 +720,30 @@ export class GoonMatchService {
     }));
   }
 
+  /**
+   * Declare whether we are still assembling a library (`media_prep`, §6).
+   *
+   * Pre-live only, and NOT a term: it clears no confirmation, blocks no phase
+   * and is never folded into the consent fingerprint (`sameSheet` must never
+   * learn about it, for the reason spelled out at the foot of this file). The
+   * only thing it does is let the other side's lobby say "they joined and are
+   * picking their media" instead of nothing at all.
+   *
+   * Edge-triggered: an unchanged value sends nothing, so a screen that repaints
+   * ten times a second cannot turn a status hint into wire traffic.
+   *
+   * @returns {boolean} true when a frame actually went out
+   */
+  setMediaPrep(on) {
+    if (this._disposed || this._ended) return false;
+    if (this._phase === GoonMatchPhase.Idle) return false;
+    const next = !!on;
+    if (next === this._localMediaPrep) return false;
+    this._localMediaPrep = next;
+    this._send(makeMediaPrep({ preparing: next }));
+    return true;
+  }
+
   // ---------------------------------------------------------- payloads
 
   /**
@@ -868,6 +907,7 @@ export class GoonMatchService {
         case 'payload_receipt': this._handleReceipt(message); break;
         case 'mercy': this._handleRemoteMercy(message); break;
         case 'emote': this._handleEmote(message); break;
+        case 'media_prep': this._handleMediaPrep(message); break;
         case 'result': this._handleRemoteResult(message); break;
         case 'round':
         case 'round_result':
@@ -1338,6 +1378,19 @@ export class GoonMatchService {
     emote.text = sanitizeText(emote.text, EMOTE_TEXT_MAX_CHARS);
     emote.icon = sanitizeText(emote.icon, EMOTE_ICON_MAX_CHARS);
     this._ev.emoteReceived.emit(emote, (e) => this._warn(`emoteReceived handler threw: ${e && e.message}`));
+  }
+
+  /**
+   * Their `media_prep`. `=== true`, not truthy: the wire is untrusted, absent is
+   * the common case (every client that predates this), and anything that is not
+   * an explicit `true` means "ready" — the state that changes nothing.
+   */
+  _handleMediaPrep(msg) {
+    const next = msg.preparing === true;
+    if (next === this._remoteMediaPrep) return;
+    this._remoteMediaPrep = next;
+    this._info(`opponent media_prep -> ${next ? 'picking' : 'ready'}`);
+    this._ev.mediaPrepChanged.emit(next, (e) => this._warn(`mediaPrepChanged handler threw: ${e && e.message}`));
   }
 
   _handleRemoteMercy(mercy) {
