@@ -13,7 +13,10 @@ using System.Windows.Threading;
 using NAudio.Wave;
 using LibVLCSharp.Shared;
 using LibVLCSharp.WPF;
+using Microsoft.Web.WebView2.Core;
+using Newtonsoft.Json.Linq;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.Video.Browser;
 using ConditioningControlPanel.Localization;
 using Screen = System.Windows.Forms.Screen;
 
@@ -31,6 +34,10 @@ namespace ConditioningControlPanel
         private readonly Action<bool> _onComplete;
         private readonly Screen _screen;
         private readonly bool _isPrimary;
+        /// <summary>This game plays out-of-process in a WebView2 instead of a leased LibVLC player.
+        /// Nothing else about the game changes: bubbles, counting, difficulty, the result window,
+        /// the strict lock and the XP flow are shared verbatim.</summary>
+        private readonly bool _useBrowser;
 
         private readonly Random _random = new();
         private readonly List<CountBubble> _activeBubbles = new();
@@ -53,6 +60,13 @@ namespace ConditioningControlPanel
         private LibVLCSharp.Shared.MediaPlayer? _mediaPlayer;
         private VideoView? _videoView;
 
+        // Browser engine (docs/BROWSER_VIDEO_ENGINE_PLAN.md §6) - instance fields per window.
+        // Mutually exclusive with the LibVLC fields above: a game is one engine or the other.
+        private BrowserVideoSurface? _browserSurface;
+        private DispatcherTimer? _browserFirstFrameTimer;
+        private bool _browserPlayingSeen;
+        private bool _browserFailed;
+
         // Multi-monitor support - static shared state
         private static readonly object _cleanupLock = new();
         private static bool _isCleaningUp = false;
@@ -60,6 +74,14 @@ namespace ConditioningControlPanel
         private static int _sharedBubbleCount = 0;
         private static int _sharedTargetCount = 0;
         private static List<LibVLCSharp.Shared.MediaPlayer> _allMediaPlayers = new();
+
+        /// <summary>
+        /// Routing decision for the game being started, taken ONCE in <see cref="ShowOnAllMonitors"/>
+        /// and copied into every window's <c>_useBrowser</c> as it is constructed. A static handover
+        /// rather than a constructor argument so the public signature (used by BubbleCountService and
+        /// the test/remote paths) does not change.
+        /// </summary>
+        private static bool _nextGameUsesBrowser;
 
         /// <summary>Owner tag used for every VideoService lease + trace line from this window.</summary>
         private const string LeaseTag = "bubble-count";
@@ -74,6 +96,12 @@ namespace ConditioningControlPanel
         /// <summary>Fallback duration when the metadata cache has never seen this video. LibVLC's
         /// LengthChanged corrects it within a second of Play() - see AdoptRealDuration.</summary>
         private const double FallbackDurationSeconds = 30;
+        /// <summary>Browser mode only: how long the game waits for the page's first <c>playing</c>
+        /// report. The page runs its OWN 10s no-playing clock and reports error 101, so this only
+        /// covers the case where the page never got far enough to run it at all (WebView2 never
+        /// initialised, navigation blocked) - which would otherwise sit on black until the safety
+        /// timer. Generous, because a cold WebView2 start can eat several seconds by itself.</summary>
+        private const int BrowserFirstFrameTimeoutMs = 20000;
 
         /// <summary>Duration of the last played video in seconds (shared for XP scaling)</summary>
         internal static double LastVideoDurationSeconds { get; private set; } = 30;
@@ -90,6 +118,7 @@ namespace ConditioningControlPanel
             _onComplete = onComplete;
             _screen = screen ?? Screen.PrimaryScreen!;
             _isPrimary = isPrimary;
+            _useBrowser = _nextGameUsesBrowser;
 
             // Set difficulty display
             TxtDifficulty.Text = $" ({difficulty})";
@@ -124,8 +153,10 @@ namespace ConditioningControlPanel
                 SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW);
                 // Cache the handle for VideoService's wedge escape hatch while we still can: these
                 // windows are fullscreen + topmost, and once the UI thread wedges nothing can
-                // resolve a Window to its HWND any more (#765/#766).
-                App.Video?.RegisterManagedWindow(hwnd);
+                // resolve a Window to its HWND any more (#765/#766). Browser mode has no in-process
+                // decoder to wedge the dispatcher, and its watchdog is never armed, so the escape
+                // hatch has nothing to escape from.
+                if (!_useBrowser) App.Video?.RegisterManagedWindow(hwnd);
             };
 
             // Reclaim focus when stolen by other windows (only primary needs focus)
@@ -182,9 +213,30 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Show bubble count game on all monitors using LibVLC
         /// </summary>
+        /// <param name="onSkipped">Optional "the game never happened" resolution, used by the
+        /// poison-cooldown backstop below. A skip is NOT a loss: routing it through
+        /// <paramref name="onComplete"/> with false would read as a failed count and, in strict
+        /// mode, start the WRONG! WATCH AGAIN retry loop for a game the user never saw. When null,
+        /// a skip falls back to the completion callback (old behaviour).</param>
         public static void ShowOnAllMonitors(string videoPath, BubbleCountService.Difficulty difficulty,
-            bool strictMode, Action<bool> onComplete)
+            bool strictMode, Action<bool> onComplete, Action? onSkipped = null)
         {
+            // The completion callback must reach the service EXACTLY once. Every window shares this
+            // delegate and CloseAllWindows invokes it, which can happen INSIDE the Show() below
+            // (Loaded runs synchronously there, and a browser/LibVLC start failure closes the game
+            // from it) - so the catch at the bottom would otherwise deliver a second, contradictory
+            // completion for a game that already ended.
+            int completionDelivered = 0;
+            Action<bool> complete = ok =>
+            {
+                if (System.Threading.Interlocked.Exchange(ref completionDelivered, 1) != 0)
+                {
+                    App.Logger?.Debug("BubbleCountWindow: completion already delivered - ignoring a second one (success={Success})", ok);
+                    return;
+                }
+                onComplete?.Invoke(ok);
+            };
+
             // Reset shared state
             lock (_cleanupLock)
             {
@@ -226,25 +278,46 @@ namespace ConditioningControlPanel
                 ReleaseStoppedPlayers(orphanStops);
             }
 
+            // Routing for THIS game (plan §6), decided once and shared by every window. A session
+            // already live on the engine would mean a mandatory video is on screen right now: the
+            // InteractionQueue's single slot is supposed to make that impossible, so treat it as
+            // doubt and take the shipped LibVLC path rather than stealing the video's surfaces.
+            var useBrowser = BrowserVideoGate.ShouldUseBrowser(videoPath)
+                             && !BrowserVideoEngine.Instance.IsSessionActive;
+            _nextGameUsesBrowser = useBrowser;
+            if (useBrowser)
+                VideoDiag.Log("BUBBLE", $"browser engine selected for {Path.GetFileName(videoPath)} - no LibVLC lease, no wedge watchdog");
+
             // A wedged native Stop() leaves a LibVLC thread stuck in this process forever, and #766
             // is precisely "poisoning at 22:05, bubble-count video at 22:18, dispatcher dead". Don't
-            // stand a fresh player up on the wreckage - the caller treats this like any other
-            // can't-show and the next scheduled game gets a clean instance.
-            var poisonMs = VideoService.NativePoisonCooldownRemainingMs;
+            // stand a fresh player up on the wreckage. Browser mode never touches the shared
+            // instance, so the cooldown has nothing to protect there.
+            //
+            // BACKSTOP ONLY: BubbleCountService now evaluates this same cooldown after it has picked
+            // the file (it is the only place that can, because the routing decision needs the path),
+            // so reaching it here means the cooldown began in the milliseconds since. Resolved as a
+            // SKIP, never as a lost game - see onSkipped.
+            var poisonMs = useBrowser ? 0 : VideoService.NativePoisonCooldownRemainingMs;
             if (poisonMs > 0)
             {
                 App.Logger?.Warning("BubbleCountWindow: shared LibVLC poisoned by a wedged Stop() - not starting ({Sec:F0}s of cooldown left)", poisonMs / 1000.0);
-                VideoDiag.Log("BUBBLE", $"ABORT - native poison cooldown, {poisonMs}ms remaining");
-                onComplete?.Invoke(false);
+                VideoDiag.Log("BUBBLE", $"SKIP - native poison cooldown, {poisonMs}ms remaining");
+                if (onSkipped != null)
+                {
+                    System.Threading.Interlocked.Exchange(ref completionDelivered, 1);
+                    onSkipped();
+                }
+                else complete(false);
                 return;
             }
 
-            // Ensure LibVLC is ready
-            if (!EnsureLibVLCReady())
+            // Ensure LibVLC is ready (browser mode never leases a player, so it must not block on -
+            // or trigger - the shared instance's initialization)
+            if (!useBrowser && !EnsureLibVLCReady())
             {
                 App.Logger?.Error("BubbleCountWindow: LibVLC not available, cannot show game");
                 VideoDiag.Log("BUBBLE", "ABORT - no shared LibVLC instance");
-                onComplete?.Invoke(false);
+                complete(false);
                 return;
             }
 
@@ -257,7 +330,7 @@ namespace ConditioningControlPanel
             if (screens.Length == 0 || screens[0] == null)
             {
                 App.Logger?.Error("BubbleCountWindow: No screens available");
-                onComplete?.Invoke(false);
+                complete(false);
                 return;
             }
 
@@ -268,15 +341,17 @@ namespace ConditioningControlPanel
 
             // Armed BEFORE the first window exists: the #766 wedge is inside the native start-up
             // sequence itself (MediaPlayer ctor / HwndHost attach / Play), which all runs on the UI
-            // thread from OnLoaded. Disarmed by CloseAllWindows / ForceCloseAll.
-            App.Video?.ArmManagedWedgeWatchdog(LeaseTag);
+            // thread from OnLoaded. Disarmed by CloseAllWindows / ForceCloseAll. NOT armed in
+            // browser mode - WebView2 media is out-of-process, so there is nothing native on this
+            // thread that can wedge the dispatcher.
+            if (!useBrowser) App.Video?.ArmManagedWedgeWatchdog(LeaseTag);
 
             var showSw = System.Diagnostics.Stopwatch.StartNew();
             try
             {
                 // Create primary window with audio
                 App.Logger?.Information("BubbleCountWindow: Creating primary window...");
-                var primaryWindow = new BubbleCountWindow(videoPath, difficulty, strictMode, onComplete, primary, true);
+                var primaryWindow = new BubbleCountWindow(videoPath, difficulty, strictMode, complete, primary, true);
 
                 App.Logger?.Information("BubbleCountWindow: Showing primary window...");
                 primaryWindow.Show();
@@ -289,7 +364,7 @@ namespace ConditioningControlPanel
                 foreach (var screen in screens.Where(s => s != primary))
                 {
                     App.Logger?.Information("BubbleCountWindow: Creating secondary window on {Screen}...", screen.DeviceName);
-                    var secondaryWindow = new BubbleCountWindow(videoPath, difficulty, strictMode, onComplete, screen, false);
+                    var secondaryWindow = new BubbleCountWindow(videoPath, difficulty, strictMode, complete, screen, false);
                     secondaryWindow.Show();
                     secondaryWindow.WindowState = WindowState.Maximized;
                     ForceTopmost(secondaryWindow);
@@ -306,7 +381,8 @@ namespace ConditioningControlPanel
                 App.Logger?.Error(ex, "BubbleCountWindow: Failed to create/show windows");
                 VideoDiag.Log("BUBBLE", $"show THREW +{showSw.ElapsedMilliseconds}ms: {ex.Message}");
                 App.Video?.DisarmManagedWedgeWatchdog();
-                onComplete?.Invoke(false);
+                // No-op when the windows already delivered one from inside Show().
+                complete(false);
             }
         }
 
@@ -444,6 +520,15 @@ namespace ConditioningControlPanel
                     {
                         CloseAllWindows(false);
                     }
+                    return;
+                }
+
+                // Browser mode owns the whole start-up sequence: no VideoView, no lease, no Media,
+                // no Play(). Everything AFTER playback start (bubbles, counting, result window,
+                // strict lock, XP) is the shared code below and in CloseAllWindows.
+                if (_useBrowser)
+                {
+                    StartBrowserPlayback(tag, sw);
                     return;
                 }
 
@@ -723,6 +808,324 @@ namespace ConditioningControlPanel
             });
         }
 
+        #region Browser engine (plan §6)
+
+        /// <summary>
+        /// Browser-mode start-up for this window: a <see cref="BrowserVideoSurface"/> inside the
+        /// game window's own VideoContainer, in place of the leased LibVLC player + VideoView. The
+        /// surface goes INSIDE this window rather than into a separate BrowserVideoWindow so the
+        /// counting HUD, the strict indicator and the ESC hint keep drawing over the video, and so
+        /// ShowOnAllMonitors' one-window-per-screen shape is unchanged.
+        ///
+        /// The page's <c>meta</c> message replaces LibVLC's LengthChanged (both land in
+        /// <see cref="AdoptRealDuration"/>) and its <c>ended</c> message replaces EndReached.
+        /// </summary>
+        private void StartBrowserPlayback(string tag, System.Diagnostics.Stopwatch sw)
+        {
+            var url = BrowserVideoEngine.BuildPageUrl(_videoPath);
+            if (url == null)
+            {
+                // ShouldUseBrowser already proved the file maps to a virtual host, so this is a race
+                // (the assets folder moved between selection and here). Nothing is on screen yet.
+                App.Logger?.Warning("BubbleCountWindow: no virtual-host URL for {Path} - abandoning the game", _videoPath);
+                VideoDiag.Log("BUBBLE", $"win[{tag}]: ABORT - browser URL build failed +{sw.ElapsedMilliseconds}ms");
+                if (_isPrimary) CloseAllWindows(false);
+                return;
+            }
+
+            _browserSurface = new BrowserVideoSurface($"{LeaseTag}[{tag}]");
+            _browserSurface.Message += OnBrowserMessage;
+            _browserSurface.ProcessFailed += OnBrowserProcessFailed;
+            VideoContainer.Children.Add(_browserSurface);
+            VideoDiag.Log("BUBBLE", $"win[{tag}]: browser surface built +{sw.ElapsedMilliseconds}ms");
+
+            // Same audio contract as the LibVLC path: the primary carries the game's volume and
+            // every secondary is silent, so there is exactly one WASAPI session per clip.
+            var volume = _isPrimary ? Math.Clamp(App.Settings.Current.MasterVolume / 100.0, 0, 1) : 0.0;
+            _browserSurface.Post(new
+            {
+                type = "load",
+                url,
+                volume,
+                muted = !_isPrimary || volume <= 0,
+                // Black bars, not the TikTok fill: the bubble-count surface has always letterboxed
+                // (a plain VideoView), and the count bubbles are positioned over the whole screen.
+                blurBackground = false,
+                // The whole game is "click the bubbles": an invisible pointer would make it
+                // unplayable, so the page's cursor hiding stays off here.
+                hideCursor = false,
+                startAtMs = 0,
+            });
+
+            if (_isPrimary)
+            {
+                // Identical to the LibVLC path: cache hit, else the 30s fallback, corrected the
+                // moment the page reports its real duration.
+                _videoDurationSeconds = ResolveVideoDurationSeconds(_videoPath);
+                LastVideoDurationSeconds = _videoDurationSeconds;
+                VideoDiag.Log("BUBBLE", $"win[{tag}]: duration={_videoDurationSeconds:F1}s (awaiting page meta) +{sw.ElapsedMilliseconds}ms");
+
+                CalculateTargetBubbles();
+                _sharedTargetCount = _targetBubbleCount;
+
+                StartSafetyTimer(_videoDurationSeconds);
+                StartBubbleSpawning();
+                ArmBrowserFirstFrameWatch();
+
+                App.Logger?.Information("BubbleCount game started (browser engine) - Target: {Target} bubbles, Duration: {Duration}s, Difficulty: {Diff}",
+                    _targetBubbleCount, _videoDurationSeconds, _difficulty);
+            }
+            else
+            {
+                _targetBubbleCount = _sharedTargetCount;
+            }
+
+            // EnsureCoreWebView2Async only works once the control is in the visual tree, which it
+            // now is (this runs from the window's Loaded handler).
+            _ = InitBrowserSurfaceAsync(tag);
+        }
+
+        /// <summary>Attach the shared WebView2 environment and navigate to the player page. The
+        /// environment is the engine's - one per process, whoever asks for it first builds it.</summary>
+        private async Task InitBrowserSurfaceAsync(string tag)
+        {
+            var surface = _browserSurface;
+            if (surface == null) return;
+            try
+            {
+                var env = await BrowserVideoEngine.SharedEnvironmentAsync();
+                if (!ReferenceEquals(surface, _browserSurface) || _isCleaningUp) return;
+                if (env == null)
+                {
+                    // WebView2 runtime missing. The gate consults IsAvailable, so this only happens
+                    // when the very first environment build of the session fails right here.
+                    OnBrowserFailure("WebView2 environment unavailable", blameFile: false);
+                    return;
+                }
+
+                await surface.InitAsync(env, BrowserVideoEngine.SharedMappings(),
+                    BrowserVideoEngine.PlayerStartUrl, BrowserVideoEngine.PlayerHost);
+                VideoDiag.Log("BUBBLE", $"win[{tag}]: browser surface navigated");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "BubbleCountWindow: browser surface init failed");
+                OnBrowserFailure("surface init failed: " + ex.Message, blameFile: false);
+            }
+        }
+
+        /// <summary>
+        /// Page messages (plan §3). Runs on the UI thread INSIDE the WebView2 message callback, so
+        /// nothing here may tear down the surface that raised it - every heavy continuation is
+        /// posted back through <see cref="PostAfterPageMessage"/>.
+        /// </summary>
+        private void OnBrowserMessage(BrowserVideoSurface surface, JObject o)
+        {
+            try
+            {
+                var type = (string?)o["type"];
+
+                // Only the primary drives the game, exactly like the LibVLC primary player: a
+                // secondary's events would end the game twice.
+                if (!_isPrimary)
+                {
+                    if (type == "error")
+                        App.Logger?.Warning("BubbleCountWindow[secondary]: page error {Code} {Msg} (ignored - primary owns the game)",
+                            (int?)o["code"], (string?)o["message"]);
+                    return;
+                }
+
+                switch (type)
+                {
+                    case "meta":
+                    {
+                        // Replaces LengthChanged. Can arrive more than once (Infinity at
+                        // loadedmetadata, the real value at durationchange) - last one wins, and
+                        // AdoptRealDuration already ignores a repeat of what it has. 0 = the page
+                        // cannot know the duration, so the metadata-cache value (or the 30s
+                        // fallback) stands, just as it does when LengthChanged never fires.
+                        long durationMs = (long?)o["durationMs"] ?? 0;
+                        if (durationMs > 0) AdoptRealDuration(durationMs / 1000.0);
+                        else App.Logger?.Debug("BubbleCountWindow: browser meta with unknown duration - keeping {Duration:F1}s", _videoDurationSeconds);
+                        break;
+                    }
+                    case "playing":
+                        _browserPlayingSeen = true;
+                        StopBrowserFirstFrameWatch();
+                        VideoDiag.Log("BUBBLE", "browser PLAYING (page reported the first frame)");
+                        break;
+                    case "ended":
+                        // Same completion path as EndReached.
+                        PostAfterPageMessage(() =>
+                        {
+                            if (!_isCleaningUp && _isPrimary) OnVideoEnded();
+                        });
+                        break;
+                    case "error":
+                    {
+                        int code = (int?)o["code"] ?? 0;
+                        var msg = (string?)o["message"] ?? "";
+                        OnBrowserFailure($"page error {code}: {msg}", blameFile: BrowserErrorBlamesFile(code));
+                        break;
+                    }
+                    case "key":
+                        OnBrowserKey((string?)o["key"] ?? "");
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("BubbleCountWindow: browser message dispatch failed - {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Which page error codes mean "this FILE is undecodable" and belong in the unsafe cache.
+        /// 1-4 are MediaError.code verbatim, 100 is a &gt;10s stall after playing and 101 is no first
+        /// frame within the page's own window. 102/103 are session-level and must not condemn the
+        /// clip. Mirrors BrowserVideoEngine.BlamesFile.
+        /// </summary>
+        private static bool BrowserErrorBlamesFile(int code) => (code >= 1 && code <= 4) || code == 100 || code == 101;
+
+        /// <summary>
+        /// Keys over a focused WebView2 go to Chromium, not to this window, so the page reports them
+        /// back here. Same policy as <see cref="OnKeyDown"/>: ESC skips the game unless the strict
+        /// lock is on (the page has already preventDefaulted it either way).
+        /// </summary>
+        private void OnBrowserKey(string key)
+        {
+            if (!string.Equals(key, "Escape", StringComparison.OrdinalIgnoreCase)) return;
+            if (_strictMode || _gameCompleted || _isCleaningUp) return;
+            _gameCompleted = true;
+            PostAfterPageMessage(() => CloseAllWindows(false));
+        }
+
+        private void OnBrowserProcessFailed(BrowserVideoSurface surface, CoreWebView2ProcessFailedKind kind)
+        {
+            // Counted app-wide so a flapping renderer stands the engine down for everyone rather
+            // than costing every feature a fallback. Never blames the file (plan §4).
+            //
+            // ONLY from the primary: one dead browser process raises this on every window sharing
+            // it, so on a dual-monitor game a single crash used to spend BOTH strikes of the
+            // two-strikes stand-down at once. (The secondaries can't end the game either -
+            // OnBrowserFailure is primary-only - so they just go black behind the count.)
+            if (!_isPrimary)
+            {
+                App.Logger?.Warning("BubbleCountWindow[secondary]: WebView2 process failed ({Kind}) - mirror lost, the game continues", kind);
+                return;
+            }
+            BrowserVideoEngine.ReportProcessFailure(kind);
+            OnBrowserFailure("WebView2 process failed: " + kind, blameFile: false);
+        }
+
+        /// <summary>
+        /// The page could not play this clip.
+        ///
+        /// Stage 2 deliberately does NOT re-run the same file through LibVLC mid-game the way
+        /// VideoService does: the surfaces here are per-window and the game clock, bubble schedule
+        /// and target count are already running off the failed attempt, so a swap would have to
+        /// rebuild every window's playback from inside a page callback. Instead the file is marked
+        /// browser-unsafe - the very next game that draws it takes the LibVLC path - and this game
+        /// ends through the flow it already has for a video that would not play.
+        /// </summary>
+        private void OnBrowserFailure(string reason, bool blameFile)
+        {
+            if (!_isPrimary || _browserFailed || _isCleaningUp || _videoEnded) return;
+            _browserFailed = true;
+            StopBrowserFirstFrameWatch();
+
+            App.Logger?.Warning("BubbleCountWindow: browser playback failed for {File} ({Reason})",
+                Path.GetFileName(_videoPath), reason);
+            VideoDiag.Log("BUBBLE", $"browser FAILED ({reason}) blameFile={blameFile}");
+            if (blameFile) BrowserUnsafeVideoCache.Add(_videoPath, reason);
+
+            var startedOnce = _browserPlayingSeen;
+            PostAfterPageMessage(() =>
+            {
+                if (_isCleaningUp || _videoEnded) return;
+                if (startedOnce)
+                {
+                    // Mid-clip failure: the user has already watched and counted most of it, so end
+                    // the video exactly as EncounteredError does on the LibVLC path.
+                    OnVideoEnded();
+                }
+                else
+                {
+                    // Never showed a frame. Asking for a bubble count would be a guaranteed fail, so
+                    // this is a can't-show: the existing completion flow retries (strict) or ends
+                    // the game (non-strict), and a retry draws a NEW video that skips this file.
+                    _gameCompleted = true;
+                    CloseAllWindows(false);
+                }
+            });
+        }
+
+        private void ArmBrowserFirstFrameWatch()
+        {
+            StopBrowserFirstFrameWatch();
+            _browserFirstFrameTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(BrowserFirstFrameTimeoutMs)
+            };
+            _browserFirstFrameTimer.Tick += (s, e) =>
+            {
+                StopBrowserFirstFrameWatch();
+                if (_browserPlayingSeen || _videoEnded || _isCleaningUp) return;
+                // blameFile stays false: the page's own 101 report is what condemns a file it could
+                // actually load. Getting here means the PAGE never ran, which is environmental.
+                OnBrowserFailure($"no playback within {BrowserFirstFrameTimeoutMs / 1000}s", blameFile: false);
+            };
+            _browserFirstFrameTimer.Start();
+        }
+
+        private void StopBrowserFirstFrameWatch()
+        {
+            try { _browserFirstFrameTimer?.Stop(); } catch { }
+            _browserFirstFrameTimer = null;
+        }
+
+        /// <summary>
+        /// Queue work for AFTER the current page message returns. Page events arrive inside the
+        /// WebView2 message callback, and anything heavy done there (closing the very surface that
+        /// raised it, CloseAllWindows' pumped waits) re-enters the browser's own message loop - the
+        /// same discipline the LibVLC handlers use with Task.Run. Normal priority:
+        /// DispatcherPriority.Loaded is starved in this app.
+        /// </summary>
+        private static void PostAfterPageMessage(Action action)
+        {
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+            try { dispatcher.BeginInvoke(DispatcherPriority.Normal, action); }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("BubbleCountWindow: browser continuation dispatch failed - {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>Unhook, stop the clip and dispose the WebView2. Called from OnClosed, which every
+        /// teardown path (normal close, panic force-close, orphan sweep) funnels through.</summary>
+        private void DisposeBrowserSurface()
+        {
+            StopBrowserFirstFrameWatch();
+            var surface = _browserSurface;
+            if (surface == null) return;
+            _browserSurface = null;
+            try
+            {
+                surface.Message -= OnBrowserMessage;
+                surface.ProcessFailed -= OnBrowserProcessFailed;
+                // Decoder hygiene: pause -> drop src -> load(), so Chromium frees the decoder now.
+                if (surface.IsReady) surface.Post(new { type = "stop" });
+                surface.DisposeWeb();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("BubbleCountWindow: browser surface teardown failed - {Error}", ex.Message);
+            }
+        }
+
+        #endregion
+
         private void CalculateTargetBubbles()
         {
             double baseRate = _difficulty switch
@@ -947,6 +1350,10 @@ namespace ConditioningControlPanel
             {
                 window._videoEnded = true;
                 window._bubbleSpawnTimer?.Stop();
+                window.StopBrowserFirstFrameWatch();
+                // The game windows are only HIDDEN for the result screen, so a clip that is still
+                // running (safety-timer end, mid-clip failure) would keep playing behind it.
+                try { window._browserSurface?.Post(new { type = "pause" }); } catch { }
             }
 
             // Clear remaining bubbles on all windows (bubbles are separate windows now).
@@ -1076,6 +1483,8 @@ namespace ConditioningControlPanel
             _bubbleSpawnTimer?.Stop();
             _bubbleAnimTimer?.Stop();
             _bubbleAnimTimer = null;
+            // Browser mode: closing the window alone would leave the browser process alive.
+            DisposeBrowserSurface();
 
             foreach (var bubble in _activeBubbles)
             {

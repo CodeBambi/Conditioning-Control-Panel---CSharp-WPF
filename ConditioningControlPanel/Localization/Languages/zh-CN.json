@@ -903,6 +903,8 @@
   "tooltip_open_assets_folder_images_videos_sounds": "打开资源文件夹（图片、视频、声音）",
   "tooltip_show_content_on_all_connected_monitors_2_3_or": "在所有已连接的显示器上显示内容（2个、3个或更多）",
   "setting_multi_mon": "多显示器",
+  "setting_browser_video_engine": "浏览器视频引擎（测试版）",
+  "tooltip_browser_video_engine": "使用内置浏览器代替传统播放器播放强制视频，稳定性大幅提升。浏览器无法解码的文件会自动回退到传统播放器。需要 WebView2 运行时（Windows 11 以及装有 Edge 的 Windows 10 已预装）。",
   "tooltip_launch_automatically_when_windows_starts": "Windows 启动时自动运行",
   "setting_win_start": "开机启动",
   "tooltip_play_a_mandatory_video_when_app_opens": "应用打开时播放强制视频",

@@ -1,0 +1,61 @@
+/* Mandatory-video player surface — pure black, no chrome.
+   Nothing here may introduce a scrollbar or a hit-testable control: the page is
+   a passive surface and every interaction is reported to the host instead. */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Opt-IN only (load message: hideCursor). The mandatory-video windows do not hide
+   the pointer — neither does the LibVLC path they must be indistinguishable from —
+   and BubbleCount is mouse-driven, so an invisible pointer there is unplayable. */
+body.hide-cursor,
+body.hide-cursor * {
+  cursor: none;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  overflow: hidden;
+}
+
+#bg, #fg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  /* Pointer events land on the document (see the window-level pointerdown in
+     player.js) rather than on the media element's own default handling. */
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+
+/* Foreground: never crop the actual content. */
+#fg {
+  object-fit: contain;
+  z-index: 1;
+}
+
+/* Blurred fill behind a letterboxed clip. scale(1.1) hides the transparent
+   edge bleed that a 40px blur pulls in from outside the frame. */
+#bg {
+  object-fit: cover;
+  filter: blur(40px) brightness(0.7);
+  transform: scale(1.1);
+  z-index: 0;
+  display: none;
+}
+
+body.has-bg #bg { display: block; }

@@ -312,6 +312,8 @@
   "tooltip_open_assets_folder_images_videos_sounds": "アセットフォルダを開く（画像、動画、音声）",
   "tooltip_show_content_on_all_connected_monitors_2_3_or": "接続されたすべてのモニターにコンテンツを表示（2台、3台以上）",
   "setting_multi_mon": "マルチモニター",
+  "setting_browser_video_engine": "ブラウザ動画エンジン（ベータ）",
+  "tooltip_browser_video_engine": "強制動画を従来のプレーヤーではなく内蔵ブラウザで再生します。安定性が大きく向上します。ブラウザがデコードできないファイルは自動的に従来のプレーヤーに切り替わります。WebView2ランタイムが必要です（Windows 11、およびEdgeが入ったWindows 10にはプリインストール済み）。",
   "tooltip_launch_automatically_when_windows_starts": "Windows起動時に自動で起動",
   "setting_win_start": "自動起動",
   "tooltip_play_a_mandatory_video_when_app_opens": "アプリ起動時に強制動画を再生",

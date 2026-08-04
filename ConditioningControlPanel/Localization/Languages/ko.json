@@ -312,6 +312,8 @@
   "tooltip_open_assets_folder_images_videos_sounds": "에셋 폴더 열기 (이미지, 영상, 사운드)",
   "tooltip_show_content_on_all_connected_monitors_2_3_or": "연결된 모든 모니터에 콘텐츠 표시 (2개, 3개 이상)",
   "setting_multi_mon": "멀티 모니터",
+  "setting_browser_video_engine": "브라우저 비디오 엔진 (베타)",
+  "tooltip_browser_video_engine": "필수 영상을 기존 플레이어 대신 내장 브라우저로 재생합니다. 안정성이 훨씬 좋아집니다. 브라우저가 디코딩할 수 없는 파일은 자동으로 기존 플레이어로 전환됩니다. WebView2 런타임이 필요합니다 (Windows 11, 그리고 Edge가 설치된 Windows 10에는 기본 설치되어 있습니다).",
   "tooltip_launch_automatically_when_windows_starts": "Windows 시작 시 자동 실행",
   "setting_win_start": "시작 시 실행",
   "tooltip_play_a_mandatory_video_when_app_opens": "앱 실행 시 필수 영상 재생",
