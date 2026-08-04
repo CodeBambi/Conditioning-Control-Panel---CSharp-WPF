@@ -124,4 +124,4 @@ After this packet lands, the main checkout's `scripts/spine-worktree-setup.exe` 
 
 - **Step 2 plan review (`spine_review_step` type=plan):** SKIPPED (same SP-195 nested-spawn block; `skipped: true`, `spawnFailed: false`, artifact `.reviews/2-20260804T152155.md`).
 
-_Pending: Step 3 call._
+- **Step 3 plan review (`spine_review_step` type=plan):** SKIPPED (same SP-195 nested-spawn block; `skipped: true`, `spawnFailed: false`, artifact `.reviews/3-20260804T152937.md`). Code + final reviews run on the engine after `.DONE` per SP-195.
