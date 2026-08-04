@@ -1,10 +1,10 @@
 ## STATUS: SP-045 — DtrhFxRouterTests ManualClock hygiene
 **Current Step:** Step 1 — verify + inject + consult
-**Last Updated:** 2026-08-04 (authored)
+**Last Updated:** 2026-08-04 (worker, Step 1 in progress)
 **Blockers:** none
 
 ### Step 1: verify + inject + consult
-- [ ] Update STATUS.md before starting work
+- [x] Update STATUS.md before starting work
 - [ ] Verify every construction in the file; inject ManualClock class-wide (SP-043 shape)
 - [ ] Pre-approach solo consult (verdict + actual model in record.md)
 
