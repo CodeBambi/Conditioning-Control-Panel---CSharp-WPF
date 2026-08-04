@@ -1,13 +1,13 @@
 ## STATUS: SP-035 — AI companion slice c2: loopback Ollama provider
 **Current Step:** Step 1 — provider archaeology + lab design + pre-approach consult
-**Last Updated:** 2026-07-22 (authored)
+**Last Updated:** 2026-08-04 (fresh execution; SP-037 floor repair landed — 466/466 + 29/29)
 **Blockers:** none
 
 ### Step 1: archaeology + lab design + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] WPF archaeology (Ollama client shape, retry placeholder, timeout/cancel, refusal)
-- [ ] Design (LoopbackOllamaProvider on c1's seam; lab failure-injection shapes)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Update STATUS.md before starting work
+- [x] WPF archaeology (Ollama client shape, retry placeholder, timeout/cancel, refusal)
+- [x] Design (LoopbackOllamaProvider on c1's seam; lab failure-injection shapes)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: provider implementation
 - [ ] LoopbackOllamaProvider.cs + types
