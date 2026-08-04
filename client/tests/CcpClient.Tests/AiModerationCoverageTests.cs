@@ -112,6 +112,26 @@ public class AiModerationCoverageTests
                     Assert.Equal(AiModerationSource.Output, refused.Refusal.Source);
                     break;
                 }
+                case "awareness-context-fields":
+                {
+                    // c5 packaging (SP-042): EVERY field through EvaluateInput on this
+                    // surface pre-assembly; a blocking verdict on any field means nothing
+                    // transmittable exists. The Wired flip landed in c6 (SP-044).
+                    var blocked = AiAwarenessContextPackaging.TryPackage(
+                        new AiAwarenessContext("cat", Forbidden, "title", "5s"),
+                        h.Boundary, out var blockedRequest, out var refusal);
+                    Assert.False(blocked);
+                    Assert.Null(blockedRequest);
+                    Assert.NotNull(refusal);
+                    Assert.Equal(AiModerationSource.Input, refusal.Source);
+
+                    var clean = AiAwarenessContextPackaging.TryPackage(
+                        new AiAwarenessContext("cat", "app", "title", "5s"),
+                        h.Boundary, out var cleanRequest, out _);
+                    Assert.True(clean);
+                    Assert.NotNull(cleanRequest);
+                    break;
+                }
                 case "command-free-text":
                 {
                     // Every free-text command field pre-execution (contract §7 rule 2),
@@ -211,12 +231,13 @@ public class AiModerationCoverageTests
     [Fact]
     public void Inventory_Dispositions_WiredAndReservedCountsMatchTheCoverageTable()
     {
-        // record.md §2: 5 wired (chat input, awareness input, both reply outputs, command
-        // free-text), 6 reserved (awareness context fields, memory persist, reply speech,
+        // record.md §2: 6 wired (chat input, awareness input, awareness context fields,
+        // both reply outputs, command free-text), 5 reserved (memory persist, reply speech,
         // prompt templates, community prompts, quiz templates). A registry edit without a
-        // record/table update trips here.
-        Assert.Equal(5, AiModerationSurfaces.All.Count(s => s.Disposition == AiModerationSurfaceDisposition.Wired));
-        Assert.Equal(6, AiModerationSurfaces.All.Count(s => s.Disposition == AiModerationSurfaceDisposition.Reserved));
+        // record/table update trips here. (awareness-context-fields flipped Reserved→Wired
+        // in c6/SP-044 after c5 landed the packaging wiring.)
+        Assert.Equal(6, AiModerationSurfaces.All.Count(s => s.Disposition == AiModerationSurfaceDisposition.Wired));
+        Assert.Equal(5, AiModerationSurfaces.All.Count(s => s.Disposition == AiModerationSurfaceDisposition.Reserved));
     }
 
     // ---- escalation state location per the Step-1 decision: session-scoped ----

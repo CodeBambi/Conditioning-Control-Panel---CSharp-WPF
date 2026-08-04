@@ -71,6 +71,9 @@ public enum AiNotExecutedReason
 
     /// <summary>The owning generation was invalidated before execution (provider switch / panic — contract §3).</summary>
     SupersededGeneration,
+
+    /// <summary>The command passed every gate but no effect backend exists to dispatch to (c6 execution-level reason — the typed placeholder: no flash/subliminal/spiral/etc. backends exist in the greenfield client yet). Extends contract §9's reason set at EXECUTION level; orchestrator follow-up recorded in SP-044 record.md §3.1.4.</summary>
+    EffectUnavailable,
 }
 
 /// <summary>
