@@ -175,6 +175,11 @@ namespace ConditioningControlPanel.Services
                 // and strand fullscreen surfaces on screen forever. Same clear/restore dance as the
                 // runtime fallback, strict bridge included.
                 try { StopBrowserSessionForHandoff(); } catch { }
+                // The disarm above already ran if the throw came after it; the LibVLC attempt this
+                // false return triggers must not build its windows unguarded (that window creation
+                // is where the historic freeze strikes). Pre-roll re-arm, same as FallbackToLibVlc.
+                _playbackStarted = false;
+                StartWedgeWatchdog();
                 return false;
             }
         }
@@ -272,9 +277,20 @@ namespace ConditioningControlPanel.Services
                 Path.GetFileName(path ?? "(none)"), reason);
             VideoDiag.Log("VIDEO", $"browser FALLBACK ({reason}) - replaying {Path.GetFileName(path ?? "?")} via LibVLC");
 
+            // Handing the clip back to LibVLC means the wedge ladder matters again. Re-arm it in
+            // the pre-roll observation state BEFORE the handoff below - closing WebView2 HWNDs is
+            // an out-of-process round trip that can itself stall, and StartVideoPlayback re-arms
+            // for real once its windows are up. WedgeWatchdogTick still no-ops until
+            // StopBrowserSession clears _browserActive, so this cannot fire early.
+            _playbackStarted = false;
+            StartWedgeWatchdog();
+
             // Drops the surfaces without letting the strict Closing veto strand them, and without
-            // letting IsStrictActive blink false across the handoff.
-            StopBrowserSessionForHandoff();
+            // letting IsStrictActive blink false across the handoff. Guarded like the start-path
+            // twin: a throw here would escape into the dispatcher continuation with
+            // _browserFallbackDone already latched, so nothing would ever retry.
+            try { StopBrowserSessionForHandoff(); }
+            catch (Exception ex) { App.Logger?.Error(ex, "VideoService: browser handoff teardown threw during fallback"); }
 
             if (string.IsNullOrEmpty(path) || _isCleaningUp) { Cleanup(); return; }
 
@@ -293,14 +309,6 @@ namespace ConditioningControlPanel.Services
             _lastWatchPositionMs = 0;
             _creditedWatchSeconds = 0;
             _startTime = DateTime.Now;
-
-            // Handing the clip to LibVLC means the wedge ladder matters again, and it is disarmed
-            // (StartBrowserVideoPlayback stopped it). Re-arm it in the pre-roll state PlayVideo's
-            // prologue uses - observation only - so the LibVLC window creation that follows, which
-            // is where the historic freeze strikes, is guarded again. StartVideoPlayback re-arms it
-            // for real once its windows are up.
-            _playbackStarted = false;
-            StartWedgeWatchdog();
 
             StartVideoPlayback(path, strict, forceLibVlc: true);
         }

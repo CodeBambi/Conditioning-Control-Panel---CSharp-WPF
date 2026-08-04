@@ -236,9 +236,13 @@ public class BubbleCountService : IDisposable
                             App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
                         });
 
-                    // Extend the stuck detection timeout to cover full video + counting phase
+                    // Extend the stuck detection timeout to cover full video + counting phase.
+                    // Typed: onSkipped above can resolve synchronously inside ShowOnAllMonitors,
+                    // and its Complete() dispatches the next queued interaction before control
+                    // returns here - a type-blind extension would stretch that unrelated
+                    // interaction's stuck-recovery window with a stale duration.
                     var videoDuration = BubbleCountWindow.LastVideoDurationSeconds;
-                    App.InteractionQueue?.ExtendTimeout(videoDuration + 120);
+                    App.InteractionQueue?.ExtendTimeout(videoDuration + 120, InteractionQueueService.InteractionType.BubbleCount);
                 }
                 catch (Exception ex)
                 {
