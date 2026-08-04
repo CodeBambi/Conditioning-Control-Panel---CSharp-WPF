@@ -81,3 +81,11 @@ only with RATIFIED decree citation placed in evidence cells. Never flip without 
 - **T-14 NAMED GATE DISCHARGED → row CLOSED:** hook fired all lanes; lane-1's first red-free contract in 6 packets. Fresh lanes now arrive pre-patched (keep MAIN checkout patched — the hook copies whatever main carries).
 - **T-16 filed** (DTRH cap-timer flake class). Next: SP-042 = AI c5 (awareness) + partner TBD.
 - **Owner decrees encoded (2026-08-04):** improve-freely mandate (no 1:1 copy anywhere; observable-outcome parity only; improvements a must); use all resources actively ALWAYS (MCP seats within SP-036 rules); hermes caps 5000→10000 (config, restart-effective); avalonia-live verified end-to-end (27 tools; laptop headed-evidence substitute for UI work).
+
+## Wave 7 (2026-08-04, integrate 49c4af7b; floor now 564/564 + 29/29)
+
+- **SP-042 (c5 awareness):** typed consent (NotGiven placeholder; residual bool door + retirement condition in row); 4-class cooldown registry (extend-not-shrink; 10-vs-90 owner question verbatim); packaging under consent through c3 boundary (zero transmission on block); keyword routing owned ops (canned keyword-path-only; refusal drops); title capability Windows-probed. Row WIP — c6 = command execution next.
+- **SP-043 (T-16 cap-timer determinism):** REAL 15s SEGMENT_SEC on ManualClock; pre-existing ISoundClock seam; 10 consecutive zero-red runs; row DONE (with T-15, consistency ruling).
+- **T-15 + T-16 BOTH DONE** (tooling rows discharge on evidence; owner async-veto standing).
+- **Named limits carried on the AI row:** Reserved→Wired flip (c6 owns, coverage test explicitly in File Scope); bool-overload retirement condition; badge-accuracy headed = c7.
+- Next: SP-044 = AI c6 (command execution; none-admitted default; provable scope = canary + verdict round-trips + NotExecuted/ConsentGated).

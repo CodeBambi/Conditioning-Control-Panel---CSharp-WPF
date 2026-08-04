@@ -29,16 +29,16 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 
 **T-14 NAMED GATE DISCHARGED 2026-08-04 (this wave):** hook fired all 3 lanes; lane-1's first red-free contract in 6 packets; zero worker remediations → row CLOSED.
 
-### Wave 7 (next)
+### Wave 7 (LANDED 2026-08-04, `49c4af7b`)
 
-**Next claimable work:** SP-042 = AI companion c5 (awareness per admission §8/§5 — consent code-enforced, context packaging through c3's boundary, cooldown mechanism with placeholder values, keyword-routing as owned operations) + lane partner TBD (T-16 DTRH cap-timer flake class is a candidate). Next unused task ID: SP-042.
+**Next claimable work:** SP-044 = AI companion c6 (command execution per admission §8: validated envelope → execution plan → per-effect dispatch behind master + per-effect consent gates; moderation pre-execution via c3; `NotExecuted(SupersededGeneration)` lands, discharging SP-019 limit 7; canary zero-execution proofs). **Authoring notes (land consult):** encode the none-admitted default (deliberate divergence — WPF master OFF but bubbles/subliminal/bounce ON); provable scope = canary + verdict round-trips + `NotExecuted`/`ConsentGated` (effect backends don't exist; WH line shrinks to what exists); **put `client/tests/CcpClient.Tests/AiModerationCoverageTests.cs` in File Scope explicitly** (the Reserved→Wired flip for awareness-context-fields rides c6 — board row named limit 3); retire the bool-overload door if the 4 test call sites migrate cleanly (named limit 4). Next unused task ID: SP-044.
 
-### Wave 7 (staged 2026-08-04)
+### Wave 7 (staged→LANDED 2026-08-04)
 
 | Task | Summary | Status | Deps |
 |------|---------|--------|------|
-| SP-042-ai-companion-c5 | Row: implement AI companion and awareness integration — slice c5 (awareness: code-enforced consent at admission, placeholder NOT-GIVEN default; 4-class cooldown machinery extend-not-shrink with observable Suppressed; context packaging under consent through c3's boundary; keyword routing as owned ops; drop-by-type; title observation Windows facts + Linux typed Unavailable) | Authored 2026-08-04 | SP-038 |
-| SP-043-dtrh-captimer-tests | Tooling: T-16 DTRH cap-timer tests deterministic timing discipline (every wall-clock dependency classified + converted — injected clock per c3 precedent or tolerant window + loud classifier; product seam conditional additive; 10 consecutive full-suite runs zero cap-timer reds) | Authored 2026-08-04 | None |
+| SP-042-ai-companion-c5 | Row: implement AI companion and awareness integration — slice c5 (awareness: code-enforced consent at admission, placeholder NOT-GIVEN default; 4-class cooldown machinery extend-not-shrink with observable Suppressed; context packaging under consent through c3's boundary; keyword routing as owned ops; drop-by-type; title observation Windows facts + Linux typed Unavailable) | **Done 2026-08-04** (landed `49c4af7b`; batch `20260804T180449` lane-1 — FULL review chain: code APPROVE + final PASS; consent typed overload w/ residual bool door recorded; cooldown union≡merged-max-dict equivalence; canned keyword-path-only + refusal-drops divergence; separate cooldown families; title capability Windows-probed; 10-vs-90 verbatim; 564/564 + 29/29; row WIP — c6 next) | SP-038 |
+| SP-043-dtrh-captimer-tests | Tooling: T-16 DTRH cap-timer tests deterministic timing discipline (every wall-clock dependency classified + converted — injected clock per c3 precedent or tolerant window + loud classifier; product seam conditional additive; 10 consecutive full-suite runs zero cap-timer reds) | **Done 2026-08-04** (landed `49c4af7b`; batch `20260804T180449` lane-2 — FULL review chain: code APPROVE + final PASS; REAL 15s SEGMENT_SEC on ManualClock (stronger than toy 0.05s wall-clock); pre-existing ISoundClock seam (real-clock default); latent-timer surface closed class-wide; zero assertions changed; 537/29 EXACT; 10 consecutive zero-red runs; row DONE on evidence per the T-15 consistency ruling) | None |
 
 ### Phase 5 — DTRH admit + host slices, quips/sound, AI companion, tail (ACTIVE — wave 7 in flight)
 

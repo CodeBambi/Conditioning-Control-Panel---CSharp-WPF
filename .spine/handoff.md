@@ -1,21 +1,18 @@
-# HANDOFF — 2026-08-04 ~19:50 local — waves 4+5+6 LANDED, run continues
+# HANDOFF — 2026-08-04 ~20:30 local — waves 4-7 LANDED, run continues
 
-**Status: NOT PARKED.** Three waves landed today: wave 4 (`8efd60b4`), wave 5 (`f4eea79e`), wave 6 (`6255a643`). Floor 537/537 + 29/29. All state pushed.
+**Status: NOT PARKED.** Four waves landed today: wave 4 (`8efd60b4`), wave 5 (`f4eea79e`), wave 6 (`6255a643`), wave 7 (`49c4af7b`). Floor 564/564 + 29/29. All state pushed.
 
-## Landed 2026-08-04 (one day: floor repair + outage fix + 3 waves + T-14 gate)
-- SP-037 (manifest-drift) → __PI_BILLING_HEADER_FIX__ (pi request-shape fix for the 400 outage; re-check after pi upgrades) → SP-035/036 (provider + MCP admission) → SP-038/039 (moderation boundary + T-14 hook) → SP-040/041 (memory + lab harness).
-- **T-14 CLOSED** (named gate discharged: lanes arrive pre-patched; keep the MAIN checkout patched — the hook copies it).
-- T-15 WIP (lab hardened: fresh-instance-per-bind + leak self-check; 5 consecutive greens). T-16 OPEN (DTRH cap-timer flake class).
+## Landed 2026-08-04 (one day: floor repair + outage fix + 4 waves + 3 tooling closures)
+- SP-037 (manifest-drift) → __PI_BILLING_HEADER_FIX__ (pi request-shape fix; re-check after pi upgrades) → wave 4: SP-035 (Ollama provider) + SP-036 (bounded MCP admission) → wave 5: SP-038 (moderation boundary) + SP-039 (T-14 hook) → wave 6: SP-040 (memory) + SP-041 (lab harness) → wave 7: SP-042 (awareness) + SP-043 (cap-timer determinism).
+- **Tooling rows closed on evidence: T-13, T-14, T-15, T-16** (owner async-veto standing). T-14 hook = invisible infrastructure now (hook events routine, lanes arrive pre-patched).
+- AI chain: c1-c5 landed (all WIP pending owner ratification). Remaining: c6 (command execution), c7 (companion UI surface).
 
 ## Next claimable work
-- **SP-042 = AI companion c5** (awareness per admission §8/§5: consent code-enforced, context packaging through c3's boundary, cooldown mechanism placeholder values, keyword-routing as owned ops) + lane partner TBD (T-16 candidate).
-- Next unused task ID: SP-042.
-
-## Owner decrees (2026-08-04, encoded in operating-rules.md)
-Improve-freely (no 1:1 copy anywhere; observable-outcome parity; improvements a must) · use all resources actively ALWAYS (MCP seats within SP-036 rules) · hermes caps 10000 · avalonia-live verified (27 tools; laptop headed-evidence substitute — use for UI evidence on this machine).
+- **SP-044 = AI c6** (command execution; none-admitted default = deliberate divergence; provable scope = canary + verdict round-trips + NotExecuted/ConsentGated — effect backends don't exist; AiModerationCoverageTests.cs EXPLICITLY in File Scope for the Reserved flip; bool-overload retirement if the 4 call sites migrate). Next unused task ID: SP-044.
+- After c6 → c7 (companion UI — first UI slice; use avalonia-live for evidence on this machine; improve-don't-clone decree applies).
 
 ## Owner questions open
-Sentry mitigation intent (SP-036) · WSL distro provisioning (ALL Linux gates named limits) · AI §9.2 ledger ×7 (moderation VALUES, consent/retention defaults — c4 shipped placeholders) · dashboard-priority · SP-039 GPT-5 self-report anomaly (T-7 class).
+Sentry mitigation intent (SP-036) · WSL distro provisioning (ALL Linux gates named limits) · AI §9.2 ledger ×7 (moderation VALUES; consent/retention defaults; **10-vs-90 awareness reaction cooldown — c5 recorded verbatim**) · dashboard-priority · SP-039 GPT-5 self-report anomaly.
 
-## Machine facts (laptop, durable)
-core.hidedotfiles=false GLOBAL · pi.exe shim · pi-spine 2.10.0 pinned both files + patches green · __PI_BILLING_HEADER_FIX__ · T-14 hook active (copies main's PATCHED .pi/npm) · WSL zero distros · Ollama present (probe-only) · hermes memory (caps raised, restart-effective) · no Z:/DISPLAY3 (avalonia-live substitutes for UI evidence) · traps: bpx-consult two configs (project governs), explicit mode:"solo", zombie test hosts = progressive-flake class, capture lane hook logs BEFORE any clean, structure audit after EVERY board edit.
+## Machine facts (laptop, durable — full list in previous revisions + memories)
+core.hidedotfiles=false GLOBAL · pi.exe shim · pi-spine 2.10.0 pinned + patches green · __PI_BILLING_HEADER_FIX__ · T-14 hook active · WSL zero distros · Ollama present · hermes memory (caps raised) · avalonia-live verified (27 tools; laptop UI-evidence substitute) · traps: bpx-consult two configs, explicit mode:"solo", zombie test hosts = progressive-flake class (T-15 mitigated), capture lane hook logs BEFORE cleans, structure audit after EVERY board edit, edit-atomicity rollback = retry call must re-include ALL edits (wave-6 ID loss).
