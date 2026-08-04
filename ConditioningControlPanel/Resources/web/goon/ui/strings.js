@@ -38,6 +38,7 @@ export const S = Object.freeze({
     join: 'Join with a code',
     practice: 'Practice',
     practiceNote: 'solo · scripted opponent',
+    assets: 'Media library',
     options: 'Options',
     how: 'How it works',
     quit: 'Quit',
@@ -192,10 +193,104 @@ export const S = Object.freeze({
     /* Says what the toggle does AND what it does not take away: a window can
        always be muted with a click, on or off. */
     skippableNote: 'gives each floating video an ✕ to close it early. off, they run their course. either way a click mutes one, and a right-click hands it the sound.',
+    shaderSpirals: 'Shader spirals',
+    /* The escape hatch, and the note says what to reach for it FOR: a picture
+       that stops moving while the game carries on is the exact symptom. Names
+       the fallback too, so turning it off does not feel like losing the bed. */
+    shaderSpiralsNote: 'draws the spiral bed live instead of stretching a gif. turn it off if the picture ever freezes while the sound and the clock keep going — the bed falls back to the bundled spirals and nothing else changes.',
     fullscreen: 'Fullscreen',
     reset: 'Reset',
     close: 'close',
     lockedNote: 'Match settings are locked once you start.',
+  },
+
+  /* --------------------------------------------------- the assets screen
+   * The compression queue lives in the app, not in this page, and every line
+   * below has to keep saying so: the player is agreeing to spend minutes of
+   * their machine's time, and the only honest way to ask is with the real
+   * number and the real encoder. Lowercase throughout, like the rest of the
+   * quiet furniture.
+   *
+   * "compressed" here NEVER means "your file was changed". A copy is made and
+   * kept beside the original; that copy is the only thing that can travel. The
+   * protected note says it out loud because it is the one fear this screen has
+   * to answer before anything else on it matters. */
+  assets: {
+    eyebrow: 'your media',
+    lead: 'a compressed copy is what travels to your opponent. your originals are never touched, moved or replaced.',
+    /** No host = no queue. Rendered instead of the grid, immediately. */
+    standaloneHeadline: 'compression lives in the app',
+    standaloneLine: 'this page is running in a plain browser, so there is no library to compress. open the goon game from the app to use this screen.',
+
+    statReady: (n) => n + ' ready',
+    statNeeds: (n) => n + ' to compress',
+    statFailed: (n) => n + ' failed',
+    statExempt: (n) => n + ' small enough already',
+    statUsage: (text) => text + ' cached',
+
+    compressAll: (n) => 'compress everything (' + n + ')',
+    compressAllIdle: 'everything is compressed',
+    pause: 'pause',
+    resume: 'resume',
+    deleteCompressed: 'delete compressed…',
+    filterAll: 'all',
+    filterNeeds: 'needs work',
+    filterReady: 'ready',
+    filterFailed: 'failed',
+    filterExempt: 'as-is',
+    searchLabel: 'filter by name',
+    searchPlaceholder: 'name contains…',
+
+    minutes: (n) => n + (n === 1 ? ' minute' : ' minutes'),
+    eta: (mins, encoder) => '~' + mins + ' left · ' + encoder,
+    etaEstimating: 'estimating…',
+    etaPausedMatch: 'paused for the match',
+    etaPausedUser: 'paused — nothing is running',
+    encoderHw: 'hardware encoder',
+    encoderSw: 'software encoder',
+
+    badgeNotReady: 'not ready',
+    badgeQueued: 'queued',
+    badgeWorking: (pct) => pct + '%',
+    badgeReady: 'ready',
+    badgeFailed: (why) => (why ? 'failed · ' + why : 'failed'),
+    badgeExempt: 'small — sends as-is',
+
+    tileCompress: 'compress',
+    tileDelete: 'delete copy',
+    tileRetry: 'try again',
+    tileCancel: 'cancel',
+    playPreview: 'play preview',
+
+    loading: 'reading your library…',
+    empty: 'no media in your active preset yet.',
+    emptyFiltered: 'nothing matches that.',
+    more: (n) => 'show more (' + n + ')',
+
+    capLabel: 'cache limit',
+    capValue: (gb) => gb + ' GB',
+    overCap: 'over the limit — the least-used copies get dropped first.',
+    presetChanged: (n) => 'your preset changed · ' + n + ' need compressing',
+    protectedNote: 'copies live beside your library, never inside it. deleting them here frees space and costs nothing but the time to make them again — and anything an opponent sent you is stored separately and is never touched by this button.',
+    back: 'back',
+
+    confirmCompress: {
+      icon: '⏳',
+      headline: 'this will take a while',
+      line: (mins, size, encoder) => 'about ' + mins + ' on your ' + encoder + ', working through ' + size + '. it pauses itself the moment a match starts, and you can stop it whenever you like.',
+      go: 'start compressing',
+      cancel: 'not now',
+    },
+    confirmDelete: {
+      icon: '✖',
+      headline: 'delete every compressed copy?',
+      line: (size) => 'frees ' + size + '. your originals are untouched. anything an opponent sent you is stored separately and stays.',
+      go: 'delete them',
+      cancel: 'keep them',
+    },
+
+    /** The title-screen ribbon: "412 ready · 3.1 GB cached". */
+    ribbon: (ready, size) => ready + ' ready · ' + size + ' cached',
   },
 
   /* --------------------------------------------------------------- sheets */

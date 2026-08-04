@@ -230,6 +230,15 @@ export class GoonMatchService {
     this._remoteDraftConfirmed = false;
     this._startProposed = false;
 
+    // P2P media transfer. THREE independent booleans, never one:
+    //   _peerSupportsTransfer  their BUILD speaks the protocol (hello caps, version discriminator)
+    //   _localMediaTransfer    OUR opt-in       (per-side declaration on the consent frame)
+    //   _remoteMediaTransfer   THEIR opt-in     (the same field, as they last declared it)
+    // None of them is a consent TERM — see the guard comment on sameSheet at the foot of the file.
+    this._peerSupportsTransfer = false;
+    this._localMediaTransfer = false;
+    this._remoteMediaTransfer = false;
+
     this._localSeedContribution = null;
     this._remoteSeedContribution = null;
 
@@ -320,6 +329,21 @@ export class GoonMatchService {
   get consentSheet() { return this._consentSheet; }
   get localConsentConfirmed() { return this._localConsentConfirmed; }
   get remoteConsentConfirmed() { return this._remoteConsentConfirmed; }
+
+  /** OUR media-transfer opt-in, as it rides every consent frame we send. */
+  get localMediaTransfer() { return this._localMediaTransfer; }
+  /** THEIR opt-in, as last declared on a consent frame. Absent field -> false. */
+  get remoteMediaTransfer() { return this._remoteMediaTransfer; }
+  /** Their BUILD advertised `caps.transfer` in the hello. Nothing to do with consent. */
+  get peerSupportsTransfer() { return this._peerSupportsTransfer; }
+  /**
+   * All three, ANDed. Still NOT the whole gate: the sender also needs the host's premium
+   * capability (session.caps.mediaTransfer) and `transport.supportsBulk` — see the one-predicate
+   * gate in net/mediaQueue.js. This getter is the MATCH's half of it.
+   */
+  get mediaTransferAgreed() {
+    return this._localMediaTransfer && this._remoteMediaTransfer && this._peerSupportsTransfer;
+  }
 
   /** What WE allow (canonical, always-on element excluded). */
   get localAllowedElements() { return this._localAllowed; }
@@ -486,6 +510,8 @@ export class GoonMatchService {
       toy_cap: clamp(toyCap, 0.0, 1.0),
       payload_min_gap_ms: Math.max(GoonConsts.PayloadMinGapMs, payloadMinGapMs),
       confirmed: false,
+      // Not a term — OUR standing declaration, republished on every frame we author.
+      media_transfer: this._localMediaTransfer,
     });
     this._localConsentConfirmed = false;
     this._remoteConsentConfirmed = false;
@@ -497,7 +523,7 @@ export class GoonMatchService {
   confirmConsent() {
     if (this._phase !== GoonMatchPhase.Consent) return;
     this._localConsentConfirmed = true;
-    this._send(cloneSheet(this._consentSheet, true));
+    this._send(cloneSheet(this._consentSheet, true, this._localMediaTransfer));
     this._ev.consentChanged.emit(undefined, (e) => this._warn(`consentChanged handler threw: ${e && e.message}`));
     this._tryEnterDraft();
   }
@@ -506,8 +532,31 @@ export class GoonMatchService {
   withdrawConsent() {
     if (this._phase !== GoonMatchPhase.Consent) return;
     this._localConsentConfirmed = false;
-    this._send(cloneSheet(this._consentSheet, false));
+    this._send(cloneSheet(this._consentSheet, false, this._localMediaTransfer));
     this._ev.consentChanged.emit(undefined, (e) => this._warn(`consentChanged handler threw: ${e && e.message}`));
+  }
+
+  /**
+   * The media-transfer opt-in (lobby checkbox). Flipping it is a CHANGE OF TERMS in every way that
+   * matters to a player, so it clears BOTH confirmations — the rule every other consent term lives
+   * by, honoured HERE BY HAND rather than through `sameSheet()`, which must never learn about this
+   * field (see the guard comment at the foot of the file).
+   *
+   * The re-sent sheet carries the new declaration; the peer's `_handleConsent` reads it back out
+   * and the two sides converge without the fingerprint ever changing.
+   *
+   * @returns {boolean} true when the toggle was taken (Lobby/Consent only).
+   */
+  setMediaTransfer(on) {
+    if (this._phase !== GoonMatchPhase.Lobby && this._phase !== GoonMatchPhase.Consent) return false;
+
+    this._localMediaTransfer = !!on;
+    this._localConsentConfirmed = false;
+    this._remoteConsentConfirmed = false;
+    this._consentSheet = cloneSheet(this._consentSheet, false, this._localMediaTransfer);
+    this._send(this._consentSheet);
+    this._ev.consentChanged.emit(undefined, (e) => this._warn(`consentChanged handler threw: ${e && e.message}`));
+    return true;
   }
 
   // ------------------------------------------------------------- draft
@@ -867,6 +916,13 @@ export class GoonMatchService {
 
     // Protocol compatibility — fail the lobby cleanly instead of desyncing later.
     const caps = hello.caps;
+
+    // The media-transfer version discriminator. Read BEFORE the compatibility checks and kept out
+    // of every intersection ON PURPOSE: it advertises what their BUILD understands, not what the
+    // pairing can run, so it can never narrow a pool and can never fail a lobby. A peer that omits
+    // it (C# reference client, older page) reads false and the feature simply never starts.
+    this._peerSupportsTransfer = !!(caps && caps.transfer);
+
     if (caps && caps.min_v > GoonConsts.ProtocolVersion) {
       this._failLobby(`opponent requires protocol v${caps.min_v}, this client speaks v${GoonConsts.ProtocolVersion} - update required`);
       return;
@@ -912,10 +968,15 @@ export class GoonMatchService {
     if (this._phase === GoonMatchPhase.Lobby) this._setPhase(GoonMatchPhase.Consent);
     if (this._phase !== GoonMatchPhase.Consent) return;
 
+    // Their declaration rides EVERY consent frame, counter-proposal or not, so it is read on both
+    // branches before anything else is decided. It is theirs alone: it never touches our own flag.
+    this._remoteMediaTransfer = !!sheet.media_transfer;
+
     if (!sameSheet(sheet, this._consentSheet)) {
       // A counter-proposal: adopt it and clear BOTH confirms so nobody can be advanced onto
-      // terms they never saw.
-      this._consentSheet = cloneSheet(sheet, false);
+      // terms they never saw. Note the LOCAL media_transfer being carried across — adopting their
+      // terms must not silently flip our own opt-in.
+      this._consentSheet = cloneSheet(sheet, false, this._localMediaTransfer);
       this._localConsentConfirmed = false;
       this._remoteConsentConfirmed = !!sheet.confirmed;
       this._ev.consentChanged.emit(undefined, (e) => this._warn(`consentChanged handler threw: ${e && e.message}`));
@@ -1653,12 +1714,21 @@ export class GoonMatchService {
 
 // ------------------------------------------------------------------ sheet helpers
 
-function cloneSheet(sheet, confirmed) {
+/**
+ * Re-sign a sheet.
+ *
+ * `mediaTransfer` is passed in rather than copied off `sheet` because one of the three call sites
+ * hands this function the INBOUND sheet (the counter-proposal branch of `_handleConsent`). Copying
+ * it there would adopt the PEER's opt-in as our own — a consent flag silently flipped by the other
+ * player, which is the one thing a per-side declaration exists to prevent. Always OUR value.
+ */
+function cloneSheet(sheet, confirmed, mediaTransfer) {
   return makeConsent({
     live_duration_sec: sheet.live_duration_sec,
     toy_cap: sheet.toy_cap,
     payload_min_gap_ms: sheet.payload_min_gap_ms,
     confirmed,
+    media_transfer: !!mediaTransfer,
   });
 }
 
@@ -1669,7 +1739,19 @@ function sameElementSet(a, b) {
   return true;
 }
 
-/** Sheet identity ignores `confirmed` — the TERMS must match, not the signature. */
+/**
+ * Sheet identity ignores `confirmed` — the TERMS must match, not the signature.
+ *
+ * DO NOT ADD FIELDS TO THIS FUNCTION. It is the sheet FINGERPRINT, and a mismatch makes
+ * `_handleConsent` adopt the peer's sheet and clear BOTH confirmations. Teach it about a field a
+ * peer might not send — `media_transfer` being the live example, but the rule is general — and
+ * that peer (the C# reference client, an older page, anything that drops the member) echoes a
+ * sheet that can NEVER compare equal: each side keeps adopting the other's sheet, keeps clearing
+ * the other's confirmation, and the lobby wedges PERMANENTLY. There is no timeout out of it.
+ *
+ * Anything genuinely per-side belongs OUTSIDE the fingerprint, declared on the frame and ANDed
+ * locally — that is exactly what `media_transfer` does (see makeConsent in core/contracts.js).
+ */
 function sameSheet(a, b) {
   return a.live_duration_sec === b.live_duration_sec
     && Math.abs(a.toy_cap - b.toy_cap) < 0.0001

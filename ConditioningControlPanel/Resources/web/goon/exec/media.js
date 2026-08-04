@@ -15,11 +15,32 @@
  *
  *   setManifest({images,videos,skipped,truncated})
  *   draw() / drawKind('image'|'video') -> {kind, name, url, acquire} | null
- *   acquire(entry) -> {url, release()}
+ *   acquire(entry) -> {url, release(), provenance}
  *   counts() -> {images, videos, skipped, truncated}   hasMedia() -> bool
+ *
+ * RECEIVED ARTIFACTS (P2P media transfer, spec §4.3) live in a SECOND map that
+ * the deck never sees:
+ *
+ *   addReceived({sha,kind,mime,url,bytes,acquire?})   incremental; never the deck
+ *   hasReceived(sha) / dropReceived(sha) / receivedCount()
+ *   acquireByTag('xfer:<sha>') -> {url, release(), provenance:'peer'} | null
+ *   drawFor(kind, payload)     -> THE resolution order (tag hit, else own library)
+ *   attachBlocklist(bl)        -> setter, so this stays a LEAF (no net/ imports)
+ *
+ * Three consequences, all of them the point:
+ *   - setManifest's hard deck reset cannot destroy them;
+ *   - a random draw()/drawKind() can NEVER surface the opponent's file — their
+ *     media appears exactly where their payload asked for it and nowhere else;
+ *   - "incremental add" is a Map write: no reshuffle, no disturbance of the
+ *     8-draw echo guard.
  * ==========================================================================*/
 
 const NO_ECHO = 8; // a reshuffled deck avoids repeating the last N draws
+
+/** The one namespace `tags` carries for this feature. `tags` stays open for others. */
+export const XFER_TAG_PREFIX = 'xfer:';
+
+const SHA_RE = /^[0-9a-f]{64}$/;
 
 export function createGoonMediaPool() {
   let entries = [];   // { kind: 'image'|'video', name, url }
@@ -27,6 +48,17 @@ export function createGoonMediaPool() {
   let truncated = false;
   let deck = [];      // shuffled indices into entries, drawn from the end
   const recent = [];  // last NO_ECHO drawn indices (echo guard for tiny pools)
+
+  /**
+   * sha -> {sha, kind, mime, url, bytes, acquire?}. SEPARATE FROM `entries` BY
+   * DESIGN — see the header. `acquire` is the received store's refcounted view
+   * factory, handed in by boot; without it the plain `url` is used and release()
+   * is the no-op the disk backend wants anyway.
+   */
+  const received = new Map();
+
+  /** Injected (never imported): {knows(sha), isBlocked(sha)} from net/blocklist.js. */
+  let blocklist = null;
 
   const counts = () => {
     let images = 0, videos = 0;
@@ -65,11 +97,77 @@ export function createGoonMediaPool() {
   /** The ONE handle every consumer holds. Backend-swappable (see header). */
   function acquire(entry) {
     if (!entry || !entry.url) return null;
+    // A peer artifact never resolves off the entry: it goes back through the
+    // received map so a refcounting backend (the standalone blob store) actually
+    // sees the acquire, and so a hash dropped between draw and acquire (blocklist
+    // sweep, user delete) reads as "gone" instead of a dangling URL.
+    if (entry.provenance === 'peer') {
+      const rec = received.get(entry.sha);
+      return rec ? acquirePeer(rec) : null;
+    }
     // Nothing to read or revoke — the URL streams straight off the virtual host.
-    return { url: entry.url, release() {} };
+    return { url: entry.url, release() {}, provenance: 'local' };
   }
 
-  const view = (e) => ({ kind: e.kind, name: e.name, url: e.url, acquire: () => acquire(e) });
+  const view = (e) => ({
+    kind: e.kind, name: e.name, url: e.url, provenance: 'local', acquire: () => acquire(e),
+  });
+
+  /* ------------------------------------------------------------ received map */
+
+  /** The refcounted handle for one received artifact. */
+  function acquirePeer(rec) {
+    let h = null;
+    if (typeof rec.acquire === 'function') {
+      try { h = rec.acquire(); } catch (_e) { h = null; }
+    }
+    if (h && h.url) {
+      // The memory backend revokes its object URL at refcount zero and mints a
+      // fresh one on the next view; keep the record's copy current so the
+      // no-store fallback below never hands out a revoked URL.
+      rec.url = h.url;
+      const rel = typeof h.release === 'function' ? h.release.bind(h) : (() => {});
+      return { url: h.url, release: rel, provenance: 'peer', sha: rec.sha, mime: rec.mime };
+    }
+    if (!rec.url) return null;
+    return { url: rec.url, release() {}, provenance: 'peer', sha: rec.sha, mime: rec.mime };
+  }
+
+  /**
+   * One received artifact as an ENTRY (the shape drawKind returns), or null.
+   * `kind` must AGREE — a video tag on a FlashBurst is skipped, not stretched —
+   * and a blocklisted sha is null here, which is the gate that actually matters
+   * because it is the one that puts pixels on screen (spec §7.4).
+   */
+  function viewReceived(sha, kind) {
+    if (typeof sha !== 'string' || !SHA_RE.test(sha)) return null;
+    const rec = received.get(sha);
+    if (!rec) return null;
+    if (kind && rec.kind !== kind) return null;
+    if (blocklist && typeof blocklist.isBlocked === 'function') {
+      try { if (blocklist.isBlocked(sha) === true) return null; } catch (_e) { /* never fatal */ }
+    }
+    return {
+      kind: rec.kind,
+      name: XFER_TAG_PREFIX + sha.slice(0, 12),
+      url: rec.url,
+      mime: rec.mime,
+      sha,
+      provenance: 'peer',
+      acquire: () => acquirePeer(rec),
+    };
+  }
+
+  /** The deck draw, hoisted so `drawFor` can reach it without a `this` binding. */
+  function drawKindInner(kind) {
+    if (!entries.some((e) => e.kind === kind)) return null;
+    for (let tries = 0; tries < 24; tries++) {
+      const i = drawIndex();
+      if (i < 0) return null;
+      if (entries[i].kind === kind) return view(entries[i]);
+    }
+    return null;
+  }
 
   return {
     /** Swap in a manifest: {images:[{name,url}], videos:[...], skipped, truncated}. */
@@ -82,6 +180,9 @@ export function createGoonMediaPool() {
       truncated = !!src.truncated;
       deck = [];          // re-deal with the new entries in the mix
       recent.length = 0;
+      // NOTE: `received` is deliberately NOT touched. The deck reset is about the
+      // user's own preset changing; what a duel partner sent is keyed by hash and
+      // has nothing to do with it (spec §4.3, trap register #5/#7).
       return counts();
     },
 
@@ -102,14 +203,79 @@ export function createGoonMediaPool() {
     },
 
     /** Draw specifically an image/video (null when that kind is absent). */
-    drawKind(kind) {
-      if (!entries.some((e) => e.kind === kind)) return null;
-      for (let tries = 0; tries < 24; tries++) {
-        const i = drawIndex();
-        if (i < 0) return null;
-        if (entries[i].kind === kind) return view(entries[i]);
+    drawKind: drawKindInner,
+
+    /* ------------------------------------------------ received (peer) artifacts */
+
+    /**
+     * Point the render-time gate at the blocklist. A SETTER, not an import: this
+     * module is a leaf and must never reach into net/, or exec/ and net/ start
+     * importing each other and the node import sweep stops being a straight line.
+     */
+    attachBlocklist(bl) {
+      blocklist = (bl && typeof bl.isBlocked === 'function') ? bl : null;
+      return !!blocklist;
+    },
+
+    /**
+     * Register one artifact a duel partner sent (or one this machine already had,
+     * primed from the manifest frame). Touches a Map, NEVER the deck.
+     * @param {{sha:string, kind:string, mime?:string, url:string, bytes?:number,
+     *          acquire?:() => ({url:string, release?:() => void}|null)}} a
+     */
+    addReceived(a) {
+      const o = a || {};
+      const sha = typeof o.sha === 'string' ? o.sha : '';
+      if (!SHA_RE.test(sha)) return false;
+      const kind = o.kind === 'video' ? 'video' : (o.kind === 'image' ? 'image' : '');
+      if (!kind) return false;
+      if (!o.url && typeof o.acquire !== 'function') return false;
+      received.set(sha, {
+        sha,
+        kind,
+        mime: String(o.mime || ''),
+        url: String(o.url || ''),
+        bytes: Math.max(0, Number(o.bytes) || 0),
+        acquire: typeof o.acquire === 'function' ? o.acquire : null,
+      });
+      return true;
+    },
+
+    /** The offer gate's dedupe answer, synchronous. */
+    hasReceived(sha) { return typeof sha === 'string' && received.has(sha); },
+
+    /** Blocklist sweep / eviction / user delete. Does not touch the file. */
+    dropReceived(sha) { return typeof sha === 'string' && received.delete(sha); },
+
+    receivedCount() { return received.size; },
+
+    /**
+     * 'xfer:<sha>' -> a peer handle, or null. Null is the WHOLE fallback story:
+     * a blocked hash, a kind that never landed and an unknown tag all read the
+     * same, and the caller draws from its own library exactly as it does today.
+     */
+    acquireByTag(tag) {
+      if (typeof tag !== 'string' || !tag.startsWith(XFER_TAG_PREFIX)) return null;
+      const v = viewReceived(tag.slice(XFER_TAG_PREFIX.length), null);
+      return v ? v.acquire() : null;
+    },
+
+    /**
+     * THE resolution order (spec §4.3), and the only door a peer artifact has.
+     * Tags are taken IN ORDER and anything unrecognised is skipped; the last line
+     * is today's behaviour, unchanged, which is why a transfer that never landed
+     * costs the receiver nothing.
+     */
+    drawFor(kind, payload) {
+      const tags = (payload && Array.isArray(payload.tags)) ? payload.tags : null;
+      if (tags) {
+        for (const t of tags) {
+          if (typeof t !== 'string' || !t.startsWith(XFER_TAG_PREFIX)) continue;
+          const v = viewReceived(t.slice(XFER_TAG_PREFIX.length), kind);   // kind must match, else skip
+          if (v) return v;
+        }
       }
-      return null;
+      return drawKindInner(kind);                                          // <- today's line
     },
   };
 }

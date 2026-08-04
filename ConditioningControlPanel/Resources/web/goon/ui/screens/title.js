@@ -13,6 +13,7 @@
 
 import { createLedger, el, button } from '../router.js';
 import { S } from '../strings.js';
+import { formatBytes } from '../assetsStore.js';
 
 export function mount(container, ctx) {
   const ledger = createLedger();
@@ -59,6 +60,7 @@ export function mount(container, ctx) {
     variant: standalone ? 'primary' : '',
     note: S.title.practiceNote,
   });
+  item(S.title.assets, () => actions.goAssets());
   item(S.title.options, () => ctx.options?.open?.());
   item(S.title.how, () => showHowItWorks(), { variant: 'ghost' });
   if (session.hosted) item(S.title.quit, () => actions.quit('title'), { variant: 'ghost', sfx: 'ui-back' });
@@ -66,13 +68,26 @@ export function mount(container, ctx) {
   card.appendChild(menu);
 
   /* --- status ribbon --------------------------------------------------
-   * v1 renders NOTHING here: premium/pass state is only knowable after a
+   * Premium/pass state is still NOT rendered here: it is only knowable after a
    * server round-trip, and a ribbon that says "free match available" before we
-   * have asked is a lie the player would plan around. The node exists so the
-   * pass check can drop straight in.
+   * have asked is a lie the player would plan around.
+   *
+   * What it does carry is the one fact we already hold locally — how much of
+   * the library is send-ready ("412 ready · 3.1 GB cached"). It stays hidden
+   * until a cache-state actually lands, and stays hidden forever when there is
+   * no host cache at all (standalone), because an empty ribbon reads as a
+   * broken one.
    * ------------------------------------------------------------------- */
   const ribbon = el('div', { class: 'gg-title-ribbon', hidden: true });
   card.appendChild(ribbon);
+
+  if (ctx.assets && typeof ctx.assets.onState === 'function') {
+    ledger.sub(ctx.assets.onState((st) => {
+      const show = !!(st && st.available && st.loaded && (st.ready > 0 || st.usedBytes > 0));
+      ribbon.textContent = show ? S.assets.ribbon(st.ready, formatBytes(st.usedBytes)) : '';
+      ribbon.hidden = !show;
+    }));
+  }
 
   card.appendChild(el('p', { class: 'gg-title-fineprint', text: S.title.fineprint }));
 

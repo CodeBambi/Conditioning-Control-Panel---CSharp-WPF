@@ -1638,6 +1638,43 @@ namespace ConditioningControlPanel.Models
             set { _currentAssetPresetId = value; OnPropertyChanged(); }
         }
 
+        private long _transferCacheCapBytes = 8L * 1024 * 1024 * 1024;
+        /// <summary>
+        /// Disk budget for the Goon Game transfer cache (compressed copies of the active pool).
+        /// Clamped to 1-64 GB by TransferCacheStore - the settings file is never trusted.
+        /// </summary>
+        [JsonProperty]
+        public long TransferCacheCapBytes
+        {
+            get => _transferCacheCapBytes;
+            set { _transferCacheCapBytes = value; OnPropertyChanged(); }
+        }
+
+        private bool _transferCacheAutoCompress = false;
+        /// <summary>
+        /// When true, the compression queue starts itself instead of waiting for the user to press
+        /// "Compress everything". Off by default: this is hours of GPU time on a big library.
+        /// </summary>
+        [JsonProperty]
+        public bool TransferCacheAutoCompress
+        {
+            get => _transferCacheAutoCompress;
+            set { _transferCacheAutoCompress = value; OnPropertyChanged(); }
+        }
+
+        private string? _lastSeenAssetPresetId = null;
+        /// <summary>
+        /// The preset the transfer cache last planned against. When this drifts from
+        /// <see cref="CurrentAssetPresetId"/> the user gets the "your preset changed - N assets need
+        /// compressing" nudge exactly once.
+        /// </summary>
+        [JsonProperty]
+        public string? LastSeenAssetPresetId
+        {
+            get => _lastSeenAssetPresetId;
+            set { _lastSeenAssetPresetId = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         private string _marqueeMessage = "GOOD GIRLS CONDITION DAILY     ❤️🔒";

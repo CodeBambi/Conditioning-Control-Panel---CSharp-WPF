@@ -31,12 +31,19 @@ namespace ConditioningControlPanel.Services.GoonGame
     ///                  ping                     (heartbeat watchdog prod)
     ///                  end-run { reason }       (host-initiated wind-down)
     ///                  net-post-result { id, status, body }
+    ///                  cache-state · cache-list · cache-progress · encode-request ·
+    ///                  cache-put-result         (transfer cache — <see cref="GoonCacheBridge"/>)
+    ///                  goon-recv-result { id, ok, url, bytes, error }
     ///   Page -&gt; Host:  ready · log              (consumed inside ChaosWebViewHost)
-    ///                  heartbeat · pong · boot-error · fullscreen-set
+    ///                  heartbeat { t, paint, vis } · pong · boot-error · fullscreen-set
     ///                  exit · exit-done
     ///                  toy-pattern · toy-stop   (STUBS — haptics v2 is not merged)
     ///                  match-result             (STUB — XP wiring comes later)
     ///                  net-post { id, path, body }
+    ///                  cache-req { op } · cache-put · encode-done
+    ///                                           (transfer cache — <see cref="GoonCacheBridge"/>)
+    ///                  goon-recv-begin/chunk/commit/abort/drop
+    ///                                           (received inbox — <see cref="TransferInboxStore"/>)
     /// </summary>
     internal static class GoonHostService
     {
@@ -53,10 +60,26 @@ namespace ConditioningControlPanel.Services.GoonGame
         /// client wearing the app's auth token.</summary>
         private const string AllowedPathPrefix = "/v2/goon/";
 
+        /// <summary>Seconds of "beats arriving, frame counter frozen, page says it is visible"
+        /// before the page is treated as visually frozen. Ten seconds is far past any legitimate
+        /// hitch (a 4K shader resize, a video decode stutter, a GC pause) and far short of how long
+        /// the owner sat in front of a dead picture on 2026-08-04.</summary>
+        private const double PaintStallSeconds = 10;
+
         private static ChaosWebViewHost? _host;
         private static DispatcherTimer? _heartbeatWatch;
         private static DispatcherTimer? _exitWatchdog;
         private static DateTime _lastHeartbeatUtc;
+        /// <summary>Last frame count the page stamped on a heartbeat; null = it has never sent one
+        /// (no rAF on this host), which switches the paint-stall rule OFF rather than tripping it.</summary>
+        private static long? _lastPaint;
+        /// <summary>When <see cref="_lastPaint"/> last MOVED — or when the page last told us it was
+        /// not visible, which is a legitimate reason to stop painting and must not accumulate.</summary>
+        private static DateTime _lastPaintMoveUtc;
+        /// <summary>One paint-stall recovery per watch. The tick runs every 5s and
+        /// <see cref="Recover"/> is dispatched asynchronously, so without this the same stall would
+        /// queue several relaunches before the first one lands.</summary>
+        private static bool _paintStallHandled;
         private static bool _exiting;
         private static bool _relaunchedOnce;
         private static bool _disposing;          // reentrancy guard (Dispose closes the window -> Closed -> DisposeAll)
@@ -97,6 +120,16 @@ namespace ConditioningControlPanel.Services.GoonGame
                 _exiting = false;
                 _duckPreference = duckMainWindow;
 
+                // BEFORE the mappings list: AddIfPresent silently DROPS a mapping whose folder is
+                // missing, and a cold install has no transfer-cache yet - without this the
+                // ccp.cache vhost would be dead for the whole session (trap 10).
+                try
+                {
+                    Transfer.TransferCacheStore.Instance.EnsureRoot();
+                    Transfer.TransferCompressionService.Instance.Initialize();   // idempotent
+                }
+                catch (Exception ex) { App.Logger?.Warning("GoonHostService: transfer cache init: {E}", ex.Message); }
+
                 var webRoot = Path.Combine(AppContext.BaseDirectory, "Resources", "web");
                 var mappings = new List<(string, string, CoreWebView2HostResourceAccessKind)>
                 {
@@ -109,6 +142,10 @@ namespace ConditioningControlPanel.Services.GoonGame
                 // when they're really there, and say so in the log when they are not.
                 AddIfPresent(mappings, "ccp.assets", App.EffectiveAssetsPath);
                 AddIfPresent(mappings, "ccp.art", Path.Combine(AppContext.BaseDirectory, "assets", "Chaos"));
+                // ONE vhost for the whole transfer cache: art/ + prv/ (the user's own compressed
+                // copies) and recv/ (what a partner sent). The .part staging area is a SIBLING of
+                // this root on purpose, so a half-written file is never page-reachable.
+                AddIfPresent(mappings, "ccp.cache", Transfer.TransferCacheStore.Instance.Root);
 
                 _host = new ChaosWebViewHost(new ChaosWebViewHost.Options
                 {
@@ -243,6 +280,11 @@ namespace ConditioningControlPanel.Services.GoonGame
             try
             {
                 _lastHeartbeatUtc = DateTime.UtcNow;
+                // A reloaded page counts its own frames from zero: forget the old page's stamp
+                // rather than compare across two documents.
+                _lastPaint = null;
+                _lastPaintMoveUtc = DateTime.UtcNow;
+                _paintStallHandled = false;
                 _host?.FocusWeb();
 
                 var consent = new ConsentSheetMsg();   // the engine's own defaults, never a fork
@@ -273,6 +315,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                         spiral = true,            // in-page spiral veil; exec/ owns the renderer
                         camera = false,           // no webcam bridge into the page in v1
                         video = true,
+                        mediaTransfer = TransferAllowed(),
                     },
                     consent = new
                     {
@@ -287,6 +330,11 @@ namespace ConditioningControlPanel.Services.GoonGame
                 // builder verbatim (asset-tree deselection, size caps, sampling) — one enumerator
                 // for every web core.
                 var m = DtrhAssetManifest.Build();
+                // `received` rides the EXISTING manifest frame rather than a new boot milestone:
+                // boot.js already gates settle() on gotManifest, so the received-artifact set is
+                // primed before any screen mounts - which is what lets the very first offer of a
+                // match answer decline:'have' instead of re-transferring (spec 6.4).
+                var received = SafeReceivedList();
                 _host?.Post(new
                 {
                     type = "manifest",
@@ -294,13 +342,22 @@ namespace ConditioningControlPanel.Services.GoonGame
                     videos = m.Videos.Select(e => new { name = e.Name, url = e.Url }),
                     skipped = m.Skipped,
                     truncated = m.Truncated,
+                    received,
                 });
+
+                // The compression cache's own feed. Attached AFTER the manifest so the page has its
+                // pool before the first cache-state lands, and pruned here because "page ready" is
+                // one of exactly two moments when nothing can be mid-transfer.
+                GoonCacheBridge.Attach(_host);
+                try { TransferInboxStore.Instance.PruneSafe(); }
+                catch (Exception ex) { App.Logger?.Debug("GoonHostService: inbox prune: {E}", ex.Message); }
 
                 // ...and tell the page which window it is actually painted in. Its affordances read
                 // the echoed state, never the requested one.
                 if (_host != null) _host.Post(new { type = "fullscreen", on = _host.IsFullscreen });
-                App.Logger?.Information("GoonHostService: sent init + manifest ({I} images, {V} videos)",
-                    m.Images.Count, m.Videos.Count);
+                App.Logger?.Information(
+                    "GoonHostService: sent init + manifest ({I} images, {V} videos, {R} received)",
+                    m.Images.Count, m.Videos.Count, received.Count);
             }
             catch (Exception ex) { App.Logger?.Warning("GoonHostService.OnPageReady: {E}", ex.Message); }
         }
@@ -316,6 +373,16 @@ namespace ConditioningControlPanel.Services.GoonGame
         // is deliberately tiny: bridge, window mode, teardown, and two logged stubs. Anything that
         // takes the screen, the input stack or the user's session away from them belongs nowhere
         // near a surface the opponent can influence.
+        //
+        // WHY THE STORAGE VERBS ARE ADMISSIBLE (cache-req/cache-put/encode-done, goon-recv-*).
+        // They are file-scoped, they fail closed, and they NEVER touch the user's originals — the
+        // compression queue only ever READS App.EffectiveAssetsPath and only ever WRITES inside
+        // transfer-cache/ (+ its sibling tmp). Critically, none of them can NAME a file: the host
+        // mints every filename from a job id it dispatched (lane B) or from a sha256 it computed
+        // itself over the bytes on disk (received inbox), so no page- or peer-supplied string
+        // reaches Path.Combine and traversal is not a thing that can be attempted. They touch no
+        // session, overlay, panic or input surface, and the worst a hostile page can achieve is
+        // filling a capped, user-deletable cache folder.
         // =====================================================================================
         private static void OnPageMessage(JObject o)
         {
@@ -324,6 +391,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                 case "heartbeat":
                 case "pong":
                     _lastHeartbeatUtc = DateTime.UtcNow;
+                    NotePaintStamp(o);
                     break;
                 case "boot-error":
                     OnBootError((string?)o["msg"]);
@@ -356,6 +424,124 @@ namespace ConditioningControlPanel.Services.GoonGame
                 case "net-post":
                     OnNetPost(o);
                     break;
+                case "cache-req":        // assets screen: state/list/queue control
+                case "cache-put":        // lane-B (page WebCodecs) artifact bytes coming back
+                case "encode-done":      // ...and the commit for them
+                    GoonCacheBridge.OnMessage(o);
+                    break;
+                case "goon-recv-begin":
+                case "goon-recv-chunk":
+                case "goon-recv-commit":
+                case "goon-recv-abort":
+                case "goon-recv-drop":
+                    OnRecvVerb(o);
+                    break;
+            }
+        }
+
+        // ============================ received-artifact inbox ============================
+
+        /// <summary>
+        /// <c>goon-recv-begin/chunk/commit/abort/drop</c> — the page's disk backend for artifacts a
+        /// duel partner sent (spec §6.2). Every one of them replies with the single
+        /// <c>goon-recv-result { id, ok, url, bytes, error }</c> shape, which
+        /// <c>exec/receivedStore.js</c> registers and correlates by <c>id</c>.
+        ///
+        /// The page's sha256 is a CLAIM until commit, where the host hashes the file it actually
+        /// wrote and compares; the page's mime is a CLAIM until commit, where the magic bytes decide
+        /// the extension and a disagreement is a rejection rather than a relabel. Commit runs the
+        /// hash on a worker (up to 24 MB) so a duel's frame budget is not spent on it.
+        /// Error vocabulary: bad-name | too-big | bad-format | hash-mismatch | cap-reached |
+        /// io-failed | bad-seq | unknown-job.
+        /// </summary>
+        private static void OnRecvVerb(JObject o)
+        {
+            var type = (string?)o["type"] ?? "";
+            var id = (string?)o["id"] ?? "";
+            var store = TransferInboxStore.Instance;
+            try
+            {
+                switch (type)
+                {
+                    case "goon-recv-begin":
+                    {
+                        var err = store.Begin(id, (string?)o["sha256"], (string?)o["mime"],
+                            (long?)o["bytes"] ?? 0);
+                        ReplyRecv(id, err == null, null, 0, err);
+                        break;
+                    }
+                    case "goon-recv-chunk":
+                    {
+                        var err = store.AppendChunk(id, (int?)o["seq"] ?? -1, (string?)o["b64"]);
+                        ReplyRecv(id, err == null, null, 0, err);
+                        break;
+                    }
+                    case "goon-recv-commit":
+                    {
+                        // Off the UI thread: this is a full SHA-256 over up to 24 MB.
+                        _ = Task.Run(() =>
+                        {
+                            var r = store.Commit(id);
+                            ReplyRecv(id, r.Ok, r.Url, r.Ok ? SafeFileLength(r.Sha, r.Ext) : 0, r.Error);
+                        });
+                        break;
+                    }
+                    case "goon-recv-abort":
+                        store.Abort(id);
+                        ReplyRecv(id, true, null, 0, null);
+                        break;
+                    case "goon-recv-drop":
+                    {
+                        var sha = (string?)o["sha256"];
+                        var ok = store.Drop(sha);
+                        ReplyRecv(id.Length > 0 ? id : sha ?? "", ok, null, 0, ok ? null : "bad-name");
+                        break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("GoonHostService.{Type}: {E}", type, ex.Message);
+                ReplyRecv(id, false, null, 0, "io-failed");
+            }
+        }
+
+        private static long SafeFileLength(string sha, string ext)
+        {
+            try
+            {
+                var p = Path.Combine(TransferInboxStore.Instance.RecvDir, sha + "." + ext);
+                return File.Exists(p) ? new FileInfo(p).Length : 0;
+            }
+            catch { return 0; }
+        }
+
+        /// <summary>Post the inbox reply on the UI thread (WebView2 is thread-affine), mirroring
+        /// <see cref="ReplyNetPost"/>.</summary>
+        private static void ReplyRecv(string id, bool ok, string? url, long bytes, string? error)
+        {
+            try
+            {
+                var disp = Application.Current?.Dispatcher;
+                if (disp == null || disp.HasShutdownStarted) return;
+                disp.BeginInvoke(() =>
+                {
+                    try { _host?.Post(new { type = "goon-recv-result", id, ok, url, bytes, error }); }
+                    catch (Exception ex) { App.Logger?.Debug("GoonHostService.ReplyRecv: {E}", ex.Message); }
+                });
+            }
+            catch (Exception ex) { App.Logger?.Debug("GoonHostService.ReplyRecv dispatch: {E}", ex.Message); }
+        }
+
+        /// <summary>What this machine already holds, for the manifest frame. Never throws — a dead
+        /// inbox must cost a re-transfer, not the whole boot.</summary>
+        private static IReadOnlyList<object> SafeReceivedList()
+        {
+            try { return TransferInboxStore.Instance.ListForManifest(); }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("GoonHostService: received list failed: {E}", ex.Message);
+                return Array.Empty<object>();
             }
         }
 
@@ -500,12 +686,58 @@ namespace ConditioningControlPanel.Services.GoonGame
         /// <c>true</c> so the gate has one place to come back to if that ever changes.)</summary>
         private static bool BrainDrainAllowed() => true;
 
+        /// <summary>May the page send its OWN media to the opponent? PREMIUM ONLY.
+        ///
+        /// Unlike <see cref="BrainDrainAllowed"/> (unconditionally true because the duel's drain is
+        /// an in-page veil), this is a real entitlement gate: transferring the user's own library to
+        /// another machine is the supporter-facing half of the feature. RECEIVING is NOT gated, so a
+        /// free player still sees a supporter's media — which is what makes the feature worth
+        /// buying. The page checks this with <c>=== true</c>, so a host that predates the flag
+        /// defaults the SEND capability OFF rather than on.</summary>
+        private static bool TransferAllowed()
+        {
+            try { return App.Patreon?.HasPremiumAccess == true; }
+            catch { return false; }
+        }
+
         // ============================ watchdogs / recovery ============================
+
+        /// <summary>Fold a heartbeat's paint/visibility stamp into the paint-stall clock.
+        ///
+        /// TWO WAYS TO NOT BE STALLED, and both have to reset the clock. The obvious one is the
+        /// frame counter moving. The other is the page saying it is not visible: a minimized,
+        /// occluded or alt-tabbed window stops getting frames BY DESIGN, and counting that as a
+        /// freeze would relaunch the duel every time the player looked at something else. The page
+        /// reports what it knows (document.visibilityState) and the decision is made here.</summary>
+        private static void NotePaintStamp(JObject o)
+        {
+            try
+            {
+                var now = DateTime.UtcNow;
+                var vis = (string?)o["vis"];
+                if (!string.IsNullOrEmpty(vis) && !string.Equals(vis, "visible", StringComparison.Ordinal))
+                {
+                    _lastPaintMoveUtc = now;
+                    return;
+                }
+                var paint = (long?)o["paint"];
+                if (paint == null) return;   // no counter on this host -> the rule stays off entirely
+                if (_lastPaint == null || paint.Value != _lastPaint.Value)
+                {
+                    _lastPaint = paint.Value;
+                    _lastPaintMoveUtc = now;
+                }
+            }
+            catch { /* a malformed stamp is not worth a log line every 2s */ }
+        }
 
         private static void StartHeartbeatWatch()
         {
             StopHeartbeatWatch();
             _lastHeartbeatUtc = DateTime.UtcNow;
+            _lastPaint = null;
+            _lastPaintMoveUtc = DateTime.UtcNow;
+            _paintStallHandled = false;
             _heartbeatWatch = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
             _heartbeatWatch.Tick += (_, _) =>
             {
@@ -518,6 +750,26 @@ namespace ConditioningControlPanel.Services.GoonGame
                     App.Logger?.Warning("GoonHostService: page heartbeat silent >20s - recovering");
                     Recover("heartbeat-silent");
                     return;
+                }
+                // SECOND TRIGGER (2026-08-04): the beats keep coming and the PICTURE is dead.
+                // A silent heartbeat only ever described a wedged main thread; the freeze the
+                // owner actually hit was a compositor/GPU stall with live script — the app was
+                // healthy, this watchdog never fired, and WebView2 never even wrote a dump,
+                // because nothing crashed. The page now stamps a frame counter on every beat
+                // (boot.js), so "alive but not painting" is a fact we can read, and it gets the
+                // SAME single relaunch a dead page does.
+                if (!_paintStallHandled && _lastPaint != null)
+                {
+                    var frozen = (DateTime.UtcNow - _lastPaintMoveUtc).TotalSeconds;
+                    if (frozen > PaintStallSeconds)
+                    {
+                        _paintStallHandled = true;
+                        App.Logger?.Warning(
+                            "GoonHostService: paint stall detected (js alive, {Sec:F0}s no frames) - recovering",
+                            frozen);
+                        Recover("paint-stall");
+                        return;
+                    }
                 }
                 // Prod a quiet-but-alive page before writing it off: a pong resets the clock and
                 // costs one message, whereas a false recovery costs a live match.
@@ -603,6 +855,13 @@ namespace ConditioningControlPanel.Services.GoonGame
             {
                 CancelExitWatchdog();
                 StopHeartbeatWatch();
+                // Unbind the cache feed BEFORE the host goes, so a worker-thread Changed can't post
+                // into a disposed WebView2. The ResumeAfterMatch is a safety net, not bookkeeping:
+                // the page pauses the queue at Countdown and resumes at Recap, and a window closed
+                // mid-match would otherwise leave the queue paused for the rest of the app session.
+                try { GoonCacheBridge.Detach(); } catch { }
+                try { Transfer.TransferCompressionService.Instance.ResumeAfterMatch(); } catch { }
+                try { TransferInboxStore.Instance.PruneSafe(); } catch { }
                 // Last word to the page before the window goes: a live match should get a chance
                 // to post its own abandon rather than just vanishing from the opponent's side.
                 try { _host?.Post(new { type = "end-run", reason = "dispose" }); } catch { }

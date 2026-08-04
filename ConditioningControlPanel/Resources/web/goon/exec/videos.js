@@ -101,6 +101,30 @@
  * merely takes that index instead of assuming the last one, which is why the
  * newest-speaks pins still hold — newest IS the default answer.
  *
+ * …AND THE MANDATORY VIDEO OWNS THE ROOM (2026-08-04, owner: "when a mandatory
+ * video we trigger is playing we might wanna mute the other videos"). While the
+ * ELEMENT bed is up — the ramp's fullscreen video on #gg-stage — every floating
+ * window DUCKS TO SILENCE. It is one module flag, `elementAudioActive`, and it
+ * is deliberately a bed-level fact rather than a clip-level one: the element
+ * CHAINS clip after clip, and a duck that lifted between clips would be four
+ * soundtracks flickering back in for the half-second it takes to load the next
+ * one. Set when the bed goes up, cleared when the bed comes down, and untouched
+ * by everything in between.
+ *
+ * THE DUCK IS AN OVERRIDE, NOT A STATE CHANGE, and that distinction is the whole
+ * feature: focusedIndexOf() takes it as a third argument and answers -1, so
+ * audioTargets() aims every window at zero and the EXISTING 300ms ramp carries
+ * them there — no second fade path, no new code that can disagree with the old
+ * one. Underneath, the player's mutes and whoever holds the mic are exactly as
+ * they were, because the player did not ask for any of this; the room did. When
+ * the bed ends, applyAudio() re-runs, the same resolution comes back and the
+ * same 500ms rise brings it in. A window that SPAWNS mid-bed takes the mic like
+ * any arrival and is simply born silent with it — it speaks when the bed ends.
+ *
+ * ONLY THE ELEMENT PATH GATES. A thrown payload video is a WINDOW, not a bed:
+ * renderPayload() never sets the flag, or the pool would silence itself every
+ * time the opponent threw one.
+ *
  * SKIPPABLE VIDEOS, DEFAULT OFF. A floating window runs its clip/60s course and
  * cannot be closed early; that is the point of being thrown one. A player who
  * wants an out turns "skippable videos" on in the options drawer and every window
@@ -246,13 +270,21 @@ export function volumeFor(intensity) {
  *     one, and nothing is promoted in its place. Muting the audible window means
  *     silence, not "play me the next one".
  *
+ * A FIFTH, AND IT OUTRANKS ALL FOUR: `ducked`. The ramp's mandatory fullscreen
+ * video is up, so nothing else in the room makes a sound. It is a third argument
+ * rather than a fifth rule because it is not a fact about the POOL at all — the
+ * pool is unchanged underneath and the very same call without the flag still
+ * answers who gets the mic back the moment the bed ends.
+ *
  * @param {Array<{wid?:*, muted?:boolean}>} pool windows, oldest first
  * @param {*} [focusedId] the wid of the last window touched/spawned
+ * @param {boolean} [ducked] the element bed owns the room: -1, whoever is focused
  * @returns {number} index into pool, or -1
  */
-export function focusedIndexOf(pool, focusedId) {
+export function focusedIndexOf(pool, focusedId, ducked) {
   const arr = Array.isArray(pool) ? pool : [];
   if (!arr.length) return -1;
+  if (ducked) return -1;                          // the mandatory video owns the room
   let idx = -1;
   if (focusedId !== undefined && focusedId !== null) {
     for (let i = 0; i < arr.length; i++) {
@@ -488,6 +520,7 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
 
   let sustained = null;               // the chained element run (fullscreen, stage)
   const runs = new Set();             // every live element run
+  let elementAudioActive = false;     // …and while there IS one, the windows duck
   const wins = [];                    // floating windows, OLDEST FIRST
   let drag = null;                    // the ONE live press, if any
   let focusedId = null;               // wid of the last window TOUCHED or SPAWNED
@@ -544,6 +577,10 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
       run.alive = false;
       teardown();
       runs.delete(run);
+      // The bed is down, so the room is the windows' again. Derived from `runs`
+      // rather than set by hand, which is why a run that dies INSIDE begin() (an
+      // empty library) cannot stand the duck up and walk away from it.
+      syncElementAudio();
       if (typeof onDone === 'function') { try { onDone(endured); } catch (e) { warn(`done() threw: ${e && e.message}`); } }
     };
 
@@ -648,6 +685,33 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     }
   }
 
+  /**
+   * END THE BED, whatever is holding it up — stop()'s body, factored out so the
+   * teardown door can share it. Every run settles (latched, so a second call is
+   * free) and the duck comes down with the last one, through settle().
+   */
+  function endElementBed() {
+    for (const r of Array.from(runs)) { try { r.settle(false); } catch (_e) { /* ignore */ } }
+    sustained = null;
+  }
+
+  /**
+   * THE DUCK, and the ONE place it is decided: it is true exactly while an
+   * element run is alive. Nothing sets it directly — a flag you can set by hand
+   * is a flag that can be left set by hand, and a stranded one would silence the
+   * NEXT match's windows for good. The only effect is a re-run of applyAudio(),
+   * so the whole feature is "the same resolution, re-resolved".
+   *
+   * Idempotent by construction: chaining one clip after another inside a bed
+   * never touches `runs`, so it cannot flap the duck.
+   */
+  function syncElementAudio() {
+    const on = runs.size > 0;
+    if (on === elementAudioActive) return;
+    elementAudioActive = on;
+    applyAudio();
+  }
+
   /* =========================================================================
    * THE FLOATING WINDOWS — the payload. Everything below this line lives on
    * #gg-fx-vwin and never touches #gg-stage.
@@ -666,7 +730,9 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
    * what they are hearing must never be computed twice.
    */
   function applyAudio() {
-    const idx = focusedIndexOf(wins, focusedId);
+    // The duck rides in as the resolver's third answer, so there is exactly ONE
+    // place that decides who is audible and exactly one set of ramps chasing it.
+    const idx = focusedIndexOf(wins, focusedId, elementAudioActive);
     const targets = audioTargets(wins.map((w) => w.intensity), idx);
     for (let i = 0; i < wins.length; i++) {
       const rec = wins[i];
@@ -1077,15 +1143,23 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
    * Build + mount one window. Returns the record, or null if it cannot exist.
    * @param {boolean} [mayEvict=true] false for a LOCAL spawn: a self-popped
    *        window may never displace a payload window (see spawnLocal).
+   * @param {object|null} [payload] THE PAYLOAD, when this window IS one. Its
+   *        `tags` may name an artifact the sender transferred (`xfer:<sha>`), in
+   *        which case media.drawFor hands back THEIR clip with provenance 'peer'.
+   *        A tag that never landed, a blocklisted hash and no tag at all all
+   *        resolve the same way: this receiver's own library, exactly as before.
+   *        Element runs, spawnLocal and reSource pass null — see reSource.
    */
-  function openWindow(intensity, capMs, onDone, mayEvict) {
+  function openWindow(intensity, capMs, onDone, mayEvict, payload) {
     if (typeof document === 'undefined') return null;
     const host = winLayer();
     if (!host) return null;
     if (mayEvict === false && wins.length >= MAX_WINDOWS) return null;
     if (!media || typeof media.drawKind !== 'function') return null;
 
-    const entry = media.drawKind('video');
+    const entry = (typeof media.drawFor === 'function')
+      ? media.drawFor('video', payload || null)
+      : media.drawKind('video');
     if (!entry) return null;
     const handle = (typeof media.acquire === 'function') ? media.acquire(entry) : null;
     if (!handle || !handle.url) return null;
@@ -1156,6 +1230,9 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
 
     const rec = {
       node, drift: driftEl, video, handle, onDone,
+      // 'peer' means the bytes came off the opponent's machine. The in-match report
+      // affordance (a later wave) keys off exactly this, and reSource reads it too.
+      provenance: (handle && handle.provenance) || entry.provenance || 'local',
       intensity: clamp01(intensity),
       wid: ++widSeq, muted: false,
       dx: 0, dy: 0, held: false, finished: false,
@@ -1218,7 +1295,16 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     return rec;
   }
 
-  /** Redraw a source into a window whose entry turned out to be a dud. */
+  /**
+   * Redraw a source into a window whose entry turned out to be a dud.
+   *
+   * ALWAYS FROM OUR OWN LIBRARY — `drawKind`, never `drawFor`, and the payload is
+   * deliberately not threaded down here. A peer artifact that fails to decode is a
+   * dud FILE, so re-drawing it from the same tag would loop the same failure until
+   * MAX_SOURCE_TRIES gives up; and a sender must never be able to keep a receiver's
+   * window pinned on a file that does not play. The window becomes a local one,
+   * which is also why the provenance flips.
+   */
   function reSource(rec) {
     if (!rec || rec.finished || !rec.video) return false;
     if (!media || typeof media.drawKind !== 'function') return false;
@@ -1228,6 +1314,7 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     if (!handle || !handle.url) return false;
     try { if (rec.handle && rec.handle.release) rec.handle.release(); } catch (_e) { /* ignore */ }
     rec.handle = handle;
+    rec.provenance = (handle && handle.provenance) || 'local';
     try { rec.video.src = handle.url; } catch (_e) { return false; }
     play(rec.video);
     return true;
@@ -1240,6 +1327,10 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
       const intensity = clamp01(cue && cue.intensity);
       if (sustained && sustained.alive) { sustained.retune(intensity); return; }
       sustained = createRun({ intensity, onDone: null });
+      // THE DUCK GOES UP BEFORE THE CLIP DOES, and before begin() can fail: a bed
+      // that dies on an empty library settles synchronously in there and takes
+      // the duck back down with it (see settle). Any other order can strand it.
+      syncElementAudio();
       sustained.begin();
     },
 
@@ -1248,9 +1339,9 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     stop() {
       // The element run only. Payload windows are independent (uniform shape) —
       // executor.stopAll() cancels those through their own cancel fn.
-      if (!sustained) return;
-      sustained.settle(false);   // no receipt path on the element run (onDone is null)
-      sustained = null;
+      // (no receipt path on the element run: onDone is null.) The windows get
+      // their voices back here, through settle -> syncElementAudio.
+      endElementBed();
     },
 
     /**
@@ -1264,7 +1355,9 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
       const p = payload || {};
       const capMs = windowCapMs(p.duration_ms);
       const intensity = p.intensity !== undefined ? p.intensity : 0.6;
-      const rec = openWindow(intensity, capMs, done, true);
+      // THE PAYLOAD GOES DOWN. This is the ONE call that may resolve to the
+      // sender's own clip (spec §4.4: Video is the flagship, one artifact per window).
+      const rec = openWindow(intensity, capMs, done, true, p);
       if (!rec) {
         // Nothing playable in the receiver's library: a silent no-op, receipted
         // completed (endured=false — nothing was endured, so no charge).
@@ -1317,7 +1410,9 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
       }
       const capMs = windowCapMs(o.duration_ms);
       const intensity = o.intensity !== undefined ? o.intensity : 0.6;
-      const rec = openWindow(intensity, capMs, null, false);
+      // null payload: a window the player earned off their OWN bubble field is drawn
+      // from their OWN library, always. It is not a payload and carries no tags.
+      const rec = openWindow(intensity, capMs, null, false, null);
       if (!rec) { info('local window fizzled — nothing playable in the library'); return false; }
       return true;
     },
@@ -1346,6 +1441,14 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
       // the match is up (no slot, no count, no clicks) but it is still a node
       // with a live clip in it, and the recap must inherit an EMPTY layer.
       purgeGhosts();
+      // AND THE BED, WITH THE DUCK ON IT. This door is only ever mercy, recap or
+      // detach, and layers.stopAll() is about to delete the element's surface off
+      // #gg-stage a line later — so a run left "alive" here is the same phantom
+      // the windows above are swept for, with a worse symptom: a duck nobody can
+      // see, silencing the NEXT match's windows for as long as it lasts. It is
+      // idempotent with stop() (settle latches), so the executor calling both,
+      // in either order, is one teardown.
+      endElementBed();
       return n;
     },
 
@@ -1357,8 +1460,18 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     /** Test/diagnostic seam: nodes that have left the pool and not yet the DOM. */
     ghostCount: () => ghosts.size,
 
-    /** Test/diagnostic seam: which pooled window has the mic, -1 for silence. */
+    /** Test/diagnostic seam: which pooled window HOLDS the mic, -1 for silence.
+     *  Deliberately un-ducked: this is the player's state, and the duck does not
+     *  touch it — ask liveIndex() for who is audible right now. */
     focusedIndex: () => focusedIndexOf(wins, focusedId),
+
+    /** Test/diagnostic seam: who is actually AUDIBLE — the same answer, with the
+     *  element bed's duck applied. -1 for a room the mandatory video owns. */
+    liveIndex: () => focusedIndexOf(wins, focusedId, elementAudioActive),
+
+    /** Test/diagnostic seam: is the element bed up (and therefore the windows
+     *  ducked)? A bed-level fact: chaining clips inside one bed never flips it. */
+    elementAudioActive: () => elementAudioActive,
 
     /** Test/diagnostic seam: who the player has click-muted, oldest first. */
     mutedFlags: () => wins.map((w) => !!w.muted),

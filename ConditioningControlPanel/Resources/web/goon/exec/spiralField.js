@@ -369,13 +369,18 @@ function compile(gl, type, src) {
   return sh;
 }
 
+/** WebGL's own CONTEXT_LOST_WEBGL, spelled out: on a lost context the enum is
+ *  still readable off `gl`, but a context we have ALREADY lost the reference to
+ *  is exactly the case where reading a property off it is least trustworthy. */
+export const CONTEXT_LOST_WEBGL = 0x9242;
+
 /**
  * The field renderer on a canvas. Returns null on ANY host that cannot run it
  * — no canvas element, no getContext, no WebGL, a shader that will not compile
  * — because exec/spiral.js's raster pool is a perfectly good floor and a thrown
  * error inside a renderer would take the whole effect tier down with it.
  *
- * @returns {{render(q:object, phase:number):void, dispose():void, gl:object}|null}
+ * @returns {{render(q:object, phase:number):void, lost():boolean, dispose():void, gl:object}|null}
  */
 export function createSpiralField(canvas) {
   if (!canvas || typeof canvas.getContext !== 'function') return null;
@@ -462,6 +467,30 @@ export function createSpiralField(canvas) {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
+  /**
+   * Has the driver taken the context away?
+   *
+   * THIS IS THE CHEAP HALF OF THE FREEZE DEFENCE. `webglcontextlost` is an EVENT,
+   * and an event needs a live event loop to be delivered on — the exact thing a
+   * compositor/GPU stall makes unreliable. Polling costs one enum read and, once
+   * a second from inside the render loop (exec/spiral.js), catches a context that
+   * went away without anybody telling us.
+   *
+   * isContextLost() is the direct question and is preferred; getError() is the
+   * fallback, and note that it CLEARS the error queue — which is fine, because
+   * nothing else in this module reads errors, but it is why this must never be
+   * called per frame.
+   */
+  function lost() {
+    if (dead) return true;
+    try {
+      if (typeof gl.isContextLost === 'function') return !!gl.isContextLost();
+      return gl.getError() === CONTEXT_LOST_WEBGL;
+    } catch (_e) {
+      return true;   // a context that throws on being asked is not a working one
+    }
+  }
+
   /** Hand the GPU its memory back; the pane goes home to the raster pool. */
   function dispose() {
     if (dead) return;
@@ -474,7 +503,7 @@ export function createSpiralField(canvas) {
     } catch (_e) { /* the context is already gone, which is the goal */ }
   }
 
-  return { render, dispose, gl };
+  return { render, lost, dispose, gl };
 }
 
 export default createSpiralField;

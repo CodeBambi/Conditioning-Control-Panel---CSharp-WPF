@@ -11,7 +11,16 @@
 // DATA CHANNEL ONLY. No tracks are ever added, so no codec is negotiated and there is no path —
 // deliberate or accidental — for mic or camera to reach the peer.
 //
-// Channel config: ONE channel, ordered + reliable (no maxRetransmits, no maxPacketLifeTime).
+// Channel config: TWO channels, both ordered + reliable (no maxRetransmits, no maxPacketLifeTime).
+//   'goon'        the game channel, created in-band by the host, JSON only, 16 KB/frame.
+//   'goon-media'  the BULK channel, negotiated out-of-band (`negotiated:true, id:1`) and created
+//                 symmetrically by both roles, carrying net/mediaChannel.js's control JSON and its
+//                 16384-byte binary chunks. It needs NO renegotiation — the m=application section
+//                 is already in the SDP because the host creates 'goon' — and its absence is never
+//                 fatal: `supportsBulk` stays false and the duel behaves exactly as it does today.
+//                 SCTP head-of-line blocking is PER-STREAM, so a 24 MB transfer cannot delay a
+//                 tick; what the two channels share is the association's congestion window, which
+//                 is what mediaChannel's backpressure pump manages.
 //
 // ICE: public STUN only, no TURN by design. A NAT pair that can't be punched gives up after
 // GoonConsts.IceTimeoutMs, sets `iceFailed`, and the caller opens a relay transport on the SAME
@@ -22,8 +31,11 @@
 // 'webrtc_unavailable' instead of throwing at import.
 
 import { GoonConsts, GoonTransportState } from '../core/contracts.js';
+// Layering: the protocol owns its own numbers, the transport imports them. Nothing in
+// mediaChannel.js touches RTCPeerConnection or window, so this import stays node-safe.
+import { BULK_LOW_WATER } from './mediaChannel.js';
 import { GoonSignalingClient, normalizeCode } from './signaling.js';
-import { GoonTransportBase } from './transportBase.js';
+import { GoonTransportBase, emit } from './transportBase.js';
 
 /** Public STUN. Two providers because one of them will be blocked on someone's network. */
 export const STUN_URLS = Object.freeze([
@@ -33,6 +45,17 @@ export const STUN_URLS = Object.freeze([
 ]);
 
 const CHANNEL_LABEL = 'goon';
+
+/** The bulk channel. Negotiated out-of-band, so both roles create it and neither announces it. */
+const MEDIA_CHANNEL_LABEL = 'goon-media';
+/**
+ * ODD BY DESIGN. Non-negotiated channels take SCTP stream ids by role: the DTLS client (here the
+ * offerer = the host) gets EVEN ids, the DTLS server ODD. Only the host ever calls
+ * `createDataChannel` in-band and it gets id 0, so the whole odd space is unused and an explicit
+ * odd id cannot collide.
+ */
+const MEDIA_CHANNEL_ID = 1;
+
 const SIGNAL_POLL_MS = 2000;          // setup only; stops when the channel opens
 const SIGNAL_FAILURE_LIMIT = 5;
 // Bounded so a peer that never comes back can't grow this without limit.
@@ -74,6 +97,10 @@ export class GoonWebRtcTransport extends GoonTransportBase {
 
     this._pc = null;
     this._dc = null;
+    this._mdc = null;                 // the bulk channel; null = the feature is simply absent
+    this._bulkMessageListeners = new Set();
+    this._bulkStateListeners = new Set();
+    this._bulkOpen = false;           // idempotence guard for the bulk open/closed reports
 
     this._code = null;
     this._token = null;
@@ -323,6 +350,23 @@ export class GoonWebRtcTransport extends GoonTransportBase {
       const pc = new RTCPeerConnection({ iceServers: STUN_URLS.map((urls) => ({ urls })) });
       this._pc = pc;
 
+      // SYMMETRIC AND IMMEDIATE, on both roles, before any offer/answer work. A negotiated channel
+      // is out-of-band by definition, so both sides must create it themselves and neither will see
+      // an `ondatachannel` for it. Spike 0 confirmed the guest may do this before
+      // setRemoteDescription (the SCTP transport is created lazily) — if that ever stops being
+      // true, this block moves to just after setRemoteDescription below and nothing else changes.
+      try {
+        const mdc = pc.createDataChannel(MEDIA_CHANNEL_LABEL, {
+          negotiated: true, id: MEDIA_CHANNEL_ID, ordered: true,
+        });
+        this._attachMediaChannel(mdc);
+      } catch (e) {
+        // The feature is simply ABSENT. NEVER fatal: `supportsBulk` stays false, the transfer queue
+        // stays dormant, and the duel behaves exactly as it does today.
+        this._mdc = null;
+        this._info(`media channel unavailable: ${(e && e.message) || e}`);
+      }
+
       pc.onicecandidate = (e) => {
         // Trickle: every candidate goes out the moment it is gathered.
         if (!e || !e.candidate || this.isDisposed) return;
@@ -341,7 +385,19 @@ export class GoonWebRtcTransport extends GoonTransportBase {
         await pc.setLocalDescription(offer);
         this._enqueueSignal('offer', JSON.stringify({ type: 'offer', sdp: pc.localDescription.sdp }));
       } else {
-        pc.ondatachannel = (e) => this._attachChannel(e.channel);
+        // LABEL-GUARDED. Our media channel is negotiated, so it never fires this event — but the
+        // unguarded version attached ANY inbound channel and overwrote `this._dc`, which let a
+        // hostile peer hijack the guest's game channel by opening a second in-band channel.
+        pc.ondatachannel = (e) => {
+          const ch = e && e.channel;
+          if (!ch) return;
+          if (ch.label !== CHANNEL_LABEL) {
+            this._warn(`ignoring unexpected in-band data channel '${ch.label}'`);
+            try { ch.close(); } catch (_e) { /* already gone */ }
+            return;
+          }
+          this._attachChannel(ch);
+        };
 
         try {
           await pc.setRemoteDescription(remoteOffer);
@@ -431,6 +487,93 @@ export class GoonWebRtcTransport extends GoonTransportBase {
     dc.onerror = (e) => this._warn(`Data channel error: ${(e && (e.message || (e.error && e.error.message))) || 'unknown'}`);
 
     if (dc.readyState === 'open') this._handleChannelOpen();
+  }
+
+  // ------------------------------------------------------------------ bulk channel
+
+  /**
+   * Wire the media channel. RAW PASSTHROUGH BOTH WAYS: nothing here parses, validates or
+   * size-guards a bulk frame — `net/mediaChannel.js` owns the whole protocol and this transport
+   * is only the pipe. Same idempotent-open discipline as `_attachChannel`.
+   */
+  _attachMediaChannel(mdc) {
+    if (!mdc) return;
+    this._mdc = mdc;
+
+    try { mdc.binaryType = 'arraybuffer'; } catch (_e) { /* not all impls expose it */ }
+    try { mdc.bufferedAmountLowThreshold = BULK_LOW_WATER; } catch (_e) { /* nor this */ }
+
+    mdc.onopen = () => this._setBulkState('open');
+    mdc.onclose = () => this._setBulkState('closed');
+
+    mdc.onmessage = (e) => {
+      if (this.isDisposed || !e) return;
+      // string OR ArrayBuffer, exactly as it arrived.
+      emit(this._bulkMessageListeners, e.data, this._log, this._tag, 'bulkMessage');
+    };
+
+    // Additive third state: the pump's own 50 ms watchdog is the guaranteed path, this just makes
+    // the common case immediate. A listener that only tests for 'open'/'closed' ignores it.
+    mdc.onbufferedamountlow = () => {
+      if (this.isDisposed) return;
+      emit(this._bulkStateListeners, 'low', this._log, this._tag, 'bulkStateChanged');
+    };
+
+    mdc.onerror = (e) => this._warn(`Media channel error: ${(e && (e.message || (e.error && e.error.message))) || 'unknown'}`);
+
+    if (mdc.readyState === 'open') this._setBulkState('open');
+  }
+
+  _setBulkState(state) {
+    if (this.isDisposed) return;
+    const next = state === 'open';
+    if (next === this._bulkOpen) return;
+    this._bulkOpen = next;
+    this._info(`Media channel ${state}`);
+    emit(this._bulkStateListeners, state, this._log, this._tag, 'bulkStateChanged');
+  }
+
+  /**
+   * P2P ONLY, and explicitly NOT `isConnected`: CONNECTED_STATES treats ConnectedRelay as
+   * connected too, and the relay is the one transport media must never touch.
+   */
+  get supportsBulk() {
+    return this.state === GoonTransportState.ConnectedP2P
+      && !!this._mdc && this._mdc.readyState === 'open';
+  }
+
+  /**
+   * Bypasses `_sendRaw` entirely, so bulk data can never enter the 128-frame resume buffer.
+   * @returns {boolean} false whenever the bytes did NOT reach the channel — callers branch on it.
+   */
+  sendBulk(data) {
+    if (this.isDisposed) return false;
+    const mdc = this._mdc;
+    if (!mdc || mdc.readyState !== 'open') return false;
+    try { mdc.send(data); return true; }
+    catch (e) { this._warn(`Bulk send failed: ${(e && e.message) || e}`); return false; }
+  }
+
+  get bulkBufferedAmount() {
+    const mdc = this._mdc;
+    const n = mdc ? Number(mdc.bufferedAmount) : 0;
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  get bulkLowThreshold() { return BULK_LOW_WATER; }
+
+  /** @returns {() => void} unsubscribe */
+  onBulkMessage(fn) {
+    if (typeof fn !== 'function') return () => {};
+    this._bulkMessageListeners.add(fn);
+    return () => this._bulkMessageListeners.delete(fn);
+  }
+
+  /** @returns {() => void} unsubscribe */
+  onBulkStateChanged(fn) {
+    if (typeof fn !== 'function') return () => {};
+    this._bulkStateListeners.add(fn);
+    return () => this._bulkStateListeners.delete(fn);
   }
 
   /** The channel is usable. Idempotent — see the note in _attachChannel. */
@@ -537,17 +680,29 @@ export class GoonWebRtcTransport extends GoonTransportBase {
     this._wake();
 
     const dc = this._dc;
+    const mdc = this._mdc;
     const pc = this._pc;
     this._dc = null;
+    this._mdc = null;
     this._pc = null;
 
+    // Tell anything mid-transfer the pipe is gone before the handles disappear.
+    if (this._bulkOpen) {
+      this._bulkOpen = false;
+      emit(this._bulkStateListeners, 'closed', this._log, this._tag, 'bulkStateChanged');
+    }
+
     try { if (dc) dc.close(); } catch (_e) { /* already gone */ }
+    try { if (mdc) mdc.close(); } catch (_e) { /* already gone */ }
     try { if (pc) pc.close(); } catch (_e) { /* already gone */ }
     try { this._clock.stop(); } catch (_e) { /* already gone */ }
   }
 
   _disposeCore() {
     this._tearDown();
+    // The base clears the message/state listeners; the bulk pair is ours.
+    this._bulkMessageListeners.clear();
+    this._bulkStateListeners.clear();
     if (this._ownsSignaling) this._signaling.dispose();
   }
 

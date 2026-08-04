@@ -8,7 +8,7 @@
  * desyncs the NEXT match's countdown. There is exactly one way to schedule work
  * in this UI and it is through a ledger.
  *
- * THE ROUTER: index.html ships eight <section class="gg-screen"> nodes. Exactly
+ * THE ROUTER: index.html ships nine <section class="gg-screen"> nodes. Exactly
  * one is unhidden at a time and html[data-gg-screen] names it, so CSS (and the
  * play-test driver's probe) can see the current screen without reading JS state.
  * `hide()` unmounts everything — that is the Live phase, where the HUD and the
@@ -31,6 +31,9 @@ export const SCREEN_IDS = Object.freeze({
   countdown: 'scr-countdown',
   sd: 'scr-sd',
   recap: 'scr-recap',
+  // The one screen that is not a match phase: the media/compression library,
+  // reached from the title menu and left with Back.
+  assets: 'scr-assets',
 });
 
 /**

@@ -26,6 +26,29 @@
  * The pane always carries a pool background-image either way, so path 2 is one
  * property removal away at any moment.
  *
+ * THE FREEZE DEFENCE (2026-08-04). This pane is the only GPU context the duel
+ * owns, and it went in hours before a session froze VISUALLY while its JS kept
+ * running — a compositor/GPU stall, no crash, no dump. Nothing here proves the
+ * shader caused it, but a shader is the cheapest thing to be able to drop, so it
+ * is now droppable four different ways and every one of them lands on path 2:
+ *   · `webglcontextlost` — preventDefault, swap to raster THAT INSTANT, and keep
+ *     the dead canvas around (shrunk to 1x1) purely as an antenna for
+ *     `webglcontextrestored`, which may re-upgrade at most MAX_CONTEXT_RECOVERIES
+ *     times before the pane stays on raster for good;
+ *   · a WATCHDOG inside the render loop, once a second, never per frame: a lost
+ *     context (polled, because an event needs an event loop that a stall is
+ *     busy eating) or rAF callbacks more than RAF_STALL_MS apart while the pane
+ *     believes it is drawing;
+ *   · the KILL SWITCH — `shaderSpirals` in ui/prefs.js, default ON, mirrored to
+ *     <html data-gg-shader>. Off, weave() never runs and a live weave is dropped
+ *     within a second. exec/ never imports ui/, so it arrives as a root attribute
+ *     exactly the way data-gg-vskip does;
+ *   · and the backing store is capped (MAX_DPR / MAX_BACKING_PX) so a 4K display
+ *     at devicePixelRatio 2 cannot ask the driver for an 8K fill every frame.
+ * The rAF-stall check is deliberately blind while the page is hidden or the heat
+ * armor has parked decoration: not painting is CORRECT in both, and a watchdog
+ * that fires on correct behaviour gets switched off by the people it protects.
+ *
  * ASSETS: the pool is the DtRH bundle under /dtrh/assets/bubbles/effects/spirals/
  * (same ccp.game origin — Resources/web is the host root, so /dtrh/... resolves
  * from /goon/). Deliberately NOT imported from dtrh/engine/loomSpirals.js: that
@@ -57,6 +80,35 @@ export const SPIRAL_POOL = Object.freeze([
 ]);
 /** The one still that ships outside the pool — the floor if the pool is ever empty. */
 export const SPIRAL_FALLBACK = '/dtrh/assets/bubbles/effects/spiral.png';
+
+/* --- THE SHADER KILL SWITCH. The pref is ui/prefs.js's (`shaderSpirals`,
+   default TRUE); it reaches this tier as a ROOT ATTRIBUTE, because exec/ does not
+   import ui/ and a renderer built once at startup must still see a toggle flipped
+   mid-match. ABSENT MEANS ON — the attribute only exists once a prefs store has
+   been built, and a page that never made one (a self-test, the import sweep) must
+   still get the good path. Only the exact off value switches it off. ---------- */
+export const SHADER_ATTR = 'data-gg-shader';   // on <html>, written by ui/prefs.js
+export const SHADER_OFF = 'off';               // …anything else, or absent, is ON
+
+/* --- THE BACKING-STORE CAP. A screen-blended bed at <=0.70 opacity behind a live
+   match does not need retina detail, and the fill cost is per-pixel per-frame:
+   this is the single biggest lever on how hard the shader leans on the GPU.
+   TWO caps, because either alone has a hole. The DPR cap alone still lets a 4K
+   window at DPR 1 through at 8.3MP; the pixel budget alone still lets a small
+   window run at DPR 3. MAX_BACKING_PX is one 4K frame, which is the most any
+   display in front of this game can actually show. ------------------------- */
+export const MAX_DPR = 1.5;
+export const MAX_BACKING_PX = 3840 * 2160;
+
+/* --- THE IN-LOOP WATCHDOG. Checked once per HEALTH_CHECK_MS, never per frame:
+   gl.getError()/isContextLost() can force a sync round-trip to the driver, which
+   is precisely the thing not to do sixty times a second on a machine that may
+   already be stalling. RAF_STALL_MS is the gap between frame callbacks that
+   stops counting as a hitch and starts counting as a hang. ------------------ */
+export const HEALTH_CHECK_MS = 1000;
+export const RAF_STALL_MS = 4000;
+/** Context losses this pane will re-upgrade through before it stays on raster. */
+export const MAX_CONTEXT_RECOVERIES = 2;
 
 /** A random spiral URL. Shared with exec/bubbles.js (a popped spiral bubble flicks one). */
 export function pickSpiralUrl() {
@@ -104,6 +156,19 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
   let lastTs = 0;
   let onLost = null;
   let onResize = null;
+  let onVisibility = null;
+  let lastCheck = 0;              // in-loop watchdog: last health poll (rAF timestamp ms)
+  // A defence fired and this pane stays on raster until it is replaced. Cleared
+  // only by teardown (a new pane earns a fresh try) or by a context RESTORE
+  // inside the recovery budget — never by a repick, or a machine whose driver is
+  // in trouble would be handed the shader back every few seconds.
+  let rasterLocked = false;
+  // A context-lost canvas, shrunk to 1x1 and kept ONLY to hear
+  // `webglcontextrestored`. It is out of the DOM and holds no drawing buffer, so
+  // it is an antenna, not a leak — and teardown drops it either way.
+  let lostCanvas = null;
+  let onRestored = null;
+  let recoveries = 0;             // context-loss re-upgrades spent on THIS pane
   // Bumped on every weave. A frame callback queued by a weave that has since
   // been torn down carries a stale token and returns without re-arming itself —
   // without this, the pane's own fade-out could hand its rAF chain to the NEXT
@@ -118,6 +183,18 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
     const d = doc();
     try { return !!(d && d.documentElement && d.documentElement.getAttribute('data-gg-fx') === 'hot'); }
     catch (_e) { return false; }
+  };
+  /** The kill switch, read FRESH every time — a cached copy is a dead toggle. */
+  const shadersOn = () => {
+    const d = doc();
+    try { return !(d && d.documentElement && d.documentElement.getAttribute(SHADER_ATTR) === SHADER_OFF); }
+    catch (_e) { return true; }
+  };
+  /** A hidden page is not painting ON PURPOSE; the stall watchdog must ignore it. */
+  const visible = () => {
+    const d = doc();
+    try { return !d || !d.visibilityState || d.visibilityState === 'visible'; }
+    catch (_e) { return true; }
   };
 
   function ensurePane() {
@@ -134,14 +211,29 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
     return true;
   }
 
-  /** Backing-store size for the pane, at the display's real pixel ratio. */
+  /**
+   * Backing-store size for the pane — CAPPED TWICE (see MAX_DPR / MAX_BACKING_PX).
+   *
+   * The fill is per-pixel per-frame, so this number IS the GPU cost of the bed.
+   * The ratio cap keeps a HiDPI laptop from doubling that for detail nobody can
+   * resolve through a screen blend at 0.7; the pixel budget keeps a 4K (or wider)
+   * window from asking for a frame no display can show, whatever the ratio says.
+   * Aspect is preserved when the budget bites — a squashed spiral is worse than a
+   * slightly soft one.
+   */
   function backingSize() {
     const w = (paneEl && paneEl.clientWidth) || (typeof innerWidth === 'number' ? innerWidth : 0);
     const h = (paneEl && paneEl.clientHeight) || (typeof innerHeight === 'number' ? innerHeight : 0);
-    // Capped at 2: past that the fill cost doubles again for detail nobody can
-    // see through a screen blend at 0.7.
-    const dpr = Math.min(2, (typeof devicePixelRatio === 'number' && devicePixelRatio > 0) ? devicePixelRatio : 1);
-    return { w: Math.max(1, Math.round(w * dpr)), h: Math.max(1, Math.round(h * dpr)) };
+    const dpr = Math.min(MAX_DPR, (typeof devicePixelRatio === 'number' && devicePixelRatio > 0) ? devicePixelRatio : 1);
+    let bw = Math.max(1, Math.round(w * dpr));
+    let bh = Math.max(1, Math.round(h * dpr));
+    const total = bw * bh;
+    if (total > MAX_BACKING_PX) {
+      const k = Math.sqrt(MAX_BACKING_PX / total);
+      bw = Math.max(1, Math.round(bw * k));
+      bh = Math.max(1, Math.round(bh * k));
+    }
+    return { w: bw, h: bh };
   }
 
   function sizeCanvas() {
@@ -159,6 +251,9 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
    */
   function weave() {
     if (field || !paneEl) return;
+    // The two ways the pane is entitled to stay on raster: the player switched
+    // shaders off, or a defence already fired on this pane.
+    if (rasterLocked || !shadersOn()) return;
     const d = doc();
     if (!d || typeof d.createElement !== 'function') return;
 
@@ -173,6 +268,16 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
     field = f;
     params = pickSpiralParams();
     const gen = ++weaveGen;
+
+    phase = Math.random();      // never start every match on the same frame
+    lastTs = 0;
+    lastCheck = 0;
+    // THE FIRST FRAME GOES IN BEFORE THE APPEND. The context is `alpha: false`,
+    // so an un-drawn canvas is OPAQUE BLACK: appending it and drawing afterwards
+    // blinks the bed out for a frame. It matters most on the re-upgrade after a
+    // context loss, where the raster bed is already up and visibly correct.
+    draw();
+    if (!field) { canvasEl = null; return; }   // that first draw threw and unwove us
 
     // fx.css is not ours to edit and must keep serving the raster fallback, so
     // the woven pane opts out of the raster-only treatments INLINE:
@@ -192,20 +297,33 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
       paneEl.appendChild(cv);
     } catch (_e) { unweave(); return; }
 
-    // A GPU reset kills the context without killing the page; when that happens
-    // we put every borrowed property back and the raster bed simply resumes.
+    // A GPU reset kills the context without killing the page. preventDefault is
+    // what makes the loss RECOVERABLE (without it the browser never fires
+    // `webglcontextrestored`), and the swap to raster happens on the spot — the
+    // player must not sit in front of a frozen last frame waiting for a restore
+    // that may never come.
     if (typeof cv.addEventListener === 'function') {
-      onLost = (e) => { try { e.preventDefault(); } catch (_e2) { /* ignore */ } warn('webgl context lost — falling back to the raster pool'); unweave(); };
+      onLost = (e) => {
+        try { e.preventDefault(); } catch (_e2) { /* ignore */ }
+        warn('webgl context lost — falling back to the raster pool');
+        loseWoven();
+      };
       try { cv.addEventListener('webglcontextlost', onLost); } catch (_e) { /* ignore */ }
     }
     if (typeof addEventListener === 'function') {
       onResize = () => { if (sizeCanvas() && field && params) { try { field.render(params, phase); } catch (_e) { /* ignore */ } } };
       try { addEventListener('resize', onResize); } catch (_e) { onResize = null; }
     }
+    // Coming back from hidden is NOT a stall, but it does look exactly like one
+    // from inside the loop: rAF is suspended while the page is hidden, so the
+    // first frame after a resume carries a gap of however long the player was
+    // away. Forget the last timestamp on every visibility change and the
+    // watchdog simply starts measuring again from the next frame pair.
+    if (typeof d.addEventListener === 'function') {
+      onVisibility = () => { lastTs = 0; lastCheck = 0; };
+      try { d.addEventListener('visibilitychange', onVisibility); } catch (_e) { onVisibility = null; }
+    }
 
-    phase = Math.random();      // never start every match on the same frame
-    lastTs = 0;
-    draw();
     // Reduced motion gets ONE still frame — and unlike a GIF, which ignores the
     // preference entirely, this actually honours it.
     if (!calm && hasRaf()) rafId = requestAnimationFrame((ts) => step(ts, gen));
@@ -217,11 +335,52 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
     catch (e) { warn(`field render threw: ${e && e.message}`); unweave(); }
   }
 
+  /**
+   * The in-loop watchdog. ONCE A SECOND, never per frame — asking the driver
+   * whether it is still there can cost a synchronous round-trip, and a machine
+   * that is already stalling is the last one to ask sixty times a second.
+   *
+   * Returns '' while the pane is well, or the reason it must go back to raster
+   * ('off' | 'lost' | 'stall'). `now` is the rAF timestamp, i.e.
+   * performance.now()'s clock, so the frame gap it measures is the real one and
+   * not a timer's opinion of it.
+   */
+  function healthCheck(now) {
+    // 1. the player switched shaders off mid-match — the escape hatch has to
+    //    reach a bed that is already running, not just the next one.
+    if (!shadersOn()) { warn('shader spirals switched off — handing the pane back to the raster bed'); return 'off'; }
+    // 2. the context went away without the event reaching us. An event needs an
+    //    event loop, which is exactly what a compositor stall is busy eating.
+    if (field && typeof field.lost === 'function' && field.lost()) {
+      warn('webgl context lost (polled) — falling back to the raster pool');
+      return 'lost';
+    }
+    // 3. frames are not arriving while this pane believes it is drawing. Blind
+    //    while hidden (rAF is suspended by design) and while the heat armor has
+    //    parked decoration; lastTs 0 means "no pair to measure yet".
+    if (lastTs && visible() && !parked() && (now - lastTs) > RAF_STALL_MS) {
+      warn(`frame callbacks stalled ${Math.round(now - lastTs)}ms — falling back to the raster pool`);
+      return 'stall';
+    }
+    return '';
+  }
+
   function step(ts, gen) {
     if (gen !== weaveGen) return;      // a torn-down weave's last frame
     rafId = 0;
     if (!field || !paneEl) return;
     const now = typeof ts === 'number' ? ts : 0;
+    if (now - lastCheck >= HEALTH_CHECK_MS) {
+      lastCheck = now;
+      const ill = healthCheck(now);
+      if (ill) {
+        // 'off' is the player's own choice and must be reversible: leave the
+        // pane unlocked so switching shaders back on re-weaves at the next cue.
+        if (ill !== 'off') rasterLocked = true;
+        if (ill === 'lost') loseWoven(); else unweave();
+        return;
+      }
+    }
     // Parked at data-gg-fx="hot": hold the frame instead of advancing it, the
     // same thing --gg-deco-play does to every keyframe in fx.css.
     if (!parked()) {
@@ -240,16 +399,22 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
    * swap a crisp spiral for a magnified raster one mid-fade, in full view.
    */
   function detachWoven() {
-    const w = { cv: canvasEl, f: field, raf: rafId, lost: onLost, resize: onResize };
+    const w = { cv: canvasEl, f: field, raf: rafId, lost: onLost, resize: onResize, vis: onVisibility };
     weaveGen++;                        // every queued frame for this weave is now stale
     canvasEl = null; field = null; params = null;
-    rafId = 0; lastTs = 0; onLost = null; onResize = null;
+    rafId = 0; lastTs = 0; lastCheck = 0; onLost = null; onResize = null; onVisibility = null;
     return () => {
       if (w.raf && typeof cancelAnimationFrame === 'function') {
         try { cancelAnimationFrame(w.raf); } catch (_e) { /* ignore */ }
       }
       if (w.resize && typeof removeEventListener === 'function') {
         try { removeEventListener('resize', w.resize); } catch (_e) { /* ignore */ }
+      }
+      if (w.vis) {
+        const d = doc();
+        if (d && typeof d.removeEventListener === 'function') {
+          try { d.removeEventListener('visibilitychange', w.vis); } catch (_e) { /* ignore */ }
+        }
       }
       if (w.cv && w.lost && typeof w.cv.removeEventListener === 'function') {
         try { w.cv.removeEventListener('webglcontextlost', w.lost); } catch (_e) { /* ignore */ }
@@ -261,7 +426,16 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
     };
   }
 
-  /** Drop the weave NOW and give the surviving pane back to the raster bed. */
+  /**
+   * Drop the weave NOW and give the surviving pane back to the raster bed.
+   *
+   * REMOVING THE THREE INLINE PROPERTIES IS THE WHOLE SWAP, and it has to remove
+   * ALL THREE: fx.css's `.gg-spiral` carries `scale: 1.6`, `filter: blur(1.1px)`
+   * and the spin keyframe as one treatment for one bed. Leaving `filter: none`
+   * behind would hand the player a magnified, unblurred, unspun raster — the
+   * dither this pane exists to hide, at 4-8x, held still. Setting each property
+   * to '' (not to its CSS value) is what lets the stylesheet answer again.
+   */
   function unweave() {
     detachWoven()();
     // Hand the raster treatments back exactly as fx.css declares them.
@@ -272,6 +446,45 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
         paneEl.style.setProperty('animation', '');
       } catch (_e) { /* ignore */ }
     }
+  }
+
+  /** Stop listening to a context-lost canvas, and let the node go. */
+  function releaseLostCanvas() {
+    if (lostCanvas && onRestored && typeof lostCanvas.removeEventListener === 'function') {
+      try { lostCanvas.removeEventListener('webglcontextrestored', onRestored); } catch (_e) { /* ignore */ }
+    }
+    lostCanvas = null;
+    onRestored = null;
+  }
+
+  /**
+   * The context died under us (event or poll): swap to raster on the spot, then
+   * keep the dead canvas ONLY as an antenna for `webglcontextrestored`.
+   *
+   * It is shrunk to 1x1 first. A fullscreen backing store is megabytes, the
+   * re-upgrade builds a brand new canvas anyway, and a detached full-size canvas
+   * held across a GPU reset is how a defence turns into a leak. The budget
+   * (MAX_CONTEXT_RECOVERIES) is what stops a driver that resets every few
+   * seconds from being handed the shader back forever.
+   */
+  function loseWoven() {
+    const cv = canvasEl;
+    rasterLocked = true;               // nothing re-weaves until a restore says so
+    unweave();
+    releaseLostCanvas();
+    if (!cv || recoveries >= MAX_CONTEXT_RECOVERIES || typeof cv.addEventListener !== 'function') return;
+    try { cv.width = 1; cv.height = 1; } catch (_e) { /* ignore */ }
+    onRestored = () => {
+      releaseLostCanvas();
+      recoveries++;
+      rasterLocked = false;
+      // Lazily, and only if the pane is still up: a restore that arrives after
+      // the bed has gone must not resurrect one.
+      if (paneEl && !field && shadersOn()) weave();
+    };
+    lostCanvas = cv;
+    try { cv.addEventListener('webglcontextrestored', onRestored); }
+    catch (_e) { lostCanvas = null; onRestored = null; }
   }
 
   /**
@@ -286,7 +499,17 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
     if (field) {
       params = pickSpiralParams();
       draw();
+      return;
     }
+    // A cue is also where the kill switch coming back ON takes effect. Swapping
+    // raster -> shader in the middle of a running bed would read as a glitch; a
+    // new spiral is the moment the bed is expected to change anyway. A pane that
+    // a DEFENCE dropped (rasterLocked) is never re-woven here — only a context
+    // restore, inside its budget, may do that.
+    // isConnected, because ensurePane() repicks BEFORE it mounts the pane and a
+    // canvas sized against an unlaid-out parent measures nothing; that first
+    // weave is ensurePane's own, one line later.
+    if (paneEl.isConnected && !rasterLocked && shadersOn()) weave();
   }
 
   function teardown() {
@@ -298,6 +521,12 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
     // magnified for 900ms on the way out. Detaching from module state right away
     // also means a pane that comes back inside those 900ms weaves a fresh one.
     const dispose = detachWoven();
+    // The defences are per-PANE. A machine that lost a context or stalled during
+    // one bed gets a clean try at the next one — the alternative is one bad
+    // moment costing the player the good spiral for the rest of the session.
+    releaseLostCanvas();
+    rasterLocked = false;
+    recoveries = 0;
     el.classList.remove('is-on');
     soon(() => {
       dispose();

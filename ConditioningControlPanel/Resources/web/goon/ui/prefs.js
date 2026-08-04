@@ -31,6 +31,15 @@ export const PREF_DEFAULTS = Object.freeze({
    * MUTES one either way — see exec/videos.js.
    */
   skippableVideos: false,
+  /**
+   * The spiral bed is drawn live on the GPU (exec/spiralField.js). ON by default
+   * — it is the good path, and the raster pool it falls back to is a magnified,
+   * dithered GIF. This exists as an ESCAPE HATCH: on 2026-08-04 a session froze
+   * visually while its script kept running (a compositor/GPU stall, no crash),
+   * and the shader pane is the only GPU context the duel owns. Off, exec/spiral.js
+   * takes the raster path from the start and drops any live weave within a second.
+   */
+  shaderSpirals: true,
   /** Last consent terms this player proposed — pre-filled next lobby. */
   matchLengthSec: 720,
   payloadGapSec: 30,
@@ -87,6 +96,10 @@ function coerce(key, value) {
 const REFLECT = Object.freeze({
   /** exec/videos.js reads this to decide whether a window's ✕ is real. */
   skippableVideos: { attr: 'data-gg-vskip', on: 'on', off: 'off' },
+  /** exec/spiral.js reads this to decide whether the bed is a shader or a GIF.
+   *  Note the polarity: absent means ON there (a page with no prefs store still
+   *  gets the good path), so it is the OFF value that carries the meaning. */
+  shaderSpirals: { attr: 'data-gg-shader', on: 'on', off: 'off' },
 });
 
 function reflect(key, value) {

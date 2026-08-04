@@ -2261,6 +2261,117 @@ const audioMod = await import('../ui/audio.js');
   root.removeAttribute(videosMod.SKIP_ATTR);
 }
 
+/* ==========================================================================
+ * SHADER SPIRALS — the freeze escape hatch (2026-08-04).
+ *
+ * On 2026-08-04 a session froze VISUALLY while its script kept running: a
+ * compositor/GPU stall, no crash, no dump. The spiral bed's WebGL pane is the
+ * only GPU context the duel owns and it had gone in hours earlier, so the owner
+ * gets a switch — default ON, because the shader IS the good bed, but reachable
+ * mid-match, because the moment you want it is the moment the picture stopped.
+ *
+ * Same three-part chain as skippable videos, and the same three risks:
+ *   · the pref exists and defaults ON (a hatch that defaults shut is a downgrade
+ *     shipped to everyone);
+ *   · ui/prefs.js mirrors it to <html> at CONSTRUCTION, not just on a toggle;
+ *   · ui/prefs.js and exec/spiral.js name the same attribute — a typo here is a
+ *     switch that does nothing, in a file nobody looks at during a freeze.
+ * Polarity is the one difference from data-gg-vskip, and it is deliberate:
+ * ABSENT means ON there.
+ * ======================================================================== */
+{
+  const prefsMod = await import('../ui/prefs.js');
+  const optionsMod = await import('../ui/options.js');
+  const { S } = await import('../ui/strings.js');
+  const spiralMod = await import('../exec/spiral.js');
+  const root = dom.doc.documentElement;
+  const attrNow = () => root.getAttribute(spiralMod.SHADER_ATTR);
+
+  // ---- the pref
+  ok(prefsMod.PREF_DEFAULTS.shaderSpirals === true,
+    'shaderSpirals is a pref, and it DEFAULTS ON — the raster pool is the floor, not the plan',
+    String(prefsMod.PREF_DEFAULTS.shaderSpirals));
+  ok(typeof prefsMod.PREF_DEFAULTS.shaderSpirals === 'boolean',
+    'a boolean, so a corrupt store coerces to one instead of poisoning the renderer');
+
+  // ---- the mirror, on every door into the store
+  root.removeAttribute(spiralMod.SHADER_ATTR);
+  const prefs = prefsMod.createPrefs({});
+  ok(attrNow() === 'on', 'creating the store writes the attribute immediately', String(attrNow()));
+  ok(prefs.set('shaderSpirals', false) === true && attrNow() === spiralMod.SHADER_OFF,
+    'turning it off moves the attribute exec/spiral.js reads', String(attrNow()));
+  ok(prefs.set('shaderSpirals', true) === true && attrNow() === 'on', 'and on again', String(attrNow()));
+  prefs.merge({ shaderSpirals: false });
+  ok(attrNow() === spiralMod.SHADER_OFF, 'a bulk merge mirrors too', String(attrNow()));
+  prefs.reset();
+  ok(attrNow() === 'on', 'and Reset puts the good bed back', String(attrNow()));
+
+  // ---- a stored FALSE is false from the first frame: the player switched the
+  //      shader off because it froze, and it must not come back on next launch
+  root.removeAttribute(spiralMod.SHADER_ATTR);
+  const seeded = prefsMod.createPrefs({ shaderSpirals: false });
+  ok(seeded.get('shaderSpirals') === false && attrNow() === spiralMod.SHADER_OFF,
+    'a player who switched it off has it off before anything is opened', String(attrNow()));
+
+  // ---- the two files agree on the name AND on the polarity
+  ok(spiralMod.SHADER_ATTR === 'data-gg-shader' && spiralMod.SHADER_OFF === 'off',
+    'ui/prefs.js and exec/spiral.js name the same attribute and the same off value',
+    `${spiralMod.SHADER_ATTR}="${spiralMod.SHADER_OFF}"`);
+  ok(prefsMod.PREF_DEFAULTS.shaderSpirals === true && spiralMod.SHADER_OFF === 'off',
+    'ABSENT means ON: a page that never built a prefs store (a self-test, the import sweep) still gets the shader, and only the exact off value switches it off');
+
+  // ---- the copy
+  ok(typeof S.options.shaderSpirals === 'string' && S.options.shaderSpirals.length > 0,
+    'the drawer has a label for it', String(S.options.shaderSpirals));
+  ok(typeof S.options.shaderSpiralsNote === 'string' && S.options.shaderSpiralsNote.length > 0,
+    'and a line saying what it does', String(S.options.shaderSpiralsNote));
+  ok(/freez/i.test(S.options.shaderSpiralsNote),
+    'which names the SYMPTOM to reach for it for — a hatch nobody can find is not a hatch',
+    S.options.shaderSpiralsNote);
+  ok(/gif|spiral/i.test(S.options.shaderSpiralsNote),
+    'and says what you fall back to, so switching it off does not read as losing the bed',
+    S.options.shaderSpiralsNote);
+
+  // ---- the row, IN a live match (this is a knob about your own screen, and the
+  //      moment you want it is the moment the screen has stopped moving)
+  const live = prefsMod.createPrefs({});
+  const options = optionsMod.createOptions({ prefs: live, session: { hosted: false }, isInMatch: () => true });
+  options.open();
+  await sleep(30);
+  const panel = findOne(dom.byId.get('gg-drawer'), 'gg-panel');
+  ok(!!panel, 'the drawer opened');
+  const rowFor = (label) => findAll(panel, 'gg-panel-row')
+    .find((r) => (r.children[0] || {}).textContent === label) || null;
+  const shaderRow = rowFor(S.options.shaderSpirals);
+  ok(!!shaderRow, 'and carries a Shader spirals row, mid-match, next to the other own-screen knobs');
+  const toggle = shaderRow ? findOne(shaderRow, 'gg-toggle') : null;
+  ok(!!toggle, 'with the house toggle the other switches use');
+  ok(toggle && toggle.getAttribute('aria-pressed') === 'true',
+    'reading ON, because that is the default', String(toggle && toggle.getAttribute('aria-pressed')));
+  const shaderNotes = findAll(panel, 'gg-panel-note').map((p) => p.textContent);
+  ok(shaderNotes.includes(S.options.shaderSpiralsNote), 'the explanation is on screen with it',
+    JSON.stringify(shaderNotes));
+  ok(shaderNotes.includes(S.options.lockedNote),
+    'and the in-match lock note is still there — this row is not one of the locked wire terms');
+
+  // FLIPPING IT REALLY REACHES exec/. Toggle -> prefs -> attribute is the whole
+  // chain, and exec/spiral.js re-reads the attribute once a second from inside
+  // its own render loop, so a bed already spinning is on the far side of it.
+  toggle.dispatchEvent({ type: 'click' });
+  ok(live.get('shaderSpirals') === false, 'clicking it writes the pref');
+  ok(toggle.getAttribute('aria-pressed') === 'false', 'and repaints itself');
+  ok(attrNow() === spiralMod.SHADER_OFF,
+    'and the attribute exec/spiral.js polls moved with it — that is a live shader bed dropping to raster',
+    String(attrNow()));
+  toggle.dispatchEvent({ type: 'click' });
+  ok(live.get('shaderSpirals') === true && attrNow() === 'on',
+    'and back on again, same chain', `${live.get('shaderSpirals')} / ${attrNow()}`);
+
+  options.dispose();
+  await sleep(320);
+  root.removeAttribute(spiralMod.SHADER_ATTR);
+}
+
 await sleep(60);
 console.log(`\nselftest-hud: ${n - failures}/${n} checks passed`);
 if (failures > 0) {

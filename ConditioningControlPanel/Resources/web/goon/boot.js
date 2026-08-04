@@ -50,6 +50,7 @@ import { createToasts } from './ui/toasts.js';
 import { createSheets } from './ui/sheets.js';
 import { createOptions } from './ui/options.js';
 import { createSoloDriver } from './ui/soloDriver.js';
+import { createAssetsStore } from './ui/assetsStore.js';
 import { S } from './ui/strings.js';
 
 import * as titleScreen from './ui/screens/title.js';
@@ -59,6 +60,7 @@ import * as lobbyScreen from './ui/screens/lobby.js';
 import * as draftScreen from './ui/screens/draft.js';
 import * as countdownScreen from './ui/screens/countdown.js';
 import * as recapScreen from './ui/screens/recap.js';
+import * as assetsScreen from './ui/screens/assets.js';
 
 /* --- ERROR SEAMS FIRST: everything after this reports instead of vanishing. */
 if (typeof window !== 'undefined') {
@@ -295,6 +297,7 @@ let options = null;
 let router = null;
 let executor = null;
 let matchLog = null;
+let assets = null;           // ui/assetsStore.js — owns every cache-* bridge verb
 let ctx = null;
 
 /* ---- match/session state. NEVER cached by a screen; always read through ctx. */
@@ -546,6 +549,20 @@ function attachMatch(match, transport) {
   // matchEnded and deliberately NOT cancelled by resultFinalized: the handshake
   // landing says nothing about whether the player can SEE the recap, which is
   // the thing that was broken.
+  // THE COMPRESSION QUEUE YIELDS TO THE DUEL. Two workers transcoding video is
+  // exactly the CPU a live match cannot spare, so the host parks the queue from
+  // Countdown and picks it back up at the Recap. `reason:'match'` is a separate
+  // flag from the user's own pause — a match ending can never resume a queue the
+  // player stopped by hand. Subscribed HERE, inside attachMatch, so the relay
+  // rebuild re-binds it with everything else.
+  const syncQueue = (p) => {
+    try {
+      if (p === GoonMatchPhase.Recap || p === GoonMatchPhase.Idle) assets?.resume?.('match');
+      else if (p >= GoonMatchPhase.Countdown) assets?.pause?.('match');
+    } catch (_e) { /* the queue is never load-bearing for the match */ }
+  };
+  phaseUnsubs.push(match.onPhaseChanged(syncQueue));
+  syncQueue(match.phase);      // a relay REBUILD lands mid-Live and never fires a change
   phaseUnsubs.push(match.onMatchEnded(() => armRecapFallback()));
   phaseUnsubs.push(match.onResultFinalized(() => forceRecap('finalized', false)));
   onPhase(match.phase);
@@ -822,6 +839,8 @@ const actions = {
   goTitle() { router.show('title'); },
   goHost() { router.show('host'); },
   goJoin() { router.show('join'); },
+  /** @param {{filter?:string}} [args] e.g. {filter:'needs'} from a "N need compressing" prompt. */
+  goAssets(args) { router.show('assets', args || null); },
 
   async goPractice() { await startSolo(); },
 
@@ -922,6 +941,10 @@ function buildApp() {
   toasts = createToasts({ prefs });
   sheets = createSheets({ audio, logger });
   matchLog = createMatchLog();
+  // ONE store, built once, and the only thing on the page allowed to register a
+  // cache-* handler (bridge.on throws on a duplicate and the assets screen
+  // mounts many times per session).
+  assets = createAssetsStore({ session, logger });
 
   options = createOptions({
     prefs, audio, session, logger,
@@ -964,7 +987,7 @@ function buildApp() {
   }
 
   ctx = {
-    session, prefs, audio, toasts, sheets, options, matchLog, actions, logger,
+    session, prefs, audio, toasts, sheets, options, matchLog, actions, logger, assets,
     getMatch: () => currentMatch,
     getTransport: () => currentTransport,
     getClock: () => { try { return currentTransport ? currentTransport.clock : null; } catch (_e) { return null; } },
@@ -980,6 +1003,7 @@ function buildApp() {
       draft: draftScreen,
       countdown: countdownScreen,
       recap: recapScreen,
+      assets: assetsScreen,
     },
     ctx,
     logger,
@@ -1136,17 +1160,60 @@ function onKeyUp(e) {
 }
 
 /* ----------------------------------------------------------------------------
- * LIVENESS — a beating rAF posts every ~2s for the host's wedge watchdog. If the
- * main thread locks up, the SILENCE (not this code) is the signal. Hosted only:
- * standalone there is nobody listening and no reason to burn frames.
+ * LIVENESS — and it is TWO different questions, which is the whole point.
+ *
+ * "IS THE SCRIPT ALIVE?" is the beat itself: a plain timer posts every ~2s, and
+ * its SILENCE (not this code) tells the host the main thread wedged.
+ *
+ * "ARE PIXELS STILL MOVING?" is the `paint` counter: a bare rAF loop that does
+ * nothing but ++ a number, stamped onto every beat. One callback per frame, no
+ * work inside it.
+ *
+ * THEY ARE ON SEPARATE CLOCKS ON PURPOSE. The beat used to BE the rAF loop, so
+ * the only failure it could describe was "everything stopped". On 2026-08-04 the
+ * page visually froze with its JS still running — a compositor/GPU stall: live
+ * script, no crash, no dump — and a heartbeat riding frames cannot tell that
+ * apart from a healthy page when the frames themselves are what died. A timer
+ * beat carrying a frame count can: beats arriving + `paint` frozen IS that
+ * stall, and GoonHostService recovers on it (grep "paint stall detected").
+ *
+ * VISIBILITY RIDES ALONG BECAUSE NOT PAINTING IS OFTEN CORRECT. A hidden,
+ * minimized or occluded window stops getting frames by design; alt-tabbing out
+ * of a fullscreen duel must never look like a freeze. The host only counts a
+ * stall while the page reports `vis: 'visible'` — the page states what it knows
+ * and the host decides, instead of the host guessing at window state.
+ *
+ * Hosted only: standalone there is nobody listening and no reason to burn frames.
  * -------------------------------------------------------------------------- */
+const HEARTBEAT_MS = 2000;
+
 function startHeartbeat() {
-  if (!bridge.isHosted || typeof requestAnimationFrame !== 'function') return;
-  let last = 0;
-  (function beat(now) {
-    if (now - last > 2000) { last = now; bridge.send({ type: 'heartbeat', t: now }); }
-    requestAnimationFrame(beat);
-  })(0);
+  if (!bridge.isHosted) return;
+
+  // The paint counter. NOTHING else may go in this callback: it is a liveness
+  // probe, and a probe that does work is a probe that can be the problem.
+  let frames = 0;
+  const painting = typeof requestAnimationFrame === 'function';
+  if (painting) (function frame() { frames++; requestAnimationFrame(frame); })();
+
+  const visibility = () => {
+    try {
+      if (typeof document === 'undefined' || !document) return 'visible';
+      return document.visibilityState || 'visible';
+    } catch (_e) { return 'visible'; }
+  };
+
+  const beat = () => {
+    const msg = { type: 'heartbeat', t: Date.now(), vis: visibility() };
+    // OMITTED, not zeroed, on a host without rAF: a `paint` that can never move
+    // would read to the watchdog as a permanent stall, and "no frame counter" is
+    // a different fact from "no frames".
+    if (painting) msg.paint = frames;
+    try { bridge.send(msg); } catch (_e) { /* the bridge is the host's problem */ }
+  };
+
+  try { setInterval(beat, HEARTBEAT_MS); } catch (_e) { /* no timers, no beat */ }
+  beat();
 }
 
 /* ----------------------------------------------------------------------------

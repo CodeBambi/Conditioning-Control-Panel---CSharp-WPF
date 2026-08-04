@@ -164,9 +164,68 @@ ramps 0.20→0.65. Payload rate: 1 / 30 s, burst 2 (receiver-enforced token buck
   only lower it for a match.
 - Opponent text is length-capped and sanitized ON THE RECEIVER before display.
 - Content resolution is receiver-side only; a client MUST ignore any future field that
-  attempts to name a concrete asset or URL.
+  attempts to name a concrete asset or URL. **The single sanctioned exception is the
+  `xfer:<sha256>` tag namespace (§12): it names content the receiver ALREADY accepted over
+  the mutually-consented media channel — never a URL, never a path, never anything the
+  receiver has not verified byte-for-byte. Unknown tag namespaces are still ignored.**
+
+## 12. Media channel (v1.1 — sender-media transfer)
+
+Optional second data channel carrying the SENDER's own media so the receiver can display it.
+Everything here is additive: a client without it interoperates unchanged.
+
+- **Channel**: label `goon-media`, `negotiated: true, id: 1, ordered: true`, created by BOTH
+  roles immediately after the RTCPeerConnection is constructed (no renegotiation; no
+  `ondatachannel` involvement). A client that cannot create it simply has no media channel.
+  In-band `ondatachannel` with any label other than `goon` MUST be closed and ignored.
+- **Relay exclusion (hard rule)**: media frames exist ONLY on this P2P channel. They MUST
+  never ride the game channel, the relay ring, or the signaling mailbox. On relay fallback
+  the feature is silently absent; payloads fall back to receiver-library resolution.
+- **Gating (all four AND'd)**: `caps.transfer` in hello (build speaks this protocol and will
+  accept offers — a version discriminator, not an entitlement) · `consent.media_transfer`
+  per-side declaration on the consent sheet (means "the sender opts in"; it is NOT part of
+  the sheet-equality fingerprint — adding it there wedges lobbies against older peers) ·
+  the local host's send entitlement (platform concern, not wire) · a live P2P channel.
+- **Frame taxonomy**: a string frame is ONE control JSON `{"t":"xfer_*","v":1,...}`; a binary
+  frame is ONE chunk: 8-byte little-endian header (`uint32 tid`, `uint32 offset`) + up to
+  16376 payload bytes (total ≤ 16384). tid spaces are disjoint by role: host mints odd,
+  guest even.
+- **Verbs**: `xfer_hello {proto, max_artifact_bytes, max_session_bytes, max_concurrent,
+  accepts[]}` (each side, on every channel open; no hello within 3 s → dormant for the match)
+  · `xfer_offer {tid, sha256, bytes, mime, kind, dur_ms?, w?, h?}` · `xfer_accept {tid,
+  from_offset}` · `xfer_decline {tid, why: have|blocked|too_big|bad_mime|busy|quota|off}` ·
+  `xfer_ack {tid, offset}` (every 256 KiB) · `xfer_end {tid, sha256}` · `xfer_done {tid,
+  sha256}` · `xfer_fail {tid, why: hash_mismatch|magic|too_big|store_full|blocked|io}` ·
+  `xfer_cancel {tid, why: peer_gone|match_over|superseded|timeout|user|stray}`.
+- **Receiver offer gate, in order, before any byte flows**: feature off → mime/kind allowlist
+  (`video/mp4`, `video/webm`, `image/png`, `image/jpeg`, `image/gif`, `image/webp`) → sha
+  shape → size (24 MiB artifact / 8 MiB un-transcoded original; 192 MiB per match per
+  direction) → locally-known blocklist → already-have (`decline:'have'` — the cross-session
+  reuse SUCCESS path) → concurrency (1 in / 1 out) → session quota → accept.
+- **Integrity is receiver-side**: the offered sha256 is a claim. The receiver hashes the
+  committed bytes itself and sniffs magic bytes; disagreement with the claimed mime/hash is
+  `xfer_fail` and the sha is refused for the rest of the match. The artifact's identity
+  everywhere (dedupe, cache, blocklist, report) is the sha256 of its bytes.
+- **Resolution**: the attacker MAY attach `tags: ["xfer:<sha256>", ...]` (≤ 3) to `payload`
+  kinds Video and FlashBurst. The receiver resolves each tag against its accepted-artifact
+  store; any miss (not landed, blocked, evicted, kind mismatch) falls back to its own
+  library. Receipts are IDENTICAL either way — the sender never learns whether its media
+  was displayed.
+- **Backpressure/liveness**: sender stops filling above 1 MiB buffered and resumes at
+  256 KiB; no ack progress for 20 s → cancel; offer unanswered for 8 s → cancel; an
+  artifact that cannot plausibly land within 90 s at measured throughput is never offered.
+  Chunks for an unaccepted tid are dropped (≥ 64 strays → `xfer_cancel:'stray'`); bytes
+  past the offered size are refused.
+- **Abuse handling is out-of-band**: `/v2/goon/report` (reporter uploads evidence at report
+  time; the server resolves the accused from its own pair record — the wire never carries
+  either player's account identity) and `/v2/goon/blocked` (sha256 blocklist; checked
+  locally at offer time when known, authoritatively at render time).
 
 ## Changelog
 - v1 (2026-08-03): initial spec, matches Wave-1 (`d0402126`). Open v1.1 candidates:
   `rejected_cost` receipt status; commit-reveal for per-round seeds; abandon = loser vs
   no-result (play-test call).
+- v1.1 (2026-08-04): §12 media channel (sender-media transfer over a second negotiated
+  data channel); `caps.transfer` + `consent.media_transfer` (append-only, absent = false);
+  `payload.tags` `xfer:` namespace for Video/FlashBurst; §11 exception carved for
+  hash-named, receiver-verified transferred content.

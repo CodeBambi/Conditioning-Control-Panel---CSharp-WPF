@@ -404,5 +404,80 @@ function mountRecap(result) {
   m.handle.unmount();
 }
 
+// ============================== 5. the paint-aware heartbeat (the 0804 freeze)
+//
+// THE INCIDENT. 2026-08-04, ~8 minutes into a session: the page froze VISUALLY
+// while its JavaScript kept running. The app process was healthy, panic handling
+// was clean, resource telemetry was flat, GoonHostService's heartbeat watchdog
+// NEVER FIRED because the beats kept arriving, and WebView2 wrote no crash dump
+// because nothing crashed — the GPU process hung. The owner had to double-panic
+// out of a duel that, as far as every liveness check in the product was
+// concerned, was going fine.
+//
+// THE HOLE IT SAT IN. A heartbeat proves the SCRIPT is alive. Nothing proved
+// PIXELS were moving, and those are different questions the moment a compositor
+// stalls. So the beat now carries a frame counter, and the host recovers on
+// "beats arriving, frames frozen, page says it is visible".
+//
+// WHAT THIS BLOCK CAN AND CANNOT DO. It pins the SHAPE on both sides of the wire
+// — the counter is rAF-driven, the beat is not, the visibility field exists, the
+// C# reads the same two field names, the threshold and the greppable log line
+// are there, and the recovery is the SAME Recover() the dead-heartbeat case
+// uses. It cannot run a DispatcherTimer, so "the watchdog actually relaunches
+// after 10s" is not provable from node and is not claimed here.
+{
+  const boot = read('boot.js');
+  const code = stripComments(boot);
+  const beat = (() => {
+    const b = code.slice(code.indexOf('function startHeartbeat('));
+    return b.slice(0, b.indexOf('\n}\n') + 1);
+  })();
+
+  ok(/function startHeartbeat\(/.test(code), 'boot.js still owns the liveness beat');
+  ok(/requestAnimationFrame/.test(beat), 'and it drives a requestAnimationFrame loop');
+  // The counter loop must do NOTHING but count. A probe that does work is a
+  // probe that can be the thing that breaks.
+  const rafLoop = /\(function frame\(\)\s*\{([^}]*)\}\)\(\)/.exec(beat);
+  ok(!!rafLoop, 'the paint counter is a bare rAF loop', String(rafLoop && rafLoop[1]));
+  ok(!!rafLoop && /frames\+\+/.test(rafLoop[1]) && /requestAnimationFrame\(frame\)/.test(rafLoop[1]),
+    'which increments a frame count and re-arms itself, and does nothing else',
+    String(rafLoop && rafLoop[1].replace(/\s+/g, ' ').trim()));
+
+  // THE BEAT AND THE COUNTER ARE ON SEPARATE CLOCKS. This is the whole fix: a
+  // beat that rides rAF cannot report a stalled rAF, because it stalls with it.
+  ok(/setInterval\(\s*beat\s*,/.test(beat),
+    'the beat itself is on a TIMER, not on frames — a heartbeat riding rAF cannot report that rAF stopped');
+  ok(!/requestAnimationFrame\([^)]*\bbeat\b/.test(beat),
+    'and nothing schedules the beat off a frame callback');
+
+  ok(/type:\s*'heartbeat'/.test(beat), 'the beat is still a `heartbeat` message');
+  ok(/msg\.paint\s*=\s*frames/.test(beat), 'stamped with the frame count');
+  ok(/vis:\s*visibility\(\)/.test(beat) && /document\.visibilityState/.test(beat),
+    'and with document.visibilityState — a hidden window legitimately stops painting and must never trip recovery');
+  ok(/if\s*\(painting\)\s*msg\.paint\s*=\s*frames/.test(beat),
+    'a host with no rAF OMITS the counter rather than sending a frozen zero: "no frame counter" is a different fact from "no frames"');
+
+  // ---- the other half of the wire, in C#
+  const hostPath = path.join(ROOT, '..', '..', '..', 'Services', 'GoonGame', 'GoonHostService.cs');
+  ok(fs.existsSync(hostPath), 'the host service is where the page thinks it is', hostPath);
+  const cs = fs.existsSync(hostPath) ? fs.readFileSync(hostPath, 'utf8').replace(/\r\n/g, '\n') : '';
+
+  ok(/o\["paint"\]/.test(cs) && /o\["vis"\]/.test(cs),
+    'the host reads the SAME two field names the page writes — a rename on one side is a watchdog that never fires again');
+  ok(/PaintStallSeconds\s*=\s*10/.test(cs),
+    'the paint-stall threshold is 10s: past any legitimate hitch, far short of how long the owner sat in front of a dead picture');
+  ok(/paint stall detected/.test(cs),
+    'and it logs a distinct, greppable line — this is how the diagnosis gets confirmed the next time it happens');
+  ok(/Recover\("paint-stall"\)/.test(cs),
+    'the new trigger runs the SAME Recover() the dead-heartbeat case does, not a second recovery path');
+  ok(/Recover\("heartbeat-silent"\)/.test(cs), 'and the original trigger is untouched');
+  ok(/_paintStallHandled/.test(cs),
+    'guarded to fire ONCE, like the >20s rule — the tick is 5s and Recover is dispatched async, so an unguarded rule queues several relaunches');
+  ok(/!string\.Equals\(vis, "visible"[\s\S]{0,220}_lastPaintMoveUtc = now;/.test(cs),
+    'a page reporting it is NOT visible resets the stall clock — alt-tabbing out of a fullscreen duel is not a freeze');
+  ok(/if \(paint == null\) return;/.test(cs),
+    'and a beat with no counter at all switches the rule off rather than tripping it');
+}
+
 console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);
 process.exit(failures === 0 ? 0 : 1);

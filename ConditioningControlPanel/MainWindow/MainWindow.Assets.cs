@@ -1492,6 +1492,10 @@ namespace ConditioningControlPanel
             // Clear caches so services pick up new selection
             App.Flash?.ClearFileCache();
             App.Video?.RefreshVideosPath();
+            // The Goon Game transfer cache plans against the ACTIVE pool, so a preset switch is a
+            // re-plan (and the "N assets need compressing" nudge). Never blocks - it schedules.
+            try { Services.Transfer.TransferCompressionService.Instance.OnPresetChanged(preset.Id); }
+            catch (Exception ex) { App.Logger?.Debug("Transfer cache preset hook: {E}", ex.Message); }
 
             // Get actual counts after applying
             var (activeImages, activeVideos) = GetCurrentActiveAssetCounts();

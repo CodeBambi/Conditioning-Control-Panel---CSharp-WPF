@@ -25,8 +25,12 @@ import { parse, serializeForSend } from '../core/wire.js';
 
 const CONNECTED_STATES = [GoonTransportState.ConnectedP2P, GoonTransportState.ConnectedRelay];
 
-/** Fires `fn` for each listener, isolating throws. */
-function emit(listeners, arg, logger, tag, what) {
+/**
+ * Fires `fn` for each listener, isolating throws.
+ * Exported so the subclasses that actually implement a bulk surface (webrtc, loopback) get the
+ * same one-listener-cannot-take-the-others-down discipline without copying it.
+ */
+export function emit(listeners, arg, logger, tag, what) {
   for (const fn of Array.from(listeners)) {
     try { fn(arg); } catch (e) {
       if (logger && logger.error) logger.error(`[${tag}] ${what} listener threw: ${(e && e.message) || e}`);
@@ -92,6 +96,46 @@ export class GoonTransportBase {
     return () => this._stateListeners.delete(fn);
   }
 
+  // ------------------------------------------------------------ bulk (out-of-band binary)
+  //
+  // The media-transfer channel (net/mediaChannel.js) rides a SECOND, out-of-band channel that
+  // bypasses wire.js entirely — 16 KiB binary chunks cannot fit MAX_WIRE_BYTES and must never be
+  // routable over the relay. These six members are the whole seam, and the defaults below are the
+  // honest answer for every transport that cannot carry bulk: relay inherits them unchanged
+  // (a 16 KB/frame HTTP long-poll ring is physically unsuitable, and media must never touch the
+  // server), loopback opts in only for tests, and only webrtcTransport overrides them for real.
+  //
+  // `supportsBulk` exists BECAUSE `isConnected` cannot be used: CONNECTED_STATES above treats
+  // ConnectedP2P and ConnectedRelay identically, so "connected" is true on exactly the transport
+  // that must never see a byte of media.
+
+  /** Can this transport carry bulk binary out-of-band? P2P only, by design. */
+  get supportsBulk() { return false; }
+
+  /**
+   * Hand one bulk frame to the channel. NEVER goes through `send`/`_sendRaw`, so bulk data can
+   * never enter the 128-frame resume buffer (that buffer is sized for ticks).
+   *
+   * The boolean return is load-bearing: `_sendRaw` silently DROPS frames in non-open states, and a
+   * pump that assumes delivery wedges where one that reads `false` retries. Every caller branches.
+   *
+   * @param {ArrayBuffer|string} _data
+   * @returns {boolean} true when the bytes were handed to the channel.
+   */
+  sendBulk(_data) { return false; }
+
+  /** Bytes queued on the bulk channel — the backpressure reading. */
+  get bulkBufferedAmount() { return 0; }
+  /** The low-water mark the channel will report `bufferedamountlow` at. */
+  get bulkLowThreshold() { return 0; }
+
+  /** @returns {() => void} unsubscribe. Delivers string | ArrayBuffer, RAW — no parsing, ever. */
+  onBulkMessage(_fn) { return () => {}; }
+  /** @returns {() => void} unsubscribe. Delivers 'open' | 'closed'. */
+  onBulkStateChanged(_fn) { return () => {}; }
+
+  // ------------------------------------------------------------------ setup
+
   /** Host path: mint an invite, resolve with the code to show the user (null = failure). */
   async createInvite() { throw new Error(`[${this._tag}] createInvite not implemented`); }
 
@@ -137,7 +181,17 @@ export class GoonTransportBase {
     if (this._disposed) return;
 
     const message = parse(json, { logger: this._log, tag: this._tag });
-    if (!message) return;                           // already logged
+    if (!message) {
+      // Belt and braces for the ONE wiring mistake this design can make silently. `parse()` drops
+      // an unknown `t` at INFO, so an `xfer_*` control frame accidentally routed to the GAME
+      // channel (mediaChannel handed the wrong send function, say) would simply vanish and the
+      // transfer would hang with no evidence anywhere. Say so, loudly.
+      if (typeof json === 'string' && json.startsWith('{"t":"xfer_')) {
+        this._warn('An xfer_ control frame arrived on the GAME channel — the media channel is '
+          + 'mis-wired (bulk frames belong on sendBulk/onBulkMessage, never on send()).');
+      }
+      return;                                       // already logged
+    }
 
     // The clock's ping/pong is its own private conversation — the match engine must never see it.
     if (this._clock.tryHandleMessage(message)) return;

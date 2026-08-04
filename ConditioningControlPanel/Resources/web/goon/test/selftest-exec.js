@@ -2862,6 +2862,476 @@ async function main() {
       'dimmed rather than removed, so the window still reads as a little monitor', String(dark && dark[1]));
   }
 
+  /* =========================================================================
+   * THE SPIRAL PANE'S FREEZE DEFENCES (added 2026-08-04, after the incident).
+   *
+   * WHY THIS BLOCK EXISTS. A session froze VISUALLY while its JS kept running:
+   * the app was healthy, the page's heartbeat never stopped, WebView2 wrote no
+   * crash dump — a compositor/GPU stall. The shader spiral bed (exec/spiralField
+   * .js) had gone in hours earlier and is the only GPU context the duel owns, so
+   * it is now droppable four ways, and every one of them must land on the RASTER
+   * bed with its fx.css treatments intact.
+   *
+   * THE STUB GROWS A GPU FOR THIS BLOCK ONLY. Everything above ran with no
+   * canvas and no rAF — which is itself the "machine without WebGL" case, and is
+   * why every check above sees the raster path. Here a fake canvas/context and a
+   * MANUALLY PUMPED rAF are installed (frames only advance when this test says
+   * so, which is what makes a 5-second stall testable in no time at all), and
+   * both are removed again at the end so nothing downstream inherits them.
+   *
+   * WHAT CANNOT BE PINNED HERE: whether a real driver hang delivers
+   * `webglcontextlost` at all. That is the whole reason the polled check and the
+   * frame-gap watchdog exist next to the event listener rather than instead of it.
+   * ======================================================================= */
+  {
+    const SP = await import('../exec/spiral.js');
+
+    // --- the fake GPU ------------------------------------------------------
+    let draws = 0;
+    let drawsWhileDetached = 0;
+    let contexts = 0;
+    let lastGl = null;
+    function fakeGl(el) {
+      let lost = false;
+      const g = {
+        VERTEX_SHADER: 1, FRAGMENT_SHADER: 2, COMPILE_STATUS: 3, LINK_STATUS: 4,
+        ARRAY_BUFFER: 5, STATIC_DRAW: 6, FLOAT: 7, TRIANGLES: 8,
+        createShader: () => ({}), shaderSource() {}, compileShader() {}, deleteShader() {},
+        getShaderParameter: () => true, getShaderInfoLog: () => '',
+        createProgram: () => ({}), attachShader() {}, linkProgram() {}, useProgram() {},
+        getProgramParameter: () => true, getProgramInfoLog: () => '',
+        createBuffer: () => ({}), bindBuffer() {}, bufferData() {},
+        getAttribLocation: () => 0, enableVertexAttribArray() {}, vertexAttribPointer() {},
+        getUniformLocation: () => ({}),
+        uniform1f() {}, uniform2f() {}, uniform3f() {}, uniform3fv() {},
+        viewport() {},
+        drawArrays: () => { draws++; if (!el.isConnected) drawsWhileDetached++; },
+        deleteBuffer() {}, deleteProgram() {},
+        getExtension: () => ({ loseContext() { lost = true; } }),
+        isContextLost: () => lost,
+        getError: () => (lost ? 0x9242 : 0),
+        /** test-only: what a driver reset does behind the page's back */
+        __die() { lost = true; },
+      };
+      return g;
+    }
+    const realCreate = document.createElement;
+    document.createElement = (tag) => {
+      const el = realCreate(tag);
+      if (String(tag).toLowerCase() === 'canvas') {
+        el.width = 0; el.height = 0;
+        el.getContext = () => { contexts++; lastGl = fakeGl(el); return lastGl; };
+      }
+      return el;
+    };
+    let rafQ = [];
+    globalThis.requestAnimationFrame = (fn) => { rafQ.push(fn); return rafQ.length; };
+    globalThis.cancelAnimationFrame = () => {};
+    /** Run every queued frame callback at timestamp `ts`. */
+    const pump = (ts) => { const q = rafQ; rafQ = []; for (const fn of q) fn(ts); };
+    globalThis.devicePixelRatio = 2;
+    globalThis.innerWidth = 3840;
+    globalThis.innerHeight = 2160;
+
+    const spiralLayer = byId.get('gg-fx-spiral');
+    const paneOf = () => spiralLayer.findAll('gg-spiral')[0] || null;
+    const canvasOf = () => {
+      const p = paneOf();
+      return p ? (p.childNodes.find((c) => c.tagName === 'CANVAS') || null) : null;
+    };
+    const inlineOf = (k) => { const p = paneOf(); return p ? p.style.getPropertyValue(k) : '(no pane)'; };
+    /** A pane on a CLEAN layer — the previous one's node lingers 900ms by design. */
+    const fresh = () => {
+      spiralLayer.replaceChildren();
+      rafQ = [];
+      const s = SP.createSpiral({ layers, media: fakeMedia(), audio: { sfx() {} }, logger: quiet });
+      s.start({ element: GoonElement.Spiral, intensity: 0.5, durationMs: 0, elapsedMs: 0 });
+      return s;
+    };
+
+    // ---------------------------------------------- the kill switch, from cold
+    documentElement.setAttribute(SP.SHADER_ATTR, SP.SHADER_OFF);
+    {
+      const sp = fresh();
+      ok(!!paneOf(), 'shaders off: the spiral bed still mounts — the switch costs a renderer, not the effect');
+      ok(!canvasOf(), 'shaders off: and it is the RASTER bed, with no canvas ever created',
+        String(canvasOf() && 'canvas'));
+      ok(inlineOf('filter') === '' && inlineOf('scale') === '' && inlineOf('animation') === '',
+        'shaders off: no inline overrides, so fx.css paints its blur(1.1px) + overscan + spin',
+        `filter="${inlineOf('filter')}" scale="${inlineOf('scale')}"`);
+      ok(String(inlineOf('background-image')).includes('/dtrh/assets/bubbles/effects/spirals/'),
+        'shaders off: and a bundled spiral is what is actually on screen', inlineOf('background-image'));
+      sp.stop();
+    }
+
+    // ------------------------------------------------- the default is the good bed
+    documentElement.removeAttribute(SP.SHADER_ATTR);
+    {
+      const sp = fresh();
+      const cv = canvasOf();
+      ok(!!cv, 'with the attribute ABSENT the pane weaves the shader — a page with no prefs store still gets the good path');
+      ok(inlineOf('scale') === '1' && inlineOf('filter') === 'none' && inlineOf('animation') === 'none',
+        'the woven pane cancels the three raster-only treatments inline',
+        `scale="${inlineOf('scale')}" filter="${inlineOf('filter')}"`);
+      ok(drawsWhileDetached >= 1,
+        'and the FIRST frame is drawn BEFORE the canvas is appended — an alpha:false canvas is opaque black, and appending an undrawn one blinks the bed out',
+        String(drawsWhileDetached));
+
+      // --- the backing-store cap. 3840x2160 at devicePixelRatio 2 would be
+      // 5760x3240 (18.7MP) after the ratio cap alone; the pixel budget pulls it
+      // back to one 4K frame, aspect intact.
+      ok(cv.width * cv.height <= SP.MAX_BACKING_PX,
+        'the backing store stays inside the pixel budget', `${cv.width}x${cv.height}`);
+      ok(cv.width === 3840 && cv.height === 2160,
+        'a 4K window at DPR 2 allocates one 4K frame, not an 8K one', `${cv.width}x${cv.height}`);
+      ok(Math.abs((cv.width / cv.height) - (3840 / 2160)) < 0.01,
+        'and the budget preserves aspect — a squashed spiral is worse than a soft one', String(cv.width / cv.height));
+      sp.stop();
+    }
+
+    // --- the ratio cap on its own, where the budget never bites
+    globalThis.innerWidth = 1280; globalThis.innerHeight = 720; globalThis.devicePixelRatio = 3;
+    {
+      const sp = fresh();
+      const cv = canvasOf();
+      ok(!!cv && cv.width === Math.round(1280 * SP.MAX_DPR) && cv.height === Math.round(720 * SP.MAX_DPR),
+        `devicePixelRatio 3 is capped at MAX_DPR ${SP.MAX_DPR} — the fill cost is per pixel per frame`,
+        cv ? `${cv.width}x${cv.height}` : '(none)');
+      sp.stop();
+    }
+    globalThis.devicePixelRatio = 1;
+
+    // ------------------------------------------- webglcontextlost, at runtime
+    {
+      const sp = fresh();
+      const cv = canvasOf();
+      ok(!!cv, 'woven, ready to lose it');
+      let prevented = false;
+      cv._listeners.get('webglcontextlost')[0]({ type: 'webglcontextlost', preventDefault() { prevented = true; } });
+      ok(prevented,
+        'the loss event is preventDefault()ed — without it the browser never fires webglcontextrestored at all');
+      ok(!canvasOf(), 'and the pane is on the raster bed THAT INSTANT, not after a restore that may never come');
+      ok(inlineOf('scale') === '' && inlineOf('filter') === '' && inlineOf('animation') === '',
+        'ALL THREE inline cancels are handed back — a leftover filter:none would be a magnified, UNBLURRED, still raster',
+        `scale="${inlineOf('scale')}" filter="${inlineOf('filter')}" animation="${inlineOf('animation')}"`);
+      ok(String(inlineOf('background-image')).includes('/dtrh/assets/bubbles/effects/spirals/'),
+        'with the pool image already underneath it — the swap is one property removal', inlineOf('background-image'));
+      ok(cv.width === 1 && cv.height === 1,
+        'the dead canvas is shrunk to 1x1: an antenna for the restore, not a retained backing store',
+        `${cv.width}x${cv.height}`);
+      const before = draws;
+      pump(1000); pump(2000);
+      ok(draws === before, 'and the render loop is over — no frame survives the swap', String(draws - before));
+
+      // --- the lazy re-upgrade
+      cv.fire('webglcontextrestored');
+      const cv2 = canvasOf();
+      ok(!!cv2, 'webglcontextrestored re-upgrades the pane');
+      ok(cv2 !== cv, 'on a FRESH canvas — the 1x1 antenna is never drawn on again');
+      ok((cv._listeners.get('webglcontextrestored') || []).length === 0,
+        'and the antenna stops listening, so nothing keeps the dead node alive');
+
+      // --- the budget. Two recoveries, then the pane stays on raster.
+      cv2.fire('webglcontextlost');
+      cv2.fire('webglcontextrestored');
+      const cv3 = canvasOf();
+      ok(!!cv3, 'a second loss recovers too');
+      cv3.fire('webglcontextlost');
+      ok(!canvasOf(), 'the third loss drops to raster');
+      cv3.fire('webglcontextrestored');
+      ok(!canvasOf(),
+        `and STAYS there — MAX_CONTEXT_RECOVERIES (${SP.MAX_CONTEXT_RECOVERIES}) is a budget, so a driver resetting every few seconds cannot be handed the shader forever`);
+      sp.stop();
+    }
+
+    // --- a restore that arrives after the bed is gone must not resurrect one
+    {
+      const sp = fresh();
+      const cv = canvasOf();
+      cv.fire('webglcontextlost');
+      sp.stop();
+      spiralLayer.replaceChildren();
+      cv.fire('webglcontextrestored');
+      ok(!paneOf() && !canvasOf(),
+        'a restore that lands after the pane is gone weaves nothing — the bed does not come back from the dead');
+    }
+
+    // --- and a NEW pane gets a clean try: the defences are per-pane
+    {
+      const sp = fresh();
+      ok(!!canvasOf(), 'the next spiral bed weaves again — one bad moment does not cost the session its good spiral');
+      sp.stop();
+    }
+
+    // ------------------------------------------ the watchdog: rAF gap > 4s
+    {
+      const sp = fresh();
+      ok(!!canvasOf(), 'woven, loop armed');
+      pump(1000);            // first health check: no frame pair yet
+      pump(2000);            // a healthy 1s gap
+      ok(!!canvasOf(), 'a normal frame cadence is left alone', String(SP.HEALTH_CHECK_MS));
+      pump(2000 + SP.RAF_STALL_MS + 500);
+      ok(!canvasOf(),
+        `frame callbacks more than RAF_STALL_MS (${SP.RAF_STALL_MS}) apart, while the pane believes it is drawing, drop it to raster`);
+      ok(inlineOf('filter') === '', 'landing in the BLURRED raster branch, not a blurless hybrid', inlineOf('filter'));
+      sp.stop();
+    }
+
+    // --- ...but a HIDDEN page is not a stalled one. rAF is suspended by design
+    //     while hidden, so the first frame after a resume carries the whole gap.
+    {
+      const sp = fresh();
+      document.visibilityState = 'hidden';
+      pump(1000);
+      pump(1000 + SP.RAF_STALL_MS + 5000);
+      ok(!!canvasOf(),
+        'a hidden page keeps its shader — not painting is CORRECT there, and a watchdog that fires on correct behaviour gets switched off by the people it protects');
+      delete document.visibilityState;
+      sp.stop();
+    }
+
+    // ------------------------------- the watchdog: a context lost WITHOUT the event
+    {
+      const sp = fresh();
+      ok(!!canvasOf() && !!lastGl, 'woven, with a context to kill');
+      const cv = canvasOf();
+      lastGl.__die();        // a driver reset that never delivers an event
+      pump(1000);
+      pump(2000);
+      ok(!canvasOf(),
+        'a context that went away silently is caught by the once-a-second poll — an event needs an event loop, which is exactly what a stall is eating');
+      ok(cv.width === 1 && cv.height === 1, 'and it takes the same antenna path as the event', `${cv.width}x${cv.height}`);
+      cv.fire('webglcontextrestored');
+      ok(!!canvasOf(), 'so a polled loss can still re-upgrade');
+      sp.stop();
+    }
+
+    // --------------------------------------------------- IDLE DISCIPLINE
+    // An always-running shader loop on an idle match is a perf tax AND a bigger
+    // hang surface. The pane's own generation token is what guarantees this.
+    {
+      const sp = fresh();
+      pump(1000);
+      const before = draws;
+      sp.stop();                       // teardown detaches the weave immediately
+      pump(2000); pump(3000); pump(4000);
+      ok(draws === before,
+        'stopping the element ends the render loop on the spot — an idle match runs no shader frames at all',
+        String(draws - before));
+      ok(rafQ.length === 0, 'and re-arms nothing', String(rafQ.length));
+    }
+
+    // ------------------------------- the kill switch, flipped MID-BED and back
+    {
+      const sp = fresh();
+      ok(!!canvasOf(), 'woven');
+      documentElement.setAttribute(SP.SHADER_ATTR, SP.SHADER_OFF);
+      pump(1000);
+      pump(2000);
+      ok(!canvasOf(),
+        'switching shader spirals off reaches a bed that is ALREADY running, within one health check — that is what makes it an escape hatch during a freeze rather than a setting for next time');
+      ok(inlineOf('filter') === '' && inlineOf('animation') === '',
+        'and the raster bed it lands on is the full fx.css one', `filter="${inlineOf('filter')}"`);
+      documentElement.removeAttribute(SP.SHADER_ATTR);
+      const cancel = sp.renderPayload({ id: 'sp1', duration_ms: 4000, intensity: 0.6 }, () => {});
+      ok(!!canvasOf(),
+        'switching it back on re-weaves at the NEXT CUE, not mid-bed — a bed that snapped from raster to shader under the player would read as a glitch');
+      cancel();
+      sp.stop();
+    }
+
+    // ---------------------------------------------------------------- cleanup
+    spiralLayer.replaceChildren();
+    document.createElement = realCreate;
+    delete globalThis.requestAnimationFrame;
+    delete globalThis.cancelAnimationFrame;
+    delete globalThis.devicePixelRatio;
+    delete globalThis.innerWidth;
+    delete globalThis.innerHeight;
+    documentElement.removeAttribute(SP.SHADER_ATTR);
+    ok(contexts > 0, 'the fake GPU was actually exercised', String(contexts));
+  }
+
+  /* --------- THE MANDATORY VIDEO OWNS THE ROOM (2026-08-04, owner-specced)
+   * "when a mandatory video we trigger is playing we might wanna mute the other
+   * videos." So while the ELEMENT bed is up — the shared ramp's fullscreen video
+   * on #gg-stage — every floating window ducks to silence, and when it ends they
+   * come back exactly as they were.
+   *
+   * THREE THINGS ARE BEING PINNED HERE, and they are all failure modes rather
+   * than features:
+   *   · the duck is a BED-level fact, not a clip-level one. The element chains
+   *     clip after clip; a duck that lifted between them would flicker four
+   *     soundtracks back in for the half-second it takes to load the next;
+   *   · it is an OVERRIDE, not a state change. Mutes and the mic are the
+   *     player's, and the room borrowing the volume must not spend them;
+   *   · it CANNOT STRAND. A flag left up after a mercy, a recap or a bed that
+   *     died on an empty library would silence the next match's windows with no
+   *     symptom to trace it by, so every door out is pinned separately.
+   * ------------------------------------------------------------------------ */
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const host = byId.get('gg-fx-vwin');
+    const stageLayer = byId.get('gg-stage');
+    const V = await import('../exec/videos.js');
+
+    // ---- the resolver first, pure: a THIRD argument, and every old call intact
+    const pool = (k, muted = []) => Array.from({ length: k }, (_x, i) => ({ wid: i + 1, muted: muted.includes(i + 1) }));
+    ok(V.focusedIndexOf(pool(3), 2) === 1 && V.focusedIndexOf(pool(3)) === 2,
+      'the two-argument resolver is bit-for-bit what it was — every focus pin above still means what it said',
+      `${V.focusedIndexOf(pool(3), 2)} / ${V.focusedIndexOf(pool(3))}`);
+    ok(V.focusedIndexOf(pool(3), 2, true) === -1,
+      'ducked, NOBODY speaks — whoever holds the mic, however many are up',
+      String(V.focusedIndexOf(pool(3), 2, true)));
+    ok(V.focusedIndexOf(pool(3), 2, false) === 1 && V.focusedIndexOf(pool(3), 2, undefined) === 1,
+      'and false/undefined are the OLD answer, not a new one: the argument is additive',
+      `${V.focusedIndexOf(pool(3), 2, false)} / ${V.focusedIndexOf(pool(3), 2, undefined)}`);
+    ok(V.focusedIndexOf(pool(3, [2]), 2, true) === -1 && V.focusedIndexOf(pool(3, [2]), 2) === -1,
+      'a muted focus is silence either way — the duck overrules who speaks, never what the player set');
+    ok(V.audioTargets([0.5, 0.5, 0.5], V.focusedIndexOf(pool(3), 2, true)).every((x) => x === 0),
+      'so audioTargets aims the whole pool at zero, and the duck needs no fade code of its own',
+      JSON.stringify(V.audioTargets([0.5, 0.5, 0.5], V.focusedIndexOf(pool(3), 2, true))));
+
+    // ---- and now the wiring, on real nodes
+    const vids = V.createVideos({ layers, media: fakeMedia(), logger: quiet });
+    const A = V.volumeFor(0.5);
+    const vidOf = (nd) => nd.findAll('gg-vwin-vid')[0];
+    const spawn = (id) => {
+      vids.renderPayload({ id, duration_ms: 40000, intensity: 0.5 }, () => {});
+      const all = liveWins(host);
+      return all[all.length - 1];
+    };
+    const bedVid = () => stageLayer.findAll('gg-vid')[0];
+    const anyLive = () => liveWins(host).some((w) => w._cls.has('is-live'));
+    skipOn(false);
+
+    const a = spawn('pD1'), b = spawn('pD2');
+    tap(a, 300, 300);                                  // one window the PLAYER silenced
+    ok(vids.elementAudioActive() === false,
+      'a thrown payload video is a WINDOW, not a bed: renderPayload never ducks the pool',
+      String(vids.elementAudioActive()));
+    ok(vids.focusedIndex() === 1 && JSON.stringify(vids.mutedFlags()) === '[true,false]',
+      'the newest speaks, the muted one does not', `${vids.focusedIndex()} / ${JSON.stringify(vids.mutedFlags())}`);
+    await sleep(560);
+    ok(Math.abs(vidOf(b).volume - A) < 1e-9 && vidOf(a).volume === 0,
+      'and the room is genuinely audible before the bed arrives', `${vidOf(a).volume} / ${vidOf(b).volume}`);
+
+    // ---- THE BED GOES UP
+    vids.start({ element: GoonElement.Videos, intensity: 0.6, durationMs: 0, elapsedMs: 0 });
+    ok(!!bedVid() && vids.elementAudioActive() === true,
+      'the ramp\'s mandatory video mounts on the stage and takes the room with it',
+      `${!!bedVid()} / ${vids.elementAudioActive()}`);
+    ok(vids.liveIndex() === -1, 'nothing in the pool is audible any more', String(vids.liveIndex()));
+    ok(vids.focusedIndex() === 1 && JSON.stringify(vids.mutedFlags()) === '[true,false]',
+      'while UNDERNEATH, the mic and the player\'s mute are untouched — the room borrowed the volume, it did not spend the state',
+      `${vids.focusedIndex()} / ${JSON.stringify(vids.mutedFlags())}`);
+    ok(!anyLive(),
+      'and no window wears .is-live while it is ducked: the pulsing dot means AUDIBLE, so it must go out too',
+      liveWins(host).map((w) => w.className).join(' | '));
+    await sleep(120);
+    ok(vidOf(b).volume > 0 && vidOf(b).volume < A,
+      'it FADES down the existing 300ms ramp — mid-flight here, not cut', `${vidOf(b).volume} of ${A}`);
+    await sleep(400);
+    ok(liveWins(host).every((nd) => vidOf(nd).volume === 0 && vidOf(nd).muted === true),
+      'and lands at zero, muted, every one of them',
+      liveWins(host).map((nd) => vidOf(nd).volume).join(','));
+    ok(bedVid().volume === V.volumeFor(0.6),
+      'the mandatory video itself is untouched — it is the one thing in the room that IS meant to be heard',
+      `${bedVid().volume} / ${V.volumeFor(0.6)}`);
+
+    // ---- CHAINING A CLIP IS NOT A NEW BED. The element plays one clip after
+    // another for as long as the ramp holds it; the duck must not flap with them.
+    const before = bedVid();
+    before.onended();
+    ok(vids.elementAudioActive() === true && vids.liveIndex() === -1,
+      'the bed chaining its next clip does NOT lift the duck for the gap between them',
+      `${vids.elementAudioActive()} / ${vids.liveIndex()}`);
+    await sleep(120);
+    ok(liveWins(host).every((nd) => vidOf(nd).volume === 0),
+      'nothing crept back in on the handover', liveWins(host).map((nd) => vidOf(nd).volume).join(','));
+
+    // ---- A WINDOW THAT ARRIVES MID-BED is born into the duck, mic and all
+    const c = spawn('pD3');
+    ok(vids.focusedIndex() === 2,
+      'it takes the mic exactly like any arrival — spawning is still the loudest touch there is',
+      String(vids.focusedIndex()));
+    ok(vids.liveIndex() === -1 && !anyLive(), 'but it holds a mic nobody can hear yet', String(vids.liveIndex()));
+    await sleep(560);
+    ok(vidOf(c).volume === 0 && vidOf(c).muted === true,
+      'and it stays silent for as long as the bed does', `${vidOf(c).volume} muted=${vidOf(c).muted}`);
+    ok(vids.windowCount() === 3, 'all three of them up, none of them audible', String(vids.windowCount()));
+
+    // ---- THE BED COMES DOWN and the room is handed straight back
+    vids.stop();
+    ok(vids.elementAudioActive() === false, 'the duck lifts with the bed', String(vids.elementAudioActive()));
+    ok(vids.liveIndex() === 2 && vids.liveIndex() === vids.focusedIndex(),
+      'and the mic it was holding all along is the one that speaks — the window spawned MID-DUCK, as promised',
+      `${vids.liveIndex()} / ${vids.focusedIndex()}`);
+    ok(JSON.stringify(vids.mutedFlags()) === '[true,false,false]',
+      'the player\'s click-mute survived the whole thing', JSON.stringify(vids.mutedFlags()));
+    ok(c._cls.has('is-live') && !a._cls.has('is-live') && !b._cls.has('is-live'),
+      'the live light comes back on exactly one window', c.className);
+    await sleep(150);
+    ok(vidOf(c).volume > 0 && vidOf(c).volume < A,
+      'it RAMPS back in on the ordinary 500ms rise, it does not snap', `${vidOf(c).volume} of ${A}`);
+    await sleep(450);
+    ok(Math.abs(vidOf(c).volume - A) < 1e-9 && vidOf(a).volume === 0 && vidOf(b).volume === 0,
+      'and lands at its own level, with the muted one still muted and the rest still quiet',
+      `${vidOf(a).volume} / ${vidOf(b).volume} / ${vidOf(c).volume}`);
+
+    // ---- TEARDOWN RESETS IT. A stranded duck is the one bug here with no
+    // symptom you could trace: the NEXT match's windows would simply never speak.
+    vids.start({ element: GoonElement.Videos, intensity: 0.6, durationMs: 0, elapsedMs: 0 });
+    ok(vids.elementAudioActive() === true && vids.liveIndex() === -1, 'bed up again, room ducked again');
+    ok(vids.stopWindows() === 3, 'mercy sweeps the pool', String(vids.windowCount()));
+    ok(vids.elementAudioActive() === false && vids.windowCount() === 0,
+      'and takes the BED with it: the recap inherits an empty layer and an un-ducked renderer',
+      `${vids.elementAudioActive()} / ${vids.windowCount()}`);
+    const d = spawn('pD4');
+    await sleep(560);
+    ok(Math.abs(vidOf(d).volume - A) < 1e-9 && d._cls.has('is-live') && vids.liveIndex() === 0,
+      'so the very next window speaks — which is the whole reason teardown is pinned separately',
+      `${vidOf(d).volume} / ${vids.liveIndex()}`);
+    vids.stopWindows();
+    await sleep(GHOST_WAIT);
+
+    // ---- A BED THAT DIES ON AN EMPTY LIBRARY never stands the duck up and
+    // walks away from it: begin() settles synchronously, inside start().
+    const dead = V.createVideos({
+      layers, logger: quiet,
+      media: { drawKind: () => null, draw: () => null, acquire: () => null, hasMedia: () => false },
+    });
+    dead.start({ element: GoonElement.Videos, intensity: 0.6, durationMs: 0, elapsedMs: 0 });
+    ok(dead.elementAudioActive() === false,
+      'nothing playable, no bed, no duck — the flag is DERIVED from the live run, never set by hand',
+      String(dead.elementAudioActive()));
+
+    // ---- and the wire, not just the seam: the ramp's own element cue and the
+    // executor's teardown are the two things that move this in a real match.
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet, toyBridge: null });
+    const m = fakeMatch();
+    ex.attach(m);
+    const R = ex.rendererFor(GoonElement.Videos);
+    R.renderPayload({ id: 'pD5', duration_ms: 40000, intensity: 0.5 }, () => {});
+    m.emitStart({ element: GoonElement.Videos, intensity: 0.7, durationMs: 0, elapsedMs: 0 });
+    ok(R.elementAudioActive() === true && R.liveIndex() === -1,
+      'the shared ramp asking for the mandatory video is what ducks the pool in a real match',
+      `${R.elementAudioActive()} / ${R.liveIndex()}`);
+    m.emitStop({ element: GoonElement.Videos, intensity: 0, durationMs: 0, elapsedMs: 0 });
+    ok(R.elementAudioActive() === false && R.liveIndex() === 0,
+      'and the ramp letting it go hands the room back', `${R.elementAudioActive()} / ${R.liveIndex()}`);
+    m.emitStart({ element: GoonElement.Videos, intensity: 0.7, durationMs: 0, elapsedMs: 0 });
+    ok(R.elementAudioActive() === true, 'bed up once more, mid-match');
+    ex.stopAll();
+    ok(R.elementAudioActive() === false && R.windowCount() === 0,
+      'MERCY takes the bed, the windows and the duck in one sweep — nothing survives into the recap',
+      `${R.elementAudioActive()} / ${R.windowCount()}`);
+    ex.detach();
+    await sleep(GHOST_WAIT);
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+  }
+
   console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);
   process.exit(failures === 0 ? 0 : 1);
 }

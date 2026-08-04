@@ -12,6 +12,7 @@ import { GoonFakeSignalingServer } from '../net/fakeSignaling.js';
 import { createLoopbackPair, loopbackOptions, loopbackPresets } from '../net/loopbackTransport.js';
 import { GoonRelayTransport } from '../net/relayTransport.js';
 import { GoonSession } from '../net/session.js';
+import { GoonWebRtcTransport } from '../net/webrtcTransport.js';
 import { GoonTransportState, makeEmote, makeTick } from '../core/contracts.js';
 
 let failures = 0;
@@ -396,6 +397,106 @@ async function testSessionFallback() {
   await busy.leave();
 }
 
+// =========================== 4b. the bulk surface (P2P media transfer, 2026-08-04)
+//
+// The transfer wire rides a SECOND, out-of-band channel. The gate on it is `supportsBulk`, and the
+// whole reason that member exists is section 4 above: a relay fallback REBUILDS the match over a
+// transport that reports `isConnected === true` while being a 16 KB/frame HTTP long-poll ring that
+// media must never touch. `isConnected` would say yes. `supportsBulk` says no, and because it says
+// no the prepick queue goes dormant, no `xfer:` tags are emitted, and the receiver renders from its
+// own library — the silent degradation is the ABSENCE of a special case, which is what is asserted
+// here.
+async function testBulkSurface() {
+  const fake = new GoonFakeSignalingServer();
+  const sig = new GoonSignalingClient({ post: fake.post, unifiedId: 'u_host', logger: quiet });
+  const relay = new GoonRelayTransport({ isHost: true, signaling: sig, logger: quiet, waitMs: 50, minGapMs: 50 });
+
+  ok(relay.supportsBulk === false, 'a fresh relay transport reports supportsBulk false');
+  await relay.createInvite();
+  ok(await until(() => relay.state === GoonTransportState.ConnectedRelay, 3000), 'relay connected');
+  ok(relay.isConnected === true, 'and it IS connected as far as CONNECTED_STATES is concerned');
+  ok(relay.supportsBulk === false, '…but still supportsBulk false — the gate is not isConnected');
+  ok(relay.sendBulk(new ArrayBuffer(16)) === false, 'sendBulk returns FALSE so a caller can branch');
+  ok(relay.bulkBufferedAmount === 0 && relay.bulkLowThreshold === 0, 'and its water marks are zero');
+  ok(typeof relay.onBulkMessage(() => {}) === 'function', 'onBulkMessage still hands back an unsubscribe');
+  ok(typeof relay.onBulkStateChanged(() => {}) === 'function', 'so does onBulkStateChanged');
+  await relay.close();
+  relay.dispose();
+
+  // The webrtc transport is the ONLY one that overrides all six. RTCPeerConnection does not exist
+  // under node, so this asserts the SURFACE (which is what a caller binds to) rather than a live
+  // channel — the browser leg stays a play-test item, exactly as the header of this file says.
+  const p2p = new GoonWebRtcTransport({ isHost: true, signaling: sig, logger: quiet });
+  const proto = Object.getPrototypeOf(p2p);
+  for (const member of ['supportsBulk', 'bulkBufferedAmount', 'bulkLowThreshold']) {
+    const d = Object.getOwnPropertyDescriptor(proto, member);
+    ok(!!d && typeof d.get === 'function', `webrtc overrides the ${member} getter`);
+  }
+  ok(typeof proto.sendBulk === 'function', 'webrtc overrides sendBulk');
+  ok(typeof proto.onBulkMessage === 'function' && typeof proto.onBulkStateChanged === 'function',
+    'webrtc overrides both bulk subscriptions');
+  ok(p2p.supportsBulk === false, 'with no peer connection there is no bulk channel');
+  ok(p2p.sendBulk(new ArrayBuffer(8)) === false, 'and sendBulk says so rather than pretending');
+  ok(p2p.bulkLowThreshold === 262144, 'its low-water mark is BULK_LOW_WATER', String(p2p.bulkLowThreshold));
+  p2p.dispose();
+  sig.dispose();
+
+  // Loopback: OFF by default, because Practice mode runs on this pair and must keep behaving
+  // exactly as it does today.
+  const plain = createLoopbackPair(loopbackOptions(Object.assign(loopbackPresets.instant(), { logger: quiet })));
+  await plain.connect();
+  ok(plain.host.supportsBulk === false, 'a default loopback pair carries no bulk channel (Practice)');
+  ok(plain.host.sendBulk(new ArrayBuffer(8)) === false, 'and refuses bulk with a false');
+  plain.dispose();
+
+  // …and opt-in for the transfer tests.
+  const bulk = createLoopbackPair(loopbackOptions({
+    latencyMs: 0, jitterMs: 0, guestClockSkewMs: 0, bulk: true, logger: quiet,
+  }));
+  const states = [];
+  bulk.host.onBulkStateChanged((s) => states.push(s));
+  const gotBulk = [];
+  const gotGame = [];
+  bulk.guest.onBulkMessage((d) => gotBulk.push(d));
+  bulk.guest.onMessageReceived((m) => gotGame.push(m));
+  await bulk.connect();
+
+  ok(states.length === 1 && states[0] === 'open', 'opting in reports the channel open on connect', states.join(','));
+  ok(bulk.host.supportsBulk === true, 'and supportsBulk flips true');
+  ok(bulk.host.sendBulk(new ArrayBuffer(16384)) === true, 'sendBulk takes a full-size binary frame');
+  ok(await until(() => gotBulk.length === 1, 2000), 'which reaches the peer');
+  ok(gotBulk[0] instanceof ArrayBuffer && gotBulk[0].byteLength === 16384, 'intact and un-parsed',
+    String(gotBulk[0] && gotBulk[0].byteLength));
+  ok(gotGame.length === 0, 'and NEVER surfaces on the game channel — bulk bypasses wire.js entirely');
+
+  bulk.host.sendBulk('{"t":"xfer_hello","v":1}');
+  ok(await until(() => gotBulk.length === 2, 2000), 'a control string rides the same channel');
+  ok(gotBulk[1] === '{"t":"xfer_hello","v":1}', 'raw, exactly as it was written');
+
+  bulk.host.dropBulkChannel();
+  ok(states[states.length - 1] === 'closed', 'a dropped bulk channel is reported');
+  ok(bulk.host.supportsBulk === false, 'and closes the gate');
+  ok(bulk.host.sendBulk(new ArrayBuffer(8)) === false, 'so nothing more is accepted');
+  bulk.dispose();
+
+  // The wiring-mistake detector: an xfer_ control frame on the GAME channel would otherwise vanish
+  // into parse()'s "unknown t" INFO log and the transfer would hang with no evidence anywhere.
+  const warned = [];
+  const spy = { info() {}, warn(m) { warned.push(String(m)); }, error() {} };
+  const probe = createLoopbackPair(loopbackOptions({ latencyMs: 0, jitterMs: 0, guestClockSkewMs: 0, logger: spy }));
+  probe.host.markConnected();
+  probe.guest.markConnected();
+  await probe.host._sendRaw('{"t":"xfer_offer","v":1,"tid":1}');
+  await sleep(60);
+  ok(warned.some((m) => m.includes('xfer_') && m.includes('GAME channel')),
+    'an xfer_ frame on the game channel is logged at WARN', warned.join('|'));
+  warned.length = 0;
+  await probe.host._sendRaw('{"t":"from_the_future","v":1}');
+  await sleep(60);
+  ok(warned.length === 0, 'while an ordinary unknown type stays a quiet INFO drop');
+  probe.dispose();
+}
+
 // ====================================== 5. the tick's `vwin` on a real channel (2026-08-04)
 //
 // APPEND-ONLY WIRE GROWTH, the DraftMsg allowed/confirmed precedent: one optional integer on the
@@ -479,6 +580,7 @@ const main = async () => {
   await testLoopback();
   await testRelayTransport();
   await testSessionFallback();
+  await testBulkSurface();
   await testVwinTick();
 
   console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);

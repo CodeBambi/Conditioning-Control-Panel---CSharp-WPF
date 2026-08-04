@@ -3,9 +3,11 @@
  * Fall's fall-styles.css, re-namespaced to gg-*).
  *
  * TWO MODES, one drawer:
- *   out of a match — volumes, motion, skippable videos, fullscreen, reset;
- *   IN a match     — volumes, motion, skippable videos, fullscreen ONLY, plus
- *                    the line "Match settings are locked once you start."
+ *   out of a match — volumes, motion, skippable videos, shader spirals,
+ *                    fullscreen, reset;
+ *   IN a match     — volumes, motion, skippable videos, shader spirals,
+ *                    fullscreen ONLY, plus the line "Match settings are locked
+ *                    once you start."
  * Everything offered mid-match is a knob about YOUR OWN SCREEN. The locked
  * settings are the ones on the wire.
  *
@@ -131,6 +133,19 @@ export function createOptions({ prefs, audio = null, session = null, setFullscre
     // A sibling, not a child of the row: .gg-panel-row is a label/control pair
     // and a second line inside it would land in the control column.
     body.appendChild(el('p', { class: 'gg-panel-note', text: S.options.skippableNote }));
+
+    /* SHADER SPIRALS — the freeze escape hatch, and it is offered mid-match for
+     * the same reason skippable videos is: the moment a player wants it is the
+     * moment the picture has stopped moving. Default ON (it is the good bed);
+     * off, exec/spiral.js drops to the bundled spiral pool within a second and
+     * stays there for the life of the pane. Same chain as the toggle above —
+     * prefs writes <html data-gg-shader> and exec/ reads it there, because exec/
+     * never imports ui/. */
+    const shaders = toggleRow(S.options.shaderSpirals,
+      () => prefs.get('shaderSpirals'),
+      (v) => prefs.set('shaderSpirals', v));
+    body.appendChild(shaders.node);
+    body.appendChild(el('p', { class: 'gg-panel-note', text: S.options.shaderSpiralsNote }));
 
     if (session && session.hosted && setFullscreen) {
       const fs = toggleRow(S.options.fullscreen,

@@ -164,6 +164,16 @@ export function costOf(kind) {
  * Capability advertisement (sub-object of hello, not a message).
  * NOTE: platform defaults to "web" here, diverging from the C# DTO's "windows" — this binding
  * only ever runs in a browser/WebView, and caps drive the draft/payload intersections.
+ *
+ * `transfer` (2026-08-04) is APPEND-ONLY, the vwin/DraftMsg precedent: "this build speaks the
+ * P2P media-transfer protocol (net/mediaChannel.js) and will ACCEPT offers". It is a VERSION
+ * DISCRIMINATOR, not an entitlement — every build that understands the protocol advertises it
+ * true regardless of what the user pays for, because the premium gate is local and lives on the
+ * SEND side only (session.caps.mediaTransfer).
+ *
+ * ABSENT MEANS FALSE. The C# reference client and any older page omit it; `false` means the
+ * transfer queue never starts, no `xfer:` tags are emitted and that peer sees exactly the wire it
+ * sees today. It enters NO intersection and can never fail a lobby.
  */
 export function makeCaps(o = {}) {
   return {
@@ -172,6 +182,7 @@ export function makeCaps(o = {}) {
     elements: o.elements ?? [],
     rounds: o.rounds ?? [],
     min_v: o.min_v ?? PROTOCOL_VERSION,
+    transfer: o.transfer ?? false,
   };
 }
 
@@ -187,6 +198,21 @@ export function makeHello(o = {}) {
   };
 }
 
+/**
+ * The consent sheet.
+ *
+ * `media_transfer` (2026-08-04) is APPEND-ONLY, the vwin/DraftMsg precedent, and it is NOT a term
+ * of the sheet. ON THE WIRE IT ALWAYS MEANS "THE SENDER OPTS IN", NEVER "THE AGREED VALUE": it is
+ * a PER-SIDE DECLARATION that happens to ride the consent frame, and each client ANDs its own
+ * value with the one it last heard from the peer (core/match.js `mediaTransferAgreed`).
+ *
+ * It is deliberately absent from `sameSheet()` (match.js), which is the sheet FINGERPRINT. A peer
+ * that drops the field — the C# client, an older page — would otherwise echo a sheet that never
+ * compares equal, both sides would clear each other's confirmations forever, and the lobby would
+ * wedge permanently. Read the guard comment on `sameSheet` before touching either.
+ *
+ * ABSENT MEANS FALSE: no declaration is no opt-in.
+ */
 export function makeConsent(o = {}) {
   return {
     t: 'consent',
@@ -195,6 +221,7 @@ export function makeConsent(o = {}) {
     toy_cap: o.toy_cap ?? 0.7,
     payload_min_gap_ms: o.payload_min_gap_ms ?? GoonConsts.PayloadMinGapMs,
     confirmed: o.confirmed ?? false,
+    media_transfer: o.media_transfer ?? false,
   };
 }
 

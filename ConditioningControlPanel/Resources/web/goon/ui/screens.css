@@ -612,6 +612,168 @@
 .gg-title-chip-why { color: var(--gg-text-3); font-size: 0.76rem; }
 
 /* ---------------------------------------------------------------------------
+ * ASSETS (scr-assets) — the compression screen.
+ *
+ * Wider than the other screens on purpose: it is the only one that is a GRID of
+ * the player's own library rather than a card of decisions. Everything else here
+ * is the standard kit (.gg-card, .gg-chip, .gg-row) so it reads as the same
+ * product with no new colours.
+ * ------------------------------------------------------------------------ */
+.gg-assets { min-width: min(58rem, 96vw); max-width: min(58rem, 96vw); text-align: left; }
+.gg-assets--off { text-align: center; }
+.gg-assets-standalone-head { margin: 0.4rem 0 0; font-size: 1.1rem; font-weight: 700; }
+
+.gg-assets-head { text-align: center; }
+.gg-assets-stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4rem; margin-bottom: 0.9rem; }
+.gg-assets-chip { background: rgba(255, 255, 255, 0.06); color: var(--gg-text-2); border-color: rgba(255, 255, 255, 0.12); }
+.gg-assets-chip.is-usage { color: var(--gg-text-1); font-variant-numeric: tabular-nums; }
+.gg-assets-chip.is-bad { background: rgba(255, 143, 176, 0.12); color: #ff8fb0; border-color: rgba(255, 143, 176, 0.38); }
+
+.gg-assets-tools { display: flex; flex-direction: column; gap: 0.5rem; }
+.gg-assets-tools-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.gg-assets-tools-row .gg-btn { font-size: 0.84rem; padding: 0.42rem 1rem; }
+
+.gg-assets-seg {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--gg-radius-pill);
+  border: 1px solid rgba(255, 105, 180, 0.28);
+  background: rgba(12, 6, 20, 0.6);
+}
+.gg-assets-segbtn {
+  font-family: var(--gg-font);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  color: var(--gg-text-3);
+  background: transparent;
+  border: 0;
+  border-radius: var(--gg-radius-pill);
+  padding: 0.3rem 0.75rem;
+  cursor: pointer;
+  transition: background .18s, color .18s;
+}
+.gg-assets-segbtn:hover { color: var(--gg-text-1); }
+.gg-assets-segbtn[aria-pressed="true"] { background: rgba(255, 105, 180, 0.2); color: var(--gg-text); }
+
+.gg-assets-search {
+  flex: 1 1 10rem;
+  min-width: 8rem;
+  font-family: var(--gg-font);
+  font-size: 0.82rem;
+  color: var(--gg-text);
+  background: rgba(12, 6, 20, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--gg-radius-pill);
+  padding: 0.36rem 0.85rem;
+}
+.gg-assets-search:focus { outline: none; border-color: var(--gg-pink); }
+
+.gg-assets-eta {
+  margin: 0.7rem 0 0;
+  font-size: 0.78rem;
+  color: var(--gg-text-3);
+  font-variant-numeric: tabular-nums;
+}
+.gg-assets-notice { margin: 0.3rem 0 0; font-size: 0.78rem; color: var(--gg-gold); }
+.gg-assets-empty { margin: 1.2rem 0; text-align: center; font-size: 0.84rem; color: var(--gg-text-4); }
+
+.gg-assets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 0.6rem;
+  margin: 0.9rem 0 0;
+}
+.gg-assets-sentinel { height: 1px; }
+.gg-assets-more { display: block; margin: 0.8rem auto 0; }
+
+.gg-asset {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.4rem;
+  border-radius: var(--gg-radius-plate);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+.gg-asset-media {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: 10px;
+  overflow: hidden;
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.035) 0 8px, rgba(255, 255, 255, 0.015) 8px 16px);
+  display: flex; align-items: center; justify-content: center;
+}
+.gg-asset-img, .gg-asset-vid { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gg-asset-name {
+  font-size: 0.68rem;
+  color: var(--gg-text-2);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gg-asset-badge {
+  align-self: flex-start;
+  padding: 0.08rem 0.45rem;
+  border-radius: var(--gg-radius-pill);
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+  color: var(--gg-text-3);
+  background: rgba(255, 255, 255, 0.06);
+}
+.gg-asset-acts { display: flex; gap: 0.3rem; }
+.gg-asset-act {
+  font-family: var(--gg-font);
+  font-size: 0.66rem;
+  color: var(--gg-text-3);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--gg-radius-pill);
+  padding: 0.14rem 0.5rem;
+  cursor: pointer;
+}
+.gg-asset-act:hover { color: var(--gg-text); border-color: var(--gg-pink); }
+
+/* STATE — a word on the tile AND a colour, never the colour alone. */
+.gg-asset[data-state="pending"] .gg-asset-media,
+.gg-asset[data-state="queued"] .gg-asset-media { filter: grayscale(1); opacity: 0.55; }
+.gg-asset[data-state="working"] { border-color: rgba(255, 105, 180, 0.45); }
+.gg-asset[data-state="working"] .gg-asset-media { filter: grayscale(1); opacity: 0.7; }
+.gg-asset[data-state="working"] .gg-asset-badge { color: var(--gg-pink); background: rgba(255, 105, 180, 0.14); }
+.gg-asset[data-state="ready"] .gg-asset-badge { color: #8ce0b0; background: rgba(140, 224, 176, 0.12); }
+.gg-asset[data-state="failed"] { border-color: rgba(255, 143, 176, 0.4); }
+.gg-asset[data-state="failed"] .gg-asset-badge { color: #ff8fb0; background: rgba(255, 143, 176, 0.12); }
+.gg-asset[data-state="exempt"] .gg-asset-badge { color: var(--gg-gold); background: rgba(255, 212, 94, 0.12); }
+.gg-asset.is-clicktoplay .gg-asset-media { cursor: pointer; }
+
+/* THE PROGRESS RING IS INFORMATION, NOT CHROME.
+   Nothing in it is a CSS animation — ui/screens/assets.js writes
+   stroke-dashoffset itself — but it re-declares --gg-deco-play: running for the
+   same reason .gg-mon-proj does: the moment three effects are live, goon.css
+   flips the page to `paused`, and any flourish added inside this rect later
+   would silently freeze exactly while the work it reports is happening. */
+.gg-asset-ring {
+  --gg-deco-play: running;
+  position: absolute;
+  inset: auto 0.3rem 0.3rem auto;
+  width: 30px; height: 30px;
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+.gg-asset-ring-track { fill: none; stroke: rgba(255, 255, 255, 0.14); stroke-width: 3; }
+.gg-asset-ring-value { fill: none; stroke: var(--gg-pink); stroke-width: 3; stroke-linecap: round; }
+.gg-asset[data-state="ready"] .gg-asset-ring,
+.gg-asset[data-state="exempt"] .gg-asset-ring,
+.gg-asset[data-state="pending"] .gg-asset-ring { display: none; }
+
+.gg-assets-foot { margin-top: 1.1rem; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 0.8rem; }
+.gg-assets-cap input[type="range"] { accent-color: var(--gg-pink); flex: 1 1 12rem; }
+.gg-assets-note { margin: 0.5rem 0 0; font-size: 0.72rem; color: var(--gg-text-4); line-height: 1.6; }
+.gg-assets-foot-actions { display: flex; justify-content: center; gap: 0.6rem; margin-top: 0.9rem; }
+
+/* ---------------------------------------------------------------------------
  * SHEETS (#gg-modal, z70)
  * ------------------------------------------------------------------------ */
 .gg-sheet-dock {
@@ -741,4 +903,7 @@ html[data-gg-motion="reduced"] .gg-draft.is-sealed::after { display: none; }
   .gg-draft-foot { flex-direction: column; align-items: stretch; }
   .gg-count-names { top: 8%; padding: 0 1rem; }
   .gg-plrow--out { flex-direction: row; text-align: left; }
+  .gg-assets { min-width: 0; max-width: 96vw; }
+  .gg-assets-grid { grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr)); }
+  .gg-assets-search { flex-basis: 100%; }
 }

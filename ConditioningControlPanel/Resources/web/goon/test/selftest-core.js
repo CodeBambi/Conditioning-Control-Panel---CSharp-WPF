@@ -375,6 +375,174 @@ const quiet = { info() {}, warn() {}, error() {}, log() {} };
   ok(match.setLocalWindowCount(0) === false, 'a disposed match takes nothing at all');
 }
 
+// ------------------------------------ P2P media transfer: caps.transfer + consent.media_transfer
+//
+// Two append-only fields and one trap. `caps.transfer` says a peer's BUILD speaks the transfer
+// protocol; `consent.media_transfer` is a PER-SIDE DECLARATION that rides the consent frame and is
+// deliberately NOT part of the sheet fingerprint.
+//
+// THE WEDGE TEST is the reason that last sentence exists. `sameSheet()` decides whether an inbound
+// consent frame is "the same terms" or a counter-proposal, and a counter-proposal clears BOTH
+// confirmations. If the fingerprint learned about `media_transfer`, every peer that drops the field
+// — the C# reference client, any older page — would echo a sheet that can never compare equal, the
+// two sides would clear each other's confirmations forever, and the lobby would wedge with no way
+// out. So: the field round-trips, the field is absent-means-false, our own value survives their
+// echo, and consent still CONVERGES against a peer that has never heard of it.
+{
+  const { makeCaps, makeConsent, makeHello, GoonMatchPhase } = await import('../core/contracts.js');
+  const { GoonMatchService } = await import('../core/match.js');
+
+  // --- the two fields, through serialize/parse -------------------------------------------
+  ok(makeCaps().transfer === false, 'caps.transfer defaults to false — no claim is no support');
+  ok(makeCaps({ transfer: true }).transfer === true, 'and carries an explicit true');
+  ok(localCaps().transfer === false,
+    'caps.local() leaves it to the caller (boot.js sets it; a headless caller stays a "legacy" peer)');
+  ok(localCaps({ transfer: true }).transfer === true, 'and passes an override straight through');
+
+  const hello = parse(serialize(makeHello({ caps: localCaps({ transfer: true }) })));
+  ok(hello.caps.transfer === true, 'caps.transfer survives a full hello round trip');
+  ok(parse('{"t":"hello","v":1,"caps":{"platform":"windows","min_v":1}}').caps.transfer === false,
+    'a hello whose caps never mention it reads false, never undefined');
+  ok(parse('{"t":"hello","v":1}').caps.transfer === false, 'a hello with NO caps at all reads false too');
+
+  ok(makeConsent().media_transfer === false, 'consent.media_transfer defaults to false');
+  ok(parse(serialize(makeConsent({ media_transfer: true }))).media_transfer === true, 'and round-trips');
+  const legacySheet = parse('{"t":"consent","v":1,"live_duration_sec":600,"toy_cap":0.5,'
+    + '"payload_min_gap_ms":30000,"confirmed":true}');
+  ok(legacySheet.media_transfer === false, 'a consent frame WITHOUT the field parses to false');
+
+  // --- the pinned wire forms ---------------------------------------------------------------
+  // Pinned literally, because these bytes are a cross-client contract. `tags` is the point of
+  // comparison: it defaults to NULL, stripNulls drops it, and a client that never sets it puts
+  // BYTE-IDENTICAL bytes on the wire — which is what keeps the payload path unchanged. The two new
+  // members are booleans, so they DO ride along as `false` (the `vwin` precedent: append-only,
+  // absent-means-default, and an unknown-member-ignoring reader on the far side).
+  ok(serialize(makeConsent()) === '{"t":"consent","v":1,"live_duration_sec":720,"toy_cap":0.7,'
+    + '"payload_min_gap_ms":30000,"confirmed":false,"media_transfer":false}',
+    'a default consent frame serializes exactly as pinned', serialize(makeConsent()));
+  ok(JSON.stringify(makeCaps()) === '{"platform":"web","payloads":[],"elements":[],"rounds":[],'
+    + '"min_v":1,"transfer":false}',
+    'and a default caps object', JSON.stringify(makeCaps()));
+  ok(serialize(makePayload({ id: 'x1' })) === '{"t":"payload","v":1,"id":"x1","kind":0,'
+    + '"fire_at_match_ms":0,"duration_ms":0,"voice":false,"intensity":0}',
+    'a payload that never sets tags is byte-identical to before (stripNulls drops the null)',
+    serialize(makePayload({ id: 'x1' })));
+  ok(!serialize(makePayload({ id: 'x1', tags: null })).includes('tags'), 'an explicit null tags is dropped');
+  ok(serialize(makePayload({ id: 'x1', tags: ['xfer:abc'] })).includes('"tags":["xfer:abc"]'),
+    'and a real tag list rides');
+
+  // --- peerSupportsTransfer comes off the hello and can never fail a lobby -----------------
+  const mkMatch = () => new GoonMatchService({
+    send() { return Promise.resolve(true); },
+    onMessageReceived() { return () => {}; },
+    onStateChanged() { return () => {}; },
+  }, true, { logger: quiet, tag: 'GG:xfer' });
+
+  {
+    const m = mkMatch();
+    ok(m.peerSupportsTransfer === false, 'a fresh match assumes the peer does NOT transfer');
+    m._phase = GoonMatchPhase.Lobby;
+    m._handleHello(makeHello({ caps: localCaps({ transfer: true }) }));
+    ok(m.peerSupportsTransfer === true, 'a hello advertising it flips the flag');
+    ok(m.lobbyFailureReason === null, 'and nothing about it can fail a lobby');
+    ok(m.availableDraftPool.length === PoolV1.length, 'it enters NO intersection');
+    m.dispose();
+
+    const old = mkMatch();
+    old._phase = GoonMatchPhase.Lobby;
+    old._handleHello(parse('{"t":"hello","v":1,"caps":{"platform":"windows","payloads":[0,3],'
+      + '"elements":[0,1,2,3,4,5,6,7,8],"rounds":[2],"min_v":1}}'));
+    ok(old.peerSupportsTransfer === false, 'a C#-shaped hello leaves it false');
+    ok(old.lobbyFailureReason === null, 'and that lobby is perfectly healthy');
+    old.dispose();
+  }
+
+  // --- the toggle clears both confirmations, by hand ---------------------------------------
+  {
+    const m = mkMatch();
+    m._phase = GoonMatchPhase.Consent;
+    m.proposeConsent(600, 0.5, 30000);
+    m._localConsentConfirmed = true;
+    m._remoteConsentConfirmed = true;
+
+    ok(m.setMediaTransfer(true) === true, 'setMediaTransfer is taken in Consent');
+    ok(m.localMediaTransfer === true, 'the local flag is set');
+    ok(m.localConsentConfirmed === false && m.remoteConsentConfirmed === false,
+      'and BOTH confirmations were cleared — the rule every other term lives by');
+    ok(m.consentSheet.media_transfer === true, 'the re-sent sheet carries the declaration');
+    ok(m.consentSheet.live_duration_sec === 600 && m.consentSheet.toy_cap === 0.5,
+      'while the actual terms are untouched');
+
+    m._phase = GoonMatchPhase.Draft;
+    ok(m.setMediaTransfer(false) === false, 'and it is refused once the lobby is over');
+    ok(m.localMediaTransfer === true, 'with nothing changed');
+    m.dispose();
+  }
+
+  // --- THE WEDGE TEST ----------------------------------------------------------------------
+  {
+    const m = mkMatch();
+    m._phase = GoonMatchPhase.Lobby;
+    m._handleHello(makeHello({ caps: localCaps({ transfer: true }) }));   // -> Consent
+    m.proposeConsent(600, 0.5, 30000);
+    m.setMediaTransfer(true);
+    m.confirmConsent();
+    ok(m.localConsentConfirmed === true, 'we signed the sheet with our opt-in on it');
+
+    // Their echo: the SAME terms, signed — and no `media_transfer` member at all.
+    m._handleConsent(parse('{"t":"consent","v":1,"live_duration_sec":600,"toy_cap":0.5,'
+      + '"payload_min_gap_ms":30000,"confirmed":true}'));
+
+    ok(m.phase === GoonMatchPhase.Draft,
+      'CONSENT CONVERGED against a peer that has never heard of the field — no wedge', String(m.phase));
+    ok(m.remoteMediaTransfer === false, 'their absent declaration reads as "they did not opt in"');
+    ok(m.localMediaTransfer === true, 'and OUR opt-in survived their echo untouched');
+    ok(m.consentSheet.media_transfer === true, 'as does the copy on our own sheet');
+    ok(m.mediaTransferAgreed === false, 'so nothing is agreed — the feature simply never starts');
+    m.dispose();
+  }
+
+  // --- a counter-proposal must not flip our own opt-in (cloneSheet keeps the LOCAL value) --
+  {
+    const m = mkMatch();
+    m._phase = GoonMatchPhase.Lobby;
+    m._handleHello(makeHello({ caps: localCaps({ transfer: true }) }));
+    m.proposeConsent(600, 0.5, 30000);
+    m.setMediaTransfer(true);
+
+    // Different terms AND an explicit opt-OUT from them.
+    m._handleConsent(parse('{"t":"consent","v":1,"live_duration_sec":900,"toy_cap":0.4,'
+      + '"payload_min_gap_ms":30000,"confirmed":false,"media_transfer":false}'));
+    ok(m.consentSheet.live_duration_sec === 900, 'the counter-proposal was adopted');
+    ok(m.localMediaTransfer === true && m.consentSheet.media_transfer === true,
+      'but adopting their sheet did NOT adopt their opt-out');
+    ok(m.remoteMediaTransfer === false, 'their declaration is recorded as theirs');
+    ok(m.localConsentConfirmed === false, 'and both signatures cleared, as a counter-proposal must');
+
+    // Now they opt in on the settled terms: the declaration is read on the SAME-sheet branch too.
+    m.confirmConsent();
+    m._handleConsent(parse('{"t":"consent","v":1,"live_duration_sec":900,"toy_cap":0.4,'
+      + '"payload_min_gap_ms":30000,"confirmed":true,"media_transfer":true}'));
+    ok(m.remoteMediaTransfer === true, 'the same-sheet branch reads it as well');
+    ok(m.mediaTransferAgreed === true, 'both sides + a build that speaks it = agreed');
+    m.dispose();
+  }
+
+  // --- all three inputs are required --------------------------------------------------------
+  {
+    const m = mkMatch();
+    m._phase = GoonMatchPhase.Consent;
+    m.setMediaTransfer(true);
+    m._remoteMediaTransfer = true;
+    ok(m.mediaTransferAgreed === false, 'both opt-ins but an old build -> not agreed');
+    m._peerSupportsTransfer = true;
+    ok(m.mediaTransferAgreed === true, '…and a build that speaks it -> agreed');
+    m.setMediaTransfer(false);
+    ok(m.mediaTransferAgreed === false, 'withdrawing ours turns it off immediately');
+    m.dispose();
+  }
+}
+
 // ------------------------------------------------------------------ clock + scheduler
 const main = async () => {
   // Loopback pair with a fake 5000 ms skew on the guest: sync must converge back to ~0 error.

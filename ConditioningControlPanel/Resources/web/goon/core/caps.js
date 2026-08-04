@@ -29,6 +29,12 @@ export function local(overrides = {}) {
     elements: overrides.elements ?? PoolV1.slice(),
     rounds: overrides.rounds ?? ALL_ROUNDS.slice(),
     min_v: overrides.min_v ?? GoonConsts.ProtocolVersion,
+    // Passed straight through (the `platform` precedent) so makeCaps owns the default. This one is
+    // NOT a set and takes part in NO intersection: it is the version discriminator for the P2P
+    // media-transfer protocol, and the caller decides it — boot.js advertises it true for every
+    // build that ships net/mediaChannel.js, while a headless/test caller that omits it stays false
+    // and behaves exactly like a client that predates the feature.
+    transfer: overrides.transfer,
   });
 }
 

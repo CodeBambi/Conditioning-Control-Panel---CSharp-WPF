@@ -84,6 +84,24 @@ const HOLD_SPREAD_MS = 400;          // ± this across the intensity range (4600
 const POP_OUT_MS = 220;              // the dismissed flash's quick pop-out (fx.css ggFlashPop)
 const HATCH_MS = [70, 210];          // children hatch staggered, never on one frame
 
+/* P2P media transfer: how many of a burst's flashes may be the SENDER's own files.
+ * MIRRORS net/mediaChannel.js XFER_TAGS_MAX and is kept local on purpose — exec/
+ * never imports net/, so the render tier stays independent of the wire tier. */
+export const XFER_TAGS_MAX = 3;
+
+/** The `xfer:` tags off a payload, cleaned and capped. [] for every other payload. */
+function xferTags(payload) {
+  const tags = (payload && Array.isArray(payload.tags)) ? payload.tags : null;
+  if (!tags) return [];
+  const out = [];
+  for (const t of tags) {
+    if (typeof t !== 'string' || !t.startsWith('xfer:')) continue;
+    out.push(t);
+    if (out.length >= XFER_TAGS_MAX) break;
+  }
+  return out;
+}
+
 /* The scatter box, in vw/vh — payloadFx's numbers. Children are placed radially
    off their parent inside the same box. */
 const X_MIN = 14, X_SPAN = 72;
@@ -559,16 +577,22 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
    * One scattered flash: draw -> place -> animate -> retire.
    * `opts` = {gen, nearX, nearY, size} when this one hatched from a click; the
    * parent hands down an absolute size, already tapered off whatever IT was.
+   * `run` is the burst/sustained run this flash belongs to, and it is how a
+   * PAYLOAD burst spends its `xfer:` tags — see takeTag.
    * THE ONE PLACE the cap is enforced — every spawn path lands here.
    */
-  function showOne(tune, opts) {
+  function showOne(tune, opts, run) {
     prune();
     const host = layer();
     if (!host || typeof document === 'undefined') return;
     if (live.size >= MAX_LIVE) return;
     if (!media || typeof media.drawKind !== 'function') return;
 
-    const entry = media.drawKind('image');   // media.js kinds are image|video; GIFs ride as images
+    // media.js kinds are image|video; GIFs ride as images.
+    const drawWith = takeTag(run);
+    const entry = (typeof media.drawFor === 'function')
+      ? media.drawFor('image', drawWith)
+      : media.drawKind('image');
     if (!entry) return;
     const handle = (typeof media.acquire === 'function') ? media.acquire(entry) : null;
     if (!handle || !handle.url) return;
@@ -641,6 +665,23 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
     rec.safety = soon(kill, tune.holdMs + 600);
   }
 
+  /**
+   * Spend ONE of the burst's transferred artifacts, or return null for "draw from
+   * our own library" (the overwhelmingly common answer).
+   *
+   * A burst shows dozens of images; the first XFER_TAGS_MAX of them may be the
+   * SENDER's, which is what gives the "that is THEIR picture" moment without
+   * spending queue depth on 30 files. Each tag is consumed exactly ONCE — the
+   * queue is shallow and a repeated file reads as a bug, not as emphasis.
+   *
+   * Only a PAYLOAD run ever carries tags: the sustained bed's run has none, hatched
+   * children pass no run at all, and both therefore behave exactly as they did.
+   */
+  function takeTag(run) {
+    if (!run || !Array.isArray(run.tags) || !run.tags.length) return null;
+    return { tags: [run.tags.shift()] };
+  }
+
   /** Pop it out and free its slot. The pop-out animation replaces the fade. */
   function dismiss(rec) {
     if (rec.popped) return;
@@ -688,11 +729,11 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
    *  The stagger re-checks `run.alive`, so stop()/cancel() means stop spawning —
    *  a half-landed beat can no longer trail nodes in behind a stopped element. */
   function beat(tune, run) {
-    showOne(tune);
+    showOne(tune, null, run);
     // A fixed stagger, not a fraction of holdMs: at a 5s lifetime a proportional
     // stagger would drift the second flash of a beat most of a second late.
     for (let i = 1; i < tune.count; i++) {
-      soon(() => { if (!run || run.alive) showOne(tune); }, 150 * i + Math.round(rand(0, 120)));
+      soon(() => { if (!run || run.alive) showOne(tune, null, run); }, 150 * i + Math.round(rand(0, 120)));
     }
   }
 
@@ -746,7 +787,14 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
       // The engine clamps duration_ms to >= 1000; a burst is a squall, not a bed.
       const runMs = Math.min(8000, Math.max(3000, (p.duration_ms | 0) || 5000));
 
-      const run = { alive: true, intensity: Math.max(0.55, intensity), timer: 0, endTimer: 0 };
+      const run = {
+        alive: true, intensity: Math.max(0.55, intensity), timer: 0, endTimer: 0,
+        // Up to XFER_TAGS_MAX artifacts the sender transferred, consumed one per
+        // flash by takeTag and then gone. Empty for every payload that carries no
+        // tags, which is every payload before this feature and every payload on a
+        // relayed connection.
+        tags: xferTags(payload),
+      };
       let finished = false;
       const settle = (endured) => {
         if (finished) return;
