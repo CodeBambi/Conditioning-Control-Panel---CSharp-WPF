@@ -61,6 +61,11 @@ export function mount(container, ctx) {
     note: S.title.practiceNote,
   });
   item(S.title.assets, () => actions.goAssets());
+  /* THE VOICE LIBRARY. Its own menu item rather than a corner of Options,
+   * because it is a place you MAKE something (like Assets), not a switch you
+   * flip — and because the opt-in behind it is a consent decision that deserves
+   * a screen of its own rather than a row in a drawer. */
+  item(S.voice.menu, () => actions.goVoice(), { note: S.voice.menuNote });
   item(S.title.options, () => ctx.options?.open?.());
   item(S.title.how, () => showHowItWorks(), { variant: 'ghost' });
   if (session.hosted) item(S.title.quit, () => actions.quit('title'), { variant: 'ghost', sfx: 'ui-back' });

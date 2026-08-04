@@ -2,17 +2,26 @@
  * ui/audio.js — the sound bus. REAL as of the sfx pass.
  *
  *   ┌──────────────────────────────────────────────────────────────────────┐
- *   │ ONE WebAudio graph, five gain nodes:                                  │
+ *   │ ONE WebAudio graph, six gain nodes:                                   │
  *   │     cue -> perCueGain(trim) -> uiBus   -\                             │
  *   │                                gameBus --\                            │
  *   │                                musicBus ---> masterBus -> destination │
  *   │                                droneBus -/                            │
+ *   │                                voiceBus /                             │
  *   │ `sfx(id)` looks the id up in SFX_REGISTRY, lazily fetch+decodes its    │
  *   │ mp3 variants, and plays ONE of them through the pool. An UNKNOWN id is │
  *   │ a dev-time warning through the logger, never a silent fallback tone.   │
  *   │ Nothing here can throw and nothing here blocks, so no screen has to    │
  *   │ branch on "is audio real" — every call site stayed exactly as it was.  │
  *   └──────────────────────────────────────────────────────────────────────┘
+ *
+ * THE VOICE BUS is the sixth, and it carries something none of the others do:
+ * ANOTHER PERSON'S ACTUAL VOICE (the voice-note feature — a duel partner holds a
+ * mic button and ten seconds of them arrives here). It gets its own node for the
+ * blunt reason that a player must be able to turn THAT down without turning the
+ * match down, and it hangs under masterBus like everything else so the master is
+ * still the one switch that takes the room quiet. See playVoiceNote() for the
+ * ceilings — nothing that arrives on this bus is trusted about its own length.
  *
  * ONE SLIDER PER NODE, AND EACH APPLIED EXACTLY ONCE. The per-cue gain carries
  * the cue's own trim and the house trim and NOTHING ELSE; the player's sliders
@@ -264,6 +273,29 @@ export const UNLOCK_EVENTS = Object.freeze(['pointerdown', 'keydown', 'touchstar
  *  so this is only there to stop a click mid-pop, not to make a musical fade. */
 export const BUS_GLIDE_SEC = 0.08;
 
+/* ----------------------------------------------------------------------------
+ * VOICE NOTES — the three numbers this tier enforces, exported so the sender,
+ * the receiver and the self-tests all read the SAME ones.
+ * -------------------------------------------------------------------------- */
+/**
+ * The hard stop, in ms. Recording is capped at 10 000 by the recorder; this is
+ * 500 ms of slack over that and it is a CEILING ON PLAYBACK, not a duplicate of
+ * the record cap: the blob arrives from another machine, its declared duration
+ * is untrusted, and a container that claims ten seconds and holds ninety must
+ * not be able to hold this bus open. Whatever is still playing at 10 500 is cut.
+ */
+export const VOICE_MAX_PLAY_MS = 10_500;
+/**
+ * How many notes may exist in this tier at once — one PLAYING plus one WAITING.
+ * Excess is DROPPED, never queued: a third note would land somewhere between six
+ * and twenty seconds after it was spoken, by which point it is not a message any
+ * more. Same principle as the cue pool's steal-the-oldest, opposite direction:
+ * for a voice the FIRST one is the one that was addressed to this moment.
+ */
+export const VOICE_QUEUE_MAX = 2;
+/** Fade applied when a note is hard-stopped, so the cut is not a click. */
+export const VOICE_STOP_FADE_SEC = 0.04;
+
 const LOG_BUDGET = 40;   // enough to see the shape of a session, not enough to spam
 
 /** No-repeat-last pick over an array. Pure (rnd injectable for the tests). */
@@ -328,12 +360,14 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
     game: prefs ? prefs.get('gameVolume') : 0.85,
     drone: prefs ? prefs.get('droneVolume') : 0.5,
     media: prefs ? prefs.get('mediaVolume') : 0.8,
+    // The opponent's actual voice. Its own node, its own slider — see the banner.
+    voice: prefs ? prefs.get('voiceVolume') : 0.9,
   };
 
   // --- the graph (all lazy; nothing here exists until the first cue) --------
   let ctx = null;
   let dead = false;              // no AudioContext in this host: stop trying
-  let masterBus = null, uiBus = null, gameBus = null, musicBus = null, droneBus = null;
+  let masterBus = null, uiBus = null, gameBus = null, musicBus = null, droneBus = null, voiceBus = null;
   let unlockHook = null;
   let stateHook = null;
   // THE BED. `droneWanted` is the latch the phase router writes; `drone` is the
@@ -358,6 +392,7 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
     gameVolume: 'game',
     droneVolume: 'drone',
     mediaVolume: 'media',
+    voiceVolume: 'voice',
   };
 
   const mediaListeners = new Set();
@@ -414,10 +449,12 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
         gameBus = ctx.createGain();
         musicBus = ctx.createGain();
         droneBus = ctx.createGain();
+        voiceBus = ctx.createGain();
         uiBus.connect(masterBus);
         gameBus.connect(masterBus);
         musicBus.connect(masterBus);
         droneBus.connect(masterBus);
+        voiceBus.connect(masterBus);
         masterBus.connect(ctx.destination);
       } catch (_e) { dead = true; ctx = null; return null; }
       applyBusGains();
@@ -461,6 +498,10 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
       // moves, so a stepped write would zipper on every pixel of the drag (the
       // Intake's pref buses use setTargetAtTime for exactly this reason).
       if (droneBus) glide(droneBus.gain, clamp01(vol.drone), DRONE_GLIDE_SEC);
+      // ...and the voice bus glides on the CUE constant, not the bed's: a note is
+      // ten seconds long, so a drag can land in the middle of one, but there is
+      // nothing sustaining that a longer ramp would help.
+      if (voiceBus) glide(voiceBus.gain, clamp01(vol.voice), BUS_GLIDE_SEC);
     } catch (_e) { /* ignore */ }
   }
 
@@ -544,6 +585,113 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
     for (let i = livePlays.length - 1; i >= 0; i--) {
       if (livePlays[i].done || t - livePlays[i].at > 12000) livePlays.splice(i, 1);
     }
+  }
+
+  /* ------------------------------------------------------------ voice notes
+   *
+   * A SEPARATE LANE FROM THE CUE POOL, on purpose. The pool's rule is "the newest
+   * pop is the one you hear" and it STEALS the oldest source at the cap; a voice
+   * note wants the exact opposite — whoever spoke first finishes their sentence,
+   * and the third one is dropped before it starts rather than cutting the second
+   * one off half a word in. So: one playing, one waiting, everything else gone.
+   *
+   * `voiceStarting` is a slot reservation held across the decode. Without it two
+   * notes that arrive in the same tick both see an empty lane, both decode, and
+   * the second start() lands on top of the first — the classic async-gate hole.
+   */
+  let voiceNow = null;        // {src, g, stopTimer, opts, done}
+  let voiceStarting = false;  // a note is decoding and owns the playing slot
+  const voiceQueue = [];      // {src, opts, resolve} — at most VOICE_QUEUE_MAX - 1
+
+  function voiceOccupancy() {
+    return ((voiceNow || voiceStarting) ? 1 : 0) + voiceQueue.length;
+  }
+
+  /** Blob | ArrayBuffer | TypedArray -> ArrayBuffer, or null. Never throws. */
+  async function voiceBytes(src) {
+    try {
+      if (!src) return null;
+      if (src instanceof ArrayBuffer) return src;
+      if (ArrayBuffer.isView(src)) return src.buffer.slice(src.byteOffset, src.byteOffset + src.byteLength);
+      // Blob (and File, and anything else that answers the same two verbs). Node's
+      // Blob has arrayBuffer() too, which is what lets the self-tests drive this.
+      if (typeof src.arrayBuffer === 'function') return await src.arrayBuffer();
+      return null;
+    } catch (_e) { return null; }
+  }
+
+  /** End the note that is playing (naturally, hard-stopped, or torn down). */
+  function voiceFinish(reason) {
+    const rec = voiceNow;
+    voiceNow = null;
+    if (!rec || rec.done) { voicePump(); return; }
+    rec.done = true;
+    try { if (rec.stopTimer) clearTimeout(rec.stopTimer); } catch (_e) { /* ignore */ }
+    if (reason !== 'ended') {
+      // A cut, not an end: ramp out over VOICE_STOP_FADE_SEC so ten seconds of
+      // somebody's voice does not finish on a click.
+      try {
+        const t = ctx.currentTime;
+        rec.g.gain.cancelScheduledValues(t);
+        rec.g.gain.setValueAtTime(rec.g.gain.value, t);
+        rec.g.gain.linearRampToValueAtTime(0.0001, t + VOICE_STOP_FADE_SEC);
+        rec.src.stop(t + VOICE_STOP_FADE_SEC + 0.01);
+      } catch (_e) { try { rec.src.stop(); } catch (_e2) { /* gone */ } }
+    }
+    try { rec.opts.onEnd?.(reason); } catch (_e) { /* a listener must not break the lane */ }
+    voicePump();
+  }
+
+  /** Start the next queued note, if the lane is free. */
+  function voicePump() {
+    if (disposed || voiceNow || voiceStarting || !voiceQueue.length) return;
+    const item = voiceQueue.shift();
+    voiceStarting = true;
+    void (async () => {
+      let outcome = 'decode-failed';
+      try {
+        const c = ensureCtx();
+        const ab = await voiceBytes(item.src);
+        if (disposed) { outcome = 'disposed'; return; }
+        if (!c || !ab) { outcome = 'unavailable'; return; }
+        let buf = null;
+        try { buf = await c.decodeAudioData(ab); } catch (_e) { buf = null; }
+        if (disposed) { outcome = 'disposed'; return; }
+        // Same rule as a cue: a suspended context would accept start() and play
+        // this whenever the player finally clicks. Ten seconds of somebody's
+        // voice arriving three minutes late is worse than never hearing it.
+        if (!buf || c.state !== 'running') { outcome = buf ? 'unavailable' : 'decode-failed'; return; }
+
+        const src = c.createBufferSource();
+        src.buffer = buf;
+        const g = c.createGain();
+        // NO TRIM. The bus carries the player's slider and masterBus the master —
+        // each applied exactly once, the rule the whole graph is built on — and a
+        // recorded voice has no house loudness to correct for.
+        g.gain.value = 1;
+        src.connect(g);
+        g.connect(voiceBus || c.destination);
+        const rec = { src, g, opts: item.opts, stopTimer: 0, done: false };
+        try { src.onended = () => { if (voiceNow === rec) voiceFinish('ended'); }; } catch (_e) { /* ignore */ }
+        src.start();
+        voiceNow = rec;
+        // THE UNTRUSTED-LENGTH CEILING. The blob came off another machine and its
+        // header is whatever they sent; this timer is the only thing that makes
+        // "ten seconds" true on THIS side.
+        try {
+          rec.stopTimer = setTimeout(() => { if (voiceNow === rec) voiceFinish('capped'); }, VOICE_MAX_PLAY_MS);
+          if (rec.stopTimer && typeof rec.stopTimer.unref === 'function') rec.stopTimer.unref();
+        } catch (_e) { /* a host with no timers simply plays it out */ }
+        stats.played++;
+        note('voice:play');
+        outcome = 'played';
+        try { item.opts.onStart?.(); } catch (_e) { /* a listener must not break the lane */ }
+      } finally {
+        voiceStarting = false;
+        try { item.resolve(outcome); } catch (_e) { /* ignore */ }
+        if (outcome !== 'played') { stats.dropped++; voicePump(); }
+      }
+    })();
   }
 
   function steal() {
@@ -631,6 +779,50 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
         return true;
       } catch (_e) { stats.dropped++; return false; }
     },
+
+    /* -------------------------------------------------------- voice notes
+     * Play ten seconds of the other player, through the `voice` bus.
+     *
+     * @param {Blob|ArrayBuffer|ArrayBufferView} src   the recorded note
+     * @param {object}   [o]
+     * @param {Function} [o.onStart]  fires when it actually BEGINS (the chip's cue)
+     * @param {Function} [o.onEnd]    fires once, with 'ended' | 'capped' | 'stopped'
+     * @returns {Promise<string>} 'played' | 'queued-then-played' is not a thing —
+     *   it resolves when this note's fate is known: 'played' (it started),
+     *   'dropped-full', 'unavailable' (no graph, or the context never woke),
+     *   'decode-failed' (not audio we can read), 'disposed', 'stopped'.
+     *
+     * NEVER THROWS AND NEVER REJECTS, like everything else on this tier: a caller
+     * on the receive path is already handling a hostile blob and must not have to
+     * handle an exception as well.
+     */
+    playVoiceNote(src, o = {}) {
+      if (disposed) return Promise.resolve('disposed');
+      if (!src) return Promise.resolve('decode-failed');
+      // The lane is full: one playing (or decoding) and one waiting. The third is
+      // dropped HERE, before a decode is spent on it — see the block comment.
+      if (voiceOccupancy() >= VOICE_QUEUE_MAX) { stats.dropped++; return Promise.resolve('dropped-full'); }
+      // ensureCtx() up front so a host with no WebAudio answers immediately rather
+      // than after an await, and so the unlock hooks are armed as early as possible.
+      if (!ensureCtx()) { stats.dropped++; return Promise.resolve('unavailable'); }
+      return new Promise((resolve) => {
+        voiceQueue.push({ src, opts: o || {}, resolve });
+        voicePump();
+      });
+    },
+
+    /** Cut whatever is playing and forget what is waiting (match teardown, mercy). */
+    stopVoice() {
+      while (voiceQueue.length) {
+        const item = voiceQueue.shift();
+        try { item.resolve('stopped'); } catch (_e) { /* ignore */ }
+      }
+      if (voiceNow) voiceFinish('stopped');
+      return true;
+    },
+
+    /** How many notes this tier is holding: 0, 1 or VOICE_QUEUE_MAX. Diagnostics. */
+    get voiceInFlight() { return voiceOccupancy(); },
 
     /** Force the context up (call from a real gesture). Returns the state. */
     unlock() {
@@ -732,6 +924,9 @@ export function createAudio({ prefs = null, logger = null, trace = false } = {})
 
     dispose() {
       if (disposed) return;
+      // BEFORE the flag: stopVoice() has to be able to cut a live source and
+      // resolve the waiting promises, and both are no-ops once `disposed` is set.
+      try { api.stopVoice(); } catch (_e) { /* ignore */ }
       disposed = true;
       api.stopMusic();
       droneWanted = false;

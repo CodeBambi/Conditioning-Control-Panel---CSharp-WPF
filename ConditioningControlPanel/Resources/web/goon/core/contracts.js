@@ -149,6 +149,48 @@ export function clampWindowCount(v) {
   return wire > GoonConsts.VideoWindowsDisplayMax ? GoonConsts.VideoWindowsDisplayMax : wire;
 }
 
+/* ----------------------------------------------------------------------------
+ * VOICE NOTES (2026-08-04) — the `t:'voice'` family's untrusted-number clamps.
+ *
+ * Same rule as clampWindowCount above, applied to a family whose numbers are
+ * SIZES AND COUNTS rather than a display cap: nothing downstream may ever see a
+ * NaN, a negative or an Infinity, because the receiver's enforcement (declared
+ * size, part count, sequence order) is arithmetic on exactly these fields and a
+ * single NaN would turn every comparison into `false` — i.e. into "accept".
+ *
+ * The CEILINGS are not here on purpose. VN_MAX_BYTES and friends belong to the
+ * enforcing tier (ui/voice/voiceService.js) and are policy, not shape; this file
+ * only guarantees that what arrives is a non-negative integer.
+ * -------------------------------------------------------------------------- */
+
+/** The three sub-kinds of `t:'voice'`. FROZEN: append only, never repurpose. */
+export const VOICE_SUBS = Object.freeze(['meta', 'chunk', 'end']);
+
+/**
+ * Untrusted sub -> one of VOICE_SUBS, or '' for anything else.
+ *
+ * '' rather than a throw or a default, because the receiver switches on it: an
+ * unknown sub (a newer peer's fourth kind) falls off the end of the switch and
+ * is ignored, which is the same forward-compatibility the unknown-`t` path has.
+ */
+export function clampVoiceSub(v) {
+  return VOICE_SUBS.includes(v) ? v : '';
+}
+
+/**
+ * Untrusted count/size -> a non-negative safe integer. Anything that is not a
+ * finite number (or a string a peer quoted its number into) is ZERO, which is
+ * also what an ABSENT field means. Booleans, arrays and objects are zero too —
+ * `Number(true)` being 1 is exactly the coercion that must not happen here.
+ */
+export function clampVoiceCount(v) {
+  const n = typeof v === 'number' ? v : (typeof v === 'string' ? Number(v) : NaN);
+  if (!Number.isFinite(n)) return 0;
+  const i = Math.trunc(n);
+  if (i <= 0) return 0;
+  return i > Number.MAX_SAFE_INTEGER ? Number.MAX_SAFE_INTEGER : i;
+}
+
 const COSTS = Object.freeze({
   [GoonPayloadKind.FlashBurst]: 1,
   [GoonPayloadKind.SubliminalStorm]: 1,
@@ -185,6 +227,14 @@ export function costOf(kind) {
  * ABSENT MEANS FALSE. The C# reference client and any older page omit it; `false` means the
  * transfer queue never starts, no `xfer:` tags are emitted and that peer sees exactly the wire it
  * sees today. It enters NO intersection and can never fail a lobby.
+ *
+ * `voice` (2026-08-04) is the SAME KIND OF THING for the voice-note family (`t:'voice'`), and it
+ * is an INTEGER rather than a boolean on purpose: it is a protocol REVISION number, so a later
+ * build that changes the chunking or grows a sub can advertise 2 and both sides can tell which
+ * dialect the other speaks without a second field. 0 (or absent) means "this build has never
+ * heard of voice notes" — the mic is hidden and NOTHING is ever sent, because an unknown `t` is
+ * dropped silently by the far side and a fire-and-forget family gets no receipt to notice with.
+ * Like `transfer` it enters NO intersection and can never fail a lobby.
  */
 export function makeCaps(o = {}) {
   return {
@@ -194,7 +244,23 @@ export function makeCaps(o = {}) {
     rounds: o.rounds ?? [],
     min_v: o.min_v ?? PROTOCOL_VERSION,
     transfer: o.transfer ?? false,
+    voice: clampVoiceCount(o.voice),
   };
+}
+
+/** The voice-note protocol revision THIS build speaks. Advertised as `caps.voice`. */
+export const VOICE_CAP_VERSION = 1;
+
+/**
+ * A peer's `caps.voice`, from an UNTRUSTED hello, as a plain boolean "can we send to them".
+ *
+ * Forgiving about the shape and strict about the meaning: some clients quote every number, so a
+ * `"1"` counts, but a boolean `true` does NOT — `true >= 1` is true in this language, and a peer
+ * that put a boolean where a revision belongs is a broken frame, not a claim of support. Anything
+ * unusable reads as "no support", which is the safe direction: we simply never send.
+ */
+export function peerSpeaksVoice(caps) {
+  return clampVoiceCount(caps && caps.voice) >= 1;
 }
 
 export function makeHello(o = {}) {
@@ -223,6 +289,12 @@ export function makeHello(o = {}) {
  * wedge permanently. Read the guard comment on `sameSheet` before touching either.
  *
  * ABSENT MEANS FALSE: no declaration is no opt-in.
+ *
+ * `voice_notes` (2026-08-04) is a CLONE of that field in every respect — per-side declaration,
+ * append-only, absent-means-false, outside `sameSheet()`, ANDed locally (core/match.js
+ * `voiceNotesAgreed`) — and it is deliberately a second field rather than a flag folded into the
+ * first: they are two different consents. "you may send me your library" and "you may send me
+ * your VOICE" are not the same thing to agree to, and one must never be able to imply the other.
  */
 export function makeConsent(o = {}) {
   return {
@@ -233,6 +305,7 @@ export function makeConsent(o = {}) {
     payload_min_gap_ms: o.payload_min_gap_ms ?? GoonConsts.PayloadMinGapMs,
     confirmed: o.confirmed ?? false,
     media_transfer: o.media_transfer ?? false,
+    voice_notes: o.voice_notes ?? false,
   };
 }
 
@@ -364,6 +437,79 @@ export function makeEmote(o = {}) {
   };
 }
 
+/**
+ * ONE VOICE NOTE, in three sub-frames (2026-08-04). APPEND-ONLY, and it rides the CONTROL lane —
+ * the same channel as every message above — never `goon-media`: the bulk channel does not exist on
+ * the relay fallback, and voice has to work on the worst link a duel can end up on.
+ *
+ *   {t:'voice', sub:'meta',  id, bytes, durMs, emote|null, parts}   announces one note
+ *   {t:'voice', sub:'chunk', id, seq, data}                         base64, capped well under 16K
+ *   {t:'voice', sub:'end',   id}                                    after the last chunk
+ *
+ * ONE FACTORY FOR ALL THREE, because wire.js routes off `t` alone and a per-sub factory would mean
+ * a second discriminator inside the parser. The unused members ride as their defaults (0 / null),
+ * which is the vwin rule again — absent means the default, and the reader switches on `sub`.
+ *
+ * IT IS THE `t:'emote'` FAMILY, NOT A PAYLOAD. No cost, no charge, no receipt, no ACK, nothing in
+ * active_effects, nothing in the ledger. A dropped frame is a note that never plays, and that is
+ * the whole failure handling: re-sending, ACKing or queueing a voice note would make the wire a
+ * place where somebody's voice can be owed to them.
+ *
+ * FIELD NAMING. `durMs` is camelCase where the rest of the wire is snake_case. That is pinned by
+ * docs/GOON_VOICE_PLAN.md (the cross-client contract) and left exactly as written rather than
+ * quietly "fixed" here — the name on the wire is the name in the spec, and there is no C# peer to
+ * disagree with it (this family has no C# mirror; the C# client simply never sends or reads it).
+ */
+export function makeVoice(o = {}) {
+  return {
+    t: 'voice',
+    v: o.v ?? PROTOCOL_VERSION,
+    sub: clampVoiceSub(o.sub),
+    /** Sender-local transfer id, monotonic. Unique per sender, NOT globally. */
+    id: clampVoiceCount(o.id),
+    /** chunk only: 0-based part index on an ORDERED lane, so it is a check, not a sort key. */
+    seq: clampVoiceCount(o.seq),
+    /** meta only: DECLARED total blob size. Checked against the accumulated one; both are capped. */
+    bytes: clampVoiceCount(o.bytes),
+    /** meta only: how many chunks to expect. */
+    parts: clampVoiceCount(o.parts),
+    /** meta only: recorded length. Cosmetic (the chip's timer) — playback is capped regardless. */
+    durMs: clampVoiceCount(o.durMs),
+    /** meta only: the emote this note is tied to, or null for a live one. Sanitized in match.js. */
+    emote: o.emote ?? null,
+    /** chunk only: base64 text. Null on meta/end so stripNulls keeps those two frames tiny. */
+    data: o.data ?? null,
+  };
+}
+
+/**
+ * "I am still getting my library together" (protocol §6, v1.4).
+ *
+ * A PRESENCE HINT, not a term and not a phase. A first-time guest who arrived on
+ * an invite link is sent through ui/screens/mediaSetup.js before the lobby, and
+ * without this the host stares at "waiting for them" with no way to tell an
+ * empty room from a busy one — which is exactly how a host gives up on a duel
+ * thirty seconds before it would have started.
+ *
+ * NOTHING WAITS ON IT. The engine does not gate a phase, a confirmation or a
+ * countdown on `preparing`; the lobby paints a line and that is the whole of it.
+ * A peer that never sends it (an older build, the C# client, a guest who already
+ * had a deck) reads as `false` — absent means "not preparing", exactly like
+ * tick's `vwin` — and a peer that only ever sends `true` and then vanishes costs
+ * nothing but a stale line on a screen that is already being torn down.
+ *
+ * APPEND-ONLY and unversioned by design: an older peer drops the whole frame as
+ * an unknown `t` (wire.js parse logs and returns null), which is the documented
+ * forward-compatible behaviour and needs no capability bit.
+ */
+export function makeMediaPrep(o = {}) {
+  return {
+    t: 'media_prep',
+    v: o.v ?? PROTOCOL_VERSION,
+    preparing: o.preparing ?? false,
+  };
+}
+
 export function makeResult(o = {}) {
   return {
     t: 'result',
@@ -409,6 +555,8 @@ export const MessageFactories = Object.freeze({
   round_result: makeRoundResult,
   mercy: makeMercy,
   emote: makeEmote,
+  voice: makeVoice,
+  media_prep: makeMediaPrep,
   result: makeResult,
   clock_ping: makeClockPing,
   clock_pong: makeClockPong,

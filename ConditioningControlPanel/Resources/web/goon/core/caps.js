@@ -35,6 +35,13 @@ export function local(overrides = {}) {
     // build that ships net/mediaChannel.js, while a headless/test caller that omits it stays false
     // and behaves exactly like a client that predates the feature.
     transfer: overrides.transfer,
+    // The voice-note revision, on the exact same terms as `transfer` above: passed straight
+    // through so makeCaps owns the default, in NO intersection, and never able to fail a lobby.
+    // boot.js advertises VOICE_CAP_VERSION for every build that ships ui/voice/voiceService.js;
+    // a headless/test caller that omits it stays 0 and is indistinguishable from a peer built
+    // before the feature existed — which is the ONLY thing that keeps us from sending into the
+    // dark, because `t:'voice'` is fire-and-forget and an old peer drops it without a word.
+    voice: overrides.voice,
   });
 }
 

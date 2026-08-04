@@ -72,6 +72,15 @@ export function mount(container, ctx) {
 
   const connLine = el('p', { class: 'gg-conn', text: S.lobby.connecting });
 
+  /* "<name> joined — picking their media…" (the `media_prep` frame, protocol §6).
+   * A first-time guest who arrived on an invite link is held on the media-setup
+   * step before this screen, which from the HOST's side used to look identical
+   * to an empty room: the code was read, somebody tapped it, and the lobby still
+   * said "waiting for them". This line is the difference, and it costs nothing
+   * against a peer that never sends the frame — absent reads as "ready", so an
+   * older build simply never lights it. */
+  const prepLine = el('p', { class: 'gg-lobby-prep', text: '', hidden: true, role: 'status' });
+
   /* -------------------------------------------------------- consent rows */
 
   function mkSlider(labelText, { min, max, step, disabled = false }) {
@@ -118,8 +127,22 @@ export function mount(container, ctx) {
   const gapRow = mkSlider(S.lobby.gap, { min: GAP_MIN_SEC, max: GAP_MAX_SEC, step: 5 });
   const xferRow = mkCheck(S.lobby.transfer);
 
+  /* THE VOICE-NOTE LINE — READ ONLY, and deliberately not a row.
+   *
+   * There is no toggle for it here and there must not be: turning voice notes on
+   * is an acknowledgment (your real voice goes to them, theirs can come back),
+   * and that gate lives on one screen — ui/screens/voice.js, off the title menu.
+   * A second entry point without the modal would be a way to switch a mic on
+   * without ever reading what it does.
+   *
+   * So this is a STATUS SENTENCE about a decision made elsewhere: whose side has
+   * it on, or that their build is too old to speak the family at all. It renders
+   * nothing at all when neither side has opted in, because a line that says
+   * "off" on a screen full of terms reads as a term. */
+  const voiceLine = el('p', { class: 'gg-row-sub gg-voice-lobbyline', text: '', hidden: true });
+
   const sheetBox = el('div', { class: 'gg-consent' }, [
-    durRow.row, toyRow.row, gapRow.row, xferRow.row, xferRow.sub,
+    durRow.row, toyRow.row, gapRow.row, xferRow.row, xferRow.sub, voiceLine,
   ]);
 
   /* ---------------------------------------------------------- confirm UI */
@@ -137,7 +160,7 @@ export function mount(container, ctx) {
   const eyebrow = el('div', { class: 'gg-eyebrow' }, [el('i'), el('span', { text: S.lobby.eyebrowWaiting })]);
 
   container.appendChild(el('div', { class: 'gg-card gg-lobby' }, [
-    eyebrow, duel, connLine, sheetBox, lamps, changedLine,
+    eyebrow, duel, connLine, prepLine, sheetBox, lamps, changedLine,
     el('div', { class: 'gg-lobby-actions' }, [leaveBtn, confirmBtn]),
   ]));
 
@@ -181,7 +204,18 @@ export function mount(container, ctx) {
       : el('span', { class: 'gg-badge is-ghost', text: '…' }));
     them.version.textContent = known && opp.appVersion ? 'v' + opp.appVersion : '';
 
-    eyebrow.lastChild.textContent = known ? S.lobby.eyebrowReady : S.lobby.eyebrowWaiting;
+    // THEY ARE HERE, THEY ARE JUST BUSY. `remoteMediaPrep` outranks the plain
+    // "waiting for them" eyebrow because it answers a different question: not
+    // "has anybody arrived" (they have) but "why is nothing happening".
+    const picking = !!match.remoteMediaPrep;
+    prepLine.textContent = picking
+      ? S.lobby.prepPicking(opp.displayName || (hello && hello.display_name) || S.lobby.them)
+      : '';
+    prepLine.hidden = !picking;
+
+    eyebrow.lastChild.textContent = picking
+      ? S.lobby.eyebrowPicking
+      : (known ? S.lobby.eyebrowReady : S.lobby.eyebrowWaiting);
     sheetBox.classList.toggle('is-waiting', !known);
   }
 
@@ -270,7 +304,25 @@ export function mount(container, ctx) {
       ? S.lobby.transferTheirsOn : S.lobby.transferTheirsOff;
   }
 
-  function paintAll() { paintIdentity(); paintConnection(); paintSheet(); paintConfirm(); paintTransfer(); }
+  /**
+   * The voice-note status line. Four states, in the order that answers the
+   * question a player is actually asking ("can they hear me?"):
+   * both on, the peer's build cannot, only mine, only theirs. Silent otherwise.
+   */
+  function paintVoice() {
+    const mine = !!match.localVoiceNotes;
+    const theirs = !!match.remoteVoiceNotes;
+    let text = '';
+    if (mine && theirs && match.peerSupportsVoice) text = S.voice.lobbyBoth;
+    else if ((mine || theirs) && !match.peerSupportsVoice) text = S.voice.lobbyPeerOld;
+    else if (mine) text = S.voice.lobbyYours;
+    else if (theirs) text = S.voice.lobbyTheirs;
+    voiceLine.textContent = text;
+    voiceLine.hidden = !text;
+    voiceLine.classList.toggle('is-on', text === S.voice.lobbyBoth);
+  }
+
+  function paintAll() { paintIdentity(); paintConnection(); paintSheet(); paintConfirm(); paintTransfer(); paintVoice(); }
 
   /* --------------------------------------------------------------- input */
 
@@ -354,9 +406,16 @@ export function mount(container, ctx) {
 
   /* --------------------------------------------------------- engine wiring */
 
-  ledger.sub(match.onConsentChanged(() => { paintSheet(); paintConfirm(); paintTransfer(); }));
-  // The hello is what sets peerSupportsTransfer, and it arrives with the opponent.
-  ledger.sub(match.onOpponentStateChanged(() => { paintIdentity(); paintTransfer(); }));
+  ledger.sub(match.onConsentChanged(() => { paintSheet(); paintConfirm(); paintTransfer(); paintVoice(); }));
+  // The hello is what sets peerSupportsTransfer (and peerSupportsVoice), and it
+  // arrives with the opponent.
+  ledger.sub(match.onOpponentStateChanged(() => { paintIdentity(); paintTransfer(); paintVoice(); }));
+  // `media_prep` (protocol §6). Optional seam on purpose: a match object built
+  // before this message existed simply has no subscribe verb, and the line stays
+  // hidden — exactly the state an absent frame means.
+  if (typeof match.onMediaPrepChanged === 'function') {
+    ledger.sub(match.onMediaPrepChanged(() => paintIdentity()));
+  }
   ledger.sub(match.onPhaseChanged(() => { paintAll(); }));
   ledger.sub(match.onLobbyFailed((reason) => {
     sheets?.open?.({

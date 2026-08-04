@@ -140,7 +140,38 @@ Phases: Lobby → Consent → Draft → Countdown → Live → SuddenDeath (opti
 | `round_result` | both | round_no, completed, elapsed_ms, reaction_ms (nullable), suspect, progress (round-specific tally: bubbles cleared / avg attention / mistakes / false-start) |
 | `mercy` | either | at_match_ms; graceful end. The local panic/Esc path maps here; a client MUST always honor its own user's mercy immediately |
 | `emote` | either | text ≤ 60 chars, icon ≤ 8 chars |
+| `media_prep` | either, pre-live | `preparing:bool` — "I am still assembling a library". A **presence hint, not a term**: it clears no confirmation, gates no phase and is never folded into the consent fingerprint. Sent when a client interposes its first-run media step (a link joiner with an empty deck) and again when they finish, so the other side's lobby can say "they joined — picking their media…" instead of "waiting for them". **Append-only on v1: absent = not preparing**, so a client that never heard of it reads as ready, and a client that RECEIVES it unknown drops the frame as an unknown `t` (§1) and stays up. Edge-triggered — an unchanged value MUST NOT be re-sent. No capability bit and no version bump: nothing waits on it, so there is nothing to negotiate |
 | `result` | both | end_reason (§9), winner_is_host (null = draw), both scores, survived_ms, `agree` countersign. Both sides also write this to `/v2/goon/ledger`. Disagreement = disputed; uncontested cosmetics still grant |
+
+### Invite links (client-side only, 2026-08-04)
+
+The room code is also expressible as a URL, so a host can hand a room over with a
+paste instead of six characters read down a phone line. **This adds nothing to the
+server surface** — the link is redeemed through the same `/v2/goon/join` as a typed
+code, and a client that ignores the parameter is simply a client that asks the
+player to type.
+
+```
+<goon client page>?join=<code>          e.g.  https://cclabs.app/goon-beta/?join=ABC123
+```
+
+- **The base is the standalone client, never the app's page.** A standalone page
+  builds it from `location.origin + location.pathname`; a HOSTED page (WebView2
+  serves the client from the virtual host `https://ccp.game/goon/index.html`,
+  which resolves on exactly one machine) MUST substitute the public web
+  deployment instead. The web client keeps that address in one constant,
+  `GOON_PUBLIC_URL` in `Resources/web/goon/ui/inviteLink.js`.
+- **Reading is tolerant, exactly as far as `normalizeCode` is** (§2): trim,
+  uppercase, strip dashes and spaces, clamp to six. Crockford's `I`/`L`→`1` and
+  `O`→`0` are deliberately NOT folded — the server mints the alphabet.
+- **A consumed link MUST be removed from the address bar** (`history.replaceState`,
+  keeping every other parameter — `server`, `token`, `uid`, `debug`). A room TTL is
+  ~5 min, and a link left in place is re-joined by every refresh, every back
+  button and every home-screen pin, forever.
+- **Failure lands on the join screen, not on the menu**: the code stays prefilled
+  and the reason (`unknown_code`, `expired`, …) is shown, because "the room is
+  gone, ask for a fresh one" is the one thing a bounced-to-menu link joiner
+  cannot work out alone.
 
 ## 7. Capability negotiation (`caps` in hello)
 `{platform: "windows"|"android"|"ios"|"web", payloads:[int], elements:[int], rounds:[int], min_v:int}`
@@ -280,3 +311,9 @@ Everything here is additive: a client without it interoperates unchanged.
   keeps the affordance). Guest-side `NoOfferTimeoutMs` (20 s): a joined guest that
   never receives an offer fails over to the relay ladder as `no_offer` instead of
   waiting on "joining…" forever (the host's untimed lobby wait is unchanged).
+- v1.4 (2026-08-04, shareable invites): `media_prep` (§6) — an append-only, v1-safe
+  presence hint saying "still assembling a library", raised by the web client's
+  first-run media step and rendered by the peer's lobby. Plus the `?join=<code>`
+  invite-link format (§6, client-side only — no server change, no new endpoint).
+  Web client only; the C# client neither sends nor reads `media_prep` and, per §1,
+  ignores the frame as an unknown `t`.

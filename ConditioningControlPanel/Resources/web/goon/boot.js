@@ -42,7 +42,9 @@ import { peerRenderLog, resetPeerRenderLog } from './exec/videos.js';
 import { GoonMatchService } from './core/match.js';
 import { GoonSuddenDeathRunner } from './core/suddenDeath.js';
 import { GoonRng } from './core/rng.js';
-import { GoonElement, GoonEndReason, GoonMatchPhase, GoonPayloadKind, GoonRoundKind } from './core/contracts.js';
+import {
+  GoonElement, GoonEndReason, GoonMatchPhase, GoonPayloadKind, GoonRoundKind, VOICE_CAP_VERSION,
+} from './core/contracts.js';
 import { local as localCapsOf, UNIVERSAL_ROUND } from './core/caps.js';
 import { GoonReceiptStatus } from './core/scoring.js';
 import { GoonSession } from './net/session.js';
@@ -62,16 +64,30 @@ import { createAssetsStore, localPlayableEntries } from './ui/assetsStore.js';
 import { createDiscord, confirmOpenDm } from './ui/discord.js';
 import { emitAva, mountVsSplash } from './ui/avatar.js';
 import { createWakeLock } from './ui/wakeLock.js';
+// Statically imported like the rest of the wave-1 tier (and unlike ui/hud.js et
+// al, which are sibling waves): this module has no DOM, no AudioContext and no
+// bridge call at import time, and a duel where the voice service silently failed
+// to load would be a duel where a consent the player gave has no effect.
+import { createVoiceService } from './ui/voice/voiceService.js';
+// ...and the library the service loads pre-recorded notes from. Same reasoning,
+// plus one more: it is the ONE writer of prefs.voiceEmoteMap, and two of those
+// would be two answers to "which note does this emote fire".
+import { createNoteStore } from './ui/voice/noteStore.js';
+import { setVoiceProvider } from './ui/emotes.js';
+import { consumeJoinCode } from './ui/inviteLink.js';
 import { S } from './ui/strings.js';
 
 import * as titleScreen from './ui/screens/title.js';
 import * as hostScreen from './ui/screens/host.js';
 import * as joinScreen from './ui/screens/join.js';
+import * as mediaSetupScreen from './ui/screens/mediaSetup.js';
+import { needsMediaSetup } from './ui/screens/mediaSetup.js';
 import * as lobbyScreen from './ui/screens/lobby.js';
 import * as draftScreen from './ui/screens/draft.js';
 import * as countdownScreen from './ui/screens/countdown.js';
 import * as recapScreen from './ui/screens/recap.js';
 import * as assetsScreen from './ui/screens/assets.js';
+import * as voiceScreen from './ui/screens/voice.js';
 
 /* --- ERROR SEAMS FIRST: everything after this reports instead of vanishing. */
 if (typeof window !== 'undefined') {
@@ -364,9 +380,37 @@ function settle() {
       }
       const loader = el('gg-loader');
       if (loader) loader.hidden = true;
-      router.show('title');
+      openFirstScreen();
       bridge.log('boot ok');
     });
+}
+
+/* ----------------------------------------------------------------------------
+ * THE FIRST SCREEN — the title, unless somebody was LINKED here.
+ *
+ * `?join=ABC123` (ui/inviteLink.js) is the shareable half of hosting: a host
+ * copies a URL, the other player taps it, and the page opens on the join screen
+ * with the code already in and already submitted. The alternative — landing on a
+ * menu and being asked to type six characters that were RIGHT THERE in the link
+ * — is where invites die.
+ *
+ * `consumeJoinCode` reads AND strips the param in one call, before anything else
+ * can look at it. The strip is not cosmetic: a link left in the address bar is
+ * re-joined by every refresh, every back button and every home-screen pin made
+ * from this page, forever, against a room whose TTL is five minutes. Failure is
+ * the join screen's problem and it is well equipped for it — the code stays in
+ * the field and the reason is on screen.
+ * -------------------------------------------------------------------------- */
+function openFirstScreen() {
+  let code = '';
+  try { code = consumeJoinCode(typeof window !== 'undefined' ? window : null); }
+  catch (_e) { code = ''; }
+  if (code) {
+    bridge.log('invite link: joining ' + code);
+    router.show('join', { autoCode: code });
+    return;
+  }
+  router.show('title');
 }
 
 function showLoaderFailure(msg) {
@@ -395,6 +439,11 @@ let mediaQueue = null;       // net/mediaQueue.js — one per page, re-attached 
 let wakeLock = null;         // ui/wakeLock.js — held while a match is attached (phone screens)
 let artifacts = null;        // the adapter below, over assets' item map
 let discord = null;          // ui/discord.js — owns the discord + peer-card verbs
+/* ui/voice/noteStore.js — PAGE-SCOPED, unlike the voice service beside it. The
+ * eight pre-recorded notes belong to the player, not to a duel: they survive
+ * every match, every relay rebuild and every trip back to the title menu, and
+ * the library screen is reached with no match in existence at all. */
+let noteStore = null;
 let vsSplash = null;         // the countdown's decorative VS card, if one is up
 let ctx = null;
 
@@ -403,6 +452,7 @@ let goonSession = null;      // net/session.js GoonSession (host/join path only)
 let currentMatch = null;
 let currentTransport = null;
 let currentSd = null;        // {presenter, inputs, dispose} from ui/sd
+let voice = null;            // ui/voice/voiceService.js — MATCH-SCOPED, see attachMatch
 let hudHandle = null;
 let mercyHandle = null;
 let phaseUnsubs = [];
@@ -410,6 +460,19 @@ let escMercied = false;
 let awaitingEntry = false;
 let lastConnectFailed = null;
 let recapFallbackTimer = 0;
+
+/* ---- THE FIRST-RUN MEDIA STEP (ui/screens/mediaSetup.js).
+ *
+ * Set on the JOIN that landed, when the deck is empty — the case that only ever
+ * happens to somebody who arrived on an invite link and has never opened this
+ * before. While it is true the phase router shows the media screen instead of
+ * the lobby; the ENGINE is untouched and walks Lobby -> Consent underneath it.
+ *
+ * `mediaPrepTold` is separate because the wire half is EDGE-triggered: onPhase
+ * fires several times on the way through the lobby and the peer must hear
+ * "preparing" once, not five times. */
+let mediaPrepPending = false;
+let mediaPrepTold = false;
 
 /* ---- Practice mode */
 let soloPair = null;
@@ -450,12 +513,26 @@ function localCaps() {
   if (caps.brainDrain !== false) { elements.push(GoonElement.BrainDrain); payloads.push(GoonPayloadKind.BrainDrain); }
   if (caps.spiral !== false) { elements.push(GoonElement.Spiral); payloads.push(GoonPayloadKind.Spiral); }
 
+  /* THE VOICE-NOTE DISCRIMINATOR. Advertised unconditionally, for every build
+   * that ships ui/voice/voiceService.js, because it is a statement about what
+   * this BUILD can PARSE and never about what this player has agreed to or paid
+   * for: the consent lives on the consent frame (`voice_notes`) and the local
+   * opt-in lives in prefs. Advertising it does not turn anything on.
+   *
+   * It has to be here rather than at the send site because `t:'voice'` is
+   * fire-and-forget — an old peer drops the frames without a word, and this
+   * integer is the ONLY way the sender ever finds out. (`transfer`, its sibling
+   * in core/caps.js, is NOT advertised from this file today: the media lane
+   * gates itself on session.caps.mediaTransfer + supportsBulk instead. Left
+   * exactly as it was — that is the media lane's business, not this pass's.) */
+  const voiceCap = VOICE_CAP_VERSION;
+
   let rounds = Array.isArray(caps.rounds) ? caps.rounds.slice() : Object.values(GoonRoundKind);
   // Without a camera there is nothing to win a staring contest with.
   if (!caps.camera) rounds = rounds.filter((r) => r !== GoonRoundKind.StaringContest);
   if (!rounds.includes(UNIVERSAL_ROUND)) rounds.push(UNIVERSAL_ROUND);
 
-  return localCapsOf({ elements, payloads, rounds, platform: 'web' });
+  return localCapsOf({ elements, payloads, rounds, platform: 'web', voice: voiceCap });
 }
 
 /* ============================================================================
@@ -856,6 +933,41 @@ function attachMatch(match, transport) {
    * and both die with this match. (Trap register #7 — documented where applied.) */
   try { mediaQueue?.attach?.(match, currentTransport); }
   catch (e) { logger.warn('mediaQueue.attach threw: ' + ((e && e.message) || e)); }
+
+  /* --- VOICE NOTES, per match. Built HERE rather than in buildApp() because it
+   * subscribes to the match's own frame pump and consent events, and a relay
+   * REBUILD hands us a brand new GoonMatchService — a singleton would go on
+   * listening to a corpse and the mic would answer "available" against a match
+   * nobody is in. Same lifetime as the HUD it feeds, torn down in detachMatch. */
+  try {
+    voice = createVoiceService({
+      match, audio, prefs,
+      // The library the emote hook fires from. Page-scoped and built in buildApp,
+      // so every match shares the same eight notes; a null one (a host where
+      // buildApp failed early) simply means sendNote() answers 'unavailable' and
+      // live notes still work.
+      noteStore,
+      // The same content gate the media lane renders through. See the consult in
+      // voiceService.onEnd: local map only, fails open, never waits on the net.
+      blocklist,
+      logger,
+    });
+  } catch (e) { logger.error('createVoiceService threw: ' + ((e && e.stack) || e)); voice = null; }
+  /* SEED THE DECLARATION FROM THE PREFERENCE, on every attach.
+   *
+   * `prefs.voiceNotesEnabled` is the player's standing answer; `voice_notes` on
+   * the consent frame is what the OPPONENT gets told. They are two different
+   * things and this is the one line that keeps them in step — without it a
+   * player who opted in on the title screen would reach the lobby with the
+   * declaration off and the mic would never appear for either of them.
+   *
+   * Done HERE rather than in the lobby screen because a relay REBUILD hands us a
+   * brand new GoonMatchService with a fresh (false) declaration and no screen
+   * remount to notice. core/match.js refuses the call outside Lobby/Consent, so
+   * a mid-match re-attach is a no-op rather than a signature-clearing surprise. */
+  try {
+    if (prefs.get('voiceNotesEnabled')) match.setLocalVoiceNotes(true);
+  } catch (e) { logger.warn('setLocalVoiceNotes threw: ' + ((e && e.message) || e)); }
   /* KEEP THE SCREEN ON for the duration. A phone that dims and locks mid-Live is
    * an unintended mercy; the lock is match-scoped (start here, stop in
    * detachMatch) so an idle title screen never holds one. Unsupported = no-op. */
@@ -1109,6 +1221,10 @@ function forceRecap(why, sweep) {
 
 function detachMatch() {
   clearRecapFallback();
+  // The match this hold belonged to is going: there is nobody left to tell, and
+  // a flag that survived would hold the NEXT match's lobby behind a media screen
+  // the player already finished with.
+  clearMediaPrep(false);
   for (const off of phaseUnsubs) { try { off(); } catch (_e) { /* ignore */ } }
   phaseUnsubs = [];
   unmountHud();
@@ -1118,6 +1234,11 @@ function detachMatch() {
   // Cancels every transfer and clears the queue; the STORE is untouched, because a
   // committed artifact is hash-keyed and stays valid across matches and sessions.
   try { mediaQueue?.detach?.(); } catch (_e) { /* ignore */ }
+  // The voice service dies WITH the match (see attachMatch) and takes the bus
+  // with it: a note that landed in the last second of a duel must not still be
+  // talking over the recap.
+  try { voice?.dispose?.(); } catch (_e) { /* ignore */ }
+  voice = null;
   try { wakeLock?.stop?.(); } catch (_e) { /* a screen convenience, never load-bearing */ }
   try { currentSd?.dispose?.(); } catch (_e) { /* ignore */ }
   currentSd = null;
@@ -1130,7 +1251,11 @@ function mountHudNow() {
   if (hudHandle || !mountHud || !currentMatch) return;
   try {
     hudHandle = mountHud({
-      match: currentMatch, session, audio, prefs, media, matchLog, discord,
+      // `voice` is threaded in now and UNUSED until wave 2 mounts ui/voice/micHud.js
+      // from inside the HUD. mountHud takes a destructured options object, so an
+      // extra key is inert — and handing it over here means the mic lands as one
+      // line in ui/hud.js rather than as a second wiring pass through this file.
+      match: currentMatch, session, audio, prefs, media, matchLog, discord, voice,
     }) || null;
   } catch (e) { logger.error('mountHud threw: ' + ((e && e.stack) || e)); hudHandle = null; }
 }
@@ -1163,6 +1288,39 @@ function unmountMercy() {
 }
 
 /* ----------------------------------------------------------------------------
+ * THE MEDIA STEP, HELD IN FRONT OF THE LOBBY.
+ *
+ * Returns true when it took the screen, so the phase arms can `break` on it
+ * without knowing anything else about the feature. Deliberately NOT a phase and
+ * NOT a gate on the engine: the match reaches Consent underneath and simply
+ * waits, exactly as it would for a player who had wandered off to make tea.
+ *
+ * The `media_prep` frame is the other half — without it the host sits on
+ * "waiting for them" with no way to tell an empty room from a busy one, which
+ * is how a host gives up thirty seconds before the duel would have started.
+ * -------------------------------------------------------------------------- */
+function showMediaSetup() {
+  if (!mediaPrepPending || !router) return false;
+  if (!mediaPrepTold) {
+    mediaPrepTold = true;
+    try { currentMatch?.setMediaPrep?.(true); } catch (_e) { /* a status hint is never load-bearing */ }
+  }
+  if (router.current !== 'mediaSetup') router.show('mediaSetup');
+  return true;
+}
+
+/** Clears the step (and tells the peer), whatever the reason. Idempotent. */
+function clearMediaPrep(tellPeer) {
+  const wasPending = mediaPrepPending;
+  mediaPrepPending = false;
+  if (tellPeer && mediaPrepTold) {
+    try { currentMatch?.setMediaPrep?.(false); } catch (_e) { /* ignore */ }
+  }
+  mediaPrepTold = false;
+  return wasPending;
+}
+
+/* ----------------------------------------------------------------------------
  * PHASE ROUTING — the engine's phase is the single source of truth for what is
  * on screen. Nothing else calls router.show() for a match screen.
  * -------------------------------------------------------------------------- */
@@ -1176,15 +1334,28 @@ function onPhase(phase) {
   try { audio?.dronePhase?.(phase); } catch (_e) { /* the bed is never load-bearing */ }
   paintProbe();
 
+  /* THE HOLD CANNOT OUTLIVE THE LOBBY. It is only ever consulted by the Lobby
+   * and Consent arms, so a match that reached the draft with the flag still set
+   * would carry a dead hold around for the rest of the session and re-assert it
+   * on the next lobby. Clearing it here (and telling the peer, so their "picking
+   * their media…" line comes down) makes "past Consent" the one exit that needs
+   * no cooperation from the screen. */
+  if (mediaPrepPending && phase >= GoonMatchPhase.Draft) clearMediaPrep(true);
+
   switch (phase) {
     case GoonMatchPhase.Lobby:
       // The host/join screen stays up until there is a second person to show —
       // a lobby with one silhouette in it is worse than the code the player is
       // still reading aloud.
+      if (showMediaSetup()) break;
       if (router.current !== 'host' && router.current !== 'join') router.show('lobby');
       break;
 
     case GoonMatchPhase.Consent:
+      // A joiner with an empty deck is held here — see showMediaSetup. The
+      // engine has already reached Consent and stays there; the sheet is
+      // waiting for them the moment they lock their picks in.
+      if (showMediaSetup()) break;
       router.show('lobby');
       break;
 
@@ -1346,6 +1517,11 @@ const actions = {
   goJoin() { router.show('join'); },
   /** @param {{filter?:string}} [args] e.g. {filter:'needs'} from a "N need compressing" prompt. */
   goAssets(args) { router.show('assets', args || null); },
+  /** ui/screens/voice.js — the pre-recorded note library. Title menu only:
+   *  there is deliberately no way into it from inside a match (the toggle it
+   *  carries clears both consent signatures, and a live duel is the wrong place
+   *  to renegotiate a term). */
+  goVoice() { router.show('voice'); },
 
   async goPractice() { await startSolo(); },
 
@@ -1371,8 +1547,46 @@ const actions = {
     lastConnectFailed = null;
     let ok = false;
     try { ok = await s.join(inviteCode); } finally { awaitingEntry = false; }
-    if (ok) return { ok: true };
-    return { ok: false, error: errorInfo(lastConnectFailed) };
+    if (!ok) return { ok: false, error: errorInfo(lastConnectFailed) };
+
+    /* THE FIRST-RUN MEDIA STEP, decided HERE and nowhere else — one join, one
+     * answer. A duel plays the player's OWN library at them, so a joiner with an
+     * empty deck would watch every effect fire against a blank screen and read
+     * it as broken rather than as empty. Only the JOIN path asks: a host has
+     * been through the title screen (and, hosted, has a preset behind them), and
+     * this is squarely about the person who arrived on a link.
+     *
+     * `syncLocalDeck` first, because the answer is about the DECK and a pick
+     * made moments ago may still be sitting in the store un-fed. */
+    syncLocalDeck(true);
+    mediaPrepTold = false;
+    mediaPrepPending = needsMediaSetup(media);
+    if (mediaPrepPending) {
+      logger.info('joined with an empty deck — media setup first');
+      /* THE RACE THIS CLOSES. GoonSession.join() attaches the match and fires
+       * onPhase(Lobby) INSIDE the await above, i.e. before the flag exists. The
+       * Lobby arm happens to be harmless (it leaves the join screen up while
+       * `router.current === 'join'`) and Consent normally lands a moment later,
+       * after this line — but "normally" is doing the work in that sentence, and
+       * a rejoin that arrives already consented would sail straight past. One
+       * idempotent call here means the hold is applied to whatever phase the
+       * match is ALREADY in, whenever it got there. */
+      showMediaSetup();
+    }
+    return { ok: true };
+  },
+
+  /**
+   * The media step's "I'm set". Clears the hold, tells the peer, and hands the
+   * player to whatever phase the match reached while they were picking — the
+   * screen itself decides nothing about where it goes next.
+   */
+  mediaPrepDone() {
+    if (!clearMediaPrep(true)) return;
+    syncLocalDeck(true);
+    logDeck('media-setup');
+    if (currentMatch) onPhase(currentMatch.phase);
+    else router.show('title');
   },
 
   /** The host/join screen's Cancel: fold the pending room, stay on the page. */
@@ -1579,6 +1793,25 @@ function buildApp() {
   });
   primeReceived(session.received);      // the manifest usually beat us here
 
+  /* --- VOICE NOTES: the library, and the emote hook -------------------------
+   * ONE store for the page (see the declaration). It is built even on a host
+   * with no IndexedDB — the store falls back to memory and the screen still
+   * works for the length of the session.
+   *
+   * The provider below is how ui/emotes.js reaches a service it cannot import:
+   * the sheet is mounted by ui/hud.js (a sibling wave's file), the service is
+   * rebuilt per match, and the map lives in prefs. Asking through one closure
+   * keeps all three facts in this file — and returns null for every case where
+   * nothing should be sent, so the hot path in emotes.js is a single call with
+   * no knowledge of any of it. */
+  noteStore = createNoteStore({ prefs, logger });
+  setVoiceProvider((emoteKey) => {
+    if (!voice || !noteStore) return null;
+    const noteId = noteStore.noteFor(emoteKey);
+    if (!noteId) return null;
+    return { voice, noteId };
+  });
+
   options = createOptions({
     prefs, audio, session, logger,
     setFullscreen: (on) => bridge.send({ type: 'fullscreen-set', on: !!on }),
@@ -1653,9 +1886,15 @@ function buildApp() {
   ctx = {
     session, prefs, audio, toasts, sheets, options, matchLog, actions, logger, assets,
     receivedStore, blocklist, mediaQueue, discord,
+    /** ui/screens/voice.js: the pre-recorded note library (page-scoped). */
+    notes: noteStore,
     /** ui/screens/recap.js: which peer artifacts rendered (and were flagged) this match. */
     getPeerRenders: peerRenderLog,
     getMatch: () => currentMatch,
+    /** ui/screens/voice.js (wave 2): the live service, or null out of a match.
+     *  A THUNK, never a snapshot — it is rebuilt per match (and per relay
+     *  fallback), and a screen that captured one would be holding a corpse. */
+    getVoice: () => voice,
     getTransport: () => currentTransport,
     getClock: () => { try { return currentTransport ? currentTransport.clock : null; } catch (_e) { return null; } },
     getSd: () => currentSd,
@@ -1666,11 +1905,13 @@ function buildApp() {
       title: titleScreen,
       host: hostScreen,
       join: joinScreen,
+      mediaSetup: mediaSetupScreen,
       lobby: lobbyScreen,
       draft: draftScreen,
       countdown: countdownScreen,
       recap: recapScreen,
       assets: assetsScreen,
+      voice: voiceScreen,
     },
     ctx,
     logger,

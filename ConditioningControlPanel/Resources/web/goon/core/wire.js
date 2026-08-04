@@ -3,7 +3,10 @@
 // JSON, snake_case, integer enum codes, integer milliseconds, 64-bit seeds as decimal STRINGS,
 // nulls dropped. The wire is UNTRUSTED: parse() never throws, it returns null and logs.
 
-import { GoonConsts, MessageFactories, PROTOCOL_VERSION, clampWindowCount } from './contracts.js';
+import {
+  GoonConsts, MessageFactories, PROTOCOL_VERSION,
+  clampVoiceCount, clampVoiceSub, clampWindowCount,
+} from './contracts.js';
 import { seedFromAny, seedToString } from './rng.js';
 
 export const MAX_WIRE_BYTES = 16 * 1024;
@@ -29,6 +32,28 @@ const SEED_FIELDS = Object.freeze({
  */
 const CLAMPED_FIELDS = Object.freeze({
   tick: Object.freeze({ vwin: clampWindowCount }),
+  /**
+   * The voice-note family (2026-08-04). Every NUMBER on it feeds the receiver's own enforcement —
+   * declared size, part count, sequence position — and arithmetic against a NaN silently answers
+   * `false` to every comparison, i.e. "no, that is not over the limit". So the shape is pinned
+   * here, in both directions, exactly as `vwin` is, and the ceilings stay in the enforcing tier.
+   *
+   * `sub` is in the table because it is a discriminator, not free text: an unknown one collapses
+   * to '' and falls off the end of the receiver's switch instead of reaching a handler.
+   *
+   * `data` and `emote` are DELIBERATELY ABSENT. Both default to null so stripNulls keeps a meta or
+   * an end frame small, and a clamp that ran over an already-stripped body would put the null
+   * straight back (JSON.stringify keeps nulls; it only drops undefined). They are sanitized where
+   * the emote family sanitizes its own strings — core/match.js, on the way out AND on the way in.
+   */
+  voice: Object.freeze({
+    sub: clampVoiceSub,
+    id: clampVoiceCount,
+    seq: clampVoiceCount,
+    bytes: clampVoiceCount,
+    parts: clampVoiceCount,
+    durMs: clampVoiceCount,
+  }),
 });
 
 const encoder = typeof TextEncoder === 'function' ? new TextEncoder() : null;

@@ -794,6 +794,40 @@
 .gg-local-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.84rem; }
 .gg-local-size { flex: 0 0 auto; font-size: 0.74rem; color: var(--gg-text-3); font-variant-numeric: tabular-nums; }
 
+/* ---------------------------------------------------------------------------
+ * THE FIRST-RUN MEDIA STEP (ui/screens/mediaSetup.js).
+ *
+ * Same width as the standalone picker it reuses — this is the same card doing a
+ * bigger job, not a new species — with the picked list CAPPED IN HEIGHT and
+ * scrolled on its own. A zip of two hundred photos must not push "I'm set" below
+ * the fold on a phone: the confirm is the whole point of the screen, and a
+ * button you have to scroll past a list to find is a button nobody presses.
+ * ------------------------------------------------------------------------ */
+/* The lobby's "they joined — picking their media…" line, under the link state. */
+.gg-lobby-prep {
+  margin: 0.2rem 0 0;
+  font-size: 0.82rem;
+  color: var(--gg-text-3);
+  text-align: center;
+}
+
+.gg-mediasetup { min-width: min(32rem, 96vw); max-width: min(32rem, 96vw); text-align: center; }
+.gg-mediasetup-tips { text-align: left; margin: 0.7rem 0 0.4rem; }
+.gg-mediasetup-discord { margin-bottom: 0.2rem; }
+.gg-mediasetup-tally { margin: 0.7rem 0 0.15rem; font-size: 0.95rem; font-weight: 600; }
+.gg-mediasetup-waiting { color: var(--gg-text-4); font-style: italic; }
+.gg-mediasetup .gg-local-list { max-height: 34vh; overflow-y: auto; }
+
+/* The one inline anchor on the page. Underlined as well as coloured — colour is
+ * never the only channel here, and this one has to read as tappable at a glance
+ * to somebody who has been in the product for eleven seconds. */
+.gg-link {
+  color: var(--gg-pink);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+.gg-link:hover, .gg-link:focus-visible { color: #fff; }
+
 .gg-assets-head { text-align: center; }
 .gg-assets-stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4rem; margin-bottom: 0.9rem; }
 .gg-assets-chip { background: rgba(255, 255, 255, 0.06); color: var(--gg-text-2); border-color: rgba(255, 255, 255, 0.12); }
@@ -1279,6 +1313,125 @@ html[data-gg-motion="reduced"] .gg-vs-splash * { transition: none !important; }
 }
 
 /* ---------------------------------------------------------------------------
+ * THE VOICE-NOTE LIBRARY (#scr-voice, ui/screens/voice.js)
+ *
+ * A title-menu screen shaped like the assets one: a card, a consent block, one
+ * action, a list of rows. Everything below is layout — the only thing that is
+ * not decoration is the recording pulse, which is the single surface that says
+ * a microphone is live, and it therefore has to keep animating under the effect
+ * armor exactly like the assets ring does.
+ *
+ * Notes on the traps this file keeps re-teaching:
+ *   · NO .gg-grad here. screens.css loads after goon.css and a `background:`
+ *     shorthand on a clipped-text element wipes the clip and paints the text
+ *     transparent-on-nothing.
+ *   · ONE ANIMATION SLOT per element. The record button already has a hover
+ *     transition, so the pulse goes on its ::before dot, which is its own box.
+ *   · minmax(0, 1fr) / min-width: 0 on every grid child — a long note name must
+ *     wrap, never widen the row past the viewport on a phone.
+ * ------------------------------------------------------------------------ */
+.gg-voice { min-width: min(38rem, 96vw); max-width: min(38rem, 96vw); text-align: left; }
+.gg-voice-head { text-align: center; }
+
+.gg-voice-consent { margin-bottom: 0.9rem; }
+/* The opt-in row is CLICKABLE EVEN WHEN THE CHECKBOX IS NOT: the ack gate
+   disables the input and the row is what opens the modal, so it has to look
+   like something you can press rather than like something switched off. */
+.gg-voice-optin { cursor: pointer; }
+.gg-voice-optin.is-disabled { opacity: 0.75; }
+.gg-voice-optin.is-disabled .gg-row-label { color: var(--gg-text-2); }
+.gg-voice-optsub { text-align: left; }
+
+.gg-voice-recrow {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem;
+  margin: 0.2rem 0 0.4rem;
+}
+.gg-voice-timer {
+  font-size: 0.82rem; font-variant-numeric: tabular-nums; color: var(--gg-text-2);
+}
+.gg-voice-recnote { margin: 0 0 0.6rem; font-size: 0.74rem; color: var(--gg-gold); }
+
+/* The live-mic tell. A dot, a word and a pulse — never the colour alone. */
+.gg-voice-record.is-recording { border-color: rgba(255, 105, 180, 0.7); }
+.gg-voice-record.is-recording::before {
+  content: '';
+  display: inline-block;
+  width: 0.5rem; height: 0.5rem; margin-right: 0.45rem; border-radius: 50%;
+  background: #ff6b8f;
+  /* `running` re-declared for the same reason the assets ring does it: the
+     effect armor pauses --gg-deco-play, and the one surface that reports a hot
+     microphone must not be freezable. */
+  animation: gg-voice-pulse 1s ease-in-out infinite;
+  animation-play-state: running;
+}
+@keyframes gg-voice-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.75); }
+}
+
+.gg-voice-empty { margin: 1rem 0; text-align: center; font-size: 0.84rem; color: var(--gg-text-4); }
+
+.gg-voice-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.gg-voice-note {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--gg-radius);
+  background: rgba(255, 255, 255, 0.03);
+}
+.gg-voice-note.is-playing { border-color: rgba(255, 105, 180, 0.55); background: rgba(255, 105, 180, 0.08); }
+.gg-voice-note-main { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; min-width: 0; }
+.gg-voice-note-name { font-weight: 600; color: var(--gg-text); overflow-wrap: anywhere; min-width: 0; }
+.gg-voice-note-len { font-variant-numeric: tabular-nums; }
+.gg-voice-note-link { font-size: 0.72rem; color: var(--gg-text-4); }
+.gg-voice-note-link.is-linked { color: var(--gg-violet); }
+.gg-voice-note-acts { display: flex; gap: 0.35rem; justify-self: end; }
+.gg-voice-note-btn { font-size: 0.78rem; padding: 0.3rem 0.8rem; }
+
+/* The picker spans BOTH columns: it is a second line of the row, not a control
+   crammed in beside the buttons. */
+.gg-voice-picker {
+  grid-column: 1 / -1;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.gg-voice-picker-label { margin-right: 0.3rem; font-size: 0.7rem; color: var(--gg-text-4); }
+.gg-voice-emote {
+  font: inherit;
+  font-size: 1rem; line-height: 1;
+  padding: 0.25rem 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--gg-radius-pill);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--gg-text-2);
+  cursor: pointer;
+}
+.gg-voice-emote.is-none { font-size: 0.72rem; }
+.gg-voice-emote:hover { border-color: rgba(255, 105, 180, 0.5); }
+.gg-voice-emote[aria-pressed="true"] {
+  border-color: rgba(255, 105, 180, 0.75);
+  background: rgba(255, 105, 180, 0.2);
+  color: var(--gg-text);
+}
+
+.gg-voice-foot { margin-top: 1.1rem; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 0.8rem; }
+.gg-voice-hint { margin: 0; font-size: 0.72rem; color: var(--gg-text-4); line-height: 1.6; }
+.gg-voice-foot-actions { display: flex; justify-content: center; gap: 0.6rem; margin-top: 0.9rem; }
+
+/* The second paragraph of the acknowledgment sheet (injected next to the first
+   — see openAck in ui/screens/voice.js). Same type as .gg-sheet-line, a little
+   quieter, because it is the consequence rather than the description. */
+.gg-voice-ack-2 { margin-top: 0.5rem; opacity: 0.92; }
+
+/* The lobby's read-only status line. */
+.gg-voice-lobbyline { text-align: center; }
+.gg-voice-lobbyline.is-on { color: var(--gg-violet); }
+
+/* ---------------------------------------------------------------------------
  * MOTION — the player's own switch, on top of the OS media query in goon.css.
  * Functional motion (countdown, expiry bar) is deliberately NOT listed.
  * ------------------------------------------------------------------------ */
@@ -1303,6 +1456,11 @@ html[data-gg-motion="reduced"] .gg-draft.is-sealed::after { display: none; }
   .gg-count-names { top: 8%; padding: 0 1rem; }
   .gg-plrow--out { flex-direction: row; text-align: left; }
   .gg-assets { min-width: 0; max-width: 96vw; }
+  .gg-voice { min-width: 0; max-width: 96vw; }
+  /* One column on a phone: the acts row drops under the name instead of
+     squeezing it, and every child is min-width:0 so nothing can widen the page. */
+  .gg-voice-note { grid-template-columns: minmax(0, 1fr); }
+  .gg-voice-note-acts { justify-self: start; }
   .gg-assets-grid { grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr)); }
   .gg-assets-search { flex-basis: 100%; }
 }

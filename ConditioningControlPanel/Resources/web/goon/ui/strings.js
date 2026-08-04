@@ -70,12 +70,23 @@ export const S = Object.freeze({
     expiresIn: (ms) => 'expires in ' + mmss(ms),
     expired: 'this code expired. mint a new one.',
     inviteLine: (code) => 'Goon Game duel — code ' + code + ' (expires in 5 min)',
+    /* --- the shareable link (ui/inviteLink.js). The PRIMARY copy button: a
+       code is a fine thing to read aloud and a miserable thing to thumb into a
+       phone, and the link opens straight into the room with nothing to type.
+       The plain-code button stays right beside it — some people paste into
+       places a URL would be eaten. --- */
+    copyLink: 'Copy invite link',
+    copiedLink: 'Link copied',
+    linkNote: 'the link opens the game and joins this room — no typing at their end.',
+    inviteLinkLine: (url) => 'Goon Game duel — tap to join: ' + url + ' (expires in 5 min)',
   },
 
   /* ----------------------------------------------------------------- join */
   join: {
     eyebrow: 'join a room',
     lead: 'type the six characters they sent you.',
+    /** Arrived on a `?join=` link: nothing to type, so nothing is asked for. */
+    leadLinked: 'the link brought the code with it. one moment…',
     action: 'Join',
     joining: 'joining…',
     back: 'Back',
@@ -122,6 +133,12 @@ export const S = Object.freeze({
     transferRelay: 'only on a direct connection. this one is relayed.',
     transferTheirsOn: 'they opted in',
     transferTheirsOff: 'they have not',
+    /* --- "they are still picking their media" (the `media_prep` wire message).
+       The host used to sit on "waiting for them" for a minute with no idea
+       whether anybody had arrived; this is the difference between a dead room
+       and a room where somebody is busy. --- */
+    eyebrowPicking: 'they are getting set up',
+    prepPicking: (name) => (name || 'they') + ' joined — picking their media…',
   },
 
   /* -------------------------------------------------------------- discord
@@ -354,10 +371,141 @@ export const S = Object.freeze({
      * is the difference between hiding a face and not asking for one. */
     oppAvatars: 'Show opponent avatars',
     oppAvatarsNote: "off, you see a coloured initial instead of your opponent's discord picture — and their picture is never downloaded at all. it changes nothing about what you share.",
+    /* The seventh slider. "Voice notes" in full, never just "Voice": the page
+       has no other voice in it, and a lone "Voice" reads as narration or TTS.
+       Says whose voice it is in the note, because that is the whole surprise. */
+    voice: 'Voice notes',
     fullscreen: 'Fullscreen',
     reset: 'Reset',
     close: 'close',
     lockedNote: 'Match settings are locked once you start.',
+  },
+
+  /* ---------------------------------------------------------------- voice notes
+   * THE COPY DECK FOR A FEATURE THAT RECORDS SOMEBODY'S ACTUAL VOICE. Written in
+   * wave 1 and complete on purpose: waves 2 and 3 are READ-ONLY on this file, so
+   * every line the mic HUD, the screen, the lobby and the toasts need is already
+   * here. Adding one later means editing a file two other agents are holding.
+   *
+   * Three rules that are safety copy rather than style, and they are the reason
+   * this block is longer than it looks like it needs to be:
+   *
+   *   1. EVERY LINE THAT MENTIONS SENDING ALSO MENTIONS HEARING. Turning this on
+   *      is two consents in one switch — your voice goes to them, and theirs can
+   *      come back — and a player who only reads the button must not be able to
+   *      miss the second half. That is why the ack gate exists at all.
+   *   2. NOTHING HERE PROMISES DELETION OR PRIVACY IT CANNOT KEEP. The audio is
+   *      peer-to-peer and never touches a server, so the copy says exactly that
+   *      and nothing more — no "disappears after", no "only you can hear it".
+   *      What happens on their machine is theirs, and the ack line says so.
+   *   3. THE OFF PATH IS NEVER SCOLDED. Cancelling a recording, refusing the mic
+   *      and turning the whole thing off are all ordinary things to do, phrased
+   *      as ordinary things.
+   *
+   * Lowercase furniture, sentence case for the sheet — the house register. */
+  voice: {
+    /* --- the title menu ------------------------------------------------- */
+    /** The menu item. Verb-first like "Host a match" — it is somewhere you go to make something. */
+    menu: 'Send voice notes',
+    menuNote: 'record a few, use them mid-duel',
+
+    /* --- the screen ----------------------------------------------------- */
+    eyebrow: 'voice notes',
+    lead: 'ten seconds each, straight to whoever you are duelling. nothing is uploaded and no server ever hears them.',
+    back: 'back',
+
+    /* --- the acknowledgment gate (shown ONCE, before the toggle will move)
+       Sheet register: sentence case, full sentences, and the second paragraph is
+       the one that is easy to forget — this switch also lets THEM be heard. */
+    ack: {
+      icon: '🎙',
+      headline: 'This records your real voice',
+      line: 'Holding the mic records you and sends the audio straight to the person you are duelling, machine to machine. There is no server in the middle and nothing is stored anywhere but on the two of you.',
+      lineTwo: 'Switching this on also means you may HEAR them: if you have both turned it on, their voice plays on your side too. Once a note has left your machine, what happens to it is on theirs.',
+      go: 'I understand',
+      cancel: 'Not now',
+    },
+
+    /* --- the opt-in toggle ---------------------------------------------- */
+    toggle: 'Voice notes',
+    /** Shown under the toggle when it is ON. Says both directions, every time. */
+    toggleOn: 'on — they can hear you, and you can hear them, when you have both switched it on.',
+    /** ...and when it is OFF. "dropped without being played" is the literal truth. */
+    toggleOff: 'off — nothing is recorded, and anything they send is dropped without being played.',
+    /** The toggle is dead until the modal has been read. */
+    toggleLocked: 'read the note above first.',
+
+    /* --- recording, in the library screen -------------------------------- */
+    record: 'Record a note',
+    recording: 'recording…',
+    recordStop: 'Stop',
+    /** The live counter while recording. Seconds, one decimal, with the ceiling. */
+    recordTimer: (ms, maxMs) => (Math.max(0, ms) / 1000).toFixed(1) + 's / ' + Math.round((maxMs || 10000) / 1000) + 's',
+    recordCapped: 'ten seconds is the lot.',
+
+    /* --- the note list --------------------------------------------------- */
+    /** Auto-name. Numbered rather than timestamped: a player picks by position. */
+    noteName: (n) => 'Note ' + n,
+    /** The duration chip on a row. */
+    noteLength: (ms) => (Math.max(0, ms) / 1000).toFixed(1) + 's',
+    play: 'play',
+    stop: 'stop',
+    delete: 'delete',
+    /** The list before anything is in it. Says what to press, not just that it is empty. */
+    empty: 'no notes yet — record one above.',
+    /** Storage ceiling (8). Phrased as a fact, not a refusal. */
+    full: (max) => 'that is all ' + max + ' — delete one to record another.',
+    /** Confirm before a note goes. Cheap to re-record, so no scary sheet. */
+    deleteConfirm: 'delete this one?',
+
+    /* --- the emote association ------------------------------------------- */
+    /** The picker's label on a row. */
+    linkLabel: 'send with an emote',
+    /** The "no emote" option, and what the row says when one is chosen. */
+    linkNone: 'on its own',
+    linkedTo: (emote) => 'goes out with ' + (emote || 'that emote'),
+    /** One note per emote: picking an emote that is taken moves it. */
+    linkMoved: (emote) => (emote || 'that emote') + ' had another note — it has this one now.',
+    linkHelp: 'firing that emote in a match sends this note with it. the emote never waits for it.',
+
+    /* --- the mic HUD (ui/voice/micHud.js) --------------------------------
+       Held-button copy. Short enough to read at a glance while holding a button
+       down, because that is the only time any of it is on screen. */
+    hudLabel: 'voice note',
+    /** A tap that was too short to be a recording. A hint, never an error. */
+    holdHint: 'hold the mic to record',
+    /** While held. The gesture out is a slide, and it has to be said, not guessed. */
+    slideToCancel: 'slide left to cancel',
+    /** The three outcomes, in the order a player meets them. */
+    sending: 'sending…',
+    sent: 'sent',
+    cancelled: 'cancelled',
+    /** The recorder came back with nothing usable (a mic that produced silence). */
+    sendFailed: 'that one did not record — try again',
+    /** The 4 s floor between sends, phrased as a wait rather than a refusal. */
+    tooSoon: (sec) => 'one more in ' + sec + 's',
+
+    /* --- the incoming indicator ------------------------------------------ */
+    /** The chip by their bezel while a note plays. Lowercase furniture. */
+    incoming: 'they said something',
+    /** ...and the emote-attached variant, anchored on the bubble instead. */
+    incomingWithEmote: 'they said something',
+
+    /* --- the lobby line (read-only; the toggle lives in the screen only) --- */
+    lobbyBoth: 'voice notes on for this match',
+    lobbyYours: 'you have voice notes on — they have not',
+    lobbyTheirs: 'they have voice notes on — you have not',
+    lobbyPeerOld: 'their app is too old for voice notes',
+
+    /* --- the refusals ----------------------------------------------------- */
+    /** getUserMedia said no. NOT an error tone: it is a perfectly good answer. */
+    micDenied: 'no microphone access — the mic stays off',
+    /** No input device at all, or a host that cannot reach one. */
+    micMissing: 'no microphone found',
+    /** The one line that explains a hidden mic button mid-match. */
+    notActive: 'voice notes need both of you switched on',
+    /** Where the volume lives, from the screen that made the note. */
+    volumeHint: 'their notes play at the Voice notes volume in options.',
   },
 
   /* --------------------------------------------------- the assets screen
@@ -499,6 +647,47 @@ export const S = Object.freeze({
 
     /** The title-screen ribbon: "412 ready · 3.1 GB cached". */
     ribbon: (ready, size) => ready + ' ready · ' + size + ' cached',
+  },
+
+  /* ------------------------------------------------- the media-setup step
+   * FIRST-RUN ONBOARDING FOR LINK JOINERS (ui/screens/mediaSetup.js). Somebody
+   * tapped a duel link, has never opened this thing before, and is about to be
+   * dropped into a lobby with an empty deck — where every effect fires against
+   * a blank screen and the match looks broken rather than empty.
+   *
+   * Two rules the copy has to keep:
+   *   1. the twenty-item suggestion is a SUGGESTION and must read as one. The
+   *      button unlocks on the first file; nothing here may sound like a gate.
+   *   2. it says where the media STAYS. A stranger asking a first-time visitor
+   *      for their porn folder has about one sentence to be honest in. */
+  mediaSetup: {
+    eyebrow: 'before you play',
+    headline: 'bring something to endure',
+    /** The whole premise, in one line: the game plays YOUR library at you. */
+    lead: 'a duel runs on your own media — every flash, clip and whisper you get is yours. your deck is empty, so it would be a very quiet match.',
+    tips: [
+      'twenty-odd images or gifs is where it starts to feel like a duel. more is better, and more is easy.',
+      'throw in a few short clips too — those are the ones that take the whole screen.',
+      'a .zip of the lot works: drop the archive in and it unpacks itself.',
+    ],
+    /** Named because it is the answer to "…but I do not have a folder ready". */
+    discordLine: 'no stash yet? plenty of girls share their packs on the discord.',
+    discordCta: 'open the discord',
+    add: 'add media',
+    /** The running tally. Reassuring at 3, congratulatory at 20 — see `enough`. */
+    count: (n) => n + (n === 1 ? ' item added' : ' items added'),
+    countNone: 'nothing added yet.',
+    /** Under the tally while they are still short of the suggestion. */
+    suggest: (want) => 'aim for about ' + want + '. you can always add more later.',
+    /** …and once they clear it. Praise, not a permission slip. */
+    enough: 'that will do nicely.',
+    remove: 'remove',
+    lock: "I'm set",
+    lockNeed: 'add at least one thing',
+    /** The opponent is watching a "picking their media" line while this is up. */
+    waiting: 'they know you are still picking. take your time.',
+    note: 'your picks stay on this device and travel nowhere unless you switch sending on in the lobby.',
+    leave: 'Leave',
   },
 
   /* --------------------------------------------------------------- sheets */
@@ -662,6 +851,7 @@ export const S = Object.freeze({
   /* --------------------------------------------------------------- toasts */
   toasts: {
     copied: 'invite line copied',
+    linkCopied: 'invite link copied',
     copyFailed: 'could not copy — select the code instead',
     peerWobbly: 'their connection is wobbling',
     peerBack: 'they are back',
