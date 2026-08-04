@@ -72,6 +72,35 @@ function sanitize(s, max) {
   return v.length <= max ? v : v.slice(0, max);
 }
 
+/** Only these schemes may reach an RTCPeerConnection config. */
+const ICE_URL_RE = /^(stun|stuns|turn|turns):/i;
+
+/**
+ * The server's `ice_servers` array, made safe to hand to RTCPeerConnection.
+ * The wire shape is the provider's own ({urls, username, credential}); this
+ * keeps recognized fields on recognized schemes and drops everything else,
+ * because a compromised (or simply buggy) server response must be able to
+ * break the RELAY UPGRADE at worst — never the whole peer connection.
+ * Exported for the selftest.
+ */
+export function sanitizeIceServers(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const s of raw.slice(0, 8)) {
+    if (!s || typeof s !== 'object') continue;
+    const urls = (Array.isArray(s.urls) ? s.urls : [s.urls])
+      .filter((u) => typeof u === 'string' && ICE_URL_RE.test(u))
+      .map((u) => u.slice(0, 256))
+      .slice(0, 8);
+    if (!urls.length) continue;
+    const entry = { urls };
+    if (typeof s.username === 'string' && s.username) entry.username = s.username.slice(0, 256);
+    if (typeof s.credential === 'string' && s.credential) entry.credential = s.credential.slice(0, 256);
+    out.push(entry);
+  }
+  return out;
+}
+
 function intOr(v, d) { return Number.isFinite(v) ? Math.trunc(v) : d; }
 
 export class GoonSignalingClient {
@@ -149,6 +178,17 @@ export class GoonSignalingClient {
      */
     this.mediaSend = null;
 
+    /**
+     * TURN/STUN entries the SERVER handed this room. Relay credentials are
+     * minted server-side (the provider key never ships in a page); what
+     * arrives here is short-lived and room-scoped. Sanitized through
+     * `sanitizeIceServers` — the transport concatenates these onto its
+     * built-in STUN list, so `[]` (an old server, or TURN not configured)
+     * means exactly the behavior that existed before the field did.
+     * @type {Array<{urls: string[], username?: string, credential?: string}>}
+     */
+    this.iceServers = [];
+
     this._disposed = false;
   }
 
@@ -191,6 +231,12 @@ export class GoonSignalingClient {
   _noteMediaSend(json) {
     if (json && typeof json.media_send === 'boolean') this.mediaSend = json.media_send;
     return this.mediaSend;
+  }
+
+  /** Records `ice_servers` off a parsed /invite or /join response. Absent = old server = no-op. */
+  _noteIceServers(json) {
+    if (json && Array.isArray(json.ice_servers)) this.iceServers = sanitizeIceServers(json.ice_servers);
+    return this.iceServers;
   }
 
   /** Records `peer_card_ver` off a parsed response and notifies subscribers. */
@@ -249,6 +295,8 @@ export class GoonSignalingClient {
       relayAllowed: json.relay_allowed === undefined ? true : !!json.relay_allowed,
       /** The server's premium send verdict (see `this.mediaSend`); null on an old server. */
       mediaSend: this._noteMediaSend(json),
+      /** Room-scoped TURN entries (see `this.iceServers`); [] on an old server. */
+      iceServers: this._noteIceServers(json),
     };
   }
 
@@ -309,6 +357,8 @@ export class GoonSignalingClient {
       selfDuel: json.self_duel === true,
       /** The server's premium send verdict (see `this.mediaSend`); null on an old server. */
       mediaSend: this._noteMediaSend(json),
+      /** Room-scoped TURN entries (see `this.iceServers`); [] on an old server. */
+      iceServers: this._noteIceServers(json),
     };
   }
 

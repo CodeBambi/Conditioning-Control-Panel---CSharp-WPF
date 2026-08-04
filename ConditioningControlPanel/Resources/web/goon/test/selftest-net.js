@@ -9,7 +9,7 @@
 
 import fs from 'node:fs';
 
-import { GoonSignalingClient, GoonSignalError, normalizeCode } from '../net/signaling.js';
+import { GoonSignalingClient, GoonSignalError, normalizeCode, sanitizeIceServers } from '../net/signaling.js';
 import { GoonFakeSignalingServer, shadowGuestUid, isShadowUid } from '../net/fakeSignaling.js';
 import { createLoopbackPair, loopbackOptions, loopbackPresets } from '../net/loopbackTransport.js';
 import { GoonRelayTransport } from '../net/relayTransport.js';
@@ -1245,9 +1245,47 @@ async function testBetaGates() {
   }
 }
 
+// ============================================================ 14. server-handed TURN entries
+async function testIceServers() {
+  // The sanitizer is the trust boundary: whatever the server (or an attacker
+  // in its chair) says, only stun/turn/turns urls with string creds survive.
+  ok(sanitizeIceServers(null).length === 0, 'sanitize: non-array -> []');
+  ok(sanitizeIceServers([{ urls: 'turn:relay.example.com:443', username: 'u', credential: 'c' }]).length === 1,
+    'sanitize: single turn entry survives');
+  const mixed = sanitizeIceServers([
+    { urls: ['turn:a.example:443', 'https://evil.example/steal', 'stun:b.example'] },
+    { urls: 'javascript:alert(1)' },
+    { urls: 'turns:c.example:443?transport=tcp', username: 42, credential: { no: true } },
+    'not-an-object',
+  ]);
+  ok(mixed.length === 2, 'sanitize: junk entries dropped, good ones kept', JSON.stringify(mixed));
+  ok(mixed[0].urls.length === 2 && mixed[0].urls.every((u) => /^(stun|turn)/.test(u)),
+    'sanitize: non-ice urls stripped from a mixed list');
+  ok(mixed[1].username === undefined && mixed[1].credential === undefined,
+    'sanitize: non-string creds dropped, entry kept');
+
+  // Adoption off the wire: present -> sanitized + surfaced; absent -> untouched
+  // (an old server must leave the client exactly as it was).
+  const canned = { code: 'ABC234', token: 't', ice_servers: [{ urls: 'turn:r.example:443', username: 'u', credential: 'c' }] };
+  const withTurn = new GoonSignalingClient({
+    post: async () => ({ status: 200, body: JSON.stringify(canned) }),
+    unifiedId: 'u_host', logger: quiet,
+  });
+  const inv = await withTurn.createInvite('X', false);
+  ok(inv && inv.iceServers.length === 1 && withTurn.iceServers[0].urls[0] === 'turn:r.example:443',
+    'createInvite adopts ice_servers off the response');
+
+  const fake = new GoonFakeSignalingServer();
+  const legacy = new GoonSignalingClient({ post: fake.post, unifiedId: 'u_host', logger: quiet });
+  await legacy.createInvite('X', false);
+  ok(Array.isArray(legacy.iceServers) && legacy.iceServers.length === 0,
+    'a server that never heard of ice_servers leaves the client with []');
+}
+
 // ============================================================ run
 const main = async () => {
   await testSignaling();
+  await testIceServers();
   await testLoopback();
   await testRelayTransport();
   await testSessionFallback();
