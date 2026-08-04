@@ -158,6 +158,19 @@ public sealed class AiOperationPipeline
     }
 
     /// <summary>
+    /// Awareness operation with the TYPED consent state (c5; admission §5 rule 1; pre-approach
+    /// consult, SP-042 record.md §4.1 (a)): the typed state is the admission vocabulary —
+    /// granularity (per-context-field/per-source) tightens HERE without contract change
+    /// (§9.2 #4 owner-pending). The bool overload remains for pre-c5 call sites and shares
+    /// the same enforcement (the residual bool door is recorded in SP-042 record.md §3).
+    /// </summary>
+    public Task<AiOperationResult> RunAwarenessAsync(AiRequest request, AiAwarenessConsent consent)
+    {
+        ArgumentNullException.ThrowIfNull(consent);
+        return RunAwarenessAsync(request, consent.Granted);
+    }
+
+    /// <summary>
     /// Panic/owner-stop (contract §2 rule 3): cancels the current generation; in-flight AI
     /// work terminates with typed Cancelled and is drained with a bound. After panic the
     /// owner stays cancelled — subsequent operations terminate Cancelled until the next

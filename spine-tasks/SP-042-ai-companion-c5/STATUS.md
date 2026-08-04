@@ -1,5 +1,5 @@
 ## STATUS: SP-042 — AI companion slice c5: awareness
-**Current Step:** Step 2 — consent + cooldown machinery + suppression outcomes (in progress)
+**Current Step:** Step 3 — packaging + routing + title observation + boundary integration (in progress)
 **Last Updated:** 2026-08-04 (worker, Step 1 started)
 **Blockers:** none
 
@@ -9,10 +9,10 @@
 - [x] Design (consent seam, AiCooldownRegistry, packaging through boundary, owned routing, title capability)
 - [x] Pre-approach solo consult (verdict + actual model in record.md)
 
-### Step 2: consent + cooldown machinery + suppression outcomes
-- [ ] Consent seam at admission (typed, denied = typed no-op)
-- [ ] AiCooldownRegistry (4 classes, extend-not-shrink, injectable clock) + Suppressed typed
-- [ ] Unit tests (consent, each class, extend-not-shrink, Suppressed shape)
+### Step 2: consent + cooldown machinery + suppression outcomes [COMPLETE]
+- [x] Consent seam at admission (typed, denied = typed no-op)
+- [x] AiCooldownRegistry (4 classes, extend-not-shrink, injectable clock) + Suppressed typed
+- [x] Unit tests (consent, each class, extend-not-shrink, Suppressed shape)
 
 ### Step 3: packaging + routing + title observation + boundary integration
 - [ ] Context packaging under consent through EvaluateInput (blocking = zero transmission)
