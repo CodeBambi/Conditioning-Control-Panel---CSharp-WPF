@@ -103,11 +103,27 @@ Completeness tripwire (SP-009-sweep-class): an executable test asserts (a) every
 
 ## 6. Redaction/log-site registry (SP-018 pattern, product-side form)
 
-(pending Step 2–3 — expectation: ZERO new product log sites; the boundary emits no log lines and no diagnostic text; stable codes only: `refused:input`, `refused:output`, `soft-hit:input`, `soft-hit:output`, `moderation-cooldown`)
+c3 adds **ZERO new product log sites**: `AiModerationBoundary`/`AiModerationEscalation`/`AiModerationPolicy` emit no log lines and no diagnostic text; all outcomes ride typed verdicts and the pipeline's existing one-record-per-operation emission. New stable diagnostic codes introduced (all content-free side/kind tokens — never category codes, never policy contents, never text):
+
+| Code | Where | Meaning |
+|------|-------|---------|
+| `refused:input` | pipeline diagnostic `StableCode` | input side blocked (category never carried) |
+| `refused:output` | pipeline diagnostic `StableCode` | output side blocked (category never carried) |
+| `soft-hit:input` / `soft-hit:output` | pipeline diagnostic `StableCode` | soft-hit pass-through recorded (WPF log-only shape, content-free) |
+| `moderation-cooldown` | `AiReplyCodes.ModerationCooldown` → `Unavailable.Code` → diagnostic `StableCode` | escalation cooldown admission denial |
+
+Executable proof: `Diagnostics_BlockedOperations_CarrySideCodesOnly_NeverPolicyContent` serializes every emitted record from blocked operations and asserts the test category code and the forbidden token appear NOWHERE; the SP-016 schema-level content-freedom proof stays green (full suite). Secrets inventory: none (test-only policy tokens, never committed payloads).
 
 ## 7. Deviations and per-change justifications
 
-(pending Step 2 — expected: (1) pipeline ctor gains the boundary dependency — all call sites are tests (no product CompositionRoot constructs the pipeline yet; composition lands in a later slice), required-not-optional so no hidden default; (2) additive `AiReplyCodes.ModerationCooldown`; (3) envelope `FreeTextFields` private→public single-source; (4) escalation state session-scoped, persistence reserved)
+1. **Pipeline ctor gains `AiModerationBoundary moderation` (REQUIRED, 5th param).** Justification: the boundary must be live on every operation — an optional/nullable default would hide the posture. All existing call sites are tests (verified by repo-wide grep: NO product CompositionRoot constructs the pipeline yet; composition lands in a later slice), so the signature change is test-only churn. Existing harnesses pass `new AiModerationBoundary()` — the Empty default posture, behavior-identical for pre-c3 tests.
+2. **Additive `AiReplyCodes.ModerationCooldown` ("moderation-cooldown")** in `AiOperationVocabulary.cs` — the designated additive home ("new codes land with their consumer row"; c3 is that row). Needed because a cooling-down admission denial is neither a content refusal (`Refused`) nor provider unavailability-as-probe-failure; contract §11 rule 1 fixes the interactive shape as `Unavailable(reason)`. The advisor's `AiAdmission`-widening alternative was not adopted (authority order; §4.1 point 4).
+3. **Additive `SurfaceId` init-property on `AiModerationVerdict.Block`/`SoftHit`** — contract §7 rule 3's `Block(category, surface)` shape. Init-only: positional construction (all c1 call sites) unchanged; record equality/serialization cover it (round-trip test added). The surface is statically known at each boundary call site and set by the boundary.
+4. **Envelope `FreeTextFields` private→public** (`AiCommandEnvelope.cs`) — the SINGLE enumeration source shared by the validator's gate and the coverage tripwire so they cannot drift; behavior of `Gate` unchanged (same enumeration, same order).
+5. **`StableCodeOf` maps `Refused` → side code** (`refused:input`/`refused:output`) — content-free (category never carried); input blocks were already emitted via the `Refused` helper, output blocks flow through the common emit path.
+6. **Escalation state session-scoped** — recorded divergence from WPF restart persistence (§3.2 rule 4): mechanism parity only, thresholds placeholder; state serializable-shaped for additive later persistence.
+7. **HeadlessTests untouched** — c3 is mechanism + tests with no UI surface; recorded honestly absent (fileScope allows "likely none").
+8. **Observed transient:** one full-suite run during Step 3 showed 1 failure (515/516); the failing test name was not captured (grep-truncated output) and THREE subsequent full-suite runs are 516/516 green. Not reproducible; suspected pre-existing timing sensitivity in the c2 lab tests (real-socket bounds), not a c3 path — c3's own 24 tests are deterministic (injected clocks, stub providers). Recorded, not hidden.
 
 ## 8. Completion-criteria disposition
 

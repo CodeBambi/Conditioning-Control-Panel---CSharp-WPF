@@ -1,5 +1,5 @@
 ## STATUS: SP-038 â€” AI companion slice c3: moderation boundary
-**Current Step:** Step 3 — coverage-honesty tests + escalation behavior + offline/diagnostics (IN PROGRESS; Steps 1-2 COMPLETE)
+**Current Step:** Step 4 — evidence consolidation + pre-completion consult (IN PROGRESS; Steps 1-3 COMPLETE)
 **Last Updated:** 2026-08-04 (worker, Step 1 started)
 **Blockers:** none
 
@@ -15,10 +15,10 @@
 - [x] Escalation counter mechanism (typed, placeholder thresholds)
 - [x] Unit tests (taxonomy, injected-policy posture, surfacing classes, guard-outside-model)
 
-### Step 3: coverage-honesty tests + escalation behavior + offline/diagnostics
-- [ ] Boundary-coverage inventory tests (wired/reserved assertions + completeness tripwire)
-- [ ] Escalation transitions (warning/cooldown typed, consulted at admission)
-- [ ] Offline zero-network + content-free diagnostics + redaction registry
+### Step 3: coverage-honesty tests + escalation behavior + offline/diagnostics — COMPLETE
+- [x] Boundary-coverage inventory tests (wired/reserved assertions + completeness tripwire)
+- [x] Escalation transitions (warning/cooldown typed, consulted at admission)
+- [x] Offline zero-network + content-free diagnostics + redaction registry
 
 ### Step 4: evidence consolidation + pre-completion consult
 - [ ] record.md (archaeology, inventory table, design, consults, review presence)
