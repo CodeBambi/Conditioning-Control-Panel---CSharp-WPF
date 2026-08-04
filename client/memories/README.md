@@ -17,6 +17,7 @@ owner preferences, consult routes, incidents, and gotchas.
 - `client/docs/task-board.md` — the sole client task board (row status lives here)
 - `client/docs/port-lessons.md` — landed port lessons (harvested after every wave)
 - `.spine/mcp-avalonia-deepresearch.md` — full Avalonia MCP research report
+- `client/port.txt` — the continuous-mode orchestration/resume prompt (paste to resume)
 
 ## Files
 
