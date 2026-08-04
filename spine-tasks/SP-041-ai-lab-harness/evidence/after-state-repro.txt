@@ -1,0 +1,4 @@
+zombie holder up on port 60562
+attempt 0: HttpListenerException (collision) — fresh instance, retrying
+attempt 1: bound 60563 — SURVIVED the collision
+RESULT: fresh-instance-per-bind retry works

@@ -1,0 +1,27 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  CcpVerify -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260804T163642\lane-2\client\tools\verify\CcpVerify\bin\Debug\net10.0\CcpVerify.dll
+  CcpClient.Desktop -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260804T163642\lane-2\client\src\CcpClient.Desktop\bin\Debug\net10.0\CcpClient.Desktop.dll
+  CcpClient.Tests -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260804T163642\lane-2\client\tests\CcpClient.Tests\bin\Debug\net10.0\CcpClient.Tests.dll
+Test run for C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260804T163642\lane-2\client\tests\CcpClient.Tests\bin\Debug\net10.0\CcpClient.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260804T163642\lane-2\client\tests\CcpClient.Tests\bin\Debug\net10.0\CcpClient.Tests.dll
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.10)
+[xUnit.net 00:00:00.34]   Discovering: CcpClient.Tests
+[xUnit.net 00:00:01.02]   Discovered:  CcpClient.Tests
+[xUnit.net 00:00:01.39]   Starting:    CcpClient.Tests
+[xUnit.net 00:00:01.67]     [Test Assembly Cleanup Failure (C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260804T163642\lane-2\client\tests\CcpClient.Tests\bin\Debug\net10.0\CcpClient.Tests.dll)] Xunit.Sdk.TestPipelineException
+[xUnit.net 00:00:01.67]       Assembly fixture type 'CcpClient.Tests.AiLabLeakSelfCheck' threw in Dispose
+[xUnit.net 00:00:01.67]       ---- System.InvalidOperationException : AiProviderLab leaked listener(s) holding loopback port(s): http://127.0.0.1:59317/ (port 59317)
+[xUnit.net 00:00:01.67]       Stack Trace:
+[xUnit.net 00:00:01.67]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:01.67]         ----- Inner Stack Trace -----
+[xUnit.net 00:00:01.67]         C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260804T163642\lane-2\client\tests\CcpClient.Tests\AiProviderLab.cs(339,0): at CcpClient.Tests.AiProviderLab.AssertNoLeakedListeners()
+[xUnit.net 00:00:01.67]         C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260804T163642\lane-2\client\tests\CcpClient.Tests\AiProviderLab.cs(349,0): at CcpClient.Tests.AiLabLeakSelfCheck.Dispose()
+[xUnit.net 00:00:01.68]   Finished:    CcpClient.Tests (ID = '0cb60fe481a185a4de6846e8e71ee6f93ce7f3956e5c800d6b87ba6485afa0d1')
+  Passed CcpClient.Tests.ThrowawayLeakDemo.DeliberateLeak_SelfCheckMustFailLoud [74 ms]
+
+Test Run Failed.
+Total tests: 1
+     Passed: 1
+ Total time: 2,5181 Seconds

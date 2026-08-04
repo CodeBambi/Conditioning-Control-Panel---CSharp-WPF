@@ -1,0 +1,4 @@
+zombie holder up on http://127.0.0.1:50109/
+attempt 0: HttpListenerException (collision) — listener.IsListening=False
+RESULT: ObjectDisposedException at Prefixes.Clear(): Cannot access a disposed object.
+Object name: 'System.Net.HttpListener'.

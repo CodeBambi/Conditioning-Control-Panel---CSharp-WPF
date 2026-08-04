@@ -1,27 +1,27 @@
-## STATUS: SP-041 — T-15: c2 AI lab harness hardening
-**Current Step:** Step 1 — harness archaeology + fix design + pre-approach consult
-**Last Updated:** 2026-08-04 (authored)
+## STATUS: SP-041 — T-15: c2 AI lab harness hardening — **COMPLETE**
+**Current Step:** done (all 4 steps complete; .DONE created)
+**Last Updated:** 2026-08-04 (worker, final — contract green 516/29 EXACT, 5 consecutive greens, zero leaked hosts)
 **Blockers:** none
 
 ### Step 1: archaeology + fix design + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] Listener lifecycle read + before-state failure shape captured
-- [ ] Design (teardown discipline, fresh-instance-per-bind, host-exit guarantee, leaked-listener self-check)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Update STATUS.md before starting work
+- [x] Listener lifecycle read + before-state failure shape captured
+- [x] Design (teardown discipline, fresh-instance-per-bind, host-exit guarantee, leaked-listener self-check)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: harden the harness
-- [ ] AiProviderLab.cs lifecycle + teardown + self-check
-- [ ] Consumer files: host-exit discipline only (assertions untouched unless justified)
-- [ ] Full matrix green with identical lab semantics
+- [x] AiProviderLab.cs lifecycle + teardown + self-check
+- [x] Consumer files: host-exit discipline only (assertions untouched unless justified)
+- [x] Full matrix green with identical lab semantics
 
 ### Step 3: stability proof + evidence + pre-completion consult
-- [ ] 5 consecutive full-suite runs green (transcripts; hosts reaped; no leaked dotnet test hosts)
-- [ ] Self-check demonstrated (throwaway leak injection fails loud; committed suite leak-free)
-- [ ] record.md (before-state, design, justifications, transcripts, consults, review presence)
-- [ ] Pre-completion solo consult (verdict + actual model in record.md)
-- [ ] STATUS.md accurate before .DONE
+- [x] 5 consecutive full-suite runs green (transcripts; hosts reaped; no leaked dotnet test hosts)
+- [x] Self-check demonstrated (throwaway leak injection fails loud; committed suite leak-free)
+- [x] record.md (before-state, design, justifications, transcripts, consults, review presence)
+- [x] Pre-completion solo consult (verdict + actual model in record.md)
+- [x] STATUS.md accurate before .DONE
 
-### Step 4: Testing & Verification
-- [ ] Contract testCommand passes (verify.mjs + build 0W/0E + counts EXACTLY 516/29)
-- [ ] git diff --check clean
-- [ ] git status --short shows only File Scope paths
+### Step 4: Testing & Verification — COMPLETE
+- [x] Contract testCommand passes (verify.mjs + build 0W/0E + counts EXACTLY 516/29)
+- [x] git diff --check clean
+- [x] git status --short shows only File Scope paths
