@@ -142,7 +142,14 @@ Executable proof: `Diagnostics_BlockedOperations_CarrySideCodesOnly_NeverPolicyC
 
 ## 9. Step 5 — contract verification transcript
 
-(pending)
+Exact contract chain (Windows lane worktree, 2026-08-04; full output captured to logs per the pre-completion consult's flake disposition — no failure recurred, so the transient remains cause-unknown, §7 item 8):
+1. `node .spine/patches/verify.mjs` → initial **FAIL** (reinstall removed all 7 project-root patches — 6th occurrence of this lane drift, SP-028/029/032/033/035 precedent) → `apply.mjs` re-applied (7 across 2 roots) → verify **exit 0** ("all patches applied on all roots").
+2. `dotnet build client/CcpClient.sln -c Debug -t:Rebuild --nologo` → **Build succeeded. 0 Warning(s) 0 Error(s)** (warnings measured on `-t:Rebuild` per the packet clause).
+3. `dotnet test client/tests/CcpClient.Tests -c Debug` → **516/516** (492 restored floor + 24 new: 8 `AiModerationBoundaryTests` + 8 `AiModerationPipelineBoundaryTests` + 8 `AiModerationCoverageTests`). Full log captured; zero failures — the Step-3 transient did not recur (4th consecutive green full-suite run).
+4. `dotnet test client/tests/CcpClient.HeadlessTests -c Debug` → **29/29** (floor 29 — no new headless tests; c3 has no UI surface, honestly absent).
+5. `git diff --check` → clean. `git status --short` → clean (all work committed at step boundaries). File-scope audit `git diff --stat db5651b5..HEAD -- ':!spine-tasks'` → ONLY `client/src/CcpClient.Desktop/Ai/**` + `client/tests/CcpClient.Tests/**` (10 files); `fileScopeMustChange` `AiModerationBoundary.cs` present; no `fileScopeMustNotChange` path touched.
+
+Linux contract run: covered by the WSL zero-distro named limit (§ header) — owner-gated, never faked (same disposition as SP-035, sanctioned by the 2026-08-04 amendment pattern).
 
 ## 10. Budgets, surprises, durable-lesson candidates
 

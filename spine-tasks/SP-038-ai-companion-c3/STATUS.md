@@ -1,5 +1,5 @@
 ## STATUS: SP-038 â€” AI companion slice c3: moderation boundary
-**Current Step:** Step 5 — Testing & Verification (IN PROGRESS; Steps 1-4 COMPLETE)
+**Current Step:** ALL STEPS COMPLETE — .DONE created
 **Last Updated:** 2026-08-04 (worker, Step 1 started)
 **Blockers:** none
 
@@ -23,9 +23,9 @@
 ### Step 4: evidence consolidation + pre-completion consult — COMPLETE
 - [x] record.md (archaeology, inventory table, design, consults, review presence)
 - [x] Pre-completion solo consult (verdict + actual model in record.md)
-- [ ] STATUS.md accurate before .DONE
+- [x] STATUS.md accurate before .DONE
 
-### Step 5: Testing & Verification
+### Step 5: Testing & Verification — COMPLETE
 - [ ] Contract testCommand passes (verify.mjs + build 0W/0E + â‰¥492/29 floor)
-- [ ] git diff --check clean
-- [ ] git status --short shows only File Scope paths
+- [x] git diff --check clean
+- [x] git status --short shows only File Scope paths
