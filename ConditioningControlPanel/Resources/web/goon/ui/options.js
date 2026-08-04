@@ -162,8 +162,9 @@ export function createOptions({ prefs, audio = null, session = null, setFullscre
     /* SHADER SPIRALS — the freeze escape hatch, and it is offered mid-match for
      * the same reason skippable videos is: the moment a player wants it is the
      * moment the picture has stopped moving. Default ON (it is the good bed);
-     * off, exec/spiral.js drops to the bundled spiral pool within a second and
-     * stays there for the life of the pane. Same chain as the toggle above —
+     * off, exec/spiral.js drops to a baked still of the same generated spiral
+     * within a second and stays there for the life of the pane. Same chain as
+     * the toggle above —
      * prefs writes <html data-gg-shader> and exec/ reads it there, because exec/
      * never imports ui/. */
     const shaders = toggleRow(S.options.shaderSpirals,

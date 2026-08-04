@@ -26,19 +26,24 @@
  * NO CROSS-IMPORT, BY CONSTRUCTION. Nothing here reaches into dtrh/. The Loom's
  * consumer module (dtrh/engine/loomSpirals.js) drags DtRH settings + the Loom's
  * saved-spiral storage in with it; goon is offline-by-construction and must
- * never read the player's Loom library. The presets below are authored HERE, in
- * goon's palette, and are the whole content surface.
+ * never read the player's Loom library.
  *
- * PRESETS AND THEIR SPIN. Rotation is seamless by construction: a layer moves
- * exactly one symmetry span per loop, so revolution time is
+ * PARAMS ARE ROLLED, NOT AUTHORED (2026-08-04). This module is the RENDERER and
+ * nothing else — exec/spiralGen.js generates a session's worth of randomized
+ * parameter sets and hands them here. The Loom's centerpiece (dot/star/cross/x)
+ * is excluded at the schema level below: there is no field for one.
+ *
+ * SPIN. Rotation is seamless by construction: a layer moves exactly one symmetry
+ * span per loop, so revolution time is
  *   revMs = loopMs * arms / (arms % colors === 0 ? colors : arms) / speedMul
- * Every preset below is tuned into a 10-18s revolution — the band the CSS
- * `ggSpiralSpin 14s` keyframe used to sit in, so the bed feels unchanged.
+ * (that is revolutionSecFor, below). spiralGen solves every roll into a 10-18s
+ * revolution — the band the CSS `ggSpiralSpin 14s` keyframe sits in, so a bed
+ * that drops from the shader to the raster path does not change tempo.
  *
- * The raster pool is NOT deleted: exec/spiral.js still falls back to it when
- * WebGL is unavailable or the context is lost, and exec/bubbles.js still flicks
- * a bundled still on a popped spiral bubble. This module is the upgrade path,
- * not a replacement for the floor.
+ * The raster path is NOT deleted, it is GENERATED TOO: exec/spiralGen.js bakes
+ * the same parameters to a still PNG with a 2D-canvas port of the Loom's own
+ * fallback renderer. So a lost context now swaps the RENDERER and keeps the
+ * picture, where it used to swap in an unrelated bundled GIF.
  * ==========================================================================*/
 
 /* ---------------------------------------------------------------------------
@@ -129,74 +134,27 @@ function layerRotationRad(layer, phase) {
   return layer.direction * phase * symmetrySpanRad(layer) * layer.speedMul;
 }
 
-/** Seconds per full revolution — the number every preset below is tuned on. */
+/** Seconds per full revolution — the number every roll is solved onto. */
 export function revolutionSecFor(q) {
   const p = normalizeSpiralParams(q);
   return (loopMsFor(p) / (symmetrySpanRad(p.layer) / TWO_PI) / p.layer.speedMul) / 1000;
 }
 
 /* ---------------------------------------------------------------------------
- * THE POOL — six woven spirals in goon's palette, one per retired raster.
+ * WHERE THE PARAMS COME FROM: exec/spiralGen.js.
  *
- * DUTY IS THE COVERAGE DIAL, AND IT IS TUNED LOW ON PURPOSE. This is a BED: it
- * screen-blends over live gameplay at up to 0.70, so it has to read as a spiral
- * without painting over the match. The rasters it replaces were thin bright
- * arms on a mostly-black field; `duty` (the lit fraction of each arm band) is
- * what reproduces that, and every preset sits at 0.26-0.34 rather than the
- * Loom's 0.5 default. Raise the ARM COUNT, not the duty, to make one busier.
- *
- * Comments carry the tuned revolution time (see the banner's revMs formula).
+ * This module used to carry a table of six hand-authored presets. It does not
+ * any more — the owner asked for the Loom's OTHER half, the 🎲 roll, so the
+ * whole content surface is now generated per session in spiralGen.js and this
+ * module is purely the renderer. What that module has to respect is written
+ * down there; the two rules it inherited from the retired table are worth
+ * repeating because they are properties of the MATH above, not of taste:
+ *   · a multi-thread layer needs `arms % colors.length === 0`, or there is no
+ *     sub-2PI symmetry, the loop must cover a whole turn, and the bed spins
+ *     arms/colors times too fast;
+ *   · `duty` is the coverage dial and belongs near 0.3 for a bed, not at the
+ *     Loom's 0.5 default — raise the ARM COUNT to make a spiral busier.
  * ------------------------------------------------------------------------ */
-export const SPIRAL_PRESETS = Object.freeze([
-  // silk — the classic: four soft pink arms opening to the rim. 14.4s/rev.
-  {
-    speed: 1, glow: 0.3,
-    layer: { arms: 4, turns: 2.25, duty: 0.3, style: 'log', direction: 1, colors: ['#ff69b4'] },
-    bg: { kind: 'radial', color: '#0a0410', outer: '#04010a' },
-  },
-  // ribbon — five swelling bands, a slow breath under them. 18s/rev.
-  {
-    speed: 1, glow: 0.2, pulse: { amp: 0.06, cycles: 1 },
-    layer: { arms: 5, turns: 1.75, duty: 0.28, style: 'ribbon', direction: -1, colors: ['#e56cc0'] },
-    bg: { kind: 'solid', color: '#080312' },
-  },
-  // twin — pink/violet candy stripe with a counter-rotating cyan weave. 10.8s/rev.
-  {
-    speed: 1, glow: 0.28,
-    layer: { arms: 6, turns: 2.5, duty: 0.28, style: 'log', direction: 1, colors: ['#ff69b4', '#8a5cff'] },
-    layer2: { enabled: true, arms: 3, turns: 1.5, duty: 0.2, style: 'arch', direction: -1, colors: ['#00e5ff'], speedMul: 1 },
-    bg: { kind: 'radial', color: '#0a0412', outer: '#030108' },
-  },
-  // golden — constant-pitch growth, gradient-blended, faintly liquid. 10.8s/rev.
-  // 6 arms, not 3: an ODD arm count with 2 threads has no sub-2PI symmetry, so
-  // the loop has to cover a whole turn and the bed spins 3x too fast (3.6s).
-  // Keep `arms % colors.length === 0` on every multi-thread preset.
-  {
-    speed: 1, glow: 0.4, wobble: { amp: 0.09, freq: 3, cycles: 1 },
-    layer: { arms: 6, turns: 3, duty: 0.3, style: 'golden', direction: 1, colors: ['#ff69b4', '#8a5cff'], bandMode: 'gradient' },
-    bg: { kind: 'solid', color: '#070310' },
-  },
-  // tunnel — rings riding the radius, sheared into a helix. Rushes inward. 14.4s/rev.
-  {
-    speed: 1, glow: 0.22,
-    layer: { arms: 8, turns: 2, duty: 0.26, style: 'tunnel', direction: -1, colors: ['#8a5cff', '#ff69b4'] },
-    bg: { kind: 'radial', color: '#0a0414', outer: '#020106' },
-  },
-  // petal — a rose sheared into blades; the softest of the six. 14.4s/rev.
-  // 8 arms at speed 3, not 5 at speed 1: petals are WIDE, so a low arm count
-  // reads as a pinwheel rather than a spiral, and 8 arms at speed 1 would crawl
-  // round in 28.8s. This pairing lands back on the same 14.4s as silk.
-  {
-    speed: 3, glow: 0.45, pulse: { amp: 0.08, cycles: 1 },
-    layer: { arms: 8, turns: 3, duty: 0.34, style: 'petal', direction: 1, colors: ['#ff8fd0'] },
-    bg: { kind: 'solid', color: '#060210' },
-  },
-].map(normalizeSpiralParams));
-
-/** A random woven spiral. The procedural twin of exec/spiral.js#pickSpiralUrl. */
-export function pickSpiralParams() {
-  return SPIRAL_PRESETS[(Math.random() * SPIRAL_PRESETS.length) | 0];
-}
 
 /* ---------------------------------------------------------------------------
  * THE SHADER — copied from the Loom's field (dtrh/shared/loomField.js) so the
@@ -377,7 +335,7 @@ export const CONTEXT_LOST_WEBGL = 0x9242;
 /**
  * The field renderer on a canvas. Returns null on ANY host that cannot run it
  * — no canvas element, no getContext, no WebGL, a shader that will not compile
- * — because exec/spiral.js's raster pool is a perfectly good floor and a thrown
+ * — because exec/spiral.js's baked raster bed is a perfectly good floor and a thrown
  * error inside a renderer would take the whole effect tier down with it.
  *
  * @returns {{render(q:object, phase:number):void, lost():boolean, dispose():void, gl:object}|null}
@@ -491,7 +449,7 @@ export function createSpiralField(canvas) {
     }
   }
 
-  /** Hand the GPU its memory back; the pane goes home to the raster pool. */
+  /** Hand the GPU its memory back; the pane goes home to the raster bake. */
   function dispose() {
     if (dead) return;
     dead = true;

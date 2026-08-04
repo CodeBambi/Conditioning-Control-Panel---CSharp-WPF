@@ -339,21 +339,33 @@ body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default
  * Overscanned so the rotation never bares a corner. The renderer swaps only the
  * background-image; this rule owns cover/blend/spin.
  *
- * THE GRAIN. The bundled pool is 360-640px dithered 256-colour GIFs, and `cover`
- * on a 1080p+ window blows a 360px source up 3-5x: the dither pattern stops
- * reading as shading and starts reading as GRAIN crawling over the whole screen.
- * A constant 1.1px blur softens the dither below the resolution of the eye while
- * leaving the spiral's own edges (which are huge at that scale) perfectly legible.
- * It is safe to sit in `filter` because NOTHING animates filter on this pane —
- * ggSpiralSpin is transform-only and the fade is opacity-only. Do not add a
- * filter keyframe here without moving this blur onto a wrapper.
- * (The other half of the fix is in exec/spiral.js: sp7.gif, the 360x360 worst
- * offender, is out of SPIRAL_POOL. The file stays on disk — DtRH owns it.)
+ * NO BUNDLED IMAGE (2026-08-04). This rule used to name a DtRH file as its
+ * default background. It names none now: every spiral goon shows is GENERATED at
+ * run time by exec/spiralGen.js, and the pane's background-image is a baked PNG
+ * data URL written inline by exec/spiral.js. A pane with no picture is invisible,
+ * which is the right answer on a host that cannot bake one.
+ *
+ * THE BLUR, WHICH STILL EARNS ITS PLACE. It went in to hide the dither in a
+ * 360px 256-colour GIF magnified 3-5x. There is no dither any more — but there
+ * is still magnification (the bake is 1280px square, `cover` plus `scale: 1.6`
+ * puts it near 2.4x on a 1080p window), and the bake draws its arms as filled
+ * annular wedge strips whose radial seams are exactly what a sub-pixel blur is
+ * for. It is safe to sit in `filter` because NOTHING animates filter on this
+ * pane — ggSpiralSpin is transform-only and the fade is opacity-only. Do not add
+ * a filter keyframe here without moving this blur onto a wrapper.
+ *
+ * SPIN RATE AND DIRECTION ARE CUSTOM PROPERTIES, and that is load-bearing. Each
+ * generated variant is solved onto its own 10-18s revolution, which exec/spiral.js
+ * writes here so the raster bed turns at the rate — and the way — the shader bed
+ * would. They cannot be plain animation-duration/-direction longhands: the woven
+ * path cancels this keyframe with an inline `animation` SHORTHAND and clears it
+ * again with '' on the way back, and a shorthand clear takes every longhand it
+ * owns with it.
  * ------------------------------------------------------------------------ */
 .gg-spiral {
   position: absolute;
   inset: 0;
-  background: url('/dtrh/assets/bubbles/effects/spiral.png') center / cover no-repeat;
+  background: center / cover no-repeat;
   mix-blend-mode: screen;
   transform-origin: 50% 50%;
   scale: 1.6;
@@ -361,7 +373,7 @@ body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default
   filter: blur(1.1px);
   will-change: opacity, transform;
   transition: opacity var(--gg-spiral-fade, 450ms) ease;
-  animation: ggSpiralSpin 14s linear infinite;
+  animation: ggSpiralSpin var(--gg-spiral-spin, 14s) linear infinite var(--gg-spiral-dir, normal);
   animation-play-state: var(--gg-deco-play, running);
 }
 .gg-spiral.is-on { opacity: var(--gg-spiral-op, 0.4); }
