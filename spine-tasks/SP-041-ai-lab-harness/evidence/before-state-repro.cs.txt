@@ -1,0 +1,70 @@
+using System.Net;
+
+// BEFORE-STATE REPRO (SP-041, throwaway — never committed):
+// Proves the wave-5 T-3 flake mechanism in AiProviderLab's constructor.
+// The lab binds a RANDOM port in 49152-65535; a zombie test host (or OS ephemeral
+// churn) holding that exact port makes Start() throw HttpListenerException.
+// SP-023 lesson: a FAILED Start() DISPOSES the instance. The lab's retry loop then
+// reuses the disposed instance (Prefixes.Clear() + Start()), and its catch clause
+// only handles HttpListenerException — so ObjectDisposedException ESCAPES the
+// constructor and fails the test. Observed wave-5 exception:
+// "System.ObjectDisposedException: Cannot access a disposed object ('System.Net.HttpListener')"
+// in AiProviderLabIntegrationTests.Refusal_ThroughPipeline_TypedCarrier_ExactlyOneHit.
+
+var port = Random.Shared.Next(49152, 65535);
+var prefix = $"http://127.0.0.1:{port}/";
+
+// The "zombie": another holder of the lab's chosen port (a leaked test host's lab).
+var zombie = new HttpListener();
+zombie.Prefixes.Add(prefix);
+zombie.Start();
+Console.WriteLine($"zombie holder up on {prefix}");
+
+// Replay the lab's CURRENT constructor shape verbatim (single reused instance).
+var listener = new HttpListener();
+string? escaped = null;
+for (var attempt = 0; ; attempt++)
+{
+    var tryPort = attempt == 0 ? port : port + 1; // force the collision on attempt 0
+    try
+    {
+        listener.Prefixes.Add($"http://127.0.0.1:{tryPort}/");
+        listener.Start();
+        Console.WriteLine($"attempt {attempt}: bound {tryPort}");
+        break;
+    }
+    catch (HttpListenerException) when (attempt < 25)
+    {
+        Console.WriteLine($"attempt {attempt}: HttpListenerException (collision) — listener.IsListening={listener.IsListening}");
+        try
+        {
+            listener.Prefixes.Clear(); // SP-023: instance is already DISPOSED here
+            Console.WriteLine($"attempt {attempt}: Prefixes.Clear() survived (unexpected)");
+        }
+        catch (ObjectDisposedException ode)
+        {
+            escaped = "ObjectDisposedException at Prefixes.Clear(): " + ode.Message;
+            break;
+        }
+    }
+}
+
+if (escaped is null)
+{
+    // Prefixes.Clear may tolerate disposal; the next Start() is the other ODE site.
+    try
+    {
+        listener.Prefixes.Add($"http://127.0.0.1:{port + 2}/");
+        listener.Start();
+        Console.WriteLine("retry Start() unexpectedly succeeded");
+    }
+    catch (ObjectDisposedException ode)
+    {
+        escaped = "ObjectDisposedException at retry Start(): " + ode.Message;
+    }
+}
+
+Console.WriteLine(escaped is null
+    ? "RESULT: no ODE reproduced (mechanism NOT confirmed)"
+    : "RESULT: " + escaped);
+zombie.Stop();

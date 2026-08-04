@@ -1,13 +1,13 @@
 ## STATUS: SP-041 — T-15: c2 AI lab harness hardening
-**Current Step:** Step 1 — harness archaeology + fix design + pre-approach consult
-**Last Updated:** 2026-08-04 (authored)
+**Current Step:** Step 1 — harness archaeology + fix design + pre-approach consult (in progress)
+**Last Updated:** 2026-08-04 (worker, Step 1 started)
 **Blockers:** none
 
 ### Step 1: archaeology + fix design + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] Listener lifecycle read + before-state failure shape captured
-- [ ] Design (teardown discipline, fresh-instance-per-bind, host-exit guarantee, leaked-listener self-check)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Update STATUS.md before starting work
+- [x] Listener lifecycle read + before-state failure shape captured
+- [x] Design (teardown discipline, fresh-instance-per-bind, host-exit guarantee, leaked-listener self-check)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: harden the harness
 - [ ] AiProviderLab.cs lifecycle + teardown + self-check
