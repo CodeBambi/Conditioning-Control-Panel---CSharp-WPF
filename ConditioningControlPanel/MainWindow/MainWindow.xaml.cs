@@ -505,8 +505,12 @@ namespace ConditioningControlPanel
 
                         // Same waiting idiom as the first-launch branch, plus IsStartupDialogShowing:
                         // What's New is modal and posts itself onto the dispatcher, so it can still be
-                        // pending when this runs.
-                        for (int i = 0; i < 60 && (App.IsUpdateDialogActive || IsStartupDialogShowing); i++)
+                        // pending when this runs. Every modular upgrader ARRIVES with a What's New to
+                        // read, so wait out minutes of reading, not seconds - at 30s a user still on
+                        // the patch notes silently lost the picker until the next launch (play-test
+                        // scenario C caught exactly that). Past 5 min we still defer to next launch,
+                        // which ModPickerShown=false keeps armed.
+                        for (int i = 0; i < 600 && (App.IsUpdateDialogActive || IsStartupDialogShowing); i++)
                         {
                             await Task.Delay(500);
                         }

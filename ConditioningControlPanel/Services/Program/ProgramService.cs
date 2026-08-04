@@ -93,8 +93,7 @@ public class ProgramService : IDisposable
     public ProgramService()
     {
         _statePath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ConditioningControlPanel",
+            App.UserDataPath,
             "programs.json");
 
         State = LoadState();

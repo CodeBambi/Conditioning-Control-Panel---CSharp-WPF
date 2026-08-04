@@ -224,14 +224,35 @@ namespace ConditioningControlPanel.Services
             return null;
         }
 
+        /// <summary>
+        /// A genuine full/legacy install bundles the whole baseline voice set (118 files this
+        /// cycle), so demand a count no hand-curated collection plausibly reaches. "Any file at
+        /// all" is NOT a full install: the modular sweep deletes bundled audio by exact name and
+        /// deliberately leaves USER-dropped files behind, so one custom mp3 (or a stray .txt)
+        /// must not flip an upgrader to FullInstall and silently disable pack downloads forever
+        /// (play-test scenario G caught exactly that).
+        /// </summary>
+        private const int FullInstallAudioThreshold = 25;
+
         private static bool DetectFullInstall()
         {
             try
             {
                 var probe = Path.Combine(AppContext.BaseDirectory, LegacyAudioProbe);
                 if (!Directory.Exists(probe)) return false;
-                // An empty leftover folder is not a full install — Inno leaves dirs behind.
-                return Directory.EnumerateFiles(probe, "*", SearchOption.AllDirectories).Any();
+                var audioCount = 0;
+                foreach (var f in Directory.EnumerateFiles(probe, "*", SearchOption.AllDirectories))
+                {
+                    var ext = Path.GetExtension(f);
+                    if (ext.Equals(".mp3", StringComparison.OrdinalIgnoreCase) ||
+                        ext.Equals(".wav", StringComparison.OrdinalIgnoreCase) ||
+                        ext.Equals(".ogg", StringComparison.OrdinalIgnoreCase) ||
+                        ext.Equals(".m4a", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (++audioCount >= FullInstallAudioThreshold) return true;
+                    }
+                }
+                return false;
             }
             catch (Exception ex)
             {

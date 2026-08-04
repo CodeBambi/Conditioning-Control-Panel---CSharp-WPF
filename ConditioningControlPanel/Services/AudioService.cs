@@ -455,8 +455,7 @@ namespace ConditioningControlPanel.Services
 
         // Crash recovery file for ducking state
         private static readonly string DuckingRecoveryFile = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ConditioningControlPanel", "ducking_recovery.json");
+            App.UserDataPath, "ducking_recovery.json");
 
         #endregion
 

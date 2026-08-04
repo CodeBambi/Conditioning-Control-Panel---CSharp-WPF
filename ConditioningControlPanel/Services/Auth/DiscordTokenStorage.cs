@@ -18,8 +18,7 @@ namespace ConditioningControlPanel.Services
 
         public DiscordTokenStorage()
         {
-            var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            var storageDir = Path.Combine(appData, "ConditioningControlPanel");
+            var storageDir = App.UserDataPath;
 
             // Ensure directory exists
             if (!Directory.Exists(storageDir))

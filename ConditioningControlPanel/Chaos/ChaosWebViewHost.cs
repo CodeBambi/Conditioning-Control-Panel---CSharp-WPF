@@ -473,9 +473,7 @@ internal sealed class ChaosWebViewHost : IDisposable
         _initStarted = true;
         try
         {
-            var userDataFolder = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "ConditioningControlPanel", _opts.UserDataFolderName);
+            var userDataFolder = Path.Combine(App.UserDataPath, _opts.UserDataFolderName);
             Directory.CreateDirectory(userDataFolder);
 
             // --disable-direct-composition-video-overlays: keep the WebGL swapchain composited

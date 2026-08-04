@@ -215,9 +215,7 @@ internal static class ChaosTunnelService
         _initStarted = true;
         try
         {
-            var userDataFolder = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "ConditioningControlPanel", "browser_data_chaos_tunnel");
+            var userDataFolder = Path.Combine(App.UserDataPath, "browser_data_chaos_tunnel");
             Directory.CreateDirectory(userDataFolder);
 
             // --disable-direct-composition-video-overlays: keep the WebGL swapchain composited

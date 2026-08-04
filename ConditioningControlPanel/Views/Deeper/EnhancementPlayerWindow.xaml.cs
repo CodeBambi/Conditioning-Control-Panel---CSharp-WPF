@@ -1189,8 +1189,7 @@ namespace ConditioningControlPanel.Views.Deeper
             // let a hostile page read the user's signed-in HT cookies via
             // document.cookie / authenticated fetch.
             var userDataFolder = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "ConditioningControlPanel",
+                App.UserDataPath,
                 "browser_data_deeper_player");
             System.IO.Directory.CreateDirectory(userDataFolder);
             // --autoplay-policy=no-user-gesture-required: Chromium otherwise

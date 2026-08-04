@@ -260,9 +260,7 @@ public static class UiHangWatchdog
         // MiniDumpWithPrivateReadWriteMemory and wrote 1-2GB with ALL threads suspended,
         // freezing the app for 30s..minutes (or forever when the write itself wedged).
         // Both paths now write the COMPACT stream set only.
-        string dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ConditioningControlPanel", "logs");
+        string dir = Path.Combine(App.UserDataPath, "logs");
         string path = Path.Combine(dir, $"hang_{DateTime.Now:yyyyMMdd_HHmmss}.dmp");
         try
         {
@@ -364,9 +362,7 @@ public static class UiHangWatchdog
     {
         try
         {
-            string dir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "ConditioningControlPanel", "logs");
+            string dir = Path.Combine(App.UserDataPath, "logs");
             var dumps = new DirectoryInfo(dir).GetFiles("hang_*.dmp")
                 .OrderByDescending(f => f.LastWriteTimeUtc).Skip(2);
             foreach (var f in dumps)
