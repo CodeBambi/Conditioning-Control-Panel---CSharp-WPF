@@ -161,6 +161,11 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.PremiumChip_Click(PremiumFeature.Voice);
         }
+        private void ChipFyp_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.PremiumChip_Click(PremiumFeature.Fyp);
+        }
         private void BtnLockdownMinus_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

@@ -7,7 +7,7 @@ using ConditioningControlPanel.Services;
 namespace ConditioningControlPanel
 {
     /// <summary>Features surfaced as quick-toggle chips on the dashboard premium rail.</summary>
-    public enum PremiumFeature { Takeover, Awareness, Haptics, Lockdown, Blink, Remote, Voice, GradedIntake }
+    public enum PremiumFeature { Takeover, Awareness, Haptics, Lockdown, Blink, Remote, Voice, GradedIntake, Fyp }
 
     // Dashboard premium quick-toggle rail (left of the feature grid).
     public partial class MainWindow
@@ -252,7 +252,8 @@ namespace ConditioningControlPanel
             // A running session owns the prescribed dose (MainWindow.SessionFeatureLock.cs).
             // Takeover / Awareness / Haptics are part of that mix, so the rail cannot flip them
             // mid-session. Deliberately NOT gated: Voice (the mic is a privacy control - the user
-            // must always be able to disarm it) and Graded Intake (navigation, not a toggle).
+            // must always be able to disarm it) and the two navigation shortcuts, Graded Intake
+            // and For You, which open a page/window instead of flipping a session feature.
             switch (feature)
             {
                 case PremiumFeature.Takeover:
@@ -281,6 +282,13 @@ namespace ConditioningControlPanel
                 case PremiumFeature.GradedIntake:
                     // Navigation shortcut, not a toggle — the intake starts from its own page.
                     ShowTab("gradedintake");
+                    break;
+                case PremiumFeature.Fyp:
+                    // Navigation shortcut too, but the destination is a window rather than a tab:
+                    // ShowTab intercepts "fyp" and calls OpenFypFeed, which owns the premium gate.
+                    // Routed through ShowTab on purpose so the dashboard chip and the Exclusives
+                    // spotlight card share one launch path.
+                    ShowTab("fyp");
                     break;
             }
             RefreshPremiumRail();
