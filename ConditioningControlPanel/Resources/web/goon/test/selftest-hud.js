@@ -2751,6 +2751,151 @@ const audioMod = await import('../ui/audio.js');
   dmDc.dispose();
 }
 
+/* ===========================================================================
+ * 13. THE ZEN TOGGLE — one button, four panels (owner, 2026-08-04).
+ *
+ * "add a button that hides the ui": the score, the risk multiplier, the
+ * closeness dial ("you're telling them") and MERCY step off together; the
+ * opponent monitor and the arsenal stay. The whole feature is one bit, so this
+ * pins the bit, both of its names, and the CSS that reads them — a toggle that
+ * flips a class no stylesheet mentions is an invisible feature.
+ * ======================================================================== */
+{
+  const { S: S13 } = await import('../ui/strings.js');
+  const prefsMod13 = await import('../ui/prefs.js');
+
+  ok(typeof hudMod.HUD_ZEN_CLASS === 'string' && hudMod.HUD_ZEN_CLASS.length > 0,
+    'ui/hud.js exports the zen class name');
+  ok(typeof hudMod.HUD_ZEN_ATTR === 'string' && hudMod.HUD_ZEN_ATTR.length > 0,
+    'ui/hud.js exports the <html> attribute MERCY is hidden from');
+
+  // every user-facing word goes through ui/strings.js
+  ok(!!(S13.hud && S13.hud.zenHide && S13.hud.zenShow),
+    'strings.js carries both labels for the toggle');
+  ok(!!(S13.hud.zenHideGlyph && S13.hud.zenShowGlyph && S13.hud.zenHideGlyph !== S13.hud.zenShowGlyph),
+    'and two DIFFERENT glyphs — the state is never only a colour');
+  ok(/escape/i.test(String(S13.hud.zenShowTitle || '')),
+    'the hidden state says out loud that escape still ends the match');
+
+  const match13 = makeFakeMatch();
+  const store13 = { hudZen: false };
+  const prefs13 = { get: (k) => store13[k], set: (k, v) => { store13[k] = v; } };
+  const hud13 = hudMod.mountHud({ match: match13, audio: { sfx() {} }, prefs: prefs13 });
+  const hudHost13 = dom.byId.get('gg-hud');
+  const root13 = findOne(hudHost13, 'gg-hud-frame');
+  const zen13 = findOne(hudHost13, 'gg-zen');
+  const html13 = dom.doc.documentElement;
+
+  ok(!!zen13, 'the live HUD carries exactly one zen toggle');
+  ok(findAll(hudHost13, 'gg-zen').length === 1, 'exactly one',
+    String(findAll(hudHost13, 'gg-zen').length));
+  ok(zen13 && zen13.tagName === 'BUTTON', 'it is a real button');
+  ok(zen13 && zen13.getAttribute('aria-pressed') === 'false', 'unpressed to start');
+  ok(zen13 && zen13.getAttribute('aria-label') === S13.hud.zenHide,
+    'labelled from strings.js', zen13 && String(zen13.getAttribute('aria-label')));
+  ok(!hasClass(root13, hudMod.HUD_ZEN_CLASS), 'the desk starts whole');
+  ok(html13.getAttribute(hudMod.HUD_ZEN_ATTR) === null, 'and MERCY starts visible');
+
+  zen13.dispatchEvent({ type: 'click' });
+  ok(hasClass(root13, hudMod.HUD_ZEN_CLASS), 'one press puts the modifier on the frame');
+  ok(html13.getAttribute(hudMod.HUD_ZEN_ATTR) === 'on',
+    'and mirrors the same bit onto <html>, which is the only way to reach #gg-mercy');
+  ok(zen13.getAttribute('aria-pressed') === 'true', 'aria-pressed follows');
+  ok(zen13.getAttribute('aria-label') === S13.hud.zenShow, 'and so does the label');
+  ok(zen13.textContent === S13.hud.zenShowGlyph, 'the glyph flips to the way back');
+  ok(store13.hudZen === true, 'the pick is remembered');
+  ok(hudHost13.children.length > 0 && !!findOne(hudHost13, 'gg-mon-host'),
+    'the monitor and the rest of the desk are untouched — CSS does the hiding, not JS');
+
+  zen13.dispatchEvent({ type: 'click' });
+  ok(!hasClass(root13, hudMod.HUD_ZEN_CLASS), 'a second press gives everything back');
+  ok(html13.getAttribute(hudMod.HUD_ZEN_ATTR) === null, 'including MERCY');
+  ok(zen13.getAttribute('aria-pressed') === 'false', 'and the button says so');
+  ok(store13.hudZen === false, 'the pref follows it back');
+
+  // the handle a play-test driver uses instead of synthesising a click
+  hud13.parts.zen.set(true);
+  ok(hud13.parts.zen.on === true && hasClass(root13, hudMod.HUD_ZEN_CLASS),
+    'parts.zen drives the same one bit');
+
+  /* THE UNWIND. The class dies with the node; the attribute does not, and a
+   * leftover one would hide the mercy button of the NEXT match with no button
+   * left on screen to bring it back. */
+  hud13.unmount();
+  ok(html13.getAttribute(hudMod.HUD_ZEN_ATTR) === null,
+    'unmount clears the <html> bit — a stale one would hide the next match\'s MERCY');
+  ok(match13._subs.released === match13._subs.taken,
+    'and the toggle leaks no subscriptions', `${match13._subs.released}/${match13._subs.taken}`);
+
+  // remembered across mounts
+  const match13b = makeFakeMatch();
+  const hud13b = hudMod.mountHud({ match: match13b, audio: { sfx() {} }, prefs: { get: () => true, set() {} } });
+  const root13b = findOne(dom.byId.get('gg-hud'), 'gg-hud-frame');
+  ok(hasClass(root13b, hudMod.HUD_ZEN_CLASS) && html13.getAttribute(hudMod.HUD_ZEN_ATTR) === 'on',
+    'a remembered zen is applied at mount, not on the first click');
+  hud13b.unmount();
+  ok(html13.getAttribute(hudMod.HUD_ZEN_ATTR) === null, 'and unwound the same way');
+
+  ok(prefsMod13.PREF_DEFAULTS.hudZen === false,
+    'the pref exists and defaults OFF — a desk you cannot read your score in is a choice',
+    String(prefsMod13.PREF_DEFAULTS.hudZen));
+
+  // a HUD with no pref store at all must still toggle
+  const match13c = makeFakeMatch();
+  const hud13c = hudMod.mountHud({ match: match13c, audio: { sfx() {} } });
+  const zen13c = findOne(dom.byId.get('gg-hud'), 'gg-zen');
+  zen13c.dispatchEvent({ type: 'click' });
+  ok(hasClass(findOne(dom.byId.get('gg-hud'), 'gg-hud-frame'), hudMod.HUD_ZEN_CLASS),
+    'the toggle works with no prefs object — persistence is a nicety, not the state');
+  hud13c.unmount();
+
+  /* ---- the CSS half ----------------------------------------------------- */
+  const fs13 = await import('node:fs/promises');
+  const url13 = await import('node:url');
+  const hudCss13 = await fs13.readFile(url13.fileURLToPath(new URL('../ui/hud.css', import.meta.url)), 'utf8');
+  const goonCss13 = await fs13.readFile(url13.fileURLToPath(new URL('../goon.css', import.meta.url)), 'utf8');
+
+  const zenBlocks = hudCss13.match(/[^{}]*\.gg-hud--zen[^{}]*\{[^}]*\}/g) || [];
+  ok(zenBlocks.length > 0, 'hud.css reads the modifier class at all');
+  const zenText = zenBlocks.join('\n');
+  for (const sel of ['.gg-score', '.gg-risk', '.gg-dial-host']) {
+    ok(zenText.includes(sel), `zen hides ${sel}`);
+  }
+  ok(/\.gg-hud--zen[^{}]*\{[^}]*display:\s*none/.test(zenText),
+    'and it hides them with display, so the layout closes up instead of leaving holes');
+
+  // what must SURVIVE the toggle: their monitor and the effects you can send
+  for (const sel of ['.gg-mon-host', '.gg-rail', '.gg-item', '.gg-zen']) {
+    ok(!new RegExp('\\.gg-hud--zen[^{}]*' + sel.replace('.', '\\.') + '[^{}]*\\{[^}]*display:\\s*none').test(hudCss13),
+      `zen never hides ${sel}`);
+  }
+
+  ok(/html\[data-gg-zen="on"\]\s*#gg-mercy[^{]*\{[^}]*display:\s*none/.test(hudCss13),
+    'MERCY is reached from <html>, because it is not a descendant of the HUD');
+  const mercyZen = (hudCss13.match(/html\[data-gg-zen="on"\][^{]*\{[^}]*\}/g) || []).join('\n');
+  ok(!/opacity|filter|transform|animation/.test(mercyZen),
+    'and only display: the isolation contract in goon.css is not being dimmed, filtered or moved');
+  ok(/filter:\s*none\s*!important/.test(goonCss13) && /opacity:\s*1\s*!important/.test(goonCss13),
+    'goon.css still owns the mercy isolation block, untouched');
+
+  // the button is the only way back on a phone: hit area, and no parked animation
+  const zenBtnBlock = (hudCss13.match(/\.gg-zen\s*\{[^}]*\}/g) || [])[0] || '';
+  ok(/width:\s*48px/.test(zenBtnBlock) && /height:\s*48px/.test(zenBtnBlock),
+    'the toggle keeps a 48px hit area', zenBtnBlock);
+  ok(!/animation/.test(zenBtnBlock),
+    'and no animation — it would need pinning against the --gg-deco-play park');
+
+  /* ---- the size pass (independent of the toggle) ------------------------- */
+  const mercyBlock = (hudCss13.match(/\.gg-mercy-btn\s*\{[^}]*\}/g) || [])[0] || '';
+  const mercyH = Number((mercyBlock.match(/height:\s*(\d+)px/) || [])[1] || 0);
+  ok(mercyH >= 48 && mercyH <= 64, 'MERCY is smaller than it was, and still a finger tall', String(mercyH));
+  const dialBlock = (hudCss13.match(/\.gg-dial\s*\{[^}]*\}/g) || [])[0] || '';
+  const dialMin = Number((dialBlock.match(/min-width:\s*([\d.]+)rem/) || [])[1] || 99);
+  ok(dialMin < 15, 'the closeness dial is narrower than the 15rem it shipped at', String(dialMin));
+  ok(/\.gg-dial-stop\s*\{[^}]*min-height:\s*48px/.test(hudCss13),
+    'but its four stops keep their 48px touch target — the plate shrank, the targets did not');
+}
+
 await sleep(60);
 console.log(`\nselftest-hud: ${n - failures}/${n} checks passed`);
 if (failures > 0) {

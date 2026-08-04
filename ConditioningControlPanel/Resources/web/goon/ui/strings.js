@@ -81,6 +81,9 @@ export const S = Object.freeze({
     back: 'Back',
     errUnknown: 'No room with that code. Check the last character?',
     errFull: 'That room already has two players.',
+    // NOT "full": the other seat is yours. Sending a player off to re-read a code
+    // they typed correctly is the worst thing this screen can do.
+    errSelf: 'That is your own room — the other player has to be on a different account.',
     errExpired: 'That code expired. Ask for a fresh one.',
     errShort: 'six characters, please.',
   },
@@ -505,6 +508,19 @@ export const S = Object.freeze({
       headline: 'Could not connect',
       line: 'Neither a direct nor a relayed link came up. Try again.',
     },
+    // A seat problem is never a connection problem, and the fall-through sheet
+    // ("could not reach the server") would tell the player to check their wifi
+    // about a room that answered perfectly.
+    seatTaken: {
+      icon: '👥',
+      headline: 'That room is taken',
+      line: 'Someone else is already in there. Ask for a fresh code.',
+    },
+    selfJoin: {
+      icon: '🪞',
+      headline: 'That is your own room',
+      line: 'You are the host of that code. The other player has to be on a different account.',
+    },
     lobbyFailed: {
       icon: '⚙',
       headline: 'This pairing will not work',
@@ -513,6 +529,25 @@ export const S = Object.freeze({
     ok: 'OK',
     cancel: 'Cancel',
     retry: 'Try again',
+  },
+
+  /* ------------------------------------------------------ the desk's chrome
+   * The zen toggle (ui/hud.js): ONE button that clears the desk down to the
+   * opponent monitor and the arsenal — the score, the risk multiplier, the
+   * closeness dial and the mercy button all step off together.
+   *
+   * A glyph, because it sits in the top-right corner beside the gear where a
+   * word would not fit, so the label travels in aria-label + title instead and
+   * the pressed state travels in aria-pressed. The "escape still ends the
+   * match" half is not decoration: while the panels are away it is the only
+   * place that says so. */
+  hud: {
+    zenHide: 'hide panels',
+    zenShow: 'show panels',
+    /** ⊟ collapse / ⊞ expand — a box that loses and regains its contents. */
+    zenHideGlyph: '⊟',
+    zenShowGlyph: '⊞',
+    zenShowTitle: 'show panels · escape still ends the match',
   },
 
   /* ------------------------------------------------- the opponent monitor */

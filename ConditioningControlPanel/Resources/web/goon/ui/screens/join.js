@@ -111,6 +111,7 @@ export function mount(container, ctx) {
     switch (kind) {
       case 'unknown_code': return S.join.errUnknown;
       case 'already_joined': return S.join.errFull;
+      case 'self_join': return S.join.errSelf;
       case 'expired': return S.join.errExpired;
       default: return null;
     }

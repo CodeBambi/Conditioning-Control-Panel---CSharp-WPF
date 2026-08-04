@@ -4,7 +4,7 @@
  * Composes the live-match HUD inside #gg-hud and owns the layout grid:
  *
  *   ┌ top ────────────────────────────────────────────────────────────────┐
- *   │ score · charges · risk        11:47 ▮▮▯▯▯        attention   ⚙      │
+ *   │ score · charges · risk        11:47 ▮▮▯▯▯      attention  ⊟  ⚙      │
  *   ├ body ───────────────────────────────────────────────────────────────┤
  *   │ [rail]              (the stage well — never covered)      [monitor] │
  *   │  4 items                                                  [receipts]│
@@ -15,6 +15,11 @@
  *
  * THE MIDDLE IS SACRED. The HUD frames #gg-stage, it never lands on top of it:
  * everything here is edge-anchored and the centre column is pointer-transparent.
+ *
+ * ZEN (the ⊟ beside the gear). One bit, and everything it hides — score, risk,
+ * the closeness dial, MERCY — is hidden by ui/hud.css off .gg-hud--zen and
+ * html[data-gg-zen]. The monitor and the arsenal stay: they are what the duel is
+ * played on. See the toggle's own block below for why hiding MERCY is safe.
  *
  * ANIMATION BUDGET. Chrome animations go through fx.play(): at most two run at
  * once and anything that waited more than 600 ms is dropped rather than played
@@ -47,6 +52,21 @@ export const BUBBLE_POP_EVENT = 'gg-bubble-pop';
  * holds an id — the detail carries a NAME and nothing else.
  */
 export const DISCORD_DM_EVENT = 'gg-discord-dm';
+
+/**
+ * THE ZEN BIT — one class on the frame, one attribute on <html>.
+ *
+ * "add a button that hides the ui" (owner, 2026-08-04). Everything the toggle
+ * takes away is hidden by ui/hud.css off these two names and nothing else, so
+ * the whole feature is one boolean: no per-element `hidden` flags to keep in
+ * sync and nothing to leave behind if a paint throws.
+ *
+ * The attribute exists because MERCY is NOT inside the HUD: #gg-mercy is its own
+ * fixed layer (z60, goon.css) and no descendant selector from .gg-hud-frame can
+ * reach it. Exported so the suite pins the same two strings the CSS does.
+ */
+export const HUD_ZEN_CLASS = 'gg-hud--zen';
+export const HUD_ZEN_ATTR = 'data-gg-zen';
 
 /** Own-draft element cues -> the chip that shows them on the bottom-left rail. */
 const ELEMENT_META = Object.freeze({
@@ -296,6 +316,73 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
 
   const rightTop = add(top, el('div', 'gg-hud-topright'));
   const attSlot = add(rightTop, el('div', 'gg-att-slot'));
+
+  /* ---- THE ZEN TOGGLE ---------------------------------------------------
+   * One button, always on screen, that takes the score, the risk multiplier,
+   * the closeness dial and the mercy button away and gives them back. What is
+   * left is what the duel is actually played on: their monitor and the arsenal.
+   *
+   * IT IS ITS OWN UNDO. The button never hides — it would be a one-way door on
+   * a phone, where there is no Escape key to fall back to — and it keeps the
+   * gear's 48px hit area for the same reason.
+   *
+   * HIDING MERCY IS A PREFERENCE, NOT A CHANGE TO THE SAFETY CONTRACT. Escape
+   * concedes through boot.js's ladder, which calls match.declareMercy() itself
+   * and has never touched this button (ui/mercy.js's own pointerdown handler is
+   * a second, independent path). Nothing here reads or focuses the button
+   * either, so a hidden mercy is a mercy that still works — and the title says
+   * so out loud while it is away.
+   */
+  const zenBtn = add(rightTop, el('button', 'gg-zen'));
+  let zenOn = false;
+  if (zenBtn) zenBtn.type = 'button';
+
+  function paintZen() {
+    const label = zenOn ? S.hud.zenShow : S.hud.zenHide;
+    text(zenBtn, zenOn ? S.hud.zenShowGlyph : S.hud.zenHideGlyph);
+    if (zenBtn && zenBtn.setAttribute) {
+      try {
+        zenBtn.setAttribute('aria-pressed', zenOn ? 'true' : 'false');
+        zenBtn.setAttribute('aria-label', label);
+        zenBtn.title = zenOn ? S.hud.zenShowTitle : label;
+      } catch (_e) { /* stub DOM */ }
+    }
+    cls(root, HUD_ZEN_CLASS, zenOn);
+    try {
+      const de = d && d.documentElement;
+      if (de && typeof de.setAttribute === 'function') {
+        if (zenOn) de.setAttribute(HUD_ZEN_ATTR, 'on');
+        else de.removeAttribute(HUD_ZEN_ATTR);
+      }
+    } catch (_e) { /* no <html>: the frame class still does the HUD half */ }
+  }
+
+  function setZen(on, remember) {
+    const next = !!on;
+    if (next === zenOn) return;
+    zenOn = next;
+    paintZen();
+    // Persisting is a nicety, not the state: the bit above is already true.
+    if (remember && prefs && typeof prefs.set === 'function') {
+      try { prefs.set('hudZen', zenOn); } catch (_e) { /* no store, no problem */ }
+    }
+  }
+
+  // Remembered across matches when there is a store to remember it in.
+  if (prefs && typeof prefs.get === 'function') {
+    try { if (prefs.get('hudZen')) zenOn = true; } catch (_e) { /* ignore */ }
+  }
+  paintZen();
+  led.listen(zenBtn, 'click', () => { sfx(audio, 'ui-select'); setZen(!zenOn, true); });
+  // The <html> attribute outlives this node, so it is unwound by hand: a stray
+  // data-gg-zen would hide the mercy button of the NEXT match.
+  led.add(() => {
+    try {
+      const de = d && d.documentElement;
+      if (de && typeof de.removeAttribute === 'function') de.removeAttribute(HUD_ZEN_ATTR);
+    } catch (_e) { /* gone */ }
+  });
+
   const gear = add(rightTop, el('button', 'gg-gear', '⚙'));
   if (gear) {
     gear.type = 'button';
@@ -673,7 +760,11 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
 
   return {
     /** Exposed so H (or a play-test driver) can poke the desk without re-deriving it. */
-    parts: { root, arsenal, opponent, dial, attention, emotes, announcer, fx, drops },
+    parts: {
+      root, arsenal, opponent, dial, attention, emotes, announcer, fx, drops,
+      /** The zen toggle, for a driver that wants the state without the click. */
+      zen: { button: zenBtn, set: (on) => setZen(on, true), get on() { return zenOn; } },
+    },
     unmount() {
       fx.stop();
       for (const rec of Array.from(chips.values())) dropChipRec(rec);

@@ -57,8 +57,23 @@ async function testSignaling() {
   ok(joined.token !== invite.token, 'guest gets its own room token');
   ok(joined.peerDisplayName === 'host', 'join reports the peer display name');
 
-  const dup = await guest.join(invite.code, 'Circe');
-  ok(dup === null && guest.lastError === GoonSignalError.AlreadyJoined, 'second join -> already_joined', String(guest.lastError));
+  /* --- THE SEAT BELONGS TO A UID (ghost-slot fix, 2026-08-04) ------------------
+   * The owner's phone was told "that room already has two players" by its OWN
+   * earlier attempt. Three outcomes have to stay separable here, because the
+   * lobby renders three different sentences from them. */
+  const stranger = new GoonSignalingClient({ post: fake.post, unifiedId: 'u_third', appVersion: 'test', logger: quiet });
+  const taken = await stranger.join(invite.code, 'Stranger');
+  ok(taken === null && stranger.lastError === GoonSignalError.AlreadyJoined,
+    'a DIFFERENT uid on an occupied room -> already_joined', String(stranger.lastError));
+
+  const selfJoin = await host.join(invite.code, 'Bambi');
+  ok(selfJoin === null && host.lastError === GoonSignalError.SelfJoin,
+    'the host redeeming its own code -> self_join, not "full"', String(host.lastError));
+
+  const again = await guest.join(invite.code, 'Circe');
+  ok(!!again && again.rejoin === true, 'the SAME uid reclaims its seat instead of being refused');
+  ok(!!again && again.token && again.token !== joined.token, 'a reclaimed seat gets a fresh room token');
+  const reclaimedToken = again.token;
 
   // --- post-and-drain round trip ------------------------------------------------
   const h1 = await host.signal(invite.code, invite.token, 'host', 0, [{ kind: 'offer', data: 'OFFER' }]);
@@ -66,7 +81,7 @@ async function testSignaling() {
   ok(h1 && h1.cursor === 1, 'cursor advances PAST our own message', String(h1 && h1.cursor));
   ok(h1 && h1.peerJoined === true, 'peer_joined true after the guest redeemed');
 
-  const g1 = await guest.signal(invite.code, joined.token, 'guest', 0, [{ kind: 'answer', data: 'ANSWER' }]);
+  const g1 = await guest.signal(invite.code, reclaimedToken, 'guest', 0, [{ kind: 'answer', data: 'ANSWER' }]);
   ok(g1 && g1.messages.length === 1 && g1.messages[0].kind === 'offer', 'guest drains the offer');
   ok(g1 && g1.messages[0].from === 'host' && g1.messages[0].seq === 1, 'drained message carries seq + from');
   ok(g1 && g1.cursor === 2, 'guest cursor covers its own answer too', String(g1 && g1.cursor));
@@ -79,7 +94,7 @@ async function testSignaling() {
   // --- relay mailbox is a separate ring -----------------------------------------
   const r1 = await host.relay(invite.code, invite.token, 'host', 0, ['{"t":"tick"}'], 10);
   ok(r1 && r1.frames.length === 0 && r1.cursor === 1, 'relay: no self-echo, cursor advances');
-  const r2 = await guest.relay(invite.code, joined.token, 'guest', 0, [], 10);
+  const r2 = await guest.relay(invite.code, reclaimedToken, 'guest', 0, [], 10);
   ok(r2 && r2.frames.length === 1 && r2.frames[0] === '{"t":"tick"}', 'relay: peer drains the frame');
   ok(r2 && r2.peerOnline === true, 'relay reports peer_online');
 
@@ -909,6 +924,169 @@ async function testGuestFold() {
   }
 }
 
+/* ================================================================================
+ * 10. THE GHOST SEAT (owner play-test, 2026-08-04)
+ *
+ * The phone was refused with "that room already has two players" by a room whose
+ * second player WAS the phone: an earlier attempt had registered the seat and then
+ * folded without telling anyone, and nothing but the 30-minute room TTL could
+ * clear it. Two independent halves fix it, and both are pinned here because either
+ * one alone still leaves a hole:
+ *
+ *   a) the SERVER reclaims a seat for the uid that already holds it, so the retry
+ *      works even when the goodbye never arrives (closed tab, dead network, a
+ *      server that predates /leave);
+ *   b) the CLIENT hands the seat back on any teardown of a room that never
+ *      connected, so the ghost does not exist in the first place — and does NOT
+ *      hand it back once a channel came up, because past that point the room token
+ *      is what the ledger writes with.
+ * ==============================================================================*/
+async function testSeatRelease() {
+  // --- a) the fake server's seat semantics, end to end -------------------------
+  {
+    const fake = new GoonFakeSignalingServer();
+    const host = new GoonSignalingClient({ post: fake.post, unifiedId: 'u_h', logger: quiet });
+    const phone = new GoonSignalingClient({ post: fake.post, unifiedId: 'u_p', logger: quiet });
+    const other = new GoonSignalingClient({ post: fake.post, unifiedId: 'u_o', logger: quiet });
+
+    const inv = await host.createInvite('Host');
+    const first = await phone.join(inv.code, 'Phone');
+    ok(!!first && first.rejoin === false, 'a first join is not a rejoin');
+
+    // The bounce: the phone hands the seat back on its way out.
+    ok(await phone.leave(inv.code, first.token, 'guest') === true, 'guest /leave is acknowledged');
+    ok(fake.room(inv.code) && fake.room(inv.code).joined === false, 'the seat is free again');
+
+    const back = await phone.join(inv.code, 'Phone');
+    ok(!!back && back.rejoin === false, 'a released seat is a clean join, not a reclaim');
+    ok(fake.room(inv.code).guestUid === 'u_p', 'and the room knows whose seat it is');
+
+    // …and the belt-and-braces half: even WITHOUT the goodbye, the same uid gets in.
+    const reclaim = await phone.join(inv.code, 'Phone');
+    ok(!!reclaim && reclaim.rejoin === true, 'a ghost seat is reclaimed by its own uid');
+    ok(fake.room(inv.code).guestEpoch === 3, 'each claim is a new seat epoch', String(fake.room(inv.code).guestEpoch));
+
+    ok(await other.join(inv.code, 'Other') === null && other.lastError === GoonSignalError.AlreadyJoined,
+      'a genuinely occupied room still refuses a stranger — the message was only a lie about the OWNER');
+
+    // The host walking away takes the code with it.
+    ok(await host.leave(inv.code, inv.token, 'host') === true, 'host /leave is acknowledged');
+    ok(fake.room(inv.code) === null, 'a host fold deletes the room');
+    ok(await phone.join(inv.code, 'Phone') === null && phone.lastError === GoonSignalError.UnknownCode,
+      'and the folded code is gone for everyone');
+  }
+
+  // --- b) leave() never disturbs the error the lobby is about to render ---------
+  {
+    const c = new GoonSignalingClient({ post: () => Promise.resolve({ status: 500, body: '' }), logger: quiet });
+    c.lastError = GoonSignalError.AlreadyJoined;
+    c.lastErrorDetail = 'keep-me';
+    await c.leave('ABC123', 'tok', 'guest');
+    ok(c.lastError === GoonSignalError.AlreadyJoined && c.lastErrorDetail === 'keep-me',
+      'a failed goodbye does not overwrite lastError');
+  }
+
+  // --- c) which teardowns send it ----------------------------------------------
+  const leaves = [];
+  const sig = () => ({
+    dispose() {},
+    leave: (code, token, role) => { leaves.push({ code, token, role }); return Promise.resolve(true); },
+  });
+  class Leg {
+    constructor(isHost, outcome) {
+      this.isHost = isHost; this._outcome = outcome;
+      this.code = null; this.token = null; this.iceFailed = false; this.lastError = null;
+    }
+    async createInvite() { this.code = 'ROOM99'; this.token = 'tok-host'; return this.code; }
+    async join(c) { this.code = c; this.token = 'tok-guest'; return true; }
+    async waitForChannel() {
+      await sleep(5);
+      if (this._outcome === 'connected') return true;
+      this.iceFailed = false;                    // signaling-level: no relay, straight fold
+      this.lastError = 'signaling_failed';
+      return false;
+    }
+    async close() {}
+    dispose() {}
+  }
+  const mk = (outcome) => new GoonSession({
+    logger: quiet,
+    createMatch: (t, isHost) => ({
+      transport: t, isHost,
+      createInvite: () => t.createInvite(), join: (c) => t.join(c),
+      adoptLobby: () => true, cancelMatch: () => {}, dispose: () => {},
+    }),
+    createSignaling: sig,
+    createWebrtc: (isHost) => new Leg(isHost, outcome),
+    createRelay: (isHost) => new Leg(isHost, outcome),
+  });
+
+  {
+    const s = mk('fold');
+    await s.join('ABC123');
+    ok(await until(() => leaves.length === 1, 3000), 'a guest fold hands the seat back');
+    ok(leaves[0] && leaves[0].role === 'guest' && leaves[0].code === 'ABC123' && leaves[0].token === 'tok-guest',
+      'with the room it actually held', JSON.stringify(leaves[0]));
+  }
+  {
+    leaves.length = 0;
+    const s = mk('fold');
+    await s.host();
+    await s.leave();
+    ok(leaves.length === 1 && leaves[0].role === 'host', 'a host that never connected folds its lobby',
+      JSON.stringify(leaves));
+  }
+  {
+    leaves.length = 0;
+    const s = mk('connected');
+    await s.join('ABC123');
+    await sleep(40);
+    await s.leave();
+    ok(leaves.length === 0,
+      'a room that CONNECTED is never released — the ledger still needs that token', JSON.stringify(leaves));
+  }
+  {
+    leaves.length = 0;
+    const s = mk('fold');
+    await s.dispose();
+    ok(leaves.length === 0, 'a session that never got a room has nothing to hand back');
+  }
+  {
+    // …and the flag is per ATTEMPT. A session object outlives one match here, so a
+    // sticky "we connected once" would silently disable the goodbye for every room
+    // after the first — the exact ghost, one match later.
+    leaves.length = 0;
+    let leg = 0;
+    const s = new GoonSession({
+      logger: quiet,
+      createMatch: (t, isHost) => ({
+        transport: t, isHost, join: (c) => t.join(c),
+        adoptLobby: () => true, cancelMatch: () => {}, dispose: () => {},
+      }),
+      createSignaling: sig,
+      createWebrtc: () => new Leg(false, ++leg === 1 ? 'connected' : 'fold'),
+      createRelay: () => new Leg(false, 'fold'),
+    });
+    await s.join('AAA111');
+    await sleep(40);
+    await s.leave();
+    ok(leaves.length === 0, 'the connected attempt still sends nothing');
+    await s.join('BBB222');
+    ok(await until(() => leaves.length === 1 && leaves[0].code === 'BBB222', 3000),
+      'a LATER attempt on the same session still hands its seat back', JSON.stringify(leaves));
+  }
+
+  // --- d) the server half, pinned by source (it lives in another repo) ----------
+  {
+    const src = readSource('../net/session.js');
+    ok(/_releaseRoom\(transport, signaling\);/.test(src) && src.indexOf('_releaseRoom(transport, signaling);') < src.indexOf('signaling.dispose()'),
+      'the goodbye is issued BEFORE the signaling client is disposed');
+    const sess = src.slice(src.indexOf('_releaseRoom(transport, signaling) {'));
+    ok(/if \(this\._everConnected\) return;/.test(sess.slice(0, 400)),
+      'and it is gated on never having connected');
+  }
+}
+
 // ============================================================ run
 const main = async () => {
   await testSignaling();
@@ -920,6 +1098,7 @@ const main = async () => {
   await testBlocklist();
   await testPeerCardVer();
   await testGuestFold();
+  await testSeatRelease();
 
   console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);
   process.exit(failures === 0 ? 0 : 1);

@@ -45,13 +45,22 @@ with all error cases lives at the top of `GoonSignalingClient.cs` — summary:
 | Endpoint | Purpose | Key semantics |
 |---|---|---|
 | `/v2/goon/invite` | host mints room | server checks premium OR burns weekly free pass (`pass:"premium"\|"weekly_free"`; 402 `no_pass` + `next_pass_utc`); crockford32 code, ~5 min TTL |
-| `/v2/goon/join` | guest redeems code | 404 `unknown_code`, 409 `already_joined`; returns peer display name/version |
+| `/v2/goon/join` | guest redeems code | 404 `unknown_code`; 409 `already_joined` (a DIFFERENT uid holds the seat) or `self_join` (the code is your own room — one account cannot hold both seats); the SAME uid **reclaims** its seat instead of being refused: fresh token, `rejoin:true`, no second pass burned, stale SDP dropped; returns peer display name/version |
+| `/v2/goon/leave` | release the seat | best-effort, fire-and-forget, `{code, token, role}`; a guest hands the seat back and the ROOM stays up, a host folds the room outright; 409 `match_started` once the ledger has a row (releasing the seat invalidates the token that row is written with). Optional by design — the room TTL is still the backstop, and a client treats any failure as "never mind" |
 | `/v2/goon/signal` | SDP/ICE mailbox | post-and-drain in ONE call, ~2 s short-poll, setup only; `data` is opaque (browser-identical `toJSON()` blobs — JS does `JSON.parse` straight into `setRemoteDescription`/`addIceCandidate`); append-only list, exclusive `since` cursor, callers never receive their own messages |
 | `/v2/goon/relay` | fallback transport | same shape; `data` = whole GoonMessage frame; `wait_ms` long-poll hint; own rate budget (~1 call/2 s per player, match-length TTL), 16 KB/frame, 128-frame ring; server MUST NOT inspect or persist `data` |
 | `/v2/goon/ledger` | end-of-match write | both clients post their signed result; server stores the pair under both unified_ids, flags mismatches as disputed; private to the two players |
 
 A bare 404 (no error body) on any route = "server not deployed" → clients show a
 warming-up message, never "bad code".
+
+> **Seat identity / `/leave` (2026-08-04)** are implemented on the server and in the
+> **web** client (`Resources/web/goon/net/`). The C# client
+> (`Services/GoonGame/GoonSignalingClient.cs` and its `GoonFakeSignalingServer`) has
+> not been taught either yet: it never sends `/leave`, and its fake server still
+> models the seat as a bare `joined` flag. Neither is a break — the additions are
+> backward-compatible — but the C# fake no longer models everything the real server
+> does, so port it before trusting it for a rejoin case.
 
 ## 3. Transport
 - Primary: WebRTC **data channel**, ordered + reliable, one channel, no media tracks.

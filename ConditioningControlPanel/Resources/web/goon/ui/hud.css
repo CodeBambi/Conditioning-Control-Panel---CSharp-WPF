@@ -58,6 +58,32 @@
 .gg-hud-frame.is-over { opacity: 0.35; pointer-events: none; }
 
 /* ---------------------------------------------------------------------------
+ * ZEN — the desk cleared down to the two things the duel is played on: their
+ * monitor and the arsenal. One bit (ui/hud.js HUD_ZEN_CLASS/HUD_ZEN_ATTR), every
+ * hide below it, nothing in JS.
+ *
+ * WHAT GOES: the score + its +1 flourish, the risk multiplier, your name plate,
+ * the closeness dial and MERCY. WHAT STAYS: the monitor, the rails, the charge
+ * pips (they are the arsenal's currency, not a readout), the timer, the
+ * attention ring and the toggle itself.
+ *
+ * MERCY IS NOT A DESCENDANT. #gg-mercy is its own fixed layer in goon.css, so
+ * the same bit is mirrored onto <html> and reached from there. This does not
+ * touch the isolation block: nothing is dimmed, filtered, scaled or animated,
+ * the layer is restored by the same button that took it away, and Escape
+ * concedes throughout (boot.js's ladder calls declareMercy() directly).
+ * ------------------------------------------------------------------------ */
+.gg-hud-frame.gg-hud--zen .gg-score,
+.gg-hud-frame.gg-hud--zen .gg-plus1,
+.gg-hud-frame.gg-hud--zen .gg-risk,
+.gg-hud-frame.gg-hud--zen .gg-me,
+.gg-hud-frame.gg-hud--zen .gg-dial-host { display: none; }
+/* the bottom deck reclaims MERCY's keep-out — there is nothing parked below it */
+.gg-hud-frame.gg-hud--zen .gg-hud-bottom { padding-bottom: 0; }
+
+html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
+
+/* ---------------------------------------------------------------------------
  * TOP BAR — score · charges · risk | timer | attention · gear
  * ------------------------------------------------------------------------ */
 .gg-hud-top {
@@ -128,6 +154,24 @@
   cursor: pointer;
 }
 .gg-gear:hover { color: #fff; border-color: var(--gg-pink); }
+
+/* The zen toggle, beside the gear and built to the same 48px hit area — it is
+   the ONLY way back once the panels are away, so it is never the thing that
+   shrinks. No animation of any kind: it would need pinning against the
+   --gg-deco-play park, and a control that must be findable at heat does not
+   move anyway. */
+.gg-zen {
+  width: 48px; height: 48px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1.05rem; line-height: 1; color: var(--gg-text-2);
+  background: var(--gg-plate-bg);
+  border: var(--gg-plate-border);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.gg-zen:hover { color: #fff; border-color: var(--gg-pink); }
+/* pressed = the desk is cleared; the glyph flips as well, colour is never alone */
+.gg-zen[aria-pressed="true"] { color: var(--gg-pink); border-color: rgba(var(--gg-pink-rgb), 0.7); }
 
 /* ---------------------------------------------------------------------------
  * ATTENTION — the ring, the dot history, the token, the missed-check banner
@@ -1011,10 +1055,14 @@
 }
 .gg-fxchip.is-incoming .gg-fxchip-bar { background: rgba(var(--gg-violet-rgb), 0.7); }
 
+/* SIZE (owner, 2026-08-04: "both are too big, especially on mobile"). The dial
+   lost a third of its width and most of its padding; it did NOT lose its touch
+   targets — the four stops keep their 48px, which is what the tier rule is
+   about, and the plate simply stopped padding them out. */
 .gg-dial-host { display: flex; justify-content: flex-end; }
-.gg-dial { min-width: 15rem; padding: 0.5rem 0.7rem 0.6rem; }
-.gg-dial-label { font-size: 0.62rem; letter-spacing: 0.16em; color: var(--gg-text-4); }
-.gg-dial-stops { display: flex; gap: 4px; margin: 0.35rem 0 0.3rem; }
+.gg-dial { min-width: 10.5rem; max-width: 14rem; padding: 0.3rem 0.5rem 0.35rem; }
+.gg-dial-label { font-size: 0.56rem; letter-spacing: 0.14em; color: var(--gg-text-4); }
+.gg-dial-stops { display: flex; gap: 4px; margin: 0.25rem 0 0.2rem; }
 .gg-dial-stop {
   flex: 1 1 0;
   min-height: 48px;
@@ -1030,7 +1078,7 @@
 .gg-dial[data-gg-close="3"] .gg-dial-stop.is-on .gg-dial-bar { background: var(--gg-hot); }
 .gg-dial-stop.is-head { color: var(--gg-text); }
 .gg-dial-stop.is-head .gg-dial-bar { height: 16px; }
-.gg-dial-fine { font-size: 0.6rem; color: var(--gg-text-4); }
+.gg-dial-fine { font-size: 0.54rem; line-height: 1.2; color: var(--gg-text-4); }
 
 /* ---------------------------------------------------------------------------
  * EMOTE SHEET
@@ -1071,12 +1119,16 @@
  * MERCY CHROME — the button itself is styled in goon.css (DO NOT TOUCH block).
  * Everything here is around it, and never on top of it.
  * ------------------------------------------------------------------------ */
-.gg-mercy-wrap { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; }
+.gg-mercy-wrap { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; }
+/* SIZE (owner, 2026-08-04: the button was eating the bottom of a phone). It is
+   smaller, not weaker: still the widest single control on the desk, still well
+   past a 48px finger in both axes, still the only uppercase word on the page,
+   and every line of the isolation contract in goon.css is untouched. */
 .gg-mercy-btn {
   position: relative;
-  width: min(420px, 60vw);
-  height: 72px;
-  font-size: 1rem;
+  width: min(300px, 46vw);
+  height: 56px;
+  font-size: 0.86rem;
 }
 .gg-mercy-btn.is-arming { pointer-events: none; opacity: 1; }
 .gg-mercy-arm {
@@ -1087,7 +1139,7 @@
   animation: ggArm 700ms linear forwards;
 }
 @keyframes ggArm { to { clip-path: inset(0 0 0 0); } }
-.gg-mercy-fine { font-size: 0.64rem; letter-spacing: 0.1em; color: var(--gg-text-4); }
+.gg-mercy-fine { font-size: 0.58rem; letter-spacing: 0.08em; color: var(--gg-text-4); }
 
 /* NOT children of #gg-mercy: that layer carries `transform: translateX(-50%)`,
    which makes it the containing block for any fixed-position descendant — a
@@ -1369,15 +1421,28 @@
   /* both rails share the strip: left half scrolls in from the left, right from the right */
   .gg-rail--left { bottom: 12.6rem; }
 
-  .gg-hud-bottom { flex-direction: column; align-items: stretch; gap: 0.4rem; padding-bottom: 5.6rem; }
+  /* keeps clearing the mercy strip, which is now 60px + its fineprint tall */
+  .gg-hud-bottom { flex-direction: column; align-items: stretch; gap: 0.4rem; padding-bottom: 5rem; }
   .gg-fxrail { max-width: none; }
-  .gg-dial-host { justify-content: stretch; }
-  .gg-dial { min-width: 0; width: 100%; }
+  /* the dial no longer spans the phone: it sits in the right corner at a size a
+     thumb still hits, and the rail beside it gets the rest of the row back */
+  .gg-dial-host { justify-content: flex-end; }
+  .gg-dial { min-width: 0; width: min(100%, 17rem); max-width: none; }
 
   .gg-emotes { right: 0.6rem; left: 0.6rem; width: auto; bottom: 18rem; }
 
-  .gg-mercy-btn { width: calc(100vw - 1.6rem); height: 84px; }
+  .gg-mercy-btn { width: min(calc(100vw - 1.6rem), 20rem); height: 60px; }
   .gg-sd-react { width: 92vw; height: 40vh; }
+
+  /* ZEN on a phone: the dial and the mercy strip are gone, so the two arsenal
+     rails drop into the space they were clearing instead of leaving a hole.
+     They stop 5.2rem up rather than at the floor — the effect chips still stack
+     upward from the bottom of the deck and they were never the thing being
+     hidden. The rails are absolutely placed, so this is the only way they can
+     follow the reflow at all. */
+  .gg-hud-frame.gg-hud--zen .gg-rail,
+  .gg-hud-frame.gg-hud--zen .gg-rail--right { bottom: 5.2rem; }
+  .gg-hud-frame.gg-hud--zen .gg-rail--left { bottom: 10.6rem; }
 }
 
 /* ---------------------------------------------------------------------------

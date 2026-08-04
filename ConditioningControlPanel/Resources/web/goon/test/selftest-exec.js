@@ -3480,6 +3480,115 @@ async function main() {
       'the tag still resolves after a preset change, even though there is no local video at all');
   }
 
+  /* -------------------------------------------------------------------------
+   * THE LOCAL LIBRARY — standalone playback (the phone bug, 2026-08-04).
+   *
+   * In a browser there is no host: bridge.js synthesizes an EMPTY manifest, and
+   * the files the player picks on the assets screen used to reach the SEND path
+   * only. So the deck stayed empty and a practice session fired every effect
+   * against nothing. setLocalLibrary is the other half of the deck, and these
+   * checks pin BOTH directions of the independence that makes it safe.
+   * ---------------------------------------------------------------------- */
+  {
+    const { createGoonMediaPool } = await import('../exec/media.js');
+
+    // 1. The bug, reproduced: standalone boots on an empty manifest.
+    const pool = createGoonMediaPool();
+    pool.setManifest({ images: [], videos: [], skipped: 0, truncated: false });
+    ok(pool.hasMedia() === false && pool.drawKind('image') === null,
+      'standalone starts on the empty synthesized manifest — an empty deck (this WAS the bug)');
+
+    // 2. The picks land, kind-first. Blob URLs carry NO extension, so the kind
+    //    the store decided is the only thing that can classify them.
+    const locals = [
+      { kind: 'image', name: 'pic-0.jpg', url: 'blob:http://localhost/aaa' },
+      { kind: 'image', name: 'pic-1.png', url: 'blob:http://localhost/bbb' },
+      { kind: 'image', name: 'pic-2.gif', url: 'blob:http://localhost/ccc' },
+      { kind: 'video', name: 'clip-0.mp4', url: 'blob:http://localhost/ddd' },
+      { kind: 'video', name: 'clip-1.mp4', url: 'blob:http://localhost/eee' },
+    ];
+    const c = pool.setLocalLibrary(locals);
+    ok(c.images === 3 && c.videos === 2, 'setLocalLibrary puts the picks in the deck',
+      c.images + 'i/' + c.videos + 'v');
+    ok(pool.hasMedia() === true && pool.localCount() === 5,
+      'the pool has media now — a solo session draws from the player\'s own picks');
+
+    const img = pool.drawKind('image');
+    const vid = pool.drawKind('video');
+    const vidUrls = new Set(['blob:http://localhost/ddd', 'blob:http://localhost/eee']);
+    ok(img && img.url.startsWith('blob:') && img.kind === 'image' && img.provenance === 'local',
+      'drawKind("image") hands back one of the picked stills, as local provenance',
+      img ? img.url : 'null');
+    ok(vid && vidUrls.has(vid.url), 'and drawKind("video") one of the picked clips', vid ? vid.url : 'null');
+    ok(pool.acquire(img).url === img.url, 'acquire hands the blob URL straight through…');
+    ok(typeof pool.acquire(img).release === 'function',
+      '…with a no-op release: the assets store owns those object URLs, not the pool');
+
+    // 3. Kinds never cross. A video pick must never render as a flash.
+    let crossed = 0;
+    for (let i = 0; i < 120; i++) {
+      const d = pool.drawKind('image');
+      if (!d || vidUrls.has(d.url)) crossed++;
+    }
+    ok(crossed === 0, 'one hundred and twenty image draws never surfaced a video pick', String(crossed));
+
+    // 4. Junk is skipped, never pushed as an entry that can only fail to load.
+    const c2 = pool.setLocalLibrary(locals.concat([
+      null,
+      { kind: 'image', name: 'no-url' },
+      { kind: 'audio', name: 'wrong-kind.mp3', url: 'blob:http://localhost/fff' },
+    ]));
+    ok(c2.images === 3 && c2.videos === 2, 'a null, a URL-less row and an unknown kind are all dropped',
+      c2.images + 'i/' + c2.videos + 'v');
+
+    // 5. Removing every pick empties the local half — and only that half.
+    ok(pool.setLocalLibrary([]).images === 0 && pool.localCount() === 0,
+      'clearing the library clears the deck when there is no host manifest behind it');
+  }
+
+  // ------------------- the two halves of the deck are INDEPENDENT (hosted safety)
+  {
+    const { createGoonMediaPool } = await import('../exec/media.js');
+    const pool = createGoonMediaPool();
+    const hosted = pool.setManifest(ownManifest());
+    ok(hosted.images === 6 && hosted.videos === 4, 'the hosted manifest flow is untouched',
+      hosted.images + 'i/' + hosted.videos + 'v');
+
+    // Hosted, nobody ever picks a file — an empty local half changes nothing.
+    const still = pool.setLocalLibrary([]);
+    ok(still.images === 6 && still.videos === 4,
+      'an empty local library leaves the host\'s preset exactly as it was',
+      still.images + 'i/' + still.videos + 'v');
+    let offPreset = 0;
+    for (let i = 0; i < 60; i++) {
+      const d = pool.draw();
+      if (!d || !d.url.startsWith('https://ccp.assets/')) offPreset++;
+    }
+    ok(offPreset === 0, 'and sixty draws all come off the host manifest', String(offPreset));
+
+    // Defensive: if both ever coexist, they ADD — neither setter clobbers the other.
+    const both = pool.setLocalLibrary([{ kind: 'image', name: 'p.jpg', url: 'blob:x/1' }]);
+    ok(both.images === 7 && both.videos === 4, 'a pick alongside a host manifest adds to the deck',
+      both.images + 'i/' + both.videos + 'v');
+    const relisted = pool.setManifest({ images: [{ name: 'only', url: 'https://ccp.assets/only' }], videos: [] });
+    ok(relisted.images === 2 && relisted.videos === 0,
+      'a NEW manifest re-deals the host half and KEEPS the player\'s picks (2 = 1 host + 1 local)',
+      relisted.images + 'i/' + relisted.videos + 'v');
+    ok(pool.localCount() === 1, 'the local half really survived the manifest reset', String(pool.localCount()));
+
+    // …and the received map is none of setLocalLibrary's business either.
+    pool.addReceived({ sha: SHA_VID, kind: 'video', mime: 'video/mp4', url: 'https://ccp.cache/recv/b.mp4' });
+    pool.setLocalLibrary([{ kind: 'image', name: 'q.jpg', url: 'blob:x/2' }]);
+    ok(pool.hasReceived(SHA_VID) === true,
+      'setLocalLibrary re-deals the DECK and leaves the received map alone, exactly like setManifest');
+    let peerFromDeck = 0;
+    for (let i = 0; i < 120; i++) {
+      const d = pool.draw();
+      if (d && d.provenance !== 'local') peerFromDeck++;
+    }
+    ok(peerFromDeck === 0, 'and a local pick still cannot make the deck surface a peer artifact', String(peerFromDeck));
+  }
+
   // ------------------------------------ videos: the payload path, and only it
   {
     for (const id of LAYER_IDS) byId.get(id).replaceChildren();

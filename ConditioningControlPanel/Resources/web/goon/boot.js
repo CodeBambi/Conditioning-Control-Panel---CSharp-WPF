@@ -58,7 +58,7 @@ import { createToasts } from './ui/toasts.js';
 import { createSheets } from './ui/sheets.js';
 import { createOptions } from './ui/options.js';
 import { createSoloDriver } from './ui/soloDriver.js';
-import { createAssetsStore } from './ui/assetsStore.js';
+import { createAssetsStore, localPlayableEntries } from './ui/assetsStore.js';
 import { createDiscord, confirmOpenDm } from './ui/discord.js';
 import { emitAva, mountVsSplash } from './ui/avatar.js';
 import { S } from './ui/strings.js';
@@ -565,6 +565,42 @@ function createArtifactSource() {
       };
     },
   };
+}
+
+/* ----------------------------------------------------------------------------
+ * THE LOCAL LIBRARY IS A PLAYABLE LIBRARY.
+ *
+ * Standalone there is no host and bridge.js synthesizes an EMPTY manifest, so
+ * exec/media.js's deck starts (and used to stay) empty: the files a player picks
+ * on the assets screen only ever reached the SEND path (listSendable above).
+ * A practice session on a phone therefore fired every flash, bubble and video
+ * against nothing — the effects ran, the screen stayed blank. This is the other
+ * half: the picks go into the deck too, so the player's OWN effects — in
+ * practice AND in a duel — draw from the library they just loaded.
+ *
+ * Hosted this is inert (the picker only exists when there is no host cache, and
+ * an empty list sets an empty local half) — the host's manifest still owns the
+ * deck, exactly as before.
+ * -------------------------------------------------------------------------- */
+let syncedLocalVersion = -1;
+let loggedLocalDeck = -1;
+
+function syncLocalDeck() {
+  if (!assets) return;
+  const v = Number(assets.localVersion) || 0;
+  if (v === syncedLocalVersion) return;      // a hosted cache-list, not a pick
+  syncedLocalVersion = v;
+  try {
+    const list = localPlayableEntries(assets.localItems);
+    const c = media.setLocalLibrary(list);
+    if (list.length !== loggedLocalDeck) {
+      loggedLocalDeck = list.length;
+      logger.info('local library: ' + list.length + ' playable item(s) — pool now '
+        + c.images + ' images, ' + c.videos + ' videos');
+    }
+  } catch (e) {
+    logger.warn('could not fold the local library into the media pool: ' + ((e && e.message) || e));
+  }
 }
 
 /**
@@ -1369,6 +1405,11 @@ function buildApp() {
   // cache-* handler (bridge.on throws on a duplicate and the assets screen
   // mounts many times per session).
   assets = createAssetsStore({ session, logger });
+  // Every pick the player adopts (and every one they remove) re-feeds the media
+  // deck — see syncLocalDeck above. `onItems` is the store's one change signal;
+  // the version guard is what keeps a hosted cache-list out of the pool.
+  assets.onItems(() => syncLocalDeck());
+  syncLocalDeck();
 
   /* --- DISCORD. Built once, like the store above and for the same reason: it
    * registers the `discord` and `peer-card` handlers and bridge.on throws on a

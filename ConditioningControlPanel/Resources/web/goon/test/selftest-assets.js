@@ -1633,6 +1633,138 @@ function fakeSheets() {
   store.dispose();
 }
 
+/* ==========================================================================
+ * THE LOCAL LIBRARY IS A PLAYABLE LIBRARY (the phone bug, 2026-08-04).
+ *
+ * A player loaded a zip on a phone, saw the assets in the manager, backed out,
+ * started a practice session — and every effect fired with no media. The picks
+ * had only ever been wired into the SEND path (boot.js listSendable); the
+ * PLAYBACK deck (exec/media.js `entries`) is fed by the host `manifest` frame,
+ * which bridge.js synthesizes EMPTY standalone. These pin the join: the store
+ * can hand its picks over as deck entries, and boot really asks it to.
+ * ======================================================================== */
+{
+  const { localPlayableEntries } = storeMod;
+  ok(typeof localPlayableEntries === 'function', 'assetsStore exports localPlayableEntries()');
+
+  /* --- the pure mapping -------------------------------------------------- */
+  const mapped = localPlayableEntries([
+    // An EXEMPT original IS the file: its bytes are behind srcUrl.
+    { id: 'local:1', name: 'pic.png', kind: 'image', state: 'exempt', srcUrl: 'blob:x/1', artUrl: '', mime: 'image/png' },
+    // A compressed pick has no srcUrl at all — the artifact is the thing.
+    { id: 'local:2', name: 'holiday.webp', kind: 'image', state: 'ready', srcUrl: '', artUrl: 'blob:x/2', mime: 'image/webp' },
+    { id: 'local:3', name: 'clip.mp4', kind: 'video', state: 'ready', srcUrl: '', artUrl: 'blob:x/3', mime: 'video/mp4' },
+    // Nothing to play: skipped rather than pushed as an entry that can only 404.
+    { id: 'local:4', name: 'urlless.png', kind: 'image', state: 'exempt', srcUrl: '', artUrl: '', mime: 'image/png' },
+    null,
+  ]);
+  ok(mapped.length === 3, 'three of five rows are playable — a URL-less row and a null are dropped',
+    String(mapped.length));
+  ok(mapped[0].url === 'blob:x/1' && mapped[1].url === 'blob:x/2',
+    'an exempt pick plays from srcUrl and a compressed one from artUrl — the same rule listSendable uses',
+    mapped.map((e) => e.url).join(','));
+  ok(mapped[2].kind === 'video' && mapped[1].kind === 'image',
+    'the KIND is taken from the item, never re-derived: a blob: URL has no extension to sniff',
+    mapped.map((e) => e.kind).join(','));
+  ok(mapped.every((e) => typeof e.name === 'string' && typeof e.url === 'string' && e.kind),
+    'and every entry is the {kind,name,url} shape exec/media.js setLocalLibrary takes');
+
+  // A row that somehow lost its kind still classifies by mime rather than
+  // vanishing — the deck would rather have it as an image than not at all.
+  const byMime = localPlayableEntries([
+    { id: 'local:5', name: 'a', kind: '', state: 'exempt', srcUrl: 'blob:x/5', mime: 'video/mp4' },
+    { id: 'local:6', name: 'b', kind: '', state: 'exempt', srcUrl: 'blob:x/6', mime: 'image/gif' },
+    { id: 'local:7', name: 'c', kind: '', state: 'exempt', srcUrl: 'blob:x/7', mime: '' },
+  ]);
+  ok(byMime.length === 2 && byMime[0].kind === 'video' && byMime[1].kind === 'image',
+    'a kindless row falls back to its mime family, and a row with neither is dropped',
+    byMime.map((e) => e.kind).join(','));
+
+  /* --- the store really hands its picks over ----------------------------- */
+  {
+    const fill2 = (nb, seed) => {
+      const u = new Uint8Array(nb);
+      for (let i = 0; i < nb; i++) u[i] = (i * 17 + seed) % 251;
+      return u;
+    };
+    const b = fakeBridge({ hosted: false });
+    const store = createAssetsStore({ bridge: b, logger: null });
+    await sleep(5);
+
+    ok(store.localVersion === 0 && store.localDeck().length === 0,
+      'a fresh standalone store has an empty local deck (this is the state the phone was stuck in)');
+
+    const r = await store.addLocalFiles([
+      new File([fill2(4000, 1)], 'zip-pic-a.png', { type: 'image/png' }),
+      new File([fill2(5000, 2)], 'zip-pic-b.jpg', { type: 'image/jpeg' }),
+      new File([fill2(6000, 3)], 'zip-clip.mp4', { type: 'video/mp4' }),
+    ]);
+    ok(r.added === 3, 'three picks adopted', JSON.stringify(r));
+    const v1 = store.localVersion;
+    ok(v1 === 3, 'localVersion counted every one of them', String(v1));
+
+    const deck = store.localDeck();
+    ok(deck.length === 3, 'and localDeck() hands all three to the media pool', String(deck.length));
+    ok(deck.filter((e) => e.kind === 'video').length === 1 && deck.filter((e) => e.kind === 'image').length === 2,
+      'with the kinds the adoption road decided, not the URL', deck.map((e) => e.kind).join(','));
+    ok(deck.every((e) => e.url.indexOf('blob:') === 0), 'behind the store\'s own object URLs',
+      deck.map((e) => e.url.slice(0, 12)).join(','));
+    ok(store.localItems.length === 3 && store.localItems !== store.localItems,
+      'store.localItems is a snapshot array, not the live map');
+
+    // THE OTHER HALF OF THE JOIN: the real pool takes them and draws them.
+    const { createGoonMediaPool } = await import('../exec/media.js');
+    const pool = createGoonMediaPool();
+    pool.setManifest({ images: [], videos: [], skipped: 0, truncated: false });   // what bridge.js synthesizes
+    ok(pool.hasMedia() === false, 'the standalone pool starts empty, exactly as the player found it');
+    const counts = pool.setLocalLibrary(store.localDeck());
+    ok(counts.images === 2 && counts.videos === 1,
+      'and setLocalLibrary(store.localDeck()) fills it — a solo session now has something to draw',
+      counts.images + 'i/' + counts.videos + 'v');
+    const drawn = pool.drawKind('image');
+    ok(drawn && drawn.url.indexOf('blob:') === 0, 'the deck really hands back one of the picked files',
+      drawn ? drawn.url.slice(0, 12) : 'null');
+
+    // Removing a pick moves the version, so boot re-feeds the deck.
+    const gone = store.localItems.find((it) => it.name === 'zip-clip.mp4');
+    ok(store.removeLocal(gone.id) === true && store.localVersion === v1 + 1,
+      'removeLocal bumps localVersion too — the deck must lose it as well');
+    ok(pool.setLocalLibrary(store.localDeck()).videos === 0, 'and re-feeding drops the clip from the pool');
+    store.dispose();
+  }
+
+  /* --- a HOSTED cache-list must NOT move the local version --------------- */
+  {
+    const b = fakeBridge();
+    const store = createAssetsStore({ bridge: b, session: { caps: {} }, logger: null, autoHello: false });
+    const before = store.localVersion;
+    b.fire({ type: 'cache-list', seq: 0, last: true, items: [mkItem(1, { state: 'ready' }), mkItem(2, { state: 'ready' })] });
+    ok(store.items.length === 2, 'the hosted list landed');
+    ok(store.localVersion === before && store.localDeck().length === 0,
+      'but localVersion did not move and the local deck stays empty — the host manifest owns the hosted deck, '
+      + 'and boot\'s version guard is what keeps a cache-list from re-dealing the pool');
+    store.dispose();
+  }
+
+  /* --- boot really wires it ---------------------------------------------- */
+  {
+    const bootSrc = await read('../boot.js');
+    ok(/import \{ createAssetsStore, localPlayableEntries \} from '\.\/ui\/assetsStore\.js'/.test(bootSrc),
+      'boot.js imports the mapper from the store (one definition of "playable", not two)');
+    ok(/function syncLocalDeck\(\)/.test(bootSrc), 'boot.js has syncLocalDeck()');
+    ok(/media\.setLocalLibrary\(/.test(bootSrc), 'which feeds exec/media.js the local half of the deck');
+    ok(/assets\.onItems\(\(\) => syncLocalDeck\(\)\)/.test(bootSrc),
+      'and is re-run on every store change, so a pick made mid-session lands in the deck');
+    ok(/if \(v === syncedLocalVersion\) return;/.test(bootSrc),
+      'guarded on localVersion, so a hosted cache-list never re-deals the pool');
+    const mediaSrc = await read('../exec/media.js');
+    ok(/setLocalLibrary\(list\)/.test(mediaSrc) && /let localEntries = \[\]/.test(mediaSrc),
+      'exec/media.js keeps the local half as its own list…');
+    ok(/`localEntries` is not touched/.test(mediaSrc),
+      '…and says out loud that setManifest must not wipe it');
+  }
+}
+
 await sleep(60);
 console.log(`\nselftest-assets: ${n - failures}/${n} checks passed`);
 if (failures > 0) {

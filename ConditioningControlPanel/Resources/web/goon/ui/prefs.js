@@ -53,6 +53,17 @@ export const PREF_DEFAULTS = Object.freeze({
    * the same request, and a pref that only hid the pixels would be a lie.
    */
   showOpponentAvatars: true,
+  /**
+   * The HUD's zen toggle (ui/hud.js): score, risk, the closeness dial and the
+   * mercy button hidden, leaving the opponent monitor and the arsenal. OFF by
+   * default — a duel you cannot read your own score in is a choice, never a
+   * starting position — and remembered only so a player who wants the quiet
+   * desk does not have to ask for it every match. It is NOT mirrored onto
+   * <html> from here: ui/hud.js owns that bit for as long as a HUD is mounted,
+   * and a stale attribute would hide the mercy button with no button to bring
+   * it back.
+   */
+  hudZen: false,
   /** Last consent terms this player proposed — pre-filled next lobby. */
   matchLengthSec: 720,
   payloadGapSec: 30,

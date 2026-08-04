@@ -12,6 +12,13 @@
 //   * a caller never receives its own messages back (no self-echo) — but the cursor still advances
 //     PAST them, so the next poll doesn't re-walk the whole list;
 //   * /join marks the room joined, which is what the host's next /signal sees as peer_joined;
+//   * SEAT IDENTITY: the seat belongs to a uid. The same uid rejoining RECLAIMS it (fresh token,
+//     stale SDP dropped), a different uid is refused `already_joined`, and the host's own uid is
+//     refused `self_join`. This is not auth — it is the rule that decides whether a client can get
+//     back into the room it just fell out of, and a fake that got it wrong would teach the client
+//     that a ghost seat is normal;
+//   * /leave hands the seat back (guest) or folds the room (host), so a fold is testable without
+//     waiting out a TTL;
 //   * room TTL (the C# fake has no clock; this one does, so an "expired" path is testable).
 //
 // Long-poll: the fake answers instantly and the caller's cadence timer paces it, same as C#.
@@ -111,6 +118,9 @@ export class GoonFakeSignalingServer {
           code: `${this._codePrefix}${String(this._codeCounter).padStart(2, '0')}`,
           hostToken: newToken(),
           guestToken: newToken(),
+          hostUid: typeof req.unified_id === 'string' ? req.unified_id : '',
+          guestUid: null,
+          guestEpoch: 0,
           joined: false,
           signals: [],          // {seq, kind, data, from}
           relay: [],            // {seq, from, data}
@@ -134,10 +144,23 @@ export class GoonFakeSignalingServer {
         const room = this._live(req.code);
         // A bad code and an expired code are indistinguishable to a joiner, by design.
         if (!room) return fail(404, GoonSignalError.UnknownCode);
-        if (room.joined) return fail(409, GoonSignalError.AlreadyJoined);
+        const uid = typeof req.unified_id === 'string' ? req.unified_id : '';
+        // Your own room is not a full room. One account cannot hold both seats:
+        // the ledger, the pair record and the peer card are all "the other uid".
+        if (uid && uid === room.hostUid) return fail(409, GoonSignalError.SelfJoin);
+        const rejoin = room.joined && !!uid && room.guestUid === uid;
+        if (room.joined && !rejoin) return fail(409, GoonSignalError.AlreadyJoined);
         room.joined = true;
+        room.guestUid = uid;
+        room.guestEpoch++;
+        room.guestToken = newToken();     // every claim gets a fresh token
+        // A reclaimed seat starts on a clean mailbox: the dead attempt's SDP would
+        // otherwise be handed to the fresh peer connection as if it were live. The
+        // SEQ counter deliberately keeps counting — the host's cursor is past it.
+        if (rejoin) room.signals = [];
         return ok({
           ok: true,
+          rejoin,
           token: room.guestToken,
           role: 'guest',
           expires_in_sec: Math.max(0, Math.round((room.expiresAt - this._now()) / 1000)),
@@ -148,6 +171,28 @@ export class GoonFakeSignalingServer {
           // The joiner is the GUEST, so the peer whose card it learns is the host.
           peer_card_ver: this.hostCardVer,
         });
+      }
+
+      case '/v2/goon/leave': {
+        const room = this._live(req.code);
+        if (!room) return fail(404, GoonSignalError.Expired);
+        const role = typeof req.role === 'string' ? req.role : 'guest';
+        const token = typeof req.token === 'string' ? req.token : '';
+        if (token !== (role === 'host' ? room.hostToken : room.guestToken)) {
+          return fail(401, GoonSignalError.Unauthorized);
+        }
+        if (role === 'host') {
+          // The code dies with the person holding it.
+          this._rooms.delete(room.code);
+          return ok({ ok: true, folded: true });
+        }
+        // The seat goes back on the market; the ROOM stays up, so the same player
+        // can retry (or anyone else can join) without a second code and a second
+        // burned pass. This is the anti-ghost half of the 2026-08-04 fix.
+        room.joined = false;
+        room.guestUid = null;
+        room.signals = [];
+        return ok({ ok: true, folded: false });
       }
 
       case '/v2/goon/signal': {

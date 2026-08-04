@@ -138,6 +138,43 @@ export function classifyLocalSize(mime, bytes) {
   return size <= LOCAL_DECODE_MAX_BYTES ? 'take' : 'too-big';
 }
 
+/**
+ * The local library as exec/media.js DECK ENTRIES — `{kind, name, url}`.
+ *
+ * Standalone this is the player's whole library, and it is the ONLY thing the
+ * media pool can draw from: bridge.js synthesizes an empty `manifest` frame out
+ * here, so without this the practice session fires every effect against an empty
+ * deck (which is exactly what it did). Pure, exported and driven by the selftest
+ * because it is the join between two tiers that must not learn about each other.
+ *
+ *   - `kind` is TAKEN, not re-derived. A pick lives behind a blob: URL with no
+ *     extension to sniff; the store decided image/video from the mime at
+ *     adoption time (kindForMime) and that answer is the right one. The mime is
+ *     only a fallback for a row that somehow carries none.
+ *   - the URL follows the same rule the send path uses: an EXEMPT original IS
+ *     the file (srcUrl), a compressed pick's bytes are the artifact (artUrl).
+ *   - a row with no URL at all (node, where there is no createObjectURL) is
+ *     skipped rather than pushed as an entry that can only fail to load.
+ */
+export function localPlayableEntries(items) {
+  const out = [];
+  for (const it of items || []) {
+    if (!it) continue;
+    const url = normalizeState(it.state) === 'exempt'
+      ? (it.srcUrl || it.artUrl || '')
+      : (it.artUrl || it.srcUrl || '');
+    if (!url) continue;
+    let kind = it.kind === 'video' ? 'video' : (it.kind === 'image' ? 'image' : '');
+    if (!kind && it.mime) kind = kindOfMime(it.mime);
+    if (!kind) continue;
+    out.push({ kind, name: String(it.name || ''), url: String(url) });
+  }
+  return out;
+}
+
+/** The mime family the wire insists a `kind` agrees with (mediaChannel familyOf). */
+function kindOfMime(mime) { return String(mime || '').indexOf('video/') === 0 ? 'video' : 'image'; }
+
 /** The wire mime for a picked file, or '' when the wire would refuse it. */
 export function localMimeOf(file) {
   const typed = String((file && file.type) || '').toLowerCase();
@@ -827,6 +864,10 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
    * purpose: every hosted `cache-list` commit REPLACES `items` wholesale, and
    * local picks must survive that. Merged into `itemsArr` by rebuildArr(). */
   const localItems = new Map();
+  /** Bumped on every MEMBERSHIP change of `localItems`. boot.js re-feeds the
+   * media deck off this, so a hosted `cache-list` (which fires the same
+   * `onItems` subscribers) cannot make it re-deal the pool for nothing. */
+  let localVersion = 0;
   let itemsArr = [];
   let listLoaded = false;
   let listRequested = false;
@@ -1087,7 +1128,7 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
   }
 
   /** The mime family the wire insists a `kind` agrees with (mediaChannel familyOf). */
-  const kindForMime = (mime) => (String(mime || '').indexOf('video/') === 0 ? 'video' : 'image');
+  const kindForMime = kindOfMime;
 
   /**
    * Source shas already adopted (or already refused) this session. The OUTPUT of
@@ -1154,6 +1195,7 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
       state: 'exempt', srcUrl, sha, ext: m ? m[1].toLowerCase() : '', mime,
       bytes, srcBytes: bytes,
     }));
+    localVersion++;
     localSrcShas.add(sha);
     report.added++;
     noteItemLanded();
@@ -1279,6 +1321,7 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
       bytes, srcBytes: Math.max(bytes, Number(srcBytes) || 0),
       w: w || 0, h: h || 0, durMs: durMs || 0,
     }));
+    localVersion++;
     localSrcShas.add(sha);
     report.added++;
     if (compressed) report.compressed++;
@@ -1446,6 +1489,7 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
     const it = localItems.get(String(id));
     if (!it) return false;
     localItems.delete(String(id));
+    localVersion++;
     // A compressed pick's bytes live behind `artUrl`, not `srcUrl` — revoking
     // only the latter leaks the whole artifact for the life of the page.
     revokeLocal(it);
@@ -1536,6 +1580,19 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
 
     /** Files the player picked in the browser (standalone's whole library). */
     get localCount() { return localItems.size; },
+
+    /** Those files, as an array. A snapshot — mutating it changes nothing. */
+    get localItems() { return Array.from(localItems.values()); },
+
+    /**
+     * Bumped whenever a local item is added or removed, and NEVER by a hosted
+     * `cache-list`. boot.js watches it so the media deck is only re-dealt when
+     * the player's own library actually moved (see localPlayableEntries above).
+     */
+    get localVersion() { return localVersion; },
+
+    /** The local library as exec/media.js deck entries. Convenience over the pure fn. */
+    localDeck() { return localPlayableEntries(Array.from(localItems.values())); },
 
     /**
      * ADOPTION PROGRESS — fires immediately with the current value, then on
