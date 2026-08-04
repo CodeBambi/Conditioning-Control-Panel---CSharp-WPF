@@ -435,12 +435,10 @@ public sealed class AiAwarenessService
         string keyword,
         string? promptTemplate = null,
         string? fallbackText = null,
-        TimeSpan? perTriggerCooldown = null,
-        CancellationToken cancellationToken = default)
+        TimeSpan? perTriggerCooldown = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(triggerId);
         ArgumentException.ThrowIfNullOrEmpty(keyword);
-        cancellationToken.ThrowIfCancellationRequested();
 
         if (!Consent.Granted)
         {
@@ -484,11 +482,9 @@ public sealed class AiAwarenessService
     /// No canned fallback on this path (WPF shape): Unavailable/Refused drop by type.
     /// </summary>
     public async Task<AiAwarenessRoutingResult> RunReactionAsync(
-        AiAwarenessContext context,
-        CancellationToken cancellationToken = default)
+        AiAwarenessContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        cancellationToken.ThrowIfCancellationRequested();
 
         if (!Consent.Granted)
         {
