@@ -107,7 +107,7 @@ public static class AiModerationSurfaces
         new("awareness-operation-input", AiModerationSource.Input, AiModerationSurfaceDisposition.Wired, null, "RunAwarenessAsync");
 
     public static readonly AiModerationSurface AwarenessContextFields =
-        new("awareness-context-fields", AiModerationSource.Input, AiModerationSurfaceDisposition.Reserved, "c5 context packaging ([Category|App|Title|Duration] fields through EvaluateInput before assembly)", null);
+        new("awareness-context-fields", AiModerationSource.Input, AiModerationSurfaceDisposition.Reserved, "c5 (SP-042) LANDED the packaging wiring (AiAwarenessContextPackaging runs every field through EvaluateInput on this surface; proven by AiAwarenessTests) — the Wired flip + coverage arm + 6/5 count update are DEFERRED: the coverage test is outside SP-042 file scope (orchestrator follow-up, SP-042 record.md §3)", null);
 
     public static readonly AiModerationSurface InteractiveReplyOutput =
         new("interactive-reply-output", AiModerationSource.Output, AiModerationSurfaceDisposition.Wired, null, "RunInteractiveAsync");
