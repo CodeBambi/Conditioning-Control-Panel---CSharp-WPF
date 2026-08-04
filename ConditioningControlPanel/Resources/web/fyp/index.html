@@ -145,6 +145,27 @@
       <button id="btn-retry" class="empty-btn">RETRY</button>
     </div>
 
+    <!-- intro gate. NOTHING in the feed exists until DIVE IN is pressed: main.js holds the
+         host's init payload and never calls applyConfig(), so no page, no <video>, no <img>
+         and therefore no audio can exist behind this card. Shown on every open on purpose -
+         it is also the user gesture that legitimises autoplay-with-sound. -->
+    <div id="intro" class="hidden">
+      <div id="intro-card">
+        <div id="intro-art-wrap">
+          <img id="intro-art" src="fyp-art.jpg" alt="">
+        </div>
+        <div id="intro-body">
+          <h1>For You</h1>
+          <p>An endless feed cut from your own library - random 20-40 second slices of your
+             videos and GIFs, a few on screen at a time. It watches what you linger on and
+             quietly serves you more of that. Scroll or use the arrow keys to keep it moving;
+             it never runs out.</p>
+          <button id="btn-intro-start" class="empty-btn">DIVE IN</button>
+          <p class="intro-hint">Clips start with sound - press <b>M</b> to mute, <b>Esc</b> to close.</p>
+        </div>
+      </div>
+    </div>
+
     <!-- boot -->
     <div id="boot">
       <div class="boot-pulse">♡</div>

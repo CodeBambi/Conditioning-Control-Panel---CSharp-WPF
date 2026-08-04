@@ -200,6 +200,15 @@
                         <BitmapImage UriSource="pack://application:,,,/Resources/features/blink_trainer.png" DecodePixelWidth="512"/>
                     </ImageBrush.ImageSource>
                 </ImageBrush>
+                <!-- fyp.png is 1376x768 with NO wordmark burned in, so the crop is chosen
+                     for subject rather than to dodge text: the phone plus the first stretch
+                     of the feed ribbon spilling out of it. The rect is ~1.64:1, the chip's
+                     own aspect, so UniformToFill has nothing left to shave. -->
+                <ImageBrush x:Key="ArtFyp" Stretch="UniformToFill" Viewbox="0.20,0.33,0.50,0.545">
+                    <ImageBrush.ImageSource>
+                        <BitmapImage UriSource="pack://application:,,,/Resources/features/fyp.png" DecodePixelWidth="512"/>
+                    </ImageBrush.ImageSource>
+                </ImageBrush>
                 <!-- lockdown_icon is a 4.45:1 banner: padlock left, "LOCKDOWN MODE"
                      right, empty smoke between. Only the padlock is framed, which is
                      a quarter of the width - hence the much larger decode. -->
@@ -371,6 +380,18 @@
                                    Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,8"/>
                             <Ellipse x:Name="DotVoice" x:FieldModifier="internal" Style="{StaticResource ChipDot}"/>
                             <TextBlock Text="Voice" Style="{StaticResource ChipCaption}"/>
+                        </Grid>
+                    </Button>
+                    <!-- For You — a navigation shortcut like Graded Intake, not a toggle: the feed
+                         runs in its own WebView2 window. ShowTab("fyp") is intercepted by
+                         MainWindow.TabNavigation and hands off to OpenFypFeed, which owns the
+                         premium gate — the chip itself never blocks, exactly like its siblings.
+                         No state dot for the same reason Intake has none. -->
+                    <Button x:Name="ChipFyp" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
+                            Background="{StaticResource ArtFyp}"
+                            Click="ChipFyp_Click" ToolTip="For You — an endless feed cut from your own library">
+                        <Grid>
+                            <TextBlock Text="{loc:Str tab_fyp}" Style="{StaticResource ChipCaption}"/>
                         </Grid>
                     </Button>
                     <!-- Lockdown — launcher with +/- duration and a live countdown. Same

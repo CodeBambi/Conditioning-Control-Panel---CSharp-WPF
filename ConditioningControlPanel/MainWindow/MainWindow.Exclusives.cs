@@ -55,7 +55,7 @@ namespace ConditioningControlPanel
             try
             {
                 var spot = ExclusiveFeature.All[0];
-                ExclusivesTab.SpotArtImage.Source = LoadPackImage(spot.ArtResource);
+                ApplySpotlightArt(spot);
                 ExclusivesTab.TxtSpotTitle.Text = $"{spot.Emoji} {ExclusiveTitle(spot)}";
                 ExclusivesTab.TxtSpotTagline.Text = Loc.Get(spot.TaglineLocKey);
                 if (spot.BadgeLocKey != null)
@@ -63,7 +63,10 @@ namespace ConditioningControlPanel
                 else
                     ExclusivesTab.SpotBadge.Visibility = Visibility.Collapsed;
 
-                foreach (var feature in ExclusiveFeature.All.Skip(1))
+                // EVERY feature gets a card - the spotlight is a highlight on top of
+                // the collection, not a hole in it. (The hero and its card share the
+                // same registry entry, so chips/veils/titles refresh identically.)
+                foreach (var feature in ExclusiveFeature.All)
                     ExclusivesTab.ExclusivesShelf.Children.Add(BuildExclusiveCard(feature));
 
                 // Parks/resumes with tab switches like every other ambient canvas.
@@ -72,6 +75,50 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Exclusives shelf build failed");
+            }
+        }
+
+        /// <summary>
+        /// Paints the hero band's art. The band is roughly 5:1, so a card-aspect PNG
+        /// would have to be cropped hard: features may ship a wide
+        /// <see cref="ExclusiveFeature.BannerArtResource"/> cut for it. That banner is
+        /// optional and may not exist yet (art lands after code), so a failed load
+        /// falls back to the card art instead of leaving the band empty.
+        /// Stretch stays UniformToFill - crop, never skew - under SpotArtHost's
+        /// rounded clip.
+        /// </summary>
+        private void ApplySpotlightArt(ExclusiveFeature spot)
+        {
+            try
+            {
+                var img = ExclusivesTab.SpotArtImage;
+                ImageSource? art = null;
+                bool banner = false;
+
+                if (!string.IsNullOrWhiteSpace(spot.BannerArtResource))
+                {
+                    // Hero band spans the whole tab (~1400 DIP) and Ken-Burns-zooms
+                    // to 1.07, so it gets a wider decode cap than a 336-wide card
+                    // (the shipped banner is 1376 wide, i.e. essentially native).
+                    art = LoadPackImage(spot.BannerArtResource!, 1400);
+                    banner = art != null;
+                }
+
+                art ??= LoadPackImage(spot.ArtResource);
+                img.Source = art;
+
+                // UniformToFill centres its crop, which is exactly right for banner
+                // art composed around the central horizontal band. Card art used as a
+                // fallback is not, so the zoom origin follows the feature's focal
+                // point and the drift pushes the subject back into view.
+                img.Stretch = Stretch.UniformToFill;
+                img.RenderTransformOrigin = banner
+                    ? new Point(0.5, 0.5)
+                    : new Point(spot.FocalX, spot.FocalY);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Exclusives spotlight art failed");
             }
         }
 
@@ -534,7 +581,18 @@ namespace ConditioningControlPanel
                 ? App.Mods?.GetTakeoverLabel() ?? Loc.Get(feature.TitleLocKey)
                 : Loc.Get(feature.TitleLocKey);
 
-        private static ImageSource? LoadPackImage(string relativePath)
+        /// <summary>
+        /// Loads pack-embedded art, or null if the resource is absent/undecodable -
+        /// callers rely on that null to fall back (see <see cref="ApplySpotlightArt"/>),
+        /// so this must never throw. OnLoad caching means a missing resource throws
+        /// inside EndInit, right here, and not later on the render thread.
+        /// </summary>
+        /// <param name="decodePixelWidth">
+        /// Bounded decode width. Card art renders at ~340 wide inside the Viewbox; a
+        /// bounded decode keeps nine 1376x768 sources from costing ~32 MB of bitmaps.
+        /// The hero band passes a larger value because it is drawn much wider.
+        /// </param>
+        private static ImageSource? LoadPackImage(string relativePath, int decodePixelWidth = 700)
         {
             try
             {
@@ -542,10 +600,11 @@ namespace ConditioningControlPanel
                 bmp.BeginInit();
                 bmp.UriSource = new Uri("pack://application:,,,/" + relativePath, UriKind.Absolute);
                 bmp.CacheOption = BitmapCacheOption.OnLoad;
-                // Card art renders at ~340 wide inside the Viewbox; a bounded decode
-                // keeps eight 1376x768 sources from costing ~32 MB of bitmaps.
-                bmp.DecodePixelWidth = 700;
+                bmp.DecodePixelWidth = decodePixelWidth;
                 bmp.EndInit();
+                // Touching PixelWidth forces any deferred decode failure to surface
+                // here, inside the catch, rather than as an empty Image later.
+                if (bmp.PixelWidth <= 0) return null;
                 bmp.Freeze();
                 return bmp;
             }

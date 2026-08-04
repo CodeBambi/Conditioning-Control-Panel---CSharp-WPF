@@ -373,6 +373,76 @@ body.clickthrough #attention { display: none !important; }
   background: #12121f;
   z-index: 40;
 }
+
+/* ---------- intro gate ---------- */
+
+/* Above #boot (40): the card takes over the moment the host's init lands, and the feed
+   itself is not built until it goes away. */
+#intro {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(8, 8, 16, 0.86);
+  backdrop-filter: blur(6px);
+  z-index: 45;
+  transition: opacity 220ms ease;
+}
+#intro.gone { opacity: 0; pointer-events: none; }
+
+/* Nothing behind the card is actionable yet - the gear/mute/fullscreen buttons would just
+   be blurred decoration. They come back with the feed. */
+body.intro-gate #chrome { display: none !important; }
+
+#intro-card {
+  display: flex;
+  flex-direction: column;
+  width: min(460px, 100%);
+  max-height: 100%;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 105, 180, 0.35);
+  background: #1a1a2e;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6);
+  animation: intro-in 260ms cubic-bezier(0.22, 0.9, 0.36, 1);
+}
+#intro.gone #intro-card { transform: scale(0.94); transition: transform 220ms ease; }
+
+#intro-art-wrap { position: relative; flex-shrink: 0; line-height: 0; background: #12121f; }
+#intro-art { width: 100%; height: auto; display: block; }
+/* the art fades into the card instead of ending on a hard edge */
+#intro-art-wrap::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 45%;
+  background: linear-gradient(to bottom, rgba(26, 26, 46, 0), #1a1a2e);
+  pointer-events: none;
+}
+
+#intro-body { padding: 2px 26px 26px; text-align: center; overflow-y: auto; }
+#intro-body h1 { font-size: 26px; margin-bottom: 10px; }
+#intro-body p { font-size: 13.5px; color: #b0b0c8; line-height: 1.6; }
+
+#btn-intro-start { margin-top: 18px; padding: 13px 34px; font-size: 15px; }
+#btn-intro-start:focus-visible { outline: 2px solid #ffb3d9; outline-offset: 3px; }
+
+.intro-hint { font-size: 11.5px !important; color: #6a6a88 !important; margin-top: 12px; }
+.intro-hint b { color: #b0b0c8; }
+
+/* short window: the copy and the button matter, the art does not */
+@media (max-height: 480px) {
+  #intro-art-wrap { display: none; }
+  #intro-body { padding-top: 24px; }
+}
+
+@keyframes intro-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.97); }
+}
 .boot-pulse {
   font-size: 44px;
   color: #ff69b4;

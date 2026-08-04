@@ -6,6 +6,7 @@ import { createFeed } from './feed.js';
 import { createPage } from './surfaces.js';
 
 const PAGE_TRANSITION_MS = 340;
+const INTRO_EXIT_MS = 240;             // intro card is fully gone before the feed is built
 const CLIP_VIEWED_MIN_DWELL_MS = 5000; // below this a skim earns no XP
 const ATTENTION_MIN_GAP_MS = 120000;   // attention target every 2-4 min
 const ATTENTION_RAND_MS = 120000;
@@ -49,6 +50,10 @@ const pages = new Map();      // compKey -> page object
 const audioFocus = new Map(); // compKey -> tileIndex
 let activeIdx = 0;
 let booted = false;
+// The intro gate: false until the user presses DIVE IN. While it is false the feed has
+// been configured with NOTHING - applyConfig() has never run, so no page/tile/<video>
+// exists and the window cannot make a sound behind the card.
+let started = false;
 let attTimer = null;
 // Click-through is host state, never persisted here: it always starts OFF and
 // the host turns it back off when the user hits the panic key.
@@ -412,6 +417,44 @@ function updateEmptyState() {
   }
 }
 
+// ---------- intro gate ----------
+//
+// The window used to open straight into a wall of playing clips WITH audio. Everything
+// media-shaped in this page hangs off applyConfig() -> syncPages() -> createPage(), so the
+// gate is simply: don't call applyConfig() until the user asks for it. Held here rather
+// than host-side because the host has no way to keep the page's own <video> elements from
+// being created once the page has its manifest.
+
+/** Show the card over the (still empty) feed. Called once, when init lands. */
+function showIntro() {
+  $('boot').classList.add('hidden');
+  document.body.classList.add('intro-gate'); // the chrome has nothing to act on yet
+  $('intro').classList.remove('hidden');
+  // Enter/Space then start the feed without the user having to aim at the button.
+  try { $('btn-intro-start').focus({ preventScroll: true }); } catch { /* focus is a nicety */ }
+}
+
+/** DIVE IN: card animates out first, and ONLY when it is gone does the feed build. */
+function startFeed() {
+  if (started) return;
+  started = true;
+  const intro = $('intro');
+  intro.classList.add('gone');
+  setTimeout(() => {
+    intro.classList.add('hidden');
+    document.body.classList.remove('intro-gate');
+    if (!feed) return; // init never landed (host died) — nothing to build
+    applyConfig();
+    scheduleAttention();
+  }, INTRO_EXIT_MS);
+}
+
+function wireIntro() {
+  $('btn-intro-start').addEventListener('click', startFeed);
+  // Art is optional: a missing or unreadable file collapses to a card with no image.
+  $('intro-art').addEventListener('error', () => $('intro-art-wrap').classList.add('hidden'));
+}
+
 function wireChrome() {
   $('btn-mute').addEventListener('click', () => setMuted(!settings.muted));
   $('btn-advance').addEventListener('click', () => setAutoAdvance(!settings.autoAdvance));
@@ -513,6 +556,9 @@ function wireInput() {
       case 'ArrowUp': case 'PageUp': prev(); e.preventDefault(); break;
       case 'm': case 'M': setMuted(!settings.muted); break;
       case 'Escape':
+        // While the intro gate is up there is no feed to back out of, so Esc means
+        // "I did not want this window" - the host closes it (same path as the ✕).
+        if (!started) { post({ type: 'close' }); e.preventDefault(); break; }
         // Only meaningful while the window still holds keyboard focus (right
         // after flipping the toggle — exactly when someone wants out). Native
         // fullscreen-exit on Esc still happens; that's fine, both say "back off".
@@ -589,6 +635,7 @@ function onHostMessage(data) {
       feed = createFeed(aspect);
       if (!booted) {
         booted = true;
+        wireIntro();
         wireChrome();
         wireInput();
       }
@@ -597,9 +644,15 @@ function onHostMessage(data) {
       $('btn-mute').textContent = settings.muted ? '🔇' : '🔊';
       $('btn-mute').classList.toggle('off', settings.muted);
       $('btn-advance').classList.toggle('off', !settings.autoAdvance);
-      applyConfig();
-      $('boot').classList.add('hidden');
-      scheduleAttention();
+      // Everything above is chrome state - cheap, silent, no media. The feed itself waits
+      // behind the intro card; only a re-init after the gate is already open rebuilds now.
+      if (started) {
+        applyConfig();
+        $('boot').classList.add('hidden');
+        scheduleAttention();
+      } else {
+        showIntro();
+      }
       break;
     }
     case 'clickThrough':
