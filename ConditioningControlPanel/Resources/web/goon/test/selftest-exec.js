@@ -1216,6 +1216,116 @@ async function main() {
     ex.detach();
   }
 
+  /* ---------------------------- flashes: PINCH, the mobile half of that wheel
+   * Same gesture as the video window's, same helper, one difference that matters:
+   * a flash is anchored on its CENTRE and sized in vmin, so the clamp has to do
+   * its arithmetic in a unit the module does not think in. The cap bites here at
+   * a plain 1280x720 (3x of 43.7vmin is taller than the viewport), which is the
+   * case the video block cannot cover.
+   * ------------------------------------------------------------------------ */
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const host = byId.get('gg-fx-flash');
+    const P = await import('../exec/pinch.js');
+    const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet, toyBridge: null });
+    const m = fakeMatch();
+    ex.attach(m);
+    const shotsOf = () => host.findAll('gg-flash').filter((el) => !el._cls.has('is-popped'));
+    const sizeOf = (el) => parseFloat(el.style.getPropertyValue('--gg-flash-size')) || 43.7;
+    const fin = (el, type, id, x, y) => ptr(el, type, x, y, { pointerId: id, pointerType: 'touch' });
+
+    m.emitStart({ element: GoonElement.Flashes, intensity: 1, durationMs: 0, elapsedMs: 0 });
+    await sleep(120);
+    m.emitStop({ element: GoonElement.Flashes, intensity: 0, durationMs: 0, elapsedMs: 0 });
+    await sleep(320);
+    const f = shotsOf()[0];
+    ok(!!f, 'a flash to pinch');
+    const bornSize = sizeOf(f);
+    // Its CENTRE in px: the vw anchor (which never moves) plus the drag offset.
+    const anchorX = parseFloat(f.style.getPropertyValue('left')) / 100 * 1280;
+    const centreX = () => anchorX + (dxOf(f) || 0);
+
+    // Park the centre at a known x with ONE finger, exactly as the video block does.
+    const A = ++PID, B = ++PID;
+    fin(f, 'pointerdown', A, 400, 400);
+    fin(f, 'pointermove', A, 700, 400);                  // past the slop: a plain grab
+    ok(f._cls.has('gg-flash--grabbed'), 'one finger still just drags it', f.className);
+    const ax = 400 + (400 - anchorX);
+    fin(f, 'pointermove', A, ax, 400);
+    ok(Math.abs(centreX() - 400) < 0.5, 'parked at a known place', String(centreX()));
+
+    fin(f, 'pointerdown', B, ax + 100, 400);
+    ok(Math.abs(sizeOf(f) - bornSize) < 0.06, 'a second finger landing resizes nothing on its own',
+      String(sizeOf(f)));
+    fin(f, 'pointermove', B, ax + 104, 400);             // inside PINCH_SLOP_PX
+    fin(f, 'pointermove', B, ax + 100, 400);
+    ok(Math.abs(sizeOf(f) - bornSize) < 0.06, 'and a wobble inside the slop is not a pinch', String(sizeOf(f)));
+
+    // ---- the pair travelling together carries it, in vmin-land
+    fin(f, 'pointermove', A, ax + 40, 400);
+    fin(f, 'pointermove', B, ax + 140, 400);
+    ok(Math.abs(sizeOf(f) - bornSize) < 0.06,
+      'the pair back at its original spread is back at its original size', String(sizeOf(f)));
+    ok(Math.abs(centreX() - 440) < 0.5, 'and the flash travelled with the midpoint, 40px', String(centreX()));
+
+    // ---- spread -> --gg-flash-size, and NEVER a stacked transform scale
+    fin(f, 'pointermove', B, ax + 240, 400);             // spread 200: exactly 2x
+    ok(Math.abs(sizeOf(f) - bornSize * 2) < 0.12, 'doubling the gap doubles the flash',
+      `${bornSize} -> ${sizeOf(f)}`);
+    ok((f.style.getPropertyValue('transform').match(/scale\(/g) || []).length === 1
+      && /scale\(1\.06\)/.test(f.style.getPropertyValue('transform')),
+      'through the size var alone — the transform still carries the tilt and the hold lift, nothing else',
+      f.style.getPropertyValue('transform'));
+
+    // ---- the clamp, and here the SCREEN is what bites rather than the 3x
+    fin(f, 'pointermove', B, ax + 40 + 2000, 400);
+    const capVmin = P.pxToVmin(P.viewportCap(1280, 720, null, 1), 1280, 720);
+    ok(capVmin < bornSize * P.PINCH_MAX_FACTOR,
+      'on a 720-tall screen, 3x of a 43.7vmin flash does not fit — so the cap is the binding one',
+      `${capVmin} < ${bornSize * P.PINCH_MAX_FACTOR}`);
+    ok(Math.abs(sizeOf(f) - capVmin) < 0.2,
+      'and a huge spread stops exactly there: never bigger than the screen', String(sizeOf(f)));
+    fin(f, 'pointermove', B, ax + 60, 400);
+    ok(Math.abs(sizeOf(f) - bornSize * P.PINCH_MIN_FACTOR) < 0.12,
+      'pinching shut clamps at half its born size', String(sizeOf(f)));
+
+    // ---- A PINCH IS NOT A THROW, and it is not a click either
+    fin(f, 'pointermove', A, ax + 200, 400);
+    fin(f, 'pointermove', A, ax + 320, 400);             // fast: this would be a fling
+    const heldSize = sizeOf(f);                          // …and it spread the pair as it went
+    fin(f, 'pointerup', A, ax + 320, 400);
+    fin(f, 'pointerup', B, ax + 60, 400);
+    ok(!f._cls.has('is-popped'), 'lifting two fingers never pops it — a pinch is not the hydra click',
+      f.className);
+    const rest = dxOf(f);
+    await sleep(150);
+    ok(Math.abs(dxOf(f) - rest) < 0.5,
+      'and it does not sail off on the momentum of the last finger to leave', `${rest} -> ${dxOf(f)}`);
+    ok(f.isConnected && Math.abs(sizeOf(f) - heldSize) < 0.12,
+      'the size it was pinched to survives the release', String(sizeOf(f)));
+
+    // ---- the hand is EMPTY: the next plain press is the hydra click it always was
+    tap(f, 500, 400);
+    ok(f._cls.has('is-popped'), 'the next press still pops, so no pinch state was left stuck', f.className);
+
+    // ---- and two MICE on one flash resize nothing: desktop is untouched
+    const g = shotsOf()[0];
+    if (g) {
+      const before = sizeOf(g);
+      const M1 = ++PID, M2 = ++PID;
+      ptr(g, 'pointerdown', 300, 300, { pointerId: M1 });
+      ptr(g, 'pointermove', 400, 300, { pointerId: M1 });
+      ptr(g, 'pointerdown', 500, 300, { pointerId: M2 });
+      ptr(g, 'pointermove', 900, 300, { pointerId: M2 });
+      ok(Math.abs(sizeOf(g) - before) < 0.06,
+        'two mouse pointers are still one drag and one ignored press', `${before} -> ${sizeOf(g)}`);
+      ptr(g, 'pointerup', 400, 300, { pointerId: M1 });
+    }
+
+    ex.stopAll();
+    ex.detach();
+  }
+
   // ------------------------ flashes: stop() never leaves one stuck in your hand
   {
     for (const id of LAYER_IDS) byId.get(id).replaceChildren();
@@ -1238,6 +1348,128 @@ async function main() {
     ok(g._cls.has('is-popped'), 'and the hand is empty: the next press works');
     ex.stopAll();
     ex.detach();
+  }
+
+  /* ---------------------------- PINCH: the arithmetic, with no fingers attached
+   * exec/pinch.js is the whole gesture as numbers — both DOM callers (videos.js,
+   * flashes.js) do nothing but read a record, call pinchStep and write a CSS var,
+   * so everything that could be WRONG about a pinch is assertable right here.
+   * ------------------------------------------------------------------------- */
+  {
+    const P = await import('../exec/pinch.js');
+    ok(P.PINCH_MIN_FACTOR === 0.5 && P.PINCH_MAX_FACTOR === 3 && P.PINCH_SLOP_PX === 10
+      && P.PINCH_KEEP_PX === 64,
+      'the pinch dials are 0.5x..3x, 10px of slop, 64px kept on screen',
+      `${P.PINCH_MIN_FACTOR}..${P.PINCH_MAX_FACTOR}x / ${P.PINCH_SLOP_PX}px / ${P.PINCH_KEEP_PX}px`);
+
+    // ---- who may pinch: two DIFFERENT fingers, and a mouse is not a finger
+    ok(P.isPinchPointer('touch') && P.isPinchPointer('pen') && !P.isPinchPointer('mouse')
+      && !P.isPinchPointer(undefined),
+      'touch and pen pinch; a mouse never does (desktop is untouched by all of this)');
+    ok(P.pinchEligible('touch', 'touch', 1, 2) === true, 'two fingers on one surface is a pinch');
+    ok(P.pinchEligible('touch', 'touch', 1, 1) === false, 'the SAME pointer twice is not');
+    ok(P.pinchEligible('touch', 'mouse', 1, 2) === false, 'nor is a finger plus a mouse');
+    ok(P.pinchEligible('touch', 'touch', null, 2) === false, 'nor a host that reports no pointerId');
+
+    // ---- the two points -> spread and anchor
+    ok(P.pinchDistance(0, 0, 3, 4) === 5, 'spread is the plain distance', String(P.pinchDistance(0, 0, 3, 4)));
+    const mid = P.pinchMidpoint(100, 200, 300, 400);
+    ok(mid.x === 200 && mid.y === 300, 'the anchor is the midpoint', JSON.stringify(mid));
+
+    // ---- spread -> scale, guarded at both ends
+    ok(P.pinchRatio(100, 200) === 2 && P.pinchRatio(200, 100) === 0.5, 'ratio is the spread ratio');
+    ok(P.pinchRatio(0, 200) === 1 && P.pinchRatio(100, 0) === 1 && P.pinchRatio(NaN, 5) === 1,
+      'a degenerate spread answers 1 — "leave it exactly as it is"');
+    ok(P.pinchRatio(1, 100000) === P.PINCH_RATIO_MAX && P.pinchRatio(100000, 1) === P.PINCH_RATIO_MIN,
+      'and an absurd one is clamped rather than allowed to explode the maths');
+
+    // ---- two fingers resting is not a gesture
+    ok(P.pinchStarted(100, 105) === false, 'a 5px wobble is not a pinch yet');
+    ok(P.pinchStarted(100, 111) === true && P.pinchStarted(100, 89) === true,
+      'past the slop it is — in either direction');
+
+    // ---- the clamp: factors of the BORN size, and the viewport outranks both
+    ok(P.clampSize(1000, 100, 0) === 300, 'growth stops at 3x the born size', String(P.clampSize(1000, 100, 0)));
+    ok(P.clampSize(1, 100, 0) === 50, 'and shrink at 0.5x', String(P.clampSize(1, 100, 0)));
+    ok(P.clampSize(150, 100, 0) === 150, 'in between it is left alone');
+    ok(P.clampSize(1000, 100, 220) === 220,
+      'a viewport ceiling below 3x WINS — that is the no-overflow promise', String(P.clampSize(1000, 100, 220)));
+    ok(P.clampSize(1000, 100, 30) === 30 && P.clampSize(1, 100, 30) === 30,
+      'a screen smaller than the FLOOR wins too: nothing is ever drawn bigger than the screen',
+      `${P.clampSize(1000, 100, 30)} / ${P.clampSize(1, 100, 30)}`);
+    ok(P.clampSize(120, 0, 0) === 120, 'no born size = nothing to clamp against, and no throw');
+
+    // ---- the ceiling itself, in px, for a 16:9 window and a square flash
+    const capWide = P.viewportCap(1280, 720, null, 9 / 16);
+    ok(Math.abs(capWide - Math.min(1264, 704 / (9 / 16))) < 0.01,
+      'a 16:9 window is capped by the SHORT side once it is wide enough', String(capWide));
+    ok(Math.abs(P.viewportCap(1280, 720, null, 1) - 704) < 0.01,
+      'a square one is capped by the height', String(P.viewportCap(1280, 720, null, 1)));
+    ok(P.viewportCap(1280, 720, { left: 40, right: 40, top: 0, bottom: 0 }, 9 / 16) < capWide,
+      'and the phone\'s safe-area insets come off it');
+    ok(P.viewportCap(0, 0, null, 1) === 0, 'no viewport, no ceiling (and no NaN)');
+    ok(Math.abs(P.pxToVmin(72, 1280, 720) - 10) < 1e-9 && P.pxToVmin(72, 0, 0) === 0,
+      'px -> vmin for the one caller that sizes in vmin', String(P.pxToVmin(72, 1280, 720)));
+
+    // ---- zoom about a fixed point: the pixel under the fingers stays there
+    const z = P.zoomAbout(100, 100, 300, 300, 2);
+    ok(z.x === -100 && z.y === -100, 'doubling about (300,300) pushes a corner at (100,100) to (-100,-100)',
+      JSON.stringify(z));
+    ok(P.zoomAbout(10, 20, 500, 500, 1).x === 10, 'a ratio of 1 moves nothing');
+    const pd = P.panDelta(100, 100, 160, 90);
+    ok(pd.x === 60 && pd.y === -10, 'and the midpoint\'s own travel is the pan', JSON.stringify(pd));
+
+    // ---- KEEP IT ON SCREEN: contained when it fits, reachable when it cannot
+    const r1 = P.clampRect(1200, 0, 200, 100, 1280, 720);
+    ok(r1.x === 1080, 'a rect that fits is held WHOLLY inside — no right-edge overflow, ever', JSON.stringify(r1));
+    ok(P.clampRect(-500, -500, 200, 100, 1280, 720).x === 0, '…and not off the left either');
+    ok(P.clampRect(0, 0, 100, 100, 1280, 720, { left: 40, top: 30 }).x === 40,
+      'containment starts at the safe-area inset, not at 0');
+    const r2 = P.clampRect(-1000, 0, 2000, 100, 1280, 720, null, 64);
+    ok(r2.x === -1000, 'a rect too big to contain is left where it is, so long as 64px stays reachable',
+      JSON.stringify(r2));
+    ok(P.clampRect(-3000, 0, 2000, 100, 1280, 720, null, 64).x === 64 - 2000,
+      'and it is caught at exactly that 64px', String(P.clampRect(-3000, 0, 2000, 100, 1280, 720, null, 64).x));
+    ok(P.clampRect(5, 5, 10, 10, 0, 0).x === 5, 'no viewport = no clamp (and no NaN)');
+
+    // ---- ONE STEP, end to end: this is exactly what both DOM callers run
+    const stepIn = {
+      startDist: 100, startSize: 200, base: 200, size: 200,
+      anchorX: 100, anchorY: 100, midX: 300, midY: 300,
+    };
+    const st = P.pinchStep(stepIn, { ax: 250, ay: 300, bx: 450, by: 300 },
+      { vw: 1280, vh: 720, aspect: 1 });
+    ok(st.size === 400, 'spreading 100px -> 200px doubles the surface', String(st.size));
+    ok(st.ratio === 2 && st.midX === 350 && st.midY === 300, 'and reports the ratio and the new anchor',
+      JSON.stringify(st));
+    ok(st.x === 0 && st.y === 0,
+      'the zoom pushed its corner off-screen and the clamp brought it back — nothing overflows',
+      JSON.stringify(st));
+    const twitch = P.pinchDistance(299, 300, 401, 300);
+    ok(P.pinchStarted(100, twitch) === false,
+      'a 2px twitch of the spread never gets past the slop gate both callers run first', String(twitch));
+    const st2 = P.pinchStep(stepIn, { ax: 299, ay: 300, bx: 401, by: 300 }, { vw: 1280, vh: 720, aspect: 1 });
+    ok(Math.abs(st2.size - 204) < 0.5,
+      'pinchStep itself is unconditional by design — the gate is the caller\'s, so the ungated step is a plain 2%',
+      String(st2.size));
+    const st3 = P.pinchStep(stepIn, { ax: 100, ay: 300, bx: 1100, by: 300 },
+      { vw: 1280, vh: 720, aspect: 1 });
+    ok(st3.size === Math.min(200 * 3, P.viewportCap(1280, 720, null, 1)),
+      'a 10x spread lands on whichever is smaller: 3x, or the screen', String(st3.size));
+    const stC = P.pinchStep({ ...stepIn, anchorX: 640, anchorY: 360, midX: 640, midY: 360 },
+      { ax: 540, ay: 360, bx: 740, by: 360 },
+      { vw: 1280, vh: 720, aspect: 1, centred: true });
+    ok(stC.x === 640 && stC.y === 360,
+      'a CENTRED surface pinched about its own centre does not move an inch', JSON.stringify(stC));
+    ok(P.pinchStep(null, null, null).size >= 0, 'and a step with nothing in it neither throws nor NaNs',
+      JSON.stringify(P.pinchStep(null, null, null)));
+
+    // ---- the one impure function answers ZEROES on a host that cannot say
+    P.resetSafeInsets();
+    const ins = P.safeInsets(1280, 720);
+    ok(ins && ins.top === 0 && ins.right === 0 && ins.bottom === 0 && ins.left === 0,
+      'safeInsets() on a host with no getComputedStyle is four zeroes, not a throw', JSON.stringify(ins));
+    ok(P.safeInsets(1280, 720) === ins, 'and it is measured once per viewport size, not per pointermove');
   }
 
   /* ============================ FLOATING VIDEO WINDOWS (the video PAYLOAD) ====
@@ -1660,6 +1892,141 @@ async function main() {
       `${host.childNodes.length} node(s) / ${videos.ghostCount()} ghost(s)`);
     cancel();
     ok(endured === false, 'a second cancel is a no-op (done() fires at most once)');
+    ex.stopAll();
+    ex.detach();
+  }
+
+  /* -------------------- video windows: PINCH, the mobile half of the wheel
+   * A phone has no wheel, so before this the opponent's clip arrived at whatever
+   * size it was born at and there was nothing to be done about it. Two fingers
+   * now drive the SAME --gg-vwin-w var — and everything below is a thing that
+   * would be a bug: a pinch that mutes on release, a pinch a mouse can start, a
+   * window that ends up hanging off the right edge of a phone, or a scale left
+   * stuck on the next window.
+   * ------------------------------------------------------------------------ */
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const host = byId.get('gg-fx-vwin');
+    const V = await import('../exec/videos.js');
+    const P = await import('../exec/pinch.js');
+    const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet, toyBridge: null });
+    const m = fakeMatch();
+    ex.attach(m);
+    const winsOf = () => liveWins(host);
+    const fire = (id) => m.emitPayload({
+      payload: payloadOf({ id, kind: GoonPayloadKind.Video, duration_ms: 40000 }),
+      fireAtLocalMs: localMonotonicMs(),
+    });
+    const sizeOf = (el) => parseFloat(el.style.getPropertyValue('--gg-vwin-w'));
+    const leftOf = (el) => parseFloat(el.style.getPropertyValue('left')) + (dxOf(el) || 0);
+    // A FINGER, as opposed to ptr()'s mouse: its own pointerId and a pointerType
+    // the module will accept. Both are load-bearing — see the two refusals below.
+    const fin = (el, type, id, x, y) => ptr(el, type, x, y, { pointerId: id, pointerType: 'touch' });
+    const base = V.baseWindowWidth(1280);
+
+    skipOn(false);
+    fire('pZ1');
+    await sleep(80);
+    const w = winsOf()[0];
+    ok(!!w && Math.abs(sizeOf(w) - base) < 1.5, 'a window to pinch, born at the base width', String(sizeOf(w)));
+
+    // Park it at a known left with ONE finger first (the drag is unchanged), so
+    // the arithmetic below does not depend on where it happened to spawn.
+    const born = parseFloat(w.style.getPropertyValue('left'));
+    const A = ++PID, B = ++PID;
+    fin(w, 'pointerdown', A, 400, 400);
+    fin(w, 'pointermove', A, 700, 400);                 // past the slop: a plain grab
+    ok(w._cls.has('is-grabbed'), 'one finger still just drags it', w.className);
+    const ax = 400 + (200 - born);
+    fin(w, 'pointermove', A, ax, 400);                  // left := 200, exactly
+    ok(Math.abs(leftOf(w) - 200) < 0.5, 'parked at a known place', String(leftOf(w)));
+
+    // ---- the second finger. It resizes NOTHING until the spread actually moves
+    fin(w, 'pointerdown', B, ax + 100, 400);            // spread 100
+    ok(Math.abs(sizeOf(w) - base) < 1.5, 'a second finger landing resizes nothing on its own', String(sizeOf(w)));
+    ok(w._cls.has('is-grabbed'), 'but it does take the window out of the drift, like any grab', w.className);
+    fin(w, 'pointermove', B, ax + 104, 400);            // 4px: inside PINCH_SLOP_PX
+    ok(Math.abs(sizeOf(w) - base) < 1.5, 'and a wobble inside the slop is still not a pinch', String(sizeOf(w)));
+    fin(w, 'pointermove', B, ax + 100, 400);            // …and back, still inside it
+
+    // ---- BOTH FINGERS TRAVELLING TOGETHER PAN IT. One event per pointer is how
+    // a real touchscreen delivers this, so the spread genuinely skews mid-gesture
+    // (and the size follows it) — and lands back on exactly the size and exactly
+    // the +40 it should, because the size is absolute over the gesture rather
+    // than accumulated, and the zoom is anchored on the midpoint.
+    fin(w, 'pointermove', A, ax + 40, 400);             // spread 100 -> 60
+    ok(sizeOf(w) < base, 'one finger of the pair moving is a resize, as it must be', String(sizeOf(w)));
+    fin(w, 'pointermove', B, ax + 140, 400);            // spread 60 -> 100 again
+    ok(Math.abs(sizeOf(w) - base) < 1.5,
+      'the pair back at its original spread is back at its original size', String(sizeOf(w)));
+    ok(Math.abs(leftOf(w) - 240) < 0.5, 'and the window travelled with the midpoint, 40px', String(leftOf(w)));
+
+    // ---- spread -> size, through the var, never a stacked transform scale
+    fin(w, 'pointermove', B, ax + 240, 400);            // spread 200: exactly 2x
+    ok(Math.abs(sizeOf(w) - base * 2) < 2, 'doubling the gap doubles the window', `${base} -> ${sizeOf(w)}`);
+    ok(!/scale\(/.test(w.style.getPropertyValue('transform')),
+      'and it does it through --gg-vwin-w — the transform still carries the offset alone',
+      w.style.getPropertyValue('transform'));
+
+    // ---- the clamps: 3x, the screen, and half
+    fin(w, 'pointermove', B, ax + 40 + 2000, 400);
+    const cap = P.viewportCap(1280, 720, null, 9 / 16);
+    ok(Math.abs(sizeOf(w) - Math.min(base * P.PINCH_MAX_FACTOR, cap)) < 2,
+      'a huge spread lands on whichever is smaller: 3x its base, or the screen', String(sizeOf(w)));
+    ok(leftOf(w) >= -0.5 && leftOf(w) + sizeOf(w) <= 1280.5,
+      'and a window pinched wide open is STILL wholly on screen — no right-edge overflow',
+      `${leftOf(w)} + ${sizeOf(w)}`);
+    fin(w, 'pointermove', B, ax + 60, 400);             // spread 20: shut
+    ok(Math.abs(sizeOf(w) - base * P.PINCH_MIN_FACTOR) < 2,
+      'and pinching shut clamps at half its base', String(sizeOf(w)));
+
+    // ---- panned off either edge, the edge holds
+    fin(w, 'pointermove', A, ax + 40 - 3000, 400);
+    fin(w, 'pointermove', B, ax + 60 - 3000, 400);
+    ok(Math.abs(leftOf(w)) < 0.5, 'panned hard left, it stops AT the edge instead of leaving', String(leftOf(w)));
+    fin(w, 'pointermove', A, ax + 40 + 4000, 400);
+    fin(w, 'pointermove', B, ax + 60 + 4000, 400);
+    ok(Math.abs(leftOf(w) + sizeOf(w) - 1280) < 1.5,
+      'and panned hard right it stops at THAT edge — the overflow the mobile HUD rework was about',
+      `${leftOf(w)} + ${sizeOf(w)}`);
+
+    // ---- the release. A pinch is NOT a click, so it must not mute (nor dismiss)
+    const kept = sizeOf(w);
+    fin(w, 'pointerup', B, ax + 60 + 4000, 400);
+    ok(!w._cls.has('is-muted'), 'lifting the second finger does not mute it', w.className);
+    fin(w, 'pointerup', A, ax + 40 + 4000, 400);
+    ok(!w._cls.has('is-muted'),
+      'and neither does lifting the first — a pinch is never the click a one-finger press is', w.className);
+    ok(w.isConnected && !m.receipts.some((r) => r.id === 'pZ1'), 'much less a dismissal');
+    ok(Math.abs(sizeOf(w) - kept) < 0.5, 'the size it was pinched to survives the release', String(sizeOf(w)));
+
+    // ---- and the hand is EMPTY: the next plain press is a plain click
+    tap(w, 300, 300);
+    ok(w._cls.has('is-muted'), 'the very next press is a clean click, so no pinch state was left stuck',
+      w.className);
+    // The ✕ is still a button, after all that handling (it never starts a gesture).
+    skipOn(true);
+    clickClose(w);
+    const z1 = m.receipts.find((r) => r.id === 'pZ1');
+    ok(!!z1 && z1.endured === true, 'and its ✕ still closes it, endured', JSON.stringify(z1));
+    skipOn(false);
+    await sleep(GHOST_WAIT);
+
+    // ---- A MOUSE NEVER PINCHES. Desktop keeps exactly the gestures it had.
+    fire('pZ2');
+    await sleep(80);
+    const w2 = winsOf()[0];
+    ok(Math.abs(sizeOf(w2) - base) < 1.5,
+      'the NEXT window is born at the base width — no scale leaked out of the last one', String(sizeOf(w2)));
+    const M1 = ++PID, M2 = ++PID;
+    ptr(w2, 'pointerdown', 300, 300, { pointerId: M1 });          // no pointerType: a mouse
+    ptr(w2, 'pointermove', 400, 300, { pointerId: M1 });
+    ptr(w2, 'pointerdown', 500, 300, { pointerId: M2 });          // a second mouse "finger"
+    ptr(w2, 'pointermove', 900, 300, { pointerId: M2 });
+    ok(Math.abs(sizeOf(w2) - base) < 1.5,
+      'two MOUSE pointers resize nothing: the second is ignored exactly as it always was', String(sizeOf(w2)));
+    ptr(w2, 'pointerup', 400, 300, { pointerId: M1 });
+
     ex.stopAll();
     ex.detach();
   }

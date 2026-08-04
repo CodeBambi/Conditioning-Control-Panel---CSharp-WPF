@@ -98,6 +98,18 @@ export class GoonSignalingClient {
     this.peerCardVer = null;
     this._peerCardListeners = new Set();
 
+    /**
+     * THE SERVER'S SEND VERDICT. /invite and /join answer with `media_send`
+     * (premium = tier>=1, same bar as the in-app gate) and this records it:
+     * true/false once a response carried the field, null against a server that
+     * predates it. boot.js folds it into session.caps.mediaTransfer for the
+     * STANDALONE page only — hosted, the C# init frame is authoritative and the
+     * two verdicts are computed from the same tier anyway. null deliberately
+     * changes nothing: an old server must not strip a hosted premium sender.
+     * @type {boolean|null}
+     */
+    this.mediaSend = null;
+
     this._disposed = false;
   }
 
@@ -113,6 +125,12 @@ export class GoonSignalingClient {
     if (typeof fn !== 'function') return () => {};
     this._peerCardListeners.add(fn);
     return () => this._peerCardListeners.delete(fn);
+  }
+
+  /** Records `media_send` off a parsed /invite or /join response. Absent = old server = no-op. */
+  _noteMediaSend(json) {
+    if (json && typeof json.media_send === 'boolean') this.mediaSend = json.media_send;
+    return this.mediaSend;
   }
 
   /** Records `peer_card_ver` off a parsed response and notifies subscribers. */
@@ -169,6 +187,8 @@ export class GoonSignalingClient {
       expiresInSec: intOr(json.expires_in_sec, 300),
       pass: typeof json.pass === 'string' ? json.pass : '',
       relayAllowed: json.relay_allowed === undefined ? true : !!json.relay_allowed,
+      /** The server's premium send verdict (see `this.mediaSend`); null on an old server. */
+      mediaSend: this._noteMediaSend(json),
     };
   }
 
@@ -209,6 +229,8 @@ export class GoonSignalingClient {
        * the tester guessing which device is which.
        */
       selfDuel: json.self_duel === true,
+      /** The server's premium send verdict (see `this.mediaSend`); null on an old server. */
+      mediaSend: this._noteMediaSend(json),
     };
   }
 

@@ -73,9 +73,24 @@
  *     renderPayload(payload, done) -> cancel   // done(endured:boolean) at most once; cancel() aborts it
  *   }
  *
+ * PINCH (2026-08-04). A phone has no wheel, so the resize above was a desktop-only
+ * affordance and an opponent's GIF arrived on a phone at whatever size it was
+ * born at. TWO fingers on one flash resize it — through the same
+ * --gg-flash-size var, for the same reason the wheel uses it (transform is
+ * already spoken for by the tilt, the lift and the drag offset). The arithmetic
+ * is exec/pinch.js's, pure and self-tested; the rest is pointer bookkeeping.
+ * ONE POINTER AT A TIME still holds everywhere else: a second finger on a
+ * DIFFERENT flash is ignored exactly as it always was, and a mouse never pinches.
+ *
  * Sustained run and payload runs are independent: a burst can land on top of an
  * already-running flash bed and neither one owns the other's nodes.
  * ==========================================================================*/
+
+import {
+  PINCH_MIN_FACTOR, PINCH_MAX_FACTOR, PINCH_SLOP_PX, PINCH_KEEP_PX,
+  pinchEligible, pinchDistance, pinchMidpoint, pinchStarted, pinchStep,
+  viewportCap, pxToVmin, safeInsets,
+} from './pinch.js';
 
 export const MAX_LIVE = 20;          // concurrent <img> nodes, hydra children included
 export const HYDRA_CHILDREN = 2;     // what one click hatches (clamped to the cap)
@@ -189,6 +204,7 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
   const flying = new Set();     // the subset currently gliding on a fling
   let sustained = null;         // {alive, intensity, timer}
   let drag = null;              // the ONE live press, if any (see onPointerDown)
+  let pinch = null;             // …and the second finger on it, if any (see beginPinch)
   let stepId = 0;               // the shared fling stepper's handle
   let stepRaf = false;          // ...and whether it is an rAF handle or a timeout
   let stepLast = 0;
@@ -336,6 +352,14 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
       n[io]('pointerup', onPointerUp);
       n[io]('pointercancel', onPointerCancel);
       n[io]('lostpointercapture', onPointerCancel);
+      // THE SECOND FINGER'S HALF, bound with the first one's and torn down with
+      // it — two bookkeeping lifetimes that must agree is how a listener leaks.
+      // Both no-op unless a pinch is live, and the handlers above already ignore
+      // a foreign pointerId, so the two sets never fight over one event.
+      n[io]('pointermove', onPinchMove);
+      n[io]('pointerup', onPinchEnd);
+      n[io]('pointercancel', onPinchEnd);
+      n[io]('lostpointercapture', onPinchEnd);
     } catch (_e) { /* ignore */ }
     // Wheel is NOT a pointer event, so capture does not redirect it: bind it as
     // wide as the host allows, and fall back to the node (which is under the
@@ -353,9 +377,26 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
    *  itself has already gone (layers.stopAll, kill). */
   function forgetDrag() {
     if (!drag) return;
+    forgetPinch();                  // a pinch cannot outlive the press it grew from
     listen(drag, false);
     try { clearTimeout(drag.watchdog); } catch (_e) { /* ignore */ }
     drag = null;
+  }
+
+  /** Drop the second finger. Releases its capture and leaves the flash's SIZE
+   *  alone — a pinch that ends keeps what it zoomed to, exactly like the wheel. */
+  function forgetPinch() {
+    const p = pinch;
+    if (!p) return;
+    pinch = null;
+    const n = p.rec && p.rec.node;
+    try {
+      if (n && p.idB != null && typeof n.releasePointerCapture === 'function'
+          && (typeof n.hasPointerCapture !== 'function' || n.hasPointerCapture(p.idB))) {
+        n.releasePointerCapture(p.idB);
+      }
+    } catch (_e) { /* ignore */ }
+    if (drag) drag.pinching = false;
   }
 
   function onPointerDown(rec, e) {
@@ -366,9 +407,14 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
     if (rec.popped || !rec.node || !rec.node.isConnected) return;
 
     if (drag) {
-      // A second finger is IGNORED (no pop, no second grab) — but a drag whose
-      // node was torn out from under us must never block the field forever.
-      if (drag.rec && drag.rec.node && drag.rec.node.isConnected) return;
+      // A second finger on THIS flash is a PINCH (touch only — see beginPinch);
+      // on any other flash it is IGNORED (no pop, no second grab) exactly as it
+      // always was. A drag whose node was torn out from under us must never
+      // block the field forever.
+      if (drag.rec && drag.rec.node && drag.rec.node.isConnected) {
+        if (!pinch && drag.rec === rec) beginPinch(rec, e);
+        return;
+      }
       forgetDrag();
     }
 
@@ -376,8 +422,10 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
     drag = {
       rec,
       pointerId: (e && e.pointerId != null) ? e.pointerId : null,
-      x0: x, y0: y, baseDx: rec.dx, baseDy: rec.dy,
+      pointerType: (e && e.pointerType) || '',
+      x0: x, y0: y, lastX: x, lastY: y, baseDx: rec.dx, baseDy: rec.dy,
       grabbed: false, wheeled: false, watchdog: 0, wheelHost: null,
+      pinching: false, pinched: false,
       samples: [{ t: nowMs(), x, y }],
     };
     listen(drag, true);
@@ -438,9 +486,18 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
     d.staleCapture = false;
     const x = ptX(e), y = ptY(e);
     const t = nowMs();
+    d.lastX = x; d.lastY = y;
     d.samples.push({ t, x, y });
     while (d.samples.length > 2 && t - d.samples[0].t > VELOCITY_WINDOW_MS) d.samples.shift();
 
+    if (d.pinching && pinch) {
+      // This finger is half of a pinch now: it drives the gesture, not the drag.
+      // (The flash still travels — with the MIDPOINT, inside applyPinch.)
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      pinch.ax = x; pinch.ay = y;
+      applyPinch();
+      return;
+    }
     if (!d.grabbed) {
       if (Math.hypot(x - d.x0, y - d.y0) <= DRAG_SLOP_PX) return;   // still a click
       beginGrab(d);
@@ -449,6 +506,107 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
     d.rec.dx = d.baseDx + (x - d.x0);
     d.rec.dy = d.baseDy + (y - d.y0);
     paint(d.rec);
+  }
+
+  /* ---------------------------------------------------------------- the pinch
+   * Two fingers on ONE flash resize it. Touch only, so the desktop gesture set
+   * (click, drag, fling, wheel) is bit-for-bit what it was.
+   * ------------------------------------------------------------------------ */
+
+  /** The second finger landed. A refusal simply leaves the press alone. */
+  function beginPinch(rec, e) {
+    const d = drag;
+    if (!d || d.rec !== rec || rec.popped || !rec.node) return;
+    const idB = (e && e.pointerId != null) ? e.pointerId : null;
+    if (!pinchEligible(d.pointerType, e && e.pointerType, d.pointerId, idB)) return;
+    // A pinch GRABS first: .gg-flash--grabbed stops the keyframe fade, the
+    // lifetime clock pauses, any fling is cancelled and JS owns the transform —
+    // only then is (anchor + dx/dy) the flash's actual place on the screen.
+    if (!d.grabbed) beginGrab(d);
+    const bx = ptX(e), by = ptY(e);
+    const mid = pinchMidpoint(d.lastX, d.lastY, bx, by);
+    pinch = {
+      rec,
+      idB,
+      ax: d.lastX, ay: d.lastY, bx, by,
+      startDist: pinchDistance(d.lastX, d.lastY, bx, by),
+      startSize: rec.sizeVmin,
+      midX: mid.x, midY: mid.y,
+      insets: safeInsets(vpW(), vpH()),
+      live: false,
+    };
+    d.pinching = true;
+    d.pinched = true;               // the release neither pops nor throws it
+    d.wheeled = true;               // …for the same reason a wheel-resize does not pop
+    try {
+      if (idB != null && typeof rec.node.setPointerCapture === 'function') rec.node.setPointerCapture(idB);
+    } catch (_e) { /* capture is a nicety; the node listeners still work without it */ }
+  }
+
+  function onPinchMove(e) {
+    const p = pinch;
+    if (!p || !e || e.pointerId == null || e.pointerId !== p.idB) return;
+    if (typeof e.preventDefault === 'function') e.preventDefault();
+    p.bx = ptX(e); p.by = ptY(e);
+    applyPinch();
+  }
+
+  /** Either finger up/cancelled ends the WHOLE gesture. This is the second
+   *  finger's half; the first one's is onPointerUp/onPointerCancel -> endDrag. */
+  function onPinchEnd(e) {
+    const p = pinch;
+    if (!p || !e || e.pointerId == null || e.pointerId !== p.idB) return;
+    forgetPinch();
+    // The flash stays in hand: the remaining finger is a plain drag again, from
+    // wherever it is now (so the flash does not leap), and it can no longer pop.
+    const d = drag;
+    if (d) {
+      d.x0 = d.lastX; d.y0 = d.lastY; d.baseDx = d.rec.dx; d.baseDy = d.rec.dy;
+      d.samples = [{ t: nowMs(), x: d.lastX, y: d.lastY }];   // a pinch is not momentum
+    }
+  }
+
+  /** ONE step of the gesture. The arithmetic is exec/pinch.js's; this reads the
+   *  record, writes the size var and repaints. */
+  function applyPinch() {
+    const p = pinch;
+    if (!p) return;
+    const rec = p.rec;
+    if (!rec || rec.popped || !rec.node) { forgetPinch(); return; }
+    const dist = pinchDistance(p.ax, p.ay, p.bx, p.by);
+    if (!p.live) {
+      // Two fingers resting is not a gesture. Keep the midpoint fresh so the pan
+      // does not jump the moment it becomes one.
+      if (!pinchStarted(p.startDist, dist, PINCH_SLOP_PX)) {
+        const m = pinchMidpoint(p.ax, p.ay, p.bx, p.by);
+        p.midX = m.x; p.midY = m.y;
+        return;
+      }
+      p.live = true;
+    }
+    const W = vpW(), H = vpH();
+    const vmin = Math.min(W, H) / 100;              // px in one vmin: the size unit's scale
+    const out = pinchStep(
+      {
+        startDist: p.startDist, startSize: p.startSize, base: rec.baseSizeVmin, size: rec.sizeVmin,
+        // A flash is anchored on its CENTRE (every rule translates it -50%,-50%).
+        anchorX: rec.x / 100 * W + rec.dx, anchorY: rec.y / 100 * H + rec.dy,
+        midX: p.midX, midY: p.midY,
+      },
+      { ax: p.ax, ay: p.ay, bx: p.bx, by: p.by },
+      {
+        vw: W, vh: H, insets: p.insets, aspect: 1, centred: true, pxPerUnit: vmin,
+        keep: PINCH_KEEP_PX,
+        cap: pxToVmin(viewportCap(W, H, p.insets, 1), W, H),
+        minFactor: PINCH_MIN_FACTOR, maxFactor: PINCH_MAX_FACTOR,
+      },
+    );
+    p.midX = out.midX; p.midY = out.midY;
+    rec.sizeVmin = out.size;
+    rec.dx = out.x - (rec.x / 100 * W);
+    rec.dy = out.y - (rec.y / 100 * H);
+    try { rec.node.style.setProperty('--gg-flash-size', `${out.size.toFixed(1)}vmin`); } catch (_e) { /* ignore */ }
+    paint(rec);
   }
 
   /** The tail of the gesture, in px/frame. Anything older than the window is not
@@ -472,6 +630,7 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
   function endDrag(why) {
     const d = drag;
     if (!d) return;
+    forgetPinch();                  // whichever finger left, the gesture is over
     drag = null;
     listen(d, false);
     try { clearTimeout(d.watchdog); } catch (_e) { /* ignore */ }
@@ -498,7 +657,10 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
     rec.expTimer = soon(() => expire(rec), rec.remainMs);
 
     let vx = 0, vy = 0;
-    if (why === 'up') { const v = velocity(d); vx = v.vx; vy = v.vy; }
+    // A PINCH IS NOT A THROW. Two fingers leaving a flash at speed is a gesture
+    // ending, not momentum handed over — and a zoomed-in flash sailing off the
+    // screen because you let go quickly is the opposite of what was asked for.
+    if (why === 'up' && !d.pinched) { const v = velocity(d); vx = v.vx; vy = v.vy; }
     const speed = Math.hypot(vx, vy);
     if (speed >= FLING_MIN) {
       rec.fly = { vx, vy, escape: speed > FLING_ESCAPE };

@@ -88,6 +88,17 @@ export const GoonConsts = Object.freeze({
   ClockPingRounds: 10,
   ClockResyncIntervalMs: 30000,
   IceTimeoutMs: 10000,
+  /**
+   * GUEST ONLY: how long a joined guest waits for the host's first offer before
+   * giving up on P2P (webrtcTransport.waitForChannel). A guest that has redeemed
+   * the code is owed an offer within a couple of signal-poll round trips; a host
+   * that never sends one (app closed, pump dead) used to leave the guest on
+   * "joining…" FOREVER, because the ICE budget only starts once negotiation
+   * does. Deliberately generous — a slow poll cycle must not eat a live host —
+   * and it feeds the same relay-fallback ladder as an ICE timeout, so a host
+   * that is alive but unreachable over P2P signaling still gets its second chance.
+   */
+  NoOfferTimeoutMs: 20000,
   ReconnectGraceMs: 5000,
 
   // Payload economy (receiver-enforced; the wire is untrusted)

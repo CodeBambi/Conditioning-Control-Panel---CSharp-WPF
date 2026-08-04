@@ -1073,7 +1073,10 @@ function makeFakeMatch() {
 {
   const optionsMod = await import('../ui/options.js');
   const prefsStub = (() => {
-    const v = { masterVolume: 0.8, musicVolume: 0.5, sfxVolume: 0.7, reduceMotion: false };
+    const v = {
+      masterVolume: 0.8, musicVolume: 0.5, droneVolume: 0.5,
+      uiVolume: 0.7, gameVolume: 0.7, mediaVolume: 0.8, reduceMotion: false,
+    };
     return { get: (k) => v[k], set: (k, x) => { v[k] = x; }, reset() {} };
   })();
   const options = optionsMod.createOptions({
@@ -2006,7 +2009,7 @@ const audioMod = await import('../ui/audio.js');
 
 /* --- 16b. the pure math, the pool cap and the gesture path ---------------- */
 {
-  const { cueGain, pickVariant, SFX_TRIM, POOL_MAX, MIN_GAP_MS, UNLOCK_EVENTS } = audioMod;
+  const { cueGain, busGain, pickVariant, SFX_TRIM, POOL_MAX, MIN_GAP_MS, UNLOCK_EVENTS } = audioMod;
 
   ok(SFX_TRIM > 0 && SFX_TRIM <= 1, 'there is ONE exported master trim over every cue', String(SFX_TRIM));
   ok(POOL_MAX >= 4 && POOL_MAX <= 16,
@@ -2015,10 +2018,15 @@ const audioMod = await import('../ui/audio.js');
   ok(UNLOCK_EVENTS.includes('pointerdown') && UNLOCK_EVENTS.includes('keydown'),
     'the gesture-unlock list covers pointer AND keyboard');
 
-  ok(Math.abs(cueGain(0.5, 1, 1) - 0.5 * SFX_TRIM) < 1e-9, 'cueGain folds the house trim in');
-  ok(cueGain(0.5, 0, 1) === 0, 'master 0 is silence');
-  ok(cueGain(0.5, 1, 0) === 0, 'sfx 0 is silence');
-  ok(Math.abs(cueGain(0.5, 0.5, 0.5) - 0.5 * 0.5 * 0.5 * SFX_TRIM) < 1e-9,
+  // The per-cue node carries the TRIM ONLY now — the player's sliders are the
+  // buses it feeds, so each is applied exactly once (see 19c for the staging).
+  ok(Math.abs(cueGain(0.5) - 0.5 * SFX_TRIM) < 1e-9, 'cueGain folds the house trim in');
+  ok(cueGain(0) === 0, 'a zero cue trim is silence');
+  ok(cueGain('nonsense') > 0, 'and a corrupt trim falls back to a sane default rather than NaN into an AudioParam');
+  ok(Math.abs(busGain(0.5, 1, 1) - 0.5 * SFX_TRIM) < 1e-9, 'busGain is cueGain at both sliders open');
+  ok(busGain(0.5, 1, 0) === 0, 'master 0 is silence');
+  ok(busGain(0.5, 0, 1) === 0, 'a cue bus at 0 is silence');
+  ok(Math.abs(busGain(0.5, 0.5, 0.5) - 0.5 * 0.5 * 0.5 * SFX_TRIM) < 1e-9,
     'and the three multiply, never conflate');
 
   // No-repeat-last over a two-file rotation must alternate, never stick.
@@ -2058,22 +2066,23 @@ const audioMod = await import('../ui/audio.js');
   ok(bus.isDucked === true, 'and is idempotent');
   bus.stopMusic();
   ok(bus.currentMusic === null, 'stopMusic clears it');
-  bus.setVolume('sfx', 0.5);
-  ok(bus.volumes.sfx === 0.5, 'setVolume writes the bus it names');
+  bus.setVolume('game', 0.5);
+  ok(bus.volumes.game === 0.5, 'setVolume writes the bus it names');
   bus.setVolume('nonsense', 0.1);
-  ok(bus.volumes.sfx === 0.5, 'and ignores a bus it does not have');
+  ok(bus.volumes.game === 0.5 && bus.volumes.nonsense === undefined,
+    'and ignores a bus it does not have', JSON.stringify(bus.volumes));
   ok(bus.unlock() === 'none', 'unlock() on a hostless bus reports none rather than throwing');
   bus.dispose();
   ok(bus.sfx('bubble-pop') === false, 'a disposed bus is inert');
 
   // It must read the player's existing sliders, not invent a second set.
   const prefsMod = await import('../ui/prefs.js');
-  const prefs = prefsMod.createPrefs({ masterVolume: 0.4, sfxVolume: 0.6 });
+  const prefs = prefsMod.createPrefs({ masterVolume: 0.4, gameVolume: 0.6 });
   const bus2 = audioMod.createAudio({ prefs });
-  ok(bus2.volumes.master === 0.4 && bus2.volumes.sfx === 0.6,
+  ok(bus2.volumes.master === 0.4 && bus2.volumes.game === 0.6,
     'the bus seeds from ui/prefs.js — no settings UI of its own', JSON.stringify(bus2.volumes));
-  prefs.set('sfxVolume', 0.2);
-  ok(bus2.volumes.sfx === 0.2, 'and follows a live slider drag');
+  prefs.set('gameVolume', 0.2);
+  ok(bus2.volumes.game === 0.2, 'and follows a live slider drag');
   bus2.dispose();
 }
 
@@ -3059,6 +3068,682 @@ const audioMod = await import('../ui/audio.js');
   const zenRail = ruleFor(phone, '.gg-hud-frame.gg-hud--zen .gg-rail--left');
   ok(/bottom:\s*[\d.]+rem/.test(zenRail) && !/display:\s*none/.test(zenRail),
     'zen moves the arsenal down into the freed space rather than taking it away', zenRail);
+}
+
+/* ===========================================================================
+ * 18. THE DRONE BED — the Intake's binaural bed, under a duel (owner ask).
+ *
+ * "The goon game should play the low drone the Intake has." The Intake's bed is
+ * SYNTHESIZED (intake/render/audio.js: two sine carriers 174-196 Hz, the right
+ * detuned by the beat, through a lowpass into one gain) — there is no loop file
+ * to copy — so ui/droneBed.js ports the topology and the endpoints instead.
+ *
+ * Four things have to hold or the feature is either silent, stuck on, or loud:
+ *   · the parameter math is the Intake's, and the bed is QUIETER than the cues
+ *     it plays under (it never stops, and every cue in the registry is already
+ *     deliberately low);
+ *   · phase -> state is a pure mapping off the engine's own phase, so the bed
+ *     cannot drift out of step by keeping its own state machine — and boot.js
+ *     really calls it, read off the source so a deleted hook cannot pass;
+ *   · the latch survives a context that does not exist yet (autoplay: a BED is
+ *     started late, unlike a one-shot cue, which is dropped);
+ *   · the slider exists, defaults modest, and retunes a bus rather than the next
+ *     thing to start — the bed is playing while you drag it.
+ * ======================================================================== */
+{
+  const droneMod = await import('../ui/droneBed.js');
+  const prefsMod = await import('../ui/prefs.js');
+  const optionsMod = await import('../ui/options.js');
+  const { S } = await import('../ui/strings.js');
+  const {
+    DRONE_BEAT_HZ, DRONE_CARRIER_HZ, DRONE_DEPTH, DRONE_PEAK, DRONE_PHASES,
+    DRONE_FADE_IN_SEC, DRONE_FADE_OUT_SEC, DRONE_GLIDE_SEC,
+    droneHz, droneGain, droneWantsPlay,
+  } = droneMod;
+
+  /* ---- 18a. the parameter math is the Intake's ---------------------------- */
+  ok(typeof droneMod.createDroneBed === 'function', 'ui/droneBed.js exports createDroneBed');
+  ok(DRONE_CARRIER_HZ.rest === 174 && DRONE_CARRIER_HZ.deep === 196,
+    'the carrier band is the Intake\'s 174-196 Hz, verbatim',
+    `${DRONE_CARRIER_HZ.rest}-${DRONE_CARRIER_HZ.deep}`);
+  ok(DRONE_BEAT_HZ.rest === 10.0 && DRONE_BEAT_HZ.deep === 3.5,
+    'and the beat runs the same 10 -> 3.5 Hz curve', `${DRONE_BEAT_HZ.rest}-${DRONE_BEAT_HZ.deep}`);
+
+  const rest = droneHz(0);
+  const deep = droneHz(1);
+  ok(rest.carrierHz === 174 && deep.carrierHz === 196, 'droneHz walks the carrier between the endpoints');
+  ok(rest.beatHz === 10.0 && deep.beatHz === 3.5, 'and the beat with it, in the other direction');
+  ok(rest.rightHz - rest.leftHz === rest.beatHz && deep.rightHz - deep.leftHz === deep.beatHz,
+    'the RIGHT carrier is the left one detuned by the beat — that is the whole trick');
+  ok(droneHz(-5).carrierHz === 174 && droneHz(99).carrierHz === 196,
+    'a nonsense depth clamps instead of detuning into a siren');
+
+  const here = droneHz();
+  ok(DRONE_DEPTH > 0 && DRONE_DEPTH < 1, 'the duel sits at a fixed point ON that curve', String(DRONE_DEPTH));
+  ok(here.carrierHz > 174 && here.carrierHz < 196 && here.beatHz > 3.5 && here.beatHz < 10,
+    'so the default is a real low carrier with a slow beat, not an endpoint',
+    `${here.carrierHz.toFixed(1)}Hz / ${here.beatHz.toFixed(1)}Hz`);
+  ok(here.carrierHz < 250, 'and it is LOW — a drone you notice as pitch is not a bed', String(here.carrierHz));
+
+  // Gain staging: peak x droneVolume x master, multiplied, never conflated.
+  ok(Math.abs(droneGain(1, 1) - DRONE_PEAK) < 1e-9, 'droneGain tops out at DRONE_PEAK');
+  ok(droneGain(0, 1) === 0, 'droneVolume 0 is silence — the slider really is an off switch');
+  ok(droneGain(1, 0) === 0, 'and master 0 takes it down like everything else');
+  ok(Math.abs(droneGain(0.5, 0.5) - DRONE_PEAK * 0.25) < 1e-9,
+    'the two sliders multiply, so the master still scales a bed on its own bus');
+  ok(droneGain('nonsense', 1) === 0 && droneGain(1, undefined) === 0,
+    'a corrupt volume is silence, not NaN into an AudioParam');
+  ok(DRONE_PEAK > 0 && DRONE_PEAK < audioMod.SFX_REGISTRY['bubble-pop'].gain,
+    'and the bed peaks UNDER the pops — it is the only voice that never stops',
+    `${DRONE_PEAK} vs ${audioMod.SFX_REGISTRY['bubble-pop'].gain}`);
+  ok(DRONE_FADE_IN_SEC >= 1 && DRONE_FADE_IN_SEC <= 6,
+    'it arrives over seconds rather than switching on', String(DRONE_FADE_IN_SEC));
+  ok(DRONE_FADE_OUT_SEC > 0 && DRONE_FADE_OUT_SEC < DRONE_FADE_IN_SEC,
+    'and leaves faster than it came, so it is gone before the recap sting',
+    String(DRONE_FADE_OUT_SEC));
+  ok(DRONE_GLIDE_SEC > 0 && DRONE_GLIDE_SEC < 1,
+    'a slider drag glides rather than steps — the bed is playing while you move it',
+    String(DRONE_GLIDE_SEC));
+
+  /* ---- 18b. phase -> state, the pure mapping ------------------------------ */
+  for (const p of [GoonMatchPhase.Countdown, GoonMatchPhase.Live, GoonMatchPhase.SuddenDeath]) {
+    ok(droneWantsPlay(p) === true, 'the bed plays at phase ' + p);
+  }
+  for (const p of [GoonMatchPhase.Idle, GoonMatchPhase.Lobby, GoonMatchPhase.Consent,
+    GoonMatchPhase.Draft, GoonMatchPhase.Recap]) {
+    ok(droneWantsPlay(p) === false, 'and is silent at phase ' + p);
+  }
+  ok(droneWantsPlay(GoonMatchPhase.Countdown) === true,
+    'it comes in at the COUNTDOWN, not at Live — the countdown is already the match');
+  ok(droneWantsPlay(GoonMatchPhase.Recap) === false,
+    'and out at the recap, which every match reaches (boot.js treats it as non-optional)');
+  ok(droneWantsPlay(undefined) === false && droneWantsPlay(null) === false
+    && droneWantsPlay('live') === false && droneWantsPlay(NaN) === false,
+    'anything unrecognised is OFF — a bed nobody can stop is the worst failure here');
+  ok(DRONE_PHASES.length === 3 && Object.isFrozen(DRONE_PHASES),
+    'the playing phases are a frozen list, not three ifs to drift apart');
+
+  /* ---- 18c. the bus: the latch, and the hostless case --------------------- */
+  {
+    const seen = [];
+    const bus = audioMod.createAudio({ logger: { debug: (m) => seen.push(m), warn: (m) => seen.push(m) } });
+    for (const k of ['dronePhase', 'startDrone', 'stopDrone']) {
+      ok(typeof bus[k] === 'function', `the bus exposes ${k}()`);
+    }
+    ok(bus.droneWanted === false && bus.droneIsPlaying === false, 'and starts with the bed down');
+
+    ok(bus.dronePhase(GoonMatchPhase.Live) === true, 'dronePhase(Live) asks for the bed');
+    ok(bus.droneWanted === true,
+      'and the LATCH holds even though this host has no AudioContext — a bed asked for before the unlock is started late, not dropped like a cue');
+    ok(bus.droneIsPlaying === false, 'while nothing pretends to be playing');
+    ok(seen.some((m) => /drone:on/.test(m)), 'the logger hears it come in');
+
+    // Idempotence is the relay-rebuild case: attachMatch runs again on the same
+    // session and re-fires the phase mid-Live.
+    ok(bus.dronePhase(GoonMatchPhase.Live) === true && bus.droneWanted === true,
+      'the same phase again is a no-op, not a second bed (the relay rebuild)');
+    ok((seen.filter((m) => /drone:on/.test(m)) || []).length === 1,
+      'and it is not even re-announced', JSON.stringify(seen.filter((m) => /drone:/.test(m))));
+
+    ok(bus.dronePhase(GoonMatchPhase.Recap) === false && bus.droneWanted === false,
+      'the recap puts it down');
+    bus.startDrone();
+    ok(bus.droneWanted === true, 'startDrone() is the manual door in (probes, this test)');
+    bus.stopDrone();
+    ok(bus.droneWanted === false, 'and stopDrone() the way out');
+    bus.startDrone();
+    bus.dispose();
+    ok(bus.droneWanted === false, 'disposing drops the latch with everything else');
+    ok(bus.dronePhase(GoonMatchPhase.Live) === false, 'and a disposed bus will not restart it');
+  }
+
+  /* ---- 18d. the pref and the slider --------------------------------------- */
+  ok(prefsMod.PREF_DEFAULTS.droneVolume === 0.5,
+    'droneVolume is a pref, and it defaults MODEST', String(prefsMod.PREF_DEFAULTS.droneVolume));
+  ok(typeof prefsMod.PREF_DEFAULTS.droneVolume === 'number',
+    'a number, so a corrupt store coerces instead of poisoning an AudioParam');
+  {
+    const p = prefsMod.createPrefs({ droneVolume: 9 });
+    ok(p.get('droneVolume') === 1, 'and it is clamped like every other *Volume key', String(p.get('droneVolume')));
+    const p2 = prefsMod.createPrefs({ droneVolume: 'loud' });
+    ok(p2.get('droneVolume') === 0.5, 'garbage falls back to the default', String(p2.get('droneVolume')));
+
+    // The bus seeds from prefs and follows a live drag — the whole reason the
+    // volume is a BUS and not a per-voice multiplier.
+    const seeded = prefsMod.createPrefs({ droneVolume: 0.3 });
+    const bus = audioMod.createAudio({ prefs: seeded });
+    ok(bus.volumes.drone === 0.3, 'the bus seeds its drone level from ui/prefs.js', JSON.stringify(bus.volumes));
+    seeded.set('droneVolume', 0.9);
+    ok(bus.volumes.drone === 0.9, 'and follows a live slider drag, mid-bed');
+    bus.setVolume('drone', 0.1);
+    ok(bus.volumes.drone === 0.1 && seeded.get('droneVolume') === 0.1,
+      'setVolume("drone") writes both ways, exactly like the other three buses');
+    bus.dispose();
+  }
+
+  // ---- the row, IN a live match (a knob about your own screen, like the rest)
+  {
+    const live = prefsMod.createPrefs({});
+    const calls = [];
+    const audioStub = { setVolume: (b, v) => calls.push([b, v]), sfx() {} };
+    const options = optionsMod.createOptions({
+      prefs: live, audio: audioStub, session: { hosted: false }, isInMatch: () => true,
+    });
+    options.open();
+    await sleep(30);
+    const panel = findOne(dom.byId.get('gg-drawer'), 'gg-panel');
+    ok(!!panel, 'the drawer opened');
+    const sliders = findAll(panel, 'gg-panel-row--slider');
+    ok(sliders.length === 6,
+      'there are SIX volume rows now — master, music, drone, ui, game and media (§19)', String(sliders.length));
+    const labelOf = (rowNode) => {
+      const lab = findOne(rowNode, 'gg-panel-label');
+      return lab && lab.children[0] ? lab.children[0].textContent : '';
+    };
+    const droneRow = sliders.find((r) => labelOf(r) === S.options.drone) || null;
+    ok(!!droneRow, 'and one of them is the drone, next to the existing three', S.options.drone);
+    ok(typeof S.options.drone === 'string' && S.options.drone.length > 0,
+      'whose label lives in ui/strings.js with the others', String(S.options.drone));
+
+    const input = droneRow ? (droneRow.children[1] || null) : null;
+    ok(!!input && input.tagName === 'INPUT', 'it is the same range input the other three use');
+    ok(input.getAttribute('aria-label') === S.options.drone, 'labelled for a screen reader too');
+    // (the stub does not mirror the value ATTRIBUTE onto the property the way a
+    // real input does, so the seed is read back off the attribute)
+    ok(input.getAttribute('value') === '50',
+      'seeded from the stored 50%, not a hardcoded number', String(input.getAttribute('value')));
+
+    input.value = '20';
+    input.dispatchEvent({ type: 'input' });
+    ok(live.get('droneVolume') === 0.2, 'dragging it writes the pref', String(live.get('droneVolume')));
+    ok(calls.some(([b, v]) => b === 'drone' && Math.abs(v - 0.2) < 1e-9),
+      'and reaches ui/audio.js as the "drone" BUS — which is what retunes a bed that is already playing',
+      JSON.stringify(calls));
+    const valueSpan = findOne(droneRow, 'gg-panel-value');
+    ok(valueSpan && valueSpan.textContent === '20%', 'the readout repaints with it', String(valueSpan && valueSpan.textContent));
+
+    input.value = '0';
+    input.dispatchEvent({ type: 'input' });
+    ok(live.get('droneVolume') === 0 && calls.some(([b, v]) => b === 'drone' && v === 0),
+      'and 0 really reaches the bus — the slider is the off switch');
+
+    options.dispose();
+    await sleep(320);
+  }
+
+  /* ---- 18e. the wiring is really at its call site -------------------------- */
+  {
+    const fs = await import('node:fs/promises');
+    const url = await import('node:url');
+    const read = async (p) => fs.readFile(url.fileURLToPath(new URL(p, import.meta.url)), 'utf8');
+    const bootSrc = await read('../boot.js');
+    const audioSrc = await read('../ui/audio.js');
+    const droneSrc = await read('../ui/droneBed.js');
+
+    // ONE hook, and it is on the phase router — the existing seam, not a new
+    // event system. A deleted call site has to fail here, not go quiet on stage.
+    ok(/audio\?\.dronePhase\?\.\(phase\)/.test(bootSrc),
+      'boot.js drives the bed from the phase it already routes on');
+    const onPhaseBody = bootSrc.slice(bootSrc.indexOf('function onPhase(phase)'),
+      bootSrc.indexOf('function onPhase(phase)') + 900);
+    ok(/dronePhase/.test(onPhaseBody),
+      'and the call is INSIDE onPhase(), which attachMatch re-subscribes on every rebuild');
+    ok((bootSrc.match(/dronePhase/g) || []).length === 1,
+      'exactly one hook — two would be two beds to keep in step', String((bootSrc.match(/dronePhase/g) || []).length));
+
+    // The bus topology: its own node, under the master, so the master still wins.
+    ok(/droneBus\s*=\s*ctx\.createGain\(\)/.test(audioSrc), 'ui/audio.js gives the bed its own bus');
+    ok(/droneBus\.connect\(masterBus\)/.test(audioSrc),
+      'and hangs it UNDER masterBus, so the master slider still scales it');
+    ok(/glide\(droneBus\.gain/.test(audioSrc),
+      'whose gain GLIDES, because the bed is playing while the slider moves');
+
+    // Import-safety: this whole tier dies silently if a module throws on import.
+    const beforeFactory = droneSrc.slice(0, droneSrc.indexOf('export function createDroneBed'));
+    ok(!/new\s+(window\.)?(webkit)?AudioContext/.test(beforeFactory),
+      'ui/droneBed.js constructs no AudioContext at module scope');
+    ok(!/document\./.test(beforeFactory), 'and touches no DOM at import time');
+    ok(/oscL\.stop\(|oscL\.stop\b/.test(droneSrc) || /dying\.oscL\.stop/.test(droneSrc),
+      'every oscillator it builds is handed its own stop() — a bed may not outlive its match');
+  }
+}
+
+/* ===========================================================================
+ * 19. VOLUME GRANULARITY — "like we do in the intake" (owner, 2026-08-04).
+ *
+ * The Intake gives a player five buses (master / binaural / effects / voice /
+ * music). This page had four sliders and one of them, `sfxVolume`, was doing two
+ * unrelated jobs — every menu tick AND every drop, payload, pop and sting — while
+ * the loudest thing in the room, the opponent's payload VIDEOS, had no slider at
+ * all. This section is the split, and it holds five things:
+ *
+ *   · THE REGISTRY IS THE MAP. Every cue declares its bus, so "which slider does
+ *     this sound obey" is answered in the same place the sound is declared and
+ *     cannot drift from the section comment above it;
+ *   · NOBODY'S SETTING IS THROWN AWAY. A player who had turned sfx down to 0.3
+ *     gets 0.3 on both new sliders, once, and then the retired key is gone;
+ *   · EACH NUMBER IS APPLIED EXACTLY ONCE. The per-cue node carries the trim, the
+ *     bus carries the slider, masterBus carries the master — which is also the
+ *     fix for the old squared master (cueGain used to multiply it in as well);
+ *   · MEDIA CROSSES THE FENCE AS A NUMBER. exec/ never imports ui/, so the
+ *     EFFECTIVE media volume is published on <html> the way skippable videos and
+ *     shader spirals already are, and mediaVolume() answers with the same value
+ *     for anyone on this side;
+ *   · AND THE DRAWER STILL FITS. Six volume rows is a lot of drawer; the panel
+ *     was already a scroller, which is the only reason this is allowed.
+ * ======================================================================== */
+{
+  const prefsMod = await import('../ui/prefs.js');
+  const optionsMod = await import('../ui/options.js');
+  const { S } = await import('../ui/strings.js');
+  const { DRONE_GLIDE_SEC } = await import('../ui/droneBed.js');
+  const {
+    SFX_REGISTRY, SFX_IDS, SFX_BUSES, BUS_UI, BUS_GAME, DEFAULT_SFX_BUS,
+    busOf, busGain, cueGain, SFX_TRIM, BUS_GLIDE_SEC,
+  } = audioMod;
+
+  /* ---- 19a. the registry: every id on exactly one real bus ---------------- */
+  ok(Array.isArray(SFX_BUSES) && Object.isFrozen(SFX_BUSES) && SFX_BUSES.length === 2,
+    'there are exactly TWO player-facing cue buses, frozen', JSON.stringify(SFX_BUSES));
+  ok(SFX_BUSES.includes(BUS_UI) && SFX_BUSES.includes(BUS_GAME),
+    'and they are ui + game', `${BUS_UI}/${BUS_GAME}`);
+
+  const noBus = SFX_IDS.filter((id) => SFX_BUSES.indexOf(SFX_REGISTRY[id].bus) < 0);
+  ok(noBus.length === 0,
+    'EVERY registered cue declares a valid bus — an unlabelled one would obey a slider nobody chose for it',
+    noBus.join(' '));
+
+  const onUi = SFX_IDS.filter((id) => busOf(id) === BUS_UI);
+  const onGame = SFX_IDS.filter((id) => busOf(id) === BUS_GAME);
+  ok(onUi.length + onGame.length === SFX_IDS.length, 'the two buses partition the registry');
+  ok(onUi.length >= 4 && onGame.length >= 20,
+    'both are real populations, and the match owns most of the pack', `${onUi.length} ui / ${onGame.length} game`);
+
+  // The chrome set, named. This is the whole player-facing promise of the ui
+  // slider: it is the sounds YOU make by pressing things outside a match.
+  const CHROME = ['ui-move', 'ui-select', 'ui-back', 'ui-error', 'code-cell', 'code-copy', 'lamp-confirm', 'lamp-clear'];
+  ok(onUi.slice().sort().join(',') === CHROME.slice().sort().join(','),
+    'the ui bus is exactly the menus/sheets/code-entry chrome, nothing else', onUi.join(' '));
+
+  // Spot pins where the line is genuinely a judgement call, so a later "tidy-up"
+  // that moves one has to argue with a named test instead of a comment.
+  ok(busOf('gg-mercy') === BUS_GAME,
+    'MERCY is a match sound — the safety valve may not go quiet with the menus');
+  ok(busOf('lock-slip') === BUS_GAME && busOf('ui-error') === BUS_UI,
+    'the same buzz sorts by WHO CAUSED IT: a form refusing you is ui, a lock card slipping is the duel');
+  ok(busOf('payload-in') === BUS_GAME && busOf('bubble-pop') === BUS_GAME
+    && busOf('countdown-tick') === BUS_GAME && busOf('draft-lock') === BUS_GAME
+    && busOf('recap-won') === BUS_GAME && busOf('video-window-in') === BUS_GAME,
+    'draft, countdown, drops, payloads, bubbles, windows and the recap are all one slider');
+  ok(SFX_IDS.filter((id) => id.startsWith('ui-')).every((id) => busOf(id) === BUS_UI),
+    'and nothing named ui-* ended up on the match bus');
+
+  ok(busOf('not-a-cue-at-all') === DEFAULT_SFX_BUS && DEFAULT_SFX_BUS === BUS_GAME,
+    'an unknown id answers the default instead of throwing — a typo is already a logged warning');
+  ok(busOf(undefined) === DEFAULT_SFX_BUS && busOf(null) === DEFAULT_SFX_BUS,
+    'busOf is total: no id, no crash');
+
+  /* ---- 19b. the migration: nobody's setting is thrown away ---------------- */
+  ok(prefsMod.PREF_DEFAULTS.sfxVolume === undefined,
+    'sfxVolume is RETIRED — it is not a live key any more, so there is no third slider to keep in step');
+  ok(prefsMod.PREF_DEFAULTS.uiVolume === 0.85 && prefsMod.PREF_DEFAULTS.gameVolume === 0.85,
+    'both halves default to the OLD sfx default, so a fresh install sounds exactly as it did',
+    `${prefsMod.PREF_DEFAULTS.uiVolume}/${prefsMod.PREF_DEFAULTS.gameVolume}`);
+  ok(prefsMod.PREF_DEFAULTS.mediaVolume === 0.8,
+    'mediaVolume defaults modest — the HUD has to stay audible under a window',
+    String(prefsMod.PREF_DEFAULTS.mediaVolume));
+  ok(prefsMod.PREF_MIGRATIONS.sfxVolume.join(',') === 'uiVolume,gameVolume',
+    'the migration is declared as data, not buried in a constructor', JSON.stringify(prefsMod.PREF_MIGRATIONS));
+
+  {
+    const { migratePrefs } = prefsMod;
+    const seeded = migratePrefs({ sfxVolume: 0.3 });
+    ok(seeded.uiVolume === 0.3 && seeded.gameVolume === 0.3,
+      'a saved sfxVolume seeds BOTH new keys — "we redesigned the mixer" is not a reason to undo a setting');
+    const partial = migratePrefs({ sfxVolume: 0.3, gameVolume: 0.9 });
+    ok(partial.gameVolume === 0.9 && partial.uiVolume === 0.3,
+      'a key that already exists WINS — a stale sfxVolume the host keeps sending can never clobber it');
+    const untouched = { masterVolume: 0.5 };
+    ok(migratePrefs(untouched) === untouched,
+      'a blob with nothing to migrate is handed straight back, not copied');
+    const empty = migratePrefs(null);
+    ok(empty && typeof empty === 'object' && Object.keys(empty).length === 0,
+      'and a missing blob is an empty object, not a crash and not an invented volume',
+      JSON.stringify(empty));
+  }
+
+  {
+    const old = prefsMod.createPrefs({ sfxVolume: 0.3 });
+    ok(old.get('uiVolume') === 0.3 && old.get('gameVolume') === 0.3,
+      'createPrefs runs it: an existing player lands on their own number, twice');
+    ok(old.get('sfxVolume') === undefined && old.all().sfxVolume === undefined,
+      'and the retired key is not carried forward — migrated once, then gone');
+    ok(old.set('sfxVolume', 0.9) === false && old.get('gameVolume') === 0.3,
+      'writing the retired key is refused rather than silently accepted');
+
+    const both = prefsMod.createPrefs({ sfxVolume: 0.3, uiVolume: 0.9 });
+    ok(both.get('uiVolume') === 0.9 && both.get('gameVolume') === 0.3,
+      'a half-migrated store keeps the half it already had');
+    const loud = prefsMod.createPrefs({ sfxVolume: 9 });
+    ok(loud.get('uiVolume') === 1 && loud.get('gameVolume') === 1,
+      'the migrated value is clamped like any other *Volume key');
+    const junk = prefsMod.createPrefs({ sfxVolume: 'loud', mediaVolume: 'quiet' });
+    ok(junk.get('gameVolume') === 0.85 && junk.get('mediaVolume') === 0.8,
+      'and garbage falls back to the defaults instead of poisoning an AudioParam');
+  }
+
+  /* ---- 19c. the gain staging, and a drag that lands on the right bus ------ */
+  ok(Math.abs(cueGain(0.4) - 0.4 * SFX_TRIM) < 1e-9,
+    'the per-cue node carries the cue trim x the house trim and NOTHING else');
+  ok(cueGain.length === 1,
+    'cueGain no longer takes the sliders — that is what squared the master before the split',
+    String(cueGain.length));
+  {
+    const tick = SFX_REGISTRY['ui-select'].gain;
+    const pop = SFX_REGISTRY['bubble-pop'].gain;
+    // The whole point of the feature, as arithmetic: one slider down, the other
+    // untouched, and master still over both.
+    ok(busGain(pop, 0, 1) === 0 && busGain(tick, 0.8, 1) > 0,
+      'game at 0 silences the field and leaves the menus alone — the granularity the owner asked for');
+    ok(busGain(tick, 0, 1) === 0 && busGain(pop, 0.8, 1) > 0, 'and the same in reverse');
+    ok(busGain(pop, 1, 0) === 0 && busGain(tick, 1, 0) === 0,
+      'master 0 still takes everything down, because it is a THIRD node under both');
+    ok(Math.abs(busGain(pop, 0.5, 0.5) - cueGain(pop) * 0.25) < 1e-9,
+      'the two multiply once each — a master of 0.5 is 0.5, not 0.25 (the old bug)');
+    ok(BUS_GLIDE_SEC > 0 && BUS_GLIDE_SEC < DRONE_GLIDE_SEC,
+      'a cue bus glides too, but shorter than the bed: nothing on it sustains',
+      `${BUS_GLIDE_SEC} vs ${DRONE_GLIDE_SEC}`);
+  }
+  {
+    const p = prefsMod.createPrefs({ uiVolume: 0.4, gameVolume: 0.6, masterVolume: 0.9 });
+    const bus = audioMod.createAudio({ prefs: p });
+    ok(bus.volumes.ui === 0.4 && bus.volumes.game === 0.6,
+      'the mixer seeds BOTH cue buses from prefs', JSON.stringify(bus.volumes));
+    ok(Object.keys(bus.volumes).sort().join(',') === 'drone,game,master,media,music,ui',
+      'and exposes exactly the six sliders the drawer draws', Object.keys(bus.volumes).join(','));
+
+    p.set('gameVolume', 0.1);
+    ok(bus.volumes.game === 0.1 && bus.volumes.ui === 0.4,
+      'a live drag on ONE slider moves one bus and leaves the other alone');
+    bus.setVolume('ui', 0.2);
+    ok(bus.volumes.ui === 0.2 && p.get('uiVolume') === 0.2,
+      'setVolume("ui") writes both ways, exactly like the older buses');
+    bus.setVolume('game', 0);
+    ok(bus.volumes.game === 0 && p.get('gameVolume') === 0,
+      'and 0 really lands — the slider is an off switch for match audio');
+    bus.dispose();
+  }
+
+  /* ---- 19d. media: the number that crosses the fence ---------------------- */
+  {
+    const { mediaGain, MEDIA_VOL_ATTR, MEDIA_VOL_EVENT } = prefsMod;
+    ok(MEDIA_VOL_ATTR === 'data-gg-mediavol',
+      'the media volume is published under a data-gg-* attribute, like every other pref exec/ obeys', MEDIA_VOL_ATTR);
+    ok(Math.abs(mediaGain(0.5, 0.5) - 0.25) < 1e-9, 'mediaGain multiplies media x master');
+    ok(mediaGain(1, 0) === 0 && mediaGain(0, 1) === 0, 'either at 0 is silence');
+    ok(mediaGain(9, 1) === 1 && mediaGain('loud', 1) === 0,
+      'and it clamps/refuses garbage rather than handing a video element a NaN');
+
+    const p = prefsMod.createPrefs({ mediaVolume: 0.8, masterVolume: 0.8 });
+    const bus = audioMod.createAudio({ prefs: p });
+    ok(typeof bus.mediaVolume === 'function',
+      'ui/audio.js exposes mediaVolume() — a call, because it is read live from the other side of the fence');
+    ok(Math.abs(bus.mediaVolume() - 0.64) < 1e-9,
+      'and it answers the EFFECTIVE number, master folded in (the videos are not on the graph)',
+      String(bus.mediaVolume()));
+
+    const heard = [];
+    const off = bus.onMediaVolume((v) => heard.push(v));
+    p.set('mediaVolume', 0.5);
+    ok(Math.abs(bus.mediaVolume() - 0.4) < 1e-9, 'a drag on the media slider moves it live', String(bus.mediaVolume()));
+    p.set('masterVolume', 0.5);
+    ok(Math.abs(bus.mediaVolume() - 0.25) < 1e-9,
+      'and so does the MASTER — the one road by which a muted master reaches a <video>');
+    ok(heard.length === 2 && Math.abs(heard[1] - 0.25) < 1e-9,
+      'subscribers hear both, with the finished number', JSON.stringify(heard));
+    off();
+    p.set('mediaVolume', 0.9);
+    ok(heard.length === 2, 'and unsubscribing really stops it');
+
+    // The <html> mirror: this is what exec/videos.js actually reads.
+    const attrNow = document.documentElement.getAttribute(MEDIA_VOL_ATTR);
+    ok(Math.abs(Number(attrNow) - 0.45) < 1e-3,
+      'ui/prefs.js keeps <html data-gg-mediavol> in step with both keys', String(attrNow));
+    ok(/^\d\.\d{3}$/.test(String(attrNow)),
+      'written to 3 places, not 17 digits of float', String(attrNow));
+
+    const evts = [];
+    const ear = (e) => evts.push(e && e.detail && e.detail.volume);
+    window.addEventListener(MEDIA_VOL_EVENT, ear);
+    p.set('mediaVolume', 0.2);
+    ok(evts.length === 1 && Math.abs(evts[0] - 0.1) < 1e-9,
+      'and fires one event with the effective number, so a window that is ALREADY open can retune',
+      JSON.stringify(evts));
+    p.set('musicVolume', 0.3);
+    ok(evts.length === 1, 'an unrelated slider does not fire it');
+    window.removeEventListener(MEDIA_VOL_EVENT, ear);
+
+    bus.setVolume('media', 0.6);
+    ok(p.get('mediaVolume') === 0.6 && Math.abs(bus.mediaVolume() - 0.3) < 1e-9,
+      'setVolume("media") goes through the same door as every other slider');
+    const heardAfter = [];
+    bus.onMediaVolume((v) => heardAfter.push(v));
+    bus.dispose();
+    p.set('mediaVolume', 0.1);
+    ok(heardAfter.length === 0 && typeof bus.onMediaVolume(() => {}) === 'function',
+      'a disposed mixer notifies nobody and still hands back an unsubscribe rather than throwing');
+  }
+
+  /* ---- 19e. the drawer: six rows, and it still fits ----------------------- */
+  {
+    const live = prefsMod.createPrefs({});
+    const calls = [];
+    const audioStub = { setVolume: (b, v) => calls.push([b, v]), sfx() {} };
+    const options = optionsMod.createOptions({
+      prefs: live, audio: audioStub, session: { hosted: false }, isInMatch: () => true,
+    });
+    options.open();
+    await sleep(30);
+    const panel = findOne(dom.byId.get('gg-drawer'), 'gg-panel');
+    ok(!!panel, 'the drawer opened');
+    const sliders = findAll(panel, 'gg-panel-row--slider');
+    const labelOf = (rowNode) => {
+      const lab = findOne(rowNode, 'gg-panel-label');
+      return lab && lab.children[0] ? lab.children[0].textContent : '';
+    };
+    ok(sliders.length === 6, 'SIX volume rows', String(sliders.length));
+    ok(sliders.map(labelOf).join(' | ')
+        === [S.options.master, S.options.music, S.options.drone, S.options.ui, S.options.game, S.options.media].join(' | '),
+      'reading Master, Music, Drone, UI sounds, Game sounds, Media — in that order',
+      sliders.map(labelOf).join(' | '));
+    ok([S.options.ui, S.options.game, S.options.media, S.options.mediaNote].every((s) => typeof s === 'string' && s.length),
+      'every new label lives in ui/strings.js with the rest');
+    ok(S.options.sfx === undefined,
+      'and the old "SFX" label is gone rather than left behind to be re-used by accident');
+
+    const rowFor = (label) => sliders.find((r) => labelOf(r) === label) || null;
+    for (const [label, bus, key] of [
+      [S.options.ui, 'ui', 'uiVolume'],
+      [S.options.game, 'game', 'gameVolume'],
+      [S.options.media, 'media', 'mediaVolume'],
+    ]) {
+      const row = rowFor(label);
+      const input = row ? (row.children[1] || null) : null;
+      ok(!!input && input.tagName === 'INPUT' && input.getAttribute('aria-label') === label,
+        `the ${bus} row is a labelled range input`, label);
+      input.value = '30';
+      input.dispatchEvent({ type: 'input' });
+      ok(live.get(key) === 0.3, `dragging it writes ${key}`, String(live.get(key)));
+      ok(calls.some(([b, v]) => b === bus && Math.abs(v - 0.3) < 1e-9),
+        `and reaches ui/audio.js as the "${bus}" bus — the drag has to land on the right one`,
+        JSON.stringify(calls));
+      const valueSpan = findOne(row, 'gg-panel-value');
+      ok(valueSpan && valueSpan.textContent === '30%', 'the readout repaints with it');
+    }
+    ok(findAll(panel, 'gg-panel-note').some((p2) => p2.textContent === S.options.mediaNote),
+      'the media row says what it covers — "Media" alone would be a guess');
+
+    options.dispose();
+    await sleep(320);
+  }
+
+  /* ---- 19f. the wiring, at the sources -------------------------------------
+   * Six sliders is a tall drawer and exec/ cannot import any of this, so the two
+   * things this block pins are the ones no in-process assertion can see: the
+   * panel really scrolls, and the fence really is a fence. */
+  {
+    const fs = await import('node:fs/promises');
+    const url = await import('node:url');
+    const read = async (p) => fs.readFile(url.fileURLToPath(new URL(p, import.meta.url)), 'utf8');
+    const audioSrc = await read('../ui/audio.js');
+    const prefsSrc = await read('../ui/prefs.js');
+    const videosSrc = await read('../exec/videos.js');
+    const cssSrc = await read('../ui/screens.css');
+
+    // The graph: two cue buses, both under the master, both glided.
+    ok(/uiBus\s*=\s*ctx\.createGain\(\)/.test(audioSrc) && /gameBus\s*=\s*ctx\.createGain\(\)/.test(audioSrc),
+      'ui/audio.js builds a real gain node for each cue bus');
+    ok(/uiBus\.connect\(masterBus\)/.test(audioSrc) && /gameBus\.connect\(masterBus\)/.test(audioSrc),
+      'and hangs both UNDER masterBus, so the master slider still scales them');
+    ok(/glide\(uiBus\.gain/.test(audioSrc) && /glide\(gameBus\.gain/.test(audioSrc),
+      'whose gains glide, so a drag mid-pop does not click');
+    ok(!/sfxBus/.test(audioSrc),
+      'the single sfxBus is GONE, not left dangling beside its replacements');
+    // The banner is the map everyone reads first; a stale diagram is a lie.
+    const banner = audioSrc.slice(0, audioSrc.indexOf('import {'));
+    ok(/uiBus/.test(banner) && /gameBus/.test(banner) && !/-> sfxBus/.test(banner),
+      'and the header diagram was redrawn with them');
+    ok(/MEDIA IS NOT ON THIS GRAPH/.test(banner),
+      'the banner says where the media volume lives instead, since it is the one that is not a node');
+
+    // The fence: exec/ may not import ui/, which is the whole reason the media
+    // number travels as an attribute. If this ever stops being true, the
+    // attribute can be retired — until then it is load-bearing.
+    ok(!/from\s+'\.\.\/ui\//.test(videosSrc),
+      'exec/videos.js imports nothing from ui/ — the attribute is the only wire');
+    ok(/MEDIA_VOL_ATTR = 'data-gg-mediavol'/.test(prefsSrc),
+      'and ui/prefs.js is the one writer of it, beside the two flags exec/ already reads');
+    ok(/mediaVolume: MEDIA_SPEC/.test(prefsSrc) && /masterVolume: MEDIA_SPEC/.test(prefsSrc),
+      'BOTH contributing keys reflect it — a master drag that did not reach the videos would be the bug');
+
+    // The drawer grew by two rows and a note; it was already a scroller.
+    const panelCss = cssSrc.slice(cssSrc.indexOf('.gg-panel {'), cssSrc.indexOf('.gg-panel.is-open'));
+    ok(/overflow-y:\s*auto/.test(panelCss),
+      'the options panel scrolls, which is why six rows and four toggles is allowed on a phone',
+      String(panelCss.length) + ' bytes of .gg-panel rules read');
+    ok(/bottom:\s*var\(--gg-drawer-clip\)/.test(panelCss),
+      'and it still clips itself off the mercy button rather than growing over it');
+  }
+
+  /* ---- 19g. import safety, in a REAL hostless node -------------------------
+   * This whole tier dies silently if a module throws while importing (the loader
+   * spins forever with no error on screen), and this file's DOM stub would hide
+   * exactly that. So the check is made in a child process with no globals at all,
+   * where the migration and the mixer both have to survive construction. */
+  {
+    const { execFileSync } = await import('node:child_process');
+    const href = (p) => new URL(p, import.meta.url).href;
+    const mods = [href('../ui/prefs.js'), href('../ui/audio.js'), href('../ui/options.js'), href('../ui/strings.js')];
+    const code = `
+      const bad = [];
+      for (const m of ${JSON.stringify(mods)}) {
+        try { await import(m); } catch (e) { bad.push(m.split('/').pop() + ': ' + (e && e.message)); }
+      }
+      try {
+        const prefs = (await import(${JSON.stringify(mods[0])})).createPrefs({ sfxVolume: 0.3 });
+        if (prefs.get('gameVolume') !== 0.3) bad.push('migration did not run hostless');
+        const bus = (await import(${JSON.stringify(mods[1])})).createAudio({ prefs });
+        if (typeof bus.mediaVolume() !== 'number') bad.push('mediaVolume() is not a number hostless');
+        if (bus.sfx('bubble-pop') !== false) bad.push('a cue in a hostless node was not a clean false');
+        bus.dispose();
+      } catch (e) { bad.push('construct: ' + (e && e.message)); }
+      if (bad.length) { console.error(bad.join(' | ')); process.exit(1); }
+    `;
+    let hostlessErr = '';
+    try { execFileSync(process.execPath, ['--input-type=module', '-e', code], { stdio: 'pipe' }); }
+    catch (e) { hostlessErr = String((e && e.stderr) || (e && e.message) || e).trim(); }
+    ok(hostlessErr === '',
+      'ui/prefs.js + ui/audio.js + ui/options.js import AND construct in a node with no document and no window',
+      hostlessErr);
+  }
+}
+
+/* ============================================================ wake lock
+ * ui/wakeLock.js — the phone-screen keeper (beta follow-up, 2026-08-04).
+ * The whole state machine runs against injected nav/doc stand-ins; the two
+ * invariants that matter are (1) an unsupported browser is a total no-op and
+ * (2) the visibility re-arm only lives between start() and stop(). */
+{
+  const { createWakeLock } = await import('../ui/wakeLock.js');
+
+  // (1) unsupported — every call is a silent no-op
+  const none = createWakeLock({ nav: {}, doc: null });
+  ok(none.supported === false, 'wakelock: no wakeLock API -> supported false');
+  none.start(); none.stop(); none.dispose();
+  ok(none.active === false, 'wakelock: and start/stop never throw or hold anything');
+
+  // a fake UA: sentinels the test can watch, a doc whose visibility it controls
+  const mkFake = () => {
+    const state = { requests: 0, sentinels: [], visibility: 'visible', listeners: new Set() };
+    const nav = { wakeLock: { request: async () => {
+      state.requests++;
+      const s = { released: false, _onRelease: null,
+        release() { this.released = true; if (this._onRelease) this._onRelease(); return Promise.resolve(); },
+        addEventListener(_t, fn) { this._onRelease = fn; } };
+      state.sentinels.push(s);
+      return s;
+    } } };
+    const doc = {
+      get visibilityState() { return state.visibility; },
+      addEventListener: (_t, fn) => state.listeners.add(fn),
+      removeEventListener: (_t, fn) => state.listeners.delete(fn),
+      show() { state.visibility = 'visible'; for (const fn of state.listeners) fn(); },
+      hide() { state.visibility = 'hidden'; for (const fn of state.listeners) fn(); },
+    };
+    return { state, nav, doc };
+  };
+
+  // (2) the ordinary life: start acquires, hide drops, show re-acquires, stop stands down
+  const f = mkFake();
+  const wl = createWakeLock({ nav: f.nav, doc: f.doc });
+  ok(wl.supported === true, 'wakelock: fake UA -> supported');
+  wl.start();
+  await sleep(0);
+  ok(wl.active === true && f.state.requests === 1, 'wakelock: start() acquires exactly one lock');
+  wl.start();
+  await sleep(0);
+  ok(f.state.requests === 1, 'wakelock: start() is idempotent while a live sentinel is held');
+
+  // the UA kills the lock on hide; show() must re-arm it — that is the phone
+  // player checking a notification mid-match
+  f.state.sentinels[0].release();
+  f.doc.hide();
+  await sleep(0);
+  ok(wl.active === false, 'wakelock: a hidden page holds no lock (the UA released it)');
+  f.doc.show();
+  await sleep(0);
+  ok(wl.active === true && f.state.requests === 2, 'wakelock: visible again -> a FRESH lock, unprompted');
+
+  wl.stop();
+  ok(wl.active === false && f.state.sentinels[1].released === true, 'wakelock: stop() releases the live sentinel');
+  ok(f.state.listeners.size === 0, 'wakelock: and the visibility re-arm is stood down with it');
+  f.doc.show();
+  await sleep(0);
+  ok(f.state.requests === 2, 'wakelock: an idle (stopped) page never re-acquires — no title-screen lock');
+
+  // (3) a request in flight when stop() lands is handed straight back
+  let resolveReq = null;
+  const slowNav = { wakeLock: { request: () => new Promise((r) => { resolveReq = r; }) } };
+  const g = mkFake();
+  const wl2 = createWakeLock({ nav: slowNav, doc: g.doc });
+  wl2.start();
+  ok(typeof resolveReq === 'function', 'wakelock: request in flight');
+  wl2.stop();
+  const late = { released: false, release() { this.released = true; return Promise.resolve(); }, addEventListener() {} };
+  resolveReq(late);
+  await sleep(0);
+  ok(late.released === true && wl2.active === false,
+    'wakelock: a sentinel that lands after stop() is released, not leaked');
 }
 
 await sleep(60);

@@ -44,8 +44,8 @@ with all error cases lives at the top of `GoonSignalingClient.cs` — summary:
 
 | Endpoint | Purpose | Key semantics |
 |---|---|---|
-| `/v2/goon/invite` | host mints room | server checks premium OR burns weekly free pass (`pass:"premium"\|"weekly_free"`; 402 `no_pass` + `next_pass_utc`); crockford32 code, ~5 min TTL |
-| `/v2/goon/join` | guest redeems code | 404 `unknown_code`; 409 `already_joined` (a DIFFERENT uid holds the seat) or `self_join` (the code is your own room — one account cannot hold both seats); the SAME uid **reclaims** its seat instead of being refused: fresh token, `rejoin:true`, no second pass burned, stale SDP dropped; **whitelisted** accounts are the one exception to `self_join` and get a **self-duel** instead (`self_duel:true`, `pass:"self_duel"`) — see below; returns peer display name/version |
+| `/v2/goon/invite` | host mints room | server checks premium OR burns weekly free pass (`pass:"premium"\|"weekly_free"`; 402 `no_pass` + `next_pass_utc`); crockford32 code, ~5 min TTL; answers `media_send` — the caller's premium SEND verdict for media transfer (tier≥1). The standalone web client defaults sending OFF against a real server and adopts this answer; the C# host computes the same verdict locally, so to it the field is advisory |
+| `/v2/goon/join` | guest redeems code | 404 `unknown_code`; 409 `already_joined` (a DIFFERENT uid holds the seat) or `self_join` (the code is your own room — one account cannot hold both seats); the SAME uid **reclaims** its seat instead of being refused: fresh token, `rejoin:true`, no second pass burned, stale SDP dropped; **whitelisted** accounts are the one exception to `self_join` and get a **self-duel** instead (`self_duel:true`, `pass:"self_duel"`) — see below; returns peer display name/version + the caller's own `media_send` verdict (see `/invite`) |
 | `/v2/goon/leave` | release the seat | best-effort, fire-and-forget, `{code, token, role}`; a guest hands the seat back and the ROOM stays up, a host folds the room outright; 409 `match_started` once the ledger has a row (releasing the seat invalidates the token that row is written with). Optional by design — the room TTL is still the backstop, and a client treats any failure as "never mind" |
 | `/v2/goon/signal` | SDP/ICE mailbox | post-and-drain in ONE call, ~2 s short-poll, setup only; `data` is opaque (browser-identical `toJSON()` blobs — JS does `JSON.parse` straight into `setRemoteDescription`/`addIceCandidate`); append-only list, exclusive `since` cursor, callers never receive their own messages |
 | `/v2/goon/relay` | fallback transport | same shape; `data` = whole GoonMessage frame; `wait_ms` long-poll hint; own rate budget (~1 call/2 s per player, match-length TTL), 16 KB/frame, 128-frame ring; server MUST NOT inspect or persist `data` |
@@ -274,3 +274,9 @@ Everything here is additive: a client without it interoperates unchanged.
 - v1.2 (2026-08-04): §2 seat identity (`self_join`, same-uid reclaim), `/v2/goon/leave`,
   and the whitelist-only **self-duel** on a `<uid>#self` shadow seat. Server + web client
   only; the C# client and its fake server are unported (see the note in §2).
+- v1.3 (2026-08-04, beta hardening): `media_send` on `/invite` and `/join` — the
+  server-authoritative premium SEND verdict the standalone web client adopts (it no
+  longer self-grants `caps.mediaTransfer`; only a server-less pure-local dev launch
+  keeps the affordance). Guest-side `NoOfferTimeoutMs` (20 s): a joined guest that
+  never receives an offer fails over to the relay ladder as `no_offer` instead of
+  waiting on "joining…" forever (the host's untimed lobby wait is unchanged).

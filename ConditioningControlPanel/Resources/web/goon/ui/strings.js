@@ -311,7 +311,21 @@ export const S = Object.freeze({
     headline: 'options',
     master: 'Master',
     music: 'Music',
-    sfx: 'SFX',
+    /* The low binaural bed that runs under a match (ui/droneBed.js). Named for
+       what you hear rather than for what it is: "binaural bed" is the
+       engineering word, "Drone" is the one a player already has for it. */
+    drone: 'Drone',
+    /* The old single "SFX" slider, split in two. Named for WHO MAKES THE SOUND,
+       because that is the line a player can hold in their head while dragging:
+       "UI sounds" is the chrome under their own hands, "Game sounds" is
+       everything the match does at them. Neither says "bus". */
+    ui: 'UI sounds',
+    game: 'Game sounds',
+    /* The opponent's video windows. "Media" rather than "Videos" because the
+       toggle two rows down is already called Skippable videos and two rows
+       reading "videos" would be read as one setting split in half. */
+    media: 'Media',
+    mediaNote: 'the volume of the clips your opponent throws at you. a click still mutes one window on its own.',
     motion: 'Reduce motion',
     skippable: 'Skippable videos',
     /* Says what the toggle does AND what it does not take away: a window can

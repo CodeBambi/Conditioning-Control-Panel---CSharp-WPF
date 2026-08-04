@@ -182,12 +182,37 @@
                          deliberately not localized. -->
                     <Border Style="{StaticResource LabCard}">
                         <StackPanel VerticalAlignment="Center">
+                            <!-- hero header: the real Goon Game wordmark, so this card carries art like
+                                 every other image-backed Lab card instead of only an emoji chip. The
+                                 source is the duel client's own logo (Resources\web\goon\assets\
+                                 goon_game_logo.png), copied into Resources\features\ because only that
+                                 folder is globbed as a <Resource> - Resources\web\** ships as on-disk
+                                 Content, so a pack:// URI into it resolves to nothing. It is a SQUARE
+                                 logo, not 16:9 hero art, so it is cropped to the wordmark with the
+                                 ImageBrush Viewbox and laid on the logo's own backdrop colour rather
+                                 than UniformToFill-cropped like lab_aimemory_hero.png and friends. -->
+                            <Border CornerRadius="16,16,0,0" Height="138" Margin="-22,-22,-22,16"
+                                    ClipToBounds="True" Background="#FF161622">
+                                <Grid>
+                                    <Border CornerRadius="16,16,0,0">
+                                        <Border.Background>
+                                            <ImageBrush x:Name="LabGoonHeroBrush" x:FieldModifier="internal"
+                                                        ImageSource="pack://application:,,,/Resources/features/goon_game.png"
+                                                        Stretch="Uniform" Viewbox="0.03,0.22,0.94,0.68"/>
+                                        </Border.Background>
+                                    </Border>
+                                    <Border CornerRadius="16,16,0,0">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                                <GradientStop Color="{DynamicResource SurfaceBg}" Offset="0"/>
+                                                <GradientStop Color="Transparent" Offset="0.9"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                    </Border>
+                                </Grid>
+                            </Border>
                             <Grid Margin="0,0,0,10">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Border Width="34" Height="34" CornerRadius="10" Margin="0,0,11,0"
-                                            Background="{DynamicResource AccentTintedBgBrush}" BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
-                                        <Image Width="18" Height="18" Source="{Binding Source='⚔️', Converter={StaticResource EmojiToImageSource}}"/>
-                                    </Border>
                                     <TextBlock Text="Goon Game" Style="{StaticResource LabCardTitle}"/>
                                     <Border Background="{DynamicResource TransparentPink20Brush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
                                             CornerRadius="6" Padding="6,2" Margin="9,0,0,0" VerticalAlignment="Center">

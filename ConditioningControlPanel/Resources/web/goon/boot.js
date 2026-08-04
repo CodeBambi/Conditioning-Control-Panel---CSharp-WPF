@@ -61,6 +61,7 @@ import { createSoloDriver } from './ui/soloDriver.js';
 import { createAssetsStore, localPlayableEntries } from './ui/assetsStore.js';
 import { createDiscord, confirmOpenDm } from './ui/discord.js';
 import { emitAva, mountVsSplash } from './ui/avatar.js';
+import { createWakeLock } from './ui/wakeLock.js';
 import { S } from './ui/strings.js';
 
 import * as titleScreen from './ui/screens/title.js';
@@ -391,6 +392,7 @@ let assets = null;           // ui/assetsStore.js — owns every cache-* bridge 
 let receivedStore = null;    // exec/receivedStore.js — owns goon-recv-result
 let blocklist = null;        // net/blocklist.js
 let mediaQueue = null;       // net/mediaQueue.js — one per page, re-attached per match
+let wakeLock = null;         // ui/wakeLock.js — held while a match is attached (phone screens)
 let artifacts = null;        // the adapter below, over assets' item map
 let discord = null;          // ui/discord.js — owns the discord + peer-card verbs
 let vsSplash = null;         // the countdown's decorative VS card, if one is up
@@ -832,6 +834,19 @@ function attachMatch(match, transport) {
   // leaves the host's manifest half of the deck exactly where it was.
   syncLocalDeck(true);
 
+  /* THE PREMIUM SEND GATE, standalone half. The server answered /invite //join
+   * with `media_send` (tier>=1, the same bar the C# host applies to its own init
+   * frame) and the signaling client recorded it. Folding it in HERE — the one
+   * seam every connect path crosses before the lobby renders — means a phone
+   * client can no longer grant itself sending by editing a querystring: the caps
+   * default is OFF against a real server and only the server turns it on. Hosted
+   * stays untouched (the init frame is authoritative), and null (an old server
+   * that never answered the question) changes nothing by design. */
+  if (!session.hosted && goonSession && goonSession.signaling
+      && typeof goonSession.signaling.mediaSend === 'boolean') {
+    session.caps = Object.assign({}, session.caps, { mediaTransfer: goonSession.signaling.mediaSend });
+  }
+
   try { executor?.attach?.(match); } catch (e) { logger.error('executor.attach threw: ' + ((e && e.stack) || e)); }
   try { matchLog.attach(match); } catch (e) { logger.error('matchLog.attach threw: ' + ((e && e.stack) || e)); }
   /* THE SECOND tryFirePayload INSTANCE WRAPPER, and the order is the point.
@@ -841,6 +856,11 @@ function attachMatch(match, transport) {
    * and both die with this match. (Trap register #7 — documented where applied.) */
   try { mediaQueue?.attach?.(match, currentTransport); }
   catch (e) { logger.warn('mediaQueue.attach threw: ' + ((e && e.message) || e)); }
+  /* KEEP THE SCREEN ON for the duration. A phone that dims and locks mid-Live is
+   * an unintended mercy; the lock is match-scoped (start here, stop in
+   * detachMatch) so an idle title screen never holds one. Unsupported = no-op. */
+  if (!wakeLock) wakeLock = createWakeLock({ logger });
+  wakeLock.start();
   stashRoom();
   /* A NEW MATCH, A NEW PEER-RENDER LOG — and this is the ONLY place it is
    * cleared. The obvious-looking reset points are both wrong: stopWindows()
@@ -1098,6 +1118,7 @@ function detachMatch() {
   // Cancels every transfer and clears the queue; the STORE is untouched, because a
   // committed artifact is hash-keyed and stays valid across matches and sessions.
   try { mediaQueue?.detach?.(); } catch (_e) { /* ignore */ }
+  try { wakeLock?.stop?.(); } catch (_e) { /* a screen convenience, never load-bearing */ }
   try { currentSd?.dispose?.(); } catch (_e) { /* ignore */ }
   currentSd = null;
   currentMatch = null;
@@ -1147,6 +1168,12 @@ function unmountMercy() {
  * -------------------------------------------------------------------------- */
 function onPhase(phase) {
   try { document.documentElement.setAttribute('data-gg-phase', String(phase)); } catch (_e) { /* ignore */ }
+  // The drone bed rides the phase like everything else on this screen: in at the
+  // countdown, out at the recap, and idempotent, so a relay REBUILD re-firing the
+  // phase mid-Live re-ramps the same oscillators instead of stacking a second bed
+  // (ui/droneBed.js). Practice runs real phases over the loopback pair, so it is
+  // covered by the same line.
+  try { audio?.dronePhase?.(phase); } catch (_e) { /* the bed is never load-bearing */ }
   paintProbe();
 
   switch (phase) {

@@ -15,7 +15,7 @@ import { createLoopbackPair, loopbackOptions, loopbackPresets } from '../net/loo
 import { GoonRelayTransport } from '../net/relayTransport.js';
 import { GoonSession } from '../net/session.js';
 import { GoonWebRtcTransport } from '../net/webrtcTransport.js';
-import { GoonTransportState, makeEmote, makeTick } from '../core/contracts.js';
+import { GoonTransportState, GoonConsts, makeEmote, makeTick } from '../core/contracts.js';
 
 let failures = 0;
 let n = 0;
@@ -1180,6 +1180,69 @@ async function testSelfDuel() {
   ok(/self_duel/.test(readSource('../net/signaling.js')), 'the client reads the self_duel flag off /join');
 }
 
+/* ================================================================================
+ * 12. BETA GATES (pre-ship follow-ups, 2026-08-04)
+ *
+ *   a) THE PREMIUM SEND VERDICT. The standalone page used to grant itself
+ *      caps.mediaTransfer=true unconditionally (the dev affordance). Now the
+ *      server answers /invite and /join with `media_send` (tier>=1 — the same
+ *      bar the C# host applies), the signaling client records it, boot.js folds
+ *      it into session.caps for the standalone page, and bridge.js only keeps
+ *      the always-on default when there is NO server in play at all.
+ *   b) THE OWED OFFER. A guest that redeemed a code is owed the host's offer
+ *      within a poll round trip; a dead host used to leave it on "joining…"
+ *      forever because the ICE budget never started. NoOfferTimeoutMs now feeds
+ *      the same relay-fallback ladder as an ICE timeout — guest only, the
+ *      host's untimed wait-for-a-human stays untimed.
+ * ==============================================================================*/
+async function testBetaGates() {
+  // --- a) the verdict, recorded off both endpoints ------------------------------
+  {
+    const old = new GoonFakeSignalingServer();                    // models a server WITHOUT the field
+    const c0 = new GoonSignalingClient({ post: old.post, unifiedId: 'u_old', logger: quiet });
+    const inv0 = await c0.createInvite('Old');
+    ok(!!inv0 && inv0.mediaSend === null && c0.mediaSend === null,
+      'a server that predates media_send leaves the verdict null — nothing changes');
+
+    const gated = new GoonFakeSignalingServer({ mediaSend: false });
+    const freeHost = new GoonSignalingClient({ post: gated.post, unifiedId: 'u_free', logger: quiet });
+    const inv = await freeHost.createInvite('Free');
+    ok(!!inv && inv.mediaSend === false && freeHost.mediaSend === false,
+      '/invite carries the server verdict and the client records false (free tier)');
+
+    gated.setMediaSend(true);
+    const premGuest = new GoonSignalingClient({ post: gated.post, unifiedId: 'u_prem', logger: quiet });
+    const gj = await premGuest.join(inv.code, 'Prem');
+    ok(!!gj && gj.mediaSend === true && premGuest.mediaSend === true,
+      '/join carries the verdict and the client records true (premium)');
+  }
+
+  // --- a) the page halves, pinned at source level -------------------------------
+  {
+    const bridge = readSource('../bridge.js');
+    ok(/mediaTransfer:\s*!\(q\.get\('server'\)\s*\|\|\s*prefs\.serverBase\)/.test(bridge),
+      'standaloneInit only self-grants sending when NO server is in play (the pure-local dev path)');
+    const boot = readSource('../boot.js');
+    ok(/typeof goonSession\.signaling\.mediaSend === 'boolean'/.test(boot)
+      && /!session\.hosted/.test(boot.slice(boot.indexOf('mediaSend') - 600, boot.indexOf('mediaSend') + 600)),
+      'boot.js folds the server verdict into session.caps — standalone only, hosted init stays authoritative');
+  }
+
+  // --- b) the owed offer, transport half (needs a browser to run for real) ------
+  {
+    const src = readSource('../net/webrtcTransport.js');
+    const i = src.indexOf('noOfferDeadline');
+    ok(i > 0, 'waitForChannel budgets the wait for the FIRST offer');
+    ok(/this\.isHost \? Infinity : Date\.now\(\) \+ GoonConsts\.NoOfferTimeoutMs/.test(src),
+      'guest only — the host\'s untimed wait for a human stays untimed');
+    const arm = src.slice(i, src.indexOf('negotiationSeen && Date.now() > deadline'));
+    ok(/_iceFailed = true/.test(arm) && /'no_offer'/.test(arm),
+      'a missing offer flags iceFailed so the SAME relay-fallback ladder runs');
+    ok(Number.isFinite(GoonConsts.NoOfferTimeoutMs) && GoonConsts.NoOfferTimeoutMs > GoonConsts.IceTimeoutMs,
+      'the no-offer budget is more generous than the ICE budget — a slow poll cycle must not eat a live host');
+  }
+}
+
 // ============================================================ run
 const main = async () => {
   await testSignaling();
@@ -1193,6 +1256,7 @@ const main = async () => {
   await testGuestFold();
   await testSeatRelease();
   await testSelfDuel();
+  await testBetaGates();
 
   console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);
   process.exit(failures === 0 ? 0 : 1);

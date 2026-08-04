@@ -239,10 +239,14 @@ export function standaloneInit() {
       // transfer-cache to talk to: the assets screen renders "compression lives in
       // the app" instead of a spinner that never resolves.
       assetCache: false,
-      // …but SENDING is on, because the dev/play-test path is the only way to
-      // exercise the transfer without two Patreon accounts. The page reads this as
-      // `=== true`, so a real host that predates the flag still defaults it OFF.
-      mediaTransfer: true,
+      // SENDING is premium-gated. Against a real server (a `?server=` launch or
+      // one remembered in prefs — the phone client) it starts OFF and boot.js
+      // adopts the server's `media_send` verdict from the /invite //join answer.
+      // Only the pure-local dev path (no server anywhere) keeps the old always-on
+      // affordance, because it is the one way to exercise the transfer without
+      // two Patreon accounts. The page reads this as `=== true`, so a real host
+      // that predates the flag still defaults it OFF.
+      mediaTransfer: !(q.get('server') || prefs.serverBase),
     }, prefs.caps || {}),
     consent: Object.assign({
       liveDurationSec: 720,    // GoonConsts.LiveDurationSecDefault

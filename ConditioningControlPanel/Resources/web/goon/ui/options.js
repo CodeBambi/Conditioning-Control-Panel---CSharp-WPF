@@ -104,11 +104,28 @@ export function createOptions({ prefs, audio = null, session = null, setFullscre
   function build() {
     const inMatch = !!(isInMatch && isInMatch());
 
+    /* SIX VOLUME ROWS, all on one piece of machinery: `key.replace('Volume','')`
+     * hands ui/audio.js the bus name, and every one of those buses is a gain
+     * node something is ALREADY playing through, so a drag retunes what you can
+     * hear rather than the next thing to start. Offered mid-match like every
+     * other knob about your own screen — the moment a player wants the match
+     * quieter is the moment the match is loud.
+     *
+     * The ORDER is loudest-context-first: the two masters of everything, then
+     * the bed under the match, then the two halves of what used to be one "SFX"
+     * slider, then the opponent's videos. `media` is the odd one out and rides
+     * the same row anyway: it is not a WebAudio bus at all (see ui/prefs.js's
+     * MEDIA_SPEC) but it is a volume, and a player looking for "why is that clip
+     * so loud" looks in the volume block. */
     const body = el('div', { class: 'gg-panel-body' }, [
       volumeRow('masterVolume', S.options.master),
       volumeRow('musicVolume', S.options.music),
-      volumeRow('sfxVolume', S.options.sfx),
+      volumeRow('droneVolume', S.options.drone),
+      volumeRow('uiVolume', S.options.ui),
+      volumeRow('gameVolume', S.options.game),
+      volumeRow('mediaVolume', S.options.media),
     ]);
+    body.appendChild(el('p', { class: 'gg-panel-note', text: S.options.mediaNote }));
 
     const motion = toggleRow(S.options.motion,
       () => prefs.get('reduceMotion'),
