@@ -122,7 +122,7 @@ public class AiProviderLabIntegrationTests
         using var h = new Harness();
         await h.SelectAndProbeAsync();
         h.Lab.Inject(AiLabMode.HangStream);
-        var generationBefore = h.Pipeline.SendAttempts; // counter sanity: nothing sent yet
+        Assert.Equal(0, h.Pipeline.SendAttempts); // nothing sent yet
 
         var operation = h.Pipeline.RunInteractiveAsync(Request);
         await WaitForAsync(() => h.Provider.BytesReadSoFar > 0, "a true mid-stream partial-body position");
@@ -136,7 +136,7 @@ public class AiProviderLabIntegrationTests
         Assert.IsType<OperationOutcome.Cancelled>(result.Outcome);
         Assert.Null(result.Reply); // zero applied
         Assert.True(elapsed < 2000, $"mid-stream cancel must be fast, took {elapsed}ms");
-        Assert.True(generationBefore == 0);
+        Assert.Equal(1, h.Pipeline.SendAttempts); // exactly one real send, cancelled mid-stream
 
         // The lab observes client-gone: a cancelled transport cannot deliver a late result.
         var record = await WaitForRecordAsync(h.Lab, AiLabMode.HangStream);
@@ -256,7 +256,9 @@ public class AiProviderLabIntegrationTests
         var discardsBefore = h.Registry.DiscardedStaleCompletions;
 
         var operation = h.Pipeline.RunInteractiveAsync(Request);
-        await WaitForAsync(() => h.Lab.HitCount >= 1, "the lab receiving the in-flight request");
+        // The probe's GET /api/version already counts as a lab hit — wait for the PROVIDER's
+        // send seam instead: the socket write has genuinely begun (request in flight).
+        await WaitForAsync(() => h.Provider.SendAttempts >= 1, "the real request reaching the wire");
 
         // Switch while the REAL network operation is in flight; the token is swallowed by
         // the decorator, so the late body genuinely arrives — and must be discarded.

@@ -19,6 +19,9 @@ public enum AiLabMode
     /// <summary>500 with a short body.</summary>
     Error500,
 
+    /// <summary>404 on the chat path (other-4xx no-retry proof).</summary>
+    NotFound404,
+
     /// <summary>200 with a deterministic provider-refusal shape {"refusal":{"category":"content_filter"}} (LAB CONSTRUCT — the typed-carrier mechanism proof, never a real-Ollama wire claim).</summary>
     Refusal,
 
@@ -172,6 +175,11 @@ public sealed class AiProviderLab : IDisposable
 
                 case AiLabMode.Error500:
                     await Write(res, 500, """{"error":"server"}""");
+                    _records.Enqueue(new AiLabRequestRecord(seq, path, mode, bodyBytes, "completed"));
+                    break;
+
+                case AiLabMode.NotFound404:
+                    await Write(res, 404, """{"error":"not found"}""");
                     _records.Enqueue(new AiLabRequestRecord(seq, path, mode, bodyBytes, "completed"));
                     break;
 

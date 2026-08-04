@@ -1,6 +1,6 @@
 ## STATUS: SP-035 — AI companion slice c2: loopback Ollama provider
-**Current Step:** Step 3 — LAB matrix + live panic + WSL gate
-**Last Updated:** 2026-08-04 (Step 2 complete: provider + lab + 25 new tests, full suite 491/491)
+**Current Step:** Step 4 — evidence consolidation + pre-completion consult
+**Last Updated:** 2026-08-04 (Step 3 complete: LAB 25/25 Windows, live panic green, WSL named limit, audit zero hits; plan review engine-skipped SP-195)
 **Blockers:** none
 
 ### Step 1: archaeology + lab design + pre-approach consult
@@ -20,9 +20,9 @@
 - [x] Sensitive-logging audit zero hits
 
 ### Step 4: evidence consolidation + pre-completion consult
-- [ ] record.md complete
-- [ ] Pre-completion solo consult
-- [ ] STATUS.md accurate
+- [x] record.md complete
+- [x] Pre-completion solo consult
+- [x] STATUS.md accurate
 
 ### Step 5: verification
 - [ ] testCommand green (verify.mjs exit 0; 0W/0E; ≥466/29 floor)

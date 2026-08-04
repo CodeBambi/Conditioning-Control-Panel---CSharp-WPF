@@ -110,6 +110,21 @@ public class LoopbackOllamaProviderTests
     }
 
     [Fact]
+    public async Task Other4xx_NeverRetried_ExactlyOneHit()
+    {
+        using var lab = new AiProviderLab();
+        var provider = Provider(lab, AiRetryPolicy.WpfObservedPlaceholder); // retry on; other-4xx still not retried
+        lab.Inject(AiLabMode.NotFound404);
+
+        var reply = await provider.CompleteAsync(Request, CancellationToken.None);
+
+        var unavailable = Assert.IsType<AiReply.Unavailable>(reply);
+        Assert.Equal("http-404", unavailable.Code);
+        Assert.Equal(1, lab.HitsFor(AiLabMode.NotFound404));
+        Assert.Equal(1, provider.SendAttempts);
+    }
+
+    [Fact]
     public async Task Refusal_TypedCarrier_ExactlyOneAttempt_NeverRetried()
     {
         using var lab = new AiProviderLab();

@@ -78,6 +78,12 @@ public sealed record LoopbackOllamaProviderOptions
 ///   admission policy is the first layer, this is defense in depth).
 /// - Diagnostics: NONE. This type emits no log lines and no text; outcomes ride the typed
 ///   <see cref="AiReply"/> and the pipeline's content-free <see cref="AiDiagnosticRecord"/>.
+///
+/// Lifetime/instrument notes (pre-completion consult): the <see cref="HttpClient"/> is an
+/// app-lifetime singleton by design (reuse is the documented .NET pattern; no per-operation
+/// sockets are leaked). <see cref="SendAttempts"/> and <see cref="BytesReadSoFar"/> are
+/// SINGLE-OPERATION test instruments — not concurrency-safe across simultaneous operations;
+/// the pipeline's own gateway counter is the product-grade offline proof.
 /// </summary>
 public sealed class LoopbackOllamaProvider : IAiProvider
 {

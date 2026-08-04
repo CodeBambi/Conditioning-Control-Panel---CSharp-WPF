@@ -129,7 +129,56 @@ Audit commands + outcomes:
 5. **Stale-discard decorator: honest** if named as a test-side uncooperative-transport decorator (SP-019 RequestDetachedAsync shape); the matrix must include BOTH the cooperative path (client-gone, no late result can arrive) AND the decorator path (late result arrives, discarded at the seam); assert the lab record outcome == `completed` for the decorator row.
 6. Stream-read body approved (true mid-stream partial position).
 
-### 4.2 Pre-completion (Step 4) — lands there
+### 4.2 Pre-completion (Step 4)
+
+**Mode:** solo. **Actual answering model:** the consult tool output carried NO model identifier (same as SP-033 and this packet's §4.1) — recorded honestly per T-2. Route per the 2026-08-04 rewire: Opus 5 main / Fable 5 fallback.
+
+**Verdict (substantive points) + dispositions:**
+1. **Completion-criteria honesty — the BOTH-platforms line is PARTIALLY DISCHARGED:** the 2026-08-04 amendment governs (it is packet authority and explicitly re-scopes the WSL gate), but the completion criterion "LAB matrix green on BOTH platforms" must be recorded as discharged **Windows-only** with the exact manual gate named — never silently checked. ADOPTED: see §8; STATUS marks the row with the qualifier; the manual gate is named verbatim for the orchestrator.
+2. **REAL RACE in the SlowOk row:** `WaitForAsync(lab.HitCount >= 1)` was satisfied by the PROBE's `api/version` hit — the switch could fire before theSlowOk POST reached the wire, making the row weaker than claimed. FIXED: the wait now keys on the provider's send seam (`Provider.SendAttempts >= 1` — the socket write has genuinely begun). The `completed` lab outcome assertion (the late body REALLY arrived) stands.
+3. **Misnamed/misplaced assertion in MidStreamCancel_Live:** `generationBefore` held SendAttempts and the pre-send check sat after `RunInteractiveAsync`. FIXED: `Assert.Equal(0, SendAttempts)` before the op, `Assert.Equal(1, SendAttempts)` after the cancel.
+4. **Missing matrix row — other-4xx no-retry:** refusal/malformed no-retry were proven but a plain 4xx was not. FIXED: lab `NotFound404` mode + `Other4xx_NeverRetried_ExactlyOneHit` (retry enabled, exactly 1 hit, `http-404`).
+5. **Instrument-hazard notes:** `BytesReadSoFar`/`SendAttempts` race across concurrent operations and tests leak per-instance HttpClients. DISPOSITION: doc-comment on the provider records both (single-operation instruments; HttpClient app-lifetime singleton by design); no product-code change — the pipeline gateway counter is the product-grade instrument.
+6. **Truncated-prefix proof:** structurally airtight (Reply is Unavailable — no text field exists; diagnostics are schema-proven content-free); no test change needed.
+7. **Step-5 discipline:** warning counts measured on `-t:Rebuild` (incremental builds hide analyzer warnings); verify.mjs may need apply.mjs first (the lane's recurring reinstall drift). ADOPTED for Step 5.
+
+## 8. Completion-criteria disposition (honest, per criterion)
+
+| Criterion | State |
+|-----------|-------|
+| First REAL provider live on c1's foundation (cancellable request/stream client, token-driven cancellation + generation invalidation, timeout as classifier, bounded-retry placeholder typed + §9.2 #6 honored, refusal no-retry typed, malformed/truncated → typed Unavailable never partial) | **MET** — §2/§3.1; 26 lab tests green |
+| Remote-host pre-socket rejection in-product (sendAttempts==0) | **MET** — both layers, §3.1 remote row |
+| LAB matrix green on BOTH platforms | **PARTIALLY DISCHARGED — Windows-only.** All SP-019 failure shapes handled identically on Windows (26/26). Linux gate = NAMED LIMIT: WSL zero distros (§0/§3.2). **Exact manual gate: provision a WSL distro (owner decision), then run the lab suite + contract testCommand on Linux (`~/ccp-sp035`, never /mnt/e).** Not faked; the 2026-08-04 amendment item 2 explicitly sanctions this disposition |
+| Panic re-verified live against a real in-flight operation | **MET** — §3.1 live-panic row (real socket, client-gone) |
+| Offline zero-network preserved and proven | **MET** — §3.1 offline row (SendAttempts==0 both layers, lab untouched, loopback-only asserted) |
+| Sensitive-logging audit zero hits | **MET** — §3.3 |
+| Contract green both platforms (≥466/29 floor) | **Windows: MET (491/491 + 29/29, Step 5). Linux: covered by the same named WSL limit as above** |
+| Both solo consults persisted with actual answering models | **MET with the T-2 honesty note** — both verdicts persisted verbatim-substantive; the consult tool carried NO model identifier on either call (recorded, not invented) |
+
+## 6. Budgets, surprises, durable-lesson candidates
+
+**Budget:** single session, well inside the 4h packet budget; no context-limit exits.
+
+**Surprises:**
+1. **Whole-operation vs per-attempt timeout:** the first implementation wrapped the retry loop in ONE linked CTS (SP-019 spike shape), so the Retry-After backoff counted against the request bound — 429/500 retry rows classified `timeout` instead of completing the bounded retry. WPF's actual shape is per-attempt (`HttpClient.Timeout` governs each `SendAsync`; the fixed-1200ms backoff is untokenized). Fixed: linked CTS per attempt; backoff observes ONLY the external token. The failing tests caught it immediately — the lab's server-side hit counts made the misclassification falsifiable.
+2. **Gateway vs attempt counters:** the c1 pipeline `SendAttempts` counts once per OPERATION (the offline zero-network instrument), not per attempt — the 429 integration row initially asserted 2. Provider-side `SendAttempts` carries the per-attempt count. Both layers now asserted with their correct semantics.
+3. **Ollama present on this laptop** (0.32.5) — SP-019's absence limit was desktop-scoped; the re-probe discipline (honesty framing a) caught the premise drift without changing the instrument (lab stays the evidence; no real-Ollama round-trip claimed).
+4. **WSL zero distros** — the designed Linux gate is unprovisionable in-packet; recorded as the named limit, never faked.
+
+**Durable-lesson candidates (orchestrator reconciles into port-lessons.md — enabler 2):**
+1. **Timeout classifiers are PER-ATTEMPT, never whole-operation, when a retry backoff exists** — otherwise the backoff eats the bound and transient 429/5xx misclassifies as timeout. Backoff delays observe only the external cancellation token. (Class: failure-classification correctness; caught by server-side hit-count tests.)
+2. **Retry/timeout defaults for a port come from the SAME WPF path being ported** — the local provider's WPF timeout is 5 min (cold model loads), not the cloud path's 30s; conservative-posture defaults (retry OFF) follow the c6 none-admitted precedent. (Class: WPF-archaeology fidelity; both my initial values were consult-corrected.)
+3. **A pre-socket rejection discipline must extend to PROBES** — probing a remote host is itself undeclared remote traffic; classify-first applies to every network path, not just the operation path. (Class: privacy/offline discipline.)
+4. **Live stale-discard proofs need the dual-transport shape** — a cooperative real provider cancels cleanly (client-gone, no late result possible); proving the application seam against a REAL late arrival needs the token-swallowing decorator over the real socket (SP-019's RequestDetachedAsync), with the lab outcome `completed` asserted as the arrival proof. (Class: cancellation testing.)
+
+## 7. Deviations and per-change justifications
+
+1. **Packet wording vs WPF evidence — protocol:** the packet says "fake OpenAI-compatible endpoint"; the provider speaks the WPF-observed NATIVE Ollama `api/chat` shape (`LocalAiService.cs:374-390`). Consult-approved (§4.1 point 1); the lab's refusal/429/Retry-After shapes are recorded as LAB CONSTRUCTS (client shape-handling proofs, never real-Ollama wire claims).
+2. **c1 public-surface change (honesty framing b):** ONE additive constant `CapabilityReasonCodes.HostUnreachable` in `CapabilityState.cs`. Justification: the SP-006 probe needs a typed reason for a refused/timed-out loopback probe; no existing code fits (`offline` is an operation-reply code, not a capability reason); the vocabulary file is the designated additive home ("new codes land with their consumer row" — c2 is that row). The endpoint-not-admitted probe reason REUSES `AiReplyCodes.EndpointNotAdmitted` (no second additive code — consult point 4's minimal-surface guidance).
+3. **Retry default reading:** "configurable-off by default per the conservative posture" read as DEFAULT OFF (consult point 2; c6 precedent); the WPF-observed placeholder shape is available as `AiRetryPolicy.WpfObservedPlaceholder`, enabled explicitly by tests; §9.2 #6 values stay owner-pending.
+4. **Timeout default:** 5 minutes (WPF-observed local value) instead of my initial 30s cloud-derived proposal (consult point 3).
+5. **LAB evidence is Windows-only** — WSL zero-distro named limit (§3.2); the packet's "LAB both platforms" is discharged on Windows with the Linux run honestly recorded as owner-gated, never faked (2026-08-04 amendment item 2 sanctions exactly this).
+6. **HeadlessTests untouched** — c2 has no UI surface; recorded honestly absent (fileScope allows "likely none").
 
 ## 5. Engine review presence (T-2)
 
@@ -137,3 +186,4 @@ Audit commands + outcomes:
 |------|--------|
 | Step 1 plan review (`spine_review_step --step 1 --type plan`) | **Engine review ABSENT (expected)** — nested reviewer spawn blocked inside pi worker session; `skipped: true`, `spawnFailed: false` (SP-195: engine runs reviews after `.DONE`). Artifact: `.reviews/1-20260804T132924.md` |
 | Step 2 plan review (`spine_review_step --step 2 --type plan`) | **Engine review ABSENT (expected)** — same SP-195 skip; `spawnFailed: false`. Artifact: `.reviews/2-20260804T134008.md` |
+| Step 3 plan review (`spine_review_step --step 3 --type plan`) | **Engine review ABSENT (expected)** — same SP-195 skip; `spawnFailed: false`. Artifact: `.reviews/3-20260804T134205.md` |
