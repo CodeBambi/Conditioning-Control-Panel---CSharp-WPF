@@ -138,6 +138,10 @@ All probes run live 2026-08-04 through the gateway against `ValidateXaml` at `va
 
 | Call | Step | Type | Result |
 |---|---|---|---|
-| 1 | 1 | plan | (recorded at call time below) |
+| 1 | 1 | plan | **SKIPPED in-worker by design (SP-195)** — "Nested reviewer spawn blocked inside pi worker session"; reviewLevel echoed 2; spawnFailed=false; artifact `.reviews/1-20260804T133704.md`; engine runs reviews after .DONE |
 
 <!-- admission record + pre-completion consult appended in Step 4 -->
+
+## 10. Step 2/3 note
+
+Step 2 (runtime health, outbound, tool inventory) and Step 3 (seeded probes, matrix, redaction) evidence is recorded in §4-§7 above — gathered in the same live session as the Step 1 inventory (single audit pass over the live process). STATUS.md tracks the checkbox mapping; each step's evidence section is cited here for the review trail: Step 2 = §4 + §5 + §6; Step 3 = §7.
