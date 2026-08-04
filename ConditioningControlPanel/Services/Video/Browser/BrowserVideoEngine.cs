@@ -160,6 +160,37 @@ namespace ConditioningControlPanel.Services.Video.Browser
 
         private static Task<CoreWebView2Environment?> EnvironmentAsync() => _envTask ??= CreateEnvironmentAsync();
 
+        /// <summary>
+        /// The ONE shared WebView2 environment, for hosts that own their own surfaces instead of a
+        /// session here (BubbleCountWindow puts a <see cref="BrowserVideoSurface"/> inside the game
+        /// window so its HUD, strict lock and ESC handling keep working). Null once it has proven
+        /// unbuildable - the caller must then use LibVLC. Never throws.
+        /// </summary>
+        public static Task<CoreWebView2Environment?> SharedEnvironmentAsync() => EnvironmentAsync();
+
+        /// <summary>Virtual-host mappings for a foreign surface, with the folders created first (a
+        /// missing folder makes WebView2 skip the mapping silently).</summary>
+        public static IReadOnlyList<(string, string, CoreWebView2HostResourceAccessKind)> SharedMappings()
+            => BuildMappings();
+
+        /// <summary>Where a foreign surface must navigate, and the only host it may navigate to.</summary>
+        public static string PlayerStartUrl => StartUrl;
+
+        public static string PlayerHost => GameHost;
+
+        /// <summary>
+        /// A host driving its own surface reports a dead browser process here, so the two-strikes
+        /// stand-down is shared app-wide: a flapping renderer must not turn every video in every
+        /// feature into a fallback. Never blames the file (plan §4).
+        /// </summary>
+        public static void ReportProcessFailure(CoreWebView2ProcessFailedKind kind)
+        {
+            _processFailures++;
+            if (_processFailures >= MaxProcessFailures)
+                App.Logger?.Warning("BrowserVideo: {Count} WebView2 process failures this session ({Kind}) - engine standing down, everything routes to LibVLC",
+                    _processFailures, kind);
+        }
+
         private static async Task<CoreWebView2Environment?> CreateEnvironmentAsync()
         {
             try

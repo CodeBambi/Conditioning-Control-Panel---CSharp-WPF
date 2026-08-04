@@ -28,6 +28,26 @@ namespace ConditioningControlPanel.Services.Video.Browser
         }
 
         /// <summary>
+        /// True when the browser engine is switched on and healthy - i.e. a video whose path is not
+        /// chosen yet MIGHT play out-of-process. Only for callers that have to decide something
+        /// BEFORE selection (BubbleCountService's poison-cooldown skip); the per-file answer is
+        /// <see cref="ShouldUseBrowser"/>, and the host re-checks it once the file is known.
+        /// </summary>
+        public static bool IsEngineUsable()
+        {
+            try
+            {
+                if (App.Settings?.Current?.BrowserVideoEngineEnabled != true) return false;
+                return BrowserVideoEngine.Instance.IsAvailable;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("BrowserVideoGate.IsEngineUsable threw ({E}) - assuming LibVLC", ex.Message);
+                return false;
+            }
+        }
+
+        /// <summary>
         /// True when the mandatory-video pipeline should hand this clip to
         /// <see cref="BrowserVideoEngine"/> instead of LibVLC. Never throws - any doubt routes to
         /// LibVLC, which is the shipped path.

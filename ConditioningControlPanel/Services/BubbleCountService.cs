@@ -129,7 +129,14 @@ public class BubbleCountService : IDisposable
         // the wreckage at 22:18, and a dispatcher that never drained again. Skip this turn rather
         // than stand another player up on it - the shared instance is being rebuilt inside the same
         // window, and the scheduler brings the next game around anyway.
-        var poisonMs = VideoService.NativePoisonCooldownRemainingMs;
+        //
+        // Browser engine on: the clip may well play out-of-process, where there is no shared LibVLC
+        // instance to have been poisoned - and the file is not chosen yet, so the routing decision
+        // cannot be made here. Defer to BubbleCountWindow.ShowOnAllMonitors, which knows the path
+        // and re-checks this exact cooldown before it leases anything native.
+        var poisonMs = Video.Browser.BrowserVideoGate.IsEngineUsable()
+            ? 0
+            : VideoService.NativePoisonCooldownRemainingMs;
         if (poisonMs > 0)
         {
             App.Logger?.Warning("BubbleCountService: skipping game - a wedged native Stop() poisoned the shared LibVLC ({Sec:F0}s of cooldown left)",
@@ -329,9 +336,11 @@ public class BubbleCountService : IDisposable
         // interactions (e.g. Video) start while the retry game plays.
         App.InteractionQueue?.ExtendTimeout(300);
 
-        // Same post-poisoning hold-off as TriggerGame. End the game outright rather than let the
-        // strict retry loop bounce off the cooldown every couple of seconds for a minute.
-        var poisonMs = VideoService.NativePoisonCooldownRemainingMs;
+        // Same post-poisoning hold-off as TriggerGame, and the same browser-engine caveat: with the
+        // browser engine usable the retry video may never touch LibVLC, so the window decides.
+        var poisonMs = Video.Browser.BrowserVideoGate.IsEngineUsable()
+            ? 0
+            : VideoService.NativePoisonCooldownRemainingMs;
         if (poisonMs > 0)
         {
             App.Logger?.Warning("BubbleCountService: retry abandoned - shared LibVLC poisoned ({Sec:F0}s of cooldown left)", poisonMs / 1000.0);

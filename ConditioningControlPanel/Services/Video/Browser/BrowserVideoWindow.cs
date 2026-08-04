@@ -1,13 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
 using Microsoft.Web.WebView2.Core;
-using Microsoft.Web.WebView2.Wpf;
 using Newtonsoft.Json.Linq;
 using Screen = System.Windows.Forms.Screen;
 
@@ -24,23 +21,21 @@ namespace ConditioningControlPanel.Services.Video.Browser
     ///   * NOTHING may ever call <c>SetLayeredWindowAttributes</c> on this window - the constant-alpha
     ///     path turns the Chromium content solid black (reproduced live on the FYP feed, 2026-08-03).
     ///
-    /// Message bridge: outbound JSON is QUEUED until the page posts <c>ready</c>, exactly like
-    /// <see cref="ChaosWebViewHost"/>; the page itself queues nothing.
+    /// Everything WebView2-shaped (the control, the bridge, the outbound queue) lives in
+    /// <see cref="BrowserVideoSurface"/>, which BubbleCount hosts inside its own game window; this
+    /// class is only the fullscreen chrome around one.
     /// </summary>
     internal sealed class BrowserVideoWindow : Window
     {
         private readonly Screen _screen;
         private readonly string _tag;
-        private readonly List<string> _pending = new();   // JSON held until the page says 'ready'
-        private WebView2? _web;
-        private bool _initStarted;
-        private bool _disposed;
+        private readonly BrowserVideoSurface _surface;
 
         /// <summary>True for the audio-bearing window (one per session). Secondaries load muted.</summary>
         public bool IsPrimary { get; }
 
         /// <summary>True once the page has completed its handshake and the queue has been flushed.</summary>
-        public bool IsReady { get; private set; }
+        public bool IsReady => _surface.IsReady;
 
         /// <summary>Every page message except the built-in <c>ready</c>/<c>log</c> handling.</summary>
         public event Action<BrowserVideoWindow, JObject>? Message;
@@ -80,15 +75,11 @@ namespace ConditioningControlPanel.Services.Video.Browser
             Width = screen.Bounds.Width / dpiScale;
             Height = screen.Bounds.Height / dpiScale;
 
-            _web = new WebView2
-            {
-                DefaultBackgroundColor = System.Drawing.Color.Black,
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                VerticalAlignment = VerticalAlignment.Stretch,
-            };
-            var grid = new Grid { Background = Brushes.Black };
-            grid.Children.Add(_web);
-            Content = grid;
+            _surface = new BrowserVideoSurface(_tag);
+            _surface.Message += (_, o) => Message?.Invoke(this, o);
+            _surface.ProcessFailed += (_, kind) => ProcessFailed?.Invoke(this, kind);
+            _surface.Ready += _ => Ready?.Invoke(this);
+            Content = _surface;
 
             PinToScreen();
         }
@@ -125,172 +116,31 @@ namespace ConditioningControlPanel.Services.Video.Browser
         /// Build the CoreWebView2 and navigate. MUST be called after <see cref="Window.Show"/> -
         /// EnsureCoreWebView2Async only works once the control is in the visual tree.
         /// </summary>
-        public async Task InitAsync(
+        public Task InitAsync(
             CoreWebView2Environment env,
             IReadOnlyList<(string Host, string Folder, CoreWebView2HostResourceAccessKind Access)> mappings,
             string startUrl,
             string primaryHost)
-        {
-            if (_initStarted || _web == null || _disposed) return;
-            _initStarted = true;
-            try
-            {
-                await _web.EnsureCoreWebView2Async(env).ConfigureAwait(true);
-                if (_disposed || _web?.CoreWebView2 == null)
-                {
-                    if (!_disposed) App.Logger?.Warning("BrowserVideo[{Tag}]: WebView2 core null after Ensure", _tag);
-                    return;
-                }
-
-                var core = _web.CoreWebView2;
-                var s = core.Settings;
-                s.AreDevToolsEnabled = false;
-                s.AreDefaultContextMenusEnabled = false;
-                s.IsStatusBarEnabled = false;
-                // Second lock on F5/Ctrl+R/F11 etc; the page preventDefaults them too.
-                s.AreBrowserAcceleratorKeysEnabled = false;
-                s.IsZoomControlEnabled = false;
-                s.IsBuiltInErrorPageEnabled = false;
-                s.IsWebMessageEnabled = true;
-
-                foreach (var (host, folder, access) in mappings)
-                {
-                    // A mapping whose folder does not exist is SILENTLY SKIPPED by WebView2, which
-                    // shows up much later as a 404 on the video. The engine creates them first.
-                    if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder))
-                    {
-                        App.Logger?.Warning("BrowserVideo[{Tag}]: virtual host {Host} folder missing: {Folder}",
-                            _tag, host, folder);
-                        continue;
-                    }
-                    core.SetVirtualHostNameToFolderMapping(host, folder, access);
-                }
-
-                core.NavigationStarting += OnNavigationStarting;
-                core.WebMessageReceived += OnWebMessageReceived;
-                core.ProcessFailed += OnCoreProcessFailed;
-                _navHost = primaryHost;
-
-                core.Navigate(startUrl);
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning("BrowserVideo[{Tag}]: InitAsync failed: {E}", _tag, ex.Message);
-            }
-        }
-
-        private string _navHost = "ccp.game";
+            => _surface.InitAsync(env, mappings, startUrl, primaryHost);
 
         /// <summary>Give the page keyboard focus so its keydown handler (and therefore the
         /// <c>{type:'key'}</c> bridge) actually runs. Best-effort; never throws.</summary>
         public void FocusWeb()
         {
-            try
-            {
-                Activate();
-                _web?.Focus();
-            }
+            try { Activate(); }
             catch (Exception ex) { App.Logger?.Debug("BrowserVideo[{Tag}].FocusWeb: {E}", _tag, ex.Message); }
+            _surface.FocusWeb();
         }
 
         /// <summary>Post a message to the page; queued until the page's <c>ready</c> handshake.</summary>
-        public void Post(object msg)
-        {
-            try
-            {
-                var json = Newtonsoft.Json.JsonConvert.SerializeObject(msg);
-                if (IsReady && _web?.CoreWebView2 != null)
-                    _web.CoreWebView2.PostWebMessageAsJson(json);
-                else
-                    _pending.Add(json);
-            }
-            catch (Exception ex) { App.Logger?.Debug("BrowserVideo[{Tag}].Post: {E}", _tag, ex.Message); }
-        }
-
-        private void OnNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
-        {
-            // Only ever our local page (defence in depth - the page never navigates).
-            if (string.IsNullOrEmpty(e.Uri) ||
-                !e.Uri.StartsWith("https://" + _navHost + "/", StringComparison.OrdinalIgnoreCase))
-            {
-                e.Cancel = true;
-            }
-        }
-
-        private void OnCoreProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
-        {
-            App.Logger?.Warning("BrowserVideo[{Tag}]: WebView2 process failed ({Kind})", _tag, e.ProcessFailedKind);
-            try { ProcessFailed?.Invoke(this, e.ProcessFailedKind); }
-            catch (Exception ex) { App.Logger?.Debug("BrowserVideo[{Tag}]: ProcessFailed handler threw: {E}", _tag, ex.Message); }
-        }
-
-        private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
-        {
-            // NOTHING in here may block or go modal: this runs inside the browser's message loop.
-            try
-            {
-                var json = e.WebMessageAsJson;
-                if (string.IsNullOrEmpty(json)) return;
-                var o = JObject.Parse(json);
-                switch ((string?)o["type"])
-                {
-                    case "ready":
-                        IsReady = true;
-                        FlushPending();
-                        try { Ready?.Invoke(this); }
-                        catch (Exception ex) { App.Logger?.Debug("BrowserVideo[{Tag}]: Ready handler threw: {E}", _tag, ex.Message); }
-                        break;
-                    case "log":
-                        // Information, not Debug: the global logger floor is Information and page
-                        // logs are the only devtools-less window into the player page.
-                        App.Logger?.Information("BrowserVideo[{Tag}][page]: {Msg}", _tag, (string?)o["msg"]);
-                        break;
-                    default:
-                        try { Message?.Invoke(this, o); }
-                        catch (Exception ex) { App.Logger?.Debug("BrowserVideo[{Tag}]: message handler threw: {E}", _tag, ex.Message); }
-                        break;
-                }
-            }
-            catch (Exception ex) { App.Logger?.Debug("BrowserVideo[{Tag}].OnWebMessageReceived: {E}", _tag, ex.Message); }
-        }
-
-        private void FlushPending()
-        {
-            if (_web?.CoreWebView2 == null) return;
-            foreach (var json in _pending)
-            {
-                try { _web.CoreWebView2.PostWebMessageAsJson(json); } catch { }
-            }
-            _pending.Clear();
-        }
+        public void Post(object msg) => _surface.Post(msg);
 
         /// <summary>Unhook + dispose the WebView2. Runs on Close() too, so the shared teardown funnel
         /// (VideoService.CloseAll closes every window in its list) is enough to end a session cleanly.</summary>
         protected override void OnClosed(EventArgs e)
         {
-            DisposeWeb();
+            _surface.DisposeWeb();
             base.OnClosed(e);
-        }
-
-        private void DisposeWeb()
-        {
-            if (_disposed) return;
-            _disposed = true;
-            try
-            {
-                if (_web?.CoreWebView2 != null)
-                {
-                    _web.CoreWebView2.NavigationStarting -= OnNavigationStarting;
-                    _web.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
-                    _web.CoreWebView2.ProcessFailed -= OnCoreProcessFailed;
-                }
-            }
-            catch { }
-            try { _web?.Dispose(); }
-            catch (Exception ex) { App.Logger?.Debug("BrowserVideo[{Tag}]: WebView2 dispose failed: {E}", _tag, ex.Message); }
-            _web = null;
-            IsReady = false;
-            _pending.Clear();
         }
 
         private const uint SWP_NOZORDER = 0x0004;
