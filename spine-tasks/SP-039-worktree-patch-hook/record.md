@@ -110,10 +110,18 @@ After this packet lands, the main checkout's `scripts/spine-worktree-setup.exe` 
 
 ### Pre-completion consult
 
-_Pending._
+**Route:** solo consult. **ACTUAL answering model: GPT-5 (reasoning transcript returned).** Verdict: **no correctness or safety blocker before .DONE.** Refinements raised — disposition:
+
+1. **Verify the COMMITTED exe blob, not just the working-tree copy** — ADOPTED, done: `git show HEAD:scripts/spine-worktree-setup.exe` → temp → executed: emits `{"ok":true,"prestaged":false,...}`, exit 0. SHA256 of blob == working tree == `d7dcb4c522e87bdefe15331b2d48e964d8ae44403e0a24223200eed05e3b01d4` (4608 bytes). Reviewers can rebuild with the .cs header command (csc.exe is not byte-deterministic — MVID/timestamp — so functional equivalence, not hash equality, is the check).
+2. **`worktreeSetupIgnorePaths` / T-5 interaction** — ANALYZED, no change: that key (spine-config-load.mjs:23-37, resume*.mjs) exists so hook-created SYMLINKS (e.g. `.venv`) are not staged by lane commit. This hook creates plain COPIES under `.pi/npm/`, which is GITIGNORED (.gitignore:50) — never staged, hook-managed or not. Every wave since wave-1 has finalized lanes that HAD `.pi/npm` present by worker time (that is T-14's premise); wave-4's T-5 recoveries were bin/obj + the `nul` file, never `.pi/npm`. The hook only makes the same state appear EARLIER. Risk unchanged.
+3. **Resume path** — confirmed non-issue: existing lanes keep their worktrees; the hook fires only at creation (+ the dirty-check repair re-run, covered by the idempotent skip).
+4. **Partial-copy race (main's `.pi/npm` being rewritten during a batch launch)** — accepted, recorded: the standing pre-launch `verify.mjs` rule makes a mutating main tree at launch unlikely; a torn copy would surface as `verifyExit != 0` in the lane log and today's recoverable mid-task remediation, never a blocked batch.
+5. **Concurrency** — non-issue: the engine provisions lanes sequentially (sync loop, `spawnSync`).
 
 ## Engine-review presence (T-2 heading format load-bearing)
 
 - **Step 1 plan review (`spine_review_step` type=plan):** SKIPPED by the runtime — "Nested reviewer spawn blocked inside pi worker session ... the batch engine runs reviews after worker success (SP-195)"; `skipped: true`, `spawnFailed: false`, artifact `.reviews/1-20260804T150503.md`. Not a spawn failure → proceeded per the engine-owned review path.
 
 - **Step 2 plan review (`spine_review_step` type=plan):** SKIPPED (same SP-195 nested-spawn block; `skipped: true`, `spawnFailed: false`, artifact `.reviews/2-20260804T152155.md`).
+
+_Pending: Step 3 call._
