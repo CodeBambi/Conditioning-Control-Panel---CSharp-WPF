@@ -33,7 +33,10 @@ namespace ConditioningControlPanel.Services
         public bool EndedNaturally { get; set; }
     }
 
-    public class VideoService : IDisposable
+    // partial: the browser-engine adapter lives in VideoService.Browser.cs (the hybrid video
+    // engine). Everything else — scheduling, selection, safety timers, attention, strict mode —
+    // stays here and is shared by both engines.
+    public partial class VideoService : IDisposable
     {
         private readonly Random _random = new();
         private Queue<string> _videoQueue = new();  // Performance: Changed to Queue for O(1) dequeue
@@ -363,7 +366,9 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public long GetCurrentPlaybackTimeMs()
         {
-            try { return _primaryMediaPlayer?.Time ?? -1; }
+            // Browser session: PrimaryMediaPlayer is null by design, and the position comes from the
+            // page's ~10Hz `time` messages instead (FunScript haptics + Deeper's time source).
+            try { return _browserActive ? _browserTimeMs : (_primaryMediaPlayer?.Time ?? -1); }
             catch { return -1; }
         }
 
@@ -379,6 +384,8 @@ namespace ConditioningControlPanel.Services
             // keeps playing, so the two screens desync (#527). Only the primary raises events, but
             // all players must track the same position.
             var target = Math.Max(0, ms);
+            // Browser session: the page seeks every screen in lockstep for the same reason.
+            if (_browserActive) _browser?.Seek(target);
             foreach (var p in SnapshotPlayers())
             {
                 try
@@ -395,6 +402,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>Pause every screen's player (kept in lockstep for multi-monitor). No-op if none.</summary>
         public void PausePrimary()
         {
+            if (_browserActive) _browser?.Pause();
             foreach (var p in SnapshotPlayers())
             {
                 try { p.SetPause(true); }
@@ -411,6 +419,7 @@ namespace ConditioningControlPanel.Services
             // _gracePaused BEFORE it calls this, so the legitimate resume is unaffected.
             if (_gracePaused) return;
 
+            if (_browserActive) _browser?.Resume();
             foreach (var p in SnapshotPlayers())
             {
                 try { p.SetPause(false); }
@@ -1249,6 +1258,10 @@ namespace ConditioningControlPanel.Services
         private void UpdatePlayingVideosVolume()
         {
             var effectiveVolume = GetEffectiveVolume();
+
+            // Browser session: one message carries master x video volume AND the external mute
+            // (GetEffectiveVolume already folds the mute in, so both halves agree).
+            if (_browserActive) _browser?.SetVolume(effectiveVolume / 100.0, effectiveVolume <= 0);
 
             // Update LibVLC media players (thread-safe snapshot)
             List<LibVLCSharp.Shared.MediaPlayer> playersCopy;
@@ -2204,8 +2217,19 @@ namespace ConditioningControlPanel.Services
             VideoDiag.Log("VIDEO", $"prologue: 1.3s delay timer scheduled +{prologueSw.ElapsedMilliseconds}ms");
         }
 
-        private void StartVideoPlayback(string path, bool strict)
+        /// <param name="forceLibVlc">Set only by the browser engine's runtime fallback: the page
+        /// already failed on this file, so the routing branch below must not send it back.</param>
+        private void StartVideoPlayback(string path, bool strict, bool forceLibVlc = false)
         {
+            // ---- hybrid routing (docs/BROWSER_VIDEO_ENGINE_PLAN.md §4) ----
+            // The ONLY change to this path. When the browser engine takes the clip it satisfies the
+            // whole parity checklist itself (see VideoService.Browser.cs) and returns; otherwise
+            // everything below runs exactly as it always has.
+            if (!forceLibVlc && Video.Browser.BrowserVideoGate.ShouldUseBrowser(path))
+            {
+                if (StartBrowserVideoPlayback(path, strict)) return;
+            }
+
             App.Logger?.Information("VideoService: StartVideoPlayback called for {File}", Path.GetFileName(path));
 
             // Every step from here to the first frame is bracketed (#750-#753): the reporters' crash
@@ -5766,6 +5790,9 @@ namespace ConditioningControlPanel.Services
             try
             {
                 _attentionTimer?.Stop();
+                // A browser session's WebView2 windows go with the video: this is the single funnel
+                // every teardown path reaches, so the engine can never outlive the run it belongs to.
+                StopBrowserSession();
                 _segmentArmedAtUtc = DateTime.MinValue;   // random-segment mode is one-shot per video
                 // #735: the video is going away, so the grace-pause card must go with it — every
                 // teardown (panic press 2, engine stop, OS lock/suspend, wedge watchdog, natural end)

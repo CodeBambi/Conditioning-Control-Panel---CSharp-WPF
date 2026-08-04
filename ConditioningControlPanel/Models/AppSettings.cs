@@ -1748,6 +1748,21 @@ namespace ConditioningControlPanel.Models
             set { _videoBlurredBackgroundEnabled = value; OnPropertyChanged(); }
         }
 
+        private bool _browserVideoEngineEnabled;
+        /// <summary>
+        /// BETA opt-in: play mandatory videos in out-of-process WebView2 windows (the player page at
+        /// Resources/web/player) instead of in-process LibVLC. LibVLC stays the automatic fallback
+        /// for anything the browser cannot decode, so turning this on never removes a playback path —
+        /// it only changes which one is tried first. See docs/BROWSER_VIDEO_ENGINE_PLAN.md.
+        /// Default OFF.
+        /// </summary>
+        [JsonProperty]
+        public bool BrowserVideoEngineEnabled
+        {
+            get => _browserVideoEngineEnabled;
+            set { _browserVideoEngineEnabled = value; OnPropertyChanged(); }
+        }
+
         private bool _restrictGazeContentToCalibratedScreen = true;
         /// <summary>
         /// When enabled (and a webcam calibration exists), all gaze-reactive
