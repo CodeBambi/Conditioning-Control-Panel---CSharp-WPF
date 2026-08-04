@@ -296,6 +296,18 @@
 .gg-row.is-disabled { opacity: 0.45; }
 .gg-row.is-disabled .gg-row-value { color: var(--gg-text-4); font-weight: 500; font-size: 0.8rem; }
 
+/* The media-transfer opt-in: a checkbox row plus the line that says why it is off.
+   The row itself is the standard .gg-row flex; only the control and the sub-line
+   are new, and the sub-line carries the explanation a greyed control owes. */
+.gg-row--check input[type="checkbox"] {
+  accent-color: var(--gg-pink);
+  width: 1.05rem; height: 1.05rem; margin: 0 0 0 auto; flex: 0 0 auto;
+}
+.gg-row-sub {
+  margin: 0.35rem 0 0.1rem;
+  font-size: 0.72rem; line-height: 1.45; color: var(--gg-text-4);
+}
+
 .gg-lamps {
   position: relative;
   display: flex;
@@ -612,6 +624,131 @@
 .gg-title-chip-why { color: var(--gg-text-3); font-size: 0.76rem; }
 
 /* ---------------------------------------------------------------------------
+ * REPORTING WHAT THEY SENT (spec §7.5) — the recap card, plus the ONE override
+ * the in-match flag button needs.
+ *
+ * THE FLAG BUTTON. exec/videos.js builds it with BOTH `gg-vwin-x` and
+ * `gg-vwin-flag`, so every pixel of it — size, plate, border, hover, focus
+ * ring, and the hide-on-exit rule — comes from the ✕ in exec/fx.css and there is
+ * no second copy of that chrome to keep in sync. Only two things differ, and
+ * both are stated here:
+ *
+ *   1. IT IS ALWAYS VISIBLE. fx.css hides `.gg-vwin-x` behind
+ *      html[data-gg-vskip="on"] because "skippable videos" is a COMFORT
+ *      preference. Reporting is a SAFETY affordance and is never behind a
+ *      preference, so this rule un-hides it.
+ *   2. It sits in the opposite corner, so the two controls never overlap.
+ *
+ * The `.gg-vwin` ancestor is load-bearing, not decoration: screens.css is
+ * linked BEFORE fx.css, so at equal specificity fx.css's `display: none` would
+ * win. Two class selectors beat one. `.gg-vwin.gg-vwin--out .gg-vwin-x` (three)
+ * still beats THIS, which is exactly right — a window on its way out shows
+ * neither control.
+ * ------------------------------------------------------------------------ */
+.gg-vwin .gg-vwin-flag {
+  display: flex;
+  left: auto;
+  right: 8px;
+  font-size: 12px;
+}
+
+.gg-recap-report .gg-recap-fine { text-align: left; }
+.gg-report-lead { margin: 0 0 0.7rem; color: var(--gg-text-2); font-size: 0.82rem; line-height: 1.5; }
+.gg-report-note-line { margin: 0.6rem 0 0; color: var(--gg-text-4); font-size: 0.7rem; line-height: 1.5; }
+
+/* The shortlist. Fixed-height thumbs so a portrait clip and a wide still do not
+   make the row jump; `object-fit: cover` is what keeps them the same shape. */
+.gg-report-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.2rem 0 0;
+}
+.gg-report-thumb {
+  position: relative;
+  width: 5.5rem;
+  padding: 0;
+  border-radius: var(--gg-radius-plate);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  overflow: hidden;
+  font: inherit;
+  color: var(--gg-text-3);
+  transition: border-color .16s, box-shadow .16s;
+}
+.gg-report-thumb img,
+.gg-report-thumb video {
+  display: block;
+  width: 100%;
+  height: 3.6rem;
+  object-fit: cover;
+  background: rgba(0, 0, 0, 0.45);
+}
+.gg-report-thumb-cap {
+  display: block;
+  padding: 0.2rem 0.3rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gg-report-thumb:hover { border-color: rgba(var(--gg-pink-rgb), 0.55); }
+.gg-report-thumb:focus-visible { outline: 2px solid var(--gg-pink); outline-offset: 2px; }
+.gg-report-thumb[aria-pressed="true"] {
+  border-color: var(--gg-pink);
+  box-shadow: 0 0 0 2px rgba(var(--gg-pink-rgb), 0.28);
+}
+/* A WORD, not a colour: the flagged ones say so. */
+.gg-report-thumb.is-flagged .gg-report-thumb-cap { color: var(--gg-gold); }
+
+/* The reason picker. A vertical stack rather than a pill row: five sentences do
+   not fit side by side, and this control must be readable in one pass. */
+.gg-report-reasons { display: flex; flex-direction: column; gap: 0.3rem; margin: 0.2rem 0 0; }
+.gg-report-reason {
+  text-align: left;
+  padding: 0.45rem 0.7rem;
+  border-radius: var(--gg-radius-plate);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--gg-text-2);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: border-color .16s, background .16s, color .16s;
+}
+.gg-report-reason:hover { border-color: rgba(var(--gg-pink-rgb), 0.5); color: var(--gg-text-1); }
+.gg-report-reason:focus-visible { outline: 2px solid var(--gg-pink); outline-offset: 2px; }
+.gg-report-reason[aria-pressed="true"] {
+  border-color: var(--gg-pink);
+  background: rgba(255, 105, 180, 0.12);
+  color: var(--gg-text-1);
+}
+
+.gg-report-note {
+  width: 100%;
+  margin: 0.2rem 0 0;
+  min-height: 4.5rem;
+  padding: 0.5rem 0.6rem;
+  resize: vertical;
+  border-radius: var(--gg-radius-plate);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--gg-text-1);
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.gg-report-note:focus-visible { outline: 2px solid var(--gg-pink); outline-offset: 1px; }
+
+.gg-report-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.7rem; }
+.gg-report-status { margin: 0.6rem 0 0; font-size: 0.8rem; color: var(--gg-text-2); }
+.gg-report-status.is-done { color: var(--gg-gold); }
+.gg-report-status.is-failed { color: var(--gg-pink); }
+
+/* ---------------------------------------------------------------------------
  * ASSETS (scr-assets) — the compression screen.
  *
  * Wider than the other screens on purpose: it is the only one that is a GRID of
@@ -878,6 +1015,234 @@
 }
 .gg-toggle[aria-pressed="true"] { background: rgba(255, 105, 180, 0.28); border-color: var(--gg-pink); }
 .gg-toggle[aria-pressed="true"] i { transform: translateX(20px); background: var(--gg-pink); }
+
+/* ===========================================================================
+ * DISCORD — the avatar kit, the lobby panel, the recap plates, the VS splash.
+ * (docs/GOON_DISCORD_CONTRACT.md §6. The HUD minis are in ui/hud.css.)
+ *
+ * THE BOX IS THE POINT. Every `.gg-ava` is sized by a token on the element
+ * itself, so the box exists at its final size from the first paint and a
+ * picture arriving a round trip later REPLACES the tile inside it. Nothing on
+ * the lobby or the recap may reflow when a data URI lands.
+ *
+ * NO LOOPS LIVE HERE. The wrapper's idle bob and every reaction belong to
+ * ui/avatarFx.js (Work Item E) — this file draws the furniture and the two
+ * one-shot TRANSITIONS the splash needs, which cost the --gg-deco-play budget
+ * nothing because a transition is not an animation.
+ * ======================================================================== */
+
+.gg-ava {
+  position: relative;
+  flex: 0 0 auto;
+  width: var(--gg-ava-size, 56px);
+  height: var(--gg-ava-size, 56px);
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(12, 6, 20, 0.72);
+  border: 1px solid rgba(var(--gg-pink-rgb), 0.5);
+  box-shadow: 0 0 18px rgba(var(--gg-pink-rgb), 0.22), inset 0 0 14px rgba(0, 0, 0, 0.55);
+  /* E's decorations are absolutely positioned children; isolation keeps them
+     (and any blend they use) inside this circle instead of over the card. */
+  isolation: isolate;
+}
+/* Pink is you, violet is them — the same two-colour vocabulary the duel card,
+   the fx chips and the opponent monitor already use. */
+.gg-ava[data-side="opp"] {
+  border-color: rgba(var(--gg-violet-rgb), 0.55);
+  box-shadow: 0 0 18px rgba(var(--gg-violet-rgb), 0.22), inset 0 0 14px rgba(0, 0, 0, 0.55);
+}
+
+.gg-ava[data-size="lobby"]  { --gg-ava-size: 64px; }
+.gg-ava[data-size="last"]   { --gg-ava-size: 44px; }
+.gg-ava[data-size="plate"]  { --gg-ava-size: 72px; }
+.gg-ava[data-size="mini"]   { --gg-ava-size: 40px; }
+.gg-ava[data-size="splash"] { --gg-ava-size: clamp(96px, 17vw, 168px); border-width: 2px; }
+
+.gg-ava-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* The fallback, and it is a real design rather than a placeholder: one letter
+   on a colour derived from the name (ui/avatar.js hueFromName). The 58%/46%
+   here MUST match TILE_SAT/TILE_LIGHT there — same colour in both channels, or
+   a tile would shift the moment JS started setting the variable. */
+.gg-ava-tile {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800;
+  font-size: calc(var(--gg-ava-size, 56px) * 0.42);
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+  background:
+    linear-gradient(150deg,
+      hsl(calc(var(--gg-ava-hue, 320) * 1deg) 58% 46%),
+      hsl(calc(var(--gg-ava-hue, 320) * 1deg) 58% 28%));
+}
+
+.gg-ava-slot { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; }
+.gg-ava-name {
+  max-width: 9rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 0.72rem; font-weight: 600; color: var(--gg-text-2);
+}
+
+/* --- the Discord-blurple button. It is the ONE non-house colour on the page,
+   and it earns it: it is the only control that leaves the game. --------- */
+.gg-btn--discord {
+  border-color: transparent;
+  background: linear-gradient(135deg, #5865f2, #7d63f5);
+  box-shadow: 0 6px 20px rgba(88, 101, 242, 0.34);
+}
+.gg-btn--discord:hover {
+  background: linear-gradient(135deg, #6b76f5, #8d74f7);
+  box-shadow: 0 6px 26px rgba(88, 101, 242, 0.5);
+}
+
+/* --- the lobby panel --------------------------------------------------- */
+.gg-dc {
+  min-width: min(34rem, 94vw);
+  margin-top: 1rem;
+  border-color: rgba(var(--gg-violet-rgb), 0.4);
+  box-shadow: 0 0 60px rgba(var(--gg-violet-rgb), 0.16);
+}
+.gg-dc-head { display: flex; align-items: center; gap: 0.95rem; }
+.gg-dc-headtext { min-width: 0; }
+.gg-dc-lead { margin: 0.35rem 0 0; font-size: 0.8rem; line-height: 1.5; color: var(--gg-text-3); }
+/* "they can see your picture" — a statement of fact, in the colour the page
+   uses for things that are switched ON, next to the face it is about. */
+.gg-dc-flag {
+  margin: 0.4rem 0 0;
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em;
+  color: var(--gg-pink);
+}
+.gg-dc-flag::before {
+  content: '';
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--gg-pink);
+  box-shadow: 0 0 10px rgba(var(--gg-pink-rgb), 0.9);
+}
+
+.gg-dc-rows { margin-top: 1rem; }
+.gg-dc-row.is-disabled { opacity: 0.45; }
+.gg-dc-row .gg-toggle { flex: 0 0 auto; }
+
+.gg-dc-link {
+  margin-top: 0.9rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--gg-radius-plate);
+  background: rgba(88, 101, 242, 0.10);
+  border: 1px solid rgba(88, 101, 242, 0.4);
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  flex-wrap: wrap;
+}
+.gg-dc-linkline { margin: 0; flex: 1 1 14rem; font-size: 0.78rem; line-height: 1.5; color: var(--gg-text-2); }
+
+/* --- last opponent ----------------------------------------------------- */
+.gg-dc-last { margin-top: 1.1rem; }
+.gg-dc-lasth {
+  margin: 0 0 0.5rem;
+  font-size: 0.66rem; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gg-text-4); font-weight: 700;
+}
+.gg-dc-lastnone { margin: 0; font-size: 0.76rem; color: var(--gg-text-4); }
+.gg-dc-lastcard {
+  position: relative;
+  display: flex; align-items: center; gap: 0.8rem;
+  padding: 0.7rem 2.4rem 0.7rem 0.8rem;
+  border-radius: var(--gg-radius-plate);
+  background: var(--gg-plate-bg);
+  border: 1px solid rgba(var(--gg-violet-rgb), 0.35);
+}
+.gg-dc-lastmeta { min-width: 0; display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start; }
+.gg-dc-lastname { margin: 0; font-weight: 700; font-size: 0.92rem; overflow: hidden; text-overflow: ellipsis; }
+.gg-dc-lastwhen { margin: 0; font-size: 0.68rem; color: var(--gg-text-4); font-variant-numeric: tabular-nums; }
+.gg-dc-forget {
+  position: absolute; top: 0.45rem; right: 0.45rem;
+  width: 30px; height: 30px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 0; border-radius: 50%;
+  color: var(--gg-text-4); font-size: 0.85rem; cursor: pointer;
+  transition: color .18s, background .18s;
+}
+.gg-dc-forget:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+
+/* --- the recap plates -------------------------------------------------- */
+.gg-recap-platewrap { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; margin-top: 1.1rem; }
+.gg-recap-plates {
+  display: flex; align-items: flex-start; justify-content: center;
+  gap: clamp(1.4rem, 6vw, 3.4rem);
+  margin-top: 1.1rem;
+}
+.gg-recap-platewrap .gg-recap-plates { margin-top: 0; }
+
+/* ---------------------------------------------------------------------------
+ * VS SPLASH — decoration with a hard deadline (boot.js drops it at the Live arm).
+ *
+ * z55: over the HUD, UNDER MERCY (z60, goon.css --gg-mercy-z). Nothing in this
+ * block may ever raise that, and pointer-events:none means it cannot eat a
+ * click on the way to anything underneath even while it is up.
+ *
+ * TRANSITIONS, NOT KEYFRAMES. There is no loop to park, so the heat governor
+ * and the reduced-motion rails have nothing to switch off — and ui/avatar.js
+ * does not mount the splash at all under reduced motion, which is the real
+ * answer. The rules below are the belt to that braces.
+ * ------------------------------------------------------------------------ */
+.gg-vs-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(1rem, 5vw, 3.5rem);
+  background: radial-gradient(60% 60% at 50% 50%, rgba(24, 10, 36, 0.62), rgba(8, 4, 14, 0) 72%);
+  opacity: 0;
+  transition: opacity .2s ease;
+}
+.gg-vs-splash.is-in { opacity: 1; }
+
+.gg-vs-splash .gg-ava-slot {
+  gap: 0.7rem;
+  transform: translate(0, 0) scale(1);
+  transition: transform .42s cubic-bezier(.2, .85, .25, 1), opacity .3s ease;
+}
+/* the slam: they arrive from their own sides and settle */
+.gg-vs-splash:not(.is-in) .gg-ava-slot[data-side="you"] { transform: translateX(-34vw) scale(1.18); }
+.gg-vs-splash:not(.is-in) .gg-ava-slot[data-side="opp"] { transform: translateX(34vw) scale(1.18); }
+.gg-vs-splash:not(.is-in) .gg-vs-splash-vs { transform: scale(2.2); opacity: 0; }
+
+.gg-vs-splash .gg-ava-name { font-size: clamp(0.8rem, 1.6vw, 1.05rem); max-width: 12rem; }
+
+.gg-vs-splash-vs {
+  font-size: clamp(1.8rem, 6vw, 4rem);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  background: linear-gradient(135deg, var(--gg-pink), var(--gg-violet));
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+  transform: scale(1);
+  opacity: 1;
+  transition: transform .34s cubic-bezier(.2, .85, .25, 1), opacity .24s ease;
+}
+
+/* the fly-out: --gg-vs-dx/dy are written by ui/avatar.js from the live HUD
+   minis, so the bubbles land where the desk actually put them */
+.gg-vs-splash.is-fly { opacity: 0; transition: opacity .34s ease .1s; }
+.gg-vs-splash.is-fly .gg-ava-slot {
+  transform: translate(var(--gg-vs-dx, 0), var(--gg-vs-dy, 0)) scale(0.26);
+  opacity: 0;
+}
+.gg-vs-splash.is-fly .gg-vs-splash-vs { transform: scale(0.4); opacity: 0; }
+
+html[data-gg-motion="reduced"] .gg-vs-splash,
+html[data-gg-motion="reduced"] .gg-vs-splash * { transition: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .gg-vs-splash, .gg-vs-splash * { transition: none !important; }
+}
 
 /* ---------------------------------------------------------------------------
  * MOTION — the player's own switch, on top of the OS media query in goon.css.

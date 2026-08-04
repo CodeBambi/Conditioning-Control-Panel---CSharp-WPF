@@ -20,6 +20,7 @@
 
 import { createLedger, el, button } from '../router.js';
 import { S, minutes } from '../strings.js';
+import { buildDiscordSection, askSharePrompt } from '../discord.js';
 import { GoonMatchPhase, GoonTransportState } from '../../core/contracts.js';
 
 const DUR_MIN_SEC = 60;
@@ -31,8 +32,15 @@ export function mount(container, ctx) {
   const ledger = createLedger();
   ledger.logger = ctx?.logger || null;
 
-  const { actions, audio, prefs, sheets, getMatch, getTransport } = ctx;
+  const { actions, audio, prefs, sheets, discord, getMatch, getTransport } = ctx;
   const match = getMatch();
+
+  /* RICH PRESENCE, FROM THE MOMENT THERE IS SOMETHING TO SAY. Posted before the
+   * early return below, because "connecting…" is still the lobby as far as
+   * anyone reading a Discord status is concerned — and boot posts `off` on every
+   * road out, so this can never be the frame that strands one. */
+  try { discord?.setRpState?.('lobby'); } catch (_e) { /* presence is never load-bearing */ }
+
   if (!match) {
     container.appendChild(el('div', { class: 'gg-card', text: S.lobby.connecting }));
     return { unmount() { ledger.dispose(); } };
@@ -82,12 +90,37 @@ export function mount(container, ctx) {
     return { row, input, value };
   }
 
+  /**
+   * The media-transfer opt-in. A CHECKBOX, not a slider, because it is not a term
+   * both sides negotiate — it is a PER-SIDE DECLARATION that rides the consent
+   * frame (core/match.js setMediaTransfer; `sameSheet()` must never learn about it
+   * or an older peer would wedge the lobby forever). The chip on the right is what
+   * THEY declared, which is the same both-sides display the sliders get for free.
+   *
+   * Flipping it clears both lamps by hand in the engine, so the existing ripple
+   * covers it with no extra wiring here.
+   */
+  function mkCheck(labelText) {
+    const value = el('span', { class: 'gg-row-value', text: '' });
+    const input = el('input', { type: 'checkbox', 'aria-label': labelText });
+    const row = el('div', { class: 'gg-row gg-row--check' }, [
+      el('span', { class: 'gg-row-label', text: labelText }),
+      input,
+      value,
+    ]);
+    const sub = el('p', { class: 'gg-row-sub', text: S.lobby.transferSub });
+    return { row, input, value, sub };
+  }
+
   const durRow = mkSlider(S.lobby.duration, { min: DUR_MIN_SEC, max: DUR_MAX_SEC, step: 60 });
   const toyRow = mkSlider(S.lobby.toyCap, { min: 0, max: 100, step: 5, disabled: true });
   toyRow.value.textContent = S.lobby.toyCapDisabled;
   const gapRow = mkSlider(S.lobby.gap, { min: GAP_MIN_SEC, max: GAP_MAX_SEC, step: 5 });
+  const xferRow = mkCheck(S.lobby.transfer);
 
-  const sheetBox = el('div', { class: 'gg-consent' }, [durRow.row, toyRow.row, gapRow.row]);
+  const sheetBox = el('div', { class: 'gg-consent' }, [
+    durRow.row, toyRow.row, gapRow.row, xferRow.row, xferRow.sub,
+  ]);
 
   /* ---------------------------------------------------------- confirm UI */
 
@@ -96,7 +129,9 @@ export function mount(container, ctx) {
   const lamps = el('div', { class: 'gg-lamps' }, [lampYou, lampThem]);
   const changedLine = el('p', { class: 'gg-consent-changed', text: S.lobby.changed, hidden: true });
 
-  const confirmBtn = button(ledger, S.lobby.confirm, () => onConfirm(), { variant: 'primary', audio, sfx: 'lamp-confirm' });
+  // `void`, because onConfirm is async now (the share sheet): the ledger's click
+  // wrapper is synchronous and a returned promise would reject into nowhere.
+  const confirmBtn = button(ledger, S.lobby.confirm, () => { void onConfirm(); }, { variant: 'primary', audio, sfx: 'lamp-confirm' });
   const leaveBtn = button(ledger, S.lobby.leave, () => actions.leave('lobby'), { variant: 'ghost', audio, sfx: 'ui-back' });
 
   const eyebrow = el('div', { class: 'gg-eyebrow' }, [el('i'), el('span', { text: S.lobby.eyebrowWaiting })]);
@@ -105,6 +140,29 @@ export function mount(container, ctx) {
     eyebrow, duel, connLine, sheetBox, lamps, changedLine,
     el('div', { class: 'gg-lobby-actions' }, [leaveBtn, confirmBtn]),
   ]));
+
+  /* --- THE DISCORD PANEL ---------------------------------------------------
+   * Its own card UNDER the duel card, deliberately not inside it: nothing on it
+   * is negotiated, countersigned or put on the wire, and folding it into the
+   * consent sheet would imply the opponent had a say in it. It is prominent
+   * because the decision it holds is the one on this screen a player must never
+   * find out about afterwards.
+   *
+   * The whole thing is optional: a page built before ui/discord.js existed (or
+   * a ctx without it) simply gets the duel card, the way it does today. */
+  if (discord) {
+    try {
+      const dc = buildDiscordSection({
+        discord, ledger, prefs, audio,
+        youName: match.localDisplayName || (ctx.session && ctx.session.identity && ctx.session.identity.displayName) || '',
+      });
+      if (dc && dc.node) container.appendChild(dc.node);
+    } catch (e) {
+      // A panel that cannot build must never take the lobby down with it — this
+      // is the screen the terms get signed on.
+      ledger._err('discord section', e);
+    }
+  }
 
   /* ------------------------------------------------------------- painting */
 
@@ -186,7 +244,33 @@ export function mount(container, ctx) {
     confirmBtn.title = localOk ? 'click to withdraw' : '';
   }
 
-  function paintAll() { paintIdentity(); paintConnection(); paintSheet(); paintConfirm(); }
+  /**
+   * The transfer row. THREE separate reasons it can be off, and each one gets its
+   * own line, because "greyed out with no explanation" is the thing players report
+   * as a bug: not a supporter (send-side only — receiving is never gated), the
+   * peer's build does not speak the protocol, or the link is relayed (media never
+   * touches the server, so a relay physically cannot carry it).
+   */
+  function paintTransfer() {
+    const caps = (ctx.session && ctx.session.caps) || {};
+    const t = getTransport ? getTransport() : null;
+    const onP2P = !!(t && t.state === GoonTransportState.ConnectedP2P);
+    const editable = match.phase === GoonMatchPhase.Consent || match.phase === GoonMatchPhase.Lobby;
+
+    let why = '';
+    if (caps.mediaTransfer !== true) why = S.lobby.transferNoPremium;
+    else if (!match.peerSupportsTransfer) why = S.lobby.transferPeerOld;
+    else if (!onP2P) why = S.lobby.transferRelay;
+
+    if (document.activeElement !== xferRow.input) xferRow.input.checked = !!match.localMediaTransfer;
+    xferRow.input.disabled = !!why || !editable;
+    xferRow.row.classList.toggle('is-disabled', !!why);
+    xferRow.sub.textContent = why || S.lobby.transferSub;
+    xferRow.value.textContent = match.remoteMediaTransfer
+      ? S.lobby.transferTheirsOn : S.lobby.transferTheirsOff;
+  }
+
+  function paintAll() { paintIdentity(); paintConnection(); paintSheet(); paintConfirm(); paintTransfer(); }
 
   /* --------------------------------------------------------------- input */
 
@@ -218,17 +302,61 @@ export function mount(container, ctx) {
     ledger.listen(row.input, 'change', propose);
   }
 
-  function onConfirm() {
+  // One call, and the engine does the rest: it flips the local declaration, clears
+  // BOTH confirmations and re-sends the sheet, so the lamp ripple this screen
+  // already paints on a clear is the whole visible half.
+  ledger.listen(xferRow.input, 'change', () => {
+    match.setMediaTransfer(!!xferRow.input.checked);
+    paintTransfer();
+    paintConfirm();
+  });
+
+  /**
+   * THE ONE-TIME FIRST-DUEL CONFIRM (contract §1) hangs off "I'm in", and that
+   * is the only honest place for it: signing the terms is the act of entering
+   * the match, so it is the last moment a player can still find out that a
+   * stranger is about to see their face and say no.
+   *
+   * NOT at Countdown, and this is load-bearing: boot's closeChrome() sweeps
+   * every sheet the instant the clock starts (a forgotten scrim eats every
+   * bubble pop for the whole run), so a sheet raised there would be torn off
+   * screen a moment later — and a consent sheet that vanishes unanswered is
+   * worse than no sheet at all. Swept HERE it resolves null, which writes
+   * nothing and leaves the lamp unlit: the player simply presses again.
+   *
+   * Asked at most once per mount as well as once per account: `askSharePrompt`
+   * re-checks needsSharePrompt() against the ECHO, and a confirm writes
+   * seenSharePrompt through the same round trip everything else uses.
+   */
+  let sharePromptBusy = false;
+
+  async function onConfirm() {
     if (match.phase !== GoonMatchPhase.Consent) return;
-    if (match.localConsentConfirmed) match.withdrawConsent();
-    else match.confirmConsent();
+    if (match.localConsentConfirmed) { match.withdrawConsent(); paintConfirm(); return; }
+
+    if (discord && !sharePromptBusy && discord.needsSharePrompt()) {
+      sharePromptBusy = true;
+      let answer = null;
+      try { answer = await askSharePrompt({ discord, sheets }); }
+      catch (e) { ledger._err('share prompt', e); answer = 'confirm'; }
+      finally { sharePromptBusy = false; }
+      // Dismissed (or swept by the chrome closer): nothing was decided, so
+      // nothing is signed. The button is still there and still says "I'm in".
+      if (answer === null) return;
+      // The screen may have gone while the sheet was up (they left, the peer
+      // dropped, the phase moved on) — re-check before touching the engine.
+      if (ledger.isDisposed || match.phase !== GoonMatchPhase.Consent) return;
+    }
+
+    match.confirmConsent();
     paintConfirm();
   }
 
   /* --------------------------------------------------------- engine wiring */
 
-  ledger.sub(match.onConsentChanged(() => { paintSheet(); paintConfirm(); }));
-  ledger.sub(match.onOpponentStateChanged(() => paintIdentity()));
+  ledger.sub(match.onConsentChanged(() => { paintSheet(); paintConfirm(); paintTransfer(); }));
+  // The hello is what sets peerSupportsTransfer, and it arrives with the opponent.
+  ledger.sub(match.onOpponentStateChanged(() => { paintIdentity(); paintTransfer(); }));
   ledger.sub(match.onPhaseChanged(() => { paintAll(); }));
   ledger.sub(match.onLobbyFailed((reason) => {
     sheets?.open?.({
@@ -240,9 +368,10 @@ export function mount(container, ctx) {
 
   const transport = getTransport ? getTransport() : null;
   if (transport && typeof transport.onStateChanged === 'function') {
-    ledger.sub(transport.onStateChanged(() => paintConnection()));
+    // Relay vs direct decides whether the transfer row is even offerable.
+    ledger.sub(transport.onStateChanged(() => { paintConnection(); paintTransfer(); }));
   } else {
-    ledger.interval(paintConnection, 1000);   // no event seam: poll cheaply
+    ledger.interval(() => { paintConnection(); paintTransfer(); }, 1000);   // no event seam: poll cheaply
   }
 
   // Seed the sheet from the player's last duel the FIRST time we reach Consent

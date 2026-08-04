@@ -40,6 +40,19 @@ export const PREF_DEFAULTS = Object.freeze({
    * takes the raster path from the start and drops any live weave within a second.
    */
   shaderSpirals: true,
+  /**
+   * Whether an opponent's shared Discord picture is shown on this machine (the
+   * VS splash, the HUD mini, the recap plate). ON by default — the sharer has
+   * already opted in and hiding their choice by default would make the feature
+   * invisible to everyone.
+   *
+   * OFF SUPPRESSES THE FETCH, NOT JUST THE RENDER (contract §1). ui/discord.js
+   * checks this BEFORE posting `peer-card-req` and again when a card lands, so
+   * a viewer who has switched it off never causes the host to pull an image at
+   * all. That is the whole point: "do not show me" and "do not download it" are
+   * the same request, and a pref that only hid the pixels would be a lie.
+   */
+  showOpponentAvatars: true,
   /** Last consent terms this player proposed — pre-filled next lobby. */
   matchLengthSec: 720,
   payloadGapSec: 30,

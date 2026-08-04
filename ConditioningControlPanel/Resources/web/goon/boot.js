@@ -33,15 +33,23 @@
 import * as bridge from './bridge.js';
 import { media } from './exec/media.js';
 import * as layers from './exec/layers.js';
+// The per-match record of which artifacts a duel PARTNER put on this screen —
+// exec/videos.js owns it, the recap's report card reads it, and this file is
+// the only thing that resets it (see attachMatch). Import-safe: videos.js
+// touches no DOM at module scope.
+import { peerRenderLog, resetPeerRenderLog } from './exec/videos.js';
 
 import { GoonMatchService } from './core/match.js';
 import { GoonSuddenDeathRunner } from './core/suddenDeath.js';
 import { GoonRng } from './core/rng.js';
-import { GoonElement, GoonMatchPhase, GoonPayloadKind, GoonRoundKind } from './core/contracts.js';
+import { GoonElement, GoonEndReason, GoonMatchPhase, GoonPayloadKind, GoonRoundKind } from './core/contracts.js';
 import { local as localCapsOf, UNIVERSAL_ROUND } from './core/caps.js';
 import { GoonReceiptStatus } from './core/scoring.js';
 import { GoonSession } from './net/session.js';
 import { createLoopbackPair, loopbackPresets } from './net/loopbackTransport.js';
+import { createMediaQueue } from './net/mediaQueue.js';
+import { createBlocklist } from './net/blocklist.js';
+import { createReceivedStore } from './exec/receivedStore.js';
 
 import { createRouter } from './ui/router.js';
 import { createPrefs } from './ui/prefs.js';
@@ -51,6 +59,8 @@ import { createSheets } from './ui/sheets.js';
 import { createOptions } from './ui/options.js';
 import { createSoloDriver } from './ui/soloDriver.js';
 import { createAssetsStore } from './ui/assetsStore.js';
+import { createDiscord, confirmOpenDm } from './ui/discord.js';
+import { emitAva, mountVsSplash } from './ui/avatar.js';
 import { S } from './ui/strings.js';
 
 import * as titleScreen from './ui/screens/title.js';
@@ -114,6 +124,21 @@ export const session = {
   fullscreen: false,
   haptics: null,      // last haptics-state {enabled, toys, cap}
   manifest: null,     // {images, videos, skipped, truncated}
+  received: null,     // [{sha,ext,mime,bytes}] the inbox already holds (manifest frame)
+  /**
+   * {code, token, role} — stashed the moment a transport connects, because
+   * actions.leave() DISPOSES the transport and the recap's report card is filed
+   * after that. The token is a per-room signaling credential, not the Patreon
+   * bearer, and it never leaves this object.
+   */
+  room: null,
+  /**
+   * The raw `init.discord` block (GOON_DISCORD_CONTRACT §4), parked here until
+   * buildApp() exists to hand it to ui/discord.js. It is the ONLY frame that
+   * carries `lastOpponent`; every later `discord` echo is flat and goes straight
+   * to the module, which owns that verb at the bridge.
+   */
+  discord: null,
   initAt: 0,
   ready: false,       // init + manifest both in
 };
@@ -195,6 +220,7 @@ bridge.on('init', (m) => {
   session.consent = m.consent || null;
   session.match = m.match || null;
   session.prefs = m.prefs || null;
+  session.discord = (m.discord && typeof m.discord === 'object') ? m.discord : null;
   session.fullscreen = !!m.fullscreen;
   session.initAt = Date.now();
   session.net = bridge.configureNet(m.net || {});
@@ -209,8 +235,15 @@ bridge.on('init', (m) => {
 bridge.on('manifest', (m) => {
   gotManifest = true;
   session.manifest = media.setManifest(m);
+  // WHAT A PARTNER SENT US IN AN EARLIER SESSION rides this same frame (spec §6.4)
+  // rather than a new boot milestone — settle() already gates on gotManifest, so the
+  // received set is primed before any screen mounts, which is what lets the very
+  // first offer of a match answer `decline:'have'` instead of re-transferring 20 MB.
+  session.received = Array.isArray(m.received) ? m.received : [];
+  primeReceived(session.received);
   bridge.log('manifest: ' + session.manifest.images + ' images, ' + session.manifest.videos + ' videos'
-    + (session.manifest.skipped ? ', ' + session.manifest.skipped + ' skipped' : ''));
+    + (session.manifest.skipped ? ', ' + session.manifest.skipped + ' skipped' : '')
+    + (session.received.length ? ', ' + session.received.length + ' received' : ''));
   armDeadline();
   settle();
 });
@@ -298,6 +331,12 @@ let router = null;
 let executor = null;
 let matchLog = null;
 let assets = null;           // ui/assetsStore.js — owns every cache-* bridge verb
+let receivedStore = null;    // exec/receivedStore.js — owns goon-recv-result
+let blocklist = null;        // net/blocklist.js
+let mediaQueue = null;       // net/mediaQueue.js — one per page, re-attached per match
+let artifacts = null;        // the adapter below, over assets' item map
+let discord = null;          // ui/discord.js — owns the discord + peer-card verbs
+let vsSplash = null;         // the countdown's decorative VS card, if one is up
 let ctx = null;
 
 /* ---- match/session state. NEVER cached by a screen; always read through ctx. */
@@ -358,6 +397,143 @@ function localCaps() {
   if (!rounds.includes(UNIVERSAL_ROUND)) rounds.push(UNIVERSAL_ROUND);
 
   return localCapsOf({ elements, payloads, rounds, platform: 'web' });
+}
+
+/* ============================================================================
+ * P2P MEDIA TRANSFER — the three singletons and the one adapter.
+ *
+ * The queue SENDS (premium-gated, session.caps.mediaTransfer), the store RECEIVES
+ * (never gated — a free player seeing a supporter's media is the whole product),
+ * and the blocklist is the render-time safety gate. All three are built in
+ * buildApp() and the queue is attached/detached with the match, so the relay
+ * rebuild re-binds it over the new transport and it simply goes dormant.
+ * ==========================================================================*/
+
+/** ext -> mime. The cache serves artifacts by extension; the protocol wants a mime. */
+const ARTIFACT_MIME = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+  webp: 'image/webp', mp4: 'video/mp4', webm: 'video/webm',
+};
+
+/**
+ * THE ARTIFACT SOURCE — the only two verbs net/mediaQueue.js needs, adapted over
+ * ui/assetsStore.js's item map (spec §0). Deliberately thin and deliberately here:
+ * the queue must not know what a compression lane is, and assetsStore must not
+ * know a duel exists.
+ *
+ * `sha` comes off the item when the store carries it, and otherwise off the
+ * artifact URL, which is `https://ccp.cache/art/<sha>.<ext>` by construction
+ * (GoonCacheBridge.ArtUrlFor). EXEMPT originals have no artifact URL — they ARE
+ * the original — so they are only sendable when the item itself carries the sha.
+ *
+ * The bytes are fetched ONCE per artifact and sliced from the ArrayBuffer: one
+ * transfer is in flight at a time and the cap is 24 MiB, so a two-entry cache is
+ * all the memory this can ever hold. The cache vhost is mapped `Allow`
+ * (GoonHostService.AddIfPresent), which is what makes a cross-origin fetch legal.
+ */
+function createArtifactSource() {
+  const urls = new Map();     // sha -> where the bytes live
+  const mimes = new Map();    // sha -> mime
+  const cache = new Map();    // sha -> {buf, bytes, mime}
+  let fetchWarned = false;
+
+  const shaOf = (it) => {
+    if (it && typeof it.sha === 'string' && /^[0-9a-f]{64}$/.test(it.sha)) return it.sha;
+    const m = /\/art\/([0-9a-f]{64})\./i.exec(String((it && it.artUrl) || ''));
+    return m ? m[1].toLowerCase() : '';
+  };
+  const mimeOf = (url) => {
+    const m = /\.([a-z0-9]{2,5})(?:\?|#|$)/i.exec(String(url || ''));
+    return m ? (ARTIFACT_MIME[m[1].toLowerCase()] || '') : '';
+  };
+
+  return {
+    listSendable() {
+      const out = [];
+      let items = [];
+      try { items = (assets && assets.items) || []; } catch (_e) { items = []; }
+      for (const it of items) {
+        if (!it) continue;
+        const exempt = it.state === 'exempt';
+        if (it.state !== 'ready' && !exempt) continue;
+        const sha = shaOf(it);
+        if (!sha) continue;                       // no identity, nothing to offer
+        const url = exempt ? it.srcUrl : (it.artUrl || '');
+        if (!url) continue;
+        const mime = mimeOf(url);
+        if (!mime) continue;
+        const bytes = exempt ? (it.srcBytes || it.bytes || 0) : (it.bytes || 0);
+        if (!bytes) continue;
+        urls.set(sha, url);
+        mimes.set(sha, mime);
+        out.push({ sha, bytes, mime, kind: it.kind === 'video' ? 'video' : 'image', exempt });
+      }
+      return out;
+    },
+
+    async open(sha) {
+      let rec = cache.get(sha);
+      if (!rec) {
+        const url = urls.get(sha);
+        if (!url) return null;
+        let buf = null;
+        try {
+          const r = await fetch(url, { credentials: 'omit' });
+          if (!r || !r.ok) return null;
+          buf = await r.arrayBuffer();
+        } catch (e) {
+          if (!fetchWarned) {
+            fetchWarned = true;
+            logger.warn('could not read a cache artifact for sending (' + ((e && e.message) || e)
+              + ') — nothing will be offered this session');
+          }
+          return null;
+        }
+        rec = { buf, bytes: buf.byteLength, mime: mimes.get(sha) || '' };
+        cache.set(sha, rec);
+        // One in flight at a time; keep the previous one only in case a resume asks
+        // for it again inside the reconnect grace.
+        while (cache.size > 2) {
+          const oldest = cache.keys().next().value;
+          if (oldest === sha) break;
+          cache.delete(oldest);
+        }
+      }
+      return {
+        bytes: rec.bytes,
+        mime: rec.mime,
+        read: (offset, len) => rec.buf.slice(offset, Math.min(offset + len, rec.bytes)),
+      };
+    },
+  };
+}
+
+/**
+ * Fold the received inbox into the store, the blocklist and the media pool.
+ * A no-op until buildApp() has built them, which is why the `manifest` handler
+ * calls it AND buildApp does: whichever comes second is the one that lands.
+ */
+function primeReceived(list) {
+  if (!receivedStore || !Array.isArray(list)) return;
+  try {
+    const shas = receivedStore.primeReceived(list);
+    blocklist?.prime?.(shas);
+    registerReceived(receivedStore.list());
+  } catch (e) {
+    logger.warn('priming the received inbox failed: ' + ((e && e.message) || e));
+  }
+}
+
+/** Hand artifacts to exec/media.js with a live view factory (real refcounts standalone). */
+function registerReceived(list) {
+  for (const e of (list || [])) {
+    try {
+      media.addReceived({
+        sha: e.sha, kind: e.kind, mime: e.mime, url: e.url, bytes: e.bytes,
+        acquire: () => receivedStore.view(e.sha),
+      });
+    } catch (_err) { /* one bad row is never the whole inbox */ }
+  }
 }
 
 /* ----------------------------------------------------------------------------
@@ -539,6 +715,50 @@ function attachMatch(match, transport) {
 
   try { executor?.attach?.(match); } catch (e) { logger.error('executor.attach threw: ' + ((e && e.stack) || e)); }
   try { matchLog.attach(match); } catch (e) { logger.error('matchLog.attach threw: ' + ((e && e.stack) || e)); }
+  /* THE SECOND tryFirePayload INSTANCE WRAPPER, and the order is the point.
+   * matchLog wrapped it a line ago; the queue wraps it now, so the queue's is the
+   * OUTERMOST — a payload gets its `xfer:` tags before the log records it, and the
+   * log therefore records exactly what went on the wire. Both are instance patches
+   * and both die with this match. (Trap register #7 — documented where applied.) */
+  try { mediaQueue?.attach?.(match, currentTransport); }
+  catch (e) { logger.warn('mediaQueue.attach threw: ' + ((e && e.message) || e)); }
+  stashRoom();
+  /* A NEW MATCH, A NEW PEER-RENDER LOG — and this is the ONLY place it is
+   * cleared. The obvious-looking reset points are both wrong: stopWindows()
+   * runs inside clearForRecap() immediately BEFORE the recap mounts, and
+   * detachMatch() runs when the player leaves it — either would wipe the list
+   * the report card is about to read. Clearing on attach means the log covers
+   * exactly one match and stays readable for the whole recap after it. */
+  resetPeerRenderLog();
+
+  /* --- DISCORD, per match --------------------------------------------------
+   * A new match is a new (or re-connected) opponent, so the card on the desk is
+   * dropped and the version ledger with it: a relay REBUILD re-uses the room and
+   * would otherwise skip the re-fetch as "same version" against a peer object
+   * that is about to be repainted from scratch.
+   *
+   * `watchSignaling` is the only path by which a peer_card_ver ever reaches the
+   * page. It is taken HERE rather than at ensureSession() because the signaling
+   * client is created per host()/join(), i.e. after the session object exists —
+   * and it is put on phaseUnsubs so the rebuild re-arms it with everything else. */
+  try { discord?.clearPeer?.(); } catch (_e) { /* never load-bearing */ }
+  if (goonSession && goonSession.signaling && discord) {
+    try { phaseUnsubs.push(discord.watchSignaling(goonSession.signaling)); }
+    catch (e) { logger.warn('discord.watchSignaling threw: ' + ((e && e.message) || e)); }
+  }
+
+  /* THE MERCY BEAT. Two callers reach declareMercy — the Escape ladder in this
+   * file and the button in ui/mercy.js — and neither is privileged, so the emit
+   * goes on the INSTANCE (the matchLog tryFirePayload precedent): one seam, both
+   * paths, and it dies with this match. The engine's return value is passed
+   * straight through; nothing about the concede may depend on a decoration. */
+  if (typeof match.declareMercy === 'function') {
+    const origMercy = match.declareMercy.bind(match);
+    match.declareMercy = (...args) => {
+      emitAva('mercy', 'you');
+      return origMercy(...args);
+    };
+  }
 
   phaseUnsubs.push(match.onPhaseChanged(onPhase));
   phaseUnsubs.push(match.onConnectionHealthChanged((h) => {
@@ -564,9 +784,38 @@ function attachMatch(match, transport) {
   phaseUnsubs.push(match.onPhaseChanged(syncQueue));
   syncQueue(match.phase);      // a relay REBUILD lands mid-Live and never fires a change
   phaseUnsubs.push(match.onMatchEnded(() => armRecapFallback()));
+  // THEIR mercy, from the only place it is knowable: the result. `localWon` on a
+  // Mercy end means the other side tapped. Guarded to a fault — a decoration must
+  // never be the thing that throws inside the end-of-match cascade.
+  phaseUnsubs.push(match.onMatchEnded(() => {
+    try {
+      const r = match.result;
+      if (r && r.endReason === GoonEndReason.Mercy && r.localWon) emitAva('mercy', 'opp');
+    } catch (_e) { /* ignore */ }
+  }));
   phaseUnsubs.push(match.onResultFinalized(() => forceRecap('finalized', false)));
   onPhase(match.phase);
   paintProbe();
+}
+
+/**
+ * Remember the room while we still can. `actions.leave()` disposes the transport,
+ * and the recap's report card is filed AFTER that — so {code, token, role} are
+ * copied off the transport the moment a match binds to it. A rebuild (relay
+ * fallback) re-runs this over the new transport with the SAME room, which is the
+ * whole point of GoonSession re-using the signaling client.
+ */
+function stashRoom() {
+  try {
+    const t = currentTransport;
+    const code = t && t.code ? String(t.code) : '';
+    if (!code) return;
+    session.room = {
+      code,
+      token: t.token ? String(t.token) : '',
+      role: t.isHost ? 'host' : 'guest',
+    };
+  } catch (_e) { /* a transport without a room is Practice — nothing to report */ }
 }
 
 /* ----------------------------------------------------------------------------
@@ -628,10 +877,57 @@ function closeChrome() {
   try { if (options && options.isOpen) options.close(); } catch (_e) { /* ignore */ }
 }
 
+/* ----------------------------------------------------------------------------
+ * THE VS SPLASH — decoration with a hard deadline.
+ *
+ * It goes up alongside the countdown and is guaranteed gone by the Live arm.
+ * That guarantee is the whole design: it is z55, pointer-events:none and under
+ * MERCY, so it cannot eat a click or cover the concede even while it is up, and
+ * dropIt() is idempotent and called from FOUR places (Live, Recap, detach,
+ * exit) rather than trusted to one owner. It never delays anything — the
+ * countdown numeral is driven by the shared clock and has never heard of this.
+ * -------------------------------------------------------------------------- */
+function raiseVsSplash() {
+  dropVsSplash();
+  if (!hasDom() || !currentMatch) return;
+  try {
+    const opp = discord ? discord.peer : null;
+    const st = discord ? discord.state : null;
+    vsSplash = mountVsSplash({
+      you: {
+        name: currentMatch.localDisplayName || (session.identity && session.identity.displayName) || S.discord.you,
+        dataUri: (discord && discord.sharingAvatar && st) ? st.avatarDataUri : null,
+      },
+      opp: {
+        name: (currentMatch.opponent && currentMatch.opponent.displayName) || (opp && opp.name) || S.lobby.them,
+        dataUri: opp ? opp.avatarDataUri : null,
+      },
+      // The player's own switch first, then the OS media query — the same order
+      // every other decoration on the page reads them in.
+      reduced: !!(prefs && prefs.get('reduceMotion')),
+      showOpponent: !discord || discord.showOpponentAvatars,
+      vsLabel: S.discord.vs,
+    });
+  } catch (e) {
+    vsSplash = null;
+    logger.warn('vs splash failed to mount: ' + ((e && e.message) || e));
+  }
+}
+
+function dropVsSplash() {
+  if (!vsSplash) return;
+  try { vsSplash.remove(); } catch (_e) { /* already gone */ }
+  vsSplash = null;
+}
+
 function clearForRecap(why) {
   try { executor?.stopAll?.(); } catch (e) { logger.warn('executor.stopAll threw: ' + ((e && e.message) || e)); }
   try { layers.stopAll(); } catch (e) { logger.warn('layers.stopAll threw: ' + ((e && e.message) || e)); }
   closeChrome();
+  // A splash cannot survive into a recap. It should already be gone (the Live
+  // arm drops it) — this is the assertion, on the same pass that sweeps the
+  // stage, so a countdown that skipped straight to Recap leaves nothing behind.
+  dropVsSplash();
 
   if (!hasDom()) return;
   const stage = el('gg-stage');
@@ -680,6 +976,9 @@ function detachMatch() {
   unmountMercy();
   try { executor?.detach?.(); } catch (e) { logger.warn('executor.detach threw: ' + ((e && e.message) || e)); }
   try { matchLog?.detach?.(); } catch (_e) { /* ignore */ }
+  // Cancels every transfer and clears the queue; the STORE is untouched, because a
+  // committed artifact is hash-keyed and stays valid across matches and sessions.
+  try { mediaQueue?.detach?.(); } catch (_e) { /* ignore */ }
   try { currentSd?.dispose?.(); } catch (_e) { /* ignore */ }
   currentSd = null;
   currentMatch = null;
@@ -691,7 +990,7 @@ function mountHudNow() {
   if (hudHandle || !mountHud || !currentMatch) return;
   try {
     hudHandle = mountHud({
-      match: currentMatch, session, audio, prefs, media, matchLog,
+      match: currentMatch, session, audio, prefs, media, matchLog, discord,
     }) || null;
   } catch (e) { logger.error('mountHud threw: ' + ((e && e.stack) || e)); hudHandle = null; }
 }
@@ -750,18 +1049,22 @@ function onPhase(phase) {
     case GoonMatchPhase.Countdown:
       // Nothing may be left over the run when the clock starts — a forgotten
       // sheet's scrim would eat every bubble pop for the whole match (see
-      // closeChrome).
+      // closeChrome). This is also what sweeps the first-duel share sheet if the
+      // player left it open: a swept sheet resolves null and writes nothing.
       closeChrome();
       router.show('countdown');
+      raiseVsSplash();
       break;
 
     case GoonMatchPhase.Live:
       closeChrome();          // belt and braces: a match can arrive at Live
                               // without us ever seeing its Countdown (rebuild,
                               // late join, a resumed transport)
+      dropVsSplash();         // the splash's hard deadline, whatever it was doing
       router.hide();
       mountHudNow();
       mountMercyNow();
+      try { discord?.setRpState?.('live'); } catch (_e) { /* presence is never load-bearing */ }
       break;
 
     case GoonMatchPhase.SuddenDeath:
@@ -775,6 +1078,7 @@ function onPhase(phase) {
       // match has to come down or the recap is a picture (see clearForRecap).
       clearForRecap('phase');
       router.show('recap');
+      try { discord?.setRpState?.('recap'); } catch (_e) { /* presence is never load-bearing */ }
       break;
 
     default:
@@ -823,6 +1127,15 @@ function errorInfo(reason) {
 
 async function teardownEverything() {
   detachMatch();
+  /* RICH PRESENCE CANNOT BE ALLOWED TO STRAND. Every road out of a match runs
+   * through here (leave, quit, host/join restart, connect failure, the exit
+   * handshake below) and `off` is idempotent inside ui/discord.js, so posting it
+   * on all of them costs one frame and closes every hole at once. A player whose
+   * Discord still says "In a duel" an hour after they quit is the failure this
+   * placement exists to make impossible. */
+  try { discord?.setRpState?.('off'); } catch (_e) { /* presence is never load-bearing */ }
+  try { discord?.clearPeer?.(); } catch (_e) { /* ignore */ }
+  dropVsSplash();
   if (soloDriver) { try { soloDriver.stop(); } catch (_e) { /* ignore */ } soloDriver = null; }
   if (soloOpponent) { try { soloOpponent.dispose(); } catch (_e) { /* ignore */ } soloOpponent = null; }
   if (soloPair) { try { soloPair.dispose(); } catch (_e) { /* ignore */ } soloPair = null; }
@@ -916,6 +1229,11 @@ async function startSolo() {
   soloDriver = createSoloDriver({ match: soloOpponent, logger });
 
   attachMatch(local, soloPair.host);
+  /* PRACTICE HAS A FACE TOO — a tile, a name and dm:false (contract §6). It is
+   * set AFTER attachMatch, which clears the peer, and it is the only way the
+   * splash, the HUD minis and the recap plates are exercisable with no server
+   * and no second machine. The bot is not a person: it never gets a DM button. */
+  try { discord?.setSoloPeer?.(S.discord.practiceBot); } catch (_e) { /* ignore */ }
   local.adoptLobby();
   soloOpponent.adoptLobby();
   soloDriver.start();
@@ -946,6 +1264,54 @@ function buildApp() {
   // mounts many times per session).
   assets = createAssetsStore({ session, logger });
 
+  /* --- DISCORD. Built once, like the store above and for the same reason: it
+   * registers the `discord` and `peer-card` handlers and bridge.on throws on a
+   * duplicate, while the lobby it renders into mounts many times per session.
+   *
+   * `getRoom` is a THUNK, never a snapshot: /v2/goon/peercard is room-authed and
+   * the page is the only side holding {code, token, role}, but a relay fallback
+   * replaces session.room mid-match (stashRoom) and a captured copy would go
+   * stale exactly when the fetch needed it. */
+  discord = createDiscord({
+    prefs, logger,
+    getRoom: () => session.room,
+  });
+  discord.applyInit(session.discord);
+
+  /* --- P2P media transfer. Built once; the queue re-attaches per match. ------ */
+  // The store owns `goon-recv-result` (bridge.on throws on a duplicate — the module
+  // that correlates the replies owns the handler, exactly like net-post-result).
+  receivedStore = createReceivedStore({ logger });
+  blocklist = createBlocklist({
+    post: (path, body) => bridge.postNet(path, body),
+    unifiedId: () => (session.identity && session.identity.unifiedId) || '',
+    logger,
+  });
+  // The gate that actually matters is at render time, and this is where it is armed.
+  media.attachBlocklist(blocklist);
+  blocklist.onBlocked((sha) => {
+    // A hash that comes back blocked stops rendering AND stops existing.
+    try { media.dropReceived(sha); } catch (_e) { /* ignore */ }
+    try { receivedStore.drop(sha); } catch (_e) { /* ignore */ }
+  });
+
+  artifacts = createArtifactSource();
+  mediaQueue = createMediaQueue({
+    artifacts,
+    store: receivedStore,
+    blocklist,
+    logger,
+    // === true, NOT !== false (the idiom brainDrain/spiral use above). Deliberate
+    // inversion: sending is a new, Patreon-gated capability, so a host that
+    // predates the flag must default it OFF. Receiving is never gated.
+    canSend: () => !!(session.caps && session.caps.mediaTransfer === true),
+  });
+  mediaQueue.onReceived((a) => {
+    registerReceived([a]);
+    blocklist.check([a.sha]);
+  });
+  primeReceived(session.received);      // the manifest usually beat us here
+
   options = createOptions({
     prefs, audio, session, logger,
     setFullscreen: (on) => bridge.send({ type: 'fullscreen-set', on: !!on }),
@@ -968,6 +1334,37 @@ function buildApp() {
     });
   } catch (_e) { /* no document: nothing to open */ }
 
+  /* THE HUD'S DM SEAM, and it is the gear's pattern for the gear's reason: the
+   * opponent mini lives inside a dynamically loaded sibling and cannot reach
+   * either `sheets` or `discord`, so it asks by event and THIS is the ear. The
+   * confirm is not optional — opening a browser out of a fullscreen duel is a
+   * big thing to do to somebody, and the sheet is where they can say no. */
+  try {
+    document.addEventListener('gg-discord-dm', (e) => {
+      const d = (e && e.detail) || {};
+      void confirmOpenDm({
+        discord,
+        sheets,
+        which: d.which === 'last' ? 'last' : 'peer',
+        name: String(d.name || (discord && discord.peer && discord.peer.name) || ''),
+      });
+    });
+  } catch (_e) { /* no document: nothing to open */ }
+
+  /* WORK ITEM E, OPTIONALLY. ui/avatarFx.js decorates the bubbles this file's
+   * modules build; it is loaded dynamically and its absence is a cosmetic loss,
+   * not a boot failure — exactly like the sibling waves above. It attaches to
+   * <body> and finds bubbles by MutationObserver, so nothing has to hand it the
+   * lobby, the splash, the HUD minis or the recap plates one at a time. */
+  try {
+    import('./ui/avatarFx.js')
+      .then((mod) => {
+        const fx = mod && (mod.avatarFx || mod.default);
+        if (fx && typeof fx.attach === 'function' && hasDom()) fx.attach(document.body);
+      })
+      .catch(() => { logger.info('avatarFx not present — bubbles will be static'); });
+  } catch (_e) { /* an import that cannot even be attempted is the same non-event */ }
+
   try {
     document.documentElement.setAttribute('data-gg-motion', prefs.get('reduceMotion') ? 'reduced' : 'full');
   } catch (_e) { /* ignore */ }
@@ -988,6 +1385,9 @@ function buildApp() {
 
   ctx = {
     session, prefs, audio, toasts, sheets, options, matchLog, actions, logger, assets,
+    receivedStore, blocklist, mediaQueue, discord,
+    /** ui/screens/recap.js: which peer artifacts rendered (and were flagged) this match. */
+    getPeerRenders: peerRenderLog,
     getMatch: () => currentMatch,
     getTransport: () => currentTransport,
     getClock: () => { try { return currentTransport ? currentTransport.clock : null; } catch (_e) { return null; } },
@@ -1059,6 +1459,11 @@ function requestExit(why) {
 function finishExit(why) {
   try { clearTimeout(exitTimer); } catch (_e) { /* ignore */ }
   exiting = true;
+  // BEFORE teardownEverything, which is async: the page may be seconds from
+  // gone and `rp-state off` is the frame the host needs to clear (or restore)
+  // the presence. teardownEverything posts it again and the second one is a
+  // no-op — that is the point of the dedupe.
+  try { discord?.setRpState?.('off'); } catch (_e) { /* presence is never load-bearing */ }
   try { void teardownEverything(); } catch (_e) { /* best effort */ }
   try { layers.stopAll(); } catch (_e) { /* best effort */ }
   bridge.log('exit-done (' + why + ')');
@@ -1244,6 +1649,11 @@ if (typeof window !== 'undefined') {
       get router() { return router; },
       get prefs() { return prefs; },
       get matchLog() { return matchLog; },
+      get assets() { return assets; },
+      get received() { return receivedStore; },
+      get blocklist() { return blocklist; },
+      get mediaQueue() { return mediaQueue; },
+      get discord() { return discord; },
       get stubs() { return stubs.slice(); },
       actions,
     };

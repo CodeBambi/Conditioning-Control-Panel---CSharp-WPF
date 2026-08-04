@@ -5394,6 +5394,81 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region Goon Game (Discord sharing)
+
+        // Goon Game opt-in Discord sharing. Sharer-only gating: each flag governs what
+        // THIS user exposes to the opponent, never what they receive. All default false —
+        // privacy fails closed. See docs/GOON_DISCORD_CONTRACT.md §1/§2.
+        //
+        // Distinct from RemoteShareAvatar (remote-control audience) and
+        // ShareProfilePicture (leaderboard / Subjects directory audience). Do not conflate;
+        // different audience, different threat model.
+
+        private bool _goonShareAvatar = false;
+        /// <summary>
+        /// Show the linked Discord avatar to the Goon Game opponent (VS splash + HUD bubble).
+        /// Pushed to the server as `goon_share_avatar` on change.
+        /// </summary>
+        [JsonProperty("goonShareAvatar")]
+        public bool GoonShareAvatar
+        {
+            get => _goonShareAvatar;
+            set { _goonShareAvatar = value; OnPropertyChanged(); }
+        }
+
+        private bool _goonShareDiscordDm = false;
+        /// <summary>
+        /// Let the Goon Game opponent open a Discord DM with this user (they get a Message
+        /// button; the snowflake is only ever resolved server-side).
+        /// Pushed to the server as `goon_share_dm` on change.
+        /// </summary>
+        [JsonProperty("goonShareDiscordDm")]
+        public bool GoonShareDiscordDm
+        {
+            get => _goonShareDiscordDm;
+            set { _goonShareDiscordDm = value; OnPropertyChanged(); }
+        }
+
+        private bool _goonRichPresence = false;
+        /// <summary>
+        /// Show Goon Game activity in Discord Rich Presence (fixed strings only — never the
+        /// opponent's name, never free text). LOCAL-ONLY: never synced to the server.
+        /// </summary>
+        [JsonProperty("goonRichPresence")]
+        public bool GoonRichPresence
+        {
+            get => _goonRichPresence;
+            set { _goonRichPresence = value; OnPropertyChanged(); }
+        }
+
+        private bool _goonSeenSharePrompt = false;
+        /// <summary>
+        /// True once the one-time first-duel sharing confirm has been shown. Written by the
+        /// page via the discord-prefs bridge verb, echoed back on the next `discord` message.
+        /// </summary>
+        [JsonProperty("goonSeenSharePrompt")]
+        public bool GoonSeenSharePrompt
+        {
+            get => _goonSeenSharePrompt;
+            set { _goonSeenSharePrompt = value; OnPropertyChanged(); }
+        }
+
+        private string _goonLastOpponentJson = "";
+        /// <summary>
+        /// Serialized { name, dmId, avatarFile, ts } for the MOST RECENT opponent only
+        /// (overwrite semantics). avatarFile is a bare filename inside
+        /// %LOCALAPPDATA%\ConditioningControlPanel\goon_avatars\ — never a full path.
+        /// Written by GoonHostService only.
+        /// </summary>
+        [JsonProperty("goonLastOpponentJson")]
+        public string GoonLastOpponentJson
+        {
+            get => _goonLastOpponentJson;
+            set { _goonLastOpponentJson = value ?? ""; OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Validation
 
         /// <summary>

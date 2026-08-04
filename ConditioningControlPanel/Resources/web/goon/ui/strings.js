@@ -109,6 +109,79 @@ export const S = Object.freeze({
     leave: 'Leave',
     lampYou: 'you',
     lampThem: 'them',
+    /* --- the media-transfer opt-in. Per-side: this row says what YOU are
+       willing to send, and the chip says what THEY answered. --- */
+    transfer: 'Send them your own media',
+    transferSub: 'a few of your images and clips go straight to them, machine to machine. never through a server.',
+    // Lowercase "supporter perk" on purpose: an explanation, not a pitch.
+    transferNoPremium: 'sending is a supporter perk — you can still receive theirs.',
+    transferPeerOld: 'their app is too old for this — nothing crosses either way.',
+    transferRelay: 'only on a direct connection. this one is relayed.',
+    transferTheirsOn: 'they opted in',
+    transferTheirsOff: 'they have not',
+  },
+
+  /* -------------------------------------------------------------- discord
+   * The sharing panel, the VS splash, the HUD minis and the recap plates.
+   *
+   * Two rules that are safety copy, not style:
+   *   1. every line says WHO SEES WHAT. "your opponent" is named in the toggle
+   *      notes because "share" on its own has been read as "publish" before;
+   *   2. nothing here ever formats an id. The Message buttons take a NAME, and
+   *      the page has no other identifier to leak (see ui/discord.js).
+   * Lowercase furniture, sentence case for the sheets — the house register. */
+  discord: {
+    eyebrow: 'discord',
+    lead: 'off by default. nothing is shared until you switch it on here.',
+    you: 'you',
+    /** The indicator on your own plate while a picture is going out. */
+    visible: 'they can see your picture',
+
+    toggleAvatar: 'Use my Discord picture',
+    toggleAvatarNote: 'your opponent sees your avatar on the versus card, on the desk and on the end card. only them, only during a duel.',
+    toggleDm: 'Allow Discord DMs',
+    toggleDmNote: 'gives your opponent a Message button after the match. they never see your account name here, and you can switch this off again whenever you like.',
+    toggleRp: 'Show Goon Game on Discord',
+    toggleRpNote: 'your discord status reads "Goon Game" while you play. fixed words only — never your opponent, never what happened.',
+
+    connectCta: 'Connect Discord',
+    connectLine: 'connect discord in the app to use your picture. this only brings the window forward — nothing signs you in but you.',
+    hostedOnly: 'this page is running in a plain browser. open the goon game from the app to connect discord.',
+
+    lastTitle: 'last opponent',
+    lastNone: 'nobody yet — whoever you duel next shows up here.',
+    lastClear: 'forget them',
+    messageOn: (name) => 'Message ' + (name || 'them') + ' on Discord',
+    /** The recap's warmer variant, offered in the moment it means something. */
+    ggMessage: (name) => 'GG! Message ' + (name || 'them'),
+    dmShort: 'DM',
+
+    agoNow: 'just now',
+    agoUnknown: 'earlier',
+    agoMinutes: (n) => n + ' min ago',
+    agoHours: (n) => n + (n === 1 ? ' hour ago' : ' hours ago'),
+    agoDays: (n) => n + (n === 1 ? ' day ago' : ' days ago'),
+
+    /** Practice mode's opponent. Tile avatar, no DM — it is not a person. */
+    practiceBot: 'Practice Bot',
+    vs: 'VS',
+
+    /** The one-time confirm, before the first duel with anything switched on. */
+    sharePrompt: {
+      icon: '👁',
+      headline: 'Your opponent is about to see this',
+      line: 'Your Discord picture and DM button will be visible to whoever you duel, for this match and every one after it. You can switch both off in the lobby at any time.',
+      go: 'That is fine',
+      cancel: 'Keep it private',
+    },
+    /** Every Message button goes through this — a browser opening mid-duel is a big surprise. */
+    dmConfirm: {
+      icon: '💬',
+      headline: 'Open Discord?',
+      line: (name) => 'This leaves the duel and opens ' + (name || 'their') + ' profile in your browser.',
+      go: 'Open Discord',
+      cancel: 'Stay here',
+    },
   },
 
   /* ---------------------------------------------------------------- draft */
@@ -171,6 +244,16 @@ export const S = Object.freeze({
     chipTooSoon: 'too soon',
     dirIn: 'they sent',
     dirOut: 'you sent',
+
+    /* --- the report card (spec §7.5). It appears ONLY when a duel partner's
+       own media actually reached this machine, and only on the recap: filing a
+       report mid-duel would be a way to interrupt one, and interruptions are
+       exactly what an opponent would weaponise. --- */
+    reportTitle: 'report what they sent',
+    reportLead: 'these files came off their machine, not your library. if any of it should not exist, say so.',
+    reportPick: 'pick the one you mean',
+    reportFlagged: 'flagged during the match',
+    reportPrivacy: "a moderator gets the file's fingerprint, a small thumbnail and your note. they never get your name, and the other player is never told.",
   },
 
   /** Locally computed cosmetics. Nothing here reaches the server. */
@@ -181,6 +264,44 @@ export const S = Object.freeze({
     untouchable: { name: 'Untouchable', why: 'nothing they threw ever reached you.' },
     gg: { name: 'GG', why: 'broke, but never looked away.' },
   }),
+
+  /* ------------------------------------------------- the report card mechanics
+   * The five REASON LABELS are written for a player who has just seen something
+   * they wish they had not, not for a lawyer. The WIRE CODES they map to
+   * (`csam`, `nonconsensual`, `gore`, `illegal`, `other` — proxy/goon-routes.js
+   * REPORT_REASONS) are NOT translatable copy and live in ui/report.js; nothing
+   * here is ever put on the wire.
+   *
+   * Lowercase like the rest of the furniture, and deliberately unsensational:
+   * this control has to be usable by someone who is upset. */
+  report: {
+    reasonHead: 'what is wrong with it',
+    reasons: [
+      { code: 'csam', label: 'sexual content involving a minor' },
+      { code: 'nonconsensual', label: 'someone who did not agree to be in it' },
+      { code: 'gore', label: 'real violence, injury or a death' },
+      { code: 'illegal', label: 'something else that is against the law' },
+      { code: 'other', label: 'something else' },
+    ],
+    /** `other` is the one reason a moderator cannot act on without words. */
+    noteHead: 'tell us what it is',
+    noteHint: (max) => 'up to ' + max + ' characters.',
+    notePlaceholder: 'in your own words…',
+    noteNeeded: 'a line or two, so a moderator knows what they are looking at.',
+
+    submit: 'send report',
+    submitting: 'sending…',
+    /** The id is a handle for a follow-up, not a receipt to celebrate. */
+    done: (id) => 'report sent — id ' + (id || 'unknown'),
+    deduped: 'already reported',
+    failed: "couldn't send — try again",
+    retry: 'try again',
+    givenUp: "couldn't send. it did not go through — nothing was recorded.",
+    cancel: 'never mind',
+
+    thumbLabel: (kind, n) => (kind === 'video' ? 'clip ' : 'image ') + n,
+    evidenceNote: 'a small thumbnail is made here and sent with the report, so a human can check without asking you for the file.',
+  },
 
   /* -------------------------------------------------------------- options */
   options: {
@@ -198,6 +319,12 @@ export const S = Object.freeze({
        that stops moving while the game carries on is the exact symptom. Names
        the fallback too, so turning it off does not feel like losing the bed. */
     shaderSpiralsNote: 'draws the spiral bed live instead of stretching a gif. turn it off if the picture ever freezes while the sound and the clock keep going — the bed falls back to the bundled spirals and nothing else changes.',
+    /* THE VIEWER'S OWN SWITCH, and it is not the same decision as the sharing
+     * toggles in the lobby: those say what leaves this machine, this says what
+     * arrives. Off, their picture is never even FETCHED (ui/discord.js), which
+     * is the difference between hiding a face and not asking for one. */
+    oppAvatars: 'Show opponent avatars',
+    oppAvatarsNote: "off, you see a coloured initial instead of your opponent's discord picture — and their picture is never downloaded at all. it changes nothing about what you share.",
     fullscreen: 'Fullscreen',
     reset: 'Reset',
     close: 'close',

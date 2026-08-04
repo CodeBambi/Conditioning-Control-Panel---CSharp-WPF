@@ -204,14 +204,14 @@ export async function probeEncode() {
  *                  -> b64-chunk the mp4 into cache-put parts
  *                  -> encode-done, and let the host hash/name/commit it.
  *
- * THE SHIPPED HOST CONTRACT TAKES EXACTLY ONE BLOB PER JOB. GoonCacheBridge's
- * `cache-put` is {jobId, seq, b64} with NO art/prv discriminator; the parts are
- * concatenated in order, magic-checked as ISO-BMFF once, and committed by
- * `CompletePageJob(..., previewSource: null)`. So the micro-preview the plan
- * describes has no channel to arrive on and `WANT_PREVIEW` is false — the worker
- * implements it, the wire cannot carry it, and lane-B items simply have no
- * `prevUrl` (the assets grid already treats that as "no preview", because exempt
- * originals do the same). Flip the constant the day the bridge grows a slot.
+ * THE HOST TAKES TWO PART STREAMS PER JOB: `cache-put {jobId, part:'art'|'prv',
+ * seq, b64}` — 'art' is the artifact (mandatory, ≤16 parts), 'prv' the
+ * micro-preview (optional, ≤4 parts / 2 MB, encoded from the same filmstrip).
+ * Each stream has its own gapless seq from 0; `part` absent means 'art'.
+ * The PREVIEW IS COSMETIC END TO END: the bridge drops a refused/oversize
+ * preview stream without touching the artifact, so a prv refusal here is
+ * counted as settled, never failed. `encode-done` claims both counts
+ * ({parts, prvParts}); the host validates art strictly, preview leniently.
  *
  * PROGRESS IS NOT COSMETIC. TransferCompressionService.PageJobStaleMs is THREE
  * MINUTES: a job that stops reporting is requeued out from under us and encoded
@@ -232,8 +232,11 @@ export const PUT_RESULT_TIMEOUT_MS = 45000;
 export const ENCODE_HEARTBEAT_MS = 15000;
 /** The realtime MediaRecorder fallback refuses to sit through longer than this. */
 export const RECORDER_MAX_MS = 30000;
-/** See the header: the shipped bridge has no second slot for the preview. */
-export const WANT_PREVIEW = false;
+/** GoonCacheBridge.MaxPrvParts / MaxPrvBytes — the preview stream's own ceilings. */
+export const PRV_MAX_PARTS = 4;
+export const PRV_MAX_BYTES = 2 * 1024 * 1024;
+/** The bridge carries the preview on the 'prv' part stream — see the header. */
+export const WANT_PREVIEW = true;
 
 /**
  * Split an artifact into `cache-put` parts.
@@ -389,23 +392,62 @@ export function createEncodeDriver({ bridge = defaultBridge, logger = null, caps
     const plan = planPutParts(bytes.length);
     if (!plan.ok) { failJob(j, plan.reason); return; }
 
+    // The preview rides its own 'prv' stream, and it is COSMETIC: any reason it
+    // can't go (absent, too big, not mp4) means "no preview", never a failed job.
+    let prv = null;
+    let prvPlan = { ok: false, parts: [] };
+    try {
+      const pb = meta && meta.prv ? new Uint8Array(meta.prv) : null;
+      if (pb && pb.length >= 32 && pb.length <= PRV_MAX_BYTES
+          && pb[4] === 0x66 && pb[5] === 0x74 && pb[6] === 0x79 && pb[7] === 0x70) {
+        const pp = planPutParts(pb.length, { maxParts: PRV_MAX_PARTS });
+        if (pp.ok) { prv = pb; prvPlan = pp; }
+      }
+    } catch (_e) { prv = null; }
+
     j.phase = 'put';
     j.parts = plan.parts.length;
-    j.lastSeq = plan.parts.length - 1;
+    j.prvParts = prv ? prvPlan.parts.length : 0;
+    j.ackedArt = 0;
+    j.ackedPrv = 0;
+    j.prvSettled = !prv;
     j.meta = {
       w: Math.max(0, Number(meta && meta.w) || 0),
       h: Math.max(0, Number(meta && meta.h) || 0),
       durMs: Math.max(0, Number(meta && meta.durMs) || 0),
     };
     for (const p of plan.parts) {
-      send({ type: 'cache-put', jobId: j.id, seq: p.seq, b64: bytesToB64(bytes.subarray(p.start, p.end)) });
+      send({ type: 'cache-put', jobId: j.id, part: 'art', seq: p.seq, b64: bytesToB64(bytes.subarray(p.start, p.end)) });
     }
-    log('job ' + j.id + ' encoded ' + bytes.length + ' bytes in ' + plan.parts.length + ' part(s)');
+    if (prv) {
+      for (const p of prvPlan.parts) {
+        send({ type: 'cache-put', jobId: j.id, part: 'prv', seq: p.seq, b64: bytesToB64(prv.subarray(p.start, p.end)) });
+      }
+    }
+    log('job ' + j.id + ' encoded ' + bytes.length + ' bytes in ' + plan.parts.length + ' part(s)'
+      + (prv ? ' + preview ' + prv.length + ' bytes in ' + prvPlan.parts.length : ''));
     try {
       j.putTimer = setTimeout(() => {
         if (job === j && j.phase === 'put') failJob(j, 'put-timeout');
       }, PUT_RESULT_TIMEOUT_MS);
     } catch (_e) { /* no timers here is not fatal */ }
+  }
+
+  /** All art parts acked and the preview stream settled (acked or refused)? Commit. */
+  function maybeCommit(j) {
+    if (j.phase !== 'put') return;
+    if (j.ackedArt !== j.parts || !j.prvSettled) return;
+    if (j.putTimer) { try { clearTimeout(j.putTimer); } catch (_e) { /* ignore */ } j.putTimer = null; }
+    j.phase = 'commit';
+    send({
+      type: 'encode-done', jobId: j.id, ok: true, parts: j.parts, prvParts: j.prvParts, ext: 'mp4',
+      w: j.meta.w, h: j.meta.h, durMs: j.meta.durMs,
+    });
+    // The commit reply (seq -1) clears the job; a host that never answers is
+    // handled by its own 5-minute put timeout plus our heartbeat stopping.
+    try {
+      j.putTimer = setTimeout(() => { if (job === j) clearJob(); }, PUT_RESULT_TIMEOUT_MS);
+    } catch (_e) { /* ignore */ }
   }
 
   /** `cache-put-result` — per part, then once more with seq -1 for the commit. */
@@ -420,25 +462,30 @@ export function createEncodeDriver({ bridge = defaultBridge, logger = null, caps
       clearJob();
       return;
     }
+    const part = m.part === 'prv' ? 'prv' : 'art';
     if (!m.ok) {
-      // A refused part means the host dropped the whole buffer; tell it to close
-      // the job rather than leaving it dispatched until the stale timer fires.
+      if (part === 'prv') {
+        // The bridge drops ONLY the preview stream on a prv refusal — the
+        // artifact upload is untouched, so settle the preview and move on.
+        warn('job ' + j.id + ' preview refused (' + String(m.error || '?') + ') — continuing without');
+        j.prvParts = 0;
+        j.prvSettled = true;
+        maybeCommit(j);
+        return;
+      }
+      // A refused ART part means the host dropped the whole buffer; tell it to
+      // close the job rather than leaving it dispatched until the stale timer fires.
       failJob(j, String(m.error || 'put-failed'));
       return;
     }
-    if (j.phase === 'put' && seq === j.lastSeq) {
-      if (j.putTimer) { try { clearTimeout(j.putTimer); } catch (_e) { /* ignore */ } j.putTimer = null; }
-      j.phase = 'commit';
-      send({
-        type: 'encode-done', jobId: j.id, ok: true, parts: j.parts, ext: 'mp4',
-        w: j.meta.w, h: j.meta.h, durMs: j.meta.durMs,
-      });
-      // The commit reply (seq -1) clears the job; a host that never answers is
-      // handled by its own 5-minute put timeout plus our heartbeat stopping.
-      try {
-        j.putTimer = setTimeout(() => { if (job === j) clearJob(); }, PUT_RESULT_TIMEOUT_MS);
-      } catch (_e) { /* ignore */ }
+    if (j.phase !== 'put') return;
+    if (part === 'prv') {
+      j.ackedPrv += 1;
+      if (j.ackedPrv >= j.prvParts) j.prvSettled = true;
+    } else {
+      j.ackedArt += 1;
     }
+    maybeCommit(j);
   }
 
   /* --------------------------------------------------------- the source */
@@ -557,7 +604,8 @@ export function createEncodeDriver({ bridge = defaultBridge, logger = null, caps
     const j = {
       id, cfg, pct: 0, phase: 'fetch', fellBack: false,
       srcUrl: String(m.srcUrl || ''), mime: mimeForKind(m.kind),
-      parts: 0, lastSeq: -1, putTimer: null, meta: { w: 0, h: 0, durMs: 0 },
+      parts: 0, prvParts: 0, ackedArt: 0, ackedPrv: 0, prvSettled: true,
+      putTimer: null, meta: { w: 0, h: 0, durMs: 0 },
     };
     job = j;
     armBeat();
@@ -647,6 +695,10 @@ function normalizeItem(raw) {
     srcUrl: typeof o.srcUrl === 'string' ? o.srcUrl : '',
     artUrl: typeof o.artUrl === 'string' ? o.artUrl : '',
     prevUrl: typeof o.prevUrl === 'string' ? o.prevUrl : '',
+    // The transfer queue's wire identity — exempt originals have no artUrl to
+    // recover it from, so dropping these makes them silently un-sendable.
+    sha: typeof o.sha === 'string' ? o.sha : '',
+    ext: typeof o.ext === 'string' ? o.ext : '',
     bytes: Math.max(0, Number(o.bytes) || 0),
     srcBytes: Math.max(0, Number(o.srcBytes) || 0),
     w: Math.max(0, Number(o.w) || 0),

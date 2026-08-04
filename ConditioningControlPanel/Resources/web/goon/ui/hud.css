@@ -1528,3 +1528,65 @@ html[data-gg-fx="hot"] .gg-announce-sheen { display: none; }
   .gg-announce { top: clamp(3.8rem, 7vh, 5rem); max-width: min(20rem, 84vw); }
   .gg-announce-slot { font-size: 0.76rem; padding: 0.3rem 0.8rem 0.36rem; }
 }
+
+/* ===========================================================================
+ * THE PERSISTENT AVATAR MINIS (docs/GOON_DISCORD_CONTRACT.md §6)
+ *
+ * Two 40px bubbles that stay up for the whole of Live: yours at the head of the
+ * score column, theirs directly above their monitor miniature. The `.gg-ava`
+ * kit itself (box, tile, hue) lives in ui/screens.css — the lobby, the splash
+ * and the recap plates all use it, so it cannot live in the HUD tier. Only the
+ * PLACEMENT is here.
+ *
+ * THE TWO KEEP-OUTS. MERCY owns the bottom-centre strip (.gg-hud-bottom already
+ * reserves 4.6rem for it) and the announcer ribbon owns the top-centre band
+ * (top: clamp(4.4rem, 8vh, 6rem), width max-content, centred). Both minis are
+ * in edge-anchored grid cells the desk already owned, so neither can reach
+ * either band at any viewport — which is why this block adds no positioning of
+ * its own beyond a flex alignment.
+ *
+ * POINTER-EVENTS — THE 0,2,0 TRAP. `.gg-hud-frame .gg-plate { pointer-events:
+ * auto }` near the top of this file is specificity 0,2,0, and the ribbon's
+ * opt-out block above documents the same trap. The minis do not wear .gg-plate
+ * today, but a future hardening pass would reach for it exactly as the ribbon
+ * did — so the opt-out is written here at 0,2,0 as well, LATER in the file, and
+ * the one control that must stay clickable re-opts in at the same weight. A
+ * bubble that ate a click meant for #gg-stage would be a very quiet bug.
+ * ======================================================================== */
+.gg-ava-minibox { display: flex; align-items: center; gap: 0.4rem; }
+.gg-ava-minibox--you { margin-top: 0.15rem; }
+.gg-ava-minibox--opp { width: 100%; justify-content: flex-end; }
+
+.gg-hud-frame .gg-ava-minibox,
+.gg-hud-frame .gg-ava { pointer-events: none; }
+.gg-hud-frame .gg-ava-dm { pointer-events: auto; }
+
+/* Their DM affordance. Blurple, tiny, and present ONLY when they shared DMs —
+   ui/hud.js does not build a disabled variant, because a button that cannot
+   work is worse than no button. */
+.gg-ava-dm {
+  min-width: 34px; height: 26px;
+  padding: 0 0.5rem;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--gg-font);
+  font-size: 0.62rem; font-weight: 800; letter-spacing: 0.1em;
+  color: #fff;
+  background: rgba(88, 101, 242, 0.85);
+  border: 1px solid rgba(120, 132, 255, 0.9);
+  border-radius: var(--gg-radius-pill);
+  box-shadow: 0 2px 10px rgba(88, 101, 242, 0.45);
+  cursor: pointer;
+  transition: background .18s, box-shadow .18s;
+}
+.gg-ava-dm:hover { background: rgba(110, 122, 255, 0.95); box-shadow: 0 2px 16px rgba(88, 101, 242, 0.7); }
+
+/* Sudden death contracts the desk and the body goes with it; the score column
+   keeps yours, which is the one that never moves. */
+.gg-hud-frame.is-sd .gg-ava-minibox--opp { opacity: 0; }
+
+@media (orientation: portrait), (max-width: 720px) {
+  /* Narrow: the monitor column is tight, so their bubble tucks in beside the
+     head instead of sitting over it, and both drop a size. */
+  .gg-hud-frame .gg-ava[data-size="mini"] { --gg-ava-size: 32px; }
+  .gg-ava-dm { min-width: 30px; height: 24px; font-size: 0.58rem; }
+}

@@ -479,5 +479,389 @@ function mountRecap(result) {
     'and a beat with no counter at all switches the rule off rather than tripping it');
 }
 
+/* ============================================================================
+ * 6. P2P MEDIA TRANSFER, END TO END: prepick -> transfer -> fire -> render.
+ *
+ * Two REAL match engines over a REAL loopback bulk pair, two real prepick queues
+ * and the real protocol. The only fakes are the two ends the page cannot have
+ * under node: the local artifact source (the compression cache) and the received
+ * store's disk (URL.createObjectURL does not exist here). Everything between them
+ * — consent, caps, the channel, the offer gate, the chunking, the tryFirePayload
+ * wrapper and the receiver-side resolution — is production code.
+ *
+ * The second half is the case that matters MORE: the same setup on a transport
+ * that cannot carry bulk degrades to today's behaviour with no special case
+ * anywhere. That is the promise the whole design is built on.
+ * ========================================================================= */
+{
+  const { createMediaQueue } = await import('../net/mediaQueue.js');
+  const { createGoonMediaPool } = await import('../exec/media.js');
+  const { local: localCaps } = await import('../core/caps.js');
+  const { GoonPayloadKind } = await import('../core/contracts.js');
+
+  const tick = (ms = 25) => new Promise((r) => setTimeout(r, ms));
+  const SHA = (c) => String(c).repeat(64).slice(0, 64);
+  const SHA_VID = SHA('a');
+  const SHA_IMG = SHA('b');
+
+  /** The compression side, as the queue sees it: two verbs and some bytes. */
+  function fakeArtifacts(list) {
+    const bufs = new Map();
+    for (const a of list) {
+      const b = new Uint8Array(a.bytes);
+      for (let i = 0; i < b.length; i++) b[i] = (i * 31 + a.sha.charCodeAt(0)) & 0xff;
+      bufs.set(a.sha, b);
+    }
+    return {
+      bufs,
+      listSendable: () => list.map((a) => Object.assign({}, a)),
+      open(sha) {
+        const b = bufs.get(sha);
+        if (!b) return null;
+        const meta = list.find((x) => x.sha === sha);
+        return {
+          bytes: b.length,
+          mime: meta.mime,
+          read: (offset, len) => b.buffer.slice(offset, Math.min(offset + len, b.length)),
+        };
+      },
+    };
+  }
+
+  /** The ReceivedStore contract, in memory, with no host and no Blob. */
+  function fakeStore() {
+    const held = new Map();
+    const parts = new Map();
+    return {
+      held,
+      has: (sha) => held.has(sha),
+      partialLength: (sha) => (parts.has(sha) ? parts.get(sha).len : 0),
+      begin(sha, mime, bytes) {
+        if (!parts.has(sha)) parts.set(sha, { buf: new Uint8Array(bytes), len: 0, mime });
+        return true;
+      },
+      write(sha, offset, ab) {
+        const p = parts.get(sha);
+        if (!p || offset !== p.len) return false;
+        const u = new Uint8Array(ab);
+        p.buf.set(u, offset);
+        p.len += u.length;
+        return true;
+      },
+      async commit(sha) {
+        const p = parts.get(sha);
+        if (!p) return { ok: false, error: 'io-failed' };
+        parts.delete(sha);
+        held.set(sha, { bytes: p.buf, mime: p.mime });
+        return { ok: true, url: 'https://ccp.cache/recv/' + sha + '.bin', bytes: p.len };
+      },
+      abort(sha) { parts.delete(sha); },
+    };
+  }
+
+  /** Stand two matches up in a consented Draft, with the media-transfer opt-in on both sides. */
+  async function consentedPair(pair) {
+    const caps = localCaps({ transfer: true });
+    const a = new GoonMatchService(pair.host, true, { logger: quiet, caps, displayName: 'A', tag: 'GG:A' });
+    const b = new GoonMatchService(pair.guest, false, { logger: quiet, caps, displayName: 'B', tag: 'GG:B' });
+    a.adoptLobby();
+    b.adoptLobby();
+    await pair.connect();
+    await tick(60);
+    a.proposeConsent(600, 0, 30000);
+    await tick(40);
+    a.setMediaTransfer(true);
+    b.setMediaTransfer(true);
+    await tick(40);
+    a.confirmConsent();
+    b.confirmConsent();
+    await tick(60);
+    return { a, b };
+  }
+
+  // ------------------------------------------------ 6a. the whole thing, over bulk
+  {
+    const pair = createLoopbackPair(loopbackOptions({
+      latencyMs: 0, jitterMs: 0, guestClockSkewMs: 0, bulk: true, logger: quiet,
+    }));
+
+    const { a, b } = await consentedPair(pair);
+    ok(pair.host.supportsBulk === true && pair.guest.supportsBulk === true,
+      'the loopback pair opted IN to bulk (tests only — Practice mode never does)');
+    ok(a.phase === GoonMatchPhase.Draft && b.phase === GoonMatchPhase.Draft,
+      'both sides consented and entered the draft', `${a.phase}/${b.phase}`);
+    ok(a.mediaTransferAgreed === true && b.mediaTransferAgreed === true,
+      'and both declared the media-transfer opt-in on the consent frame');
+
+    const artifacts = fakeArtifacts([
+      { sha: SHA_VID, bytes: 90000, mime: 'video/mp4', kind: 'video', exempt: false },
+      { sha: SHA_IMG, bytes: 40000, mime: 'image/png', kind: 'image', exempt: false },
+    ]);
+    const storeA = fakeStore();
+    const storeB = fakeStore();
+    const poolB = createGoonMediaPool();
+    poolB.setManifest({
+      images: [{ name: 'own-i', url: 'https://ccp.assets/own/i' }],
+      videos: [{ name: 'own-v', url: 'https://ccp.assets/own/v' }],
+    });
+
+    const qA = createMediaQueue({
+      artifacts, store: storeA, logger: quiet, canSend: () => true, idlePollMs: 40,
+    });
+    // B sends nothing (no artifacts, no premium) and receives everything — which is
+    // the asymmetry the product is built on: only SENDING is gated.
+    const qB = createMediaQueue({
+      artifacts: { listSendable: () => [], open: () => null },
+      store: storeB, logger: quiet, canSend: () => false, idlePollMs: 40,
+    });
+    const received = [];
+    qB.onReceived((e) => {
+      received.push(e);
+      poolB.addReceived({ sha: e.sha, kind: e.kind, mime: e.mime, url: e.url, bytes: e.bytes });
+    });
+
+    qA.attach(a, pair.host);
+    qB.attach(b, pair.guest);
+    ok(qB.enabled() === false, 'B cannot send: canSend() is the premium gate and it said no');
+
+    // The queue primes at Draft; the hello round trip and the idle poll are what make
+    // it start, so give it a moment rather than assuming one turn.
+    for (let i = 0; i < 80 && storeB.held.size < 1; i++) await tick(25);
+
+    ok(qA.enabled() === true, "A's gate is open: caps + both consents + peer support + supportsBulk + hello");
+    ok(storeB.held.size >= 1, 'at least one artifact crossed the wire and committed on B',
+      String(storeB.held.size));
+    ok(received.length >= 1 && /^[0-9a-f]{64}$/.test(received[0].sha),
+      'and the queue announced it so boot can register it with the media pool');
+
+    const landedSha = received[0].sha;
+    const sent = artifacts.bufs.get(landedSha);
+    const got = storeB.held.get(landedSha).bytes;
+    ok(got.length === sent.length && got[0] === sent[0] && got[got.length - 1] === sent[sent.length - 1],
+      'the bytes that landed are the bytes that were sent, start and end',
+      `${got.length} vs ${sent.length}`);
+
+    // --- the payload. Live phase + charges are forced: this section is about the
+    // wrapper and the tag, not about the charge economy (selftest-core owns that).
+    a._phase = GoonMatchPhase.Live;
+    b._phase = GoonMatchPhase.Live;
+    a._scoring._charges = 9;
+    // B only knows what A's state frames told it, and we skipped Live entirely — so
+    // hand it the same number by hand or the inbound gate refuses on the economy.
+    b._opponentChargesKnown = 9;
+
+    const kind = received[0].kind === 'video' ? GoonPayloadKind.Video : GoonPayloadKind.FlashBurst;
+    const tags = qA.tagsFor(kind);
+    ok(tags.length >= 1 && tags[0] === 'xfer:' + landedSha,
+      'tagsFor hands back the landed artifact as an xfer: tag', tags.join(','));
+
+    let inbound = null;
+    b.onPayloadAccepted((e) => { inbound = e && e.payload; });
+    const res = a.tryFirePayload({ kind, durationMs: 5000, intensity: 0.5 });
+    ok(res && res.ok === true, 'the payload fired', res && res.error);
+    await tick(80);
+
+    ok(!!inbound, 'and it arrived on the other side');
+    ok(!!inbound && Array.isArray(inbound.tags) && inbound.tags[0] === 'xfer:' + landedSha,
+      "carrying the xfer tag the queue's tryFirePayload wrapper added — with zero changes to "
+      + 'ui/arsenal.js or ui/soloDriver.js', JSON.stringify(inbound && inbound.tags));
+
+    // --- and the receiver renders THEIR file.
+    const drawn = poolB.drawFor(received[0].kind, inbound);
+    ok(drawn && drawn.provenance === 'peer' && drawn.url.startsWith('https://ccp.cache/recv/'),
+      "the receiver resolves the tag to the SENDER's artifact, flagged as theirs",
+      drawn ? `${drawn.provenance} ${drawn.url}` : 'null');
+
+    // --- consumed once, never twice.
+    ok(qA.tagsFor(kind).indexOf('xfer:' + landedSha) < 0,
+      'the artifact was marked consumed by the wrapper — one landing, one drop');
+
+    qA.detach();
+    qB.detach();
+    ok(typeof a.tryFirePayload === 'function', 'detach left a callable tryFirePayload behind');
+    a.dispose(); b.dispose(); pair.dispose();
+  }
+
+  // ------------------------------- 6b. the relay case: dormant, with no special case
+  {
+    // A transport that cannot carry bulk is EXACTLY the relay situation: connected,
+    // healthy, and physically unable to move media. Nothing branches on it anywhere.
+    const pair = createLoopbackPair(loopbackOptions({
+      latencyMs: 0, jitterMs: 0, guestClockSkewMs: 0, logger: quiet,
+    }));
+
+    const { a, b } = await consentedPair(pair);
+    ok(pair.host.supportsBulk === false,
+      'a default loopback pair reports supportsBulk false — the relay-shaped path');
+    ok(pair.host.isConnected === true,
+      'while `isConnected` is TRUE, which is precisely why it is never the bulk gate (trap #1)');
+
+    const q = createMediaQueue({
+      artifacts: fakeArtifacts([{ sha: SHA_VID, bytes: 4000, mime: 'video/mp4', kind: 'video', exempt: false }]),
+      store: fakeStore(), logger: quiet, canSend: () => true, idlePollMs: 40,
+    });
+    q.attach(a, pair.host);
+    await tick(200);
+
+    ok(q.enabled() === false, 'the queue is dormant even though everything else agreed');
+    ok(q.tagsFor(GoonPayloadKind.Video).length === 0, 'so tagsFor returns []');
+
+    a._phase = GoonMatchPhase.Live;
+    b._phase = GoonMatchPhase.Live;
+    a._scoring._charges = 9;
+    b._opponentChargesKnown = 9;
+    let inbound = null;
+    b.onPayloadAccepted((e) => { inbound = e && e.payload; });
+    const res = a.tryFirePayload({ kind: GoonPayloadKind.Video, durationMs: 5000, intensity: 0.5 });
+    await tick(80);
+    ok(res && res.ok === true, 'the payload still fires — a drop can never block on a transfer');
+    ok(!!inbound && (inbound.tags === null || inbound.tags === undefined),
+      'and it goes out UNTAGGED, byte-identical to the wire before this feature existed',
+      JSON.stringify(inbound && inbound.tags));
+
+    q.detach();
+    a.dispose(); b.dispose(); pair.dispose();
+  }
+}
+
+/* ===========================================================================
+ * 6. DISCORD SHARING — the ORDERING half (docs/GOON_DISCORD_CONTRACT.md §7).
+ *
+ * The behaviour of the module is proved against a DOM in selftest-hud.js §12.
+ * What can only be proved HERE is where the calls sit in boot's lifecycle,
+ * because every risk in this block is a placement risk:
+ *
+ *   · a VS SPLASH that outlives the countdown. It is z55 decoration over the
+ *     desk; one left behind at Recap is a full-bleed node on a screen whose
+ *     entire history is "the player could not click anything";
+ *   · a RICH PRESENCE that strands. Every road out of a match has to post
+ *     `off`, or somebody's Discord says "In a duel" an hour after they quit;
+ *   · a MERCY BEAT wired to one of its two callers. The button and the Escape
+ *     ladder both concede and neither is privileged;
+ *   · a PEER-CARD FETCH that gates something. It may never be awaited.
+ * ======================================================================== */
+{
+  const boot = read('boot.js');
+  const code = stripComments(boot);
+  const lobby = stripComments(read('ui/screens/lobby.js'));
+  const recap = stripComments(read('ui/screens/recap.js'));
+  const hud = stripComments(read('ui/hud.js'));
+  const discord = stripComments(read('ui/discord.js'));
+  const avatar = stripComments(read('ui/avatar.js'));
+
+  const fn = (src, name, next) => {
+    const start = src.indexOf('function ' + name + '(');
+    if (start < 0) return '';
+    const end = next ? src.indexOf('function ' + next + '(', start) : -1;
+    return end > start ? src.slice(start, end) : src.slice(start);
+  };
+
+  // ---- ONE OWNER PER VERB. bridge.on throws on a duplicate, so the two the
+  //      module claims must appear nowhere else on the page.
+  ok(/subscribeBridge\('discord',/.test(discord) && /subscribeBridge\('peer-card',/.test(discord),
+    'ui/discord.js is the one thing that registers the discord + peer-card handlers');
+  ok(!/bridge\.on\(['"]discord['"]|bridge\.on\(['"]peer-card['"]/.test(code),
+    'and boot.js registers NEITHER — a second on() would throw at wiring time');
+  ok((code.match(/createDiscord\(/g) || []).length === 1,
+    'built exactly once, in buildApp — the lobby it renders into mounts many times a session');
+  ok(/getRoom: \(\) => session\.room/.test(code),
+    'the room is handed over as a THUNK — a relay fallback replaces session.room mid-match');
+
+  // ---- THE VS SPLASH: one raise, and a drop on every road out.
+  ok(/raiseVsSplash\(\)/.test(fn(code, 'onPhase')),
+    'boot raises the VS splash from the phase router');
+  const phases = fn(code, 'onPhase', 'ensureSession');
+  const atCountdown = phases.slice(phases.indexOf('GoonMatchPhase.Countdown'), phases.indexOf('GoonMatchPhase.Live'));
+  ok(/raiseVsSplash\(\)/.test(atCountdown), 'at Countdown, alongside the screen — never before it');
+  const atLive = phases.slice(phases.indexOf('case GoonMatchPhase.Live'), phases.indexOf('GoonMatchPhase.SuddenDeath'));
+  ok(/dropVsSplash\(\)/.test(atLive),
+    'and the LIVE arm drops it — that is the hard deadline, whatever it was doing');
+  ok(/dropVsSplash\(\)/.test(fn(code, 'clearForRecap', 'forceRecap')),
+    'clearForRecap drops it too, on the same pass that sweeps #gg-stage');
+  ok(/dropVsSplash\(\)/.test(fn(code, 'teardownEverything', 'actions')) || /dropVsSplash\(\)/.test(code.slice(code.indexOf('async function teardownEverything'), code.indexOf('const actions'))),
+    'and so does teardownEverything — four callers, one idempotent remove');
+  ok(/pointer-events: none/.test(read('ui/screens.css').slice(read('ui/screens.css').indexOf('.gg-vs-splash {'), read('ui/screens.css').indexOf('.gg-vs-splash.is-in'))),
+    'the splash cannot take a click while it is up');
+  {
+    const css = read('ui/screens.css');
+    const block = css.slice(css.indexOf('.gg-vs-splash {'), css.indexOf('.gg-vs-splash.is-in'));
+    const z = (block.match(/z-index:\s*(\d+)/) || [])[1];
+    const mercyZ = (read('goon.css').match(/--gg-mercy-z:\s*(\d+)/) || [])[1];
+    ok(Number(z) === 55, 'it sits at z55', String(z));
+    ok(Number(z) < Number(mercyZ),
+      'which is UNDER mercy — nothing in this feature may ever be over the concede', `${z} < ${mercyZ}`);
+  }
+  ok(/if \(reduced\) return null;/.test(avatar),
+    'and reduced motion skips it entirely rather than parking a card on screen for 1.6s');
+
+  // ---- RICH PRESENCE: every road out posts `off`.
+  const teardown = code.slice(code.indexOf('async function teardownEverything'), code.indexOf('const actions'));
+  ok(/setRpState\?\.\('off'\)/.test(teardown),
+    "teardownEverything posts rp-state off — leave, quit, a failed connect and a re-host all run through it");
+  ok(/setRpState\?\.\('off'\)/.test(fn(code, 'finishExit')),
+    'and so does finishExit, because the page may be gone before the async teardown lands');
+  ok(/setRpState\?\.\('live'\)/.test(atLive), 'Live arms the live state');
+  ok(/setRpState\?\.\('recap'\)/.test(phases.slice(phases.indexOf('case GoonMatchPhase.Recap'))),
+    'and the Recap arm the recap one');
+  ok(/setRpState\?\.\('lobby'\)/.test(lobby),
+    'the lobby screen posts its own on mount — it is the screen, not a phase');
+  ok(/if \(v === rp\) return false;/.test(discord),
+    'and a repeat is dropped inside the module, so posting it liberally costs one frame');
+
+  // ---- MERCY: one seam, both callers.
+  const attach = code.slice(code.indexOf('function attachMatch('), code.indexOf('function stashRoom('));
+  ok(/match\.declareMercy = /.test(attach) && /emitAva\('mercy', 'you'\)/.test(attach),
+    'the mercy beat wraps the match INSTANCE — the button and the Escape ladder both go through it');
+  ok(/origMercy\(\.\.\.args\)/.test(attach),
+    'and passes the engine call straight through — nothing about a concede depends on a decoration');
+  ok(/emitAva\('mercy', 'opp'\)/.test(attach),
+    'their mercy is read off the result, the only place it is knowable');
+  ok((code.match(/emitAva\('mercy'/g) || []).length === 2,
+    'exactly two mercy emit sites, one per side', String((code.match(/emitAva\('mercy'/g) || []).length));
+
+  // ---- THE OTHER BEATS, at the seams that already existed.
+  ok(/emitAva\('land', 'you'/.test(hud) && /emitAva\('land', 'opp'/.test(hud),
+    'ui/hud.js lands the beat on both sides — inbound payload, and the receipt for ours');
+  ok(/emitAva\('fire', 'you'/.test(hud), 'the arsenal onFired seam fires one');
+  ok(/emitAva\('pop', 'you'\)/.test(hud) && /emitAva\('drop', 'you'/.test(hud),
+    'and a bubble pop raises both the pop and (rarely) the drop');
+  ok(/emitAva\('cue', 'you'/.test(hud) && /emitAva\('emote', 'you'/.test(hud),
+    'the announcer cue and the outbound emote ride the shared log sink');
+  ok(/mountAnnouncer\(\{ host: root, match, audio, onLog \}\)/.test(hud)
+    && /mountEmotes\(\{ host: root, match, audio, onLog \}\)/.test(hud),
+    'which is why NEITHER mount call grew a wrapper argument');
+  ok(/emitAva\(beat, 'you'\)/.test(recap) && /'lose' : 'win', 'opp'/.test(recap),
+    'the recap emits win AND lose — avatarFx does not mirror those two');
+  ok(/if \(beat === 'draw'\) \{ emitAva\('draw', 'you'\); return; \}/.test(recap),
+    'but a draw exactly ONCE, because avatarFx applies it to both bubbles itself');
+  ok(/if \(stung \|\| !tone\) return;/.test(recap),
+    'and all of it is on the sting latch — paint() runs again when the countersignature lands');
+
+  // ---- THE FETCH NEVER GATES.
+  ok(!/await [^\n]*notePeerCardVer|await [^\n]*peer-card/.test(code + hud + lobby),
+    'nothing on the page ever AWAITS a peer card — it may not gate lobby, countdown or Live');
+  ok(/if \(!showOpponentAvatars\(\)\) return \{ requested: false, reason: 'pref-off' \};/.test(discord),
+    'and the viewer pref is checked BEFORE the request, so OFF suppresses the fetch and not just the pixels');
+  ok(discord.indexOf("reason: 'pref-off'") < discord.indexOf("counters.cardReqs++"),
+    'the pref gate is genuinely ahead of the post, not merely present');
+
+  // ---- THE FIRST-DUEL CONFIRM sits where it cannot be swept unanswered.
+  ok(/askSharePrompt\(\{ discord, sheets \}\)/.test(lobby),
+    'the one-time share confirm hangs off the lobby, not the countdown');
+  ok(/if \(answer === null\) return;/.test(lobby),
+    'and a swept sheet (closeChrome closes every sheet at Countdown) signs NOTHING');
+  ok(/dismissible: false/.test(discord),
+    'it is not scrim-dismissible either — a click-through that meant "yes" is the worst reading of a consent sheet');
+  ok(/writePrefs\(\{ shareAvatar: false, shareDm: false \}\)/.test(discord),
+    'declining turns the sharing off rather than remembering that it was refused');
+
+  // ---- NO IDENTIFIER, ANYWHERE ON THE PAGE.
+  const pageSrc = discord + avatar + hud + lobby + recap + code;
+  ok(!/dm_id|snowflake|discordapp\.com\/users|cdn\.discordapp/.test(pageSrc),
+    'no page module names a snowflake, a dm_id or a Discord URL — the host owns all three');
+  ok(/which: w \}/.test(discord) || /type: 'discord-open-dm', which: w/.test(discord),
+    'discord-open-dm carries WHICH and nothing else');
+}
+
 console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);
 process.exit(failures === 0 ? 0 : 1);

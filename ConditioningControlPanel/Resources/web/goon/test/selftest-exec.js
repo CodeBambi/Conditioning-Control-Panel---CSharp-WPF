@@ -3332,6 +3332,385 @@ async function main() {
     for (const id of LAYER_IDS) byId.get(id).replaceChildren();
   }
 
+  /* =========================================================================
+   * P2P MEDIA TRANSFER — the RECEIVER side (spec §4.3).
+   *
+   * These run against the REAL exec/media.js pool rather than fakeMedia(),
+   * because the whole property under test is the separation between the deck
+   * (the player's own preset) and the received map (what a partner sent). A
+   * fake that merged them would pass every check here and ship the bug.
+   * ======================================================================= */
+
+  /** 64 hex chars, deterministic per letter. Only a real sha is ever accepted. */
+  const SHA = (c) => String(c).repeat(64).slice(0, 64);
+  const SHA_IMG = SHA('a');
+  const SHA_VID = SHA('b');
+  const SHA_GONE = SHA('c');
+  const SHA_BLOCKED = SHA('d');
+
+  const ownManifest = () => ({
+    images: Array.from({ length: 6 }, (_, i) => ({ name: 'own-img-' + i, url: 'https://ccp.assets/own/i' + i })),
+    videos: Array.from({ length: 4 }, (_, i) => ({ name: 'own-vid-' + i, url: 'https://ccp.assets/own/v' + i })),
+  });
+
+  /** Run `fn` with a deterministic Math.random, so two decks are comparable. */
+  function seeded(fn) {
+    const orig = Math.random;
+    let s = 987654321;
+    Math.random = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+    try { return fn(); } finally { Math.random = orig; }
+  }
+
+  // ------------------------------------------- drawFor: the resolution order
+  {
+    const { createGoonMediaPool } = await import('../exec/media.js');
+    const pool = createGoonMediaPool();
+    pool.setManifest(ownManifest());
+
+    ok(pool.addReceived({ sha: SHA_IMG, kind: 'image', mime: 'image/webp', url: 'https://ccp.cache/recv/a.webp' }),
+      'addReceived takes a well-formed artifact');
+    ok(pool.addReceived({ sha: SHA_VID, kind: 'video', mime: 'video/mp4', url: 'https://ccp.cache/recv/b.mp4' }),
+      '…of either kind');
+    ok(pool.addReceived({ sha: 'not-a-sha', kind: 'image', url: 'x' }) === false,
+      'and refuses anything whose id is not a sha — the id is the only thing that ever names a file');
+    ok(pool.receivedCount() === 2, 'two artifacts held', String(pool.receivedCount()));
+
+    // 1. tag + in the store -> the PEER's file, flagged as theirs.
+    const hit = pool.drawFor('image', { tags: ['xfer:' + SHA_IMG] });
+    ok(hit && hit.provenance === 'peer' && hit.url === 'https://ccp.cache/recv/a.webp',
+      'a tag we hold resolves to the SENDER\'s artifact with provenance peer',
+      hit ? `${hit.provenance} ${hit.url}` : 'null');
+    ok(hit.acquire().provenance === 'peer', 'and the handle carries the provenance too, for the renderers');
+
+    // 2. tag we never got -> our own library, exactly as today.
+    const missed = pool.drawFor('image', { tags: ['xfer:' + SHA_GONE] });
+    ok(missed && missed.provenance === 'local' && missed.url.startsWith('https://ccp.assets/'),
+      'a tag that never landed falls back to our OWN library — the fallback IS the current code path',
+      missed ? missed.url : 'null');
+
+    // 3. kind mismatch -> SKIPPED, and the next tag still gets its turn.
+    const skipped = pool.drawFor('image', { tags: ['xfer:' + SHA_VID, 'xfer:' + SHA_IMG] });
+    ok(skipped && skipped.provenance === 'peer' && skipped.url.endsWith('a.webp'),
+      'a video tag on an image draw is skipped, not stretched — the next tag is tried',
+      skipped ? skipped.url : 'null');
+    const onlyWrongKind = pool.drawFor('video', { tags: ['xfer:' + SHA_IMG] });
+    ok(onlyWrongKind && onlyWrongKind.provenance === 'local',
+      'and a tag list of nothing but the wrong kind lands on our own library');
+
+    // 4. unknown namespaces are ignored, never guessed at.
+    const foreign = pool.drawFor('image', { tags: ['lol:whatever', 42, null, 'xfer:' + SHA_IMG] });
+    ok(foreign && foreign.provenance === 'peer', 'unrecognised tags are skipped without a throw');
+
+    // 5. no tags at all -> today's line, unchanged.
+    for (const p of [null, {}, { tags: null }, { tags: [] }]) {
+      const own = pool.drawFor('image', p);
+      ok(own && own.provenance === 'local', 'an untagged payload draws from our own library');
+    }
+
+    // 6. THE RENDER-TIME GATE. Blocked -> null -> the caller draws its own.
+    pool.addReceived({ sha: SHA_BLOCKED, kind: 'image', mime: 'image/png', url: 'https://ccp.cache/recv/d.png' });
+    let asked = 0;
+    pool.attachBlocklist({
+      knows: () => true,
+      isBlocked: (sha) => { asked++; return sha === SHA_BLOCKED; },
+    });
+    ok(pool.acquireByTag('xfer:' + SHA_BLOCKED) === null,
+      'acquireByTag returns null for a blocklisted sha — the gate that puts pixels on screen');
+    ok(asked > 0, 'and it really asked the blocklist', String(asked));
+    const blockedDraw = pool.drawFor('image', { tags: ['xfer:' + SHA_BLOCKED] });
+    ok(blockedDraw && blockedDraw.provenance === 'local',
+      'so a blocked tag renders the receiver\'s own library, as if the transfer had never landed');
+    ok(pool.acquireByTag('xfer:' + SHA_IMG) !== null, 'an unblocked one still resolves');
+    ok(pool.acquireByTag('nope:' + SHA_IMG) === null, 'and only the xfer: namespace is a tag at all');
+
+    // 7. the deck can NEVER surface a peer artifact by itself.
+    let peerFromDeck = 0;
+    for (let i = 0; i < 200; i++) {
+      const d = pool.draw();
+      if (d && d.provenance !== 'local') peerFromDeck++;
+    }
+    ok(peerFromDeck === 0,
+      'two hundred random draws never once surfaced the opponent\'s file — their media appears '
+      + 'exactly where their payload asked for it and nowhere else', String(peerFromDeck));
+
+    // 8. dropReceived is the blocklist sweep / user delete.
+    ok(pool.dropReceived(SHA_IMG) === true && pool.hasReceived(SHA_IMG) === false,
+      'dropReceived forgets it');
+    ok(pool.drawFor('image', { tags: ['xfer:' + SHA_IMG] }).provenance === 'local',
+      'and the tag falls back the moment it is gone');
+  }
+
+  // -------------------------------- addReceived does not disturb the deck
+  {
+    const { createGoonMediaPool } = await import('../exec/media.js');
+    const m = ownManifest();
+
+    const clean = seeded(() => {
+      const p = createGoonMediaPool();
+      p.setManifest(m);
+      return Array.from({ length: 14 }, () => p.draw().name);
+    });
+    const interrupted = seeded(() => {
+      const p = createGoonMediaPool();
+      p.setManifest(m);
+      const out = [];
+      for (let i = 0; i < 14; i++) {
+        // Artifacts land MID-MATCH, between draws. That must be a Map write and
+        // nothing else: no reshuffle, no disturbance of the 8-draw echo guard.
+        if (i === 3 || i === 7) {
+          p.addReceived({ sha: SHA(i === 3 ? 'e' : 'f'), kind: 'image', mime: 'image/png', url: 'u' + i });
+        }
+        out.push(p.draw().name);
+      }
+      return out;
+    });
+    ok(clean.join('|') === interrupted.join('|'),
+      'the draw sequence is byte-identical either side of two addReceived calls',
+      `${clean.join(',')} vs ${interrupted.join(',')}`);
+
+    // …and setManifest's hard deck reset cannot destroy them.
+    const p = createGoonMediaPool();
+    p.setManifest(m);
+    p.addReceived({ sha: SHA_VID, kind: 'video', mime: 'video/mp4', url: 'https://ccp.cache/recv/b.mp4' });
+    const counts = p.setManifest({ images: [{ name: 'new', url: 'https://ccp.assets/new' }], videos: [] });
+    ok(counts.images === 1 && counts.videos === 0, 'the deck really was re-dealt');
+    ok(p.hasReceived(SHA_VID) === true,
+      'setManifest re-deals the DECK and leaves the received map alone (trap register #5)');
+    ok(p.drawFor('video', { tags: ['xfer:' + SHA_VID] }).provenance === 'peer',
+      'the tag still resolves after a preset change, even though there is no local video at all');
+  }
+
+  // ------------------------------------ videos: the payload path, and only it
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const host = byId.get('gg-fx-vwin');
+    const { createGoonMediaPool } = await import('../exec/media.js');
+    const pool = createGoonMediaPool();
+    pool.setManifest(ownManifest());
+    pool.addReceived({ sha: SHA_VID, kind: 'video', mime: 'video/mp4', url: 'https://ccp.cache/recv/b.mp4' });
+
+    const ex = createExecutor({ media: pool, layers, logger: quiet, toyBridge: null });
+    const m = fakeMatch();
+    ex.attach(m);
+    const R = ex.rendererFor(GoonElement.Videos);
+
+    R.renderPayload({ id: 'pT1', duration_ms: 40000, intensity: 0.5, tags: ['xfer:' + SHA_VID] }, () => {});
+    const win = liveWins(host)[0];
+    const vid = win && win.findAll('gg-vwin-vid')[0];
+    ok(!!vid && vid.src === 'https://ccp.cache/recv/b.mp4',
+      'a Video payload carrying an xfer tag opens the window on the SENDER\'s clip',
+      vid ? vid.src : 'no video');
+
+    // A dud peer file must not loop: reSource redraws from OUR OWN library.
+    vid.onerror();
+    ok(vid.src.startsWith('https://ccp.assets/'),
+      'and a peer clip that fails to decode re-sources from the receiver\'s own library — '
+      + 'never from the same tag, or a dud file would loop until MAX_SOURCE_TRIES',
+      vid.src);
+
+    R.stop();
+    ex.stopAll();
+    await sleep(GHOST_WAIT);
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+
+    // An untagged payload is byte-for-byte the old behaviour.
+    R.renderPayload({ id: 'pT2', duration_ms: 40000, intensity: 0.5 }, () => {});
+    const plainVid = liveWins(host)[0].findAll('gg-vwin-vid')[0];
+    ok(plainVid.src.startsWith('https://ccp.assets/'),
+      'an untagged Video payload draws from the receiver\'s library exactly as before', plainVid.src);
+    ex.stopAll();
+    ex.detach();
+    await sleep(GHOST_WAIT);
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+  }
+
+  // ------------------------------- flashes: up to XFER_TAGS_MAX, each spent once
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const host = byId.get('gg-fx-flash');
+    const F = await import('../exec/flashes.js');
+    const { createGoonMediaPool } = await import('../exec/media.js');
+    const pool = createGoonMediaPool();
+    pool.setManifest(ownManifest());
+    const tagShas = ['1', '2', '3', '4'].map((c) => SHA(c));
+    tagShas.forEach((sha, i) => pool.addReceived({
+      sha, kind: 'image', mime: 'image/png', url: 'https://ccp.cache/recv/t' + i + '.png',
+    }));
+
+    ok(F.XFER_TAGS_MAX === 3,
+      'exec/flashes.js mirrors the protocol\'s XFER_TAGS_MAX locally (exec/ never imports net/)',
+      String(F.XFER_TAGS_MAX));
+
+    const ex = createExecutor({ media: pool, layers, logger: quiet, toyBridge: null });
+    ex.attach(fakeMatch());
+    const R = ex.rendererFor(GoonElement.Flashes);
+
+    // FOUR tags offered; the cap is three, and each of those is spent exactly once.
+    const cancel = R.renderPayload({
+      id: 'pF1', duration_ms: 4000, intensity: 0.8,
+      tags: tagShas.map((s) => 'xfer:' + s),
+    }, () => {});
+    await sleep(900);
+    const srcs = host.findAll('gg-flash').map((el) => el.src || '');
+    const peer = srcs.filter((s) => s.startsWith('https://ccp.cache/recv/'));
+    const own = srcs.filter((s) => s.startsWith('https://ccp.assets/'));
+    ok(peer.length === 3,
+      'a burst shows at most XFER_TAGS_MAX of the sender\'s images — the rest is the receiver\'s '
+      + 'own library, which is what keeps a 30-flash squall from costing 30 transfers',
+      `${peer.length} peer / ${own.length} own`);
+    ok(new Set(peer).size === peer.length,
+      'and each landed artifact is spent ONCE — a repeated file reads as a bug, not as emphasis',
+      peer.join(','));
+    ok(!peer.includes('https://ccp.cache/recv/t3.png'),
+      'the fourth tag was never used: the cap is a cap, not a suggestion');
+    ok(own.length > 0, 'the burst kept going on our own images after the tags ran out', String(own.length));
+    cancel();
+    ex.stopAll();
+    ex.detach();
+    await sleep(60);
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+  }
+
+  /* ------------------------------------------------- the received store, hosted
+   *
+   * The disk backend talks to TransferInboxStore through five verbs that ALL reply
+   * with the same `goon-recv-result` shape carrying the same job id — so the
+   * correlation is a per-id FIFO, not a map lookup. This fake host is the shipped
+   * one's contract: replies in request order, seq-gapless, and a commit that can
+   * refuse with the DtrhLoomStore vocabulary.
+   */
+  {
+    const { createReceivedStore, CHUNK_BYTES } = await import('../exec/receivedStore.js');
+
+    function fakeHost({ commitError = null, beginError = null } = {}) {
+      const sent = [];
+      let onResult = null;
+      const bridge = {
+        isHosted: true,
+        on(type, fn) { if (type === 'goon-recv-result') onResult = fn; },
+        send(msg) {
+          sent.push(msg);
+          const reply = (o) => Promise.resolve().then(() => onResult && onResult(Object.assign({ id: msg.id }, o)));
+          if (msg.type === 'goon-recv-begin') reply({ ok: !beginError, error: beginError });
+          else if (msg.type === 'goon-recv-chunk') reply({ ok: true });
+          else if (msg.type === 'goon-recv-commit') {
+            reply(commitError
+              ? { ok: false, error: commitError }
+              : { ok: true, url: 'https://ccp.cache/recv/' + msg.sha256 + '.mp4', bytes: 999 });
+          } else reply({ ok: true });
+        },
+      };
+      return { bridge, sent };
+    }
+
+    const sha = SHA('9');
+    const payloadBytes = Math.round(CHUNK_BYTES * 2.5);
+    const body = new Uint8Array(payloadBytes);
+    for (let i = 0; i < body.length; i++) body[i] = i & 0xff;
+
+    {
+      const host = fakeHost();
+      const store = createReceivedStore({ bridge: host.bridge, hosted: true, logger: quiet });
+      ok(store.backend === 'host', 'hosted means the disk backend', store.backend);
+      ok(store.has(sha) === false && store.partialLength(sha) === 0, 'nothing held yet');
+      ok(store.begin(sha, 'video/mp4', payloadBytes) === true, 'begin opens the job');
+      ok(store.begin(sha, 'video/mp4', payloadBytes) === true,
+        'and begin is IDEMPOTENT — a resumed transfer calls it again and must keep the partial');
+      ok(store.begin(sha, 'application/pdf', 10) === false,
+        'the mime allowlist is checked BEFORE the resume shortcut, so a live job cannot be '
+        + 'reopened as something we do not render');
+      ok(store.partialLength(sha) === 0, 'and the refusal left the partial exactly where it was');
+      ok(store.begin(SHA('8'), 'application/pdf', 10) === false, 'a new job with a bad mime is refused too');
+      ok(store.begin(sha, 'video/mp4', -1) === false, 'as is a nonsense length');
+
+      // Feed it in protocol-sized pieces; the store re-chunks to CHUNK_BYTES itself.
+      const STEP = 16376;
+      let at = 0;
+      let allWrote = true;
+      while (at < payloadBytes) {
+        const len = Math.min(STEP, payloadBytes - at);
+        if (!store.write(sha, at, body.buffer.slice(at, at + len))) allWrote = false;
+        at += len;
+      }
+      ok(allWrote === true, 'every in-order write was taken');
+      ok(store.write(sha, 0, body.buffer.slice(0, 8)) === false,
+        'and a write at the wrong offset is refused — write appends at exactly `offset`, never seeks');
+      ok(store.partialLength(sha) === payloadBytes, 'partialLength is the resume offset',
+        String(store.partialLength(sha)));
+
+      const res = await store.commit(sha);
+      ok(res.ok === true && res.url.includes(sha), 'commit lands with the host\'s virtual-host URL', res.url);
+      ok(store.has(sha) === true, 'and the artifact is now held');
+      ok(store.thisMatch().length === 1, 'and listed as landed THIS session (the report card\'s shortlist)');
+
+      const chunks = host.sent.filter((m) => m.type === 'goon-recv-chunk');
+      ok(chunks.length === 3, 'the bytes went out as three chunks (2.5 x CHUNK_BYTES)', String(chunks.length));
+      ok(chunks.every((c, i) => c.seq === i),
+        'with GAPLESS sequence numbers from 0 — TransferInboxStore refuses anything else',
+        chunks.map((c) => c.seq).join(','));
+      ok(chunks.every((c) => c.b64.length <= 350000),
+        'and every base64 body inside the host\'s MaxChunkB64Chars',
+        String(Math.max(...chunks.map((c) => c.b64.length))));
+      ok(chunks[0].b64 === Buffer.from(body.subarray(0, CHUNK_BYTES)).toString('base64'),
+        'the encoding is the bytes, not a mangled copy');
+      const order = host.sent.map((m) => m.type);
+      ok(order[0] === 'goon-recv-begin' && order[order.length - 1] === 'goon-recv-commit',
+        'begin first, commit last, chunks in between — which is what makes FIFO correlation exact',
+        order.join(' '));
+
+      store.drop(sha);
+      ok(store.has(sha) === false, 'drop forgets it');
+      ok(host.sent.some((m) => m.type === 'goon-recv-drop' && m.sha256 === sha),
+        'and tells the host to delete the file');
+      store.dispose();
+    }
+
+    // The error vocabulary the protocol maps onto xfer_fail.
+    {
+      const host = fakeHost({ commitError: 'hash-mismatch' });
+      const store = createReceivedStore({ bridge: host.bridge, hosted: true, logger: quiet });
+      store.begin(sha, 'video/mp4', 32);
+      store.write(sha, 0, new Uint8Array(32).buffer);
+      const res = await store.commit(sha);
+      ok(res.ok === false && res.error === 'hash-mismatch',
+        'a host-side hash mismatch comes back verbatim — the page\'s sha was only ever a claim', res.error);
+      ok(store.has(sha) === false, 'and nothing was indexed');
+      store.dispose();
+    }
+    {
+      // A refused begin is async, so it surfaces where the protocol can act on it: commit.
+      const host = fakeHost({ beginError: 'cap-reached' });
+      const store = createReceivedStore({ bridge: host.bridge, hosted: true, logger: quiet });
+      ok(store.begin(sha, 'image/png', 16) === true, 'begin is synchronous by contract and answers optimistically');
+      store.write(sha, 0, new Uint8Array(16).buffer);
+      const res = await store.commit(sha);
+      ok(res.ok === false && res.error === 'cap-reached',
+        'and a full inbox surfaces at commit instead of being swallowed', res.error);
+      store.dispose();
+    }
+
+    // The manifest prime — a returning session's whole point.
+    {
+      const host = fakeHost();
+      const store = createReceivedStore({ bridge: host.bridge, hosted: true, logger: quiet });
+      const shas = store.primeReceived([
+        { sha: SHA('7'), ext: 'mp4', mime: 'video/mp4', bytes: 1234 },
+        { sha: 'garbage', ext: 'mp4', mime: 'video/mp4', bytes: 1 },
+        { sha: SHA('6'), ext: 'exe', mime: 'application/x-msdownload', bytes: 1 },
+      ]);
+      ok(shas.length === 1 && shas[0] === SHA('7'),
+        'primeReceived takes the good row and drops the bad name and the mime we do not render',
+        shas.join(','));
+      ok(store.has(SHA('7')) === true,
+        'so the very first offer of a match can answer decline:have instead of re-transferring');
+      const v = store.view(SHA('7'));
+      ok(v && v.url === 'https://ccp.cache/recv/' + SHA('7') + '.mp4',
+        'and the view is the virtual-host URL, which streams like every other asset', v && v.url);
+      ok(typeof v.release === 'function', 'release() exists and is the no-op the disk backend wants');
+      store.dispose();
+    }
+  }
+
   console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);
   process.exit(failures === 0 ? 0 : 1);
 }

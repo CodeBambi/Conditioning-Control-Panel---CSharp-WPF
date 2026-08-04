@@ -23,6 +23,17 @@ public class DiscordRichPresenceService : IDisposable
     private readonly DispatcherTimer _updateTimer;
     private int _currentLevel = 0;
 
+    // ---- Goon Game presence (docs/GOON_DISCORD_CONTRACT.md §5) ----------------------
+    // The duel OVERRIDES the generic presence while it runs and puts it back afterwards.
+    // Three pieces of state, because there are two different "afterwards": if GG connected
+    // the client itself (global presence off) the correct exit is ClearPresence+Disconnect,
+    // and if the global presence was already running the correct exit is to restore the exact
+    // activity it was showing before the duel took over.
+    private bool _goonActive;            // a duel currently owns the presence text
+    private bool _goonOwnsConnection;    // ...and GG is the only reason the RPC client is up
+    private string? _goonPriorState;     // the generic activity to put back on `off`
+    private string? _goonPriorDetails;
+
     public bool IsConnected => _client?.IsInitialized == true;
     public bool IsEnabled
     {
@@ -337,6 +348,86 @@ public class DiscordRichPresenceService : IDisposable
     }
 
     /// <summary>
+    /// Goon Game presence — FIXED STRINGS ONLY (contract §5). <paramref name="s"/> is an enum:
+    /// lobby | live | recap | off. Never the opponent's name, never free text, never a level
+    /// suffix: the whole vocabulary is the three strings below, so there is nothing here that can
+    /// leak who the player is duelling.
+    ///
+    /// CONNECT-ON-DEMAND. Two entry states, two exits:
+    ///  * global presence OFF, GoonRichPresence ON — GG connects the RPC client for the duration
+    ///    of the duel and, on `off`, clears the presence and disconnects again. The user asked for
+    ///    Goon Game presence, not for app presence, and they get exactly that.
+    ///  * global presence ON — GG overrides the running activity, and `off` RESTORES the exact
+    ///    state/details that were showing before it took over (captured on the way in).
+    /// Either way, a duel run with GoonRichPresence OFF never reaches this method at all — the host
+    /// drops rp-state before it gets here — so the generic presence is untouched.
+    /// </summary>
+    public void SetGoonActivity(string s)
+    {
+        try
+        {
+            string state;
+            switch (s)
+            {
+                case "lobby": state = "In the lobby"; break;
+                case "live": state = "In a duel"; break;
+                case "recap": state = "Match over"; break;
+                case "off": EndGoonActivity(); return;
+                default: return;   // enum only — anything else is not a presence we know how to write
+            }
+
+            if (!_goonActive)
+            {
+                _goonActive = true;
+                _goonPriorState = _currentState;
+                _goonPriorDetails = _currentDetails;
+                if (_client == null || !_client.IsInitialized)
+                {
+                    // GG is the reason this pipe exists, so GG is the one that closes it.
+                    _goonOwnsConnection = !_isEnabled;
+                    Connect();
+                }
+            }
+
+            _currentDetails = "Goon Game";
+            _currentState = state;
+            UpdatePresence();
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("SetGoonActivity({S}) failed: {E}", s, ex.Message);
+        }
+    }
+
+    /// <summary>The `off` half of <see cref="SetGoonActivity"/>. Idempotent: a teardown funnel calls
+    /// it whether or not a duel ever set a presence.</summary>
+    private void EndGoonActivity()
+    {
+        if (!_goonActive) return;
+        _goonActive = false;
+
+        var owned = _goonOwnsConnection;
+        _goonOwnsConnection = false;
+        var priorState = _goonPriorState;
+        var priorDetails = _goonPriorDetails;
+        _goonPriorState = null;
+        _goonPriorDetails = null;
+
+        if (owned)
+        {
+            // Nothing else wanted a presence; put the pipe back the way we found it.
+            try { _client?.ClearPresence(); } catch { }
+            Disconnect();
+            return;
+        }
+
+        // The generic presence was already running: give it its own words back.
+        _currentState = priorState ?? "Idle";
+        _currentDetails = priorDetails ?? "In the app";
+        UpdatePresence();
+    }
+
+    /// <summary>
     /// Update the current level for Rich Presence display
     /// </summary>
     public void UpdateLevel(int level)
@@ -347,14 +438,17 @@ public class DiscordRichPresenceService : IDisposable
 
     private void UpdatePresence()
     {
-        if (_client == null || !_client.IsInitialized || !_isEnabled)
+        // `|| !_goonActive`: a duel may have connected the client on its own while the global
+        // presence toggle is off — that connection exists precisely to publish this.
+        if (_client == null || !_client.IsInitialized || (!_isEnabled && !_goonActive))
             return;
 
         try
         {
-            // Build state string, optionally including level
+            // Build state string, optionally including level. NOT for the duel: contract §5 pins
+            // the Goon Game presence to fixed strings, and "| Level 47" is not one of them.
             var state = _currentState;
-            if (_currentLevel > 0 && App.Settings?.Current?.DiscordShowLevelInPresence == true)
+            if (!_goonActive && _currentLevel > 0 && App.Settings?.Current?.DiscordShowLevelInPresence == true)
             {
                 state = $"{_currentState} | Level {_currentLevel}";
             }
@@ -368,6 +462,19 @@ public class DiscordRichPresenceService : IDisposable
                     Start = _sessionStartTime
                 }
             };
+
+            if (_goonActive)
+            {
+                // Art for the duel only — the app's own generic presence still has no uploaded
+                // assets (see the commented block below). DiscordRPC 1.6 accepts an https URL as a
+                // key; if Discord rejects it the presence simply shows no image, which is the
+                // agreed acceptable failure.
+                presence.Assets = new Assets
+                {
+                    LargeImageKey = "https://cclabs.app/img/goon-game.png",
+                    LargeImageText = "Goon Game",
+                };
+            }
 
             // Only add assets if images are uploaded to Discord Developer Portal
             // To add images: Discord Developer Portal > Your App > Rich Presence > Art Assets

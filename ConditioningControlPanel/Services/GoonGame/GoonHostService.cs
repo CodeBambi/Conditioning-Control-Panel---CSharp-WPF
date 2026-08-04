@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -34,6 +35,10 @@ namespace ConditioningControlPanel.Services.GoonGame
     ///                  cache-state · cache-list · cache-progress · encode-request ·
     ///                  cache-put-result         (transfer cache — <see cref="GoonCacheBridge"/>)
     ///                  goon-recv-result { id, ok, url, bytes, error }
+    ///                  discord { avatarState, avatarDataUri, dmShared, richPresence,
+    ///                            seenSharePrompt }
+    ///                  peer-card { name, avatarDataUri, reason, dm, ver }
+    ///                                           (Discord sharing — docs/GOON_DISCORD_CONTRACT.md §4)
     ///   Page -&gt; Host:  ready · log              (consumed inside ChaosWebViewHost)
     ///                  heartbeat { t, paint, vis } · pong · boot-error · fullscreen-set
     ///                  exit · exit-done
@@ -44,6 +49,9 @@ namespace ConditioningControlPanel.Services.GoonGame
     ///                                           (transfer cache — <see cref="GoonCacheBridge"/>)
     ///                  goon-recv-begin/chunk/commit/abort/drop
     ///                                           (received inbox — <see cref="TransferInboxStore"/>)
+    ///                  discord-prefs · peer-card-req · discord-open-dm ·
+    ///                  discord-link-request · rp-state · last-opponent-clear
+    ///                                           (Discord sharing — docs/GOON_DISCORD_CONTRACT.md §4)
     /// </summary>
     internal static class GoonHostService
     {
@@ -324,7 +332,16 @@ namespace ConditioningControlPanel.Services.GoonGame
                         payloadMinGapMs = consent.PayloadMinGapMs,
                     },
                     fullscreen = _host?.IsFullscreen == true,
+                    // Discord sharing state (contract §4). Built from the CACHE only — init is
+                    // posted synchronously and an avatar may never sit on a boot path. If the
+                    // cached own-avatar is stale/absent, KickOwnAvatarRefresh below fetches it and
+                    // the page gets a `discord` echo when it lands; the page's box is reserved from
+                    // first paint either way, so nothing shifts.
+                    discord = BuildDiscordBlock(includeLastOpponent: true),
                 });
+                // ...and top the own avatar up off-thread. No-op unless the user is linked AND
+                // sharing, so a player who shares nothing never touches the Discord CDN.
+                KickOwnAvatarRefresh();
 
                 // The user's own images/videos, as ccp.assets URLs. Reuses the DtRH manifest
                 // builder verbatim (asset-tree deselection, size caps, sampling) — one enumerator
@@ -383,6 +400,34 @@ namespace ConditioningControlPanel.Services.GoonGame
         // reaches Path.Combine and traversal is not a thing that can be attempted. They touch no
         // session, overlay, panic or input surface, and the worst a hostile page can achieve is
         // filling a capped, user-deletable cache folder.
+        //
+        // WHY THE DISCORD-SHARING VERBS ARE ADMISSIBLE (contract §4). None of them takes the
+        // screen, the input stack or the session; all of them fail closed; and the two that carry
+        // a real secret keep it OUT of the page entirely.
+        //   * discord-prefs  — writes five booleans the user owns (GoonShareAvatar /
+        //     GoonShareDiscordDm / GoonRichPresence / GoonSeenSharePrompt). Each one only ever
+        //     REDUCES or restores what the local user exposes about themselves; none reveals
+        //     anything TO the page, none touches another user's data, and there is no value of
+        //     them that starts a session, an overlay or a network identity. The page must read the
+        //     ECHO, so a write it isn't allowed to make simply doesn't come back.
+        //   * peer-card-req  — the host, not the page, chooses the URL: the path is the compile-time
+        //     constant PeerCardPath, so this cannot be steered into the net-post proxy's general
+        //     shape. It is fire-and-forget with a 3 s budget and one retry, so it can never gate the
+        //     lobby, the countdown or Live. The response's snowflake is stored in a private static
+        //     field and DELIBERATELY stripped from the `peer-card` frame — the page sees a boolean.
+        //   * discord-open-dm — the page supplies a two-value ENUM ("peer"|"last"), never an id.
+        //     The host resolves the snowflake from its own store, re-validates it as ≤20 digits,
+        //     and shell-opens a fixed discord.com/users/ URL. A hostile page's whole reachable
+        //     surface is "open the DM the user already has, or nothing".
+        //   * discord-link-request — restores main and calls ShowTab("discord"). It MUST NOT start
+        //     OAuth: an auto-started login is a credential prompt the page could summon at will, so
+        //     the verb is deliberately navigation-only. BANNED for this bridge, permanently:
+        //     StartOAuthFlowAsync, Logout, token reads, and any /discord/* call.
+        //   * rp-state — an ENUM (lobby|live|recap|off) mapped to FIXED presence strings. It is
+        //     dropped outright unless GoonRichPresence is on, so a page cannot publish anything
+        //     about the user who did not ask for it, and it can never carry free text or a name.
+        //   * last-opponent-clear — deletes local state and one cached file. Strictly destructive
+        //     of the app's own data, so there is nothing to abuse.
         // =====================================================================================
         private static void OnPageMessage(JObject o)
         {
@@ -420,6 +465,9 @@ namespace ConditioningControlPanel.Services.GoonGame
                     // play-test can see the duel actually ended and with what.
                     App.Logger?.Information("GoonHostService: match-result (stub, not scored yet): {R}",
                         o["result"]?.ToString(Newtonsoft.Json.Formatting.None));
+                    // The last-opponent record is written HERE, by the host, from the peer card it
+                    // already fetched — no page-supplied data and no extra verb (contract §4).
+                    WriteLastOpponentRecord();
                     break;
                 case "net-post":
                     OnNetPost(o);
@@ -435,6 +483,25 @@ namespace ConditioningControlPanel.Services.GoonGame
                 case "goon-recv-abort":
                 case "goon-recv-drop":
                     OnRecvVerb(o);
+                    break;
+                // ---- Discord sharing (contract §4; admissibility in the banner above) ----
+                case "discord-prefs":
+                    OnDiscordPrefs(o);
+                    break;
+                case "peer-card-req":
+                    OnPeerCardRequest(o);
+                    break;
+                case "discord-open-dm":
+                    OnDiscordOpenDm(o);
+                    break;
+                case "discord-link-request":
+                    OnDiscordLinkRequest();
+                    break;
+                case "rp-state":
+                    OnRichPresenceState(o);
+                    break;
+                case "last-opponent-clear":
+                    OnLastOpponentClear();
                     break;
             }
         }
@@ -700,6 +767,556 @@ namespace ConditioningControlPanel.Services.GoonGame
             catch { return false; }
         }
 
+        // ============================ Discord sharing (contract §4/§5) ============================
+
+        /// <summary>The peer-card endpoint. A COMPILE-TIME CONSTANT on purpose: unlike net-post,
+        /// the page never names this URL, so there is no path to whitelist and nothing to steer.
+        /// It happens to sit under <see cref="AllowedPathPrefix"/> as well, which is the point —
+        /// this is the duel's own surface, not a general proxy.</summary>
+        private const string PeerCardPath = "/v2/goon/peercard";
+
+        /// <summary>The current match peer's Discord snowflake, or null when they did not share it.
+        /// PRIVACY BOUNDARY: this field, the last-opponent record and the shell-opened URL are the
+        /// only three places it ever exists. It is never posted to the page (the `peer-card` frame
+        /// carries a BOOLEAN), never logged, and never written anywhere else.</summary>
+        private static string? _peerDmId;
+        private static string? _peerName;
+        private static bool _peerAvatarCached;
+        private static bool _peerCardFetched;
+        private static int _peerCardInFlight;   // Interlocked: one fetch at a time, no lock on the UI thread
+
+        // ---------------------------------------------------------------- init/echo payloads
+
+        /// <summary>The `discord` block for init (and, minus lastOpponent, for the echo). Reads the
+        /// avatar from the DISK CACHE only — see the call site in <see cref="OnPageReady"/>.</summary>
+        private static JObject BuildDiscordBlock(bool includeLastOpponent)
+        {
+            var block = new JObject
+            {
+                ["avatarState"] = "unlinked",
+                ["avatarDataUri"] = JValue.CreateNull(),
+                ["dmShared"] = false,
+                ["richPresence"] = false,
+                ["seenSharePrompt"] = false,
+            };
+            try
+            {
+                var s = App.Settings?.Current;
+                var d = App.Discord;
+                var linked = d != null && d.IsAuthenticated && !string.IsNullOrEmpty(d.UserId);
+                var shareAvatar = s?.GoonShareAvatar == true;
+                // Three states, not two: "off" (linked, chose not to share) and "unlinked" (nothing
+                // to share) read completely differently in the lobby, and only one of them has a
+                // useful call to action.
+                block["avatarState"] = !linked ? "unlinked" : (shareAvatar ? "shared" : "off");
+                block["dmShared"] = s?.GoonShareDiscordDm == true;
+                block["richPresence"] = s?.GoonRichPresence == true;
+                block["seenSharePrompt"] = s?.GoonSeenSharePrompt == true;
+                if (linked && shareAvatar)
+                {
+                    var uri = GoonAvatarCache.ReadOwnDataUriIfFresh(d?.Avatar);
+                    if (uri != null) block["avatarDataUri"] = uri;
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("GoonHostService.BuildDiscordBlock: {E}", ex.Message); }
+
+            if (includeLastOpponent) block["lastOpponent"] = BuildLastOpponentBlock();
+            return block;
+        }
+
+        /// <summary>`{ name, avatarDataUri, dm, ts }` or null. The stored record's `dmId` is
+        /// FLATTENED to a boolean here — the page is never told the snowflake exists as a value,
+        /// only that a Message button is possible.</summary>
+        private static JToken BuildLastOpponentBlock()
+        {
+            try
+            {
+                var raw = App.Settings?.Current?.GoonLastOpponentJson;
+                if (string.IsNullOrWhiteSpace(raw)) return JValue.CreateNull();
+                var rec = JObject.Parse(raw!);
+                var name = (string?)rec["name"];
+                if (string.IsNullOrWhiteSpace(name)) return JValue.CreateNull();
+
+                string? uri = null;
+                // Only the ONE bare filename this cache ever writes is accepted; a record naming
+                // anything else is treated as having no picture rather than being followed.
+                if ((string?)rec["avatarFile"] == GoonAvatarCache.LastOpponentFile)
+                    uri = GoonAvatarCache.ReadDataUri(GoonAvatarCache.LastOpponentFile);
+
+                return new JObject
+                {
+                    ["name"] = name,
+                    ["avatarDataUri"] = uri == null ? JValue.CreateNull() : (JToken)uri,
+                    ["dm"] = !string.IsNullOrEmpty((string?)rec["dmId"]),
+                    ["ts"] = (long?)rec["ts"] ?? 0L,
+                };
+            }
+            catch (Exception ex)
+            {
+                // A corrupt record is a missing record: never a boot failure.
+                App.Logger?.Debug("GoonHostService.BuildLastOpponentBlock: {E}", ex.Message);
+                return JValue.CreateNull();
+            }
+        }
+
+        /// <summary>Echo the current sharing state. Every page affordance reads THIS, never the
+        /// request it sent — the same rule the fullscreen toggle follows.</summary>
+        private static void PostDiscordEcho()
+        {
+            try
+            {
+                var block = BuildDiscordBlock(includeLastOpponent: false);
+                block["type"] = "discord";
+                _host?.Post(block);
+            }
+            catch (Exception ex) { App.Logger?.Debug("GoonHostService.PostDiscordEcho: {E}", ex.Message); }
+        }
+
+        /// <summary>Top up the cached own-avatar off-thread and echo when it lands. No-op unless the
+        /// user is linked AND sharing: a player who shares nothing never touches the CDN.</summary>
+        private static void KickOwnAvatarRefresh()
+        {
+            try
+            {
+                if (App.Settings?.Current?.GoonShareAvatar != true) return;
+                if (App.Discord?.IsAuthenticated != true) return;
+                _ = Task.Run(async () =>
+                {
+                    var uri = await GoonAvatarCache.RefreshOwnAvatarAsync().ConfigureAwait(false);
+                    if (uri == null) return;
+                    var disp = Application.Current?.Dispatcher;
+                    if (disp == null || disp.HasShutdownStarted) return;
+                    disp.BeginInvoke(() => { try { PostDiscordEcho(); } catch { } });
+                });
+            }
+            catch (Exception ex) { App.Logger?.Debug("GoonHostService.KickOwnAvatarRefresh: {E}", ex.Message); }
+        }
+
+        // ---------------------------------------------------------------- discord-prefs
+
+        /// <summary><c>discord-prefs { shareAvatar?, shareDm?, richPresence?, seenSharePrompt? }</c>
+        /// — every field OPTIONAL, so the page can move one toggle without restating the others.
+        /// Writes, pushes the profile sync on change (the two shared flags only), then echoes.</summary>
+        private static void OnDiscordPrefs(JObject o)
+        {
+            try
+            {
+                var s = App.Settings?.Current;
+                if (s == null) return;
+
+                var sharedChanged = false;
+                var rpTurnedOff = false;
+
+                var a = (bool?)o["shareAvatar"];
+                if (a.HasValue && s.GoonShareAvatar != a.Value) { s.GoonShareAvatar = a.Value; sharedChanged = true; }
+
+                var dm = (bool?)o["shareDm"];
+                if (dm.HasValue && s.GoonShareDiscordDm != dm.Value) { s.GoonShareDiscordDm = dm.Value; sharedChanged = true; }
+
+                var rp = (bool?)o["richPresence"];
+                if (rp.HasValue && s.GoonRichPresence != rp.Value)
+                {
+                    s.GoonRichPresence = rp.Value;
+                    rpTurnedOff = !rp.Value;
+                }
+
+                var seen = (bool?)o["seenSharePrompt"];
+                if (seen.HasValue && s.GoonSeenSharePrompt != seen.Value) s.GoonSeenSharePrompt = seen.Value;
+
+                App.Settings?.Save();
+
+                // Turning the flag off mid-session must retract the presence NOW. rp-state is
+                // dropped while the flag is off, so the page's own "off" would never arrive.
+                if (rpTurnedOff)
+                {
+                    try { App.DiscordRpc?.SetGoonActivity("off"); }
+                    catch (Exception ex) { App.Logger?.Debug("GoonHostService: rp retract: {E}", ex.Message); }
+                }
+
+                if (sharedChanged)
+                {
+                    // Push-on-change (contract §2, RemoteControl precedent): the server's room
+                    // snapshot is taken at invite/join, so a flag flipped in the lobby has to reach
+                    // it before the next match rather than at the next scheduled sync. The service's
+                    // own 30 s cooldown may defer it; the flags ride the normal sync body too, so a
+                    // deferred push costs latency, never correctness.
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var svc = App.ProfileSync;
+                            if (svc != null) await svc.SyncProfileAsync().ConfigureAwait(false);
+                        }
+                        catch (Exception ex) { App.Logger?.Debug("GoonHostService: prefs sync push: {E}", ex.Message); }
+                    });
+                    if (s.GoonShareAvatar) KickOwnAvatarRefresh();
+                }
+
+                PostDiscordEcho();
+            }
+            catch (Exception ex) { App.Logger?.Warning("GoonHostService.discord-prefs: {E}", ex.Message); }
+        }
+
+        // ---------------------------------------------------------------- peer-card-req
+
+        /// <summary>
+        /// <c>peer-card-req</c> — the HOST fetches the peer card itself (contract §4). Fire-and-forget
+        /// with a 3 s budget and exactly one retry: this may never gate the lobby, the countdown or
+        /// Live, so a failure posts a <c>peer-card</c> with <c>reason:"error"</c> and the page falls
+        /// back to its initial-letter tile.
+        ///
+        /// DEVIATION (reported, not renamed): the contract writes the payload as <c>{}</c>, but
+        /// /v2/goon/peercard is roomAuth(requireJoined=true) and only the PAGE holds the room
+        /// credentials — the host never joined a room. The optional <c>code</c>/<c>token</c>/<c>role</c>
+        /// fields below are therefore read when present, which is a superset of <c>{}</c> and leaves
+        /// the frozen verb name and response shape untouched. They are room credentials the page
+        /// obtained for itself, they cannot name a path (see <see cref="PeerCardPath"/>), and the
+        /// snowflake still never travels back to the page.
+        /// </summary>
+        private static void OnPeerCardRequest(JObject o)
+        {
+            // One in flight at a time. A duplicated request during a countdown must cost nothing.
+            if (Interlocked.CompareExchange(ref _peerCardInFlight, 1, 0) != 0)
+            {
+                App.Logger?.Debug("GoonHostService: peer-card-req ignored (already in flight)");
+                return;
+            }
+
+            // A NEW request means a NEW peer: drop the previous one's card first, or a failed fetch
+            // for match 2 would let match 1's opponent be written as match 2's last-opponent record.
+            ResetPeerCardState();
+
+            var code = SafeShort((string?)o["code"], 32);
+            var token = SafeShort((string?)o["token"], 128);
+            var role = SafeShort((string?)o["role"], 16);
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var json = await PostPeerCardAsync(code, token, role).ConfigureAwait(false);
+                    if (json == null)
+                    {
+                        PostPeerCard(null, null, "error", false, null);
+                        return;
+                    }
+
+                    var name = (string?)json["name"];
+                    var reason = (string?)json["avatar_reason"] ?? "error";
+                    var ver = (string?)json["ver"];
+                    var dmId = (string?)json["dm_id"];
+
+                    _peerName = string.IsNullOrWhiteSpace(name) ? null : name!.Trim();
+                    // Re-validate what the server sent before it can ever reach a shell command.
+                    _peerDmId = IsSnowflake(dmId) ? dmId : null;
+                    _peerAvatarCached = false;
+
+                    string? uri = null;
+                    var bytes = GoonAvatarCache.DecodeDataUri((string?)json["avatar"]);
+                    if (bytes != null && GoonAvatarCache.Write(GoonAvatarCache.PeerFile, bytes))
+                    {
+                        _peerAvatarCached = true;
+                        uri = GoonAvatarCache.ReadDataUri(GoonAvatarCache.PeerFile);
+                    }
+                    _peerCardFetched = true;
+
+                    // Never the snowflake, never the CDN URL — a boolean and a reason code.
+                    App.Logger?.Information(
+                        "GoonHostService: peer card fetched (avatar={A}, reason={R}, dm={D})",
+                        uri != null, reason, _peerDmId != null);
+                    PostPeerCard(_peerName, uri, reason, _peerDmId != null, ver);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning("GoonHostService.peer-card-req: {E}", ex.Message);
+                    PostPeerCard(null, null, "error", false, null);
+                }
+                finally { Interlocked.Exchange(ref _peerCardInFlight, 0); }
+            });
+        }
+
+        /// <summary>POST the peer card with a 3 s budget and one retry. Returns null on anything
+        /// that isn't a parseable 2xx body — the caller's answer to that is a tile, not an error
+        /// dialog.</summary>
+        private static async Task<JObject?> PostPeerCardAsync(string code, string token, string role)
+        {
+            var body = Newtonsoft.Json.JsonConvert.SerializeObject(new
+            {
+                unified_id = App.UnifiedUserId ?? "",
+                code,
+                token,
+                role,
+            });
+
+            for (var attempt = 1; attempt <= 2; attempt++)
+            {
+                try
+                {
+                    // The shared client's 40 s timeout is for the relay long-poll; an avatar gets 3 s.
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                    using var request = new HttpRequestMessage(HttpMethod.Post, ProxyBaseUrl + PeerCardPath)
+                    {
+                        Content = new StringContent(body, Encoding.UTF8, "application/json")
+                    };
+                    var auth = SafeAuthToken();
+                    if (!string.IsNullOrEmpty(auth)) request.Headers.Add("X-Auth-Token", auth);
+                    request.Headers.Add("X-Client-Version", UpdateService.AppVersion);
+
+                    using var response = await Http.SendAsync(request, cts.Token).ConfigureAwait(false);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        // 403/429 are ANSWERS ("not joined", "rate limited"), not transport faults:
+                        // retrying them just spends the 6/min gate for nothing.
+                        App.Logger?.Debug("GoonHostService: peercard HTTP {S}", (int)response.StatusCode);
+                        return null;
+                    }
+                    var text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    return JObject.Parse(text);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("GoonHostService: peercard attempt {N}/2 failed: {E}", attempt, ex.Message);
+                }
+            }
+            return null;
+        }
+
+        /// <summary>Post the `peer-card` frame on the UI thread. The snowflake is NOT a parameter
+        /// here — <paramref name="dm"/> is the whole of what the page learns.</summary>
+        private static void PostPeerCard(string? name, string? avatarDataUri, string reason, bool dm, string? ver)
+        {
+            try
+            {
+                var disp = Application.Current?.Dispatcher;
+                if (disp == null || disp.HasShutdownStarted) return;
+                disp.BeginInvoke(() =>
+                {
+                    try
+                    {
+                        _host?.Post(new
+                        {
+                            type = "peer-card",
+                            name = name ?? "",
+                            avatarDataUri,
+                            reason,
+                            dm,
+                            ver,
+                        });
+                    }
+                    catch (Exception ex) { App.Logger?.Debug("GoonHostService.PostPeerCard: {E}", ex.Message); }
+                });
+            }
+            catch (Exception ex) { App.Logger?.Debug("GoonHostService.PostPeerCard dispatch: {E}", ex.Message); }
+        }
+
+        // ---------------------------------------------------------------- last-opponent record
+
+        /// <summary>Write `{ name, dmId, avatarFile, ts }` for the peer this match, overwriting the
+        /// previous record (most recent only, contract §4). ONLY the fields the peer actually
+        /// shared: no dm flag means no dmId, no avatar means no avatarFile.</summary>
+        private static void WriteLastOpponentRecord()
+        {
+            try
+            {
+                if (!_peerCardFetched || string.IsNullOrWhiteSpace(_peerName)) return;
+                var s = App.Settings?.Current;
+                if (s == null) return;
+
+                string? file = null;
+                if (_peerAvatarCached) file = GoonAvatarCache.PromotePeerToLastOpponent();
+                // A peer who shared no picture must not inherit the PREVIOUS opponent's one.
+                if (file == null) GoonAvatarCache.Delete(GoonAvatarCache.LastOpponentFile);
+
+                var rec = new JObject
+                {
+                    ["name"] = _peerName,
+                    ["dmId"] = _peerDmId == null ? JValue.CreateNull() : (JToken)_peerDmId,
+                    ["avatarFile"] = file == null ? JValue.CreateNull() : (JToken)file,   // bare name, never a path
+                    ["ts"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                };
+                s.GoonLastOpponentJson = rec.ToString(Newtonsoft.Json.Formatting.None);
+                App.Settings?.Save();
+                App.Logger?.Information("GoonHostService: last-opponent record written (avatar={A}, dm={D})",
+                    file != null, _peerDmId != null);
+            }
+            catch (Exception ex) { App.Logger?.Warning("GoonHostService.WriteLastOpponentRecord: {E}", ex.Message); }
+        }
+
+        /// <summary><c>last-opponent-clear</c> — wipe the record and its cached picture.</summary>
+        private static void OnLastOpponentClear()
+        {
+            try
+            {
+                var s = App.Settings?.Current;
+                if (s != null && !string.IsNullOrEmpty(s.GoonLastOpponentJson))
+                {
+                    s.GoonLastOpponentJson = "";
+                    App.Settings?.Save();
+                }
+                GoonAvatarCache.Delete(GoonAvatarCache.LastOpponentFile);
+                App.Logger?.Information("GoonHostService: last-opponent record cleared");
+            }
+            catch (Exception ex) { App.Logger?.Warning("GoonHostService.last-opponent-clear: {E}", ex.Message); }
+        }
+
+        /// <summary>The stored opponent's snowflake, or null. Read straight off disk each time so a
+        /// cleared record can never be opened from a stale in-memory copy.</summary>
+        private static string? ReadLastOpponentDmId()
+        {
+            try
+            {
+                var raw = App.Settings?.Current?.GoonLastOpponentJson;
+                if (string.IsNullOrWhiteSpace(raw)) return null;
+                var id = (string?)JObject.Parse(raw!)["dmId"];
+                return IsSnowflake(id) ? id : null;
+            }
+            catch { return null; }
+        }
+
+        // ---------------------------------------------------------------- open DM / link request
+
+        /// <summary><c>discord-open-dm { which: "peer"|"last" }</c> — resolve the snowflake from the
+        /// HOST's own store, un-fullscreen first (a browser opened under a borderless fullscreen
+        /// window is invisible), then shell-open the fixed profile URL.</summary>
+        private static void OnDiscordOpenDm(JObject o)
+        {
+            var which = (string?)o["which"] ?? "";
+            string? id = which switch
+            {
+                "peer" => _peerDmId,
+                "last" => ReadLastOpponentDmId(),
+                _ => null,                       // enum only — a page-supplied id is not a case
+            };
+            if (!IsSnowflake(id))
+            {
+                App.Logger?.Debug("GoonHostService: discord-open-dm '{W}' - nothing to open", which);
+                return;
+            }
+
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+            disp.BeginInvoke(() =>
+            {
+                try
+                {
+                    // FIRST, synchronously on this thread — ApplyHostFullscreen would queue the
+                    // toggle behind the shell open and the browser would land underneath.
+                    UnFullscreenForShellOpen();
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "https://discord.com/users/" + id,
+                        UseShellExecute = true,
+                    });
+                    // The id is never logged: this URL identifies a real person.
+                    App.Logger?.Information("GoonHostService: opened Discord DM ({W})", which);
+                }
+                catch (Exception ex) { App.Logger?.Warning("GoonHostService: discord-open-dm failed: {E}", ex.Message); }
+            });
+        }
+
+        /// <summary><c>discord-link-request</c> — hand the user back the control panel on the Discord
+        /// tab and STOP. It deliberately does not call StartOAuthFlowAsync: a login the page can
+        /// summon is a credential prompt the page can summon (see the banned-verbs note in the
+        /// safety rail). The user presses "Connect" themselves, in the app, where they can see it.</summary>
+        private static void OnDiscordLinkRequest()
+        {
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+            disp.BeginInvoke(() =>
+            {
+                try
+                {
+                    UnFullscreenForShellOpen();
+                    var main = App.MainWindowRef;
+                    if (main == null) return;
+                    if (main.WindowState == WindowState.Minimized)
+                    {
+                        main.WindowState = _mainStateBeforeDuck == WindowState.Maximized
+                            ? WindowState.Maximized
+                            : WindowState.Normal;
+                    }
+                    // The duck debt is paid here: we handed the window back, so DisposeAll must not
+                    // "restore" a window the user may since have minimized on purpose.
+                    _duckedMainWindow = false;
+                    main.Show();
+                    main.Activate();
+                    main.ShowTab("discord");
+                    App.Logger?.Information("GoonHostService: discord-link-request - focused Discord tab");
+                }
+                catch (Exception ex) { App.Logger?.Warning("GoonHostService.discord-link-request: {E}", ex.Message); }
+            });
+        }
+
+        /// <summary>Drop out of borderless fullscreen so another window can be seen, WITHOUT
+        /// rewriting <c>GoonFullscreen</c> — the user did not choose windowed, we did, and their
+        /// remembered mode has to survive opening a DM.</summary>
+        private static void UnFullscreenForShellOpen()
+        {
+            try
+            {
+                if (_host == null || !_host.IsFullscreen) return;
+                _host.SetFullscreen(false);
+                _host.Post(new { type = "fullscreen", on = _host.IsFullscreen });   // page reads the echo
+            }
+            catch (Exception ex) { App.Logger?.Debug("GoonHostService.UnFullscreenForShellOpen: {E}", ex.Message); }
+        }
+
+        // ---------------------------------------------------------------- rich presence
+
+        /// <summary><c>rp-state { s }</c> — enum-validated and dropped entirely unless
+        /// <c>GoonRichPresence</c> is on, so a duel can never move the app's generic presence for a
+        /// user who did not ask for it (contract §1).</summary>
+        private static void OnRichPresenceState(JObject o)
+        {
+            var s = (string?)o["s"] ?? "";
+            if (s != "lobby" && s != "live" && s != "recap" && s != "off")
+            {
+                App.Logger?.Debug("GoonHostService: rp-state rejected (not in the enum)");
+                return;
+            }
+            if (App.Settings?.Current?.GoonRichPresence != true) return;
+
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+            disp.BeginInvoke(() =>
+            {
+                try { App.DiscordRpc?.SetGoonActivity(s); }
+                catch (Exception ex) { App.Logger?.Debug("GoonHostService.rp-state: {E}", ex.Message); }
+            });
+        }
+
+        // ---------------------------------------------------------------- small validators
+
+        /// <summary>A Discord snowflake is digits and nothing else. Applied to the SERVER's value on
+        /// arrival and again on the way to <see cref="Process.Start"/>, because that string is about
+        /// to become part of a shell-executed URL.</summary>
+        private static bool IsSnowflake(string? id)
+        {
+            if (string.IsNullOrEmpty(id) || id!.Length > 20) return false;
+            foreach (var c in id) if (c < '0' || c > '9') return false;
+            return true;
+        }
+
+        /// <summary>Trim + hard-cap a page-supplied string before it rides an outgoing request body.</summary>
+        private static string SafeShort(string? v, int max)
+        {
+            if (string.IsNullOrWhiteSpace(v)) return "";
+            var t = v!.Trim();
+            return t.Length > max ? t.Substring(0, max) : t;
+        }
+
+        /// <summary>Forget everything about the match peer. Called from the single teardown funnel:
+        /// the snowflake must not outlive the window it was fetched for, and the next duel must not
+        /// inherit the previous opponent's cached picture.</summary>
+        private static void ResetPeerCardState()
+        {
+            _peerDmId = null;
+            _peerName = null;
+            _peerAvatarCached = false;
+            _peerCardFetched = false;
+            try { GoonAvatarCache.Delete(GoonAvatarCache.PeerFile); } catch { }
+        }
+
         // ============================ watchdogs / recovery ============================
 
         /// <summary>Fold a heartbeat's paint/visibility stamp into the paint-stall clock.
@@ -865,6 +1482,11 @@ namespace ConditioningControlPanel.Services.GoonGame
                 // Last word to the page before the window goes: a live match should get a chance
                 // to post its own abandon rather than just vanishing from the opponent's side.
                 try { _host?.Post(new { type = "end-run", reason = "dispose" }); } catch { }
+                // The duel's rich presence dies with the duel WHATEVER killed it — a window closed
+                // mid-match would otherwise leave "In a duel" published forever (and, when GG owned
+                // the connection, an RPC pipe open). No-op when GG never set it.
+                try { App.DiscordRpc?.SetGoonActivity("off"); } catch { }
+                try { ResetPeerCardState(); } catch { }
                 try { _host?.Dispose(); } catch { }
                 _host = null;
                 _exiting = false;

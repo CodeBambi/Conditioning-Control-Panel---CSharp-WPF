@@ -50,6 +50,30 @@ export class GoonFakeSignalingServer {
     this._codeCounter = 0;
     /** Every request the server saw — handy in an assertion. */
     this.requests = [];
+    /**
+     * THE PEER CARD VERSION (GOON_DISCORD_CONTRACT §3). The real server derives
+     * it from the sharer's avatar hash + dm flag and hands it to the OTHER side
+     * on /join and /signal; null means "this peer shares nothing", which is the
+     * default here because every sharing flag defaults false.
+     *
+     * It is modelled — unlike auth and rate limiting — because a client
+     * behaviour depends on it: ui/discord.js must ask for a card exactly once
+     * per version, and there is no way to prove "exactly once" without a server
+     * that can change its mind. `setPeerCardVer` is how a test does that.
+     */
+    this.hostCardVer = null;    // what the GUEST is told about the host
+    this.guestCardVer = null;   // what the HOST is told about the guest
+  }
+
+  /**
+   * Test hook: publish a card version for one side. The value is opaque to
+   * everything — it only has to CHANGE when the underlying share changes.
+   * @param {'host'|'guest'} role whose card moved
+   */
+  setPeerCardVer(role, ver) {
+    const v = (typeof ver === 'string' && ver) ? ver : null;
+    if (role === 'guest') this.guestCardVer = v; else this.hostCardVer = v;
+    return v;
   }
 
   /** Hand this to GoonSignalingClient's `post` option. */
@@ -121,6 +145,8 @@ export class GoonFakeSignalingServer {
           peer_app_version: 'fake',
           pass: 'premium',
           relay_allowed: true,
+          // The joiner is the GUEST, so the peer whose card it learns is the host.
+          peer_card_ver: this.hostCardVer,
         });
       }
 
@@ -151,7 +177,17 @@ export class GoonFakeSignalingServer {
           cursor = Math.max(cursor, s.seq);
         }
 
-        return ok({ ok: true, cursor, msgs: mine, peer_joined: room.joined, peer_gone: false });
+        return ok({
+          ok: true,
+          cursor,
+          msgs: mine,
+          peer_joined: room.joined,
+          peer_gone: false,
+          // Whose card you are told about is whoever you are NOT. Repeated on
+          // every poll, exactly like the real route: de-duplication is the
+          // page's job (ui/discord.js), never the wire's.
+          peer_card_ver: role === 'host' ? this.guestCardVer : this.hostCardVer,
+        });
       }
 
       case '/v2/goon/relay': {

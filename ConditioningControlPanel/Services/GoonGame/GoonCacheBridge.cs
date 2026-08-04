@@ -113,6 +113,8 @@ namespace ConditioningControlPanel.Services.GoonGame
         private static readonly List<byte[]> _putPrvParts = new();
         private static int _putPrvNextSeq;
         private static long _putPrvBytes;
+        /// <summary>A refused preview stream drops ONLY the preview — never the artifact.</summary>
+        private static bool _putPrvRefused;
         private static DateTime _putStartedUtc;
 
         /// <summary>Preview parts ceiling — a 240p 2 s clip is ~100 KB; 4 x 3 MB is generous.</summary>
@@ -606,6 +608,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             var jobId = (string?)o["jobId"] ?? "";
             var seq = (int?)o["seq"] ?? -1;
             var b64 = (string?)o["b64"] ?? "";
+            var part = (string?)o["part"] ?? "art";   // absent = 'art' (pre-preview pages)
             string? error = null;
 
             lock (Lock)
@@ -613,6 +616,8 @@ namespace ConditioningControlPanel.Services.GoonGame
                 ExpirePutLocked();
                 if (jobId.Length == 0 || _dispatchedJobId == null || jobId != _dispatchedJobId)
                     error = "unknown-job";
+                else if (part != "art" && part != "prv")
+                    error = "bad-seq";
                 else if (b64.Length == 0 || b64.Length > MaxPutB64Chars)
                     error = "too-big";
                 else
@@ -623,32 +628,59 @@ namespace ConditioningControlPanel.Services.GoonGame
                         _putParts.Clear();
                         _putNextSeq = 0;
                         _putBytes = 0;
+                        _putPrvParts.Clear();
+                        _putPrvNextSeq = 0;
+                        _putPrvBytes = 0;
+                        _putPrvRefused = false;
                         _putStartedUtc = DateTime.UtcNow;
                     }
-                    if (seq != _putNextSeq) error = "bad-seq";
-                    else if (_putParts.Count >= MaxPutParts) error = "too-big";
+                    var isArt = part == "art";
+                    var nextSeq = isArt ? _putNextSeq : _putPrvNextSeq;
+                    if (seq != nextSeq) error = "bad-seq";
+                    else if (isArt && _putParts.Count >= MaxPutParts) error = "too-big";
+                    else if (!isArt && (_putPrvParts.Count >= MaxPrvParts || _putPrvBytes >= MaxPrvBytes)) error = "too-big";
                     else
                     {
                         try
                         {
                             var bytes = Convert.FromBase64String(b64);
                             if (bytes.Length == 0) error = "bad-seq";
-                            else
+                            else if (isArt)
                             {
                                 _putParts.Add(bytes);
                                 _putBytes += bytes.Length;
                                 _putNextSeq = seq + 1;
                             }
+                            else
+                            {
+                                _putPrvParts.Add(bytes);
+                                _putPrvBytes += bytes.Length;
+                                _putPrvNextSeq = seq + 1;
+                            }
                         }
                         catch { error = "bad-seq"; }
                     }
                 }
-                if (error != null && error != "unknown-job" && _putJobId == jobId) AbandonPutLocked(error);
+                if (error != null && error != "unknown-job" && _putJobId == jobId)
+                {
+                    if (part == "prv")
+                    {
+                        // Cosmetic stream: drop the preview, keep the artifact upload alive.
+                        _putPrvParts.Clear();
+                        _putPrvBytes = 0;
+                        _putPrvNextSeq = 0;
+                        _putPrvRefused = true;
+                    }
+                    else
+                    {
+                        AbandonPutLocked(error);
+                    }
+                }
             }
 
             if (error != null)
-                App.Logger?.Warning("GoonCacheBridge: cache-put {Job} seq {Seq} refused ({E})", jobId, seq, error);
-            Post(new { type = "cache-put-result", jobId, seq, ok = error == null, error });
+                App.Logger?.Warning("GoonCacheBridge: cache-put {Job} {Part} seq {Seq} refused ({E})", jobId, part, seq, error);
+            Post(new { type = "cache-put-result", jobId, part, seq, ok = error == null, error });
         }
 
         /// <summary>
@@ -665,8 +697,10 @@ namespace ConditioningControlPanel.Services.GoonGame
             var ext = (string?)o["ext"] ?? "mp4";
             int w = (int?)o["w"] ?? 0, h = (int?)o["h"] ?? 0, durMs = (int?)o["durMs"] ?? 0;
             int? claimedParts = (int?)o["parts"];
+            int? claimedPrvParts = (int?)o["prvParts"];
 
             byte[]? blob = null;
+            byte[]? prvBlob = null;
             string? error = null;
             lock (Lock)
             {
@@ -693,9 +727,25 @@ namespace ConditioningControlPanel.Services.GoonGame
                     blob = new byte[_putBytes];
                     int off = 0;
                     foreach (var part in _putParts) { Buffer.BlockCopy(part, 0, blob, off, part.Length); off += part.Length; }
+
+                    // Preview is cosmetic end to end: a claim mismatch or a refused stream just
+                    // means no preview — the artifact commit is never held hostage by it.
+                    if (!_putPrvRefused && _putPrvParts.Count > 0 &&
+                        (claimedPrvParts == null || claimedPrvParts.Value == _putPrvParts.Count))
+                    {
+                        prvBlob = new byte[_putPrvBytes];
+                        int poff = 0;
+                        foreach (var part in _putPrvParts) { Buffer.BlockCopy(part, 0, prvBlob, poff, part.Length); poff += part.Length; }
+                    }
                     AbandonPutLocked("committed");
                     _dispatchedJobId = null;
                 }
+            }
+
+            if (prvBlob != null && !TransferInboxStore.LooksLikeMp4(prvBlob))
+            {
+                App.Logger?.Debug("GoonCacheBridge: encode-done {Job} preview is not an mp4 - dropped", jobId);
+                prvBlob = null;
             }
 
             if (error != null)
@@ -726,6 +776,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             }
 
             var payload = blob;
+            var preview = prvBlob;
             _ = Task.Run(() =>
             {
                 try
@@ -734,7 +785,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                     // never page-reachable) and let the service hash + name + index it.
                     Directory.CreateDirectory(TransferCacheStore.Instance.TmpDir);
                     TransferCompressionService.Instance.CompletePageJob(jobId, true, payload,
-                        ext, w, h, durMs, null);
+                        ext, w, h, durMs, null, previewBytes: preview);
                     Post(new { type = "cache-put-result", jobId, seq = -1, ok = true, done = true });
                 }
                 catch (Exception ex)
@@ -756,6 +807,10 @@ namespace ConditioningControlPanel.Services.GoonGame
             _putParts.Clear();
             _putNextSeq = 0;
             _putBytes = 0;
+            _putPrvParts.Clear();
+            _putPrvNextSeq = 0;
+            _putPrvBytes = 0;
+            _putPrvRefused = false;
         }
 
         private static void ExpirePutLocked()

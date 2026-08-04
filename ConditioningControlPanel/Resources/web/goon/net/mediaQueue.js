@@ -433,6 +433,31 @@ export function createMediaQueue({
     pollTimer = 0;
   }
 
+  /** Unbind everything. A NAMED function, so `attach` never depends on a `this` binding. */
+  function detach() {
+    attached = false;
+    stopPoll();
+    for (const off of unsubs) { try { off(); } catch (_e) { /* ignore */ } }
+    unsubs = [];
+    // Restores the wrapper matchLog installed UNDERNEATH ours — one layer peeled,
+    // not the whole stack, because the log's patch is not ours to remove.
+    if (match && origFire && match.tryFirePayload === wrappedFire) {
+      match.tryFirePayload = (req) => origFire(req);
+    }
+    origFire = null;
+    wrappedFire = null;
+    if (channel) { try { channel.close(); } catch (_e) { /* ignore */ } }
+    channel = null;
+    cancelAll();
+    pickInfo.clear();
+    attempts.clear();
+    neverOffer.clear();
+    seen.clear();
+    recent.length = 0;
+    match = null;
+    transport = null;
+  }
+
   return {
     /**
      * Bind to a match + transport. Called from boot.js attachMatch, which the relay fallback
@@ -440,7 +465,7 @@ export function createMediaQueue({
      * automatically, sees supportsBulk false, and goes dormant. No special case.
      */
     attach(m, t) {
-      this.detach();
+      detach();
       if (!m || !t) return false;
       match = m;
       transport = t;
@@ -475,27 +500,7 @@ export function createMediaQueue({
       return true;
     },
 
-    detach() {
-      attached = false;
-      stopPoll();
-      for (const off of unsubs) { try { off(); } catch (_e) { /* ignore */ } }
-      unsubs = [];
-      if (match && origFire && match.tryFirePayload === wrappedFire) {
-        match.tryFirePayload = (req) => origFire(req);
-      }
-      origFire = null;
-      wrappedFire = null;
-      if (channel) { try { channel.close(); } catch (_e) { /* ignore */ } }
-      channel = null;
-      cancelAll();
-      pickInfo.clear();
-      attempts.clear();
-      neverOffer.clear();
-      seen.clear();
-      recent.length = 0;
-      match = null;
-      transport = null;
-    },
+    detach,
 
     tagsFor,
     markConsumed,

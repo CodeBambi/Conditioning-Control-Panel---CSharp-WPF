@@ -213,6 +213,71 @@ export const SKIP_BTN_MIN_PX = 22;          // the pointer target fx.css must me
 export const MUTED_CLASS = 'is-muted';      // this window was click-silenced
 export const LIVE_CLASS = 'is-live';        // …and this one is the one speaking
 
+/* --- THE FLAG. The quiet in-match report affordance (spec §7.5), on windows
+   whose bytes came off the OPPONENT'S machine and on nothing else.
+
+   IT NEVER OPENS A DIALOG. A modal mid-duel is a way to interrupt one, and
+   interruptions are exactly what a hostile opponent would weaponise — so the
+   button does two silent things (hide this window, remember the hash) and the
+   actual report is filed on the recap, where nothing is running.
+
+   It wears BOTH classes on purpose: `gg-vwin-x` is the whole visual and the
+   whole hit target (fx.css owns them), `gg-vwin-flag` only moves it to the
+   other corner and — critically — makes it visible regardless of
+   html[data-gg-vskip], because reporting is a safety affordance and the ✕ is a
+   comfort preference. See ui/screens.css for the four-declaration override. --- */
+export const FLAG_BTN_CLASS = 'gg-vwin-flag';
+export const FLAG_GLYPH = '⚑';
+
+/* ----------------------------------------------------------------------------
+ * THE PER-MATCH PEER RENDER LOG — the seam ui/screens/recap.js reads to decide
+ * whether to offer a report card at all, and in what order.
+ *
+ * MODULE-LEVEL, not per-instance, and the reason is the reset point:
+ *
+ *   IT IS *NOT* CLEARED BY stopWindows(). boot.js clearForRecap() calls
+ *   executor.stopAll() -> stopWindows() IMMEDIATELY BEFORE the recap screen
+ *   mounts, so clearing here would wipe exactly the data the card is about to
+ *   ask for. The log is cleared at the START of a match instead
+ *   (boot.js attachMatch -> resetPeerRenderLog), which means it covers exactly
+ *   one match and stays readable for the whole recap that follows it.
+ *
+ * FLASHES ARE NOT IN HERE. exec/flashes.js can also resolve an `xfer:` tag, but
+ * a burst throws dozens of stills a second and a per-image flag button would be
+ * unusable; the recap card covers them from receivedStore.thisMatch() instead
+ * (v1 decision, spec §7.5 "secondary").
+ * -------------------------------------------------------------------------- */
+const peerRendered = new Map();   // sha -> {sha, at, flagged}
+
+/** Remember that a peer artifact went on screen. Called from openWindow only. */
+export function notePeerRender(sha) {
+  if (typeof sha !== 'string' || !sha) return false;
+  if (!peerRendered.has(sha)) peerRendered.set(sha, { sha, at: Date.now(), flagged: false });
+  return true;
+}
+
+/** The player pressed the flag on it. Idempotent; survives the window. */
+export function notePeerFlag(sha) {
+  if (typeof sha !== 'string' || !sha) return false;
+  notePeerRender(sha);
+  peerRendered.get(sha).flagged = true;
+  return true;
+}
+
+/**
+ * What a duel partner put on this screen during THIS match.
+ * @returns {{rendered: Array<{sha:string, at:number, flagged:boolean}>, flagged: string[]}}
+ */
+export function peerRenderLog() {
+  const rendered = Array.from(peerRendered.values()).map((e) => ({ ...e }));
+  return { rendered, flagged: rendered.filter((e) => e.flagged).map((e) => e.sha) };
+}
+
+/** A new match begins. THE ONLY reset — see the banner above. */
+export function resetPeerRenderLog() {
+  peerRendered.clear();
+}
+
 /* --- the exit. The class fx.css hangs ggVwinOut off, how long that animation
    runs, and the timer that guarantees the node dies even if it never plays. --- */
 export const OUT_CLASS = 'gg-vwin--out';
@@ -1165,6 +1230,13 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     if (!handle || !handle.url) return null;
     sfx('video-window-in');
 
+    // WHOSE BYTES ARE THESE? Read once, here, because everything downstream —
+    // the flag button, the render log, reSource's flip back to 'local' — keys
+    // off it. `sha` only exists on a peer handle (exec/media.js acquirePeer).
+    const provenance = (handle && handle.provenance) || entry.provenance || 'local';
+    const peerSha = provenance === 'peer' ? String((handle && handle.sha) || entry.sha || '') : '';
+    if (peerSha) notePeerRender(peerSha);
+
     // At the cap the OLDEST settles first — it has been watched the longest, so
     // it is endured, not interrupted. A LOCAL spawn never reaches this line.
     while (wins.length >= MAX_WINDOWS) settleWindow(wins[0], true);
@@ -1221,18 +1293,31 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     skipBtn.setAttribute('aria-label', 'close this video');
     skipBtn.textContent = '✕';
 
+    // THE FLAG — built ONLY for a peer window, so a player can never be offered
+    // a report on their own library. Absent, not hidden: there is nothing to
+    // report about a file that was already on this machine.
+    const flagBtn = peerSha ? document.createElement('button') : null;
+    if (flagBtn) {
+      flagBtn.className = SKIP_BTN_CLASS + ' ' + FLAG_BTN_CLASS;
+      flagBtn.setAttribute('type', 'button');
+      flagBtn.setAttribute('aria-label', 'hide this and flag it for reporting');
+      flagBtn.textContent = FLAG_GLYPH;
+    }
+
     inner.appendChild(video);
     inner.appendChild(dot);
     inner.appendChild(mute);
     inner.appendChild(skipBtn);
+    if (flagBtn) inner.appendChild(flagBtn);
     driftEl.appendChild(inner);
     node.appendChild(driftEl);
 
     const rec = {
       node, drift: driftEl, video, handle, onDone,
       // 'peer' means the bytes came off the opponent's machine. The in-match report
-      // affordance (a later wave) keys off exactly this, and reSource reads it too.
-      provenance: (handle && handle.provenance) || entry.provenance || 'local',
+      // affordance keys off exactly this, and reSource reads it too.
+      provenance,
+      sha: peerSha,
       intensity: clamp01(intensity),
       wid: ++widSeq, muted: false,
       dx: 0, dy: 0, held: false, finished: false,
@@ -1254,6 +1339,39 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
       // to post: they sat with it until they were done. ENDURED.
       settleWindow(rec, true);
     });
+
+    if (flagBtn) {
+      // Same press ergonomics as the ✕, for the same reason: the button must
+      // never start a drag, and it must NOT preventDefault the pointerdown or
+      // the browser never raises the click the control exists for. Wheel is
+      // left alone deliberately — it bubbles to the window and resizes it,
+      // exactly as it does over the ✕.
+      flagBtn.addEventListener('pointerdown', (e) => {
+        if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+      });
+      flagBtn.addEventListener('click', (e) => {
+        if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        if (rec.finished || !rec.node) return;
+        // Read off the RECORD, not the closure: reSource clears rec.sha when a
+        // dud peer file is replaced by one of the receiver's own, and flagging
+        // an artifact that is no longer on the screen would name the wrong file.
+        // In that state the button is just a close, which is honest.
+        const sha = rec.sha;
+        // Remembered FIRST: settleWindow tears the record down, and a flag that
+        // depended on the node still existing would be lost on the fast path.
+        if (sha) {
+          notePeerFlag(sha);
+          info(`peer artifact ${sha.slice(0, 8)} flagged — hidden for the match, queued for the recap`);
+        }
+        // ENDURED, exactly like the ✕ (settleWindow(rec, true)), and that is the
+        // point: the receipt a flag posts must be INDISTINGUISHABLE from the one
+        // a plain dismissal posts, or the wire tells the sender their file was
+        // flagged. It is also the truth — the player sat with it until they
+        // decided to act. No dialog, no toast, no sound: this window simply goes.
+        settleWindow(rec, true);
+      });
+    }
 
     video.onerror = () => {
       rec.tries++;
@@ -1315,6 +1433,11 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     try { if (rec.handle && rec.handle.release) rec.handle.release(); } catch (_e) { /* ignore */ }
     rec.handle = handle;
     rec.provenance = (handle && handle.provenance) || 'local';
+    // …and the hash goes with it. The window now shows the RECEIVER'S file, so a
+    // flag on it would name an artifact that is no longer on the screen. (The
+    // button is still in the DOM — it was built with the window — but the log
+    // already holds the original render, which is the thing worth reporting.)
+    rec.sha = '';
     try { rec.video.src = handle.url; } catch (_e) { return false; }
     play(rec.video);
     return true;

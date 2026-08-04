@@ -574,6 +574,195 @@ async function testVwinTick() {
   pair.dispose();
 }
 
+// ============================================================ 7. the hash blocklist
+//
+// net/blocklist.js is the safety client for the P2P media transfer, and it has two jobs that
+// pull in opposite directions: answer the OFFER GATE in one synchronous turn (a round trip
+// there would be a wedge and a timing oracle), and never let a proxy outage silently kill a
+// consented feature. So it batches, caches both verdicts, and FAILS OPEN.
+async function testBlocklist() {
+  const { createBlocklist, BLOCKLIST_MAX_PER_POST } = await import('../net/blocklist.js');
+  const SHA = (c) => String(c).repeat(64).slice(0, 64);
+  const A = SHA('a'), B = SHA('b'), C = SHA('c');
+
+  // --- batching: one POST for a burst of checks, and the hits come back only.
+  {
+    const posts = [];
+    const bl = createBlocklist({
+      post: (path, body) => {
+        posts.push({ path, body });
+        return Promise.resolve({ status: 200, body: JSON.stringify({ ok: true, blocked: [B] }) });
+      },
+      unifiedId: () => 'u_test',
+      logger: quiet,
+      batchMs: 5,
+    });
+
+    ok(bl.knows(A) === false, 'an unknown hash is UNKNOWN — which the offer gate reads as "not blocked"');
+    ok(bl.isBlocked(A) === false, 'and never as blocked, or an outage would look like a ban');
+
+    const blocked = [];
+    bl.onBlocked((sha) => blocked.push(sha));
+    bl.check([A, B, C, 'nope', A]);
+    await sleep(60);
+
+    ok(posts.length === 1, 'one debounced POST for the whole burst, duplicates and junk dropped',
+      String(posts.length));
+    ok(posts[0].path === '/v2/goon/blocked', 'to the route the server whitelist already allows', posts[0].path);
+    ok(posts[0].body.unified_id === 'u_test', 'carrying the identity the rate limiter keys on');
+    ok(posts[0].body.hashes.length === 3, 'three real hashes, and the junk string was never sent',
+      String(posts[0].body.hashes.length));
+    ok(bl.knows(A) && bl.knows(B) && bl.knows(C), 'every hash in the batch now has a verdict');
+    ok(bl.isBlocked(B) === true && bl.isBlocked(A) === false && bl.isBlocked(C) === false,
+      'and only the hits are blocked — the response carries hits ONLY, which is the shape the client wants');
+    ok(blocked.length === 1 && blocked[0] === B,
+      'onBlocked fires once per newly-blocked hash (this is what drops the file)', blocked.join(','));
+
+    bl.check([A, B, C]);
+    await sleep(40);
+    ok(posts.length === 1, 'a re-check of known hashes costs nothing at all', String(posts.length));
+    bl.dispose();
+  }
+
+  // --- the flush threshold: a big prefetch does not wait out the debounce.
+  {
+    let posted = 0;
+    const bl = createBlocklist({
+      post: () => { posted++; return Promise.resolve({ status: 200, body: '{"ok":true,"blocked":[]}' }); },
+      logger: quiet,
+      batchMs: 100000,          // the debounce would never fire — only the threshold can
+      flushAt: 4,
+    });
+    bl.prime([SHA('1'), SHA('2'), SHA('3'), SHA('4'), SHA('5')]);
+    await sleep(40);
+    ok(posted === 1, 'hitting the flush threshold posts immediately instead of waiting', String(posted));
+    ok(BLOCKLIST_MAX_PER_POST === 64, 'and the per-call cap matches the server BLOCKED_QUERY_MAX',
+      String(BLOCKLIST_MAX_PER_POST));
+    bl.dispose();
+  }
+
+  // --- FAIL OPEN. A dead proxy must not ban everyone's media.
+  {
+    let calls = 0;
+    const bl = createBlocklist({
+      post: () => { calls++; return Promise.resolve({ status: 503, body: '' }); },
+      logger: quiet,
+      batchMs: 5,
+      retryMs: 80,
+    });
+    bl.check([A]);
+    await sleep(50);
+    ok(calls === 1, 'the lookup was attempted');
+    ok(bl.isBlocked(A) === false, 'a 5xx does NOT block the hash — the sender is someone we consented to');
+    ok(bl.knows(A) === true, 'and the verdict ANSWERS the offer gate immediately rather than stalling it');
+
+    bl.check([A]);
+    await sleep(20);
+    ok(calls === 1, 'inside the retry window it is not asked again', String(calls));
+    await sleep(120);
+    bl.check([A]);
+    await sleep(50);
+    ok(calls === 2, 'past the retry stamp it IS asked again — fail-open is temporary, not permanent',
+      String(calls));
+    ok(bl.stats().failures === 2, 'and the failures are counted for the debug surface',
+      JSON.stringify(bl.stats()));
+    bl.dispose();
+  }
+
+  // --- status 0 (no host at all) is the same story.
+  {
+    const bl = createBlocklist({ post: () => Promise.resolve({ status: 0, body: '' }), logger: quiet, batchMs: 5 });
+    bl.check([A]);
+    await sleep(50);
+    ok(bl.knows(A) === true && bl.isBlocked(A) === false, 'a dead bridge fails open too');
+    bl.dispose();
+  }
+}
+
+/* ====================================== 8. peer_card_ver (Discord §3)
+ *
+ * The ONE piece of the Discord sharing feature that lives in net/: the opaque
+ * version string the server hands each side about the OTHER. This layer only
+ * has to CARRY it and announce it — it never fetches an avatar, and it must
+ * never decide whether one is wanted (that is a viewer preference, one tier up
+ * in ui/discord.js).
+ *
+ * The three ways it would go wrong:
+ *   · a version that arrives on /join (guest) or /signal (host) and is silently
+ *     dropped, leaving the opponent permanently faceless with nothing in a log;
+ *   · a listener that throws taking the signaling poll down with it — the poll
+ *     IS the match's connection and an avatar is a decoration;
+ *   · null being reported as a change. Nobody sharing anything is the DEFAULT
+ *     case (every flag ships false), and it has to be silent.
+ * ======================================================================== */
+async function testPeerCardVer() {
+  const fake = new GoonFakeSignalingServer();
+  const hostSig = new GoonSignalingClient({ post: fake.post, unifiedId: 'u_host', logger: quiet });
+  const guestSig = new GoonSignalingClient({ post: fake.post, unifiedId: 'u_guest', logger: quiet });
+
+  const seenHost = [];
+  const seenGuest = [];
+  hostSig.onPeerCard((v) => seenHost.push(v));
+  guestSig.onPeerCard((v) => seenGuest.push(v));
+  // A decoration listener that blows up must not be able to break the poll.
+  hostSig.onPeerCard(() => { throw new Error('listener blew up'); });
+
+  const invite = await hostSig.createInvite('host');
+  ok(!!invite, 'peer-card: a room is minted');
+
+  // NOBODY SHARES ANYTHING — the default, and it must be silent.
+  const quietJoin = await guestSig.join(invite.code, 'guest');
+  ok(!!quietJoin && quietJoin.peerCardVer === null,
+    'with no sharing, /join reports a null card version', String(quietJoin && quietJoin.peerCardVer));
+  ok(seenGuest.length === 0, 'and NOTHING is announced — null is not a change', JSON.stringify(seenGuest));
+
+  // The HOST learns the guest's version off /signal, next to peer_joined.
+  fake.setPeerCardVer('guest', 'g-v1');
+  const poll = await hostSig.signal(invite.code, invite.token, 'host', 0, []);
+  ok(!!poll && poll.peerJoined === true, 'the host polls and sees the peer joined');
+  ok(poll.peerCardVer === 'g-v1', 'and the guest card version rides alongside it', String(poll.peerCardVer));
+  ok(seenHost.length === 1 && seenHost[0] === 'g-v1',
+    'announced once — and the throwing listener stopped neither the poll nor the good listener',
+    JSON.stringify(seenHost));
+  ok(hostSig.peerCardVer === 'g-v1', 'and latched on the client, for a subscriber that arrives late');
+
+  // /signal repeats it on EVERY tick. The client announces every time; the PAGE
+  // de-duplicates. Two jobs, two files — a client that filtered here would hide
+  // a re-share that happened to produce the same version.
+  await hostSig.signal(invite.code, invite.token, 'host', poll.cursor, []);
+  await hostSig.signal(invite.code, invite.token, 'host', poll.cursor, []);
+  ok(seenHost.length === 3,
+    "a repeated version is announced every poll — de-duplication is the page's job, not the wire's",
+    String(seenHost.length));
+
+  fake.setPeerCardVer('guest', 'g-v2');
+  const poll2 = await hostSig.signal(invite.code, invite.token, 'host', poll.cursor, []);
+  ok(poll2.peerCardVer === 'g-v2' && seenHost[seenHost.length - 1] === 'g-v2',
+    'and a changed version comes straight through', String(poll2.peerCardVer));
+
+  // The GUEST's half of the same contract, on a fresh room: /join is the only
+  // response it ever gets before the channel is up.
+  const fake2 = new GoonFakeSignalingServer();
+  const hostSig2 = new GoonSignalingClient({ post: fake2.post, unifiedId: 'u_host2', logger: quiet });
+  const guestSig2 = new GoonSignalingClient({ post: fake2.post, unifiedId: 'u_guest2', logger: quiet });
+  const seenGuest2 = [];
+  guestSig2.onPeerCard((v) => seenGuest2.push(v));
+  fake2.setPeerCardVer('host', 'h-v1');
+  const inv2 = await hostSig2.createInvite('host');
+  const joined2 = await guestSig2.join(inv2.code, 'guest');
+  ok(joined2 && joined2.peerCardVer === 'h-v1',
+    'the guest learns the HOST card version off the /join response', String(joined2 && joined2.peerCardVer));
+  ok(seenGuest2.length === 1 && seenGuest2[0] === 'h-v1',
+    'announced exactly once', JSON.stringify(seenGuest2));
+
+  const after = seenHost.length;
+  hostSig.dispose();
+  await hostSig.signal(invite.code, invite.token, 'host', poll2.cursor, []);
+  ok(seenHost.length === after, 'a disposed client notifies nobody', `${after} -> ${seenHost.length}`);
+
+  guestSig.dispose(); hostSig2.dispose(); guestSig2.dispose();
+}
+
 // ============================================================ run
 const main = async () => {
   await testSignaling();
@@ -582,6 +771,8 @@ const main = async () => {
   await testSessionFallback();
   await testBulkSurface();
   await testVwinTick();
+  await testBlocklist();
+  await testPeerCardVer();
 
   console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);
   process.exit(failures === 0 ? 0 : 1);

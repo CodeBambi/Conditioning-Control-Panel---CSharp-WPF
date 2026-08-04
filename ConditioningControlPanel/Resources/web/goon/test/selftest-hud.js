@@ -2372,6 +2372,385 @@ const audioMod = await import('../ui/audio.js');
   root.removeAttribute(spiralMod.SHADER_ATTR);
 }
 
+/* ===========================================================================
+ * 12. DISCORD SHARING — the avatar kit, the state module, the panel, the minis
+ *     and the `gg-ava` bus (docs/GOON_DISCORD_CONTRACT.md, Work Item D).
+ *
+ * The risks this section exists for, in the order they would ship:
+ *   1. AN OPTIMISTIC TOGGLE. A switch that paints itself on click is a switch
+ *      that lies whenever the host refuses the write. The whole panel renders
+ *      from the ECHO, and the only way to prove it is to click and assert that
+ *      NOTHING moved until a `discord` frame arrived.
+ *   2. A FETCH LOOP. `peer-card-req` must fire once per VERSION, not once per
+ *      poll — /signal repeats peer_card_ver on every tick, and a request per
+ *      tick is a rate-limit ban.
+ *   3. A PREF THAT ONLY HIDES PIXELS. showOpponentAvatars OFF has to suppress
+ *      the FETCH; "do not show me" and "do not download it" are one request.
+ *   4. A LEAKED IDENTIFIER. No snowflake reaches this page, ever — `dm` is a
+ *      boolean and the DM button is absent, not disabled, when it is false.
+ *   5. A CTA THAT STARTS SOMETHING. `discord-link-request` asks the app to come
+ *      forward; a version that began OAuth would be a consent bypass.
+ * ======================================================================== */
+{
+  const avatarMod = await import('../ui/avatar.js');
+  const discordMod = await import('../ui/discord.js');
+  const prefsMod = await import('../ui/prefs.js');
+  const routerMod = await import('../ui/router.js');
+  const { S } = await import('../ui/strings.js');
+
+  /* ---- 12a. the avatar kit ---------------------------------------------- */
+  ok(typeof avatarMod.avatarNode === 'function', 'ui/avatar.js exports avatarNode');
+  ok(typeof avatarMod.emitAva === 'function', 'and the gg-ava emitter');
+  ok(avatarMod.AVA_EVENT === 'gg-ava', 'the bus is the contract event name', avatarMod.AVA_EVENT);
+  // The kinds and their ORDER are frozen by §6 — E indexes the same list.
+  ok(avatarMod.AVA_KINDS.join(',') === 'land,fire,drop,pop,emote,mercy,win,lose,draw,cue',
+    'and carries the contract kinds, in contract order', avatarMod.AVA_KINDS.join(','));
+
+  const hues = ['ada', 'Ada', 'bee', '', 'ада', '🦊fox'].map((x) => avatarMod.hueFromName(x));
+  ok(hues.every((h) => Number.isInteger(h) && h >= 0 && h <= 359),
+    'hueFromName folds any name to an integer 0-359', JSON.stringify(hues));
+  ok(avatarMod.hueFromName('ada') === avatarMod.hueFromName('ada'),
+    'and is deterministic — the same player is the same colour on both machines');
+  ok(avatarMod.hueFromName('ada') !== avatarMod.hueFromName('Ada'),
+    'case is part of the name, so two spellings do not collide by accident');
+  ok(avatarMod.initialOf('🦊fox') === '🦊',
+    'initialOf takes a whole code point — half a surrogate pair is a tofu box',
+    avatarMod.initialOf('🦊fox'));
+  ok(avatarMod.initialOf('') === '?' && avatarMod.initialOf(null) === '?',
+    'and a nameless peer still gets a glyph');
+
+  // THE BOX IS RESERVED. A bubble built with no picture is already the right
+  // size with a tile in it; the picture REPLACES the tile in the same box.
+  const tileAva = avatarMod.avatarNode({ side: 'opp', name: 'Ada', dataUri: null, size: 'mini' });
+  ok(tileAva.getAttribute('data-side') === 'opp', 'a bubble carries data-side for the FX bus');
+  ok(tileAva.getAttribute('data-size') === 'mini', 'and a size token, which is what reserves the box');
+  ok(findOne(tileAva, 'gg-ava-tile') && !findOne(tileAva, 'gg-ava-img'),
+    'with no picture it renders the initial-letter tile');
+  ok(findOne(tileAva, 'gg-ava-tile').textContent === 'A', 'showing the initial', findOne(tileAva, 'gg-ava-tile').textContent);
+  tileAva.setPicture('data:image/png;base64,AAAA');
+  ok(findOne(tileAva, 'gg-ava-img') && !findOne(tileAva, 'gg-ava-tile'),
+    'and the picture landing SWAPS the child — same node, same box, no reflow');
+  ok(tileAva.children.length === 1, 'exactly one child at a time', String(tileAva.children.length));
+  tileAva.setPicture('https://cdn.discordapp.com/x.png');
+  ok(!!findOne(tileAva, 'gg-ava-tile'),
+    'a non-data: src is REFUSED back to a tile — this page never fetches a remote avatar');
+
+  /* ---- 12b. the bus is unbreakable --------------------------------------- */
+  const beats = [];
+  const busEar = (e) => beats.push(e.detail);
+  document.addEventListener('gg-ava', busEar);
+  ok(avatarMod.emitAva('land', 'you', { kind: 3 }) === true, 'emitAva dispatches a known kind');
+  ok(beats.length === 1 && beats[0].kind === 'land' && beats[0].side === 'you', 'with the contract detail shape',
+    JSON.stringify(beats[0]));
+  ok(avatarMod.emitAva('nonsense', 'you') === false, 'an unknown kind is dropped, not thrown on');
+  ok(avatarMod.emitAva('pop', 'nobody') === false || beats[beats.length - 1].side === 'you',
+    'and an unknown side falls back to "you" rather than emitting garbage');
+  ok(avatarMod.emitAva('pop') === true && beats[beats.length - 1].meta === undefined,
+    'a beat with no meta simply carries none');
+  beats.length = 0;
+
+  /* ---- 12c. the state module: THE ECHO IS THE TRUTH ---------------------- */
+  function fakeBridge() {
+    const sent = [];
+    const handlers = new Map();
+    return {
+      sent,
+      send: (m) => sent.push(m),
+      on: (t, fn) => {
+        if (handlers.has(t)) throw new Error('duplicate handler for ' + t);
+        handlers.set(t, fn);
+      },
+      deliver: (t, m) => { const fn = handlers.get(t); if (fn) fn(m); },
+      types: () => Array.from(handlers.keys()),
+      last: (t) => sent.filter((m) => m.type === t).pop() || null,
+      count: (t) => sent.filter((m) => m.type === t).length,
+    };
+  }
+
+  const bus = fakeBridge();
+  const uiPrefs = prefsMod.createPrefs({});
+  const dc = discordMod.createDiscord({
+    prefs: uiPrefs,
+    send: bus.send,
+    on: bus.on,
+    hosted: true,
+    getRoom: () => ({ code: 'ABC123', token: 'roomtok', role: 'host' }),
+  });
+
+  ok(bus.types().sort().join(',') === 'discord,peer-card',
+    'ui/discord.js owns exactly two inbound verbs at the bridge', bus.types().join(','));
+  ok(discordMod.DISCORD_VERBS_OUT.length === 6,
+    'and declares its six outbound verbs', discordMod.DISCORD_VERBS_OUT.join(','));
+
+  ok(dc.state.avatarState === 'unlinked' && !dc.sharingDm && !dc.richPresence,
+    'everything defaults to unlinked and OFF before any frame arrives');
+  ok(dc.lastOpponent === null && dc.peer === null, 'with no opponent and no card');
+
+  dc.applyInit({
+    avatarState: 'off', avatarDataUri: null, dmShared: false,
+    richPresence: false, seenSharePrompt: false,
+    lastOpponent: { name: 'Mara', avatarDataUri: null, dm: true, ts: Date.now() - 3600000 },
+  });
+  ok(dc.linked === true && dc.sharingAvatar === false,
+    'init "off" means LINKED but not sharing — two different facts, two different states');
+  ok(dc.lastOpponent && dc.lastOpponent.name === 'Mara', 'init is the one frame that carries lastOpponent');
+
+  // THE OPTIMISM PIN. Ask for a write, and assert the local view has NOT moved.
+  dc.writePrefs({ shareAvatar: true });
+  ok(bus.last('discord-prefs').shareAvatar === true, 'writePrefs posts discord-prefs');
+  ok(dc.sharingAvatar === false,
+    'and NOTHING local moved — the request is not the truth, the echo is');
+  bus.deliver('discord', { type: 'discord', avatarState: 'shared', avatarDataUri: 'data:image/png;base64,QQ==', dmShared: false, richPresence: false, seenSharePrompt: false });
+  ok(dc.sharingAvatar === true && dc.state.avatarDataUri.slice(0, 5) === 'data:',
+    'only the echo flips it — and the echo is a FLAT frame, as the host sends it');
+  ok(dc.lastOpponent && dc.lastOpponent.name === 'Mara',
+    'and a `discord` echo never clears lastOpponent — only `init` carries that record');
+  ok(dc.writePrefs({}) === false, 'a write with no fields is refused rather than costing an echo');
+
+  /* ---- 12d. the share prompt gate ---------------------------------------- */
+  ok(dc.needsSharePrompt() === true, 'sharing on + never asked = the one-time confirm is due');
+  bus.deliver('discord', { type: 'discord', avatarState: 'shared', avatarDataUri: null, dmShared: false, richPresence: false, seenSharePrompt: true });
+  ok(dc.needsSharePrompt() === false, 'and it is spent once the host echoes seenSharePrompt');
+  bus.deliver('discord', { type: 'discord', avatarState: 'off', avatarDataUri: null, dmShared: false, richPresence: false, seenSharePrompt: false });
+  ok(dc.needsSharePrompt() === false, 'with nothing shared there is nothing to confirm, asked or not');
+
+  /* ---- 12e. peer-card-req: once per VERSION, with the room credentials ---- */
+  ok(dc.notePeerCardVer(null).reason === 'none', 'a null version means the peer shares nothing — no request');
+  const first = dc.notePeerCardVer('v1');
+  ok(first.requested === true, 'a new version asks for the card');
+  ok(bus.count('peer-card-req') === 1, 'exactly one request', String(bus.count('peer-card-req')));
+  const req = bus.last('peer-card-req');
+  ok(req.code === 'ABC123' && req.token === 'roomtok' && req.role === 'host',
+    'and it carries {code, token, role} — /v2/goon/peercard is room-authed and only the PAGE holds them',
+    JSON.stringify(req));
+  for (let i = 0; i < 5; i++) dc.notePeerCardVer('v1');
+  ok(bus.count('peer-card-req') === 1,
+    'five more polls of the SAME version ask for nothing — /signal repeats it every tick',
+    String(bus.count('peer-card-req')));
+  dc.notePeerCardVer('v2');
+  ok(bus.count('peer-card-req') === 2, 'a CHANGED version asks again', String(bus.count('peer-card-req')));
+
+  bus.deliver('peer-card', { type: 'peer-card', name: 'Mara', avatarDataUri: 'data:image/png;base64,QQ==', reason: 'ok', dm: true, ver: 'v3' });
+  ok(dc.peer && dc.peer.dm === true && dc.peer.name === 'Mara', 'a card lands on the peer view');
+  ok(!('dm_id' in dc.peer) && !('id' in dc.peer),
+    'and carries NO identifier — dm is a boolean, the host owns the snowflake', Object.keys(dc.peer).join(','));
+  dc.notePeerCardVer('v3');
+  ok(bus.count('peer-card-req') === 2,
+    'an arriving card advances the ledger, so the version it carried is never re-fetched');
+
+  /* ---- 12f. showOpponentAvatars OFF suppresses the FETCH ------------------ */
+  ok(prefsMod.PREF_DEFAULTS.showOpponentAvatars === true,
+    'showOpponentAvatars is a pref and DEFAULTS ON — the sharer already opted in',
+    String(prefsMod.PREF_DEFAULTS.showOpponentAvatars));
+  uiPrefs.set('showOpponentAvatars', false);
+  const suppressed = dc.notePeerCardVer('v9');
+  ok(suppressed.requested === false && suppressed.reason === 'pref-off',
+    'with it OFF a brand-new version fetches NOTHING — not hidden pixels, no download',
+    JSON.stringify(suppressed));
+  ok(bus.count('peer-card-req') === 2, 'and no frame went out', String(bus.count('peer-card-req')));
+  bus.deliver('peer-card', { type: 'peer-card', name: 'Mara', avatarDataUri: 'data:image/png;base64,QQ==', reason: 'ok', dm: true, ver: 'v9' });
+  ok(dc.peer.avatarDataUri === null,
+    'and a card that lands anyway (the pref flipped mid-flight) is stripped of its picture');
+  ok(dc.peer.dm === true, 'though the DM flag survives — it is their choice, not their face');
+  uiPrefs.set('showOpponentAvatars', true);
+
+  /* ---- 12g. rp-state: enum only, never repeated --------------------------- */
+  ok(dc.setRpState('lobby') === true && bus.last('rp-state').s === 'lobby', 'rp-state posts the enum');
+  ok(dc.setRpState('lobby') === false, 'the same state twice is one frame, not two');
+  ok(dc.setRpState('dancing') === false, 'and a value outside the enum never reaches the wire');
+  ok(bus.count('rp-state') === 1, 'so exactly one rp-state frame so far', String(bus.count('rp-state')));
+  dc.setRpState('live'); dc.setRpState('recap'); dc.setRpState('off');
+  ok(bus.count('rp-state') === 4 && bus.last('rp-state').s === 'off', 'and the run of states is posted in order');
+
+  /* ---- 12h. last-opponent clear, and the CTA that starts nothing ---------- */
+  ok(dc.lastOpponent !== null, 'the last opponent is still on file');
+  dc.clearLastOpponent();
+  ok(bus.count('last-opponent-clear') === 1, 'the ✕ posts last-opponent-clear');
+  ok(dc.lastOpponent === null,
+    'and clears the local copy in the same breath — a card that lingers for a round trip reads as a refusal');
+
+  dc.linkRequest();
+  const link = bus.last('discord-link-request');
+  ok(!!link && Object.keys(link).length === 1,
+    'discord-link-request carries NOTHING but its type — it cannot grow an argument that starts OAuth',
+    JSON.stringify(link));
+  ok(bus.count('discord-open-dm') === 0, 'and the CTA opened no DM and started no sign-in');
+  dc.openDm('peer');
+  ok(bus.last('discord-open-dm').which === 'peer', 'opening a DM names WHICH, and nothing else',
+    JSON.stringify(bus.last('discord-open-dm')));
+  ok(!('id' in bus.last('discord-open-dm')), 'never an id — the host resolves it from its own store');
+
+  /* ---- 12i. the lobby panel renders from the echo ------------------------- */
+  const ledger = routerMod.createLedger();
+  const panel = discordMod.buildDiscordSection({ discord: dc, ledger, prefs: uiPrefs, youName: 'tester' });
+  ok(!!panel && !!panel.node, 'buildDiscordSection builds a card');
+  const toggles = findAll(panel.node, 'gg-toggle');
+  ok(toggles.length === 3, 'with the three sharing toggles', String(toggles.length));
+  ok(!!findOne(panel.node, 'gg-ava'), 'and your own avatar bubble on it');
+  // Unlinked: the CTA shows and the two sharing switches are inert.
+  bus.deliver('discord', { type: 'discord', avatarState: 'unlinked', avatarDataUri: null, dmShared: false, richPresence: false, seenSharePrompt: false });
+  ok(findOne(panel.node, 'gg-dc-link').hidden === false, 'unlinked, the Connect CTA is on screen');
+  ok(toggles[0].disabled === true && toggles[1].disabled === true,
+    'and the two SHARING switches are inert — there is nothing to share yet');
+  const beforeLink = bus.count('discord-link-request');
+  const beforeWrites = bus.count('discord-prefs');
+  toggles[0].dispatchEvent({ type: 'click' });
+  ok(bus.count('discord-prefs') === beforeWrites,
+    'clicking a disabled switch writes nothing',
+    `${beforeWrites} -> ${bus.count('discord-prefs')}`);
+  ok(toggles[0].getAttribute('aria-pressed') === 'false', 'and does not paint itself on either');
+  ok(bus.count('discord-link-request') === beforeLink,
+    'and NOTHING on this panel auto-starts a link — the CTA is the only door, and it is a click',
+    `${beforeLink} -> ${bus.count('discord-link-request')}`);
+
+  bus.deliver('discord', { type: 'discord', avatarState: 'shared', avatarDataUri: null, dmShared: true, richPresence: false, seenSharePrompt: true });
+  ok(findOne(panel.node, 'gg-dc-link').hidden === true, 'linked and sharing, the CTA steps aside');
+  ok(toggles[0].getAttribute('aria-pressed') === 'true' && toggles[1].getAttribute('aria-pressed') === 'true',
+    'and both switches read from the echo');
+  ok(findOne(panel.node, 'gg-dc-flag').hidden === false,
+    '"they can see your picture" is on screen the whole time it is true');
+  ledger.dispose();
+
+  /* ---- 12i-b. STANDALONE (?solo=1, no host). The panel is the only way to
+   * LOOK at this feature during dev, so it renders — inert, with one line
+   * saying why, and a CTA that cannot be pressed into a link request that has
+   * nowhere to go. */
+  const soloBus = fakeBridge();
+  const soloDc = discordMod.createDiscord({ send: soloBus.send, on: soloBus.on, hosted: false, getRoom: () => null });
+  const soloLedger = routerMod.createLedger();
+  const soloPanel = discordMod.buildDiscordSection({ discord: soloDc, ledger: soloLedger, youName: 'Solo' });
+  ok(soloDc.hosted === false, 'standalone, the module knows there is no host');
+  ok(soloDc.state.avatarState === 'unlinked' && !soloDc.sharingDm && !soloDc.richPresence,
+    'and defaults sanely — unlinked, nothing shared, no presence');
+  ok(findAll(soloPanel.node, 'gg-toggle').length === 3 && !!findOne(soloPanel.node, 'gg-ava'),
+    'the sharing panel still renders in full — it is the only way to see it in a browser');
+  ok(findOne(soloPanel.node, 'gg-dc-link').hidden === false, 'with the CTA box on screen');
+  ok(findOne(soloPanel.node, 'gg-dc-linkline').textContent === S.discord.hostedOnly,
+    'carrying the hosted-only hint instead of the connect line',
+    findOne(soloPanel.node, 'gg-dc-linkline').textContent);
+  ok(findAll(soloPanel.node, 'gg-toggle').every((t) => t.disabled === true),
+    'and every switch inert — there is no settings file out here to write to');
+  ok(soloBus.sent.length === 0, 'and NOTHING was posted just by rendering it', JSON.stringify(soloBus.sent));
+
+  // Practice mode's opponent: a name, a tile, and never a DM.
+  soloDc.setSoloPeer(S.discord.practiceBot);
+  ok(soloDc.peer.name === S.discord.practiceBot && soloDc.peer.dm === false && soloDc.peer.avatarDataUri === null,
+    'the practice bot presents a name and a tile, and no DM — it is not a person',
+    JSON.stringify(soloDc.peer));
+  soloLedger.dispose();
+  soloDc.dispose();
+
+  /* ---- 12j. the HUD minis and the DM affordance --------------------------- */
+  const dmBus = fakeBridge();
+  const dmDc = discordMod.createDiscord({ send: dmBus.send, on: dmBus.on, hosted: true, getRoom: () => null });
+  const match12 = makeFakeMatch();
+  const hud12 = hudMod.mountHud({
+    match: match12,
+    session: { identity: { displayName: 'tester' } },
+    audio: { sfx() {} },
+    discord: dmDc,
+  });
+  const frame12 = findOne(dom.byId.get('gg-hud'), 'gg-hud-frame');
+  const minis = findAll(frame12, 'gg-ava--mini');
+  ok(minis.length === 2, 'the desk carries two persistent minis', String(minis.length));
+  ok(minis.some((m) => m.getAttribute('data-side') === 'you')
+    && minis.some((m) => m.getAttribute('data-side') === 'opp'),
+    'one a side, and both tagged for the FX bus');
+  ok(findAll(frame12, 'gg-ava-dm').length === 0,
+    'and NO DM button before a card says they shared one');
+
+  dmBus.deliver('peer-card', { type: 'peer-card', name: 'Mara', avatarDataUri: null, reason: 'not_shared', dm: false, ver: 'c1' });
+  ok(findAll(frame12, 'gg-ava-dm').length === 0,
+    'a card with dm:false grows NO button — absent, never disabled, because a button that cannot work is worse');
+  dmBus.deliver('peer-card', { type: 'peer-card', name: 'Mara', avatarDataUri: null, reason: 'ok', dm: true, ver: 'c2' });
+  const dmBtn = findOne(frame12, 'gg-ava-dm');
+  ok(!!dmBtn, 'dm:true grows one');
+  // It ASKS, it does not open: boot confirms first (a browser out of a fullscreen
+  // duel is a surprise) and posts the verb itself.
+  const asks = [];
+  const askEar = (e) => asks.push(e.detail);
+  document.addEventListener(hudMod.DISCORD_DM_EVENT, askEar);
+  dmBtn.dispatchEvent({ type: 'click' });
+  ok(asks.length === 1 && asks[0].which === 'peer', 'clicking it raises the DM ask', JSON.stringify(asks[0]));
+  ok(dmBus.count('discord-open-dm') === 0,
+    'and posts NOTHING itself — the confirm lives in boot, where the sheets are');
+  ok(!('id' in asks[0]) && typeof asks[0].name === 'string', 'the ask carries a name, never an id');
+  document.removeEventListener(hudMod.DISCORD_DM_EVENT, askEar);
+
+  /* ---- 12k. the beats the desk emits -------------------------------------- */
+  beats.length = 0;
+  const kinds = () => beats.map((b) => b.kind + ':' + b.side);
+
+  // LAND — on the landing, not on acceptance: the engine schedules ahead.
+  match12._emit('pAcc', { payload: { id: 'z1', kind: GoonPayloadKind.FlashBurst, duration_ms: 1000 }, fireAtLocalMs: 0 });
+  await sleep(30);
+  ok(kinds().includes('land:you'), 'an inbound payload landing flinches YOUR bubble', kinds().join(' '));
+
+  // LAND on the other side, from the receipt — the only proof it reached them.
+  match12._emit('pRec', { id: 'z1', status: 0 });
+  ok(kinds().includes('land:opp'), 'and a receipt lands the beat on THEIRS', kinds().join(' '));
+
+  // POP + DROP off one real bubble event.
+  beats.length = 0;
+  const realRandom12 = Math.random;
+  Math.random = () => 0;
+  try {
+    document.dispatchEvent(new CustomEvent('gg-bubble-pop', { detail: { kind: 'flash', worth: 2.5, payload: false, x: 10, y: 10 } }));
+  } finally { Math.random = realRandom12; }
+  ok(kinds().includes('pop:you'), 'popping a bubble bops your bubble', kinds().join(' '));
+  ok(kinds().includes('drop:you'), 'and a roll that armed a slot is its own, rarer beat', kinds().join(' '));
+
+  // FIRE, through the arsenal's own gate. Arm one by hand rather than relying on
+  // whatever the pop above happened to drop — an order-dependent pin is a pin
+  // that starts failing for an unrelated reason.
+  beats.length = 0;
+  let armed12 = hud12.parts.arsenal.droppable().find((c) => c.armed > 0);
+  if (!armed12) {
+    const candidate = hud12.parts.arsenal.droppable()[0];
+    if (candidate) { hud12.parts.arsenal.armDrop(candidate.id, { count: 1 }); armed12 = candidate; }
+  }
+  ok(!!armed12, 'the desk has something armed to fire');
+  if (armed12) hud12.parts.arsenal.fire(armed12.id);
+  ok(kinds().includes('fire:you'), 'firing a payload is a beat on the shooter', kinds().join(' '));
+
+  // EMOTE, both directions, with the dwell E syncs its wiggle to.
+  beats.length = 0;
+  hud12.parts.emotes.send('gg', '');
+  ok(kinds().includes('emote:you'), 'your emote going out', kinds().join(' '));
+  match12._emit('emote', { text: 'gg', icon: '' });
+  const oppEmote = beats.find((b) => b.kind === 'emote' && b.side === 'opp');
+  ok(!!oppEmote, 'and theirs arriving');
+  ok(oppEmote && oppEmote.meta && oppEmote.meta.ms > 0,
+    'carrying the real dwell, so the wiggle ends when the bubble does', JSON.stringify(oppEmote && oppEmote.meta));
+
+  hud12.unmount();
+  ok(match12._subs.released === match12._subs.taken,
+    'and the whole discord layer leaks no subscriptions',
+    `${match12._subs.released}/${match12._subs.taken}`);
+
+  /* ---- 12l. the VS splash ------------------------------------------------ */
+  const before = dom.doc.body.children.length;
+  const splash = avatarMod.mountVsSplash({
+    you: { name: 'tester', dataUri: null },
+    opp: { name: 'Mara', dataUri: null },
+    reduced: false,
+    totalMs: 60,
+  });
+  ok(!!splash && !!splash.node, 'the VS splash mounts');
+  ok(findAll(splash.node, 'gg-ava').length === 2, 'with both bubbles on it');
+  ok(dom.doc.body.children.length === before + 1, 'onto <body>, outside every screen container');
+  splash.remove();
+  splash.remove();
+  ok(dom.doc.body.children.length === before, 'and remove() is idempotent — four callers share it');
+
+  ok(avatarMod.mountVsSplash({ you: { name: 'a' }, opp: { name: 'b' }, reduced: true }) === null,
+    'reduced motion SKIPS it entirely rather than parking a card on screen for 1.6s');
+
+  document.removeEventListener('gg-ava', busEar);
+  dc.dispose();
+  dmDc.dispose();
+}
+
 await sleep(60);
 console.log(`\nselftest-hud: ${n - failures}/${n} checks passed`);
 if (failures > 0) {

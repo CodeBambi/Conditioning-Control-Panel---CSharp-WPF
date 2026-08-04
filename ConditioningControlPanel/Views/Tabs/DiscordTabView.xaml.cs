@@ -71,6 +71,23 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkDiscordRichPresence_Changed(sender, e);
         }
+        // Goon Game sharing toggles — forwarded to MainWindow.Patreon like every other
+        // checkbox on this tab (the settings write + sync push lives there).
+        private void ChkGoonShareAvatar_Changed(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.ChkGoonShareAvatar_Changed(sender, e);
+        }
+        private void ChkGoonShareDiscordDm_Changed(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.ChkGoonShareDiscordDm_Changed(sender, e);
+        }
+        private void ChkGoonRichPresence_Changed(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.ChkGoonRichPresence_Changed(sender, e);
+        }
         private void ChkShareAchievements_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

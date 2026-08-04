@@ -484,8 +484,8 @@ function driverRig(o = {}) {
   ok(Array.isArray(post.transfer) && post.transfer[0] === rig.src,
     'the buffer is TRANSFERRED, not copied — a 20 MB gif must not exist twice');
   ok(post.m.cfg.maxBox === 720 && post.m.cfg.maxFps === 30, 'the host\'s targets ride through verbatim');
-  ok(post.m.cfg.wantPrev === WANT_PREVIEW && WANT_PREVIEW === false,
-    'and the preview is OFF: the shipped cache-put takes one blob per job, with no art/prv discriminator');
+  ok(post.m.cfg.wantPrev === WANT_PREVIEW && WANT_PREVIEW === true,
+    'and the preview is ON: cache-put carries it on the dedicated prv part stream');
   ok(rig.driver.busy === true && rig.driver.jobId === 'job-1', 'the driver holds exactly one job');
 
   // progress is forwarded as the verb that resets the host's 3-minute stale timer
@@ -504,6 +504,7 @@ function driverRig(o = {}) {
   const puts = rig.bridge.puts();
   ok(puts.length === 2, 'a 3 MB+ artifact goes out as two cache-put parts', String(puts.length));
   ok(puts.map((p) => p.seq).join(',') === '0,1', 'seq gapless from 0', puts.map((p) => p.seq).join(','));
+  ok(puts.every((p) => p.part === 'art'), 'every artifact part is marked part:art', puts.map((p) => p.part).join(','));
   ok(puts.every((p) => p.jobId === 'job-1'), 'every part quotes the jobId');
   ok(puts.every((p) => typeof p.b64 === 'string' && p.b64.length <= PUT_MAX_B64_CHARS),
     'and none breaks the 4 MB base64 ceiling',
@@ -553,6 +554,57 @@ function driverRig(o = {}) {
   ok(rig.bridge.puts().length === 0, 'a non-ISO-BMFF blob is never uploaded');
   ok(rig.bridge.done()[0].fail === 'not-mp4', 'and the failure names the real problem',
     rig.bridge.done()[0].fail);
+  rig.driver.dispose();
+}
+
+{
+  // --- the preview rides its own prv part stream --------------------------
+  const rig = driverRig();
+  rig.driver.handle(REQ);
+  await sleep(10);
+  const art = fakeMp4(1000);
+  const prv = fakeMp4(500);
+  rig.worker.emit({ kind: 'done', jobId: 'job-1', ok: true, art, prv, w: 640, h: 480, durMs: 1800 });
+  const puts = rig.bridge.puts();
+  ok(puts.length === 2, 'one art part + one prv part', String(puts.length));
+  ok(puts[0].part === 'art' && puts[1].part === 'prv', 'art first, then the preview',
+    puts.map((p) => p.part).join(','));
+  ok(puts[1].seq === 0, 'the prv stream has its OWN gapless seq from 0', String(puts[1].seq));
+  rig.driver.handle({ type: 'cache-put-result', jobId: 'job-1', part: 'art', seq: 0, ok: true });
+  ok(rig.bridge.done().length === 0, 'no encode-done until the preview settles too');
+  rig.driver.handle({ type: 'cache-put-result', jobId: 'job-1', part: 'prv', seq: 0, ok: true });
+  const done = rig.bridge.done();
+  ok(done.length === 1 && done[0].parts === 1 && done[0].prvParts === 1,
+    'encode-done claims both stream counts', JSON.stringify(done[0]));
+  rig.driver.dispose();
+}
+
+{
+  // --- a REFUSED preview settles the job instead of failing it -------------
+  const rig = driverRig();
+  rig.driver.handle(REQ);
+  await sleep(10);
+  rig.worker.emit({ kind: 'done', jobId: 'job-1', ok: true, art: fakeMp4(1000), prv: fakeMp4(500), w: 640, h: 480, durMs: 1800 });
+  rig.driver.handle({ type: 'cache-put-result', jobId: 'job-1', part: 'prv', seq: 0, ok: false, error: 'too-big' });
+  rig.driver.handle({ type: 'cache-put-result', jobId: 'job-1', part: 'art', seq: 0, ok: true });
+  const done = rig.bridge.done();
+  ok(done.length === 1 && done[0].ok === true, 'the artifact still commits', JSON.stringify(done[0]));
+  ok(done[0].prvParts === 0, 'claiming zero preview parts after the refusal', String(done[0].prvParts));
+  rig.driver.dispose();
+}
+
+{
+  // --- an oversize or non-mp4 preview is silently dropped, never sent ------
+  const rig = driverRig();
+  rig.driver.handle(REQ);
+  await sleep(10);
+  const badPrv = new Uint8Array(4096); badPrv[0] = 0x47;   // not ISO-BMFF
+  rig.worker.emit({ kind: 'done', jobId: 'job-1', ok: true, art: fakeMp4(1000), prv: badPrv.buffer, w: 640, h: 480, durMs: 1800 });
+  const puts = rig.bridge.puts();
+  ok(puts.length === 1 && puts[0].part === 'art', 'only the artifact goes out', String(puts.length));
+  rig.driver.handle({ type: 'cache-put-result', jobId: 'job-1', part: 'art', seq: 0, ok: true });
+  ok(rig.bridge.done().length === 1 && rig.bridge.done()[0].prvParts === 0,
+    'and encode-done claims no preview', JSON.stringify(rig.bridge.done()[0]));
   rig.driver.dispose();
 }
 

@@ -721,6 +721,69 @@ namespace ConditioningControlPanel
             }
         }
 
+        #region Goon Game sharing toggles
+
+        // Goon Game consent flags (docs/GOON_DISCORD_CONTRACT.md §1/§2). Sharer-only:
+        // each flag governs what THIS user exposes to the current opponent. All default off.
+        //
+        // The two SHARE flags push to the server ON CHANGE (RemoteControl precedent,
+        // MainWindow.RemoteControl.cs:275-284) so a revoke lands before the next duel
+        // instead of waiting for the next scheduled sync. Each handler no-ops when the
+        // value is unchanged, because LoadDiscordTabState() assigns IsChecked
+        // programmatically and that re-fires Checked/Unchecked.
+        //
+        // GoonRichPresence is LOCAL-ONLY — never synced.
+
+        internal async void ChkGoonShareAvatar_Changed(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current == null || sender is not CheckBox chk) return;
+            var isChecked = chk.IsChecked == true;
+            if (App.Settings.Current.GoonShareAvatar == isChecked) return; // programmatic load echo
+
+            App.Settings.Current.GoonShareAvatar = isChecked;
+            App.Settings.Save();
+            App.Logger?.Information("[GoonShare] avatar sharing changed: {Enabled}", isChecked);
+
+            // Push-on-change: revoking must reach the server (it drops the cached avatar
+            // bytes at sync time) without waiting for the next scheduled push.
+            if (App.ProfileSync != null)
+            {
+                try { await App.ProfileSync.SyncProfileAsync(); }
+                catch (Exception ex) { App.Logger?.Warning(ex, "[GoonShare] immediate avatar-flag sync push failed"); }
+            }
+        }
+
+        internal async void ChkGoonShareDiscordDm_Changed(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current == null || sender is not CheckBox chk) return;
+            var isChecked = chk.IsChecked == true;
+            if (App.Settings.Current.GoonShareDiscordDm == isChecked) return; // programmatic load echo
+
+            App.Settings.Current.GoonShareDiscordDm = isChecked;
+            App.Settings.Save();
+            App.Logger?.Information("[GoonShare] opponent DMs changed: {Enabled}", isChecked);
+
+            if (App.ProfileSync != null)
+            {
+                try { await App.ProfileSync.SyncProfileAsync(); }
+                catch (Exception ex) { App.Logger?.Warning(ex, "[GoonShare] immediate dm-flag sync push failed"); }
+            }
+        }
+
+        internal void ChkGoonRichPresence_Changed(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current == null || sender is not CheckBox chk) return;
+            var isChecked = chk.IsChecked == true;
+            if (App.Settings.Current.GoonRichPresence == isChecked) return; // programmatic load echo
+
+            App.Settings.Current.GoonRichPresence = isChecked;
+            App.Settings.Save();
+            App.Logger?.Information("[GoonShare] Goon Game rich presence changed: {Enabled}", isChecked);
+            // Deliberately NO sync push — this flag never leaves the machine.
+        }
+
+        #endregion
+
         internal async void ChkShowOnlineStatus_Changed(object sender, RoutedEventArgs e)
         {
             if (App.Settings?.Current != null && sender is CheckBox chk)

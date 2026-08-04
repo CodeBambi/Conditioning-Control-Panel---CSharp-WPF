@@ -147,6 +147,17 @@ export function createOptions({ prefs, audio = null, session = null, setFullscre
     body.appendChild(shaders.node);
     body.appendChild(el('p', { class: 'gg-panel-note', text: S.options.shaderSpiralsNote }));
 
+    /* OPPONENT AVATARS — the viewer's half of the Discord sharing feature
+     * (contract §1). It is offered mid-match like the two knobs above it,
+     * because it is the same kind of switch: what MY screen shows me. Turning
+     * it off mid-duel stops the face on the desk and stops the next fetch;
+     * ui/discord.js consults it before it asks the host for anything. */
+    const oppAva = toggleRow(S.options.oppAvatars,
+      () => prefs.get('showOpponentAvatars'),
+      (v) => prefs.set('showOpponentAvatars', v));
+    body.appendChild(oppAva.node);
+    body.appendChild(el('p', { class: 'gg-panel-note', text: S.options.oppAvatarsNote }));
+
     if (session && session.hosted && setFullscreen) {
       const fs = toggleRow(S.options.fullscreen,
         () => !!session.fullscreen,

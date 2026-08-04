@@ -692,6 +692,12 @@ namespace ConditioningControlPanel.Services
                         allow_discord_dm = settings.AllowDiscordDm,
                         show_online_status = settings.ShowOnlineStatus,
                         share_profile_picture = settings.ShareProfilePicture,
+                        // Goon Game consent flags (GOON_DISCORD_CONTRACT §2). Sharer-only;
+                        // the server snapshots these into the room card at invite/join and
+                        // drops the cached avatar bytes when a flag is revoked.
+                        // GoonRichPresence is deliberately NOT sent — local-only.
+                        goon_share_avatar = settings.GoonShareAvatar,
+                        goon_share_dm = settings.GoonShareDiscordDm,
                         // Send false to clear server-side reset flags only when acknowledging
                         reset_weekly_quest = false,
                         reset_daily_quest = false,
@@ -1161,6 +1167,10 @@ namespace ConditioningControlPanel.Services
                     AllowDiscordDm = settings.AllowDiscordDm,
                     ShareProfilePicture = settings.ShareProfilePicture,
                     ShowOnlineStatus = settings.ShowOnlineStatus,
+                    // Goon Game consent flags (GOON_DISCORD_CONTRACT §2). GoonRichPresence
+                    // is local-only and never rides the body.
+                    GoonShareAvatar = settings.GoonShareAvatar,
+                    GoonShareDm = settings.GoonShareDiscordDm,
                     DiscordId = App.Discord?.UserId,  // Include Discord ID even when syncing via Patreon
                     AvatarUrl = App.Discord?.GetAvatarUrl(256),  // Include Discord avatar URL
                     SkillPoints = settings.SkillPoints,
@@ -3007,6 +3017,14 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("show_online_status")]
             public bool ShowOnlineStatus { get; set; } = true;
+
+            // Goon Game consent flags (GOON_DISCORD_CONTRACT §2) — sharer-only, default off.
+            // No goon_rich_presence here on purpose: that flag is local-only.
+            [JsonProperty("goon_share_avatar")]
+            public bool GoonShareAvatar { get; set; }
+
+            [JsonProperty("goon_share_dm")]
+            public bool GoonShareDm { get; set; }
 
             [JsonProperty("discord_id")]
             public string? DiscordId { get; set; }

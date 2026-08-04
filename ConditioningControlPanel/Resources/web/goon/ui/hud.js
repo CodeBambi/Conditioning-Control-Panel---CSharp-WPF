@@ -26,16 +26,27 @@
 
 import { GoonConsts, GoonElement, GoonMatchPhase, GoonPayloadKind } from '../core/contracts.js';
 import { localMonotonicMs } from '../core/clock.js';
-import { mountOpponent } from './opponent.js';
+import { mountOpponent, EMOTE_MINI_MS } from './opponent.js';
 import { mountArsenal } from './arsenal.js';
 import { mountCloseness } from './closeness.js';
 import { mountAttention } from './attention.js';
 import { mountEmotes } from './emotes.js';
 import { mountAnnouncer } from './announcer.js';
 import { createDropRoller } from './drops.js';
+import { avatarNode, emitAva } from './avatar.js';
+import { S } from './strings.js';
 
 /** exec/bubbles.js's economy seam. Kept as a literal so ui/ never imports exec/. */
 export const BUBBLE_POP_EVENT = 'gg-bubble-pop';
+
+/**
+ * The desk's ask for "open their Discord DM". Same shape and same reason as
+ * `gg-options-open` above it: the HUD is mounted by a dynamically loaded
+ * sibling and can reach neither boot's `sheets` nor its `discord` singleton, so
+ * it raises an event and boot.js confirms and posts the verb. The page never
+ * holds an id — the detail carries a NAME and nothing else.
+ */
+export const DISCORD_DM_EVENT = 'gg-discord-dm';
 
 /** Own-draft element cues -> the chip that shows them on the bottom-left rail. */
 const ELEMENT_META = Object.freeze({
@@ -205,16 +216,38 @@ function logTo(sink, entry) {
  * @param {object} [o.prefs]    user prefs (reduced motion etc.)
  * @param {object} [o.media]    exec/media pool (unused by the HUD in v1)
  * @param {object} [o.matchLog] array/fn/sink for a human-readable match log
+ * @param {object} [o.discord]  ui/discord.js handle — the avatar minis + DM
  * @returns {{unmount:Function}}
  */
-export function mountHud({ match, session = null, audio = null, prefs = null, media = null, matchLog = null } = {}) {
+export function mountHud({ match, session = null, audio = null, prefs = null, media = null,
+  matchLog = null, discord = null } = {}) {
   const led = createLedger();
   const fx = createFx();
   const d = doc();
   const host = d && typeof d.getElementById === 'function' ? d.getElementById('gg-hud') : null;
   if (!host || !match) return { unmount() { fx.stop(); led.run(); } };
 
-  const onLog = (entry) => logTo(matchLog, entry);
+  /* THE SHARED LOG SINK — and, since 2026-08-04, the seam two `gg-ava` beats
+   * ride out on (docs/GOON_DISCORD_CONTRACT.md §6).
+   *
+   * ui/emotes.js and ui/announcer.js each already write ONE tagged entry at
+   * exactly the instant the bubbles should react — `emote-out` as a line is
+   * sent, `announce` as a ribbon goes on screen — and each tag has exactly one
+   * producer on the page. Reading them here means neither file is touched and
+   * neither sub-mount grows a second callback that fires on the same click.
+   *
+   * It also keeps both mount calls in their pristine shorthand form, which the
+   * hud suite pins by source: a wrapper argument at either call site is a
+   * silent test failure (it was, for one commit). */
+  const onLog = (entry) => {
+    try {
+      if (entry) {
+        if (entry.t === 'emote-out') emitAva('emote', 'you', { emote: entry.text || entry.icon || '', ms: EMOTE_MINI_MS });
+        else if (entry.t === 'announce') emitAva('cue', 'you', { element: entry.element });
+      }
+    } catch (_e) { /* a decoration must never break the log */ }
+    logTo(matchLog, entry);
+  };
 
   host.hidden = false;
   const root = el('div', 'gg-hud-frame');
@@ -236,6 +269,31 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const timerTrack = add(timerBox, el('div', 'gg-timer-track'));
   const timerFill = add(timerTrack, el('i', 'gg-timer-fill'));
 
+  /* ---- THE PERSISTENT AVATAR MINIS (contract §6) -------------------------
+   * Two bubbles that stay up for the whole of Live: yours at the head of your
+   * own column, theirs directly over their monitor miniature.
+   *
+   * PLACEMENT IS A SAFETY DECISION, not a layout one. Both sit in edge-anchored
+   * grid cells the desk already owns, which keeps them out of the two bands
+   * nothing may enter: MERCY's bottom-centre keep-out (.gg-hud-bottom already
+   * reserves 4.6rem for it) and the announcer ribbon's top-centre strip. They
+   * are the flying targets the VS splash aims at, too — ui/avatar.js finds them
+   * by `.gg-ava--mini[data-side]`.
+   *
+   * They are also POINTER-TRANSPARENT except for the one button on theirs: see
+   * the 0,2,0 opt-out in ui/hud.css, written after `.gg-hud-frame .gg-plate`.  */
+  function mini(side, name, uri) {
+    const node = avatarNode({ side, name, dataUri: uri, size: 'mini' });
+    if (node && node.classList) node.classList.add('gg-ava--mini');
+    return node;
+  }
+
+  const youName = (session && session.identity && session.identity.displayName)
+    || match.localDisplayName || '';
+  const youAva = mini('you', youName, null);
+  const youAvaBox = add(scoreBox, el('div', 'gg-ava-minibox gg-ava-minibox--you'));
+  if (youAva) add(youAvaBox, youAva);
+
   const rightTop = add(top, el('div', 'gg-hud-topright'));
   const attSlot = add(rightTop, el('div', 'gg-att-slot'));
   const gear = add(rightTop, el('button', 'gg-gear', '⚙'));
@@ -256,6 +314,7 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const leftRail = add(body, el('div', 'gg-rail gg-rail--left'));
   add(body, el('div', 'gg-well'));                         // the stage window: never covered
   const rightCol = add(body, el('div', 'gg-rightcol'));
+  const oppAvaBox = add(rightCol, el('div', 'gg-ava-minibox gg-ava-minibox--opp'));
   const monHost = add(rightCol, el('div', 'gg-mon-host'));
   const receiptsHost = add(rightCol, el('div', 'gg-receipts'));
   const coolHost = add(rightCol, el('div', 'gg-cool'));
@@ -284,6 +343,9 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     // The glue the owner asked for: what we FIRED drives their little screen,
     // without waiting for (or needing) their tick to mention it.
     onFired: (shot) => {
+      // The FX beat first and unconditionally: it is about the ACT of firing,
+      // which happened whether or not the monitor can draw the flight.
+      emitAva('fire', 'you', shot && shot.kind !== undefined ? { kind: shot.kind } : null);
       if (!shot || typeof opponent.markPayloadFired !== 'function') return;
       opponent.markPayloadFired({
         id: shot.id,
@@ -301,7 +363,13 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   // silent bookkeeping, only its flourish rides the animation budget.
   const drops = createDropRoller({ match, arsenal, audio, onLog });
   led.listen(d, BUBBLE_POP_EVENT, (e) => {
-    try { drops.onPop(e && e.detail); } catch (_e) { /* a drop must never break the desk */ }
+    try {
+      const res = drops.onPop(e && e.detail);
+      // Two beats, and they are different facts: `pop` is every pop (E throttles
+      // it to four a second), `drop` is the rare one that armed a slot.
+      emitAva('pop', 'you');
+      if (res && res.dropped) emitAva('drop', 'you', res.id ? { item: res.id } : null);
+    } catch (_e) { /* a drop must never break the desk */ }
   });
 
   const dial = mountCloseness({ host: dialHost, match, audio, onLog });
@@ -324,6 +392,73 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   led.add(() => { try { arsenal.unmount(); } catch (_e) { /* gone */ } });
   led.add(() => { try { emotes.unmount(); } catch (_e) { /* gone */ } });
   led.add(() => { try { opponent.unmount(); } catch (_e) { /* gone */ } });
+
+  /* -------------------------------------------- the opponent's mini + its DM
+   * Rebuilt rather than mutated whenever the card or the name changes: a peer
+   * card can land mid-match (it is fetched fire-and-forget) and a name can
+   * arrive with the hello, and rebuilding is the only way the picture can
+   * replace the tile without the box ever moving.
+   *
+   * The DM affordance exists ONLY when THEY shared DMs. There is no disabled
+   * variant and no explanatory tooltip: a button that cannot work is worse than
+   * no button, and the flag is theirs to set, not ours to editorialise. */
+  function oppName() {
+    const fromMatch = match.opponent && match.opponent.displayName;
+    const fromCard = discord && discord.peer && discord.peer.name;
+    return String(fromMatch || fromCard || S.lobby.them);
+  }
+
+  let lastOppKey = null;
+  function paintOppAva() {
+    if (!oppAvaBox) return;
+    const card = discord ? discord.peer : null;
+    const show = !discord || discord.showOpponentAvatars;
+    const uri = (show && card) ? card.avatarDataUri : null;
+    const dm = !!(show && card && card.dm);
+    const name = oppName();
+    const key = name + '|' + (uri ? uri.length : 0) + '|' + (dm ? 1 : 0);
+    if (key === lastOppKey) return;
+    lastOppKey = key;
+
+    const node = mini('opp', name, uri);
+    if (!node) return;
+    const kids = [node];
+    if (dm) {
+      const b = el('button', 'gg-ava-dm', S.discord.dmShort);
+      if (b) {
+        b.type = 'button';
+        try { b.setAttribute('aria-label', S.discord.messageOn(name)); b.title = S.discord.messageOn(name); }
+        catch (_e) { /* stub DOM */ }
+        led.listen(b, 'click', () => {
+          sfx(audio, 'ui-select');
+          try {
+            if (d && typeof d.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+              d.dispatchEvent(new CustomEvent(DISCORD_DM_EVENT, {
+                bubbles: true,
+                detail: { which: 'peer', name },
+              }));
+            }
+          } catch (_e) { /* boot may not be listening; the desk is unaffected */ }
+        });
+        kids.push(b);
+      }
+    }
+    try { oppAvaBox.replaceChildren(...kids); } catch (_e) { for (const k of kids) add(oppAvaBox, k); }
+  }
+  paintOppAva();
+  if (discord && typeof discord.subscribe === 'function') led.add(discord.subscribe(paintOppAva));
+
+  /* Your own bubble only ever changes when the host echoes a new `discord`
+   * frame (you switched your picture on mid-lobby, say). Same repaint path. */
+  function paintYouAva() {
+    if (!youAvaBox) return;
+    const st = discord ? discord.state : null;
+    const uri = (discord && discord.sharingAvatar && st) ? st.avatarDataUri : null;
+    try { if (youAva && typeof youAva.setPicture === 'function') youAva.setPicture(uri); }
+    catch (_e) { /* a bubble that keeps its tile is not a failure */ }
+  }
+  paintYouAva();
+  if (discord && typeof discord.subscribe === 'function') led.add(discord.subscribe(paintYouAva));
 
   // ---------------------------------------------------------- top painting
 
@@ -485,6 +620,10 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     const t = setTimeout(() => {
       sfx(audio, 'payload-in');
       addChip(chipKey('p', p.id), meta, p.duration_ms || 0, true);
+      // The FLINCH lands with the payload, not when it was accepted: the engine
+      // schedules ahead (PAYLOAD_LEAD_MS) and a bubble that recoiled a second
+      // and a half early would read as a glitch, not a hit.
+      emitAva('land', 'you', { kind: p.kind });
     }, Math.min(wait, 30000));
     led.add(() => { try { clearTimeout(t); } catch (_e) { /* gone */ } });
     onLog({ t: 'payload-in', kind: meta.label, id: p.id });
@@ -494,9 +633,24 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   // monitor; every other terminal status just closes the window. (The arsenal
   // takes its own subscription for the receipt strip — these are independent.)
   sub('onPayloadReceiptReceived', (r) => {
-    if (!r || typeof opponent.markReceipt !== 'function') return;
+    if (!r) return;
+    // A receipt is the only proof anything reached THEIR screen — this is the
+    // `land` beat for the other bubble, and the receipt/executor seam the
+    // contract points at.
+    emitAva('land', 'opp', { status: r.status });
+    if (typeof opponent.markReceipt !== 'function') return;
     opponent.markReceipt(r.id, r.status);
   });
+
+  // Their emote arriving is the mirror of ours going out (see onLog above).
+  // `ms` is the mini's real dwell, so the wiggle ends when the bubble does
+  // rather than on avatarFx's 2600ms fallback.
+  sub('onEmoteReceived', (e) => {
+    emitAva('emote', 'opp', { emote: (e && (e.text || e.icon)) || '', ms: EMOTE_MINI_MS });
+  });
+
+  // The hello carries their display name; the mini is built before it lands.
+  sub('onOpponentStateChanged', () => { try { paintOppAva(); } catch (_e) { /* ignore */ } });
 
   // ---------------------------------------------------------------- phases
 

@@ -215,7 +215,9 @@ export function standaloneInit() {
     // Field-for-field the host's shape (GoonHostService.OnPageReady) so the page
     // never branches on where the frame came from.
     identity: {
-      unifiedId: String(prefs.unifiedId || 'local-' + name),
+      // `?uid=` lets a phone/browser identify as a real account (paired with
+      // `?token=` below) — without it the page plays as a throwaway local id.
+      unifiedId: String(q.get('uid') || prefs.unifiedId || 'local-' + name),
       displayName: String(name).slice(0, 32),
       appVersion: 'dev',
     },
@@ -226,6 +228,14 @@ export function standaloneInit() {
       video: true,
       platform: 'web',
       rounds: [0, 2, 3],       // QuickDrawLockCard · ReactionDuel · BubbleRace
+      // There is no C# host out here, so there is no compression queue and no
+      // transfer-cache to talk to: the assets screen renders "compression lives in
+      // the app" instead of a spinner that never resolves.
+      assetCache: false,
+      // …but SENDING is on, because the dev/play-test path is the only way to
+      // exercise the transfer without two Patreon accounts. The page reads this as
+      // `=== true`, so a real host that predates the flag still defaults it OFF.
+      mediaTransfer: true,
     }, prefs.caps || {}),
     consent: Object.assign({
       liveDurationSec: 720,    // GoonConsts.LiveDurationSecDefault
@@ -252,6 +262,18 @@ if (!isHosted && typeof document !== 'undefined') {
   // anything that lands early is pre-buffered anyway.
   Promise.resolve().then(() => {
     try {
+      // Creds handed on the querystring are adopted into prefs so a later bare-URL
+      // launch (or a home-screen pin that dropped the query) still boots with them.
+      // Explicit params always win over stored ones inside standaloneInit itself.
+      try {
+        const q = new URLSearchParams(location.search || '');
+        const keep = {};
+        if (q.get('server')) keep.serverBase = q.get('server');
+        if (q.get('token')) keep.authToken = q.get('token');
+        if (q.get('uid')) keep.unifiedId = q.get('uid');
+        if (q.get('name')) keep.name = q.get('name');
+        if (Object.keys(keep).length) savePrefs(keep);
+      } catch (_e) { /* prefs are a convenience, never load-bearing */ }
       dispatch(standaloneInit());
       dispatch({ type: 'manifest', images: [], videos: [], skipped: 0, truncated: false });
     } catch (e) {

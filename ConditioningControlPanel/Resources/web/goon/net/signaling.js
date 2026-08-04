@@ -80,7 +80,48 @@ export class GoonSignalingClient {
     /** @type {number|null} seconds the server asked us to wait, when lastError is rate_limited */
     this.retryAfterSeconds = null;
 
+    /**
+     * THE PEER'S CARD VERSION (GOON_DISCORD_CONTRACT §3). Both /join (guest) and
+     * every /signal poll (host) may carry `peer_card_ver`; null means the peer
+     * shares nothing. It is an OPAQUE string — never an id, never a URL — and
+     * its only job is to say "what you fetched last time is stale".
+     *
+     * It lives here because this client is the one thing that parses both
+     * responses. ui/discord.js subscribes and decides whether to ask the host
+     * for the card; this file never fetches anything itself and knows nothing
+     * about avatars.
+     * @type {string|null}
+     */
+    this.peerCardVer = null;
+    this._peerCardListeners = new Set();
+
     this._disposed = false;
+  }
+
+  /**
+   * Fires with the peer's card version whenever a response carries a non-null
+   * one. Repeats are NOT filtered here — the subscriber (ui/discord.js) owns
+   * the "have I already fetched this version" decision, because it is the side
+   * that knows whether the last fetch actually landed.
+   * @param {(ver:string) => void} fn
+   * @returns {() => void} unsubscribe
+   */
+  onPeerCard(fn) {
+    if (typeof fn !== 'function') return () => {};
+    this._peerCardListeners.add(fn);
+    return () => this._peerCardListeners.delete(fn);
+  }
+
+  /** Records `peer_card_ver` off a parsed response and notifies subscribers. */
+  _notePeerCard(json) {
+    const raw = json && typeof json.peer_card_ver === 'string' ? json.peer_card_ver : null;
+    if (!raw) return null;
+    this.peerCardVer = raw;
+    for (const fn of Array.from(this._peerCardListeners)) {
+      // A UI listener must never be able to break a signaling poll.
+      try { fn(raw); } catch (e) { this._warn(`peer-card listener threw: ${(e && e.message) || e}`); }
+    }
+    return raw;
   }
 
   /** The shape the lobby UI consumes. `kind` is one of GoonSignalError (or `http_<status>`). */
@@ -152,6 +193,8 @@ export class GoonSignalingClient {
       peerAppVersion: typeof json.peer_app_version === 'string' ? json.peer_app_version : '',
       pass: typeof json.pass === 'string' ? json.pass : '',
       relayAllowed: json.relay_allowed === undefined ? true : !!json.relay_allowed,
+      /** §3: the guest learns the host's card version on the join response. */
+      peerCardVer: this._notePeerCard(json),
     };
   }
 
@@ -190,6 +233,8 @@ export class GoonSignalingClient {
       messages,
       peerJoined: !!json.peer_joined,
       peerGone: !!json.peer_gone,
+      /** §3: the host learns the guest's card version next to `peer_joined`. */
+      peerCardVer: this._notePeerCard(json),
     };
   }
 
@@ -309,7 +354,10 @@ export class GoonSignalingClient {
     return null;
   }
 
-  dispose() { this._disposed = true; }
+  dispose() {
+    this._disposed = true;
+    this._peerCardListeners.clear();
+  }
 
   _warn(m) { if (this._log && this._log.warn) this._log.warn(`[GoonSignal] ${m}`); }
 }
