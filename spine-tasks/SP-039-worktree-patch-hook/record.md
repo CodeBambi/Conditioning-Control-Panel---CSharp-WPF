@@ -59,6 +59,35 @@ The engine contract HARD-requires the hook under `scripts/` (worktree-setup-hook
 4. **`.exe` committability checked:** `git check-ignore scripts/spine-worktree-setup.exe` → NOT ignored (exit 1) — no `.gitignore` change needed. `csc.exe` confirmed at `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe`.
 5. **Scratch isolation:** provision the scratch worktree with `projectRoot` = THIS lane-2 worktree (a worktree-of-worktree under lane-2's gitignored `.worktrees/`, .gitignore:184) — zero main-checkout pollution, identical engine code path (`provisionLaneWorktree` + `runWorktreeSetupHook` imported from the global engine install), full cleanup after. SPINE_PROJECT_ROOT for the scratch = lane-2, whose `.pi/npm` is patched (this packet's recorded remediation).
 
+## Step 2 — Implementation + scratch verification
+
+### Delivered
+
+- `.spine/patches/worktree-setup-hook.mjs` — the hook logic (in File Scope). Pre-stages `$SPINE_PROJECT_ROOT/.pi/npm` → lane, dest-first idempotent skip, post-copy `verify.mjs --root` self-check (recorded, never propagated), always writes `\<lane\>/.pi/npm/worktree-setup-hook.log` (gitignored), ALWAYS exits 0 with last stdout line `{"ok":true,...}`.
+- `scripts/spine-worktree-setup.cs` + compiled `scripts/spine-worktree-setup.exe` (4.6 KB, csc.exe 4.8.9221.0) — Windows spawn shim (SP-023-norm scope expansion, consult-flagged). Missing script / node-launch failure → emits `{"ok":true,"prestaged":false,...}` itself, exit 0.
+- `.spine/spine-config.json`: `worktreeSetupHook: "scripts/spine-worktree-setup.exe"` (was `""`).
+- Build note: from git-bash, csc.exe must be invoked via `cmd /c` with backslash paths — bare `/out:` slash-args get path-mangled (CS2001/CS1504). Rebuild command in the .cs header.
+
+### Scratch verification — THROUGH THE ENGINE'S OWN PROVISIONING PATH
+
+Driver: `spine-tasks/SP-039-worktree-patch-hook/scratch-verify.mjs` — imports `provisionLaneWorktree` / `runWorktreeSetupHook` / `removeLaneWorktree` from the GLOBAL engine install (`C:\Users\Micha\.pi\agent\npm\node_modules\pi-spine\src\batch\worktree.mjs`) and calls them exactly as `engine.mjs`'s provisioning loop does.
+
+- **v1 attempt (worktree-of-worktree, projectRoot = lane-2 per consult preference): FAILED at `git worktree add` — MAX_PATH**: the nested base path pushes the deep WPF asset filenames (`ConditioningControlPanel/Resources/sounds/companion_audio/mods/builtin-sissyhypno/flashes_audio/*.mp3`) past 260 chars. Honest limitation: the hook mechanism is unaffected, but scratch isolation moved to the main checkout (production-identical base depth — production lanes check out fine). v1 debris (dir + `task/spine-lane-1-scratch-sp039` branch) cleaned before v2.
+- **v2 (projectRoot = main checkout, orch = this lane's branch): GREEN.** Hook-enabled lane transcript:
+  - `runWorktreeSetupHook` → `{ ok: true, durationMs: 788 }` (the engine's exact contract consumption — JSON last line parsed, exit 0, no throw).
+  - Fresh lane's `.pi/npm/node_modules/pi-spine/package.json` present BEFORE any worker/pi run.
+  - In-lane `node .spine/patches/verify.mjs --root <lane>/.pi/npm/node_modules/pi-spine` → **exit 0, "verify.mjs: OK — all patches applied on all roots."**
+  - Lane log: `{"at":"2026-08-04T15:19:15.174Z","batchId":"scratch-sp039","laneNumber":"1",...,"ok":true,"prestaged":true,"reason":"copied .pi/npm from SPINE_PROJECT_ROOT (pi-spine 2.10.0)","sourceVersion":"2.10.0","verifyExit":0,"durationMs":603}`.
+- **Negative control (same driver, `config: {}`):** `runWorktreeSetupHook` → `{ ok: true, skipped: true }`; lane's pi-spine **absent** — the old unpatched state, falsifiable contrast.
+- **Fail-safe paths (direct invocation):** shim with hook script absent → `{"ok":true,"prestaged":false,"reason":"hook script absent in lane: ..."}` exit 0; mjs with SPINE_PROJECT_ROOT nonexistent → `{"ok":true,"prestaged":false,"reason":"source pi-spine missing ..."}` exit 0 + lane log written; idempotent re-run with dest present and source gone → `{"ok":true,"prestaged":true,"reason":"already-present (pi-spine 2.10.0 in lane) — idempotent skip"}` exit 0.
+- **Cleanup verified:** both scratch worktrees removed, both `task/spine-lane-N-scratch-sp039` branches deleted, `git worktree prune`, temp exe copy + `scripts/` dir removed from the main checkout, `git status` on the main checkout EMPTY, `.worktrees/` contains only the live batch dir.
+
+### Post-land production note
+
+After this packet lands, the main checkout's `scripts/spine-worktree-setup.exe` + `.spine/patches/worktree-setup-hook.mjs` + the `worktreeSetupHook` config value exist on every fresh clone and every new lane's orch base — the engine resolves the hook from the MAIN checkout (patched per the standing pre-launch verify rule) and the `.mjs` rides in each lane's branch. No fresh-machine step beyond the standing `verify.mjs`/`apply.mjs` rule for the main checkout itself.
+
 ## Engine-review presence (T-2 heading format load-bearing)
 
 - **Step 1 plan review (`spine_review_step` type=plan):** SKIPPED by the runtime — "Nested reviewer spawn blocked inside pi worker session ... the batch engine runs reviews after worker success (SP-195)"; `skipped: true`, `spawnFailed: false`, artifact `.reviews/1-20260804T150503.md`. Not a spawn failure → proceeded per the engine-owned review path.
+
+_Pending: Step 2+ calls._
