@@ -36,8 +36,8 @@ import {
 /** What the picker offers the OS file sheet — mirror of the wire's allowlist,
  * plus .zip: a phone cannot hand over a folder, so an archive is the only way
  * a player on a phone gives us a whole library (assetsStore expands it). */
-const LOCAL_ACCEPT = '.png,.jpg,.jpeg,.gif,.webp,.mp4,.m4v,.webm,.zip,'
-  + 'image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,'
+const LOCAL_ACCEPT = '.png,.jpg,.jpeg,.gif,.webp,.mp4,.m4v,.webm,.mov,.zip,'
+  + 'image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,video/quicktime,'
   + 'application/zip,application/x-zip-compressed';
 
 /** Hard ceiling on simultaneously playing micro-previews. */
@@ -648,6 +648,7 @@ function localMediaCard({ store, ledger, audio, actions, logger }) {
       // ARTIFACT cap in its own sentence rather than the exempt one.
       if (r.tooBigVideo) bits.push(L.skipBigVideo(r.tooBigVideo, artMaxText));
       if (r.badType) bits.push(L.skipType(r.badType));
+      if (r.badCodec) bits.push(L.skipCodec(r.badCodec));
       if (r.failed) bits.push(L.skipFailed(r.failed));
       // "Took the first 500" is not a failure and must never read as one.
       if (r.trimmed) bits.push(L.trimmed(r.trimmed, LOCAL_ZIP_MAX_ENTRIES));

@@ -534,14 +534,21 @@ export const S = Object.freeze({
       headline: 'add media to send',
       line: 'pick files from this device and they can travel to your opponent mid-duel, straight from you to them. nothing is uploaded anywhere.',
       add: 'add files',
-      limits: (max, vmax) => 'jpg, png, gif, webp, mp4, webm · or a zip of them · up to ' + max
+      limits: (max, vmax) => 'jpg, png, gif, webp, mp4, webm, mov · or a zip of them · up to ' + max
         + ' travels as-is, bigger photos and gifs are compressed to fit, clips up to ' + vmax,
       empty: 'nothing added yet.',
       note: 'your picks last until this page closes — add them again next visit.',
       remove: 'remove',
       skipDupe: (n) => n + ' already added',
       skipBig: (n, max) => n + ' over ' + max,
-      skipType: (n) => n + ' of an unsupported type',
+      skipType: (n) => n + ' of a format we can\'t carry (jpg, png, gif, webp, mp4, webm and mov travel)',
+      /**
+       * The container was welcome but THIS device has no decoder for what is
+       * inside — iPhone HEVC on an older browser, mostly. Distinct from
+       * skipType on purpose: "wrong format" tells the player to convert,
+       * "can't decode" tells them nothing they did is wrong.
+       */
+      skipCodec: (n) => n + (n === 1 ? ' clip' : ' clips') + ' this device can\'t decode — a re-save as mp4 usually fixes it',
       skipFailed: (n) => n + ' unreadable',
       added: (n) => n + ' added',
       /**
@@ -677,6 +684,13 @@ export const S = Object.freeze({
     discordLine: 'no stash yet? plenty of girls share their packs on the discord.',
     discordCta: 'open the discord',
     add: 'add media',
+    /**
+     * The button once SOMETHING is in: the phone's photo sheet is one-shot per
+     * visit, so "add more" is the whole answer to "…but that was only one
+     * album" (2026-08-04 play-test — the first small batch read as the end of
+     * the road and the primary button below whisked people into the room).
+     */
+    addMore: 'add more · another album, a zip…',
     /** The running tally. Reassuring at 3, congratulatory at 20 — see `enough`. */
     count: (n) => n + (n === 1 ? ' item added' : ' items added'),
     countNone: 'nothing added yet.',
@@ -686,7 +700,10 @@ export const S = Object.freeze({
     enough: 'that will do nicely.',
     remove: 'remove',
     lock: "I'm set",
+    /** The commitment, wearing its own number — nobody locks in "3 picks" thinking they added an album. */
+    lockN: (n) => "I'm set — lock in " + n + (n === 1 ? ' pick' : ' picks'),
     lockNeed: 'add at least one thing',
+    lockBusy: 'still adding…',
     /** The opponent is watching a "picking their media" line while this is up. */
     waiting: 'they know you are still picking. take your time.',
     note: 'your picks stay on this device and travel nowhere unless you switch sending on in the lobby.',

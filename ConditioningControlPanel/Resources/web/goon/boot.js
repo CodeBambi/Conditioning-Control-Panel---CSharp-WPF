@@ -409,6 +409,21 @@ function openFirstScreen() {
   let code = '';
   try { code = consumeJoinCode(typeof window !== 'undefined' ? window : null); }
   catch (_e) { code = ''; }
+  /* A LIVE GUEST SEAT SURVIVES THE PAGE THAT CLAIMED IT (2026-08-04 play-test).
+   * iOS routinely kills this page while the player is off in the photo sheet,
+   * and the reload comes back on a BARE url — consumeJoinCode stripped the
+   * ?join on the first visit, so the one person with a seat waiting for them
+   * landed on a menu with no way back but re-finding the link. If prefs hold a
+   * fresh `g_` seat, walk them straight back into the join flow: presenting
+   * the kept id is a server-side seat RECLAIM (pass:"rejoin"), and a room that
+   * died in the meantime fails on the join screen with the code prefilled and
+   * a plain sentence, not a dead end. An EXPLICIT link still wins — the player
+   * asked for THAT room. */
+  if (!code && guestSeat.id && guestSeat.code
+    && guestSeat.at && (Date.now() - guestSeat.at) < GUEST_SEAT_FRESH_MS) {
+    code = guestSeat.code;
+    bridge.log('resuming guest seat in ' + code);
+  }
   if (code) {
     bridge.log('invite link: joining ' + code);
     router.show('join', { autoCode: code });
@@ -552,7 +567,7 @@ function localCaps() {
 /** ext -> mime. The cache serves artifacts by extension; the protocol wants a mime. */
 const ARTIFACT_MIME = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
-  webp: 'image/webp', mp4: 'video/mp4', webm: 'video/webm',
+  webp: 'image/webp', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
 };
 
 /**
@@ -1465,13 +1480,22 @@ function cancelFoldToTitle() {
 const guestSeat = {
   id: String(bridge.storedPrefs().guestId || ''),
   code: String(bridge.storedPrefs().guestRoom || ''),
+  at: Number(bridge.storedPrefs().guestAt) || 0,
   save(id, code) {
     this.id = String(id || '');
     this.code = String(code || '');
-    try { bridge.savePrefs({ guestId: this.id, guestRoom: this.code }); }
+    // The claim instant bounds the RESUME window (openFirstScreen): a seat is
+    // only worth walking back into while its room can still exist server-side.
+    this.at = this.id ? Date.now() : 0;
+    try { bridge.savePrefs({ guestId: this.id, guestRoom: this.code, guestAt: this.at }); }
     catch (_e) { /* a lost seat costs a rejoin, never the match in progress */ }
   },
+  /** The seat is spent — left on purpose, or its room is confirmed dead. */
+  clear() { this.save('', ''); },
 };
+
+/** How long a remembered guest seat is worth resuming: the room's own match TTL. */
+const GUEST_SEAT_FRESH_MS = 30 * 60 * 1000;
 
 function ensureSession() {
   if (goonSession) return goonSession;
@@ -1505,6 +1529,33 @@ function ensureSession() {
     sheets?.showSignalError?.(errorInfo(reason)).then(() => router.show('title'));
   });
   return goonSession;
+}
+
+/* ----------------------------------------------------------------------------
+ * THE RESUME KICK — iOS's half of the connection story (2026-08-04 play-test).
+ *
+ * A phone in the OS photo sheet, a locked screen, an app switch: Safari clamps
+ * or outright freezes this page's timers, and both network loops (the P2P
+ * signal pump and the relay mailbox loop) park inside a setTimeout that never
+ * fires on schedule. Meanwhile the desktop host reads the silence as the guest
+ * being gone — the play-test host sat on "waiting for your opponent" while the
+ * guest was right there, picking photos. The loops already expose a wake seam
+ * (`nudge()`, used by their own send paths); this just pulls it the moment the
+ * page is visible again, so the first poll happens NOW and not a backoff later.
+ * Registered once, at module scope, like bridge's own listeners — the handler
+ * reads the CURRENT session through the closure, so it survives every rebuild.
+ * -------------------------------------------------------------------------- */
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+  const kick = () => {
+    try { if (document.visibilityState === 'hidden') return; } catch (_e) { /* be generous */ }
+    try { goonSession?.transport?.nudge?.(); } catch (_e) { /* a kick is never load-bearing */ }
+  };
+  document.addEventListener('visibilitychange', kick);
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('pageshow', kick);   // bfcache restores skip visibilitychange
+    window.addEventListener('online', kick);     // radio came back before the timer did
+    window.addEventListener('focus', kick);
+  }
 }
 
 /** Merge the machine reason with whatever the signaling client recorded. */
@@ -1573,7 +1624,20 @@ const actions = {
     lastConnectFailed = null;
     let ok = false;
     try { ok = await s.join(inviteCode); } finally { awaitingEntry = false; }
-    if (!ok) return { ok: false, error: errorInfo(lastConnectFailed) };
+    if (!ok) {
+      const err = errorInfo(lastConnectFailed);
+      /* A DEAD ROOM SPENDS THE SEAT. Without this, the resume path
+       * (openFirstScreen) walks every fresh page load straight back into the
+       * same expired code for up to half an hour — an auto-retry loop nobody
+       * asked for, wearing an error screen. Only the seat's OWN room counts,
+       * and only verdicts that mean the room is truly gone. */
+      const kind = err && err.kind;
+      if ((kind === 'expired' || kind === 'unknown_code') && guestSeat.id
+        && String(inviteCode || '').trim().toUpperCase() === guestSeat.code) {
+        guestSeat.clear();
+      }
+      return { ok: false, error: err };
+    }
 
     /* THE FIRST-RUN MEDIA STEP, decided HERE and nowhere else — one join, one
      * answer. A duel plays the player's OWN library at them, so a joiner with an
@@ -1631,6 +1695,8 @@ const actions = {
     if (s) { try { await s.leave(); } catch (e) { logger.warn('leave threw: ' + ((e && e.message) || e)); } }
     else if (currentMatch) { try { currentMatch.cancelMatch('left'); } catch (_e) { /* ignore */ } }
     await teardownEverything();
+    // Walking out is a decision — the resume path must not walk them back in.
+    guestSeat.clear();
     cancelFoldToTitle();      // leaving is an explanation of its own
     router.show('title');
   },

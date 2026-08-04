@@ -159,6 +159,17 @@ export function mount(container, ctx) {
 
   function tickExpiry() {
     if (!code) return;
+    /* THE TTL SLIDES NOW, ON BOTH SIDES. The server re-arms the lobby's five
+     * minutes on every host poll (2026-08-04 — a host who waited six minutes
+     * for a friend watched the code die mid-wait), and the poll runs exactly
+     * as long as this page is visible and its session alive. So a VISIBLE
+     * screen slides its own countdown in step: past the halfway mark the bar
+     * is pushed back to full, and the only way it ever runs out is the page
+     * being hidden or dead — the same conditions under which the server-side
+     * room is genuinely burning down. */
+    let vis = true;
+    try { vis = typeof document === 'undefined' || document.visibilityState !== 'hidden'; } catch (_e) { /* assume visible */ }
+    if (vis && expiresAt - Date.now() < EXPIRY_MS / 2) expiresAt = Date.now() + EXPIRY_MS;
     const left = expiresAt - Date.now();
     const frac = Math.max(0, Math.min(1, left / EXPIRY_MS));
     const fill = expiryBar.firstChild;

@@ -46,13 +46,23 @@ export class MatchClock {
    * @param {(msg:object)=>any} [o.sendPing] outbound path; may also be supplied later via attach()
    * @param {object} [o.logger] console-shaped
    * @param {number} [o.testSkewMs] TEST ONLY: fake local skew so a loopback pair must actually converge
+   * @param {number} [o.pingTimeoutMs] how long after the burst a pong may still land and count.
+   *   The default fits a data channel. A RELAY transport must pass its own: one mailbox
+   *   round-trip is up to two long-poll holds, so a 3 s window scores every pong as
+   *   unanswered and the sync never converges (2026-08-04 play-test, "0 usable samples"
+   *   every round) — which matters, because the host refuses to propose a start on an
+   *   unsynced clock (core/match.js _tryProposeStart).
+   * @param {number} [o.pingSpacingMs] gap between pings in a burst — same story, relay passes longer.
    */
-  constructor({ isClockMaster = false, tag = 'GoonClock', sendPing = null, logger = null, testSkewMs = 0 } = {}) {
+  constructor({ isClockMaster = false, tag = 'GoonClock', sendPing = null, logger = null, testSkewMs = 0,
+    pingTimeoutMs = PING_TIMEOUT_MS, pingSpacingMs = PING_SPACING_MS } = {}) {
     this._isClockMaster = !!isClockMaster;
     this._tag = tag;
     this._send = sendPing;
     this._log = logger || (typeof console !== 'undefined' ? console : null);
     this._testSkewMs = testSkewMs | 0;
+    this._pingTimeoutMs = Math.max(100, Number(pingTimeoutMs) || PING_TIMEOUT_MS);
+    this._pingSpacingMs = Math.max(10, Number(pingSpacingMs) || PING_SPACING_MS);
 
     this._pending = new Map();      // seq -> local send ms
     this._samples = [];             // {rtt, offset}
@@ -189,11 +199,11 @@ export class MatchClock {
         continue;
       }
 
-      await delay(PING_SPACING_MS);
+      await delay(this._pingSpacingMs);
     }
 
     // Give the last few pongs a chance to land before scoring the burst.
-    const deadline = this.nowLocalMs() + PING_TIMEOUT_MS;
+    const deadline = this.nowLocalMs() + this._pingTimeoutMs;
     while (this.nowLocalMs() < deadline && !this._stopped && !this._disposed) {
       if (this._pending.size === 0) break;
       await delay(50);

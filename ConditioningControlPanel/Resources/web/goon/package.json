@@ -1,0 +1,4 @@
+{
+  "//": "Every .js under this folder is an ES module. Without this marker Node walks up to ConditioningControlPanel/package.json (type: commonjs, puppeteer tooling) and refuses the selftest suite's imports. Browsers never read this file.",
+  "type": "module"
+}

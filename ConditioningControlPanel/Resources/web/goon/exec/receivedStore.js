@@ -66,13 +66,13 @@ const SHA_RE = /^[0-9a-f]{64}$/;
 /** mime -> the kind exec/media.js speaks. Anything else is not ours to store. */
 const MIME_KIND = Object.freeze({
   'image/png': 'image', 'image/jpeg': 'image', 'image/gif': 'image', 'image/webp': 'image',
-  'video/mp4': 'video', 'video/webm': 'video',
+  'video/mp4': 'video', 'video/webm': 'video', 'video/quicktime': 'video',
 });
 
 /** ext -> mime, for the manifest's `received` rows (which carry both anyway). */
 const EXT_MIME = Object.freeze({
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
-  webp: 'image/webp', mp4: 'video/mp4', webm: 'video/webm',
+  webp: 'image/webp', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
 });
 
 export function kindForMime(mime) { return MIME_KIND[String(mime || '').toLowerCase()] || ''; }

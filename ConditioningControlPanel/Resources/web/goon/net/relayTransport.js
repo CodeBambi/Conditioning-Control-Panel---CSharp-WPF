@@ -41,7 +41,20 @@ export class GoonRelayTransport extends GoonTransportBase {
    */
   constructor({ isHost = false, signaling = null, logger = null, displayName = '',
     waitMs = RELAY_WAIT_MS, minGapMs = RELAY_MIN_GAP_MS } = {}) {
-    super({ isHost, tag: isHost ? 'GoonRelay:host' : 'GoonRelay:guest', logger });
+    super({
+      isHost, tag: isHost ? 'GoonRelay:host' : 'GoonRelay:guest', logger,
+      /* THE MAILBOX IS SLOW AND THE CLOCK MUST KNOW (2026-08-04 play-test). A
+       * ping's round trip here is up to two long-poll holds (~8 s each way at
+       * worst), so the data-channel default of a 3 s pong window scored every
+       * relay pong as unanswered — "0 usable samples" forever, and a host that
+       * never proposes a start (core/match.js _tryProposeStart hard-gates on a
+       * synced clock; the Draft tick re-polls it, so converging LATE is fine).
+       * The window covers the worst honest round trip; the extra retries cover
+       * the peer's loop simply not having reached the mailbox yet. */
+      clockPingTimeoutMs: (waitMs || RELAY_WAIT_MS) * 2 + 4000,
+      clockPingSpacingMs: 400,
+      clockSyncRetries: 5,
+    });
 
     this._ownsSignaling = !signaling;
     this._signaling = signaling || new GoonSignalingClient({ logger });
@@ -65,6 +78,15 @@ export class GoonRelayTransport extends GoonTransportBase {
 
   get code() { return this._code; }
   get token() { return this._token; }
+
+  /**
+   * Wake the loop NOW. The one caller that matters is boot's visibility watcher:
+   * a phone that spent a minute in the OS photo sheet (or a locked pocket) comes
+   * back with this loop parked deep in a backoff or a gap timer iOS refused to
+   * run — and every second it stays parked, the peer reads "gone". Idempotent
+   * and safe whenever; a loop mid-request simply ignores it.
+   */
+  nudge() { this._wake(); }
 
   /**
    * Take over a room the WebRTC transport already opened, after ICE gave up. No second /invite or
