@@ -121,6 +121,102 @@ the c3/q1 precedent.
 
 | Step | Call | Result |
 |------|------|--------|
-| 1 | `spine_review_step --step 1 --type plan` | (recorded at step completion) |
+| 1 | `spine_review_step --step 1 --type plan` | **SKIPPED** (SP-195: nested reviewer spawn blocked in worker session; engine runs reviews after .DONE). Artifact `.reviews/1-20260804T181349.md` |
+| 2 | `spine_review_step --step 2 --type plan` | **SKIPPED** (SP-195, same). Artifact `.reviews/2-20260804T181814.md` |
+| 3 | `spine_review_step --step 3 --type plan` | (recorded at step completion) |
+| 4 | `spine_review_step --step 4 --type plan` | (recorded at step completion) |
 
-<!-- Steps 2-4 sections appended as executed. -->
+## 4. Implementation (Step 2)
+
+**Product seam (additive-only, per-change justification):**
+
+| Change | File | Justification |
+|--------|------|---------------|
+| Optional ctor param `ISoundClock? clock = null`, default `new SystemSoundClock()` | `DtrhNativeEffects.cs` ctor | The raw `System.Threading.Timer` is the only wall-clock element in the product path under test; determinism is impossible without a seam. Reuses the EXISTING `Audio/AudioSeams.cs:109-133` seam built for exactly this (2026-07-22 consult binding), already consumed cross-feature by `Companion/BarkPipeline.cs:116` — no new coupling class, no DTRH→arbitration ownership wiring. |
+| `_videoCapTimer` type `Timer?` → `IDisposable?`, armed via `_clock.Schedule(...)` | `DtrhNativeEffects.cs` `PlayVideoFile` | The only timer-arming site. `SystemSoundClock.Schedule` wraps the identical real `System.Threading.Timer` (same due, one-shot; clamps due<=0 to 0 so zero/negative-cap behavior cannot regress). Production call site `DtrhHostWindow.axaml.cs:298` compiles unchanged; real-clock behavior identical. |
+
+**Test conversions (`DtrhNativeEffectsTests.cs`):**
+
+- New private `ManualClock` fake (the proven `SoundArbitrationTests.cs:551` pattern:
+  due+fire capture, in-order Advance firing, CancelHandle honors dispose-cancels).
+- `Make()` gains `ManualClock? clock = null` (internally `??= new()`) — EVERY test in the
+  class now runs on an injected manual clock; no real timer is ever armed (the consult-
+  caught latent-15s-timer surface closed). All existing call-site deconstructions unchanged.
+- `FirePayload_Video_PlaysFromPool_RaisesStarted_CapsAtSegment`: toy 0.05s cap + 5s
+  wall-clock poll REPLACED by the REAL SEGMENT_SEC=15 parity value on the fake clock.
+  Assertions: started/played/non-consumed unchanged; `StopCalls == 0` before advancing and
+  at cap−0.1s (strengthening — time-driven, never immediate, never early); after the exact
+  remainder advance, `StopCalls == 1` and `ended == 1` (unchanged meaning: the cap stops
+  the tape, VideoEnded rides the stop). A wrongly-scheduled cap cannot fire inside the
+  exact-15s window.
+- `MediaLogging_UserMediaRoot_...` direct construction injects a `ManualClock` (hygiene;
+  assertions untouched).
+- **Zero assertions weakened/loosened/deleted; zero timeouts widened; no new tests added
+  (the seam needed none — the floor stays 537/29 EXACT); suite serialization untouched.**
+
+Step-2 gate: DTRH class 17/17 green; full suite 537/537 + 29/29; build 0W/0E.
+
+## 5. Stability proof (Step 3) — transcripts in `evidence/`
+
+**10 consecutive full-suite runs (both test projects, the suite's NORMAL parallel load —
+no serialization switches), ZERO reds of any class:**
+
+| Chain run | Main | Headless |
+|-----------|------|----------|
+| 1 (18:24Z) | 537/537 | 29/29 |
+| 2 (18:25Z) | 537/537 | 29/29 |
+| 3 (18:26Z) | 537/537 | 29/29 |
+| 4 (18:27Z) | 537/537 | 29/29 |
+| 5 (18:28Z) | 537/537 | 29/29 |
+| 6 (18:29Z) | 537/537 | 29/29 |
+| 7 (18:31Z) | 537/537 | 29/29 |
+| 8 (18:32Z) | 537/537 | 29/29 |
+| 9 (18:33Z) | 537/537 | 29/29 |
+| 10 (18:34Z) | 537/537 | 29/29 |
+
+Transcripts: `evidence/stability-run-{1..10}-{main,headless}.txt` (20 files, full output).
+No non-cap-timer flake appeared in the chain (nothing to name via TRX — the wave-4 rule
+discharged vacuously). Post-chain process probe: the only `dotnet.exe` processes are
+MSBuild node-reuse daemons (`/nodemode:1 /nodeReuse:true`) — ZERO leaked test hosts
+(SP-041 zombie rule).
+
+Note: the cap-timer red this task kills was a 1-in-10 flake under load; 10 consecutive
+greens post-fix vs 1 red in SP-041's 10-run chain pre-fix is the empirical acceptance the
+board row names. The fix is structural (no wall-clock remains in the class), so the green
+chain is expected, not lucky.
+
+## 6. Contract verification (Step 4)
+
+- `node .spine/patches/verify.mjs` → **OK** (all patches applied on all roots, exit 0).
+- `dotnet build client/CcpClient.sln -c Debug --nologo` → **0 Warning(s), 0 Error(s)**.
+- `dotnet test` both projects → **537/537 + 29/29** (floor 537/29 met EXACTLY; zero new
+  tests — recorded: the deterministic seam added none).
+- `git diff --check` → clean.
+- `git status --short` → only File Scope paths (`client/tests/CcpClient.Tests/DtrhNativeEffectsTests.cs`,
+  `client/src/CcpClient.Desktop/Features/Dtrh/DtrhNativeEffects.cs`, `spine-tasks/SP-043-dtrh-captimer-tests/**`).
+- `fileScopeMustNotChange` honored: `ConditioningControlPanel/**`, `client/CcpClient.sln`,
+  `client/spikes/**`, `.spine/**`, `client/docs/task-board.md`, `client/docs/port-lessons.md`,
+  `client/src/CcpClient.Desktop/Ai/**` all untouched (enabler 2 respected).
+- WSL2 named limit: laptop WSL zero distros — Windows-only evidence, never faked.
+
+## 7. Durable-lesson candidates (for the orchestrator's port-lessons reconciliation)
+
+1. **The repo already owns the fix for every timer flake class:** `ISoundClock`
+   (`Audio/AudioSeams.cs`) was built 2026-07-22 for exactly this. Before designing any new
+   timing seam, grep for `ISoundClock`/`ManualClock` — the proven fake pattern now exists
+   in THREE test classes (`SoundArbitrationTests`, `BarkPipelineTests`,
+   `DtrhNativeEffectsTests`).
+2. **Latent real timers are a class even when no assertion observes them:** any test that
+   arms a product `Timer` and never disposes the fixture leaves a pool-thread callback
+   that outlives the test. Injecting the manual clock CLASS-WIDE (not just in the
+   observed-flaky test) closes the whole surface at once.
+3. **Toy durations hide under fake clocks:** with an injected clock the test can use the
+   REAL parity value (SEGMENT_SEC=15) at zero runtime cost — the exact-advance window then
+   verifies the due value itself, a stronger assertion than the toy-0.05s wall-clock poll
+   ever was.
+4. **Discovery (out of scope, recorded):** `DtrhFxRouterTests.cs:34` still constructs
+   `DtrhNativeEffects` with the real clock default and routes a fire-payload video message
+   — a latent non-observed 15s timer. Zero flake potential (synchronous assertions,
+   per-test instances), but the next touch of that file should inject a `ManualClock`.
+
+<!-- Pre-completion consult appended below before .DONE. -->
