@@ -177,8 +177,21 @@
  * number goes UP to exec/executor.js, which hands it to core/match.js for the tick's `vwin`.
  * Nobody listening = nothing changes.
  *
+ * PINCH (2026-08-04). A phone has no wheel, so onWheel below is a desktop-only
+ * affordance and a window arrived on a phone at whatever size it was born at.
+ * Two fingers on a window now resize it — through the SAME --gg-vwin-w var the
+ * wheel drives, so it composes with the drag offset, the drift and the exit
+ * exactly as the wheel already does. The arithmetic lives in exec/pinch.js (pure,
+ * self-tested); everything below is the pointer bookkeeping.
+ *
  * Uniform renderer shape — see the banner in exec/flashes.js.
  * ==========================================================================*/
+
+import {
+  PINCH_MIN_FACTOR, PINCH_MAX_FACTOR, PINCH_SLOP_PX, PINCH_KEEP_PX,
+  pinchEligible, pinchDistance, pinchMidpoint, pinchStarted, pinchStep,
+  viewportCap, safeInsets,
+} from './pinch.js';
 
 const MAX_SOURCE_TRIES = 3;   // a broken entry costs one redraw, not the run
 
@@ -208,6 +221,19 @@ export const AUDIO_RAMP_TICK_MS = 25;   // ~40 steps/s: inaudible stepping, no r
    halves cannot disagree about what "on" looks like. ------------------------- */
 export const SKIP_ATTR = 'data-gg-vskip';   // on <html>, written by ui/prefs.js
 export const SKIP_ON = 'on';                // …anything else, or absent, is OFF
+
+/* --- MEDIA VOLUME. Same root-attribute contract as SKIP_ATTR: ui/prefs.js
+   writes the EFFECTIVE value (mediaVolume × masterVolume) to <html>, exec/
+   reads it lazily so a startup-built renderer still sees a mid-match drag.
+   Absent = 1: a page with no prefs store plays at the tuned defaults. -------- */
+export const MEDIA_VOL_ATTR = 'data-gg-mediavol';   // on <html>, written by ui/prefs.js
+/** The player's Media slider × Master, read lazily. Absent = 1 (no prefs store). */
+const mediaScale = () => {
+  try {
+    const n = parseFloat(document.documentElement.getAttribute(MEDIA_VOL_ATTR));
+    return isFinite(n) ? Math.max(0, Math.min(1, n)) : 1;
+  } catch (_e) { return 1; }
+};
 export const SKIP_BTN_CLASS = 'gg-vwin-x';
 export const SKIP_BTN_MIN_PX = 22;          // the pointer target fx.css must meet
 export const MUTED_CLASS = 'is-muted';      // this window was click-silenced
@@ -315,9 +341,10 @@ const reducedMotion = () => {
 const vpW = () => ((typeof window !== 'undefined' && window && window.innerWidth > 0) ? window.innerWidth : 1280);
 const vpH = () => ((typeof window !== 'undefined' && window && window.innerHeight > 0) ? window.innerHeight : 720);
 
-/** Cue intensity -> playback volume. Modest on purpose: the HUD must stay audible. */
+/** Cue intensity -> playback volume, scaled by the player's Media × Master
+ *  sliders (MEDIA_VOL_ATTR). Modest on purpose: the HUD must stay audible. */
 export function volumeFor(intensity) {
-  return +lerp(0.12, 0.55, clamp01(intensity)).toFixed(3);
+  return +(lerp(0.12, 0.55, clamp01(intensity)) * mediaScale()).toFixed(3);
 }
 
 /**
@@ -588,6 +615,7 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
   let elementAudioActive = false;     // …and while there IS one, the windows duck
   const wins = [];                    // floating windows, OLDEST FIRST
   let drag = null;                    // the ONE live press, if any
+  let pinch = null;                   // …and the second finger on it, if any
   let focusedId = null;               // wid of the last window TOUCHED or SPAWNED
   let widSeq = 0;                     // window ids: unique, thrown or earned
 
@@ -813,6 +841,17 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     try { if (rec && rec.node) rec.node.classList.toggle(cls, !!on); } catch (_e) { /* ignore */ }
   };
 
+  /* A MID-DRAG on the Media/Master sliders lands on OPEN windows instantly:
+   * ui/prefs.js dispatches this event (MEDIA_VOL_EVENT, edge-triggered) with
+   * every effective change, and applyAudio() re-resolves each window's target
+   * through volumeFor's lazy attribute read. The name is a string literal
+   * because exec/ does not import ui/ — the contract lives in the attribute
+   * comment beside MEDIA_VOL_ATTR above. Registered once for the renderer's
+   * page-long life (createVideos is built once at startup; stopWindows() is a
+   * per-match door, not a dispose), so there is nothing to unhook. */
+  try { if (typeof window !== 'undefined') window.addEventListener('gg-media-volume', () => applyAudio()); }
+  catch (_e) { /* a windowless host renders nothing anyway */ }
+
   /**
    * A TOUCH: this window now holds the mic. Right-click, a completed drag and a
    * wheel-resize are the three touches — anything the player did ON PURPOSE to
@@ -993,15 +1032,42 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
       n[io]('pointerup', onPointerUp);
       n[io]('pointercancel', onPointerCancel);
       n[io]('lostpointercapture', onPointerCancel);
+      // THE SECOND FINGER'S HALF, bound in the same breath as the first one's and
+      // torn down in the same breath too. It could have had its own listen()/
+      // forget() pair; it does not, because two bookkeeping lifetimes that must
+      // agree is exactly how a listener gets leaked. Both handlers no-op unless a
+      // pinch is live, and the drag handlers above already ignore a foreign
+      // pointerId, so the two sets never fight over one event.
+      n[io]('pointermove', onPinchMove);
+      n[io]('pointerup', onPinchEnd);
+      n[io]('pointercancel', onPinchEnd);
+      n[io]('lostpointercapture', onPinchEnd);
     } catch (_e) { /* ignore */ }
   }
 
   /** Tear the bookkeeping down without touching the window. */
   function forgetDrag() {
     if (!drag) return;
+    forgetPinch();                   // a pinch cannot outlive the press it grew from
     listen(drag, false);
     try { clearTimeout(drag.watchdog); } catch (_e) { /* ignore */ }
     drag = null;
+  }
+
+  /** Drop the second finger. Releases its capture; leaves the window's size alone
+   *  (a pinch that ends keeps what it zoomed to, exactly like a wheel). */
+  function forgetPinch() {
+    const p = pinch;
+    if (!p) return;
+    pinch = null;
+    const n = p.rec && p.rec.node;
+    try {
+      if (n && p.idB != null && typeof n.releasePointerCapture === 'function'
+          && (typeof n.hasPointerCapture !== 'function' || n.hasPointerCapture(p.idB))) {
+        n.releasePointerCapture(p.idB);
+      }
+    } catch (_e) { /* ignore */ }
+    if (drag) drag.pinching = false;
   }
 
   function onPointerDown(rec, e) {
@@ -1015,9 +1081,13 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     if (rec.finished || !rec.node || !rec.node.isConnected) return;
 
     if (drag) {
-      // A second finger is IGNORED — but a drag whose node was torn out from
-      // under us must never block the field forever.
-      if (drag.rec && drag.rec.node && drag.rec.node.isConnected) return;
+      // A second finger on THIS window is a pinch (touch only — see beginPinch);
+      // a second finger anywhere else is IGNORED, exactly as it always was. A
+      // drag whose node was torn out from under us must never block the field.
+      if (drag.rec && drag.rec.node && drag.rec.node.isConnected) {
+        if (!pinch && drag.rec === rec) beginPinch(rec, e);
+        return;
+      }
       forgetDrag();
     }
 
@@ -1025,8 +1095,9 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     drag = {
       rec,
       pointerId: (e && e.pointerId != null) ? e.pointerId : null,
-      x0: x, y0: y, baseDx: rec.dx, baseDy: rec.dy,
-      grabbed: false, watchdog: 0, staleCapture: false,
+      pointerType: (e && e.pointerType) || '',
+      x0: x, y0: y, lastX: x, lastY: y, baseDx: rec.dx, baseDy: rec.dy,
+      grabbed: false, watchdog: 0, staleCapture: false, pinching: false, pinched: false,
     };
     listen(drag, true);
     drag.watchdog = soon(() => { if (drag) endDrag('watchdog'); }, HOLD_WATCHDOG_MS);
@@ -1094,6 +1165,15 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     // move means lift()'s re-capture went through and the licence has expired.
     d.staleCapture = false;
     const x = ptX(e), y = ptY(e);
+    d.lastX = x; d.lastY = y;
+    if (d.pinching && pinch) {
+      // This finger is half of a pinch now: it moves the gesture, not the window.
+      // (The window still travels — with the MIDPOINT, inside applyPinch.)
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      pinch.ax = x; pinch.ay = y;
+      applyPinch();
+      return;
+    }
     if (!d.grabbed) {
       if (Math.hypot(x - d.x0, y - d.y0) <= DRAG_SLOP_PX) return;   // still a click
       beginGrab(d);
@@ -1104,6 +1184,104 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     paint(d.rec);
   }
 
+  /* ---------------------------------------------------------------- the pinch
+   * Two fingers on ONE window resize it. Touch only: the second button of a
+   * mouse, a stylus hover, a desktop anything — none of them reach here, so the
+   * desktop gesture set is bit-for-bit what it was.
+   * ------------------------------------------------------------------------ */
+
+  /** The second finger landed. Returns nothing; a refusal simply leaves it alone. */
+  function beginPinch(rec, e) {
+    const d = drag;
+    if (!d || d.rec !== rec || rec.finished || !rec.node) return;
+    const idB = (e && e.pointerId != null) ? e.pointerId : null;
+    if (!pinchEligible(d.pointerType, e && e.pointerType, d.pointerId, idB)) return;
+    // A pinch takes the window OUT of the keyframe world before it measures it:
+    // .is-grabbed freezes the drift (whose live translate is folded into dx/dy by
+    // beginGrab), and only then is `left + dx` the window's actual position.
+    if (!d.grabbed) beginGrab(d);
+    const bx = ptX(e), by = ptY(e);
+    const mid = pinchMidpoint(d.lastX, d.lastY, bx, by);
+    pinch = {
+      rec,
+      idB,
+      ax: d.lastX, ay: d.lastY, bx, by,
+      startDist: pinchDistance(d.lastX, d.lastY, bx, by),
+      startSize: rec.widthPx,
+      midX: mid.x, midY: mid.y,
+      insets: safeInsets(vpW(), vpH()),
+      live: false,
+    };
+    d.pinching = true;
+    d.pinched = true;                 // the release is a cancel, never a click
+    // Handling a window is handling it, whichever hand did it.
+    focusWindow(rec, false);
+    try {
+      if (idB != null && typeof rec.node.setPointerCapture === 'function') rec.node.setPointerCapture(idB);
+    } catch (_e) { /* capture is a nicety; the node listeners still work without it */ }
+  }
+
+  function onPinchMove(e) {
+    const p = pinch;
+    if (!p || !e || e.pointerId == null || e.pointerId !== p.idB) return;
+    if (typeof e.preventDefault === 'function') e.preventDefault();
+    p.bx = ptX(e); p.by = ptY(e);
+    applyPinch();
+  }
+
+  /** Either finger up/cancelled ends the WHOLE gesture — see the banner in
+   *  exec/pinch.js. This is the second finger's half; the first one's is
+   *  onPointerUp/onPointerCancel, which run through endDrag as they always did. */
+  function onPinchEnd(e) {
+    const p = pinch;
+    if (!p || !e || e.pointerId == null || e.pointerId !== p.idB) return;
+    forgetPinch();
+    // The window stays in hand: the remaining finger goes back to being a drag,
+    // and its own release ends it. It cannot click any more (d.pinched).
+    const d = drag;
+    if (d) { d.x0 = d.lastX; d.y0 = d.lastY; d.baseDx = d.rec.dx; d.baseDy = d.rec.dy; }
+  }
+
+  /** ONE step of the gesture. All arithmetic is exec/pinch.js's; this only reads
+   *  the record, writes the width var and repaints. */
+  function applyPinch() {
+    const p = pinch;
+    if (!p) return;
+    const rec = p.rec;
+    if (!rec || rec.finished || !rec.node) { forgetPinch(); return; }
+    const dist = pinchDistance(p.ax, p.ay, p.bx, p.by);
+    if (!p.live) {
+      // Two fingers resting is not a gesture. Keep the midpoint fresh so the pan
+      // does not jump the moment it becomes one.
+      if (!pinchStarted(p.startDist, dist, PINCH_SLOP_PX)) {
+        const m = pinchMidpoint(p.ax, p.ay, p.bx, p.by);
+        p.midX = m.x; p.midY = m.y;
+        return;
+      }
+      p.live = true;
+    }
+    const W = vpW(), H = vpH();
+    const aspect = num(rec.aspect, 0) > 0 ? rec.aspect : 9 / 16;
+    const out = pinchStep(
+      {
+        startDist: p.startDist, startSize: p.startSize, base: rec.baseW, size: rec.widthPx,
+        anchorX: rec.left + rec.dx, anchorY: rec.top + rec.dy, midX: p.midX, midY: p.midY,
+      },
+      { ax: p.ax, ay: p.ay, bx: p.bx, by: p.by },
+      {
+        vw: W, vh: H, insets: p.insets, aspect, keep: PINCH_KEEP_PX,
+        cap: viewportCap(W, H, p.insets, aspect),
+        minFactor: PINCH_MIN_FACTOR, maxFactor: PINCH_MAX_FACTOR,
+      },
+    );
+    p.midX = out.midX; p.midY = out.midY;
+    rec.widthPx = out.size;
+    rec.dx = out.x - rec.left;
+    rec.dy = out.y - rec.top;
+    try { rec.node.style.setProperty('--gg-vwin-w', `${out.size.toFixed(0)}px`); } catch (_e) { /* ignore */ }
+    paint(rec);
+  }
+
   /**
    * THE ONE EXIT. `why` is 'up' (released), 'cancel', 'stop' or 'watchdog'.
    * Only 'up' is a gesture the player completed; every other reason is a gentle
@@ -1112,6 +1290,7 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
   function endDrag(why) {
     const d = drag;
     if (!d) return;
+    forgetPinch();                   // whichever finger left, the gesture is over
     drag = null;
     listen(d, false);
     try { clearTimeout(d.watchdog); } catch (_e) { /* ignore */ }
@@ -1321,6 +1500,10 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
       intensity: clamp01(intensity),
       wid: ++widSeq, muted: false,
       dx: 0, dy: 0, held: false, finished: false,
+      // The CSS anchor a pinch measures against (left/top are written above and
+      // never move; dx/dy is the whole travel) and the shape it grows by. The
+      // aspect is a guess until onloadedmetadata knows the clip's real one.
+      left: pos.x, top: pos.y, aspect: 9 / 16,
       baseW, widthPx: baseW, tries: 0, endTimer: 0, fadeTimer: 0, bornAt: nowMs(),
     };
 
@@ -1385,7 +1568,10 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     // is the only chance to fade a natural ending at all (see the AUDIO banner).
     video.onloadedmetadata = () => {
       const w = num(video.videoWidth, 0), h = num(video.videoHeight, 0);
-      if (w > 0 && h > 0) { try { node.style.setProperty('--gg-vwin-ar', `${w} / ${h}`); } catch (_e) { /* ignore */ } }
+      if (w > 0 && h > 0) {
+        rec.aspect = h / w;          // …which is also the shape a pinch clamps against
+        try { node.style.setProperty('--gg-vwin-ar', `${w} / ${h}`); } catch (_e) { /* ignore */ }
+      }
       const secs = num(video.duration, 0);
       if (secs > 0 && isFinite(secs)) {
         const endsIn = (secs - num(video.currentTime, 0)) * 1000;

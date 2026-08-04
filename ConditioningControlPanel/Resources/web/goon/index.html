@@ -9,6 +9,21 @@
          standalone in a plain browser for dev (?solo=1 — see bridge.js).
          Self-contained: DOM/canvas/WebAudio own every effect. No importmap, no
          three.js, no remote fonts — offline by construction. -->
+    <!-- PWA chrome for the STANDALONE phone client (cclabs.app/goon-beta/).
+         Add-to-home-screen keeps working after the tokenized query is dropped
+         because bridge.js adopts ?server/&token/&uid into localStorage on first
+         launch. Deliberately NO service worker: the page deploys often and a
+         stale offline cache is worse than a plain reload (it is offline-by-
+         construction for assets anyway — no CDN, no remote fonts). Hosted
+         (WebView2) all of this is inert. -->
+    <link rel="manifest" href="./manifest.webmanifest">
+    <meta name="theme-color" content="#1a1a2e">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Goon Game">
+    <link rel="apple-touch-icon" href="./assets/icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png">
     <link rel="stylesheet" href="./goon.css">
     <link rel="stylesheet" href="./ui/screens.css">
     <link rel="stylesheet" href="./ui/hud.css">

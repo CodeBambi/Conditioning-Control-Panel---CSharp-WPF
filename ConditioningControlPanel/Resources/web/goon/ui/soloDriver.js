@@ -229,8 +229,15 @@ export function createSoloDriver({ match, name = 'Practice', seed = 0xB0BBn, log
     // 45s" into a coin flip.
     if (salvoArmed > 0) return;
     const charges = match.scoring.charges;
+    // BrainDrain: once per match, and the bot must not spend it on a whim.
+    // BubbleSwarm: the human has no such sticker any more (ui/arsenal.js, owner
+    // 2026-08-04 — bubbles are the always-on field, so a bubble throwable bought
+    // nothing) and the practice bot throws from the player's own deck. The kind
+    // stays legal on the wire and stays rendered inbound; nothing local sends one.
     const affordable = (match.availablePayloadKinds || [])
-      .filter((k) => k !== GoonPayloadKind.BrainDrain && costOf(k) <= charges);
+      .filter((k) => k !== GoonPayloadKind.BrainDrain
+        && k !== GoonPayloadKind.BubbleSwarm
+        && costOf(k) <= charges);
     if (affordable.length === 0) return;
     if (rng.nextDouble() < 0.35) return;    // it does not fire the instant it can
 

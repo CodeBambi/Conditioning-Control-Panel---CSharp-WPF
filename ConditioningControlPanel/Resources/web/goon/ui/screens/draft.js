@@ -25,9 +25,10 @@
 
 import { createLedger, el, button } from '../router.js';
 import { S, ELEMENTS } from '../strings.js';
-import {
-  ALWAYS_ON_ELEMENT, MAX_MATCH_RISK_TIER, matchRiskTier, riskMultiplier, riskTierOf, sharedPool,
-} from '../../core/draft.js';
+// matchRiskTier/riskMultiplier are the ENGINE's frozen names for "how heavy is this pool" and
+// "what does that multiply the score by" (core/scoring.js, C#-parity). The screen uses only the
+// product of the two — one honest "you both score ×N" — and shows the tier itself nowhere.
+import { ALWAYS_ON_ELEMENT, matchRiskTier, riskMultiplier, sharedPool } from '../../core/draft.js';
 
 /** One 24x24 glyph per element. Literal markup — no interpolation, ever. */
 const GLYPHS = {
@@ -60,31 +61,22 @@ export function mount(container, ctx) {
 
   /* --------------------------------------------------------- duel header */
 
-  const mkMeter = (who) => {
-    const segs = [];
-    const bar = el('div', { class: 'gg-riskmeter gg-riskmeter--' + who });
-    for (let i = 0; i < MAX_MATCH_RISK_TIER; i++) {
-      const s = el('i', { class: 'gg-riskseg' + (i === MAX_MATCH_RISK_TIER - 1 ? ' is-gold' : '') });
-      segs.push(s);
-      bar.appendChild(s);
-    }
-    return { bar, segs };
-  };
-  const youMeter = mkMeter('you');
-  const themMeter = mkMeter('them');
+  /* NO RISK METERS (2026-08-04). Each side used to carry a seven-segment bar of
+   * the pool's summed "risk tier", 0-7, plus a third copy in the footer. Three
+   * meters, one number, and no player could say what a 5 bought them — so all
+   * three are gone and the header is just who is signing. The tier itself lives
+   * on inside core/scoring.js, where it belongs. */
   const youSig = el('span', { class: 'gg-draft-sig', text: '' });
   const themSig = el('span', { class: 'gg-draft-sig', text: '' });
 
   const header = el('div', { class: 'gg-draft-head' }, [
     el('div', { class: 'gg-draft-side' }, [
       el('span', { class: 'gg-draft-who', text: match.localDisplayName || S.lobby.you }),
-      youMeter.bar,
       youSig,
     ]),
     el('span', { class: 'gg-duel-vs', text: 'vs', 'aria-hidden': 'true' }),
     el('div', { class: 'gg-draft-side gg-draft-side--them' }, [
       el('span', { class: 'gg-draft-who', text: match.opponent.displayName || S.lobby.them }),
-      themMeter.bar,
       themSig,
     ]),
   ]);
@@ -97,10 +89,6 @@ export function mount(container, ctx) {
   for (const meta of ELEMENTS) {
     const alwaysOn = meta.id === ALWAYS_ON_ELEMENT;
 
-    const pips = el('span', { class: 'gg-riskpips', 'aria-hidden': 'true' });
-    const tier = riskTierOf(meta.id);
-    for (let i = 0; i < 3; i++) pips.appendChild(el('i', { class: i < tier ? 'is-on' : '' }));
-
     const badge = el('span', { class: 'gg-elem-badge', hidden: true });
     const node = el('button', {
       type: 'button',
@@ -111,7 +99,7 @@ export function mount(container, ctx) {
       badge,
       el('span', { class: 'gg-elem-glyph', html: GLYPHS[meta.id] || '' }),
       el('span', { class: 'gg-elem-name', text: meta.name }),
-      pips,
+      // no risk pips: the blurb is the whole story a tile tells now
       el('span', { class: 'gg-elem-blurb', text: meta.blurb }),
       el('span', { class: 'gg-elem-why', text: S.draft.unsupported }),
     ]);
@@ -134,15 +122,13 @@ export function mount(container, ctx) {
 
   /* ---------------------------------------------------------- the footer */
 
-  const riskLabel = el('span', { class: 'gg-draft-risk', text: '' });
   const multLabel = el('span', { class: 'gg-draft-mult', text: '' });
-  const footMeter = mkMeter('foot');
   const poolLabel = el('span', { class: 'gg-draft-pool', text: '' });
   const errLabel = el('p', { class: 'gg-draft-error', text: '', role: 'status', hidden: true });
   const confirmBtn = button(ledger, S.draft.confirm, () => confirmIn(), { variant: 'primary', audio, sfx: 'draft-lock' });
 
   const footer = el('div', { class: 'gg-draft-foot' }, [
-    el('div', { class: 'gg-draft-meterwrap' }, [riskLabel, footMeter.bar, multLabel]),
+    el('div', { class: 'gg-draft-meterwrap' }, [multLabel]),
     el('div', { class: 'gg-draft-poolwrap' }, [
       poolLabel,
       el('span', { class: 'gg-draft-rolled', text: S.draft.rolled }),
@@ -211,10 +197,6 @@ export function mount(container, ctx) {
     paint();
   }
 
-  function paintMeter(meter, tier) {
-    for (let i = 0; i < meter.segs.length; i++) meter.segs[i].classList.toggle('is-on', i < tier);
-  }
-
   function paint() {
     const mine = myAllowed();
     const theirs = theirAllowed();
@@ -238,14 +220,10 @@ export function mount(container, ctx) {
       t.badge.textContent = theirsOff ? S.draft.theirsOff : '';
     }
 
-    // Both players endure the same pool, so there is ONE risk figure — the meters show the same
-    // number on both sides, with the signature strip carrying who has signed off on it.
-    const tier = matchRiskTier(shared);
-    paintMeter(youMeter, tier);
-    paintMeter(footMeter, tier);
-    paintMeter(themMeter, tier);
-    riskLabel.textContent = S.draft.risk(tier);
-    multLabel.textContent = S.draft.score(riskMultiplier(tier));
+    // Both players endure the same pool, so there is ONE number here and it is the one a player
+    // can act on: agree to more, score faster. (The 0-7 "match risk" tier this used to paint as
+    // three seven-segment meters is gone — it was engine bookkeeping on a player's screen.)
+    multLabel.textContent = S.draft.score(riskMultiplier(matchRiskTier(shared)));
     poolLabel.textContent = S.draft.pool(shared.length);
 
     youSig.textContent = match.localDraftConfirmed ? S.draft.confirmed : '';

@@ -63,8 +63,11 @@ export class GoonFakeSignalingServer {
    * @param {() => number} [o.now] injectable clock (ms) — tests expire rooms without waiting
    * @param {string} [o.codePrefix]
    * @param {string[]} [o.whitelist] uids allowed to self-duel (see setWhitelisted)
+   * @param {boolean|null} [o.mediaSend] the `media_send` verdict /invite //join answer with.
+   *   null (the default) models a server that PREDATES the field and omits it entirely —
+   *   the client must then leave its recorded verdict untouched.
    */
-  constructor({ ttlMs = DEFAULT_TTL_MS, now = () => Date.now(), codePrefix = 'LOOP', whitelist = [] } = {}) {
+  constructor({ ttlMs = DEFAULT_TTL_MS, now = () => Date.now(), codePrefix = 'LOOP', whitelist = [], mediaSend = null } = {}) {
     this._rooms = new Map();
     this._ttlMs = ttlMs;
     this._now = now;
@@ -93,6 +96,21 @@ export class GoonFakeSignalingServer {
      */
     this.hostCardVer = null;    // what the GUEST is told about the host
     this.guestCardVer = null;   // what the HOST is told about the guest
+    /**
+     * The premium SEND verdict (`media_send`) this server answers /invite and
+     * /join with. Boolean = the field is present; null = omitted (old server).
+     * @type {boolean|null}
+     */
+    this.mediaSend = typeof mediaSend === 'boolean' ? mediaSend : null;
+  }
+
+  /** Test hook: change the send verdict between calls (or null to omit the field). */
+  setMediaSend(v) { this.mediaSend = typeof v === 'boolean' ? v : null; return this; }
+
+  /** Fold `media_send` into a response only when this server models the field. */
+  _withMediaSend(json) {
+    if (typeof this.mediaSend === 'boolean') json.media_send = this.mediaSend;
+    return json;
   }
 
   /**
@@ -164,7 +182,7 @@ export class GoonFakeSignalingServer {
           expiresAt: this._now() + this._ttlMs,
         };
         this._rooms.set(room.code, room);
-        return ok({
+        return ok(this._withMediaSend({
           ok: true,
           code: room.code,
           token: room.hostToken,
@@ -172,7 +190,7 @@ export class GoonFakeSignalingServer {
           expires_in_sec: Math.round(this._ttlMs / 1000),
           pass: 'premium',
           relay_allowed: true,
-        });
+        }));
       }
 
       case '/v2/goon/join': {
@@ -200,7 +218,7 @@ export class GoonFakeSignalingServer {
         // otherwise be handed to the fresh peer connection as if it were live. The
         // SEQ counter deliberately keeps counting — the host's cursor is past it.
         if (rejoin) room.signals = [];
-        return ok({
+        return ok(this._withMediaSend({
           ok: true,
           rejoin,
           // Advisory: both seats are one account. Nothing in the match depends on it.
@@ -214,7 +232,7 @@ export class GoonFakeSignalingServer {
           relay_allowed: true,
           // The joiner is the GUEST, so the peer whose card it learns is the host.
           peer_card_ver: this.hostCardVer,
-        });
+        }));
       }
 
       case '/v2/goon/leave': {

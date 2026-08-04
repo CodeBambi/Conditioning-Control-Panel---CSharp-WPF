@@ -156,12 +156,20 @@ export class GoonWebRtcTransport extends GoonTransportBase {
 
   /**
    * Resolves when the data channel is open, or when ICE gives up (GoonConsts.IceTimeoutMs after
-   * negotiation STARTS). False means "fall back to relay" — check `iceFailed` to tell that apart
-   * from a signaling failure.
+   * negotiation STARTS), or — guest only — when no offer ever arrives (GoonConsts.NoOfferTimeoutMs
+   * after the join). False means "fall back to relay" — check `iceFailed` to tell that apart from
+   * a signaling failure.
    */
   async waitForChannel() {
     let deadline = Date.now() + GoonConsts.IceTimeoutMs;
     let negotiationSeen = false;
+    // GUEST ONLY: a joined guest is OWED an offer — it redeemed the code, the host learns
+    // `peer_joined` on its next poll and offers immediately. If none arrives inside
+    // NoOfferTimeoutMs the host side is dead or unreachable, and without this budget the
+    // guest sat on "joining…" forever (the ICE budget below never starts until an offer
+    // lands). The HOST keeps its untimed wait on purpose: its pre-negotiation phase is a
+    // human typing a code, and that must not eat into any budget.
+    const noOfferDeadline = this.isHost ? Infinity : Date.now() + GoonConsts.NoOfferTimeoutMs;
 
     while (!this._cancelled && !this.isDisposed) {
       if (this.state === GoonTransportState.ConnectedP2P) return true;
@@ -173,6 +181,18 @@ export class GoonWebRtcTransport extends GoonTransportBase {
       if (!negotiationSeen && this._negotiationStarted) {
         negotiationSeen = true;
         deadline = Date.now() + GoonConsts.IceTimeoutMs;
+      }
+
+      if (!negotiationSeen && Date.now() > noOfferDeadline) {
+        // Same shape as an ICE timeout so the caller's relay-fallback ladder runs: a host
+        // that is alive but couldn't reach us over P2P signaling still gets its second
+        // chance, and a host that is gone fails the relay connect with a real error sheet
+        // instead of an infinite spinner.
+        this._iceFailed = true;
+        this._setLastError('no_offer');
+        this._warn(`no offer from the host in ${GoonConsts.NoOfferTimeoutMs}ms — relay fallback`);
+        this._setState(GoonTransportState.Disconnected, 'no_offer');
+        return false;
       }
 
       if (negotiationSeen && Date.now() > deadline) {

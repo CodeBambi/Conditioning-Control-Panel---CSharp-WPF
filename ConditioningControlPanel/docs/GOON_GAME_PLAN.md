@@ -193,6 +193,36 @@ never auto-declared a mercy).
   +1 per sudden-death/mini event won. Cap 3 held.
 - Payload costs: 1 = flash burst / subliminal storm / bubble swarm · 2 = mandatory video /
   lock card / toy pattern · 3 = BrainDrain combo (one "heavy" per match).
+- **The bubble swarm is no longer throwable (2026-08-04).** Bubbles became the always-on
+  baseline field (t=0 → end, both players, a locked tile in the agreement), so a bubble
+  payload threw more of what was already running. `ui/arsenal.js` has no bubble slot,
+  `ui/drops.js` can never roll one and the practice bot never sends one — the arsenal is
+  7 payload slots + emote, keys 1-7. The WIRE is unchanged: `GoonPayloadKind.BubbleSwarm`
+  (2) stays a frozen contract int at cost 1, stays in our advertised caps, and an inbound
+  swarm from any other client still renders through `exec/bubbles.js` as before.
+
+### Risk tiers are ENGINE-INTERNAL (2026-08-04)
+The 0–3 per-element risk tier and the 0–7 match sum above are still exactly what
+`GoonScoring` / `core/scoring.js` multiply the per-second score by, and they are still
+C#-parity — nothing about the numbers moved. What changed is that **no player ever sees
+them again**: the draft's three seven-segment risk meters, the per-tile risk pips, the
+"Match risk 4 / 7" label, the duplicated risk table in `ui/strings.js` and the HUD's
+"×1.30 risk" readout are all gone (owner: the tier was incomprehensible). What survives on
+screen is the *consequence* — one honest "you both score ×1.60" in the draft footer and
+"×1.60 score" in the HUD. Do not re-surface the tier; do not re-copy it into `ELEMENTS`.
+
+### Item drops are paced by HEAT, not a flat roll (2026-08-04)
+Popping a bubble used to be a flat `12% × worth` coin flip per pop — invisible, memoryless
+and unreadable. It now banks **heat** (`ui/drops.js` `DROP_TUNING`), and the drop chance
+ramps with the gauge: `CHANCE_FLOOR` 0.02 at empty to `CHANCE_PEAK` 0.60 at full, along a
+`fill^3.4` curve, with a landed drop spending `HEAT_DROP_COST` back. The rail-side gauge
+(`.gg-heat`, HUD right column) is the visible half of the feature.
+
+The pacing is **conserved by construction**: heat in must equal heat out, so drops-per-pop
+settles at `HEAT_PER_WORTH / HEAT_DROP_COST × worth` = `7.5 / 58` ≈ **12.9%/worth**
+regardless of the curve's shape (decay and the ceiling shave it to a measured 12.0–13.1%
+for a plain bubble, ~28% for an effect bubble). So the curve only buys feel; that ratio
+alone is the economy, and `selftest-hud` pins it against the old flat 12%.
 - Titles (cosmetic stakes): win streaks; "Graceful" (mercy with ≥ 8 min survived),
   "Iron Edge" (12+ min), "Stone Wall" (win taking 5+ payloads), "Untouchable" (win, zero
   charges spent), "GG" (first match played).
