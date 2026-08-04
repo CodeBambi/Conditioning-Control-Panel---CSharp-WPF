@@ -1,6 +1,6 @@
 ## STATUS: SP-035 — AI companion slice c2: loopback Ollama provider
-**Current Step:** Step 1 — provider archaeology + lab design + pre-approach consult
-**Last Updated:** 2026-08-04 (fresh execution; SP-037 floor repair landed — 466/466 + 29/29)
+**Current Step:** Step 2 — provider implementation
+**Last Updated:** 2026-08-04 (Step 1 complete: archaeology + design + pre-approach consult; plan review engine-skipped SP-195)
 **Blockers:** none
 
 ### Step 1: archaeology + lab design + pre-approach consult

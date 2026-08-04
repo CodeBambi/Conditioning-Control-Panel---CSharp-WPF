@@ -38,6 +38,9 @@ public static class CapabilityReasonCodes
 
     /// <summary>No reachable platform secret service (SP-033; e.g. WSL2 without a session D-Bus daemon). Never a plaintext fallback.</summary>
     public const string SecretServiceUnreachable = "secret-service-unreachable";
+
+    /// <summary>A loopback provider endpoint did not answer its probe (connection refused or bounded probe timeout — SP-035).</summary>
+    public const string HostUnreachable = "host-unreachable";
 }
 
 /// <summary>Structured reason: a stable code plus human diagnostic detail (contract §1).</summary>

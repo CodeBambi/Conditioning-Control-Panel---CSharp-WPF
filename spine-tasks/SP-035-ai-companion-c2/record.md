@@ -89,4 +89,4 @@ WSL2 gate: NAMED LIMIT (§0) — zero distros on this laptop; Linux LAB evidence
 
 | Call | Result |
 |------|--------|
-| (per-step plan reviews recorded as they happen) | |
+| Step 1 plan review (`spine_review_step --step 1 --type plan`) | **Engine review ABSENT (expected)** — nested reviewer spawn blocked inside pi worker session; `skipped: true`, `spawnFailed: false` (SP-195: engine runs reviews after `.DONE`). Artifact: `.reviews/1-20260804T132924.md` |
