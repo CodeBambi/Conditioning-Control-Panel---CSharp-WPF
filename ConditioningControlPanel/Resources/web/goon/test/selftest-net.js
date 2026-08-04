@@ -1220,8 +1220,10 @@ async function testBetaGates() {
   // --- a) the page halves, pinned at source level -------------------------------
   {
     const bridge = readSource('../bridge.js');
-    ok(/mediaTransfer:\s*!\(q\.get\('server'\)\s*\|\|\s*prefs\.serverBase\)/.test(bridge),
-      'standaloneInit only self-grants sending when NO server is in play (the pure-local dev path)');
+    ok(/mediaTransfer:\s*!\(q\.get\('server'\)\s*\|\|\s*prefs\.serverBase\s*\|\|\s*defaultServerBase\(\)\)/.test(bridge),
+      'standaloneInit only self-grants sending when NO server is in play (query, prefs, or the public-deploy default)');
+    ok(/\(\^\|\\\.\)cclabs\\\.app\$/.test(bridge),
+      'defaultServerBase is pinned to the public deployment host, so dev origins keep the serverless playground');
     const boot = readSource('../boot.js');
     ok(/typeof goonSession\.signaling\.mediaSend === 'boolean'/.test(boot)
       && /!session\.hosted/.test(boot.slice(boot.indexOf('mediaSend') - 600, boot.indexOf('mediaSend') + 600)),

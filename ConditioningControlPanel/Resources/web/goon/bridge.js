@@ -218,6 +218,22 @@ export function savePrefs(partial) {
 
 function numOr(v, d) { const n = parseFloat(v); return isFinite(n) ? n : d; }
 
+/**
+ * The API base a standalone launch falls back to when neither `?server=` nor a
+ * stored pref names one. Non-empty ONLY on the public deployment (cclabs.app):
+ * an invite link is a bare `?join=CODE`, and a page that cannot find its server
+ * from that link alone is a dead end for the person it was built to welcome.
+ * Everywhere else (localhost, file://, forks) stays '' — the serverless dev
+ * playground, with its always-on transfer affordance, is keyed off "no server
+ * anywhere" and a built-in default would quietly kill it. Exported for tests.
+ */
+export function defaultServerBase() {
+  try {
+    const host = (typeof location !== 'undefined' && location.hostname) || '';
+    return /(^|\.)cclabs\.app$/i.test(host) ? 'https://codebambi-proxy.vercel.app' : '';
+  } catch (_e) { return ''; }
+}
+
 /** Build the fake `init` a standalone browser boots from. Exported for tests. */
 export function standaloneInit() {
   const q = new URLSearchParams((typeof location !== 'undefined' && location.search) || '');
@@ -263,14 +279,15 @@ export function standaloneInit() {
       // transfer-cache to talk to: the assets screen renders "compression lives in
       // the app" instead of a spinner that never resolves.
       assetCache: false,
-      // SENDING is premium-gated. Against a real server (a `?server=` launch or
-      // one remembered in prefs — the phone client) it starts OFF and boot.js
-      // adopts the server's `media_send` verdict from the /invite //join answer.
-      // Only the pure-local dev path (no server anywhere) keeps the old always-on
-      // affordance, because it is the one way to exercise the transfer without
-      // two Patreon accounts. The page reads this as `=== true`, so a real host
-      // that predates the flag still defaults it OFF.
-      mediaTransfer: !(q.get('server') || prefs.serverBase),
+      // SENDING is premium-gated. Against a real server (a `?server=` launch,
+      // one remembered in prefs, or the public deployment's built-in default)
+      // it starts OFF and boot.js adopts the server's `media_send` verdict from
+      // the /invite //join answer. Only the pure-local dev path (no server
+      // anywhere) keeps the old always-on affordance, because it is the one way
+      // to exercise the transfer without two Patreon accounts. The page reads
+      // this as `=== true`, so a real host that predates the flag still
+      // defaults it OFF.
+      mediaTransfer: !(q.get('server') || prefs.serverBase || defaultServerBase()),
     }, prefs.caps || {}),
     consent: Object.assign({
       liveDurationSec: 720,    // GoonConsts.LiveDurationSecDefault
@@ -283,7 +300,7 @@ export function standaloneInit() {
       skewMs: numOr(q.get('skew'), numOr(prefs.skewMs, 0)),
     },
     net: {
-      serverBase: q.get('server') || prefs.serverBase || '',
+      serverBase: q.get('server') || prefs.serverBase || defaultServerBase(),
       authToken: q.get('token') || prefs.authToken || '',
       viaHost: false,
     },
