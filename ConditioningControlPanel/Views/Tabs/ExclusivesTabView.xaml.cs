@@ -14,11 +14,11 @@ namespace ConditioningControlPanel.Views.Tabs
     /// </summary>
     public partial class ExclusivesTabView : UserControl
     {
-        // The room. Chaos ships these painted plates on disk; until the vault
-        // gets its own commissioned backdrop this is the stand-in, and a plain
+        // The room: a neutral black/grey/neon-blue cyber-vault plate, so every
+        // mod's FxTheme accent washes over it without clashing. A plain
         // gradient (the XAML background) is the fallback if the file is gone.
         private static readonly string BackdropDiskPath =
-            Path.Combine(AppContext.BaseDirectory, "assets", "Chaos", "backdrops", "dollhouse_background.png");
+            Path.Combine(AppContext.BaseDirectory, "assets", "exclusives", "vault_backdrop.png");
 
         public ExclusivesTabView()
         {
