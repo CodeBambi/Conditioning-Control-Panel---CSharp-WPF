@@ -1,13 +1,13 @@
 ## STATUS: SP-044 — AI companion slice c6: command execution
 **Current Step:** Step 1 — archaeology + dispatch/consent design + pre-approach consult
-**Last Updated:** 2026-08-04 (authored)
+**Last Updated:** 2026-08-04 (worker)
 **Blockers:** none
 
 ### Step 1: archaeology + design + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] WPF archaeology (effect dispatch + toggle shapes; toggle-only gate REJECTED; SP-019 fuzz outcomes)
-- [ ] Design (executor, consent gates, canary placeholders, superseded-generation at dispatch)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Update STATUS.md before starting work
+- [x] WPF archaeology (effect dispatch + toggle shapes; toggle-only gate REJECTED; SP-019 fuzz outcomes)
+- [x] Design (executor, consent gates, canary placeholders, superseded-generation at dispatch)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: executor + consent gates + canary
 - [ ] AiCommandExecutor.cs + per-command result vocabulary
