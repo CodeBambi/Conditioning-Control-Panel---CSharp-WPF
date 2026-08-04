@@ -250,11 +250,11 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Lab → For You hero card. Opens the TikTok-style feed window (WebView2). Premium:
-        /// the Lab smokescreen already gates the tab, but the entitlement is re-checked here
-        /// so a stale/visible card can't launch without it.
+        /// Exclusives → "For You" spotlight. Opens the TikTok-style feed window (WebView2).
+        /// Reached through ShowTab("fyp"), which intercepts the key rather than switching tabs.
+        /// The card itself never blocks, so premium is enforced here.
         /// </summary>
-        internal void BtnStartFyp_Click(object sender, RoutedEventArgs e)
+        internal void OpenFypFeed()
         {
             try
             {
@@ -267,7 +267,7 @@ namespace ConditioningControlPanel
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "BtnStartFyp_Click failed");
+                App.Logger?.Error(ex, "OpenFypFeed failed");
                 MessageBox.Show("Couldn't open the For You feed:\n\n" + ex.Message, "For You",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
             }

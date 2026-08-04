@@ -67,11 +67,6 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnStartChaos_Click(sender, e);
         }
-        private void BtnStartFyp_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnStartFyp_Click(sender, e);
-        }
         private void BtnStartGoon_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

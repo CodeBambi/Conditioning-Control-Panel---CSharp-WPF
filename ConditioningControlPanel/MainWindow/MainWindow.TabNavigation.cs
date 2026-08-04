@@ -88,6 +88,15 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // "fyp" is a window, not a tab: the Exclusives spotlight routes through
+            // ShowTab like every other card, so the launch is intercepted here and the
+            // active tab is left alone. The card never blocks - OpenFypFeed gates.
+            if (tab == "fyp")
+            {
+                OpenFypFeed();
+                return;
+            }
+
             // Bark hook: announce navigation (gated/chanced in the rules so it isn't spammy).
             try { App.Bark?.NotifyTabNavigated(tab); } catch { }
 

@@ -156,61 +156,6 @@
 
                 <!-- HOW TO PLAY moved to the Rabbit Hole main menu (📖 HOW TO PLAY button → card tutorial overlay). -->
 
-                <!-- ===================== HERO: FOR YOU FEED ===================== -->
-                <!-- Literal English text on purpose: matches the DtRH hero card above (Lab hero
-                     cards are not localized). Premium is enforced in the click handler; the
-                     whole tab already sits behind LabSmokescreen. -->
-                <Border CornerRadius="16" BorderThickness="1" BorderBrush="{DynamicResource PanelAccentBrush}"
-                        Margin="9,0,9,18" ClipToBounds="True" MinHeight="110">
-                    <Border.Background>
-                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                            <GradientStop Color="#FF12142A" Offset="0"/>
-                            <GradientStop Color="#FF1A1230" Offset="0.55"/>
-                            <GradientStop Color="#FF301040" Offset="1"/>
-                        </LinearGradientBrush>
-                    </Border.Background>
-                    <Grid Margin="24,20,24,20">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-
-                        <!-- left: title + blurb -->
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                <TextBlock Text="📱 FOR YOU" Foreground="White" FontSize="24" FontWeight="Bold">
-                                    <TextBlock.Effect>
-                                        <DropShadowEffect Color="{DynamicResource FxGlowColor}" BlurRadius="22" ShadowDepth="0" Opacity="0.7"/>
-                                    </TextBlock.Effect>
-                                </TextBlock>
-                                <Border Background="{DynamicResource TransparentPink20Brush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                                        CornerRadius="6" Padding="7,2" Margin="12,2,0,0" VerticalAlignment="Center">
-                                    <TextBlock Text="NEW" Foreground="{DynamicResource PinkBrush}" FontFamily="Consolas" FontWeight="Bold" FontSize="10"/>
-                                </Border>
-                            </StackPanel>
-                            <TextBlock Text="an endless feed cut from your own library. random 20-40 second slices, stacked and quilted into duos, trios and shifting mosaics. it learns what you linger on. keep scrolling."
-                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="13" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left"/>
-                        </StackPanel>
-
-                        <!-- right: launch -->
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="24,0,0,0">
-                            <Button x:Name="BtnStartFyp" Content="▶ START SCROLLING" Cursor="Hand" ToolTip="just one more."
-                                    Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="Bold" FontSize="16"
-                                    BorderThickness="0" Padding="30,14" HorizontalAlignment="Right"
-                                    Click="BtnStartFyp_Click">
-                                <Button.Effect>
-                                    <DropShadowEffect Color="{DynamicResource FxGlowColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
-                                </Button.Effect>
-                                <Button.Resources>
-                                    <Style TargetType="Border">
-                                        <Setter Property="CornerRadius" Value="14"/>
-                                    </Style>
-                                </Button.Resources>
-                            </Button>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
                 <!-- ===================== ZONE: MIND ===================== -->
                 <Grid Margin="2,4,2,8">
                     <Grid.ColumnDefinitions>
