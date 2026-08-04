@@ -163,11 +163,17 @@ export function mount(container, ctx) {
   /* ---- footer ------------------------------------------------------------ */
   const backBtn = button(ledger, S.voice.back, () => { actions?.goTitle?.(); }, { variant: 'ghost', audio, sfx: 'ui-back' });
   const footer = el('div', { class: 'gg-voice-foot' }, [
-    el('p', { class: 'gg-voice-hint', text: S.voice.volumeHint }),
+    el('p', { class: 'gg-voice-foot-hint', text: S.voice.volumeHint }),
     el('div', { class: 'gg-voice-foot-actions' }, [backBtn]),
   ]);
 
-  container.appendChild(el('div', { class: 'gg-card gg-voice' }, [
+  /* THE CARD IS `gg-voicelib`, NOT `gg-voice`. ui/voice/micHud.js already owns
+   * `.gg-voice` (and `.gg-voice-hint`) for the in-duel mic strip, and ui/hud.css
+   * loads AFTER ui/screens.css — so a card wearing that name inherited
+   * `position:absolute; right:0; top:0; height:48px; display:flex` and rendered
+   * as a 22rem pile in the top-right corner of an empty page. Every other class
+   * on this screen is `gg-voice-*` and unique; these two are the HUD's. */
+  container.appendChild(el('div', { class: 'gg-card gg-voicelib' }, [
     head,
     el('div', { class: 'gg-consent gg-voice-consent' }, [optRow, optSub]),
     recRow, recNote,

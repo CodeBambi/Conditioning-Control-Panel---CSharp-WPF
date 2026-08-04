@@ -1329,8 +1329,15 @@ html[data-gg-motion="reduced"] .gg-vs-splash * { transition: none !important; }
  *     transition, so the pulse goes on its ::before dot, which is its own box.
  *   · minmax(0, 1fr) / min-width: 0 on every grid child — a long note name must
  *     wrap, never widen the row past the viewport on a phone.
+ *   · THE NAMESPACE IS SHARED WITH THE HUD, AND THE HUD WINS. ui/hud.css loads
+ *     after this file and already owns `.gg-voice` and `.gg-voice-hint` for the
+ *     in-duel mic strip — both `position: absolute; right: 0`. The card is
+ *     therefore `.gg-voicelib` and the footer caption `.gg-voice-foot-hint`;
+ *     naming either one after the HUD's classes throws the whole screen into
+ *     the top-right corner as a 22rem flex row. Check hud.css before adding a
+ *     `gg-voice-*` name here (selftest-voice-ui.js pins that no name is shared).
  * ------------------------------------------------------------------------ */
-.gg-voice { min-width: min(38rem, 96vw); max-width: min(38rem, 96vw); text-align: left; }
+.gg-voicelib { min-width: min(38rem, 96vw); max-width: min(38rem, 96vw); text-align: left; }
 .gg-voice-head { text-align: center; }
 
 .gg-voice-consent { margin-bottom: 0.9rem; }
@@ -1419,7 +1426,7 @@ html[data-gg-motion="reduced"] .gg-vs-splash * { transition: none !important; }
 }
 
 .gg-voice-foot { margin-top: 1.1rem; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 0.8rem; }
-.gg-voice-hint { margin: 0; font-size: 0.72rem; color: var(--gg-text-4); line-height: 1.6; }
+.gg-voice-foot-hint { margin: 0; font-size: 0.72rem; color: var(--gg-text-4); line-height: 1.6; }
 .gg-voice-foot-actions { display: flex; justify-content: center; gap: 0.6rem; margin-top: 0.9rem; }
 
 /* The second paragraph of the acknowledgment sheet (injected next to the first
@@ -1456,7 +1463,7 @@ html[data-gg-motion="reduced"] .gg-draft.is-sealed::after { display: none; }
   .gg-count-names { top: 8%; padding: 0 1rem; }
   .gg-plrow--out { flex-direction: row; text-align: left; }
   .gg-assets { min-width: 0; max-width: 96vw; }
-  .gg-voice { min-width: 0; max-width: 96vw; }
+  .gg-voicelib { min-width: 0; max-width: 96vw; }
   /* One column on a phone: the acts row drops under the name instead of
      squeezing it, and every child is min-width:0 so nothing can widen the page. */
   .gg-voice-note { grid-template-columns: minmax(0, 1fr); }

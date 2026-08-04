@@ -364,7 +364,8 @@ async function mountVoiceScreen({ prefs, sheets, toasts, notes = null, match = n
   const store = createNoteStore({ prefs, logger: quiet, idb: null });
   const { container, handle } = await mountVoiceScreen({ prefs, sheets, toasts, notes: store });
 
-  ok(!!findOne(container, 'gg-voice'), 'the screen mounts a .gg-voice card');
+  ok(!!findOne(container, 'gg-voicelib'), 'the screen mounts a .gg-voicelib card');
+  ok(!findOne(container, 'gg-voice'), 'and NEVER wears .gg-voice — that is the HUD mic strip, absolute in the corner');
   const row = findOne(container, 'gg-voice-optin');
   ok(!!row, 'with the opt-in row');
   const input = findTag(row, 'input')[0];
@@ -880,13 +881,34 @@ function mountSheet(provider) {
     'and never touches indexedDB above the function that looks it up (node-import-safe)');
 
   const css = read('ui/screens.css');
-  ok(/\.gg-voice \{/.test(css), 'screens.css styles the screen');
+  ok(/\.gg-voicelib \{/.test(css), 'screens.css styles the screen');
   ok(/\.gg-voice-picker \{/.test(css) && /\.gg-voice-emote \{/.test(css), 'and the emote picker');
   ok(/\.gg-voice-note \{[^}]*minmax\(0, 1fr\)/.test(css), 'the note row is written minmax(0,1fr) — phone-safe');
+
+  /* THE COLLISION, and the reason this screen once rendered as a pile in the
+   * top-right corner: ui/hud.css owns `.gg-voice` / `.gg-voice-hint` for the
+   * in-duel mic strip (position:absolute; right:0), and it LOADS AFTER
+   * screens.css — so any name shared between the two files is decided by the
+   * HUD. Not "prefer not to"; the screen has no way to win. */
+  const hudCss = read('ui/hud.css');
+  const classNames = (text) => new Set(
+    Array.from(stripComments(text).matchAll(/\.(gg-voice[a-z0-9-]*)/g), (m) => m[1]),
+  );
+  const hudNames = classNames(hudCss);
+  const shared = Array.from(classNames(css)).filter((c) => hudNames.has(c));
+  ok(shared.length === 0,
+    'no gg-voice* class is styled by BOTH screens.css and hud.css (hud.css loads last and would win)',
+    shared.join(', '));
+  const screenSrc = stripComments(read('ui/screens/voice.js'));
+  for (const name of ['gg-voice', 'gg-voice-hint']) {
+    ok(!new RegExp("['\" ]" + name + "['\" ]").test(screenSrc),
+      'the screen never mounts .' + name + ' — hud.css owns it');
+  }
+
   // THE TRAP: .gg-grad + a `background:` shorthand paints the text transparent.
   // From the first RULE (not the header comment, which discusses the trap by
   // name) to the motion section that follows the block.
-  const voiceBlock = stripComments(css.slice(css.indexOf('.gg-voice {'), css.indexOf('MOTION — the player')));
+  const voiceBlock = stripComments(css.slice(css.indexOf('.gg-voicelib {'), css.indexOf('MOTION — the player')));
   ok(!/gg-grad/.test(voiceBlock), 'and no RULE in the voice block touches .gg-grad');
   ok(/animation-play-state: running/.test(voiceBlock),
     'the recording pulse re-declares `running`, so the effect armor cannot freeze the live-mic tell');
