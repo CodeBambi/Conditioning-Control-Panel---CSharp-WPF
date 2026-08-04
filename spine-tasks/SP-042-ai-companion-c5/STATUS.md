@@ -1,5 +1,6 @@
 ## STATUS: SP-042 — AI companion slice c5: awareness
-**Current Step:** Step 5 — Testing & Verification (in progress)
+**Current Step:** COMPLETE — all steps done, contract green (564/564 + 29/29), .DONE created
+**Last Updated:** 2026-08-04 (worker, Step 5 complete)
 **Last Updated:** 2026-08-04 (worker, Step 1 started)
 **Blockers:** none
 
@@ -25,7 +26,7 @@
 - [x] Pre-completion solo consult (verdict + actual model in record.md)
 - [x] STATUS.md accurate before .DONE
 
-### Step 5: Testing & Verification
-- [ ] Contract testCommand passes (verify.mjs + build 0W/0E + ≥537/29 floor)
-- [ ] git diff --check clean
-- [ ] git status --short shows only File Scope paths
+### Step 5: Testing & Verification [COMPLETE]
+- [x] Contract testCommand passes (verify.mjs + build 0W/0E + ≥537/29 floor)
+- [x] git diff --check clean
+- [x] git status --short shows only File Scope paths

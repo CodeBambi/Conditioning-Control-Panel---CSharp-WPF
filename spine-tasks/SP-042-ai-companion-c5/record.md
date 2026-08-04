@@ -134,7 +134,14 @@ Executable content-freedom proofs: `Packaging_BlockingPolicyOnAnyField_ZeroTrans
 
 ## 9. Step 5 — contract verification transcript
 
-(filled in Step 5)
+Exact contract chain (Windows lane worktree, 2026-08-04):
+1. `node .spine/patches/verify.mjs` → **exit 0** ("all patches applied on all roots"; one patch re-applied at run start — the known lane-drift pattern, verify self-heals).
+2. `dotnet build client/CcpClient.sln -c Debug -t:Rebuild --nologo` → **Build succeeded. 0 Warning(s) 0 Error(s)** (warnings measured on `-t:Rebuild` per the packet clause).
+3. `dotnet test client/tests/CcpClient.Tests -c Debug` → **564/564** (537 restored floor + 27 new: 8 `AiAwarenessCooldownTests` + 19 `AiAwarenessTests`).
+4. `dotnet test client/tests/CcpClient.HeadlessTests -c Debug` → **29/29** (floor 29 — no new headless tests; c5 has no UI surface, honestly absent).
+5. `git diff --check` → clean. `git status --short` → clean (all work committed at step boundaries). File-scope audit `git diff --stat 8bf9cf49..HEAD -- ':!spine-tasks'` → ONLY `client/src/CcpClient.Desktop/Ai/**` (3 files: `AiAwarenessService.cs` NEW = fileScopeMustChange, `AiOperationPipeline.cs` +13 additive, `AiModerationBoundary.cs` 1-line ReservedFor text) + 2 NEW test files (`AiAwarenessTests.cs`, `AiAwarenessCooldownTests.cs`); no `fileScopeMustNotChange` path touched; no edits to the 4 out-of-scope test files that call the bool overload.
+
+Linux contract run: covered by the WSL zero-distro named limit (header) — owner-gated, never faked (same disposition as SP-035/038, sanctioned by the 2026-08-04 amendment pattern).
 
 ## 10. Budgets, surprises, durable-lesson candidates
 
