@@ -199,7 +199,7 @@ Everything here is additive: a client without it interoperates unchanged.
   `xfer_cancel {tid, why: peer_gone|match_over|superseded|timeout|user|stray}`.
 - **Receiver offer gate, in order, before any byte flows**: feature off → mime/kind allowlist
   (`video/mp4`, `video/webm`, `image/png`, `image/jpeg`, `image/gif`, `image/webp`) → sha
-  shape → size (24 MiB artifact / 8 MiB un-transcoded original; 192 MiB per match per
+  shape → size (64 MiB artifact / 8 MiB un-transcoded original; 512 MiB per match per
   direction) → locally-known blocklist → already-have (`decline:'have'` — the cross-session
   reuse SUCCESS path) → concurrency (1 in / 1 out) → session quota → accept.
 - **Integrity is receiver-side**: the offered sha256 is a claim. The receiver hashes the

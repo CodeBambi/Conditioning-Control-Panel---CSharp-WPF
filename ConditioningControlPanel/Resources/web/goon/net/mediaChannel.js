@@ -45,8 +45,10 @@ export const BULK_LOW_WATER = 1 << 18;     // 256 KiB
 /** Receiver acks at most this often, by bytes received. */
 export const ACK_EVERY_BYTES = 1 << 18;    // 256 KiB
 
-/** Per artifact, both directions. */
-export const MAX_ARTIFACT_BYTES = 24 * 1024 * 1024;
+/** Per artifact, both directions. (Owner raised 24→64 MB 2026-08-04: real clips
+ * routinely land 25..50 MB and the transfer already self-regulates via the
+ * MAX_XFER_MS throughput budget, so the rail was the only thing refusing them.) */
+export const MAX_ARTIFACT_BYTES = 64 * 1024 * 1024;
 /**
  * Tighter cap for un-transcoded originals. An exempt original is by definition un-optimised (no
  * 720p ceiling, no re-encode), and 20 MB of that is ~40 s of dead time on a mediocre link.
@@ -54,8 +56,8 @@ export const MAX_ARTIFACT_BYTES = 24 * 1024 * 1024;
  * exempt original from a compressed artifact and does not try.
  */
 export const MAX_EXEMPT_BYTES = 8 * 1024 * 1024;
-/** Per match, per direction. */
-export const MAX_SESSION_BYTES = 192 * 1024 * 1024;
+/** Per match, per direction. Scaled with the artifact cap (~8 big items). */
+export const MAX_SESSION_BYTES = 512 * 1024 * 1024;
 
 export const MAX_CONCURRENT_IN = 1;
 export const MAX_CONCURRENT_OUT = 1;

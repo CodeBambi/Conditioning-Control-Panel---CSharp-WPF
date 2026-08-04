@@ -73,7 +73,7 @@ export const NEEDS_STATES = Object.freeze(['pending', 'queued', 'working']);
  *   ≤ MAX_EXEMPT_BYTES (8 MB)    sent AS-IS, on the exempt path. Never
  *                                recompressed: it already fits, and re-encoding
  *                                something that fits only loses quality.
- *   ≤ MAX_ARTIFACT_BYTES (24 MB) the ceiling for a NON-exempt artifact — what
+ *   ≤ MAX_ARTIFACT_BYTES (64 MB) the ceiling for a NON-exempt artifact — what
  *                                the transfer queue allows once an item is a
  *                                compressed product rather than an original.
  *
@@ -313,7 +313,7 @@ export async function probeEncode() {
 
 /** GoonCacheBridge.MaxPutB64Chars — base64 CHARACTERS, not bytes. */
 export const PUT_MAX_B64_CHARS = 4 * 1024 * 1024;
-/** GoonCacheBridge.MaxPutParts. 16 x 3 MB is far past the 24 MiB wire cap. */
+/** GoonCacheBridge.MaxPutParts. 16 x 3 MB = 48 MB — plenty for lane B's ~2 MB mp4s (raw sends never ride this put path). */
 export const PUT_MAX_PARTS = 16;
 /** Bytes per part: base64 is 4 chars per 3 bytes, and parts must not straddle. */
 export const PUT_PART_BYTES = Math.floor(PUT_MAX_B64_CHARS / 4) * 3;
@@ -1117,12 +1117,12 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
    * THE POLICY, in the order it is applied:
    *   1. not a mime the wire carries        -> badType
    *   2. ≤ 8 MB                             -> EXEMPT, as-is, untouched
-   *   3. video 8..24 MB                     -> non-exempt artifact, as-is (no transcode)
-   *   4. video > 24 MB                      -> tooBigVideo (its own sentence)
+   *   3. video 8..64 MB                     -> non-exempt artifact, as-is (no transcode)
+   *   4. video > 64 MB                      -> tooBigVideo (its own sentence)
    *   5. still/animated > 80 MB source      -> tooBig (we will not decode that)
    *   6. animated gif/awebp > 8 MB          -> mp4 artifact, via lane B's worker
    *   7. still > 8 MB                       -> WebP (or JPEG) artifact
-   *   8. any compressed output > 24 MB      -> failed (pathological; nothing to send)
+   *   8. any compressed output > 64 MB      -> failed (pathological; nothing to send)
    */
   async function adoptLocalFile(f, report) {
     if (!f || typeof f.arrayBuffer !== 'function') { report.failed++; return; }
@@ -1162,7 +1162,7 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
   /**
    * Everything over the exempt cap. What lands is a NON-EXEMPT ARTIFACT: state
    * 'ready' with an `artUrl`, which is exactly the shape boot.js listSendable()
-   * offers under the 24 MB rail (`bytes <= MAX_ARTIFACT_BYTES`), and exactly the
+   * offers under the 64 MB rail (`bytes <= MAX_ARTIFACT_BYTES`), and exactly the
    * shape the host's own compressed items have.
    */
   async function adoptOversize(f, mime, bytes, report) {
@@ -1170,7 +1170,7 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
 
     /* --- video: as-is up to the artifact cap, and honest above it ----------
      * A browser cannot re-encode an mp4 without decoding every frame through
-     * WebCodecs, at a cost we cannot promise on a phone. So an 8..24 MB clip
+     * WebCodecs, at a cost we cannot promise on a phone. So an 8..64 MB clip
      * rides the wire as the artifact it already is, and anything bigger is
      * COUNTED AND NAMED rather than quietly dropped. */
     if (kindForMime(mime) === 'video') {
@@ -1235,7 +1235,7 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
       report.failed++; return;
     }
     const outBytes = Number(out.blob.size) || 0;
-    // The 24 MB rail is the transfer queue's, and an artifact past it is simply
+    // The 64 MB rail is the transfer queue's, and an artifact past it is simply
     // un-offerable — adopting it would put an item on the screen that can never
     // be sent, which is worse than saying it did not work.
     if (outBytes > LOCAL_ARTIFACT_MAX_BYTES) {
@@ -1264,7 +1264,7 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
    * `state: 'ready'` + `artUrl` is not decoration: listSendable() reads `artUrl`
    * for anything that is not exempt, and `bytes` must be the ARTIFACT's length
    * because that is the number the receiver's offer gate checks against its own
-   * 24 MB cap. `kind` is derived from the OUTPUT mime, never carried over from
+   * 64 MB cap. `kind` is derived from the OUTPUT mime, never carried over from
    * the source — the offer gate declines any offer whose kind and mime disagree,
    * and a GIF that became an mp4 changes family.
    */

@@ -890,7 +890,7 @@ function fakeSheets() {
  * AS-IS.
  *
  * The wire has two rails, not one: MAX_EXEMPT_BYTES (8 MB) for an untouched
- * original and MAX_ARTIFACT_BYTES (24 MB) for a compressed product. Everything
+ * original and MAX_ARTIFACT_BYTES (64 MB) for a compressed product. Everything
  * over the first used to be skipped, which meant a 1 GB zip of real photos
  * adopted nothing and said "over 8 MB" — a limit invented by the picker, not by
  * the protocol.
@@ -949,7 +949,7 @@ function fakeSheets() {
     && classifyLocalSize('image/png', 90 * MB) === 'too-big'
     && classifyLocalSize('video/mp4', 2 * MB) === 'take'
     && classifyLocalSize('video/mp4', 20 * MB) === 'take'
-    && classifyLocalSize('video/mp4', 30 * MB) === 'too-big-video'
+    && classifyLocalSize('video/mp4', 70 * MB) === 'too-big-video'
     && classifyLocalSize('image/gif', 0) === 'too-big',
     'classifyLocalSize routes by family AND size: a still is compressible to the decode cap, a clip only to '
     + 'the artifact cap, and past that it is its own answer');
@@ -990,7 +990,7 @@ function fakeSheets() {
     store.dispose();
   }
 
-  /* --- 8..24 MB of video rides as-is; past that it is said out loud ------- */
+  /* --- 8..64 MB of video rides as-is; past that it is said out loud ------- */
   {
     const stub = makeStub();
     const b = fakeBridge({ hosted: false });
@@ -1010,7 +1010,7 @@ function fakeSheets() {
     ok(!!it && it.artUrl !== '', 'behind artUrl, like every other artifact');
     ok(stub.calls.image.length === 0 && stub.calls.gif.length === 0, 'and the compressor was never asked');
 
-    const big = await store.addLocalFiles([realFile('feature.mp4', fill(30 * MB, 6), 'video/mp4')]);
+    const big = await store.addLocalFiles([realFile('feature.mp4', fill(70 * MB, 6), 'video/mp4')]);
     ok(big.tooBigVideo === 1 && big.added === 0 && big.tooBig === 0 && big.failed === 0,
       'a 30 MB clip lands in tooBigVideo — its OWN counter, because "too big to send" and "over the 8 MB '
       + 'as-is limit" are different sentences and only one of them is true here', JSON.stringify(big));
@@ -1100,7 +1100,7 @@ function fakeSheets() {
       'every adopted kind agrees with its mime — mediaChannel.familyOf is the rule and it declines the pair '
       + 'when they disagree, so an item that fails this is un-sendable and invisible about it');
     ok(locals.every((x) => x.bytes > 0 && x.bytes <= LOCAL_ARTIFACT_MAX_BYTES),
-      'and nothing adopted is past the 24 MB rail the transfer queue enforces');
+      'and nothing adopted is past the 64 MB rail the transfer queue enforces');
     ok(locals.every((x) => (x.state === 'exempt' ? x.bytes <= LOCAL_MAX_BYTES : x.state === 'ready' && !!x.artUrl)),
       'exempt items are the small ones; everything else is ready + artUrl, which is what listSendable reads');
     store.dispose();
@@ -1112,13 +1112,13 @@ function fakeSheets() {
     // 25 MB of "compressed" output: past the wire cap, so there is nothing to
     // adopt. Adopting it anyway would put a row on the screen that can never be
     // offered, which is a worse lie than "that one did not work".
-    const fat = makeStub({ imageOut: new Uint8Array(25 * MB) });
+    const fat = makeStub({ imageOut: new Uint8Array(65 * MB) });
     const b = fakeBridge({ hosted: false });
     const store = createAssetsStore({ bridge: b, logger: null, compressor: fat });
     await sleep(5);
     const r = await store.addLocalFiles([realFile('vast.png', fill(20 * MB, 4), 'image/png')]);
     ok(r.failed === 1 && r.added === 0 && r.compressed === 0,
-      'an output past the 24 MB artifact cap is counted failed, never adopted', JSON.stringify(r));
+      'an output past the 64 MB artifact cap is counted failed, never adopted', JSON.stringify(r));
     store.dispose();
 
     const cross = makeStub({ throwOnImage: true });
@@ -1341,8 +1341,8 @@ function fakeSheets() {
     for (const k of ['adding', 'addingOne', 'compressing', 'compressed', 'skipBigVideo', 'trimmed', 'sizeShrunk']) {
       ok(S.assets.local[k] !== undefined, 'S.assets.local.' + k + ' exists');
     }
-    ok(/24 MB/.test(S.assets.local.skipBigVideo(2, formatBytes(LOCAL_ARTIFACT_MAX_BYTES))),
-      'the video refusal quotes the 24 MB rail, not the 8 MB one',
+    ok(/64 MB/.test(S.assets.local.skipBigVideo(2, formatBytes(LOCAL_ARTIFACT_MAX_BYTES))),
+      'the video refusal quotes the 64 MB rail, not the 8 MB one',
       S.assets.local.skipBigVideo(2, formatBytes(LOCAL_ARTIFACT_MAX_BYTES)));
   }
 }
@@ -1352,8 +1352,8 @@ function fakeSheets() {
   const src = await read('../ui/screens/assets.js');
   ok(/const LOCAL_ACCEPT[\s\S]{0,300}\.zip/.test(src), 'the device picker offers .zip to the OS file sheet');
   ok(/application\/zip/.test(src), 'by mime as well as by extension (android hands over one or the other)');
-  ok(/zip/.test(S.assets.local.limits('8 MB', '24 MB')), 'and the limits line says so out loud',
-    S.assets.local.limits('8 MB', '24 MB'));
+  ok(/zip/.test(S.assets.local.limits('8 MB', '64 MB')), 'and the limits line says so out loud',
+    S.assets.local.limits('8 MB', '64 MB'));
   ok(typeof S.assets.local.zipNone === 'string',
     'S.assets.local.zipNone exists — an archive holding nothing sendable must still answer');
   ok(typeof S.assets.local.zipBad === 'function'

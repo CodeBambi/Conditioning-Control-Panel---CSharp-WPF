@@ -41,8 +41,11 @@
 
 import * as defaultBridge from '../bridge.js';
 
-/** The in-memory backend's whole budget. Nothing persists; this is the ceiling per session. */
-export const MEM_STORE_BYTES = 64 * 1024 * 1024;
+/** The in-memory backend's whole budget. Nothing persists; this is the ceiling per
+ * session. Sized to hold a few artifacts at the 64 MB wire cap — a phone browser
+ * is the only runtime that lives on this backend, so it stays deliberately
+ * smaller than MAX_SESSION_BYTES and old entries are evicted refcount-first. */
+export const MEM_STORE_BYTES = 192 * 1024 * 1024;
 
 /**
  * Binary bytes per bridge chunk. 262 144 -> 349 528 base64 chars, inside the host's

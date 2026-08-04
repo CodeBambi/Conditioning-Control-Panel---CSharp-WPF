@@ -9,7 +9,7 @@
  * which is not a limit — it is a missing feature.
  *
  * The wire's actual ceiling for a NON-exempt artifact is MAX_ARTIFACT_BYTES
- * (24 MB). So the page can adopt big media the same way the C# app does: by
+ * (64 MB). So the page can adopt big media the same way the C# app does: by
  * compressing it into an artifact that fits. This module is the two lanes.
  *
  *   IMAGE  decode -> downscale to ≤1920 long edge -> WebP q0.80.
@@ -27,7 +27,7 @@
  *          directly and hands the bytes back to its caller. The worker itself is
  *          shared and untouched, so lane B cannot regress from anything here.
  *
- * WHAT IS NOT HERE, ON PURPOSE: video transcoding. An mp4/webm over 24 MB is
+ * WHAT IS NOT HERE, ON PURPOSE: video transcoding. An mp4/webm over 64 MB is
  * counted and said out loud, because a browser-side H.264 -> H.264 transcode
  * means decoding every frame through WebCodecs at real cost for a result we
  * cannot promise, and "the video is too big to send" is a better answer than a
