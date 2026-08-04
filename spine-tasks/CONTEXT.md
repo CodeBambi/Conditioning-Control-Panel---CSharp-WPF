@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-21
 **Status:** CLOSED-OUT — no claimable board work remains (see below)
-**Next Task ID:** SP-038
+**Next Task ID:** SP-040
 
 ---
 
@@ -25,6 +25,13 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 **WAVE-4 PARK LIFTED 2026-08-04 (~15:30 local, same day):** the anthropic-400 park was a pi request-shape defect, not account exhaustion — fixed by the `__PI_BILLING_HEADER_FIX__` local pi-ai patch (`x-anthropic-billing-header` system[0] per hermes-agent #48176; `pi -p` 200 on opus-5 AND fable-5). SP-037 landed earlier that day (floor restored). SP-035+SP-036 launch per plan. (The ~13:10 UTC park state is retained in the board's 2026-08-04 gate-history entry for the SP-037 substitution-land provenance.)
 
 **WAVE 4 LANDED 2026-08-04 (integrate `8efd60b4`, first production wave on the billing-header fix — all review spawns green).** SP-035 (c2 provider) + SP-036 (MCP bounded admission) both landed WIP. **Next claimable work:** SP-038 = AI companion c3 (moderation boundary per admission §8 — read §8 c3 BEFORE authoring) + lane partner TBD (evaluate T-14 worktree-setup-hook tooling row vs product rows); next unused task ID stays SP-038. Named machine limits carried: WSL zero-distros (Linux gates open everywhere), Ollama session fact.
+
+### Wave 5 (staged 2026-08-04)
+
+| Task | Summary | Status | Deps |
+|------|---------|--------|------|
+| SP-038-ai-companion-c3 | Row: implement AI companion and awareness integration — slice c3 (moderation boundary: every-surface + every-command-field wiring per §3; typed refusal surfacing per class; escalation counter mechanism with placeholder thresholds; policy-document injection, verdict-rejected default; coverage honesty — wired vs reserved inventory, never claiming nonexistent surfaces) | Authored 2026-08-04 | SP-035 |
+| SP-039-worktree-patch-hook | Tooling: T-14 lane-local patch application at worktree creation (engine hook archaeology — timing decided from source evidence; idempotent fail-safe hook; scratch verification through the engine's provisioning path + negative control; named post-land gate: next 2-lane wave zero mid-task verify reds) | Authored 2026-08-04 | None |
 
 **Owner decision 2026-07-21: ALL GATES LIFTED** (recorded in board gate history; 18 landed rows flipped WIP→DONE citing the decree; probe row stays WIP — council broken, 5th failure). Phase 5 decomposition approved by solo Fable 5 consult 2026-07-21: **stay SERIAL** (single-threaded recovery path, board-file collisions, headed focus, 9 consecutive clean single-lane batches); decree ≠ engineering records (admit packet must PIN actual values; moderation/cooldown values chosen by the run and recorded as owner-reviewable); quips needs a PRODUCT package admission for SoundFlow (spike admission ≠ product admission); **engine upgrade FIRST (e0 — DONE 2026-07-21: 2.8.0→2.10.0, T-5/T-12 likely fixed upstream, T-10 NOT, all 5 patches re-applied, preflight green)**; DTRH host must be SLICED (b1…b5 cut proposed in the admit packet's deliverable); Wayland + MCP closure as tail. **Pause protocol correction encoded (updated 2026-08-04): Sol/glm/uva fallbacks are DEAD. Opus 5 failure → fall back to Fable 5 solo + hourly re-probe loop, switch back when healthy; Opus AND Fable both failed = park + `.spine/handoff.md` + memory checkpoint + delete loops/monitors + stop.**
 
