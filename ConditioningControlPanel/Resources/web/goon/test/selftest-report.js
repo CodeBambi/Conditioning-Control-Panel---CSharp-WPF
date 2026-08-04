@@ -185,6 +185,11 @@ ok(typeof report.buildReportBody === 'function', 'ui/report.js exports buildRepo
 ok(typeof recap.mount === 'function', 'ui/screens/recap.js still exports mount');
 ok(typeof recap.assertStageClear === 'function', 'ui/screens/recap.js still exports assertStageClear');
 ok(typeof recap.reportCandidates === 'function', 'ui/screens/recap.js exports reportCandidates');
+ok(typeof recap.EXPLORE_URL === 'string' && /^https:\/\/cclabs\.app\//.test(recap.EXPLORE_URL),
+  'ui/screens/recap.js exports EXPLORE_URL and it is an https cclabs.app link', recap.EXPLORE_URL);
+// The site is static hosting with clean URLs OFF: /explore is a 404 and only
+// /explore.html answers. Dropping the extension would ship a dead CTA.
+ok(recap.EXPLORE_URL.endsWith('.html'), 'and it keeps the .html — /explore alone is a 404', recap.EXPLORE_URL);
 ok(typeof videos.peerRenderLog === 'function', 'exec/videos.js exports peerRenderLog');
 ok(typeof videos.resetPeerRenderLog === 'function', 'exec/videos.js exports resetPeerRenderLog');
 ok(typeof videos.notePeerFlag === 'function', 'exec/videos.js exports notePeerFlag');
@@ -760,6 +765,49 @@ const fakeStore = (landed, held) => ({
 }
 
 /* ===========================================================================
+ * 7.5 THE STANDALONE CTA — the only piece of marketing on the end card, and
+ *     the only external link the page has. It is aimed at the phone joiner who
+ *     followed an invite link and has never seen the app the payloads came out
+ *     of; hosted, it is absent rather than quiet.
+ * ========================================================================= */
+{
+  // goodSession carries no `hosted` flag — that IS standalone (title.js reads
+  // the same one).
+  const box = new StubEl('section');
+  const h = recap.mount(box, fakeCtx(fakeStore([], []), []));
+  const cta = box.findAll('gg-recap-cta');
+  ok(cta.length === 1, 'standalone -> the recap offers the app');
+  const link = cta[0].findTag('a')[0] || null;
+  ok(!!link && link.getAttribute('href') === recap.EXPLORE_URL,
+    'the CTA is a real link to the explore page', link ? String(link.getAttribute('href')) : 'no <a>');
+  ok(!!link && link.getAttribute('target') === '_blank' && link.getAttribute('rel') === 'noopener',
+    'opened in a new tab, with no window.opener handle back into the duel');
+  ok(!!link && link.textContent === S.recap.ctaLink, 'labelled from strings');
+  ok(cta[0].hasText(S.recap.ctaTitle) && cta[0].hasText(S.recap.ctaLead),
+    'and the copy is in ui/strings.js, not inline in the screen');
+
+  // Below the way out, like everything else this screen appends.
+  const kids = box.childNodes[0].childNodes.map((c) => c.className);
+  ok(kids.findIndex((c) => c.includes('gg-recap-actions'))
+    < kids.findIndex((c) => c.includes('gg-recap-cta')),
+    'and it sits BELOW "Back to menu" — nothing this screen adds may bury the exit');
+  h.unmount();
+}
+
+{
+  // HOSTED (WebView2): the player is already inside the Conditioning Control
+  // Panel, so the card would be selling them the desk they are sitting at.
+  const box = new StubEl('section');
+  const ctx = fakeCtx(fakeStore([], []), []);
+  ctx.session = Object.assign({}, goodSession, { hosted: true });
+  const h = recap.mount(box, ctx);
+  ok(box.findAll('gg-recap-cta').length === 0, 'hosted -> no CTA at all');
+  ok(box.findTag('a').length === 0, 'and the hosted recap grows no external link anywhere');
+  ok(box.findAll('gg-recap-hero').length === 1, 'while the rest of the recap paints as it always did');
+  h.unmount();
+}
+
+/* ===========================================================================
  * 8. THE WIRING — pinned as source, because these three lines are the whole
  *    reason the card has data to read.
  * ========================================================================= */
@@ -839,7 +887,10 @@ const fakeStore = (landed, held) => ({
   ok(!!rule && /right:\s*8px/.test(rule[0]) && /left:\s*auto/.test(rule[0]),
     'and moves it to the opposite corner from the ✕');
   for (const cls of ['gg-recap-report', 'gg-report-thumb', 'gg-report-reason', 'gg-report-note',
-    'gg-report-actions', 'gg-report-status']) {
+    'gg-report-actions', 'gg-report-status',
+    // the standalone CTA — an <a> wearing .gg-btn needs both of these or it
+    // renders as underlined inline text in the middle of the card
+    'gg-recap-cta', 'gg-recap-cta-lead', 'gg-recap-cta-link']) {
     ok(css.includes('.' + cls), 'ui/screens.css styles .' + cls);
   }
 }
