@@ -180,6 +180,17 @@ Audit commands + outcomes:
 5. **LAB evidence is Windows-only** — WSL zero-distro named limit (§3.2); the packet's "LAB both platforms" is discharged on Windows with the Linux run honestly recorded as owner-gated, never faked (2026-08-04 amendment item 2 sanctions exactly this).
 6. **HeadlessTests untouched** — c2 has no UI surface; recorded honestly absent (fileScope allows "likely none").
 
+## 9. Step 5 — contract verification transcript (Windows lane, 2026-08-04)
+
+Exact contract chain:
+1. `node .spine/patches/verify.mjs` → initial **FAIL** (reinstall removed all 7 project-root patches — 5th occurrence of this lane drift, SP-028/029/032/033 precedent) → `apply.mjs` re-applied (7 across 2 roots) → verify **exit 0**.
+2. `dotnet build client/CcpClient.sln -c Debug --nologo` → succeeded; warnings measured on `-t:Rebuild` per the packet clause: **0 Warning(s) 0 Error(s)**.
+3. `dotnet test client/tests/CcpClient.Tests -c Debug` → **492/492** (466 restored floor + 26 new: 14 `LoopbackOllamaProviderTests` + 12 `AiProviderLabIntegrationTests`).
+4. `dotnet test client/tests/CcpClient.HeadlessTests -c Debug` → **29/29** (floor 29 — no new headless tests; c2 has no UI surface, honestly absent).
+5. `git diff --check` → clean. `git status --short` → only `spine-tasks/SP-035-ai-companion-c2/**` (File Scope).
+
+Linux contract run: covered by the WSL named limit (§3.2/§8) — not faked.
+
 ## 5. Engine review presence (T-2)
 
 | Call | Result |
@@ -187,3 +198,4 @@ Audit commands + outcomes:
 | Step 1 plan review (`spine_review_step --step 1 --type plan`) | **Engine review ABSENT (expected)** — nested reviewer spawn blocked inside pi worker session; `skipped: true`, `spawnFailed: false` (SP-195: engine runs reviews after `.DONE`). Artifact: `.reviews/1-20260804T132924.md` |
 | Step 2 plan review (`spine_review_step --step 2 --type plan`) | **Engine review ABSENT (expected)** — same SP-195 skip; `spawnFailed: false`. Artifact: `.reviews/2-20260804T134008.md` |
 | Step 3 plan review (`spine_review_step --step 3 --type plan`) | **Engine review ABSENT (expected)** — same SP-195 skip; `spawnFailed: false`. Artifact: `.reviews/3-20260804T134205.md` |
+| Step 4 plan review (`spine_review_step --step 4 --type plan`) | **Engine review ABSENT (expected)** — same SP-195 skip; `spawnFailed: false`. Artifact: `.reviews/4-20260804T134624.md` |

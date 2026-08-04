@@ -1,7 +1,7 @@
 ## STATUS: SP-035 — AI companion slice c2: loopback Ollama provider
-**Current Step:** Step 4 — evidence consolidation + pre-completion consult
-**Last Updated:** 2026-08-04 (Step 3 complete: LAB 25/25 Windows, live panic green, WSL named limit, audit zero hits; plan review engine-skipped SP-195)
-**Blockers:** none
+**Current Step:** DONE (all 5 steps complete; .DONE created)
+**Last Updated:** 2026-08-04 (Step 5 complete: verify exit 0, Rebuild 0W/0E, 492/492 + 29/29, diff-check clean, File Scope only)
+**Blockers:** none. **Named limit (never faked):** Linux LAB/contract gate — WSL zero distros on this laptop; exact manual gate in record.md §8.
 
 ### Step 1: archaeology + lab design + pre-approach consult
 - [x] Update STATUS.md before starting work
@@ -25,6 +25,6 @@
 - [x] STATUS.md accurate
 
 ### Step 5: verification
-- [ ] testCommand green (verify.mjs exit 0; 0W/0E; ≥466/29 floor)
-- [ ] git diff --check clean
-- [ ] git status shows File Scope only
+- [x] testCommand green (verify.mjs exit 0; 0W/0E; ≥466/29 floor)
+- [x] git diff --check clean
+- [x] git status shows File Scope only
