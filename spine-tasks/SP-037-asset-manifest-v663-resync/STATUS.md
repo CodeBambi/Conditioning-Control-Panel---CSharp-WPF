@@ -1,5 +1,5 @@
 ## STATUS: SP-037 — Reconcile asset manifest with v6.6.3 DTRH payload delta
-**Current Step:** Step 3 — self-check binaries + full-suite floor + evidence + pre-completion consult
+**Current Step:** complete — all steps done, .DONE next
 **Last Updated:** 2026-08-04 (worker, Step 1 in progress)
 **Blockers:** none
 
@@ -19,9 +19,9 @@
 - [x] Full contract testCommand green (466/466 + 29/29 restored)
 - [x] record.md written (delta derivation, consults, review presence, WSL2 named-limit probe verbatim)
 - [x] Pre-completion solo consult (verdict + actual model in record.md)
-- [ ] STATUS.md accurate before .DONE
+- [x] STATUS.md accurate before .DONE
 
-### Step 4: Testing & Verification
-- [ ] Contract testCommand passes (verify.mjs + build 0W/0E + 466/466 + 29/29 exact)
-- [ ] git diff --check clean
-- [ ] git status --short shows only File Scope paths
+### Step 4: Testing & Verification — COMPLETE
+- [x] Contract testCommand passes (verify.mjs + build 0W/0E + 466/466 + 29/29 exact)
+- [x] git diff --check clean
+- [x] git status --short shows only File Scope paths
