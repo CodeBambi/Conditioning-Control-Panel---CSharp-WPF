@@ -34,9 +34,22 @@
  *      fx.css keyframe at the variant's own solved revolution time. The
  *      fallback is never removed and never degraded; it is what a machine
  *      without a GPU still gets.
- * The pane always carries the baked background-image either way, so path 2 is
- * one property removal away at any moment — and because both paths draw the
- * same roll, a mid-match context loss now changes the RENDERER, not the picture.
+ * Path 2 is one property removal away at any moment, and because both paths
+ * draw the same roll, a mid-match context loss changes the RENDERER, not the
+ * picture.
+ *
+ * THE STILL IS PAINTED WHEN THE PANE LANDS ON RASTER, NOT BEFORE (2026-08-05).
+ * The pane used to carry the baked background-image ALWAYS, woven or not, on
+ * the theory that a bed which already holds its own fallback cannot be caught
+ * out by a context loss. What that actually bought, on a phone, was a ~1600-fill
+ * canvas bake plus a PNG encode plus a multi-megabyte data-URL decode — for a
+ * picture sitting underneath an OPAQUE canvas where no player can ever see it —
+ * landing on the main thread inside the cue's own first frames, which is
+ * precisely the stutter the owner reported (a spiral that mounts and then holds
+ * still for a second or two). Now: the bake is WARMED at build during idle time
+ * (exec/spiralGen.js#warmSpiralStills), the woven pane skips painting it, and
+ * unweave() — the one door every fallback goes through — paints it on the way
+ * down. The guarantee is unchanged and the cost moved off the cue.
  *
  * THE FREEZE DEFENCE (2026-08-04). This pane is the only GPU context the duel
  * owns, and it went in hours before a session froze VISUALLY while its JS kept
@@ -70,7 +83,9 @@
  * ==========================================================================*/
 
 import { createSpiralField, loopMsFor } from './spiralField.js';
-import { beginSpiralSession, nextSpiral } from './spiralGen.js';
+import {
+  beginSpiralSession, nextSpiral, warmSharedSpirals, RASTER_PX, LITE_RASTER_PX,
+} from './spiralGen.js';
 import { perfLite } from './perfTier.js';
 
 /* --- THE SHADER KILL SWITCH. The pref is ui/prefs.js's (`shaderSpirals`,
@@ -101,6 +116,25 @@ export const MAX_BACKING_PX = 3840 * 2160;
    bed already spinning. ----------------------------------------------------- */
 export const LITE_MAX_DPR = 1;
 export const LITE_FRAME_MS = 33;   // ~30fps draw cadence on the lite tier
+
+/**
+ * Is this frame owed a DRAW? Pure, so the startup edge is pinnable in node.
+ *
+ * The phase advances on every callback either way (see step()), so a skipped
+ * frame skips pixels and never tempo. Two rules:
+ *   · the full tier never skips — byte-identical to the pre-tier loop;
+ *   · a lastDraw of 0 is "this weave has not drawn a LOOP frame yet" and always
+ *     draws. weave() zeroes it for exactly this reason: rAF timestamps are a
+ *     page-lifetime clock shared with the pane that just died, so a bed that
+ *     mounts within 33ms of the last one's final frame would otherwise open by
+ *     SKIPPING — a fresh spiral's first visible act being a dropped frame is
+ *     the one moment a throttle must not be silently right.
+ */
+export function dueForDraw(now, lastDraw, lite) {
+  if (!lite) return true;
+  if (!(lastDraw > 0)) return true;
+  return (now - lastDraw) >= LITE_FRAME_MS;
+}
 
 /* --- THE IN-LOOP WATCHDOG. Checked once per HEALTH_CHECK_MS, never per frame:
    gl.getError()/isContextLost() can force a sync round-trip to the driver, which
@@ -143,7 +177,21 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
   // duel page (boot.js builds one executor), so this is the session boundary —
   // and it is the shared pool, so exec/bubbles.js's popped-spiral flick throws
   // a spiral this match has actually been showing.
-  try { beginSpiralSession(); } catch (_e) { /* the pool builds lazily on first ask anyway */ }
+  //
+  // …AND WARM THEIR STILLS FROM HERE TOO. boot.js#buildApp builds the executor
+  // BEFORE the first screen, so this fires with the whole title/lobby/countdown
+  // stretch of idle time still ahead of it — every bake is cached long before a
+  // cue, or a popped spiral bubble (exec/bubbles.js#popFx -> pickSpiralImage),
+  // can ask for one on the main thread. The lite tier bakes SMALLER (see
+  // LITE_RASTER_PX): the still is the fallback bed there and the live bed it
+  // falls back FROM is already only LITE_MAX_DPR deep. The tier is read once,
+  // here, because a pool's bake size is fixed when it is built — a player who
+  // flips the perf toggle mid-match moves the shader and the caps, not the five
+  // pictures already in hand.
+  try {
+    beginSpiralSession({ size: perfLite() ? LITE_RASTER_PX : RASTER_PX });
+    warmSharedSpirals();
+  } catch (_e) { /* the pool builds lazily on first ask anyway */ }
 
   let paneEl = null;
   let elementIntensity = null;    // null = element not running
@@ -153,6 +201,13 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
   // BOTH beds: `.params` is what the shader weaves, `.image()` is the baked
   // still underneath it, `.revSec` is the spin the CSS keyframe runs at.
   let variant = null;
+  // The variant whose still is actually IN the pane's background-image. Null
+  // while the pane is woven and has never needed one — see paintStill().
+  let stillOn = null;
+  // ensurePane() MINTED the pane on this call (rather than finding one already
+  // up). Read one line later by start()/renderPayload(), which must not roll a
+  // second variant on top of the one the new pane just rolled for itself.
+  let mintedPane = false;
 
   // --- the woven path's state (all null on the raster fallback) -------------
   let canvasEl = null;
@@ -209,6 +264,8 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
     if (paneEl && paneEl.isConnected) return true;
     const host = layer();
     if (!host || typeof document === 'undefined') return false;
+    mintedPane = true;
+    stillOn = null;                 // a brand-new node carries no picture yet
     paneEl = document.createElement('div');
     // .gg-deco so the heat armor can park the spin when the stack goes hot.
     // (The woven path cancels the keyframe and parks itself — see step().)
@@ -285,6 +342,7 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
     phase = Math.random();      // never start every match on the same frame
     lastTs = 0;
     lastCheck = 0;
+    lastDraw = 0;               // this weave has not drawn a LOOP frame — see dueForDraw()
     // THE FIRST FRAME GOES IN BEFORE THE APPEND. The context is `alpha: false`,
     // so an un-drawn canvas is OPAQUE BLACK: appending it and drawing afterwards
     // blinks the bed out for a frame. It matters most on the re-upgrade after a
@@ -383,7 +441,15 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
     rafId = 0;
     if (!field || !paneEl) return;
     const now = typeof ts === 'number' ? ts : 0;
-    if (now - lastCheck >= HEALTH_CHECK_MS) {
+    // SEED, DON'T POLL, ON THE FIRST FRAME OF A WEAVE. lastCheck starts at 0 and
+    // an rAF timestamp is a page-lifetime clock, so the very first callback used
+    // to satisfy `now - 0 >= 1000` and run the driver poll — a synchronous
+    // round-trip to the GPU, in the busiest millisecond of the pane's life, when
+    // the only thing it can possibly report is a context created moments ago.
+    // (It also re-seeds after a visibilitychange, which zeroes lastCheck for the
+    // same reason the stall check does.)
+    if (!lastCheck) lastCheck = now;
+    else if (now - lastCheck >= HEALTH_CHECK_MS) {
       lastCheck = now;
       const ill = healthCheck(now);
       if (ill) {
@@ -403,7 +469,7 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
       // every callback, so skipping a draw skips pixels, never tempo — a
       // 30fps bed and a 120fps bed show the same rotation at the same second.
       // Full tier: no gate at all, byte-identical to the pre-tier loop.
-      if (!perfLite() || (now - lastDraw) >= LITE_FRAME_MS) {
+      if (dueForDraw(now, lastDraw, perfLite())) {
         lastDraw = now;
         draw();
       }
@@ -460,6 +526,15 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
    * PROPERTIES (repick), precisely so this shorthand clear cannot eat them.
    */
   function unweave() {
+    // PAINT THE STILL FIRST, WHILE THE DEAD CANVAS IS STILL COVERING THE PANE.
+    // This is the moment the fallback stops being insurance and becomes the
+    // bed, and it is the ONE door every fallback comes through (a lost context,
+    // a polled stall, the kill switch, a render that threw). Doing it here
+    // instead of on every repick is what keeps the bake off the cue — and doing
+    // it BEFORE detachWoven() drops the canvas is what keeps the swap from
+    // showing a frame of empty pane. It is normally free: the pool warmed this
+    // picture during idle time long before anything went wrong.
+    paintStill(variant);
     detachWoven()();
     // Hand the raster treatments back exactly as fx.css declares them.
     if (paneEl && paneEl.style) {
@@ -511,22 +586,46 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
   }
 
   /**
-   * Advance to the next spiral in the session's rotation, and put it on BOTH
-   * beds at once: the shader takes its parameters, the pane's background-image
-   * takes the baked still of the same roll. Doing both every time is what keeps
-   * the fallback underneath from ever being stale — or, now, from ever being a
-   * different picture — if the context dies mid-match.
+   * Put `v`'s baked still into the pane's background-image — the raster bed's
+   * whole picture, and the woven bed's parachute.
+   *
+   * IDEMPOTENT ON THE VARIANT, because it is called from two directions (the
+   * deferred bake on a raster pane, and unweave() on the way down from a woven
+   * one) and repainting a picture the pane already carries would re-decode a
+   * multi-megabyte data URL for no change at all.
    *
    * An UNBAKEABLE variant (no canvas, no 2D context, a toDataURL the host
-   * refuses) returns '' and the pane simply keeps whatever it had. Writing
+   * refuses) answers '' and the pane simply keeps whatever it had. Writing
    * `url('')` instead would blank a bed that was working a moment ago.
+   */
+  function paintStill(v) {
+    if (!paneEl || !paneEl.style || !v || stillOn === v) return;
+    try {
+      const img = v.image();       // warmed at build; cached after the first ask
+      if (!img) return;
+      paneEl.style.setProperty('background-image', `url("${img}")`);
+      stillOn = v;
+    } catch (_e) { /* the bed keeps whatever it had */ }
+  }
+
+  /**
+   * Advance to the next spiral in the session's rotation, and put it on the
+   * shader — and, when the pane is (or lands) on the raster bed, put the baked
+   * still of the SAME roll underneath it. One roll drives both, which is what
+   * keeps the fallback from ever being a different picture if the context dies
+   * mid-match.
    *
-   * THE BAKE IS DEFERRED ONE TICK, and that is not a micro-optimisation. A
-   * first bake is ~1600 canvas path fills plus a PNG encode — tens of
-   * milliseconds, ON THE MAIN THREAD, and repick() is called from the middle of
-   * a cue landing. The pane fades in over 450-900ms, so an image that arrives
-   * on the next tick arrives invisibly; a bed that ate the cue's own frame
-   * would be felt. Cached after the first ask, so a repeat variant is free.
+   * THE WOVEN PANE DOES NOT PAINT ONE AT ALL (2026-08-05, the phone stutter).
+   * The bake used to be DEFERRED ONE TICK on the theory that a bed fading in
+   * over 450-900ms would swallow it. It does not: one tick lands the work in
+   * the pane's FIRST FRAMES, the rAF loop queues behind it, and a ~1600-fill
+   * bake plus a PNG encode plus a multi-megabyte data-URL decode is a second
+   * of a spiral that is on screen and not turning. And on the woven path the
+   * whole thing is invisible anyway — the canvas over it is `alpha: false`.
+   * So: the tick's callback bails if the weave took, unweave() paints on the
+   * way back down to raster, and a pane that never wove (no WebGL, shaders off,
+   * a defence already fired) paints exactly as before, one tick later. The
+   * picture itself is normally already warm — see the createSpiral() banner.
    */
   function repick() {
     if (!paneEl || !paneEl.style) return;
@@ -545,10 +644,11 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
       // A pane that has been torn down (or replaced) in the meantime must not
       // be painted into — its node lingers 900ms on the way out by design.
       if (paneEl !== el || !el.style) return;
-      try {
-        const img = v.image();
-        if (img) el.style.setProperty('background-image', `url("${img}")`);
-      } catch (_e) { /* the bed keeps whatever it had */ }
+      // The weave (ensurePane's, one line after its repick) took: the still
+      // would be baked, decoded and uploaded for a layer nobody can see. It is
+      // owed, not skipped — unweave() paints it the instant the pane needs it.
+      if (field) return;
+      paintStill(v);
     }, 0);
     if (field) {
       params = variant.params;
@@ -596,6 +696,10 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
       : Math.max(payloadIntensity === null ? 0 : payloadIntensity, elementIntensity === null ? 0 : elementIntensity);
 
     if (want === null) { teardown(); return; }
+    // Cleared BEFORE the call, set by ensurePane only when it actually mints:
+    // start()/renderPayload() read it one line after apply() returns, and a
+    // stale true from the pane before this one would cost that cue its repick.
+    mintedPane = false;
     if (!ensurePane()) return;
 
     const tune = spiralTuning(want, calm);
@@ -611,7 +715,11 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
       const fresh = elementIntensity === null;
       elementIntensity = clamp01(cue && cue.intensity);
       apply();
-      if (fresh) { repick(); sfx('spiral-in'); }   // a new bed gets a new spiral; a re-tune keeps its own
+      // A new bed gets a new spiral; a re-tune keeps its own. But a pane
+      // ensurePane() JUST MINTED has ALREADY rolled one (and woven it) — see
+      // the note in renderPayload; rolling again here would be the second roll
+      // of the same cue.
+      if (fresh) { if (!mintedPane) repick(); sfx('spiral-in'); }
     },
 
     setIntensity(v) {
@@ -632,7 +740,16 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
       const runMs = Math.max(1000, (p.duration_ms | 0) || 12000);
       payloadIntensity = Math.max(0.5, clamp01(p.intensity !== undefined ? p.intensity : 0.75));
       apply();
-      repick();
+      // ONE ROLL PER CUE. apply() -> ensurePane() already repicks for a pane it
+      // MINTED, and that roll is the one weave() wove a first frame of; rolling
+      // again here threw that frame away, swapped the shader's params on the
+      // spot, and — before the still moved off this path — queued a SECOND
+      // 1280px raster bake behind the first, both landing on the main thread
+      // inside the cue's own fade. That double bake is the freeze the owner
+      // play-tested on an iPhone. A bed that was ALREADY UP still repicks: a
+      // payload landing on a running spiral is exactly when the picture should
+      // change.
+      if (!mintedPane) repick();
 
       let finished = false;
       let endTimer = 0;
