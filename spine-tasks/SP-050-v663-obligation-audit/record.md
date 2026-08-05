@@ -12,7 +12,7 @@
 | Step | Type | Result | Artifact |
 |------|------|--------|----------|
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260805T090014.md` |
-| 2 | plan | (pending) | `.reviews/` |
+| 2 | plan | SKIPPED BY DESIGN (same) | `.reviews/2-20260805T091152.md` |
 | 3 | plan | (pending) | `.reviews/` |
 
 ---
@@ -38,7 +38,7 @@
 
 #### Delta 2 — FX overhaul (payload side)
 
-- **Quality tiers are page-internal:** `shared/quality.js:1-50` — the `Q` knob block (desktop defaults; `setQuality('mobile')` lightens MSAA/DPR/bloom/fog/wall/tube); the tier is chosen page-side (`shared/capability.js:40-44`: coarse pointer / small viewport → `mobile`).
+- **Quality tiers are page-internal AND pre-date the v6.6.3 window:** `shared/quality.js:1-50` — the `Q` knob block (desktop defaults; `setQuality('mobile')` lightens MSAA/DPR/bloom/fog/wall/tube); the tier is chosen page-side (`shared/capability.js:40-44`: coarse pointer / small viewport → `mobile`). **Range-proof (pre-completion consult fix 4):** `git log --oneline 9e9fc875..b35facb6 -- …/dtrh/shared/capability.js …/dtrh/shared/quality.js` = EMPTY — the payload's tier/reduced-motion machinery is NOT part of the v6.6.3 delta (the in-run FX files did move — `8cc2a23b` dome-dressing/pooling — payload-internal game dressing, no host obligation).
 - **Reduced motion is a page-side probe:** `shared/capability.js:35` (`matchMedia('(prefers-reduced-motion: reduce)')`), `:57` (reduced → 2D mode, `canTry3d:false`).
 - **The DTRH page consumes NO host FX setting:** `boot.js` init handling and `engine/settings.js:48,67,183` carry only bubble-motion prefs (`runMotion`: Mixed/FloatUp/RainDown/RoamBounce) — gameplay motion, not chrome FX. The page never reads an FX tier or reduced-motion flag from `init`.
 
@@ -57,7 +57,7 @@
 
 #### Delta 5 — NUX first-run (payload side)
 
-- **NOTHING.** The NUX commit `10b555e2` ("feat(nux): first-run experience — revive dead tour, feature intro cards, premium celebration") touches exactly 7 WPF files — `MainWindow.Patreon.cs`, `MainWindow.SubscribeStar.cs`, `MainWindow.TabNavigation.cs`, `MainWindow.xaml.cs`, `Models/AppSettings.cs`, `Windows/FeatureIntroPopup.xaml(.cs)` — zero payload files. The first-run mod picker (commit `3f31a9c9`, packs wave 2) is WPF dialogs (`ModPickerDialog`, `ModManagerDialog`, `ModPackCatalog`) + `ModService` two-root probing + 35 loc keys × 9 languages — again zero `Resources/web` changes. (DTRH's own scripted-first-run/VN beats predate v6.6.3 and are b4-landed.)
+- **NOTHING (range-proven).** The NUX commit `10b555e2` ("feat(nux): first-run experience — revive dead tour, feature intro cards, premium celebration") touches exactly 7 WPF files — `MainWindow.Patreon.cs`, `MainWindow.SubscribeStar.cs`, `MainWindow.TabNavigation.cs`, `MainWindow.xaml.cs`, `Models/AppSettings.cs`, `Windows/FeatureIntroPopup.xaml(.cs)` — zero payload files. The first-run mod picker (commit `3f31a9c9`, packs wave 2) is WPF dialogs (`ModPickerDialog`, `ModManagerDialog`, `ModPackCatalog`) + `ModService` two-root probing + 35 loc keys × 9 languages. **Range-proof (pre-completion consult fix 1):** `git show --name-only 3f31a9c9 -- ConditioningControlPanel/Resources/web` = EMPTY and `git show --name-only 10b555e2 -- ConditioningControlPanel/Resources/web` = EMPTY (both exit 0 — cited, never asserted). (DTRH's own scripted-first-run/VN beats predate v6.6.3 and are b4-landed.)
 
 #### Delta 6 — Weekly Intake Pass (payload side)
 
@@ -142,9 +142,10 @@ Vocabulary (pre-approach consult binding): five values — **MSGS** (new bridge 
 | Delta | Scope | Verdict | What the client must provide | Sources |
 |---|---|---|---|---|
 | 1 Brain Drain rework + Brain Melt | DTRH host surface | **NOTHING** (proven) | The payload renders the drain wash in-world; fire-payload carries only video/audio; a visual kind there is a logged mismatch | payloadFx.js:111-122; variants.js:46-48; main DtrhHostService.cs:524-529,547-549 |
-| | Client shell (overlay/Deeper system) | **BLOCKED-ON** overlay-compositor + Deeper-editor rows — and parked BY WPF ITSELF | TODAY's user-observable parity = the WITHHELD behavior: kinds valid-but-withheld, "(unavailable)" placeholders round-tripping pre-authored content, silent playback skip with intact bookkeeping, hidden settings toggle, the still-live audio service's shape. When `BrainDrainWithheld` lifts: per-monitor capture + downscale/blur/upscale + optional Perlin melt warp + off-thread latest-wins pump + capture-exclusion privacy pair. NOT a current packet | OverlayService.cs:1897-1925,30; ProgressionTabView.xaml:532-533; DeeperEditorWindow.Unified.cs:641-671; TimelineItem.cs:72-82; BrainDrainService.cs:46-55,100-127; BrainDrainCapturePump.cs:106-112; CompositorEngine.cs:20-22 |
+| | Client shell (overlay/Deeper system) | **BLOCKED-ON** overlay-compositor + Deeper-editor rows — and parked BY WPF ITSELF | TODAY's user-observable parity = the WITHHELD behavior: kinds valid-but-withheld, "(unavailable)" placeholders round-tripping pre-authored content, silent playback skip with intact bookkeeping, hidden settings toggle. When `BrainDrainWithheld` lifts: per-monitor capture + downscale/blur/upscale + optional Perlin melt warp + off-thread latest-wins pump + capture-exclusion privacy pair. NOT a current packet | OverlayService.cs:1897-1925,30; ProgressionTabView.xaml:532-533; DeeperEditorWindow.Unified.cs:641-671; TimelineItem.cs:72-82; BrainDrainCapturePump.cs:106-112; CompositorEngine.cs:20-22 |
+| | Client shell (Brain Drain AUDIO service) | **NOTHING today** (proven — pre-completion consult fix 2) | The still-live audio service (`BrainDrainService.cs:46-55,100-127`, started `MainWindow.StartStop.cs:236-238`, NOT gated by `BrainDrainWithheld`) is reachable only by legacy users whose settings predate the Collapsed UI — no new user can enable it (ProgressionTabView.xaml:532-533; "BrainDrainEnabled is false for everyone", OverlayService.cs:30). No greenfield obligation while the withhold stands. Recorded ambiguity: StartStop.cs:235's comment claims a rework gate that `BrainDrainService.Start` does not check | BrainDrainService.cs:46-55,100-127,102; MainWindow.StartStop.cs:235-238; AppSettings.cs:3389-3415 |
 | 2 FX overhaul | DTRH host surface | **NOTHING** (proven) | Page-internal tiers (quality.js) + page-side matchMedia probe; the page consumes no host FX setting | shared/quality.js:1-50; shared/capability.js:35,57; engine/settings.js:48,67,183 |
-| | DTRH host surface | **PROBES** (one, open) | Verify the embedded webview INHERITS the OS/user `prefers-reduced-motion` state on Windows (WebView2) and Linux (WebKitGTK) — a capability-inventory probe question, not a message. Unverified on this laptop; Linux unproven (WSL zero-distros class). If wrong: a reduced-motion user silently gets the 3D descent | capability.js:35,57 (the page's own probe the host must not betray) |
+| | DTRH host surface | **PROBES** (one, open — **pre-existing DTRH host obligation SURFACED by this audit, not a v6.6.3 delta obligation**: `capability.js`/`quality.js` untouched in the 9e9fc875..b35facb6 range — fix-4 range-proof above) | Verify the embedded webview INHERITS the OS/user `prefers-reduced-motion` state on Windows (WebView2) and Linux (WebKitGTK) — a capability-inventory probe question, not a message. Unverified on this laptop; Linux unproven (WSL zero-distros class). If wrong: a reduced-motion user silently gets the 3D descent | capability.js:35,57 (the page's own probe the host must not betray) |
 | | Client shell (dashboard/chrome) | **BLOCKED-ON** dashboard/chrome rows | The ambient layer canvas (5 layers + burst), the 3-tier ladder with count escalation (8/16) and zero-cost Performance tier, `MotionLevel` (OS-capped), FxTheme mod-palette FX colors, tab parking, 6 event bursts, crossfade/instant tab-transition policy. WPF-internal machinery (SKElement/DispatcherTimer/airspace) NOT ported | AmbientFxCanvas.cs:15-28,73,388-482; PerformanceProfile.cs:22-137; AppSettings.cs:55-77,3417-3455; MotionFx.cs:37-70; MainWindow.EventFx.cs:14-66; ChromeFxNav.cs:25-59 |
 | 3 Hourglass | DTRH host surface | **WIN/STORES** (one settings clamp, ownership-gated — no new messages, no new windows) | Lift the persisted+deal durationSec clamp 60..1200 → 60..(7200 if `custom_duration` owned) at BOTH points | main DtrhHostService.cs:469-473; ChaosModels.cs:203; drift: DtrhMeta.cs:878, DtrhRunConfig.cs:98; payload: catalog.js:72, warren.js:1013,108, chaosRun.js:144 |
 | | Client shell | **NOTHING** | — | (the whole delta is the game + the host clamp) |
@@ -158,14 +159,85 @@ Vocabulary (pre-approach consult binding): five values — **MSGS** (new bridge 
 | | Punch card UI | **NOTHING today** (honest parity) | The card UI is HIDDEN in WPF itself (`UiEnabled=false` — prize TBD); parity = silent stamping, no painted card | IntakePunchCardService.cs:55-60 |
 | | Privacy boundaries (named, never widened) | (obligation shape) | Patreon-bearer AI proxy with empty-token local-stub fallback; mic consent gate; user media paths + subliminal phrases + whisper audio to the page (presence-shape logging); subject id local-only | IntakeHostService.cs:45-49,248-279,716-722,834-918,970-988 |
 
-**Explicit nothing-records (the SP-049 discipline):** Delta 1 DTRH surface, Delta 2 DTRH surface, Delta 3/4 client shell, Delta 5 payload, Delta 6 punch-card UI — each proven above with sources, not assumed.
+**Explicit nothing-records (the SP-049 discipline):** Delta 1 DTRH surface, Delta 1 audio service (fix 2), Delta 2 DTRH surface, Delta 3/4 client shell, Delta 5 payload (range-proven, fix 1), Delta 6 punch-card UI — each proven above with sources, not assumed.
 
 
 ---
 
 ## Step 3 — sizing verdicts + board-row filings + pre-completion consult
 
-(pending)
+### Per-delta packet-sizing verdicts
+
+Size vocabulary S/M/L; `—` = unsizable per the pre-approach consult binding (prerequisites absent — never pad to L). Evidence class names the proof shape the eventual packet owes. Limit shapes inherit the wave-11 classes (WSL zero-distros for any future Linux evidence; no Wayland claims; painted-surface classes where relevant).
+
+**Delta 1 — Brain Drain rework + Brain Melt: `—` (unsizable; BLOCKED-ON + parked by WPF itself).**
+- Dependencies (by name): a greenfield **overlay-compositor row** (does not exist — the unified-compositor skill territory) and a **Deeper-editor row** (does not exist). Today's user-observable parity is the WITHHELD behavior, which lives inside those two systems' surfaces.
+- Evidence class (when reached): editor-placeholder round-trip (pre-authored braindrain/melt content loads, validates, shows "(unavailable)", skips at playback with intact bookkeeping) + the hidden-toggle fact; the capture machinery is a separate future packet gated on WPF lifting `BrainDrainWithheld`.
+- Limit shape: the screen-capture privacy pair (self-capture exclusion; capture-excluded blurred surface) is a hard privacy boundary for any future capture packet; the Linux capture path is UNDEFINED (GDI desktop DC is Windows-only — its own research question, no Wayland claims); the withhold flag is the parity authority — porting the machinery now would port behavior WPF users cannot see.
+
+**Delta 2 — FX overhaul: `—` for the chrome body (BLOCKED-ON dashboard/chrome rows); one S sub-item (the probe).**
+- Chrome body dependencies (by name): **dashboard/chrome surface rows** (the board's "Dashboard entry points for landed surfaces" P2 is adjacent — entry points, not chrome FX; no chrome-FX row exists). The body = ambient canvas + tiers + MotionLevel + FxTheme + event bursts.
+- Evidence class (chrome body, when reached): painted-surface pixel evidence per tab surface + tier-escalation unit tests (the 8/16 count ladder, zero-cost Performance tier) + reduced-motion behavior matrix (Full/Reduced/Off × transition policy).
+- **The S sub-item — the webview `prefers-reduced-motion` inheritance probe (size S; framed as a PRE-EXISTING DTRH host obligation surfaced by this audit, NOT a v6.6.3 delta obligation — fix-4 range-proof in Step 1):** measure `matchMedia('(prefers-reduced-motion: reduce)')` inside the greenfield WebView2 host with the OS animation setting toggled, and record what the embedded engine reports vs the OS/user state (capability-inventory probe, Windows). Dependencies: none beyond the landed DTRH host. Evidence class: one headed probe run + typed log lines; a unit test can pin the probe seam but not the OS inheritance itself. Limit shape: **Linux half unproven — WSL zero-distros named limit** (WebKitGTK's inheritance unknown); WPF's own OS cap is Windows-only (`SystemParameters.ClientAreaAnimation`), so a Windows-first probe is honest parity work.
+
+**Delta 3 — Hourglass: S/M (ONE packet with Delta 4, TWO board rows — pre-approach consult CORRECTION 2; size corrected per the pre-completion consult mis-sizing A).**
+- Scope: the ownership-gated duration ceiling at BOTH host points (persist `DtrhMeta.cs:878`, deal `DtrhRunConfig.cs:98`) vs main (`DtrhHostService.cs:469-473`, `ChaosModels.cs:203`).
+- Dependencies: none beyond the landed b4 meta engine (ownership = `PurchasedUpgrades.Contains`, landed).
+- Evidence class: unit (clamp matrix — owner/non-owner × persist/deal × boundary values 1200/1201/7200) + one headed round-trip (a `custom_duration` owner's >20min setup survives persist and deals ≥1201s `durationSec` in run-config; a non-owner still clamps 1200). **b4's existing 1200-clamp tests must be UPDATED, never weakened** — the clamp change breaks them by design (pre-completion consult mis-sizing A).
+- Limit shape: none new — rides the DTRH host's existing named limits.
+
+**Delta 4 — Bottomless Fall: S/M (the same packet).**
+- Scope: the `endless` knob end-to-end — **additive index-doc member `Endless`** (no schema bump, b4 additive-only rule + absent-member flag), ownership-gated persist, init runSetup carry, run-config carry, deal-time re-check, habit-rail exclusion (main `DtrhHostService.cs:477-479`, `:508`, `:1042`, `:1073`; `ChaosModels.cs:134-135`, `:206`).
+- Dependencies: none beyond b4.
+- Evidence class: unit (the five points + stale-page refusal) + one headed round-trip (`endless:true` from a real owner reaching `rc.endless` — the page's own endless state line in evidence; never a full endless run). The scriptable seam: fx-drive request-run through the real dispatch (SP-023 norm).
+- Limit shape: none new.
+
+**Delta 5 — NUX first-run: `—` (unsizable; BLOCKED-ON).**
+- Dependencies (by name): **mod-system row** (does not exist — mod picker + niche mapping + pack probing), **content-pack pipeline row** (filing 6 below), **tutorial/tour subsystem** (does not exist), **entitlement/auth rows** (do not exist — Patreon/SubscribeStar `TierChanged` equivalents), **dashboard-tabs row** (the intro cards hang on tab navigation), **assets-picker row** (first-run assets prompt). The welcome dialog alone is feasible on landed SP-005 settings, but a welcome dialog is not the delta.
+- Sub-piece map for the eventual decomposition (recorded, not sized): (a) welcome + 7-step tour — needs dashboard tabs; (b) mod picker — needs mod system + content packs; (c) feature-intro cards + seen-list + pacing — needs dashboard tabs; (d) premium celebration — needs entitlement providers; (e) first-run assets prompt — needs the assets picker.
+- Limit shape: the v6.6.3 dispatcher-starvation lesson is a design constraint for the eventual tour (`DispatcherPriority.Loaded` handoff starved silently; Normal + IsLoaded wait — `MainWindow.xaml.cs:455-469`, `:482-485`); one-way flags spent BEFORE display (never on dismiss) is the parity rule (`ModPickerDialog.xaml.cs:585-586`, `FeatureIntroPopup.xaml.cs:104-108`).
+
+**Delta 6 — Weekly Intake Pass: L overall, decomposable into one L host packet + one BLOCKED cadence packet + the shared pipeline row.**
+- **6a. The Graded Intake web-core HOST (size L, buildable on landed machinery):** the window class (ChaosWebViewHost parity — the greenfield already has the b-series pattern: capability-driven surface, profile dir, autoplay flag, fullscreen persist, heartbeat watchdog + relaunch-once (b5 landed), 1200ms exit watchdog (b5 landed), minimize/restore ducking) + the full bridge vocabulary (**6 message types out / 12 in, C#-pinned** — init, fullscreen, end-run, session-drafted, loom-result, intake-save-image-result out (IntakeHostService.cs:236-280,284,152,497,571,628); ready, log, heartbeat, pong, quiz-result, boot-error, fullscreen-set, exit, exit-done, intake-close, loom-save, intake-save-image in (:23-24,296-364,531-635); **named gap (pre-completion consult fix 3): `ping` and `payload-state` are payload-attested (web-shim.js:218-227) but their C# emit sites were never pinned in this audit** — the eventual packet pins or types them) + 3 stores (settings keys on SP-005; `intake_punchcard.json`; `intake_subject.txt`) + the profiler (deterministic, unit-testable pure function) + session drafting sink + `loom-save` against the SHARED b4 `DtrhLoom` store (landed, reusable) + serving routes for the intake tree under the page origin. **Degraded-delivery contract (pre-completion consult mis-sizing B — what a user observes if 6a lands before its dependencies):** the intake RUNS and drafts a session; the drafted session is never runnable (no session engine — punches pend forever, silently); the VO corpus may be absent (chimes survive via the dtrh-tree borrow, `render/audio.js:222-229`); niche falls back to bambi (WPF's own last-resort); the AI runs the page's deterministic local stub (empty token = WPF's own no-network fallback). The row must carry this sentence so it never files as if it ships the feature. Dependencies (named, with honest fallback shapes): **content-pack pipeline row** (fresh-install VO/sfx/music — the dtrh-borrow chime fallback exists; VO is pack-hosted); **session-engine row** (does not exist — the drafted session must RUN ≥50% to redeem punches); **mod-system row** (niche mapping falls back to bambi, `IntakeNiche.cs:31-57`); **entitlement/auth** (the `ai` auth token is a Patreon bearer — empty token → the page's own deterministic local stub, no network, `IntakeHostService.cs:45-49`).
+- Evidence class (6a): the DTRH b-series class — unit (bridge parse/classify, pass-week arithmetic incl. the New-Year ISO-week guard, punch-card hygiene, profiler matrix vs WPF cases, store round-trips) + headed Windows host-window evidence (page boots, init provisions land, quiz-result → drafting + spend, intake-close abort = no spend, fullscreen-set round trip, watchdog relaunch) + serving-origin proofs. Linux: WSL zero-distros named limit.
+- **6b. The weekly-pass cadence + punch card + dashboard surfaces (BLOCKED-ON):** entitlement/auth rows (pass states NeedsLogin/Premium; fail-closed = Spent; without auth the honest greenfield state is NeedsLogin and the free-tier funnel cannot function) + **dashboard row** (the flip tile + 14s nudge). The punch card UI is hidden in WPF itself (`UiEnabled=false`) — parity = silent stamping only.
+
+### Board-row filings NAMED (orchestrator writes them at land — enabler 2; worker does NOT touch task-board.md)
+
+| # | Row title (proposed) | Delta | Size | Status shape |
+|---|---|---|---|---|
+| 1 | DTRH Hourglass: ownership-gated 2h duration ceiling (v6.6.3 host drift fix) | 3 | S/M | OPEN — one shared packet with #2 |
+| 2 | DTRH Bottomless Fall: endless setup knob end-to-end (v6.6.3 host drift fix) | 4 | S/M | OPEN — same packet as #1 |
+| 3 | Webview prefers-reduced-motion inheritance probe (pre-existing DTRH host obligation surfaced by SP-050 — NOT a v6.6.3 delta obligation, fix-4 range-proof) | 2 (surface only) | S | OPEN — no deps beyond the landed DTRH host |
+| 4 | Graded Intake web-core host: window + bridge + stores + profiler + session drafting (v6.6.3) | 6 | L | OPEN — deps named with fallback shapes (content-pack row #6; session-engine row — to be filed by port-plan; mod-system row — to be filed; no-auth AI stub = WPF's own fallback) |
+| 5 | Weekly Intake Pass cadence + punch card + dashboard surfaces (v6.6.3) | 6 | — | BLOCKED-ON entitlement/auth rows + dashboard row; punch-card UI = silent stamping parity (WPF-hidden) |
+| 6 | Content-pack acquisition + `ccp.content`-class serving origin (asset pipeline) | 6 (+1,5) | — | BLOCKED-ON owner asset-pipeline decision; serves intake audio, DTRH lazy audio-web, NUX mod picker |
+| 7 | NUX first-run experience: welcome, mod picker, tour, intro cards, premium celebration (v6.6.3) | 5 | — | BLOCKED-ON with the recorded sub-piece map |
+| 8 | Brain Drain / Brain Melt withheld-parity record (v6.6.3) | 1 | — | BLOCKED-ON overlay-compositor + Deeper-editor rows; parked by WPF itself (`BrainDrainWithheld` is the authority) |
+| 9 | Chrome ambient FX + performance tiers + motion level (FX overhaul, client shell) | 2 | — | BLOCKED-ON dashboard/chrome rows |
+
+Filings exist for every delta with a real obligation (all six); the NOTHING verdicts are proven in the Step-2 table rather than filed as rows (no row for "do nothing").
+
+### Provenance (pre-completion consult final binding)
+
+- **Subagents:** four `wpf-archaeologist` agents (deltas 1, 2, 5, 6 host sides), all instructed to cite git `main` (b35facb6) with the merged-tree debris warning; their load-bearing claims were spot-verified against my own direct reads (the delta 3/4 host drift, the NUX commit stats, the intake pass week logic) and the range-proofs above. **The Brain Drain agent was WRAPPED AT ITS TURN LIMIT — its output is marked partial** (its core findings — the withhold gate, the melt warp, the audio service, the privacy pair — were each verified against main before entering the table). **The FX agent found NO 6.6.3 version constant** — the FX-overhaul plan doc (`docs/FX_OVERHAUL_PLAN.md`) was drafted against v6.5.2 screenshots, so the delta's version attribution is the main-sync inventory's, unverified by any in-tree version string (recorded honestly; the machinery itself is main-verified).
+- **Consults:** pre-approach = 3 calls (2 truncations, terse-completion request); pre-completion = 2 calls (1 truncation). Actual answering models never surfaced by the tool — recorded honestly throughout.
+
+### Pre-completion consult (Step 3 gate)
+
+**Mode:** solo (T-7; PROMPT Do-NOT — council banned on this laptop). **Requested route:** Opus 5 main (2026-08-04 rewire). **Actual answering model:** NOT surfaced by the consult tool response (recorded honestly, same discipline as Step 1). **Two calls:** the first verdict TRUNCATED mid-fix-1 (the Step-1 truncation class); the second (terse-completion request) delivered the remainder in full.
+
+**Verdict: close-able, but four unsupported claims and two mis-sizings must be fixed first — ALL CLOSED in this record before .DONE:**
+1. **Fix 1 (CLOSED):** delta-5's payload-NOTHING was half-proven (a `head -30`-truncated commit stat for `3f31a9c9`) — replaced with range-proofs: `git show --name-only <commit> -- ConditioningControlPanel/Resources/web` = EMPTY for BOTH NUX commits (cited in Step 1 + the table).
+2. **Fix 2 (CLOSED):** the Brain Drain AUDIO service was in the enumeration prose but had no table cell — added the explicit **NOTHING today** cell (Collapsed settings UI → unreachable for new users; the StartStop.cs:235 comment-vs-code ambiguity recorded).
+3. **Fix 3 (CLOSED):** the intake bridge counts ("12 out / 14 in") were wrong — corrected to the C#-pinned enumeration (**6 out / 12 in**) with `ping` + `payload-state` named as payload-attested emitters whose C# sites this audit never pinned (a named gap for the eventual packet).
+4. **Fix 4 (CLOSED):** the FX probe was framed as a v6.6.3 obligation — range-proof showed `capability.js`/`quality.js` UNTOUCHED in 9e9fc875..b35facb6; relabeled **pre-existing DTRH host obligation surfaced by this audit** (filing #3 stands; the framing no longer inflates the delta).
+5. **Mis-sizing A (CLOSED):** deltas 3+4 re-sized **S → S/M** (two headed round-trips + unit matrices + the additive `Endless` index-doc member); the b4 1200-clamp tests must be UPDATED, never weakened — recorded in both verdicts.
+6. **Mis-sizing B (CLOSED):** 6a now carries the degraded-delivery contract verbatim (intake runs, session never runnable, punches pend, VO possibly absent, chimes survive) so the row never files as if it ships the feature.
+7. **Final binding (CLOSED):** the provenance section above records the subagent wrap/limit facts and the consult truncation counts.
+
+**Endorsed as sound (no change):** the five-value scoped vocabulary; the NOTHING-proofs discipline; the withheld-parity framing for delta 1 (the withhold flag as parity authority); the BLOCKED-ON treatment of deltas 5/6b; the privacy namings for delta 6.
+
 
 ---
 
