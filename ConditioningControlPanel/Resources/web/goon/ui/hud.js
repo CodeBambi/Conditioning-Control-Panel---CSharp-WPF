@@ -4,7 +4,7 @@
  * Composes the live-match HUD inside #gg-hud and owns the layout grid:
  *
  *   ┌ top ────────────────────────────────────────────────────────────────┐
- *   │ score · charges · ×mult       11:47 ▮▮▯▯▯      attention  ⊟  ⚙      │
+ *   │ score · charges               11:47 ▮▮▯▯▯      attention  ⊟  ⚙      │
  *   ├ body ───────────────────────────────────────────────────────────────┤
  *   │ ┌ arsenal ──┐◂                                            [monitor] │
  *   │ │ HEAT ▰▰▱  │      (the stage well — never covered)       [receipts]│
@@ -26,10 +26,10 @@
  * everything here is edge-anchored and the centre column is pointer-transparent.
  *
  * ZEN (the ⊟ beside the gear). One bit, and everything it hides — score, the
- * score multiplier, the closeness dial, MERCY — is hidden by ui/hud.css off
- * .gg-hud--zen and html[data-gg-zen]. The monitor, the arsenal and the heat
- * gauge that feeds it stay: they are what the duel is played on. See the
- * toggle's own block below for why hiding MERCY is safe.
+ * closeness dial, MERCY — is hidden by ui/hud.css off .gg-hud--zen and
+ * html[data-gg-zen]. The monitor, the arsenal and the heat gauge that feeds it
+ * stay: they are what the duel is played on. See the toggle's own block below
+ * for why hiding MERCY is safe.
  *
  * ANIMATION BUDGET. Chrome animations go through fx.play(): at most two run at
  * once and anything that waited more than 600 ms is dropped rather than played
@@ -326,7 +326,28 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const pipRow = add(scoreBox, el('div', 'gg-pips'));
   const pips = [];
   for (let i = 0; i < GoonConsts.ChargeCap; i++) pips.push(add(pipRow, el('i', 'gg-pip')));
-  const multEl = add(scoreBox, el('div', 'gg-mult', S.hud.scoreMult(1)));
+
+  /* NO SCORE-MULTIPLIER READOUT (owner, 2026-08-05: "the risk level indicator
+   * is not intuitive — the heat gauge already does the job").
+   *
+   * A third line used to sit here under the charge pips: `.gg-mult`, née
+   * `.gg-risk`, painting `match.scoring.riskMultiplier` as "×1.30 score". It
+   * was the LAST player-facing limb of the risk system — batch 7 took the
+   * seven-segment tier meters and the per-tile pips off the draft screen and
+   * left this one behind, renamed. Renaming it never fixed the thing that was
+   * wrong with it: a bare multiplier with no key, on a number the player agreed
+   * to once at the draft and can no longer change, that never moves for the
+   * whole match. Nothing here reads scoring.riskMultiplier any more.
+   *
+   * THE ENGINE KEEPS IT. core/scoring.js multiplies every second by it and
+   * core/draft.js still sums the tier that produces it (C#-parity names, wire
+   * and RNG vectors depend on them) — this was a UI removal, not a mechanics
+   * change. The score in the line above is the multiplier's whole visible
+   * effect, which is the part a player could ever act on.
+   *
+   * THE CHARGE PIPS ABOVE ARE NOT IT and must stay: they are what you are
+   * holding to throw, the wire validates against them, and the arsenal's cost
+   * pips are read against them. */
 
   const timerBox = add(top, el('div', 'gg-timer gg-plate'));
   const timerClock = add(timerBox, el('div', 'gg-timer-clock', '0:00'));
@@ -362,9 +383,9 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const attSlot = add(rightTop, el('div', 'gg-att-slot'));
 
   /* ---- THE ZEN TOGGLE ---------------------------------------------------
-   * One button, always on screen, that takes the score, its multiplier,
-   * the closeness dial and the mercy button away and gives them back. What is
-   * left is what the duel is actually played on: their monitor and the arsenal.
+   * One button, always on screen, that takes the score, the closeness dial and
+   * the mercy button away and gives them back. What is left is what the duel is
+   * actually played on: their monitor and the arsenal.
    *
    * IT IS ITS OWN UNDO. The button never hides — it would be a one-way door on
    * a phone, where there is no Escape key to fall back to — and it keeps the
@@ -861,14 +882,6 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     }
   }
 
-  function paintMult() {
-    const s = match.scoring;
-    // `riskMultiplier` is the ENGINE's frozen name for the pool's score bonus
-    // (core/scoring.js, C#-parity). Nothing player-facing says "risk" any more.
-    const mult = s && typeof s.riskMultiplier === 'number' ? s.riskMultiplier : 1;
-    text(multEl, S.hud.scoreMult(mult));
-  }
-
   /* THE HEAT GAUGE. Polled, not subscribed: heat decays on the wall clock with
    * no timer behind it (ui/drops.js keeps it lazy), so the only way the bar can
    * show a cool-down is for the painter to ask. paintAll already runs at 5 Hz
@@ -930,7 +943,7 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   }
 
   function paintAll() {
-    try { paintScore(); paintCharges(); paintTimer(); paintMult(); paintHeat(); paintArmedBadge(); }
+    try { paintScore(); paintCharges(); paintTimer(); paintHeat(); paintArmedBadge(); }
     catch (_e) { /* a paint must never take the match down */ }
   }
 

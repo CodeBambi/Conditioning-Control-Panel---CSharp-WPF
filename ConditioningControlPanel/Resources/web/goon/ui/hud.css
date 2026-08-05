@@ -95,8 +95,8 @@
  * monitor and the arsenal. One bit (ui/hud.js HUD_ZEN_CLASS/HUD_ZEN_ATTR), every
  * hide below it, nothing in JS.
  *
- * WHAT GOES: the score + its +1 flourish, the score multiplier, your name plate,
- * the closeness dial, the closeness THEY claim, the live-effect chips and MERCY.
+ * WHAT GOES: the score + its +1 flourish, your name plate, the closeness dial,
+ * the closeness THEY claim, the live-effect chips and MERCY.
  * WHAT STAYS: the monitor, the rails, the charge pips (they are the arsenal's
  * currency, not a readout), the timer, the attention ring and the toggle itself.
  *
@@ -121,7 +121,6 @@
  * ------------------------------------------------------------------------ */
 .gg-hud-frame.gg-hud--zen .gg-score,
 .gg-hud-frame.gg-hud--zen .gg-plus1,
-.gg-hud-frame.gg-hud--zen .gg-mult,
 .gg-hud-frame.gg-hud--zen .gg-me,
 .gg-hud-frame.gg-hud--zen .gg-dial-host,
 .gg-hud-frame.gg-hud--zen .gg-mon-close,
@@ -132,7 +131,7 @@
 html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
 
 /* ---------------------------------------------------------------------------
- * TOP BAR — score · charges · ×mult | timer | attention · gear
+ * TOP BAR — score · charges | timer | attention · gear
  * ------------------------------------------------------------------------ */
 .gg-hud-top {
   display: grid;
@@ -150,9 +149,12 @@ html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
   color: #fff;
   text-shadow: 0 0 18px rgba(var(--gg-pink-rgb), 0.55), 0 2px 0 rgba(0, 0, 0, 0.45);
 }
-/* was .gg-risk ("×1.30 risk") until 2026-08-04 — same slot, same number, and no
-   longer named after a 0-7 tier the player was never shown a key for */
-.gg-mult { font-size: 0.68rem; color: var(--gg-text-4); font-variant-numeric: tabular-nums; letter-spacing: 0.06em; }
+/* THE SCORE MULTIPLIER IS GONE (2026-08-05). `.gg-risk` ("×1.30 risk") became
+   `.gg-mult` ("×1.30 score") on 2026-08-04 and was deleted outright a day later
+   with the rest of the risk indicator — a fixed number, set at the draft and
+   unmovable for the whole match, is not a readout a live desk needs. The score
+   directly above it already carries every point the multiplier bought.
+   ui/hud.js builds no such node, so do not restyle one back into being. */
 .gg-me { font-size: 0.68rem; color: var(--gg-text-3); }
 
 .gg-pips { display: flex; gap: 6px; align-items: center; }
@@ -2178,7 +2180,7 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
   .gg-hud-top { grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.35rem; }
   .gg-hud-top > * { min-width: 0; }
   .gg-scorebox { min-width: 0; }
-  .gg-mult, .gg-me { overflow-wrap: anywhere; }
+  .gg-me { overflow-wrap: anywhere; }
   .gg-pip { width: 13px; height: 13px; }
   .gg-pips { gap: 5px; }
   .gg-timer { min-width: 92px; padding: 0.35rem 0.6rem 0.45rem; }
