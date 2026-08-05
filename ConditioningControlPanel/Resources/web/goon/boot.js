@@ -585,9 +585,10 @@ function localCaps() {
    * `transfer` (its sibling in core/caps.js) is advertised on EXACTLY the same
    * terms: this build ships net/mediaChannel.js and will parse offers, full
    * stop. It says nothing about consent (the sheet's `media_transfer` term),
-   * nothing about premium (session.caps.mediaTransfer gates SENDING only —
-   * receiving is deliberately free), and nothing about the link (the lobby row
-   * checks supportsBulk separately). Until 2026-08-04 NOBODY set this flag —
+   * nothing about entitlement (session.caps.mediaTransfer gates SENDING only,
+   * and as of 2026-08-05 that is free for every seat anyway — receiving never
+   * was), and nothing about the link (the lobby row checks supportsBulk
+   * separately). Until 2026-08-04 NOBODY set this flag —
    * caps.js documented that boot advertises it and boot never did — so every
    * hello said `transfer:false`, both lobbies greyed the checkbox out with
    * "their build doesn't transfer", and the entire media lane was unreachable
@@ -605,9 +606,9 @@ function localCaps() {
 /* ============================================================================
  * P2P MEDIA TRANSFER — the three singletons and the one adapter.
  *
- * The queue SENDS (premium-gated, session.caps.mediaTransfer), the store RECEIVES
- * (never gated — a free player seeing a supporter's media is the whole product),
- * and the blocklist is the render-time safety gate. All three are built in
+ * The queue SENDS (session.caps.mediaTransfer — free for every seat since
+ * 2026-08-05; the paid perk is HOSTING), the store RECEIVES (never gated at all,
+ * in any era), and the blocklist is the render-time safety gate. All three are built in
  * buildApp() and the queue is attached/detached with the match, so the relay
  * rebuild re-binds it over the new transport and it simply goes dormant.
  * ==========================================================================*/
@@ -980,6 +981,47 @@ function buildMatch(transport, isHost, { withSuddenDeathUi = true, displayName =
   return match;
 }
 
+/**
+ * THE SERVER'S SEND VERDICT -> session.caps.mediaTransfer. Standalone only.
+ *
+ * Sending is free for every seat now (bridge.js defaults the cap ON, and the C#
+ * host's TransferAllowed() answers true), so this is no longer how a seat EARNS
+ * the capability — it is how the server can still TAKE IT BACK. /invite and
+ * /join answer `media_send`; net/signaling.js records it; this folds it in. A
+ * `false` from a future policy turns sending off with no client release, and a
+ * `null` (a server that predates the field) deliberately changes nothing.
+ *
+ * WHY THIS IS A FUNCTION AND NOT A LINE IN attachMatch — it has to run TWICE,
+ * on two different roads, and running it only in attachMatch is exactly the bug
+ * that made a verdict-driven gate unusable:
+ *
+ *   FIRST CONNECT.  GoonSession._beginSession() constructs a BRAND NEW signaling
+ *     client (mediaSend === null), builds the match, and raises
+ *     currentMatchChanged — i.e. calls attachMatch — and only THEN awaits
+ *     createInvite/join, which is the round trip that learns the verdict. Read
+ *     at attach time the answer is therefore ALWAYS null. Under the old
+ *     default-OFF cap that left every standalone seat unable to send for the
+ *     whole match, however loudly the server said yes. hostStart/joinStart call
+ *     this again after their await, which is the only moment the answer exists.
+ *
+ *   RELAY REBUILD.  _fallBackToRelay disposes the match and raises
+ *     currentMatchChanged over a new transport, KEEPING the signaling client. The
+ *     call in attachMatch catches that road, where the verdict is long since in.
+ *
+ * Idempotent by construction (it assigns a value, it does not toggle one), so
+ * calling it on both roads and twice on one of them costs nothing. Hosted pages
+ * are skipped outright: the C# init frame is authoritative there and there is no
+ * signaling client on this side to ask.
+ */
+function adoptServerSendVerdict() {
+  if (session.hosted) return;
+  const verdict = goonSession && goonSession.signaling ? goonSession.signaling.mediaSend : null;
+  if (typeof verdict !== 'boolean') return;
+  if (session.caps && session.caps.mediaTransfer === verdict) return;   // no churn, no log spam
+  session.caps = Object.assign({}, session.caps, { mediaTransfer: verdict });
+  logger.info('server send verdict adopted: caps.mediaTransfer = ' + verdict);
+}
+
 /* ----------------------------------------------------------------------------
  * ATTACH / DETACH — the rebuild-safe graph. Everything that observes a match is
  * bound HERE and nowhere else, so "the match was replaced" is one function call
@@ -1003,18 +1045,11 @@ function attachMatch(match, transport) {
   // leaves the host's manifest half of the deck exactly where it was.
   syncLocalDeck(true);
 
-  /* THE PREMIUM SEND GATE, standalone half. The server answered /invite //join
-   * with `media_send` (tier>=1, the same bar the C# host applies to its own init
-   * frame) and the signaling client recorded it. Folding it in HERE — the one
-   * seam every connect path crosses before the lobby renders — means a phone
-   * client can no longer grant itself sending by editing a querystring: the caps
-   * default is OFF against a real server and only the server turns it on. Hosted
-   * stays untouched (the init frame is authoritative), and null (an old server
-   * that never answered the question) changes nothing by design. */
-  if (!session.hosted && goonSession && goonSession.signaling
-      && typeof goonSession.signaling.mediaSend === 'boolean') {
-    session.caps = Object.assign({}, session.caps, { mediaTransfer: goonSession.signaling.mediaSend });
-  }
+  // The server's send verdict, for the REBUILD road into a match (the relay
+  // fallback raises currentMatchChanged again with the room already redeemed, so
+  // by here the verdict is known). The FIRST road is handled at the call sites —
+  // see adoptServerSendVerdict for why one call here can never be enough.
+  adoptServerSendVerdict();
 
   try { executor?.attach?.(match); } catch (e) { logger.error('executor.attach threw: ' + ((e && e.stack) || e)); }
   try { matchLog.attach(match); } catch (e) { logger.error('matchLog.attach threw: ' + ((e && e.stack) || e)); }
@@ -1760,6 +1795,10 @@ const actions = {
     lastConnectFailed = null;
     let code = null;
     try { code = await s.host(); } finally { awaitingEntry = false; }
+    // /invite has answered, so `media_send` finally EXISTS. attachMatch already
+    // ran (inside the await, before the POST) and read null — see
+    // adoptServerSendVerdict. This is the first moment there is a verdict to fold.
+    adoptServerSendVerdict();
     if (code) return { ok: true, code };
     return { ok: false, error: errorInfo(lastConnectFailed) };
   },
@@ -1772,6 +1811,10 @@ const actions = {
     lastConnectFailed = null;
     let ok = false;
     try { ok = await s.join(inviteCode); } finally { awaitingEntry = false; }
+    // The guest's half of the same fold — and the one that actually mattered to a
+    // FREE seat, which is the seat that reaches a duel down this road. See
+    // adoptServerSendVerdict: attachMatch ran before /join was ever posted.
+    adoptServerSendVerdict();
     if (!ok) {
       const err = errorInfo(lastConnectFailed);
       /* A DEAD ROOM SPENDS THE SEAT. Without this, the resume path
@@ -2049,9 +2092,12 @@ function buildApp() {
     blocklist,
     logger,
     acceptsCodecs: decodeCodecs,
-    // === true, NOT !== false (the idiom brainDrain/spiral use above). Deliberate
-    // inversion: sending is a new, Patreon-gated capability, so a host that
-    // predates the flag must default it OFF. Receiving is never gated.
+    // === true, NOT !== false (the idiom brainDrain/spiral use above). Kept
+    // strict even though the capability is free now: a host that predates the
+    // flag entirely says nothing, and "said nothing" must not read as consent to
+    // start a lane. Every host that DOES speak the flag sets it true (C#
+    // TransferAllowed, bridge.js standalone default), so the strictness only
+    // ever catches a genuinely ancient frame. Receiving is never gated.
     canSend: () => !!(session.caps && session.caps.mediaTransfer === true),
   });
   mediaQueue.onReceived((a) => {

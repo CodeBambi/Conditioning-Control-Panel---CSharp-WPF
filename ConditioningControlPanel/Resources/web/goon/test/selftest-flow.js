@@ -612,8 +612,10 @@ function mountRecap(result) {
     const qA = createMediaQueue({
       artifacts, store: storeA, logger: quiet, canSend: () => true, idlePollMs: 40,
     });
-    // B sends nothing (no artifacts, no premium) and receives everything — which is
-    // the asymmetry the product is built on: only SENDING is gated.
+    // B sends nothing (no artifacts, and canSend forced off) and receives everything.
+    // The forced-off gate is a TEST FIXTURE, not a tier: since 2026-08-05 no real
+    // seat is refused the capability (see 6a-free). It stays here because the
+    // receive path must keep working while the send path is shut, whatever shut it.
     const qB = createMediaQueue({
       artifacts: { listSendable: () => [], open: () => null },
       store: storeB, logger: quiet, canSend: () => false, idlePollMs: 40,
@@ -626,7 +628,7 @@ function mountRecap(result) {
 
     qA.attach(a, pair.host);
     qB.attach(b, pair.guest);
-    ok(qB.enabled() === false, 'B cannot send: canSend() is the premium gate and it said no');
+    ok(qB.enabled() === false, 'B cannot send: canSend() is the capability gate and it said no');
 
     // The queue primes at Draft; the hello round trip and the idle poll are what make
     // it start, so give it a moment rather than assuming one turn.
@@ -684,6 +686,98 @@ function mountRecap(result) {
     qB.detach();
     ok(typeof a.tryFirePayload === 'function', 'detach left a callable tryFirePayload behind');
     a.dispose(); b.dispose(); pair.dispose();
+  }
+
+  /* ---------------- 6a-free. THE FREE SEAT SENDS (owner call, 2026-08-05) ------
+   * Everything above drives `canSend` from a hand-written arrow. This one drives
+   * it from the SHAPE A FREE SEAT ACTUALLY HOLDS — bridge.js's standaloneInit
+   * caps, minus every paid marker — through the same predicate boot.js installs
+   * (`caps.mediaTransfer === true`). If someone re-introduces a tier default in
+   * bridge.js, this fails on the object rather than on a source regex.
+   *
+   * The two verdicts are asserted TOGETHER on the same caps object because the
+   * whole decision is that they diverge: sending free, hosting not.
+   * -------------------------------------------------------------------------- */
+  {
+    // A guest that arrived on an invite link: no account, no tier, no host right.
+    const freeSeatCaps = {
+      platform: 'web', video: true, camera: false, assetCache: false,
+      mediaTransfer: true,     // bridge.js standaloneInit — free for every seat
+      canHost: false,          // …and the server's tier-2 bar, unmoved
+    };
+    // boot.js's canSend closure, verbatim in shape.
+    const canSend = () => !!(freeSeatCaps && freeSeatCaps.mediaTransfer === true);
+    ok(canSend() === true, 'a free seat CAN send: caps.mediaTransfer is true with no account behind it');
+    ok(freeSeatCaps.canHost !== true, 'and still cannot host — the perk did not move');
+
+    const pair = createLoopbackPair(loopbackOptions({
+      latencyMs: 0, jitterMs: 0, guestClockSkewMs: 0, bulk: true, logger: quiet,
+    }));
+    const { a, b } = await consentedPair(pair);
+    const artifacts = fakeArtifacts([
+      { sha: SHA_IMG, bytes: 40000, mime: 'image/png', kind: 'image', exempt: false },
+    ]);
+    const storeB = fakeStore();
+    // The FREE seat is the sender here — the exact inversion of 6a, where the
+    // gated side was the one holding nothing.
+    const qFree = createMediaQueue({ artifacts, store: fakeStore(), logger: quiet, canSend, idlePollMs: 40 });
+    const qPeer = createMediaQueue({
+      artifacts: { listSendable: () => [], open: () => null },
+      store: storeB, logger: quiet, canSend: () => true, idlePollMs: 40,
+    });
+    qFree.attach(a, pair.host);
+    qPeer.attach(b, pair.guest);
+
+    // The hello is a round trip, so the ladder is only complete a few turns in —
+    // same wait 6a uses, and the same reason.
+    for (let i = 0; i < 80 && storeB.held.size < 1; i++) await tick(25);
+    ok(qFree.enabled() === true,
+      'and the whole sendGate ladder passes for it — capability, both consents, peer support, bulk, hello');
+    ok(storeB.held.size >= 1, "the free seat's media actually crossed the wire", String(storeB.held.size));
+
+    qFree.detach(); qPeer.detach();
+    a.dispose(); b.dispose(); pair.dispose();
+  }
+
+  /* -------- 6a-consent. A FREE CAPABILITY IS NOT A FREE PASS --------------------
+   * The half of 6a-free that matters most for review: give the free seat the
+   * capability and take away the OTHER side's lobby tick, and the lane stays
+   * shut — with the queue naming consent, not entitlement, as the reason. The
+   * pair is built the 6d way (declarations set at Idle, one side silent) because
+   * the setter refuses past Consent and a withdrawal mid-Draft is a no-op.
+   * -------------------------------------------------------------------------- */
+  {
+    const caps = localCaps({ transfer: true });
+    const pair = createLoopbackPair(loopbackOptions({
+      latencyMs: 0, jitterMs: 0, guestClockSkewMs: 0, bulk: true, logger: quiet,
+    }));
+    const a = new GoonMatchService(pair.host, true, { logger: quiet, caps, displayName: 'Free', tag: 'GG:AFREE' });
+    const b = new GoonMatchService(pair.guest, false, { logger: quiet, caps, displayName: 'Peer', tag: 'GG:BFREE' });
+    ok(a.setMediaTransfer(true) === true, 'the free seat ticks its own lobby box');
+    // The peer never does.
+    a.adoptLobby(); b.adoptLobby();
+    await pair.connect();
+    await tick(60);
+    a.proposeConsent(600, 0, 30000);
+    await tick(40);
+    a.confirmConsent(); b.confirmConsent();
+    await tick(60);
+
+    const q = createMediaQueue({
+      artifacts: fakeArtifacts([{ sha: SHA_IMG, bytes: 40000, mime: 'image/png', kind: 'image', exempt: false }]),
+      store: fakeStore(), logger: quiet, canSend: () => true, idlePollMs: 40,
+    });
+    q.attach(a, pair.host);
+    await tick(60);
+    ok(q.enabled() === false,
+      'the capability is granted and the lane is STILL shut — one consent short');
+    const why = q.tagsFor(GoonPayloadKind.FlashBurst);
+    ok(Array.isArray(why) && why.length === 0,
+      'so a media payload fires untagged, exactly as it does for a gated seat');
+    ok(a.mediaTransferAgreed === false,
+      'and the engine agrees: free to send is not the same as cleared to send');
+
+    q.detach(); a.dispose(); b.dispose(); pair.dispose();
   }
 
   // ------------------------------- 6b. the relay case: dormant, with no special case
