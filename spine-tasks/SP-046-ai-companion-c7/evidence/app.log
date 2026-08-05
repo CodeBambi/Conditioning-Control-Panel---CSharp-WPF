@@ -1,0 +1,70 @@
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)
+layout-probe: card 488.0x77.1 DIP @ scale 1.75 @ screen 304,398
+warn: ModelContextProtocol.Server.McpServer[975074943]
+      Server (CcpClient.Desktop 0.1.0.0), Client (pi-mcp-avalonia-live 1.0.0) method 'tools/call' request handler failed in 61.2376ms.
+      System.OperationCanceledException: The operation was canceled.
+         at System.Threading.CancellationToken.ThrowOperationCanceledException()
+         at System.Threading.CancellationToken.ThrowIfCancellationRequested()
+         at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http.HttpResponseStream.FlushAsync(CancellationToken cancellationToken)
+         at System.Net.ServerSentEvents.SseEventWriter.WriteAsync[T](SseItem`1 item, Action`2 itemFormatter, CancellationToken cancellationToken)
+         at ModelContextProtocol.Server.StreamableHttpPostTransport.SendMessageAsync(JsonRpcMessage message, CancellationToken cancellationToken)
+         at ModelContextProtocol.McpSessionHandler.SendMessageAsync(JsonRpcMessage message, CancellationToken cancellationToken)
+         at ModelContextProtocol.McpSessionHandler.HandleRequestAsync(JsonRpcRequest request, CancellationToken cancellationToken)
+         at ModelContextProtocol.McpSessionHandler.HandleMessageCoreAsync(JsonRpcMessage message, CancellationToken cancellationToken)
+fail: ModelContextProtocol.Server.McpServer[1433779783]
+      "get_property" threw an unhandled exception.
+      System.ArgumentException: The arguments dictionary is missing a value for the required parameter 'propertyName'. (Parameter 'arguments')
+         at Microsoft.Shared.Diagnostics.Throw.ArgumentException(String paramName, String message)
+         at Microsoft.Extensions.AI.AIFunctionFactory.ReflectionAIFunctionDescriptor.<>c__DisplayClass40_0.<GetParameterMarshaller>b__3(AIFunctionArguments arguments, CancellationToken _)
+         at Microsoft.Extensions.AI.AIFunctionFactory.ReflectionAIFunction.InvokeCoreAsync(AIFunctionArguments arguments, CancellationToken cancellationToken)
+         at Microsoft.Extensions.AI.AIFunctionFactory.ReflectionAIFunction.InvokeCoreAsync(AIFunctionArguments arguments, CancellationToken cancellationToken)
+         at ModelContextProtocol.Server.AIFunctionMcpServerTool.InvokeAsync(RequestContext`1 request, CancellationToken cancellationToken)
+         at ModelContextProtocol.Server.McpServerImpl.<>c__DisplayClass51_1.<<ConfigureTools>b__4>d.MoveNext()
+      --- End of stack trace from previous location ---
+         at ModelContextProtocol.AspNetCore.AuthorizationFilterSetup.<>c__DisplayClass8_0.<<CheckCallToolFilter>b__1>d.MoveNext()
+      --- End of stack trace from previous location ---
+         at ModelContextProtocol.Server.McpServerImpl.<>c__DisplayClass51_2.<<ConfigureTools>b__5>d.MoveNext()
+fail: ModelContextProtocol.Server.McpServer[1433779783]
+      "get_property" threw an unhandled exception.
+      System.ArgumentException: The arguments dictionary is missing a value for the required parameter 'propertyName'. (Parameter 'arguments')
+         at Microsoft.Shared.Diagnostics.Throw.ArgumentException(String paramName, String message)
+         at Microsoft.Extensions.AI.AIFunctionFactory.ReflectionAIFunctionDescriptor.<>c__DisplayClass40_0.<GetParameterMarshaller>b__3(AIFunctionArguments arguments, CancellationToken _)
+         at Microsoft.Extensions.AI.AIFunctionFactory.ReflectionAIFunction.InvokeCoreAsync(AIFunctionArguments arguments, CancellationToken cancellationToken)
+         at Microsoft.Extensions.AI.AIFunctionFactory.ReflectionAIFunction.InvokeCoreAsync(AIFunctionArguments arguments, CancellationToken cancellationToken)
+         at ModelContextProtocol.Server.AIFunctionMcpServerTool.InvokeAsync(RequestContext`1 request, CancellationToken cancellationToken)
+         at ModelContextProtocol.Server.McpServerImpl.<>c__DisplayClass51_1.<<ConfigureTools>b__4>d.MoveNext()
+      --- End of stack trace from previous location ---
+         at ModelContextProtocol.AspNetCore.AuthorizationFilterSetup.<>c__DisplayClass8_0.<<CheckCallToolFilter>b__1>d.MoveNext()
+      --- End of stack trace from previous location ---
+         at ModelContextProtocol.Server.McpServerImpl.<>c__DisplayClass51_2.<<ConfigureTools>b__5>d.MoveNext()
+fail: ModelContextProtocol.Server.McpServer[1433779783]
+      "get_property" threw an unhandled exception.
+      System.ArgumentException: The arguments dictionary is missing a value for the required parameter 'propertyName'. (Parameter 'arguments')
+         at Microsoft.Shared.Diagnostics.Throw.ArgumentException(String paramName, String message)
+         at Microsoft.Extensions.AI.AIFunctionFactory.ReflectionAIFunctionDescriptor.<>c__DisplayClass40_0.<GetParameterMarshaller>b__3(AIFunctionArguments arguments, CancellationToken _)
+         at Microsoft.Extensions.AI.AIFunctionFactory.ReflectionAIFunction.InvokeCoreAsync(AIFunctionArguments arguments, CancellationToken cancellationToken)
+         at Microsoft.Extensions.AI.AIFunctionFactory.ReflectionAIFunction.InvokeCoreAsync(AIFunctionArguments arguments, CancellationToken cancellationToken)
+         at ModelContextProtocol.Server.AIFunctionMcpServerTool.InvokeAsync(RequestContext`1 request, CancellationToken cancellationToken)
+         at ModelContextProtocol.Server.McpServerImpl.<>c__DisplayClass51_1.<<ConfigureTools>b__4>d.MoveNext()
+      --- End of stack trace from previous location ---
+         at ModelContextProtocol.AspNetCore.AuthorizationFilterSetup.<>c__DisplayClass8_0.<<CheckCallToolFilter>b__1>d.MoveNext()
+      --- End of stack trace from previous location ---
+         at ModelContextProtocol.Server.McpServerImpl.<>c__DisplayClass51_2.<<ConfigureTools>b__5>d.MoveNext()
+fail: ModelContextProtocol.Server.McpServer[1433779783]
+      "automation_action" threw an unhandled exception.
+      System.Text.Json.JsonException: The JSON value could not be converted to Keincheck.Core.Tools.ActionTools+AutomationActionKind. Path: $ | LineNumber: 0 | BytePositionInLine: 7.
+         at System.Text.Json.ThrowHelper.ThrowJsonException(String message)
+         at System.Text.Json.Serialization.Converters.EnumConverter`1.Read(Utf8JsonReader& reader, Type typeToConvert, JsonSerializerOptions options)
+         at System.Text.Json.Serialization.JsonConverter`1.TryRead(Utf8JsonReader& reader, Type typeToConvert, JsonSerializerOptions options, ReadStack& state, T& value, Boolean& isPopulatedValue)
+         at System.Text.Json.Serialization.JsonConverter`1.ReadCore(Utf8JsonReader& reader, T& value, JsonSerializerOptions options, ReadStack& state)
+         at System.Text.Json.Serialization.Metadata.JsonTypeInfo`1.Deserialize(Utf8JsonReader& reader, ReadStack& state)
+         at System.Text.Json.Serialization.Metadata.JsonTypeInfo`1.DeserializeAsObject(Utf8JsonReader& reader, ReadStack& state)
+         at Microsoft.Extensions.AI.AIFunctionFactory.ReflectionAIFunctionDescriptor.<>c__DisplayClass40_0.<GetParameterMarshaller>b__3(AIFunctionArguments arguments, CancellationToken _)
+         at Microsoft.Extensions.AI.AIFunctionFactory.ReflectionAIFunction.InvokeCoreAsync(AIFunctionArguments arguments, CancellationToken cancellationToken)
+         at Microsoft.Extensions.AI.AIFunctionFactory.ReflectionAIFunction.InvokeCoreAsync(AIFunctionArguments arguments, CancellationToken cancellationToken)
+         at ModelContextProtocol.Server.AIFunctionMcpServerTool.InvokeAsync(RequestContext`1 request, CancellationToken cancellationToken)
+         at ModelContextProtocol.Server.McpServerImpl.<>c__DisplayClass51_1.<<ConfigureTools>b__4>d.MoveNext()
+      --- End of stack trace from previous location ---
+         at ModelContextProtocol.AspNetCore.AuthorizationFilterSetup.<>c__DisplayClass8_0.<<CheckCallToolFilter>b__1>d.MoveNext()
+      --- End of stack trace from previous location ---
+         at ModelContextProtocol.Server.McpServerImpl.<>c__DisplayClass51_2.<<ConfigureTools>b__5>d.MoveNext()

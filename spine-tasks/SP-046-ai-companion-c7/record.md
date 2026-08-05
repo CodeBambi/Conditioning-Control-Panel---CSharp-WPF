@@ -116,6 +116,7 @@ The avalonia-docs MCP search tool returned oversized/empty payloads on this box 
 ## 4. Engine review presence (T-2)
 
 - Step 1 plan review (`spine_review_step step=1 type=plan`): **SKIPPED by runtime** — SP-195 nested-spawn block; artifact `.reviews/1-20260805T001731.md`; `spawnFailed=false` → proceed (engine-owned reviews run post-.DONE).
+- Step 2 plan review (`spine_review_step step=2 type=plan`): **SKIPPED by runtime** — same SP-195 block; artifact `.reviews/2-20260805T005252.md`; `spawnFailed=false` → proceed.
 
 ## 5. Evidence summary (Step 3/5)
 
