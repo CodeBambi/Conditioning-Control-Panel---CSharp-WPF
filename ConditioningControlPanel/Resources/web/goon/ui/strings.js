@@ -46,7 +46,14 @@ export const S = Object.freeze({
     options: 'Options',
     how: 'How it works',
     quit: 'Quit',
-    fineprint: 'Both players endure their own library. Nothing you own leaves this machine.',
+    /* THE FINEPRINT SAYS WHAT ACTUALLY CROSSES (2026-08-05 privacy pass). It read
+       "Nothing you own leaves this machine" until today, which was written before
+       media transfer and voice notes existed and has been the exact opposite of
+       the truth ever since: with sending switched on, copies of your images and
+       clips are sent to your opponent, and a voice note is your recorded voice
+       going to a stranger. Both are opt-in and both are off until you say so —
+       which is the honest version of the same reassurance, so that is what it says. */
+    fineprint: 'Both players endure their own library. Nothing you own is sent anywhere until you switch sending on — then it goes to your opponent, and nowhere else.',
   },
 
   /** The "how it works" modal — exactly six bullets, in reading order. */
@@ -135,7 +142,19 @@ export const S = Object.freeze({
     /* --- the media-transfer opt-in. Per-side: this row says what YOU are
        willing to send, and the chip says what THEY answered. --- */
     transfer: 'Send them your own media',
-    transferSub: 'a few of your images and clips go straight to them, machine to machine. never through a server.',
+    /* THE CONSENT SENTENCE FOR SHARING, and every clause in it is checked against
+       the code (2026-08-05 privacy pass):
+         · "sent to them"   — net/mediaQueue.js puts compressed copies on the wire.
+                              This is the half the old copy buried; it now leads.
+         · "encrypted"      — the bulk lane is a WebRTC data channel, so DTLS/SCTP.
+         · "never through our servers" — `supportsBulk` is P2P-ONLY (see
+                              net/mediaQueue.js:625 and paintTransfer below): on the
+                              ws-mailbox relay the row greys out and nothing crosses.
+                              A TURN hop is still this data channel and still sees
+                              nothing but ciphertext.
+         · "theirs to keep"  — exec/receivedStore.js writes it down on their side.
+                              We cannot unsend it and the copy must not imply we can. */
+    transferSub: 'a few of your images and clips are sent to your opponent — encrypted, straight to their machine, never through our servers. what lands on their side is theirs to keep.',
     /**
      * NO LONGER A PITCH, because it is no longer a perk (owner call 2026-08-05):
      * sending is free for every seat and the only thing money buys is HOSTING
@@ -447,10 +466,18 @@ export const S = Object.freeze({
    *      is two consents in one switch — your voice goes to them, and theirs can
    *      come back — and a player who only reads the button must not be able to
    *      miss the second half. That is why the ack gate exists at all.
-   *   2. NOTHING HERE PROMISES DELETION OR PRIVACY IT CANNOT KEEP. The audio is
-   *      peer-to-peer and never touches a server, so the copy says exactly that
-   *      and nothing more — no "disappears after", no "only you can hear it".
-   *      What happens on their machine is theirs, and the ack line says so.
+   *   2. NOTHING HERE PROMISES DELETION OR PRIVACY IT CANNOT KEEP — and until the
+   *      2026-08-05 privacy pass this block broke its own rule. It said "no server
+   *      ever hears them" and "there is no server in the middle", which is FALSE on
+   *      the fallback path and was false the day it was written: a voice note rides
+   *      the CONTROL lane precisely so it survives a relayed link (see the header of
+   *      ui/voice/voiceService.js and core/contracts.js makeVoice), and on that link
+   *      every frame is plain JSON through our /v2/goon/relay mailbox. There is no
+   *      application-layer encryption on that hop — TLS to us, readable by us.
+   *      So the copy now says the true thing in two clauses: direct link, straight
+   *      to them and we never see it; relayed link, it passes through our server.
+   *      Still no "disappears after" and no "only you can hear it": what happens on
+   *      their machine is theirs, and the ack line says so.
    *   3. THE OFF PATH IS NEVER SCOLDED. Cancelling a recording, refusing the mic
    *      and turning the whole thing off are all ordinary things to do, phrased
    *      as ordinary things.
@@ -464,7 +491,7 @@ export const S = Object.freeze({
 
     /* --- the screen ----------------------------------------------------- */
     eyebrow: 'voice notes',
-    lead: 'ten seconds each, straight to whoever you are duelling. nothing is uploaded and no server ever hears them.',
+    lead: 'ten seconds each, sent to whoever you are duelling. on a direct link it goes straight to them, encrypted, and we never see it — on a relayed one it passes through our server to reach them.',
     back: 'back',
 
     /* --- the acknowledgment gate (shown ONCE, before the toggle will move)
@@ -473,8 +500,8 @@ export const S = Object.freeze({
     ack: {
       icon: '🎙',
       headline: 'This records your real voice',
-      line: 'Holding the mic records you and sends the audio straight to the person you are duelling, machine to machine. There is no server in the middle and nothing is stored anywhere but on the two of you.',
-      lineTwo: 'Switching this on also means you may HEAR them: if you have both turned it on, their voice plays on your side too. Once a note has left your machine, what happens to it is on theirs.',
+      line: 'Holding the mic records your real voice and sends that recording to the person you are duelling. On a direct connection it travels straight to their machine, encrypted, and our servers never see it. If your two networks can only reach each other through our relay, the note passes through our server on the way to them.',
+      lineTwo: 'Switching this on also means you may HEAR them: if you have both turned it on, their voice plays on your side too. Once a note has reached them it is on their machine, and what happens to it there is theirs — it cannot be taken back.',
       go: 'I understand',
       cancel: 'Not now',
     },
@@ -601,7 +628,7 @@ export const S = Object.freeze({
     /** Standalone's OWN library: files picked straight off the device. */
     local: {
       headline: 'add media to send',
-      line: 'pick files from this device and they can travel to your opponent mid-duel, straight from you to them. nothing is uploaded anywhere.',
+      line: 'pick files from this device and copies of them can be sent to your opponent mid-duel, encrypted, straight from you to them. nothing is uploaded to our servers — but what reaches them is theirs to keep.',
       add: 'add files',
       limits: (max, vmax) => 'jpg, png, gif, webp, mp4, webm, mov · or a zip of them · up to ' + max
         + ' travels as-is, bigger photos and gifs are compressed to fit, clips up to ' + vmax,
@@ -737,8 +764,12 @@ export const S = Object.freeze({
    * Two rules the copy has to keep:
    *   1. the twenty-item suggestion is a SUGGESTION and must read as one. The
    *      button unlocks on the first file; nothing here may sound like a gate.
-   *   2. it says where the media STAYS. A stranger asking a first-time visitor
-   *      for their porn folder has about one sentence to be honest in. */
+   *   2. it says where the media GOES. A stranger asking a first-time visitor
+   *      for their porn folder has about one sentence to be honest in, and until
+   *      the 2026-08-05 privacy pass that sentence spent it on the wrong half
+   *      ("travel nowhere") — true only for as long as the lobby toggle stays
+   *      off, and read by everybody as a promise about the whole feature. It now
+   *      names the toggle AND what crossing it means. */
   mediaSetup: {
     eyebrow: 'before you play',
     headline: 'bring something to endure',
@@ -775,7 +806,7 @@ export const S = Object.freeze({
     lockBusy: 'still adding…',
     /** The opponent is watching a "picking their media" line while this is up. */
     waiting: 'they know you are still picking. take your time.',
-    note: 'your picks stay on this device and travel nowhere unless you switch sending on in the lobby.',
+    note: 'your picks stay on this device unless you switch sending on in the lobby — then copies of a few of them are sent to your opponent, encrypted and never through our servers, and whatever reaches them is theirs to keep.',
     leave: 'Leave',
   },
 
