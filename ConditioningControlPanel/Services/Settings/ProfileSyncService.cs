@@ -126,6 +126,19 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Forget that this session already completed a profile round-trip. Call on logout.
+        /// Logout zeroes local progression (ClearProgressionData), so without this the
+        /// defaults-push guard in SyncProfileAsync stays disarmed for the rest of the app
+        /// session and the first sync after a re-login can PUSH the zeroed streak/XP before
+        /// the READ lands — the streak then flashes 0 until a later sync repaints it.
+        /// </summary>
+        public void ResetLoadedProfileState()
+        {
+            _hasLoadedProfile = false;
+            App.Logger?.Debug("Profile sync: loaded-profile flag reset (logout) - defaults guard re-armed");
+        }
+
+        /// <summary>
         /// Send a lightweight heartbeat to keep user showing as online.
         /// Only updates last_seen timestamp, doesn't sync full profile.
         /// </summary>

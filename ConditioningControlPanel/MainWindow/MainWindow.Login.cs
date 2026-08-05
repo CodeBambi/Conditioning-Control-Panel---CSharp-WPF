@@ -265,6 +265,12 @@ namespace ConditioningControlPanel
             // Clear all progression data
             ClearProgressionData();
 
+            // ClearProgressionData just zeroed streaks/XP locally. Re-arm the sync service's
+            // defaults guard so a re-login in this same app session READS the server profile
+            // before it can PUSH those zeros — otherwise the quest/login streak flashes 0
+            // until a later sync repaints it. Every logout path funnels through here.
+            App.ProfileSync?.ResetLoadedProfileState();
+
             // Update all UI
             UpdateQuickLoginUI();
             UpdateQuickPatreonUI();
