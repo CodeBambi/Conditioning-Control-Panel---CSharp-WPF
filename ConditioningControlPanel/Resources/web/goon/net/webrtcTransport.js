@@ -22,9 +22,17 @@
 //                 tick; what the two channels share is the association's congestion window, which
 //                 is what mediaChannel's backpressure pump manages.
 //
-// ICE: public STUN only, no TURN by design. A NAT pair that can't be punched gives up after
-// GoonConsts.IceTimeoutMs, sets `iceFailed`, and the caller opens a relay transport on the SAME
-// room — `code`/`token` deliberately survive the failure so session.js can adopt it.
+// ICE: three public STUN providers, ALWAYS, plus whatever turn/turns entries the ROOM handed us
+// (net/signaling.js iceServers — server-minted, short-lived; the provider's own stun urls are
+// dropped, see turnOnlyIceServers). A pair that cannot be formed gives up after `iceBudgetMs` —
+// GoonConsts.IceTimeoutMs alone when there is no relay to wait for, plus IceRelayGraceMs when
+// there is, plus one IceProgressGraceMs if checks are still in flight at that point — sets
+// `iceFailed`, and the caller opens a relay transport on the SAME room: `code`/`token`
+// deliberately survive the failure so session.js can adopt it.
+//
+// A TURN-mediated pair is STILL P2P as far as this file and `supportsBulk` are concerned: it ends
+// in ConnectedP2P over a real data channel. The thing media must never ride is the ws/HTTP mailbox
+// in net/relayTransport.js, which is a different object entirely.
 //
 // NODE-IMPORT-SAFE: nothing at module scope touches RTCPeerConnection. It is constructed only
 // inside the negotiation path, guarded — a page without WebRTC fails with lastError
@@ -43,6 +51,80 @@ export const STUN_URLS = Object.freeze([
   'stun:stun1.l.google.com:19302',
   'stun:stun.cloudflare.com:3478',
 ]);
+
+/**
+ * Does this entry carry at least one turn/turns url? The room's server-minted
+ * list is the only source of relay candidates; the built-in STUN list never is.
+ */
+export function entryHasTurn(entry) {
+  if (!entry) return false;
+  const urls = Array.isArray(entry.urls) ? entry.urls : [entry.urls];
+  return urls.some((u) => /^turns?:/i.test(String(u || '')));
+}
+
+/**
+ * THE ROOM'S ENTRIES, TURN URLS ONLY (2026-08-05).
+ *
+ * metered's credentials endpoint answers with `stun:` urls alongside its turn
+ * ones, and on the cellular play-test every single one of them 701'd:
+ *   stun:global.relay.metered.ca:80 / :443, stun:stun.relay.metered.ca:80 —
+ *   "STUN binding request timed out".
+ * A dead STUN url is not free. libwebrtc runs the full binding retransmit
+ * ladder (~9.5 s) before it gives up, and iceGatheringState stays 'gathering'
+ * the whole time, so three dead urls are three parallel legs holding the
+ * gathering phase open for most of the ICE budget — for candidates we do not
+ * need, because STUN_URLS above already covers srflx with three public
+ * providers and a TURN allocation yields its own srflx on the way through.
+ *
+ * So: keep every entry that can produce a RELAY candidate, and inside it keep
+ * only the turn/turns urls. Entries with no turn url at all are dropped whole.
+ * A server that hands out nothing but stun therefore contributes nothing, which
+ * is exactly right — that is the STUN-only case the built-in list already is.
+ */
+export function turnOnlyIceServers(entries) {
+  if (!Array.isArray(entries)) return [];
+  const out = [];
+  for (const e of entries) {
+    if (!entryHasTurn(e)) continue;
+    const urls = (Array.isArray(e.urls) ? e.urls : [e.urls])
+      .filter((u) => /^turns?:/i.test(String(u || '')));
+    if (!urls.length) continue;
+    const kept = { urls };
+    if (e.username !== undefined) kept.username = e.username;
+    if (e.credential !== undefined) kept.credential = e.credential;
+    out.push(kept);
+  }
+  return out;
+}
+
+/**
+ * How long the ICE attempt gets, from the moment negotiation starts.
+ * See GoonConsts.IceRelayGraceMs for the whole argument; the short version is
+ * that a relayed pair on a carrier link cannot be judged in ten seconds, and a
+ * STUN-only room has nothing to wait for.
+ */
+export function iceBudgetMs(turnConfigured) {
+  return GoonConsts.IceTimeoutMs + (turnConfigured ? GoonConsts.IceRelayGraceMs : 0);
+}
+
+/**
+ * Is the browser still DOING something, as of `iceConnectionState`? Gate for the
+ * one-shot IceProgressGraceMs extension.
+ *
+ *   checking   — pairs are being probed right now.
+ *   connected  — a pair WON; the only thing left is DTLS + SCTP, which over a
+ *                relay is another couple of round trips. Giving up here would
+ *                throw away a working link.
+ *   completed  — same, with gathering finished too.
+ *
+ * 'new' means nothing has started (no extension: something is wrong upstream),
+ * 'disconnected' means a pair died, and 'failed'/'closed' are terminal — the
+ * transport already folds on those via pc.onconnectionstatechange.
+ */
+export function iceChecksInFlight(iceConnectionState) {
+  const s = String(iceConnectionState || '');
+  return s === 'checking' || s === 'connected' || s === 'completed';
+}
 
 const CHANNEL_LABEL = 'goon';
 
@@ -106,6 +188,24 @@ export class GoonWebRtcTransport extends GoonTransportBase {
     this._token = null;
     this._iceFailed = false;
     this._peerDisplayName = null;
+
+    /**
+     * Did the ROOM hand us TURN credentials? Decided once, in _startPeer, off
+     * the entries the signaling client recorded — and it is what buys the
+     * attempt GoonConsts.IceRelayGraceMs on top of the base budget. Deliberately
+     * "were relay credentials in play", not "did we gather a relay candidate":
+     * the relay candidate is exactly the one that arrives LATE, so making the
+     * extension depend on having already seen it would arm the longer budget
+     * only after the short one had already killed the attempt.
+     */
+    this._turnConfigured = false;
+    /**
+     * Diagnostics only (the fallback breadcrumb + the grace warn): did either
+     * side ever produce a `typ relay` candidate? Nothing branches on it.
+     */
+    this._sawLocalRelay = false;
+    this._sawRemoteRelay = false;
+    this._pairLogged = false;         // one-shot guard for the selected-pair breadcrumb
   }
 
   /** Invite code for this room. Survives an ICE failure so the relay can adopt it. */
@@ -158,14 +258,23 @@ export class GoonWebRtcTransport extends GoonTransportBase {
   }
 
   /**
-   * Resolves when the data channel is open, or when ICE gives up (GoonConsts.IceTimeoutMs after
-   * negotiation STARTS), or — guest only — when no offer ever arrives (GoonConsts.NoOfferTimeoutMs
-   * after the join). False means "fall back to relay" — check `iceFailed` to tell that apart from
-   * a signaling failure.
+   * Resolves when the data channel is open, or when ICE gives up (iceBudgetMs after negotiation
+   * STARTS, plus at most one IceProgressGraceMs extension), or — guest only — when no offer ever
+   * arrives (GoonConsts.NoOfferTimeoutMs after the join). False means "fall back to relay" — check
+   * `iceFailed` to tell that apart from a signaling failure.
+   *
+   * THE BUDGET IS NOT A CONSTANT ANY MORE (2026-08-05). A STUN-only room still fails at
+   * GoonConsts.IceTimeoutMs; a room carrying TURN credentials gets IceRelayGraceMs on top, and one
+   * further IceProgressGraceMs if the browser is demonstrably still checking when that runs out.
+   * The whole argument lives on GoonConsts.IceRelayGraceMs — in one line: the flat 10 s deadline
+   * was killing cellular duels that were still mid-handshake, and because the relay fallback is
+   * terminal that silently disabled media transfer for the rest of the match.
    */
   async waitForChannel() {
-    let deadline = Date.now() + GoonConsts.IceTimeoutMs;
+    let budgetMs = GoonConsts.IceTimeoutMs;
+    let deadline = Date.now() + budgetMs;
     let negotiationSeen = false;
+    let graceUsed = false;
     // GUEST ONLY: a joined guest is OWED an offer — it redeemed the code, the host learns
     // `peer_joined` on its next poll and offers immediately. If none arrives inside
     // NoOfferTimeoutMs the host side is dead or unreachable, and without this budget the
@@ -183,7 +292,12 @@ export class GoonWebRtcTransport extends GoonTransportBase {
       // human to type the code must not eat into it.
       if (!negotiationSeen && this._negotiationStarted) {
         negotiationSeen = true;
-        deadline = Date.now() + GoonConsts.IceTimeoutMs;
+        budgetMs = iceBudgetMs(this._turnConfigured);
+        deadline = Date.now() + budgetMs;
+        // WARN, like the other ICE diagnostics in this file: this is the line that tells the next
+        // play-test which budget the attempt actually ran on, which is the difference between
+        // "TURN was never in play" and "TURN was in play and still lost".
+        this._warn(`ice budget ${budgetMs}ms (turn creds ${this._turnConfigured ? 'present' : 'ABSENT'})`);
       }
 
       if (!negotiationSeen && Date.now() > noOfferDeadline) {
@@ -199,9 +313,27 @@ export class GoonWebRtcTransport extends GoonTransportBase {
       }
 
       if (negotiationSeen && Date.now() > deadline) {
+        const iceState = (this._pc && this._pc.iceConnectionState) || 'none';
+
+        // THE ONE-SHOT EXTENSION. Only when the browser says checks are still running: a pair that
+        // is mid-probe, or one that already won and is only waiting on DTLS+SCTP over a relay, is
+        // not a link to throw away over a stopwatch. Once, never twice — a second extension would
+        // be an unbounded wait dressed as a budget.
+        if (!graceUsed && iceChecksInFlight(iceState)) {
+          graceUsed = true;
+          deadline = Date.now() + GoonConsts.IceProgressGraceMs;
+          this._warn(`ice budget ${budgetMs}ms elapsed but checks are still in flight`
+            + ` (iceConnectionState=${iceState}, relay candidates local=${this._sawLocalRelay} remote=${this._sawRemoteRelay})`
+            + ` — one grace extension of ${GoonConsts.IceProgressGraceMs}ms`);
+          await this._sleep(100);
+          continue;
+        }
+
         this._iceFailed = true;
         this._setLastError('ice_timeout');
-        this._warn(`ICE did not complete in ${GoonConsts.IceTimeoutMs}ms — relay fallback`);
+        this._warn(`ICE did not complete in ${budgetMs + (graceUsed ? GoonConsts.IceProgressGraceMs : 0)}ms`
+          + ` (iceConnectionState=${iceState}, turn creds ${this._turnConfigured ? 'present' : 'ABSENT'},`
+          + ` relay candidates local=${this._sawLocalRelay} remote=${this._sawRemoteRelay}) — relay fallback`);
         this._setState(GoonTransportState.Disconnected, 'ice_timeout');
         return false;
       }
@@ -344,6 +476,10 @@ export class GoonWebRtcTransport extends GoonTransportBase {
 
   async _tryAddCandidate(cand) {
     try {
+      // Diagnostics only: the SDP candidate line carries its type as `typ relay`. Knowing whether
+      // the PEER ever managed a TURN allocation is half of any "why did this pair not form"
+      // question, and the phone side never ships us a log of its own.
+      if (cand && / typ relay\b/.test(String(cand.candidate || ''))) this._sawRemoteRelay = true;
       if (this._pc) await this._pc.addIceCandidate(cand);
     } catch (e) {
       // One unusable candidate is normal (IPv6-only, a stale srflx); the pair still works.
@@ -376,18 +512,21 @@ export class GoonWebRtcTransport extends GoonTransportBase {
        * actually meet: without a relay candidate those two networks never
        * complete ICE, every duel lands on the HTTP-mailbox fallback, and the
        * media transfer (P2P-only by design) never gets a channel to run on. */
-      const iceServers = STUN_URLS.map((urls) => ({ urls }))
-        .concat(Array.isArray(this._signaling?.iceServers) ? this._signaling.iceServers : []);
+      /* TURN URLS ONLY out of the room's list — see turnOnlyIceServers for why the provider's
+       * own `stun:` entries are dropped rather than merged (they are three more dead legs
+       * holding iceGatheringState open for most of the budget, on a network where they 701). */
+      const roomTurn = turnOnlyIceServers(this._signaling?.iceServers);
+      const iceServers = STUN_URLS.map((urls) => ({ urls })).concat(roomTurn);
+      /* THE BUDGET SWITCH, decided here and read by waitForChannel: relay credentials in hand
+       * means this attempt is allowed to take as long as a relayed cellular pair actually takes. */
+      this._turnConfigured = roomTurn.length > 0;
       /* DIAGNOSTIC WARNS, deliberately (2026-08-05): info lines die before the
        * C# log and the phone's ?debug=1 overlay, and this exact spot is where
        * three play-test evenings' worth of "still relayed" questions get their
        * answer — did the room carry TURN entries at all, did the browser take
        * them, and what did gathering actually produce. */
-      const turnEntries = iceServers.filter((s) => {
-        const u = Array.isArray(s.urls) ? s.urls : [s.urls];
-        return u.some((x) => /^turns?:/i.test(String(x)));
-      }).length;
-      this._warn(`ice config: ${iceServers.length} entr(ies), ${turnEntries} carrying turn urls`);
+      this._warn(`ice config: ${iceServers.length} entr(ies), ${roomTurn.length} carrying turn urls`
+        + ` (room list ${(this._signaling?.iceServers || []).length} raw, stun-only entries dropped)`);
       const pc = new RTCPeerConnection({ iceServers });
       this._pc = pc;
       const iceTally = { host: 0, srflx: 0, relay: 0, prflx: 0 };
@@ -424,6 +563,7 @@ export class GoonWebRtcTransport extends GoonTransportBase {
         if (!e || !e.candidate || this.isDisposed) return;
         const t = String(e.candidate.type || '');
         if (t in iceTally) iceTally[t]++;
+        if (t === 'relay') this._sawLocalRelay = true;
         try { this._enqueueSignal('ice', JSON.stringify(e.candidate.toJSON())); }
         catch (err) { this._info(`Failed to queue local candidate: ${(err && err.message) || err}`); }
       };
@@ -648,6 +788,63 @@ export class GoonWebRtcTransport extends GoonTransportBase {
     // _setState kicks off the clock sync (autoClockSync) — GoonTransportBase.BeginClockSync.
     this._setState(GoonTransportState.ConnectedP2P, 'data channel open');
     this._flushResumeBuffer();
+    // Fire-and-forget: getStats is async and nothing may wait on a diagnostic. The .catch is not
+    // decoration — an unhandled rejection out of a LOG LINE would be a genuinely stupid way to
+    // take down a connection that just succeeded.
+    try { const p = this._logSelectedPair(); if (p && p.catch) p.catch(() => {}); }
+    catch (_e) { /* diagnostics never bite */ }
+  }
+
+  /**
+   * THE BREADCRUMB THAT ANSWERS "how did this duel actually connect" (2026-08-05). One warn, once
+   * per transport, naming the nominated pair's candidate types — host/srflx/relay/prflx on each
+   * side. `relay/…` is the receipt that TURN did its job; `srflx/srflx` on a cellular guest means
+   * the phone punched through and the whole TURN apparatus was never needed.
+   *
+   * It is a warn because info lines do not survive the trip to the C# log or the ?debug=1 overlay,
+   * and this line is the entire point of the next cellular play-test.
+   *
+   * BOTH STAT SHAPES. Chromium hangs the pair off `transport.selectedCandidatePairId`; Safari (the
+   * iPhone side, and the one we most need to hear from) marks the pair itself with `selected`.
+   * Neither is guaranteed, so the whole thing degrades to silence rather than throwing.
+   */
+  async _logSelectedPair() {
+    if (this._pairLogged) return;
+    const pc = this._pc;
+    if (!pc || typeof pc.getStats !== 'function') return;
+    this._pairLogged = true;
+    try {
+      const stats = await pc.getStats();
+      if (!stats || typeof stats.forEach !== 'function') return;
+
+      const byId = new Map();
+      stats.forEach((r) => { if (r && r.id) byId.set(r.id, r); });
+
+      let pair = null;
+      stats.forEach((r) => {
+        if (!r) return;
+        if (r.type === 'transport' && r.selectedCandidatePairId && byId.has(r.selectedCandidatePairId)) {
+          pair = byId.get(r.selectedCandidatePairId);
+        }
+      });
+      if (!pair) {
+        stats.forEach((r) => {
+          if (pair || !r || r.type !== 'candidate-pair') return;
+          if (r.selected === true || (r.nominated === true && r.state === 'succeeded')) pair = r;
+        });
+      }
+      if (!pair) { this._warn('p2p link up — the browser named no selected candidate pair'); return; }
+
+      const local = byId.get(pair.localCandidateId);
+      const remote = byId.get(pair.remoteCandidateId);
+      const lt = (local && local.candidateType) || '?';
+      const rt = (remote && remote.candidateType) || '?';
+      const proto = (local && (local.relayProtocol || local.protocol)) || '?';
+      this._warn(`p2p link up via ${lt}/${rt} over ${proto}`
+        + ` (turn creds ${this._turnConfigured ? 'present' : 'ABSENT'})`);
+    } catch (e) {
+      this._info(`selected-pair stats unavailable: ${(e && e.message) || e}`);
+    }
   }
 
   // ------------------------------------------------------------------ reconnect / resume
