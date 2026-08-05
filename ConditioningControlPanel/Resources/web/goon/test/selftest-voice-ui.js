@@ -64,6 +64,11 @@ function installDom() {
         toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)),
         contains: (c) => classes.has(c),
       },
+      // ui/screens/lobby.js repaints its eyebrow through `lastChild` — a real
+      // Node property the trimmed stub never needed until the lobby was mounted
+      // here (section 9).
+      get firstChild() { return kids[0] || null; },
+      get lastChild() { return kids[kids.length - 1] || null; },
       appendChild(child) { if (child) { child.parentNode = node; kids.push(child); } return child; },
       append(...c) { c.forEach((x) => node.appendChild(x)); },
       prepend(child) { if (child) { child.parentNode = node; kids.unshift(child); } return child; },
@@ -106,7 +111,7 @@ function installDom() {
   doc.body = makeNode('body');
   doc.activeElement = null;
   const byId = new Map();
-  for (const id of ['gg-modal', 'gg-drawer', 'gg-toasts', 'scr-voice', 'scr-title']) {
+  for (const id of ['gg-modal', 'gg-drawer', 'gg-toasts', 'scr-voice', 'scr-title', 'scr-lobby']) {
     const n = makeNode('div');
     n.id = id;
     n.hidden = true;
@@ -186,6 +191,8 @@ import { VN_MAX_NOTES, VN_MAX_BYTES } from '../ui/voice/voiceService.js';
 import { createPrefs, PREF_DEFAULTS } from '../ui/prefs.js';
 import { mountEmotes, setVoiceProvider, fireVoiceForEmote, EMOTE_ICONS } from '../ui/emotes.js';
 import * as voiceScreen from '../ui/screens/voice.js';
+import * as lobbyScreen from '../ui/screens/lobby.js';
+import { GoonMatchPhase, GoonTransportState } from '../core/contracts.js';
 import { S } from '../ui/strings.js';
 import { SCREEN_IDS } from '../ui/router.js';
 
@@ -912,6 +919,217 @@ function mountSheet(provider) {
   ok(!/gg-grad/.test(voiceBlock), 'and no RULE in the voice block touches .gg-grad');
   ok(/animation-play-state: running/.test(voiceBlock),
     'the recording pulse re-declares `running`, so the effect armor cannot freeze the live-mic tell');
+}
+
+/* =================================== 9. THE LOBBY ROW — the door that was missing
+ *
+ * THE BUG THIS SECTION EXISTS FOR (owner, 2026-08-05): the mic was hunted for
+ * across three setups — iPhone Safari, iPhone Safari incognito, and a
+ * desktop-to-desktop match — and never appeared once. Not one of those was a
+ * wire, layout or CSS failure: `prefs.voiceNotesEnabled` had never been true on
+ * that seat, because until today the ONLY switch was on a title-menu screen a
+ * player has no reason to visit before a duel, and the lobby merely REPORTED a
+ * decision nobody had ever been offered.
+ *
+ * Four properties, and the last two are the ones a well-meaning refactor breaks:
+ *
+ *   1. THE ROW EXISTS AND IT IS A REAL CHECKBOX, on the screen you sign terms on.
+ *   2. THE ACK GATE CAME WITH IT. Inert until `voiceAckSeen`; the ROW opens the
+ *      same S.voice.ack sheet; cancel writes nothing. A second door to the gate,
+ *      never a way around it.
+ *   3. TICKING IT TAKES EFFECT FOR *THIS* MATCH, WITH NO RELOAD. It writes the
+ *      pref AND calls match.setLocalVoiceNotes — because ui/prefs.js caches in
+ *      memory and boot.js only re-seeds the declaration at attachMatch, so a
+ *      pref-only write would land on the NEXT page load. (That is exactly the
+ *      trap the raw-localStorage play-test hit.)
+ *   4. THE PREF IS WRITTEN EVEN WHEN THE ENGINE REFUSES THE DECLARATION. Outside
+ *      Lobby/Consent core/match.js says no; the standing answer must survive it
+ *      or the player's choice is silently discarded.
+ */
+{
+  function fakeLobbyMatch(o = {}) {
+    const subs = { consent: new Set(), opp: new Set(), phase: new Set(), fail: new Set() };
+    const declared = [];
+    const m = {
+      declared,
+      isHost: true,
+      phase: o.phase === undefined ? GoonMatchPhase.Consent : o.phase,
+      localDisplayName: 'you',
+      localAppVersion: '1.0',
+      remoteHello: { display_name: 'them' },
+      opponent: { displayName: 'them', appVersion: '1.0', attentionMode: 1 },
+      remoteMediaPrep: false,
+      consentSheet: { live_duration_sec: 720, toy_cap: 0.7, payload_min_gap_ms: 30000 },
+      localConsentConfirmed: false,
+      remoteConsentConfirmed: false,
+      localMediaTransfer: false,
+      remoteMediaTransfer: false,
+      peerSupportsTransfer: false,
+      localVoiceNotes: !!o.localVoiceNotes,
+      remoteVoiceNotes: !!o.remoteVoiceNotes,
+      peerSupportsVoice: o.peerSupportsVoice !== false,
+      setMediaTransfer() { return true; },
+      /** The engine's real rule: Lobby/Consent only. Everything else refuses. */
+      setLocalVoiceNotes(on) {
+        declared.push(!!on);
+        if (m.phase !== GoonMatchPhase.Lobby && m.phase !== GoonMatchPhase.Consent) return false;
+        m.localVoiceNotes = !!on;
+        for (const fn of Array.from(subs.consent)) fn();
+        return true;
+      },
+      proposeConsent() {}, confirmConsent() {}, withdrawConsent() {},
+      onConsentChanged(fn) { subs.consent.add(fn); return () => subs.consent.delete(fn); },
+      onOpponentStateChanged(fn) { subs.opp.add(fn); return () => subs.opp.delete(fn); },
+      onPhaseChanged(fn) { subs.phase.add(fn); return () => subs.phase.delete(fn); },
+      onLobbyFailed(fn) { subs.fail.add(fn); return () => subs.fail.delete(fn); },
+      _subs: subs,
+    };
+    return m;
+  }
+
+  function mountLobby({ prefs, sheets, match }) {
+    const container = dom.byId.get('scr-lobby');
+    container.replaceChildren();
+    const handle = lobbyScreen.mount(container, {
+      actions: { goTitle() {}, leave() {} },
+      audio: null, prefs, sheets, discord: null, logger: quiet,
+      session: { caps: {} },
+      getMatch: () => match,
+      getTransport: () => ({ state: GoonTransportState.ConnectedP2P, onStateChanged() { return () => {}; } }),
+    });
+    return { container, handle };
+  }
+
+  // ---- 1 + 2: the row, and the gate that came with it ----------------------
+  {
+    const prefs = createPrefs();
+    const sheets = fakeSheets('go');
+    const match = fakeLobbyMatch();
+    const { container, handle } = mountLobby({ prefs, sheets, match });
+
+    const row = findOne(container, 'gg-voice-lobbyrow');
+    ok(!!row, 'THE DOOR: the lobby carries a voice-note row, on the screen the terms are signed on');
+    const input = findTag(row, 'input')[0];
+    ok(!!input && input.getAttribute('type') === 'checkbox', 'and it is a real checkbox, not a sentence');
+    ok(input.disabled === true, 'THE GATE CAME WITH IT: inert until the acknowledgment has been read');
+    ok(row._classes.has('is-disabled'), 'and the row says so');
+    const sub = findOne(container, 'gg-voice-lobbyline');
+    ok(sub && sub.textContent === S.voice.lobbyLocked, 'the sub-line says what to press, from strings');
+
+    // The belt-and-braces path: a host that ignores `disabled` still cannot
+    // switch a microphone on without both paragraphs having been on screen.
+    input.checked = true;
+    input.dispatchEvent({ type: 'change', target: input });
+    ok(input.checked === false, 'a change on the un-acked row is REVERTED on the spot');
+    ok(prefs.get('voiceNotesEnabled') === false, 'and writes nothing before the modal is answered');
+    ok(sheets.calls.length === 1, 'it opens the acknowledgment sheet instead');
+    const ack = sheets.calls[0];
+    ok(ack.headline === S.voice.ack.headline && ack.line === S.voice.ack.line,
+      'the SAME sheet ui/screens/voice.js opens — one gate, two doors');
+    await sleep(5);
+    ok(prefs.get('voiceAckSeen') === true, '"I understand" records the acknowledgment');
+    ok(prefs.get('voiceNotesEnabled') === true, 'and switches on the thing the player reached for');
+    ok(match.localVoiceNotes === true,
+      'NO RELOAD: the declaration is on THIS match, not waiting for the next attachMatch');
+
+    handle.unmount();
+  }
+
+  // ---- cancel changes nothing ----------------------------------------------
+  {
+    const prefs = createPrefs();
+    const sheets = fakeSheets('cancel');
+    const match = fakeLobbyMatch();
+    const { container, handle } = mountLobby({ prefs, sheets, match });
+    click(findOne(container, 'gg-voice-lobbyrow'));
+    await sleep(5);
+    ok(sheets.calls.length === 1, 'clicking the ROW opens the sheet (the disabled input cannot)');
+    ok(prefs.get('voiceAckSeen') === false && prefs.get('voiceNotesEnabled') === false,
+      'and cancelling records nothing at all');
+    ok(match.declared.length === 0, 'nothing was declared to the opponent either');
+    handle.unmount();
+  }
+
+  // ---- 3: an acked player, both halves, both ways ---------------------------
+  {
+    const prefs = createPrefs();
+    prefs.set('voiceAckSeen', true);
+    const match = fakeLobbyMatch();
+    const { container, handle } = mountLobby({ prefs, sheets: fakeSheets(), match });
+
+    const row = findOne(container, 'gg-voice-lobbyrow');
+    const input = findTag(row, 'input')[0];
+    ok(input.disabled === false, 'an acked player gets a live row on mount');
+    ok(input.checked === false, 'unticked, because the pref is off');
+
+    input.checked = true;
+    input.dispatchEvent({ type: 'change', target: input });
+    ok(prefs.get('voiceNotesEnabled') === true, 'ticking writes the standing answer');
+    ok(match.declared[match.declared.length - 1] === true && match.localVoiceNotes === true,
+      'AND declares it to the opponent on this match — that is the no-reload half');
+
+    input.checked = false;
+    input.dispatchEvent({ type: 'change', target: input });
+    ok(prefs.get('voiceNotesEnabled') === false && match.localVoiceNotes === false,
+      'unticking does both again');
+    handle.unmount();
+  }
+
+  // ---- 4: the engine refusing must not lose the player's answer -------------
+  {
+    const prefs = createPrefs();
+    prefs.set('voiceAckSeen', true);
+    const match = fakeLobbyMatch({ phase: GoonMatchPhase.Draft });
+    const { container, handle } = mountLobby({ prefs, sheets: fakeSheets(), match });
+    const input = findTag(findOne(container, 'gg-voice-lobbyrow'), 'input')[0];
+    ok(input.disabled === true, 'past Consent the row is not editable (the engine would refuse anyway)');
+    // ...and if it is driven anyway (a host that ignores `disabled`), the pref
+    // still records the answer for the next attachMatch rather than dropping it.
+    input.checked = true;
+    input.dispatchEvent({ type: 'change', target: input });
+    ok(prefs.get('voiceNotesEnabled') === true,
+      'a refused declaration still leaves the STANDING answer written — boot re-seeds from it');
+    ok(match.localVoiceNotes === false, 'while the engine kept its own rule and declared nothing');
+    handle.unmount();
+  }
+
+  // ---- the four status sentences, unchanged, now as the row's sub-line ------
+  {
+    const cases = [
+      [{ localVoiceNotes: true, remoteVoiceNotes: true }, S.voice.lobbyBoth, 'both on'],
+      [{ localVoiceNotes: true, remoteVoiceNotes: true, peerSupportsVoice: false }, S.voice.lobbyPeerOld, 'their build cannot'],
+      [{ localVoiceNotes: true }, S.voice.lobbyYours, 'only mine'],
+      [{ remoteVoiceNotes: true }, S.voice.lobbyTheirs, 'only theirs'],
+      [{}, S.voice.lobbySub, 'neither: the row explains itself instead of saying nothing'],
+    ];
+    for (const [state, want, why] of cases) {
+      const prefs = createPrefs();
+      prefs.set('voiceAckSeen', true);
+      const match = fakeLobbyMatch(state);
+      const { container, handle } = mountLobby({ prefs, sheets: fakeSheets(), match });
+      const sub = findOne(container, 'gg-voice-lobbyline');
+      ok(sub && sub.textContent === want, 'the sub-line — ' + why, sub && sub.textContent);
+      const value = findOne(findOne(container, 'gg-voice-lobbyrow'), 'gg-row-value');
+      ok(value && value.textContent === (state.remoteVoiceNotes ? S.voice.lobbyTheirsOn : S.voice.lobbyTheirsOff),
+        'and the chip carries THEIR half, like the transfer row above it');
+      handle.unmount();
+    }
+  }
+
+  // ---- source pins ----------------------------------------------------------
+  {
+    const src = stripComments(read('ui/screens/lobby.js'));
+    ok(/prefs\?\.set\?\.\('voiceNotesEnabled'/.test(src) && /match\.setLocalVoiceNotes\(want\)/.test(src),
+      'setVoiceEnabled writes BOTH halves — the local receive gate and the wire declaration');
+    ok(src.indexOf("prefs?.set?.('voiceNotesEnabled'") < src.indexOf('match.setLocalVoiceNotes(want)'),
+      'and the pref FIRST, so a consent frame can never announce a mic the local gate would refuse');
+    ok(/S\.voice\.ack\.headline/.test(src) && /S\.voice\.ack\.lineTwo/.test(src),
+      'the ack copy is S.voice.ack, the same deck the voice screen reads — never a second wording');
+    for (const key of Array.from(src.matchAll(/S\.voice\.([a-zA-Z0-9_]+)/g), (m) => m[1])) {
+      if (key === 'ack') continue;
+      ok(S.voice[key] !== undefined, 'the lobby reads a string that exists: S.voice.' + key);
+    }
+  }
 }
 
 console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);

@@ -511,6 +511,7 @@ let currentMatch = null;
 let currentTransport = null;
 let currentSd = null;        // {presenter, inputs, dispose} from ui/sd
 let voice = null;            // ui/voice/voiceService.js — MATCH-SCOPED, see attachMatch
+let micGateSaid = false;     // the mic breadcrumb is once per match — see reportMicGate
 let hudHandle = null;
 let mercyHandle = null;
 let phaseUnsubs = [];
@@ -991,6 +992,8 @@ function attachMatch(match, transport) {
   currentMatch = match;
   currentTransport = transport || (goonSession ? goonSession.transport : null);
   escMercied = false;
+  // A new match is a new answer to "is there a mic on the desk". See reportMicGate.
+  micGateSaid = false;
 
   // EVERY match starts with the player's picks in the deck, proven rather than
   // assumed. `onItems` is the reactive path and it is the one that normally does
@@ -1357,6 +1360,57 @@ function detachMatch() {
   paintProbe();
 }
 
+/* ----------------------------------------------------------------------------
+ * THE MIC BREADCRUMB — one warn, once per match, when the duel goes live with no
+ * mic on the desk.
+ *
+ * THE BUG THIS EXISTS FOR (owner, 2026-08-05): "I cannot see the mic button."
+ * Three play-tests, three setups (iPhone Safari, iPhone Safari incognito, a
+ * desktop pair), never once visible — and the page said absolutely nothing in
+ * any of the three, because a hidden mic is the CORRECT rendering of five ANDed
+ * booleans and none of them is written down anywhere a play-test can read. Every
+ * one of those three was the same first gate (their own seat had never opted
+ * in), and finding that out took a code read rather than a log line.
+ *
+ * WARN, not info, and that is deliberate: warn is the level that reaches the C#
+ * log through bridge.log AND the phone's ?debug=1 overlay. This is the exact
+ * pattern (and the exact reasoning) as net/mediaQueue.js `whyNoTags` — the
+ * untagged-payload breadcrumb that ended the same kind of three-round hunt on
+ * the media lane a day earlier.
+ *
+ * ONCE. A match that reaches Live, then SuddenDeath, then a relay REBUILD would
+ * otherwise say it three times for one fact; `micGateSaid` is cleared in
+ * attachMatch, so a genuinely new match gets a genuinely new line.
+ */
+function reportMicGate() {
+  if (micGateSaid) return;
+  micGateSaid = true;
+  const mic = hudHandle && hudHandle.parts ? hudHandle.parts.mic : null;
+  try {
+    if (!voice) { logger.warn('voice mic hidden: no voice service (createVoiceService failed at attach)'); return; }
+    // The two facts the SERVICE cannot see for itself: the desk's zen bit and
+    // whether this host has a microphone API at all. Both are read defensively —
+    // a handle-shaped stub (no service = a no-op mic) answers neither.
+    let hudHidden = false;
+    let micSupported;
+    try { if (mic && typeof mic.shown === 'function' && typeof mic.available === 'function') hudHidden = mic.available() && !mic.shown(); }
+    catch (_e) { /* leave it false */ }
+    try { if (mic && mic.recorder && typeof mic.recorder.supported === 'function') micSupported = !!mic.recorder.supported(); }
+    catch (_e) { /* leave it undefined — the gate is then not reported */ }
+
+    const why = typeof voice.whyUnavailable === 'function'
+      ? voice.whyUnavailable({ hudHidden, micSupported })
+      : (voice.available() ? '' : 'unknown (this build has no whyUnavailable)');
+    // Shown and working: say nothing. A quiet log is the good outcome.
+    if (!why && mic && typeof mic.shown === 'function' && mic.shown()) return;
+    if (!why) { logger.warn('voice mic hidden: the service says live but the desk has no strip (mount failure?)'); return; }
+    logger.warn('voice mic hidden: ' + why);
+  } catch (e) {
+    // A diagnostic that can break a match is worse than no diagnostic.
+    logger.warn('voice mic gate check threw: ' + ((e && e.message) || e));
+  }
+}
+
 function mountHudNow() {
   if (hudHandle || !mountHud || !currentMatch) return;
   try {
@@ -1491,6 +1545,9 @@ function onPhase(phase) {
       router.hide();
       mountHudNow();
       mountMercyNow();
+      // AFTER the HUD, because the answer is partly about the strip that was
+      // just (not) put on the desk. See reportMicGate.
+      reportMicGate();
       try { discord?.setRpState?.('live'); } catch (_e) { /* presence is never load-bearing */ }
       break;
 

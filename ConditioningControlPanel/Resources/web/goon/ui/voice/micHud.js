@@ -1,14 +1,23 @@
 /* ============================================================================
  * ui/voice/micHud.js — the held mic, and the chip that says they answered.
  *
- * Two small things, mounted from ui/hud.js into two slots of the opponent
- * column, because both of them are about the person on the other side:
+ * Two small things, mounted from ui/hud.js into two slots that point in opposite
+ * directions, because one of them is a CONTROL and the other is a READOUT:
  *
- *   THE MIC        a 48px button under their monitor. Press and hold; the strip
- *                  grows LEFTWARDS out of the button with a pulsing dot, the
- *                  elapsed seconds and "slide left to cancel". Release sends.
- *   THE CHIP       a speaking indicator directly under their bezel while one of
- *                  THEIR notes is playing, so a voice never arrives from nowhere.
+ *   THE MIC        a 48px button in the arsenal drawer, directly under the tiles
+ *                  — the emote is the last one on the right rail, and this is
+ *                  the thing a player reaches for next. (It sat under the
+ *                  opponent's monitor until 2026-08-05, where three play-tests
+ *                  running never found it: the owner looked "right under the
+ *                  Emote icon" every time, because holding a mic is a thing you
+ *                  DO.) Press and hold; the strip grows out of the button with a
+ *                  pulsing dot, the elapsed seconds and "slide left to cancel".
+ *                  Release sends. Which WAY it grows is a stylesheet fact — the
+ *                  drawer is the left gutter, so ui/hud.css anchors the strip
+ *                  left there and flips the paint order; nothing in this file
+ *                  knows or cares.
+ *   THE CHIP       a speaking indicator directly under THEIR bezel while one of
+ *                  their notes is playing, so a voice never arrives from nowhere.
  *
  * ────────────────────────────────────────────────────────────── the gesture ──
  *
@@ -188,7 +197,7 @@ export function sendReasonLine(reason, waitSec = 1) {
 
 /**
  * @param {object}   o
- * @param {Element}  o.host        the mic's slot in the opponent column (.gg-voice-host)
+ * @param {Element}  o.host        the mic's slot in the arsenal drawer (.gg-voice-host)
  * @param {Element}  [o.chipHost]  the incoming chip's slot, under their bezel
  * @param {object}   [o.voice]     ui/voice/voiceService.js handle. null = no mic, ever
  * @param {object}   [o.audio]     {sfx(id)}

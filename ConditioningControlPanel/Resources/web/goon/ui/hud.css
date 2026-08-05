@@ -2457,20 +2457,30 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
  * VOICE NOTES — the held mic and the incoming chip (ui/voice/micHud.js).
  *
  * PLACEMENT IS FLOW, NOT COORDINATES, and that is the whole safety argument.
- * Both slots are ordinary children of `.gg-rightcol` (ui/hud.js builds them
- * around the receipts), so the browser keeps them inside the monitor column at
- * every viewport. They cannot reach MERCY's bottom-centre gutter, the closeness
- * dial, either rail, the announcer ribbon or the bezel itself, because none of
- * them is positioned against the frame — unlike the emote sheet and the
- * portrait rails, there is no band here to measure and nothing to re-measure
- * when the phone pass moves one. Sudden death takes them away with the rest of
- * the body (.gg-hud-frame.is-sd .gg-hud-body), for free.
+ * Both slots are ordinary flow children — the MIC is the last child of
+ * `.gg-arsenal-panel`, directly under the two rails whose last right-hand tile
+ * is the emote (2026-08-05: the owner looked for it "right under the Emote
+ * icon" three play-tests running, and holding a mic is a thing you DO, so it
+ * belongs with the other things you do); the CHIP stays in `.gg-rightcol` under
+ * their bezel, because it is about THEIR voice. Neither can reach MERCY's
+ * bottom-centre gutter, the closeness dial, the announcer ribbon or the bezel
+ * itself, because neither is positioned against the frame — unlike the emote
+ * sheet and the portrait rails, there is no band here to measure and nothing to
+ * re-measure when the phone pass moves one. Sudden death takes them away with
+ * the rest of the body (.gg-hud-frame.is-sd .gg-hud-body), for free.
  *
- * THE STRIP GROWS INSIDE ITS OWN SLOT. `.gg-voice-host` is a fixed 48px row and
- * the strip is absolutely placed against it, anchored right — so a recording
- * expands LEFTWARDS over the (pointer-transparent) well and NOTHING on the desk
- * moves while a button is being held. A layout shift under a live pointer
- * capture is how a hold gets dropped half way through a sentence.
+ * THE STRIP GROWS INSIDE ITS OWN SLOT, AND IT GROWS AWAY FROM ITS EDGE OF THE
+ * SCREEN. `.gg-voice-host` is a fixed 48px row and the strip is absolutely
+ * placed against it, so a recording expands over the (pointer-transparent) well
+ * and NOTHING on the desk moves while a button is being held — a layout shift
+ * under a live pointer capture is how a hold gets dropped half way through a
+ * sentence. The DIRECTION follows the slot's home: the arsenal drawer is on the
+ * LEFT of the desk, so the strip is anchored left and grows RIGHTWARDS, with
+ * the button first in the reading order via `row-reverse` (the DOM order is
+ * meta-then-button and micHud must never re-append a node — see its header — so
+ * this is a paint-order flip, not a re-parent). The right-anchored variant is
+ * kept below for `.gg-rightcol`, which is where the chip lives and where a
+ * future slot would land.
  *
  * POINTER-EVENTS — THE 0,2,0 TRAP, for the third time in this file. `.gg-hud-
  * frame .gg-plate { pointer-events: auto }` near the top is specificity 0,2,0,
@@ -2519,6 +2529,29 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
 }
 /* idle: no plate, no box — just the round button, exactly like the gear */
 .gg-voice:not(.gg-plate) { background: none; border: 0; backdrop-filter: none; padding-left: 0; }
+
+/* ---- THE ARSENAL-DRAWER VARIANT: anchored LEFT, growing RIGHT --------------
+ * Same nodes, same classes, same machine — only the edge it is pinned to and
+ * the direction the strip unfolds. The drawer sits on the left gutter, so a
+ * strip that grew leftwards out of it would run off the screen inside two
+ * words. `row-reverse` puts the button back on the outside edge (nearest the
+ * finger, where a 48px target belongs) without touching the DOM order micHud
+ * relies on. The host is width:100% of a two-tile-wide panel, so the strip is
+ * allowed to overhang it — the panel is pointer-transparent (sidebar rule 1)
+ * and only `.gg-voice-btn` re-opts in, so nothing under the overhang is ever
+ * swallowed. */
+.gg-arsenal-panel > .gg-voice-host { margin-top: 0.15rem; }
+.gg-arsenal-panel .gg-voice {
+  right: auto;
+  left: 0;
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+  padding: 0 0.85rem 0 0;
+}
+.gg-arsenal-panel .gg-voice:not(.gg-plate) { padding-right: 0; }
+/* …and the hint, which is a flow child of the host rather than of the strip:
+   it reads from the same edge the strip now grows from. */
+.gg-arsenal-panel .gg-voice-hint { right: auto; left: 0; text-align: left; }
 
 /* THE 0,2,0 OPT-OUT (see the header) + the one re-opt-in. */
 .gg-hud-frame .gg-voice,
