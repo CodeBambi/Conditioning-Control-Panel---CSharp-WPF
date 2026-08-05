@@ -324,14 +324,12 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
 
   const scoreBox = add(top, el('div', 'gg-scorebox'));
   const scoreEl = add(scoreBox, el('div', 'gg-score', '0'));
-  const pipRow = add(scoreBox, el('div', 'gg-pips'));
-  const pips = [];
-  for (let i = 0; i < GoonConsts.ChargeCap; i++) pips.push(add(pipRow, el('i', 'gg-pip')));
+  const chargeEl = add(scoreBox, el('div', 'gg-charges', S.hud.charges(0, GoonConsts.ChargeCap)));
 
   /* NO SCORE-MULTIPLIER READOUT (owner, 2026-08-05: "the risk level indicator
    * is not intuitive — the heat gauge already does the job").
    *
-   * A third line used to sit here under the charge pips: `.gg-mult`, née
+   * A third line used to sit here under the charge readout: `.gg-mult`, née
    * `.gg-risk`, painting `match.scoring.riskMultiplier` as "×1.30 score". It
    * was the LAST player-facing limb of the risk system — batch 7 took the
    * seven-segment tier meters and the per-tile pips off the draft screen and
@@ -346,9 +344,29 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
    * change. The score in the line above is the multiplier's whole visible
    * effect, which is the part a player could ever act on.
    *
-   * THE CHARGE PIPS ABOVE ARE NOT IT and must stay: they are what you are
-   * holding to throw, the wire validates against them, and the arsenal's cost
-   * pips are read against them. */
+   * AND THE CHARGE PIPS WENT TOO (owner, 2026-08-05, second pass: "the little
+   * yellow squares that we were supposed to have removed"). The first pass kept
+   * them on the argument that they are NOT the risk indicator — they are what
+   * you are holding to throw, the wire validates throws against them and the
+   * arsenal pays its costs out of them, so they were real and load-bearing in a
+   * way the multiplier never was. That argument was about the DATA and the
+   * owner's complaint was about the SHAPE. A row of five rotated squares under
+   * the score is indistinguishable, on a phone, from the row of rotated squares
+   * that had just been taken off the draft tiles: the player cannot tell "your
+   * ammunition" from "the risk meter you asked me to delete" by looking, and
+   * being right about the difference does not help them at arm's length.
+   *
+   * So the DATA stays and the SHAPE goes: one small line, "3 / 5 charges", in
+   * words. It is strictly more legible than the pips ever were — it survives a
+   * squint, it reads aloud, it does not depend on a fill colour, and it says the
+   * cap out loud instead of asking you to count outlines to find it. There is no
+   * diamond left anywhere in this HUD; the only pips on the desk now are the
+   * arsenal's amber `.gg-cost-pip` cost dots, which are round, attached to the
+   * tile whose price they are, and were never part of this complaint.
+   *
+   * THE GAIN JUICE SURVIVES INTACT — sfx('gg-charge') and the floating "+1"
+   * chip both still fire in paintCharges(). Only the per-pip pop animation died
+   * with the pips, because there is no longer a pip to pop. */
 
   const timerBox = add(top, el('div', 'gg-timer gg-plate'));
   const timerClock = add(timerBox, el('div', 'gg-timer-clock', '0:00'));
@@ -860,19 +878,24 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     text(scoreEl, String(shownScore));
   }
 
+  /* THE CHARGE COUNT. Memoised on `lastCharges` exactly as the pip row was, for
+   * the same two reasons: the 5 Hz poll would otherwise rewrite an unchanged
+   * string twenty times a second, and the "+1" flourish has to fire ONCE on the
+   * edge rather than on every tick that finds the number high.
+   *
+   * `lastCharges >= 0` is the mount guard: the very first paint moves 0 -> N and
+   * is not a gain the player did anything to earn, so it must not bang the sfx
+   * on the way into a match that resumed with charges already banked. */
   function paintCharges() {
     const s = match.scoring;
     const c = s ? (s.charges | 0) : 0;
     if (c === lastCharges) return;
     const gained = c > lastCharges && lastCharges >= 0;
     lastCharges = c;
-    for (let i = 0; i < pips.length; i++) cls(pips[i], 'is-on', i < c);
+    text(chargeEl, S.hud.charges(c, GoonConsts.ChargeCap));
     if (!gained) return;
     sfx(audio, 'gg-charge');
-    const pip = pips[Math.max(0, c - 1)];
     fx.play(400, () => {
-      cls(pip, 'is-pop', true);
-      setTimeout(() => cls(pip, 'is-pop', false), 400);
       const chip = el('span', 'gg-plus1', '+1');
       if (!chip) return;
       add(scoreBox, chip);
