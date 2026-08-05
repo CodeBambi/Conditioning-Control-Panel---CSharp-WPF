@@ -508,6 +508,10 @@ export const S = Object.freeze({
     holdHint: 'hold the mic to record',
     /** While held. The gesture out is a slide, and it has to be said, not guessed. */
     slideToCancel: 'slide left to cancel',
+    /** The last three seconds (micHud.MIC_COUNTDOWN_MS). The question stops being
+       "how much have I said" and becomes "how long have I got", so the number
+       does too — a countdown, not a fraction to subtract mid-sentence. */
+    recordCountdown: (sec) => Math.max(0, sec) + 's left',
     /** The three outcomes, in the order a player meets them. */
     sending: 'sending…',
     sent: 'sent',

@@ -4392,16 +4392,22 @@ const audioMod = await import('../ui/audio.js');
       _sends: sends,
     };
   }
-  function fakeRec() {
-    const st = { starts: 0, stops: 0, cancels: 0, recording: false, disposed: false, capSubs: new Set() };
+  /**
+   * `elapsed` and `cap` are MUTABLE on the returned `st` so the countdown block
+   * below can walk the clock towards the ceiling without waiting ten real
+   * seconds — the strip reads both off the recorder every repaint, which is the
+   * whole reason it may not keep a second copy of the cap.
+   */
+  function fakeRec({ elapsed = 900, cap = 10000 } = {}) {
+    const st = { starts: 0, stops: 0, cancels: 0, recording: false, disposed: false, capSubs: new Set(), elapsed, cap };
     const api = {
       start() { st.starts++; st.recording = true; return Promise.resolve({ ok: true, reason: 'recording' }); },
       stop() { st.stops++; st.recording = false; return Promise.resolve({ ok: true, reason: 'stopped', blob: { size: 64 }, durMs: 900 }); },
       cancel() { st.cancels++; st.recording = false; return Promise.resolve({ ok: false, reason: 'cancelled' }); },
       state() { return st.recording ? 'recording' : 'idle'; },
       isRecording() { return st.recording; },
-      elapsedMs() { return 900; },
-      maxMs() { return 10000; },
+      elapsedMs() { return st.elapsed; },
+      maxMs() { return st.cap; },
       mimeType() { return ''; },
       onCapped(fn) { st.capSubs.add(fn); return () => st.capSubs.delete(fn); },
       dispose() { st.disposed = true; st.recording = false; },
@@ -4412,11 +4418,11 @@ const audioMod = await import('../ui/audio.js');
     type, pointerId: id, clientX: x, clientY: 0, preventDefault() {},
   });
   /** One mounted mic with its fakes, live and idle. */
-  function mountMic() {
+  function mountMic(recOpts) {
     const host = document.createElement('div');
     const chipHost = document.createElement('div');
     const v = fakeVoice();
-    const r = fakeRec();
+    const r = fakeRec(recOpts);
     const mic = micMod.mountMicHud({ host, chipHost, voice: v, recorder: r.api });
     return { host, chipHost, v, r, mic, btn: mic.parts.button };
   }
@@ -4526,6 +4532,114 @@ const audioMod = await import('../ui/audio.js');
     m.mic.unmount();
   }
 
+  /* --- 20c-bis. ZEN TAKES THE MIC, IN JS AND NOT ONLY IN CSS ---------------
+   * The stylesheet's `.gg-hud--zen .gg-voice-host { display:none }` is asserted
+   * in 20f, and on its own it is NOT ENOUGH: pointer capture bypasses hit
+   * testing, so hiding the slot under a live hold would leave a recording (and
+   * the OS microphone light) running with nothing on screen to say so. The bit
+   * is pushed into the handle, and it composes with availability rather than
+   * replacing it. */
+  {
+    const m = mountMic();
+    ok(typeof m.mic.setHudHidden === 'function', 'the mic takes the desk\'s hidden bit');
+    m.v._set(true);
+    ok(m.host.hidden === false && m.mic.shown() === true, 'live and shown, to start');
+    m.mic.setHudHidden(true);
+    ok(m.host.hidden === true, 'ZEN HIDES THE BUTTON — at the host, not only in the stylesheet');
+    ok(m.mic.shown() === false, 'and shown() says so');
+    ok(m.mic.available() === true, '...while available() still reports the FEATURE, which zen did not change');
+    m.mic.setHudHidden(true);
+    ok(m.host.hidden === true, 'pushing the same bit twice is a no-op');
+    m.mic.setHudHidden(false);
+    ok(m.host.hidden === false, 'un-zen gives it back');
+
+    // The two bits AND. Whichever one is false, the mic is gone.
+    m.mic.setHudHidden(true);
+    m.v._set(false);
+    m.mic.setHudHidden(false);
+    ok(m.host.hidden === true, 'leaving zen does NOT resurrect a mic the feature itself has taken away');
+    m.v._set(true);
+    ok(m.host.hidden === false, 'and both being true is the only state that shows it');
+    m.mic.unmount();
+  }
+
+  {
+    // zen DURING a hold: the recording dies with the surface it was drawn on
+    const m = mountMic();
+    m.v._set(true);
+    ptr(m.btn, 'pointerdown', 200);
+    await sleep(320);
+    ok(m.mic.isRecording() === true, 'a hold is running');
+    m.mic.setHudHidden(true);
+    await sleep(20);
+    ok(m.r.st.cancels === 1, 'hiding the HUD mid-hold CANCELS the recording — never a mic behind a hidden strip');
+    ok(m.v._sends.length === 0, 'and nothing is sent: the player was hiding the UI, not finishing a note');
+    ok(m.mic.isRecording() === false, 'the gesture is over');
+    ok(m.host.hidden === true, 'and the slot is gone');
+    m.mic.unmount();
+  }
+
+  /* --- 20c-ter. THE LAST THREE SECONDS ARE A COUNTDOWN ---------------------
+   * Elapsed for the first seven ("3.4s / 10s"), remaining for the last three
+   * ("2s left") — the question changes, so the number does. Both readings come
+   * off the RECORDER's own cap, which is why this fake can shrink it. */
+  {
+    const m = mountMic({ elapsed: 0, cap: 10000 });
+    m.v._set(true);
+    ptr(m.btn, 'pointerdown', 200);
+    await sleep(320);
+    const timeEl = m.mic.parts.timeEl;
+
+    m.r.st.elapsed = 4200;
+    await sleep(150);
+    ok(timeEl.textContent === S20.voice.recordTimer(4200, 10000),
+      'mid-note the strip reads elapsed / cap', timeEl.textContent);
+    ok(!hasClass(m.mic.parts.strip, 'is-ending'), 'and is not warning about anything yet');
+
+    m.r.st.elapsed = 10000 - micMod.MIC_COUNTDOWN_MS + 1;
+    await sleep(150);
+    ok(hasClass(m.mic.parts.strip, 'is-ending'),
+      'crossing MIC_COUNTDOWN_MS turns the strip hot');
+    ok(timeEl.textContent === S20.voice.recordCountdown(3),
+      'and the number becomes a countdown, from strings.js', timeEl.textContent);
+
+    m.r.st.elapsed = 9200;
+    await sleep(150);
+    ok(timeEl.textContent === S20.voice.recordCountdown(1),
+      'the last whole second is "1s left", never "0s left" for a whole second', timeEl.textContent);
+
+    // ...and the warning belongs to ONE note: it may not be inherited.
+    ptr(m.btn, 'pointerup', 200);
+    await sleep(30);
+    ok(!hasClass(m.mic.parts.strip, 'is-ending'), 'sending clears it');
+    // "sent" holds the strip for MIC_FLASH_MS and onDown only fires from idle —
+    // the second hold has to wait for the fold, exactly as a player's would.
+    await sleep(micMod.MIC_FLASH_MS + 120);
+    m.r.st.elapsed = 0;
+    ptr(m.btn, 'pointerdown', 200);
+    await sleep(320);
+    ok(!hasClass(m.mic.parts.strip, 'is-ending') &&
+       m.mic.parts.timeEl.textContent === S20.voice.recordTimer(0, 10000),
+      'so the NEXT hold starts on the elapsed reading, not the last one\'s hot number',
+      m.mic.parts.timeEl.textContent);
+    m.mic.unmount();
+  }
+
+  {
+    // a shrunken cap counts down from ITSELF — there is no second copy of 10s
+    const m = mountMic({ elapsed: 0, cap: 4000 });
+    m.v._set(true);
+    ptr(m.btn, 'pointerdown', 200);
+    await sleep(320);
+    m.r.st.elapsed = 2500;
+    await sleep(150);
+    ok(hasClass(m.mic.parts.strip, 'is-ending') &&
+       m.mic.parts.timeEl.textContent === S20.voice.recordCountdown(2),
+      'the countdown is read off rec.maxMs(), not VN_MAX_MS',
+      m.mic.parts.timeEl.textContent);
+    m.mic.unmount();
+  }
+
   {
     // their note arriving
     const m = mountMic();
@@ -4590,10 +4704,42 @@ const audioMod = await import('../ui/audio.js');
       'exposed on parts, like every other sub-mount');
     voice20._set(true);
     ok(micHost20.hidden === false, 'the desk shows it on the availability edge');
+
+    /* THE ZEN TOGGLE REALLY REACHES IT. Clicking the button the player clicks,
+     * not calling the setter: the wiring between setZen and the mic handle is
+     * the thing under test, and it has a hoisting order to get wrong. */
+    hud20.parts.zen.button.dispatchEvent({ type: 'click' });
+    ok(hud20.parts.zen.on === true, 'the zen button toggles the desk');
+    ok(micHost20.hidden === true, 'and the mic goes with the rest of the chrome');
+    hud20.parts.zen.button.dispatchEvent({ type: 'click' });
+    ok(hud20.parts.zen.on === false && micHost20.hidden === false,
+      'the toggle is its own undo for the mic too');
+    ok(hud20.parts.mic.shown() === true, 'and the handle agrees it is back');
+
     hud20.unmount();
     ok(dom.byId.get('gg-hud').children.length === 0, 'and it comes down with the desk');
     ok(match20._subs.released === match20._subs.taken, 'with no subscription left behind',
       `${match20._subs.released}/${match20._subs.taken}`);
+  }
+  {
+    /* A REMEMBERED ZEN, which is the ordering trap: the pref is read before the
+     * mic is mounted, so the bit has to be REPLAYED into the handle. Without it
+     * a returning player's first zen press would SHOW the mic instead of hiding
+     * it, and the second would hide it — the toggle inverted for one match. */
+    const match20z = makeFakeMatch();
+    const voice20z = fakeVoice();
+    const hud20z = hudMod.mountHud({
+      match: match20z, audio: { sfx() {} }, voice: voice20z,
+      prefs: { get: (k) => k === 'hudZen', set() {} },
+    });
+    const micHost20z = findOne(dom.byId.get('gg-hud'), 'gg-voice-host');
+    voice20z._set(true);
+    ok(micHost20z.hidden === true,
+      'a zen remembered from the last match hides the mic at mount, not after the first click');
+    hud20z.parts.zen.button.dispatchEvent({ type: 'click' });
+    ok(hud20z.parts.zen.on === false && micHost20z.hidden === false,
+      'and the FIRST press is the one that brings it back');
+    hud20z.unmount();
   }
   {
     // no service (a build with the feature off, or a construction failure)
@@ -4654,6 +4800,15 @@ const audioMod = await import('../ui/audio.js');
 
     ok(/gg-hud--zen\s+\.gg-voice-host/.test(bare20) && /gg-hud--zen\s+\.gg-voice-chiphost/.test(bare20),
       'zen takes both slots away by name, like the dial and the effect chips');
+    // ...and the JS half of the same fact, which is the one that closes the mic.
+    const hudSrc20 = await fs20.readFile(url20.fileURLToPath(new URL('../ui/hud.js', import.meta.url)), 'utf8');
+    ok(/setHudHidden\(zenOn\)/.test(hudSrc20.replace(/\/\*[\s\S]*?\*\//g, '')),
+      'ui/hud.js pushes the zen bit into the mic — CSS cannot end a captured hold');
+
+    ok(/\.gg-voice\.is-ending\s+\.gg-voice-time/.test(bare20),
+      'the last three seconds have a colour as well as a word');
+    ok(css20.indexOf('.gg-voice.is-cancel .gg-voice-time') > css20.indexOf('.gg-voice.is-ending .gg-voice-time'),
+      '...and the cancel state is written later, so a note about to be dropped is not also "running out"');
     ok(/prefers-reduced-motion[\s\S]*gg-voice-dot[\s\S]*animation:\s*none/.test(bare20),
       'motion off stops the pulse without taking the state away');
     ok(/\.gg-voice-btn\s*\{[^}]*width:\s*48px[\s\S]{0,40}height:\s*48px/.test(bare20),

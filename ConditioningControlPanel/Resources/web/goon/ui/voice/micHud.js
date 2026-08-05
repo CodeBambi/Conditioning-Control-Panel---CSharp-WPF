@@ -17,8 +17,18 @@
  *        └──(>=250ms held)──> RECORDING ──┬── pointerup ─────────> stop + send
  *                                         ├── slid left >80px ───> cancel
  *                                         ├── 10.0s cap ─────────> stop + send
+ *                                         ├── the HUD hiding ────> cancel
  *                                         └── pointercancel /
  *                                             lostpointercapture > cancel
+ *
+ * THE LAST THREE SECONDS ARE A COUNTDOWN, NOT A FRACTION. For the first seven
+ * the strip reads "3.4s / 10s", which answers "how much have I said". Inside
+ * MIC_COUNTDOWN_MS it becomes "2s left" and the number turns hot — because the
+ * question has changed to "how long have I got", and a player mid-sentence
+ * should not have to subtract two numbers to find out. The cap itself is
+ * unchanged and still lives in ui/voice/recorder.js; this is only how it is
+ * SAID, and it is read off `rec.maxMs()` so a shrunken test recorder counts down
+ * from its own cap rather than from a second copy of ten seconds.
  *
  * WHY THE RECORDER STARTS ON pointerdown AND NOT AT THE 250ms MARK. The hold
  * threshold decides whether a note EXISTS, not when the microphone opens: a
@@ -59,6 +69,17 @@
  *   `pointerType` the way the pinch gesture is — desktop is a mouse and this is
  *   a desktop app first.
  *
+ *   A HIDDEN HUD IS A CLOSED MICROPHONE. ui/hud.css already takes both voice
+ *   slots away by name under zen, but CSS alone is not enough: pointer capture
+ *   BYPASSES HIT TESTING, so a `display:none` (or the `pointer-events:none` that
+ *   sudden death lays over the body) does not end a hold that is already
+ *   captured. Left to the stylesheet, tapping zen with a second finger while the
+ *   first one holds the mic would leave a recording running with the OS mic
+ *   indicator lit and no strip anywhere on screen to say so — exactly the hot mic
+ *   recorder.js rule 1 forbids. ui/hud.js therefore PUSHES the bit in via
+ *   `setHudHidden()`, and it ends a live gesture on the same cancel path the
+ *   feature going away takes. See applyPresence().
+ *
  * Node-import-safe: no DOM at import time, only inside mountMicHud().
  * ==========================================================================*/
 
@@ -74,6 +95,13 @@ export const MIC_CANCEL_PX = 80;
 export const MIC_ARM_PX = 40;
 /** How long "sent" / "cancelled" stays on the strip before it folds away. */
 export const MIC_FLASH_MS = 1200;
+/**
+ * How close to the cap the elapsed timer turns into a countdown. Three seconds
+ * is two beats of warning at the pace people actually talk — long enough to
+ * finish a short clause, short enough that the strip is not nagging for a third
+ * of every note.
+ */
+export const MIC_COUNTDOWN_MS = 3000;
 /** The hint caption's dwell (a tap, a refusal). Long enough to read once. */
 export const MIC_HINT_MS = 2200;
 /** Timer repaint cadence while recording. 10 fps is smooth for one decimal. */
@@ -167,7 +195,8 @@ export function sendReasonLine(reason, waitSec = 1) {
  * @param {object}   [o.recorder]  TEST SEAM — a pre-built recorder (see recorder.js)
  * @param {Function} [o.now]       TEST SEAM — the clock the hold/slide read
  * @param {Function} [o.onLog]
- * @returns {{unmount:Function, isRecording:Function, available:Function, parts:object}}
+ * @returns {{unmount:Function, isRecording:Function, available:Function,
+ *            shown:Function, setHudHidden:Function, parts:object}}
  */
 export function mountMicHud({
   host, chipHost = null, voice = null, audio = null,
@@ -190,6 +219,9 @@ export function mountMicHud({
       unmount() { led.run(); },
       isRecording() { return false; },
       available() { return false; },
+      /** Nothing to hide, but the desk pushes the bit unconditionally. */
+      setHudHidden() {},
+      shown() { return false; },
       parts: {},
     };
   }
@@ -255,8 +287,10 @@ export function mountMicHud({
   let hintTimer = 0;
   let chipTimer = 0;
   let willCancel = false;
+  let ending = false;            // inside MIC_COUNTDOWN_MS of the cap
   let lastSentAt = -Infinity;
   let live = false;              // the availability bit, from voice.onStateChanged
+  let hudHidden = false;         // the zen bit, pushed in by ui/hud.js
   let unmounted = false;
 
   function log(entry) {
@@ -279,6 +313,7 @@ export function mountMicHud({
     attr(strip, 'data-gg-voice', phase);
     cls(strip, 'is-rec', phase === 'rec');
     cls(strip, 'is-cancel', phase === 'rec' && willCancel);
+    cls(strip, 'is-ending', phase === 'rec' && ending);
     // .gg-plate ONLY while the strip is a strip: idle, it is a bare round
     // button and a plate behind it would be a box around a circle. goon.css's
     // html[data-gg-fx="hot"] rule hardens it for free while it is on.
@@ -291,13 +326,42 @@ export function mountMicHud({
     text(slideEl, S.voice.slideToCancel);
   }
 
+  /**
+   * The cap THIS recorder enforces. Asked every time rather than cached: the
+   * handle can be injected (the suite shrinks it to hundreds of milliseconds so
+   * it can wait a cap out), and VN_MAX_MS is only the fallback for a recorder
+   * old enough not to answer.
+   */
+  function capMs() {
+    try {
+      const m = typeof rec.maxMs === 'function' ? Number(rec.maxMs()) : 0;
+      if (m > 0) return m;
+    } catch (_e) { /* fall through */ }
+    return VN_MAX_MS;
+  }
+
   function paintTimer() {
     if (phase !== 'rec') return;
-    text(timeEl, S.voice.recordTimer(rec.elapsedMs(), VN_MAX_MS));
+    const max = capMs();
+    const elapsed = rec.elapsedMs();
+    const left = Math.max(0, max - elapsed);
+    /* THE HANDOVER. Two readings of the same clock — "how much have I said" and
+     * "how long have I got" — and the strip only ever shows the one the player
+     * is asking. The class change is the colour half and rides the same repaint,
+     * so the words and the red never disagree by a tick. */
+    const nextEnding = left <= MIC_COUNTDOWN_MS;
+    if (nextEnding !== ending) { ending = nextEnding; paintPhase(); }
+    // ceil, so the last whole second is spoken as "1s left" rather than "0s
+    // left" for its entire duration.
+    text(timeEl, ending ? S.voice.recordCountdown(Math.ceil(left / 1000)) : S.voice.recordTimer(elapsed, max));
   }
 
   function setPhase(next) {
     phase = next;
+    // The countdown belongs to ONE recording. Leaving 'rec' for any reason —
+    // sent, cancelled, taken away — puts the strip back on the elapsed reading
+    // before the next hold can inherit a hot number from the last one.
+    if (next !== 'rec') ending = false;
     paintPhase();
     if (next === 'rec') paintTimer();
   }
@@ -496,23 +560,57 @@ export function mountMicHud({
   /* --------------------------------------------------------- availability -- */
 
   /**
-   * The mic is not disabled when voice is off — it is NOT THERE. A greyed-out
+   * THE ONE PRESENCE RULE. Two independent bits decide whether the mic is on the
+   * desk at all, and NEITHER of them may leave a gesture running:
+   *
+   *   live       ui/voice/voiceService.js's five-fact predicate — both consents,
+   *              the peer's build, the phase, your own opt-in.
+   *   hudHidden  the desk's zen toggle, pushed in by ui/hud.js.
+   *
+   * The mic is not DISABLED when either is false — it is NOT THERE. A greyed-out
    * button would be a standing invitation to a feature the other player has not
    * agreed to, and there is nothing useful to say on it (S.voice.notActive is
    * the lobby's job, once, where the toggle is).
    *
-   * The host is hidden rather than emptied: rebuilding these nodes is what would
-   * release a live pointer capture (see the header).
+   * The host is HIDDEN rather than emptied: rebuilding these nodes is what would
+   * release a live pointer capture (see the header). And it is `hidden` on the
+   * host rather than a class, both times — the stylesheet's zen rule already
+   * hides the slot, but only the attribute survives a stylesheet that has not
+   * loaded, and only the JS below closes the microphone. A recording that
+   * outlives its own strip is the failure mode this function exists to make
+   * impossible.
+   *
+   * @param {'lost'|'zen'} why  what to log the abandoned recording as
    */
+  function applyPresence(why) {
+    const shown = live && !hudHidden;
+    host.hidden = !shown;
+    cls(host, 'is-live', shown);
+    // A caption that outlived its slot: the hint is a child of the host, so it
+    // goes dark with it, but it must not come BACK when zen does.
+    if (!shown && hint) hint.hidden = true;
+    // Going away mid-hold: the gesture dies with the surface it was drawn on,
+    // and the recorder is cancelled rather than left holding the microphone.
+    if (!shown && (phase === 'rec' || phase === 'hold')) finishGesture(why || 'lost');
+  }
+
   function setLive(on) {
     const next = !!on;
     if (next === live) return;
     live = next;
-    host.hidden = !live;
-    cls(host, 'is-live', live);
-    // Going away mid-hold: the gesture dies with the feature, and the recorder
-    // is cancelled rather than left holding the microphone open.
-    if (!live && (phase === 'rec' || phase === 'hold')) finishGesture('lost');
+    applyPresence('lost');
+  }
+
+  /**
+   * The desk hiding (zen) or showing its chrome. Idempotent, so ui/hud.js can
+   * push the remembered preference at mount time without knowing whether it
+   * differs from the default.
+   */
+  function setHudHidden(on) {
+    const next = !!on;
+    if (next === hudHidden) return;
+    hudHidden = next;
+    applyPresence('zen');
   }
   host.hidden = true;
   try { setLive(voice.available()); } catch (_e) { setLive(false); }
@@ -557,6 +655,10 @@ export function mountMicHud({
     /** The phase name, for a driver that wants more than a boolean. */
     phase() { return phase; },
     available() { return live; },
+    /** Is it actually on the desk? available() AND the HUD not hidden. */
+    shown() { return live && !hudHidden; },
+    /** ui/hud.js's zen toggle, pushed in. See applyPresence(). */
+    setHudHidden,
     /** The recorder, so the library screen could share one if it ever wants to. */
     recorder: rec,
 

@@ -801,7 +801,7 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
     for (const k of flat) if (typeof V[k] !== 'string' || V[k] === '') missing += k + ' ';
     ok(missing === '', 'every flat string wave 2 needs is present', missing);
 
-    const fns = ['noteName', 'noteLength', 'recordTimer', 'full', 'linkedTo', 'linkMoved', 'tooSoon'];
+    const fns = ['noteName', 'noteLength', 'recordTimer', 'recordCountdown', 'full', 'linkedTo', 'linkMoved', 'tooSoon'];
     let notFn = '';
     for (const k of fns) if (typeof V[k] !== 'function') notFn += k + ' ';
     ok(notFn === '', 'and every interpolator is a FUNCTION, so this module stays import-safe', notFn);
@@ -809,6 +809,18 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
     ok(V.full(VN_MAX_NOTES).includes(String(VN_MAX_NOTES)),
       'the "library is full" line carries the real ceiling', V.full(VN_MAX_NOTES));
     ok(V.recordTimer(4200, VN_MAX_MS).includes('4.2'), 'the record timer reads in seconds', V.recordTimer(4200, VN_MAX_MS));
+    /* TWO READINGS OF ONE CLOCK, and they have to be tellable apart at a glance:
+     * the library screen and the first seven seconds of a hold say how much has
+     * been said; the last three say how much is LEFT (ui/voice/micHud.js
+     * MIC_COUNTDOWN_MS). A countdown that still looked like a fraction would be
+     * a warning nobody notices. */
+    ok(V.recordCountdown(2).includes('2') && !V.recordCountdown(2).includes('/'),
+      'the countdown is a bare remaining number, not a fraction to subtract', V.recordCountdown(2));
+    ok(V.recordCountdown(2) !== V.recordTimer(8000, VN_MAX_MS),
+      'and never renders as the elapsed line for the same instant',
+      V.recordCountdown(2) + ' | ' + V.recordTimer(8000, VN_MAX_MS));
+    ok(V.recordCountdown(-1) === V.recordCountdown(0),
+      'a clock that overshot the cap still says something sane', V.recordCountdown(-1));
 
     // THE ACK GATE. Two paragraphs, and the second one is the one that is easy to
     // leave out: this switch is also a consent to HEAR them.
