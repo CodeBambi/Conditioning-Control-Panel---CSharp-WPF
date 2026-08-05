@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-21
 **Status:** CLOSED-OUT — no claimable board work remains (see below)
-**Next Task ID:** SP-050
+**Next Task ID:** SP-052
 
 ---
 
@@ -80,7 +80,14 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 
 **Next claimable work:** SP-050 = **host-obligation audit across the remaining v6.6.3 deltas** (land-consult directive — enumerate, from the payload + WPF host sources, what the client must provide per delta: new bridge messages / new windows/stores / new capability probes / NOTHING — with packet-sizing verdicts; output = one record + board rows for deltas with real obligations). Deltas: Brain Drain rework + Brain Melt, FX overhaul (AmbientFxCanvas/tiers/reduced-motion), Hourglass, Bottomless Fall, NUX first-run, Weekly Intake Pass. Cheap, evidence-first decomposition instead of blind feature packets. Lane partner TBD (ChaosSfx audit is a candidate). Next unused task ID: SP-050.
 
-### Phase 5 — DTRH admit + host slices, quips/sound, AI companion, tail (ACTIVE — wave 11 in flight)
+### Wave 12 (staged 2026-08-05)
+
+| Task | Summary | Status | Deps |
+|------|---------|--------|------|
+| SP-050-v663-obligation-audit | Row: host-obligation audit across remaining v6.6.3 deltas (Brain Drain + Brain Melt, FX overhaul, Hourglass, Bottomless Fall, NUX, Weekly Intake Pass — per-delta client obligations: messages/windows-stores/probes/NOTHING + sizing verdicts; zero product code; board filings at land) | Authored 2026-08-05 | SP-049 |
+| SP-051-chaossfx-chain-audit | Row: ChaosSfx cue→fallback-chain audit (complete map or not evidence; per cue resolve-per-chain or named typed gap; resolution layer typed; tests pin each chain + gap) | Authored 2026-08-05 | SP-049 |
+
+### Phase 5 — DTRH admit + host slices, quips/sound, AI companion, tail (ACTIVE — wave 12 in flight)
 
 **WAVE-4 PARK LIFTED 2026-08-04 (~15:30 local, same day):** the anthropic-400 park was a pi request-shape defect, not account exhaustion — fixed by the `__PI_BILLING_HEADER_FIX__` local pi-ai patch (`x-anthropic-billing-header` system[0] per hermes-agent #48176; `pi -p` 200 on opus-5 AND fable-5). SP-037 landed earlier that day (floor restored). SP-035+SP-036 launch per plan. (The ~13:10 UTC park state is retained in the board's 2026-08-04 gate-history entry for the SP-037 substitution-land provenance.)
 
