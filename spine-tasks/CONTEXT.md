@@ -74,7 +74,11 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 
 | Task | Summary | Status | Deps |
 |------|---------|--------|------|
-| SP-049-loom-studio | Row: Loom studio promotion (v6.6.3 behavior delta — dual archaeology: v6.6.3 payload changes AND b4's landed DtrhLoom; drive the studio surface in-engine; discharge or honestly limit the b4 rack-pane limit; GIF export through the serving contract; avalonia-live evidence) | Authored 2026-08-05 | SP-048 |
+| SP-049-loom-studio | Row: Loom studio promotion (v6.6.3 behavior delta — dual archaeology: v6.6.3 payload changes AND b4's landed DtrhLoom; drive the studio surface in-engine; discharge or honestly limit the b4 rack-pane limit; GIF export through the serving contract; avalonia-live evidence) | **Done 2026-08-05** (landed `7a26a661`; batch `20260805T045747` — FULL review chain: code APPROVE + final PASS; DtrhLoomWindow sibling shape; loom-reveal end-to-end; gifenc round trip byte-deterministic ×8; rack DISCHARGED AS DRIVEN (painted screenshot = residual laptop scale limit, zero-code-change discharge condition); boon_pick chain fix (b3 text corrected; audit row filed); 629/629 + 33/33 TRX'd; row WIP with residual limits) | SP-048 |
+
+### Wave 12 (next)
+
+**Next claimable work:** SP-050 = **host-obligation audit across the remaining v6.6.3 deltas** (land-consult directive — enumerate, from the payload + WPF host sources, what the client must provide per delta: new bridge messages / new windows/stores / new capability probes / NOTHING — with packet-sizing verdicts; output = one record + board rows for deltas with real obligations). Deltas: Brain Drain rework + Brain Melt, FX overhaul (AmbientFxCanvas/tiers/reduced-motion), Hourglass, Bottomless Fall, NUX first-run, Weekly Intake Pass. Cheap, evidence-first decomposition instead of blind feature packets. Lane partner TBD (ChaosSfx audit is a candidate). Next unused task ID: SP-050.
 
 ### Phase 5 — DTRH admit + host slices, quips/sound, AI companion, tail (ACTIVE — wave 11 in flight)
 

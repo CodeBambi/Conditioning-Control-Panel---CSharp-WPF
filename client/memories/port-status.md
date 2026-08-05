@@ -111,3 +111,9 @@ only with RATIFIED decree citation placed in evidence cells. Never flip without 
 - Consent-scope divergence is a board named limit now (startup load regardless of consent + ungated ReadRecent; retirement condition recorded).
 - Packet-template patch `skill-trx-failure-names` added (TRX logger mandated on full-suite runs).
 - Next: SP-049 = Loom studio promotion (v6.6.3 delta; dual archaeology — v6.6.3 payload changes AND b4's landed DtrhLoom).
+
+## Wave 11 (2026-08-05, integrate 7a26a661; floor now 629/629 + 33/33)
+
+- **SP-049 (Loom studio promotion, first v6.6.3 delta):** DtrhLoomWindow (WPF LoomHostService sibling); loom-reveal end-to-end; gifenc save round trip (byte-deterministic ×8); rack-pane limit DISCHARGED AS DRIVEN (painted screenshot = residual laptop-scale limit, zero-code-change discharge condition on a matched-scale machine); boon_pick chain fix (b3 text corrected; ChaosSfx audit row filed — full cue→chain map unaudited); dashboard entry-points row filed (reachability debt).
+- **Next: SP-050 = host-obligation audit** across remaining v6.6.3 deltas (Brain Drain + Brain Melt, FX overhaul, Hourglass, Bottomless Fall, NUX, Weekly Intake Pass) — enumerate per-delta client obligations instead of blind feature packets.
+- Ten consecutive auto-gate lands; four consecutive zero-recovery waves.
