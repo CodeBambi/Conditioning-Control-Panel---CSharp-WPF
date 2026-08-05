@@ -1184,6 +1184,15 @@ namespace ConditioningControlPanel.Services
                 if (current.BubblesEnabled)
                 {
                     App.Bubbles?.Start(bypassLevelCheck: true);
+                    // Start() no-ops when bubbles were already running from the dashboard,
+                    // which would keep spawning at the user's old rate for the whole session
+                    App.Bubbles?.RefreshFrequency();
+                }
+                else
+                {
+                    // Delayed or intermittent start: the session owns bubbles from t=0, so a
+                    // dashboard-started spawner must not keep running until the schedule kicks in
+                    App.Bubbles?.Stop();
                 }
             }
             else

@@ -461,7 +461,7 @@
   "monitor_label": "Монитор",
   "monitor_primary_marker": "Основной",
   "tooltip_spiral_transparency_level": "Уровень прозрачности спирали",
-  "tooltip_spiral_opacity_5_50": "Прозрачность спирали (5% - 50%)",
+  "tooltip_spiral_opacity_5_100": "Прозрачность спирали (5% - 100%)",
   "tooltip_choose_a_spiral_gif_animation": "Выбери GIF-анимацию спирали",
   "label_if_you_have_display_problems_try_setting_your": "⚠ Если у тебя проблемы с отображением, попробуй установить масштабирование DPI монитора на рекомендуемые значения",
   "tooltip_pink_color_tint_overlay_for_all_screens_subtl": "Розовый цветовой фильтр для всех экранов.\r\nЛёгкий или интенсивный — тебе выбирать!\r\nОткрывается на Уровне 10.",

@@ -223,6 +223,11 @@ namespace ConditioningControlPanel
                 if (!IsIncomingTab("presets")) return;  // the outgoing tab's fade-out re-show
                 _presetsTabVisible = true;
 
+                // DATA BEFORE FX. A session drafted while this tab sat collapsed (the Graded
+                // Intake ducks the whole window for the run) must be on the list before the
+                // stagger animates it in - see SyncCustomSessionsFromDisk / #614.
+                SyncCustomSessionsFromDisk();
+
                 InitializePresetsFx();
                 StaggerPresetCards();
                 RefreshCardSheen();

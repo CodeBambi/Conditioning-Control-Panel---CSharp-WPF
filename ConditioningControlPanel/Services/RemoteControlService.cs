@@ -1066,7 +1066,7 @@ namespace ConditioningControlPanel.Services
                             if (App.Settings?.Current != null && parameters != null)
                             {
                                 var spiralVal = parameters["value"]?.Value<int>() ?? 25;
-                                App.Settings.Current.SpiralOpacity = Math.Clamp(spiralVal, 0, 50);
+                                App.Settings.Current.SpiralOpacity = Math.Clamp(spiralVal, 0, 100);
                                 EnsureOverlayRunning();
                                 App.Overlay?.RefreshOverlays();
                                 App.Settings.Save();

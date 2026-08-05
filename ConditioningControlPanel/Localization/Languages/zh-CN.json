@@ -1051,7 +1051,7 @@
   "monitor_label": "显示器",
   "monitor_primary_marker": "主",
   "tooltip_spiral_transparency_level": "螺旋透明度等级",
-  "tooltip_spiral_opacity_5_50": "螺旋透明度（5% - 50%）",
+  "tooltip_spiral_opacity_5_100": "螺旋透明度（5% - 100%）",
   "tooltip_choose_a_spiral_gif_animation": "选择螺旋GIF动画",
   "label_if_you_have_display_problems_try_setting_your": "⚠ 如果遇到显示问题，请尝试将显示器 DPI 缩放设置为推荐值",
   "tooltip_pink_color_tint_overlay_for_all_screens_subtl": "所有屏幕的粉色滤镜覆盖层。\n细腻或浓烈，由你选择！\n10级解锁。",

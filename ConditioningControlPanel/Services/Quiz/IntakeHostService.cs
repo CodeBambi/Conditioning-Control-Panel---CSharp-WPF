@@ -392,6 +392,13 @@ namespace ConditioningControlPanel.Services.Quiz
                         + (int)Math.Round(Math.Clamp(run.PeakDepth, 0, 1) * 50)
                         + Math.Min(run.AffirmedMantras?.Count ?? 0, 5) * 5;
                     App.Progression?.AddXP(Math.Min(xp, 100), XPSource.Other);
+
+                    // Affirmed mantras also feed the mantra quest/program verifier, same cap
+                    // as the XP above so endless laps can't farm program days. XP was already
+                    // granted in the sum - this is credit only.
+                    var affirmed = Math.Min(run.AffirmedMantras?.Count ?? 0, 5);
+                    for (var i = 0; i < affirmed; i++)
+                        App.Quests?.TrackMantraCompleted();
                 }
                 catch (Exception ex) { App.Logger?.Debug("IntakeHostService: XP grant failed: {E}", ex.Message); }
 

@@ -461,7 +461,7 @@
   "monitor_label": "모니터",
   "monitor_primary_marker": "주 모니터",
   "tooltip_spiral_transparency_level": "소용돌이 투명도 레벨",
-  "tooltip_spiral_opacity_5_50": "소용돌이 불투명도 (5% - 50%)",
+  "tooltip_spiral_opacity_5_100": "소용돌이 불투명도 (5% - 100%)",
   "tooltip_choose_a_spiral_gif_animation": "소용돌이 GIF 애니메이션 선택",
   "label_if_you_have_display_problems_try_setting_your": "⚠ 화면 문제가 있으면 모니터 DPI 스케일링을 권장 설정으로 맞춰보세요",
   "tooltip_pink_color_tint_overlay_for_all_screens_subtl": "모든 화면에 핑크색 틴트 오버레이.\r\n은은하게 또는 강하게, 선택은 자유!\r\n레벨 10에서 잠금 해제.",

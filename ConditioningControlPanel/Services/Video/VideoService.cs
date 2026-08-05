@@ -2780,6 +2780,14 @@ namespace ConditioningControlPanel.Services
                     {
                         var tracks = aspectPlayer.Media?.Tracks;
                         if (tracks == null) return;
+                        // Pick the BIGGEST video ES, not the first one that parses. A container can
+                        // carry an attached cover-art/thumbnail video track, and since #786 the sharp
+                        // layer is Stretch.Fill inside the rect this aspect produces — so sizing it
+                        // from a thumbnail is a STRETCH, the exact failure #786 removed, re-entered
+                        // through a different door. The real picture is always the larger track.
+                        double bestAspect = 0;
+                        long bestArea = 0;
+                        string bestSource = string.Empty;
                         foreach (var track in tracks)
                         {
                             if (track.TrackType != TrackType.Video) continue;
@@ -2789,12 +2797,15 @@ namespace ConditioningControlPanel.Services
                                 or VideoOrientation.RightTop
                                 or VideoOrientation.RightBottom;
                             double aspect = DisplayAspectFrom(v.Width, v.Height, v.SarNum, v.SarDen, transposed);
-                            if (aspect > 0)
-                            {
-                                aspectTarget.SetSourceAspect(aspect, $"track {v.Width}x{v.Height} sar {v.SarNum}:{v.SarDen}");
-                                return;
-                            }
+                            if (aspect <= 0) continue;
+                            long area = (long)v.Width * v.Height;
+                            if (area <= bestArea) continue;
+                            bestArea = area;
+                            bestAspect = aspect;
+                            bestSource = $"track {v.Width}x{v.Height} sar {v.SarNum}:{v.SarDen}";
                         }
+                        if (bestAspect > 0)
+                            aspectTarget.SetSourceAspect(bestAspect, bestSource);
                     }
                     catch (Exception ex)
                     {
@@ -3413,6 +3424,18 @@ namespace ConditioningControlPanel.Services
                         return;
                     }
 
+                    // #786 follow-up: the LAYOUT does not depend on the bitmap, so stamp the aspect and
+                    // re-fit BEFORE the droppable swap below. Every early-return under this point (lock
+                    // timeout, stale-at-swap, exception) used to take the layout down with it, and the
+                    // "nothing known yet" layout is a full-screen Fill rect — i.e. the edge-to-edge
+                    // stretch users report. Nothing here can block or throw on the bitmap's behalf.
+                    if (bufferAspect > 0 && Math.Abs(Volatile.Read(ref _bufferAspect) - bufferAspect) >= 0.0005)
+                    {
+                        Volatile.Write(ref _bufferAspect, bufferAspect);
+                        _geometryLogged = false; // the reported shape moved - trace the new fit once
+                    }
+                    ApplyGeometry();
+
                     var bmp = new WriteableBitmap((int)bw, (int)bh, 96, 96, PixelFormats.Bgr32, null);
                     bool applied;
                     // BOUNDED, like the per-frame blit (:TryEnter 8ms) and Dispose (:TryEnter 250ms):
@@ -3443,16 +3466,6 @@ namespace ConditioningControlPanel.Services
 
                     _foreground.Source = bmp;
 
-                    // #786: re-stamp the buffer aspect from THIS callback and re-derive both the blur
-                    // decision and the fit rect. Every callback lands a complete layout; nothing is
-                    // carried over from the previous geometry.
-                    if (bufferAspect > 0 && Math.Abs(Volatile.Read(ref _bufferAspect) - bufferAspect) >= 0.0005)
-                    {
-                        Volatile.Write(ref _bufferAspect, bufferAspect);
-                        _geometryLogged = false; // the reported shape moved - trace the new fit once
-                    }
-                    ApplyGeometry();
-
                     // The fill is fed by RefreshBackgroundSnapshot, NOT by this bitmap (#687). Drop the
                     // old snapshot so the next frame rebuilds it at the new geometry immediately.
                     _snapW = 0;
@@ -3468,15 +3481,28 @@ namespace ConditioningControlPanel.Services
             /// <summary>
             /// The aspect the picture must actually be drawn at: the track's SAR-corrected display
             /// aspect when it is known, else the buffer's own pixel aspect, else the screen's (so a
-            /// surface with no information yet is never sized to nonsense). Callable from any thread.
+            /// LOG LINE for a surface with no information yet never prints nonsense). Callable from
+            /// any thread. Layout must use <see cref="KnownAspect"/>, never this.
             /// </summary>
             private double EffectiveAspect(double bufferAspect)
+            {
+                double known = KnownAspect(bufferAspect);
+                return known > 0 ? known : _screenAspect;
+            }
+
+            /// <summary>
+            /// The display aspect when it is actually KNOWN, else 0. ApplyGeometry must never pin a
+            /// Fill rect from a guess: guessing the SCREEN's own aspect produces exactly the reported
+            /// failure — a portrait clip drawn edge-to-edge and sharp, with the blurred fill disarmed
+            /// because a "screen-shaped" video needs no bars. Unknown means "stay on the harmless
+            /// Uniform fallback until a format callback or a track probe says otherwise".
+            /// </summary>
+            private double KnownAspect(double bufferAspect)
             {
                 double t = Volatile.Read(ref _trueAspect);
                 if (t > 0) return t;
                 if (bufferAspect > 0) return bufferAspect;
-                double b = Volatile.Read(ref _bufferAspect);
-                return b > 0 ? b : _screenAspect;
+                return Volatile.Read(ref _bufferAspect);
             }
 
             /// <summary>
@@ -3518,7 +3544,11 @@ namespace ConditioningControlPanel.Services
                 if (_disposed) return;
                 try
                 {
-                    double aspect = EffectiveAspect(0);
+                    // KnownAspect, NOT EffectiveAspect: 0 here means "no aspect information yet", and
+                    // FitToAspect(_, _, 0) returns (0,0) so we fall through to the Uniform fallback
+                    // below instead of pinning a full-screen Fill rect. NeedsBlurFill(0, _) is false,
+                    // which is also correct — nothing is on screen to put bars around yet.
+                    double aspect = KnownAspect(0);
                     bool needsBlur = NeedsBlurFill(aspect, _screenAspect);
 
                     _needsBlur = needsBlur;

@@ -271,6 +271,46 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// The literal mechanics line for a task card: which feature the verifier draws credit
+        /// from and what has to happen for the task to tick, formatted with the target count or
+        /// minutes. The authored Description carries the program's fiction; support reports showed
+        /// users guessing wrong about what actually satisfies a task (e.g. spoken vs typed
+        /// mantras), so this line spells it out. OutsideSession tasks get an extra sentence
+        /// saying the day's own session will not produce the credit.
+        /// </summary>
+        private static string? ProgramTaskHowTo(ProgramTask task)
+        {
+            if (task.Kind == ProgramTaskKind.Ritual)
+                return Loc.Get("programs_howto_ritual");
+
+            if (task.Kind != ProgramTaskKind.AutoVerified || task.Verifier == null) return null;
+
+            var key = task.Verifier switch
+            {
+                Models.QuestCategory.Flash          => "programs_howto_flash",
+                Models.QuestCategory.Bubbles        => "programs_howto_bubbles",
+                Models.QuestCategory.BubbleCount    => "programs_howto_bubblecount",
+                Models.QuestCategory.LockCard       => "programs_howto_lockcard",
+                Models.QuestCategory.Video          => "programs_howto_video",
+                Models.QuestCategory.PinkFilter     => "programs_howto_pinkfilter",
+                Models.QuestCategory.Spiral         => "programs_howto_spiral",
+                Models.QuestCategory.Mantra         => "programs_howto_mantra",
+                Models.QuestCategory.Autonomy       => "programs_howto_autonomy",
+                Models.QuestCategory.KeywordTrigger => "programs_howto_keyword",
+                Models.QuestCategory.Lockdown       => "programs_howto_lockdown",
+                Models.QuestCategory.Remote         => "programs_howto_remote",
+                Models.QuestCategory.BlinkTrainer   => "programs_howto_blink",
+                _ => null
+            };
+            if (key == null) return null;
+
+            var text = Loc.GetF(key, Math.Max(1, task.TargetValue));
+            if (task.OutsideSession)
+                text += " " + Loc.Get("programs_howto_outside_suffix");
+            return text;
+        }
+
+        /// <summary>
         /// The feature layers a program session can turn on, roughly in the order they arrive on
         /// screen: a predicate over the day's settings, a localisation key, and the app's own
         /// product icon for that feature.
@@ -820,10 +860,17 @@ namespace ConditioningControlPanel
                 var isRitual = task.Kind == ProgramTaskKind.Ritual;
                 if (isRitual) hasRitual = true;
 
+                // The literal mechanics line under the authored flavour text - which feature the
+                // verifier draws from and what has to happen. Hidden once the task is complete,
+                // a settled card doesn't need instructions.
+                var howTo = complete ? null : ProgramTaskHowTo(task);
+
                 var item = new ProgramTaskItem
                 {
                     TaskId = task.Id,
                     Description = task.Description,
+                    HowTo = howTo ?? "",
+                    HowToVisibility = string.IsNullOrWhiteSpace(howTo) ? Visibility.Collapsed : Visibility.Visible,
                     StatusGlyph = complete ? "✓" : "○",
                     StatusBrush = complete ? accent : mutedBrush,
                     TextBrush = complete ? mutedBrush : lightBrush,
