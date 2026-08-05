@@ -457,7 +457,7 @@
   "monitor_label": "Monitor",
   "monitor_primary_marker": "Principal",
   "tooltip_spiral_transparency_level": "Nivel de transparencia de la espiral",
-  "tooltip_spiral_opacity_5_50": "Opacidad de la espiral (5% - 50%)",
+  "tooltip_spiral_opacity_5_100": "Opacidad de la espiral (5% - 100%)",
   "tooltip_choose_a_spiral_gif_animation": "Elige una animación GIF de espiral",
   "label_if_you_have_display_problems_try_setting_your": "⚠ Si tienes problemas de visualización, intenta configurar el escalado DPI de tu monitor a los ajustes recomendados",
   "tooltip_pink_color_tint_overlay_for_all_screens_subtl": "Capa de tinte de color rosa para todas las pantallas.\r\n¡Sutil o intensa, tú eliges!\r\nSe desbloquea en el Nivel 10.",

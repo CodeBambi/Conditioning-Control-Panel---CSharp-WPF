@@ -457,7 +457,7 @@
   "monitor_label": "モニター",
   "monitor_primary_marker": "メイン",
   "tooltip_spiral_transparency_level": "スパイラルの透明度レベル",
-  "tooltip_spiral_opacity_5_50": "スパイラルの不透明度（5% - 50%）",
+  "tooltip_spiral_opacity_5_100": "スパイラルの不透明度（5% - 100%）",
   "tooltip_choose_a_spiral_gif_animation": "スパイラルGIFアニメーションを選択",
   "label_if_you_have_display_problems_try_setting_your": "⚠ 表示に問題がある場合は、モニターのDPIスケーリングを推奨設定にしてください",
   "tooltip_pink_color_tint_overlay_for_all_screens_subtl": "全画面ピンクカラーティントオーバーレイ\r\n微妙にも強烈にも、お好みで！\r\nレベル10で解除",

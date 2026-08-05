@@ -2406,11 +2406,11 @@ namespace ConditioningControlPanel.Models
             set { _spiralRandomize = value; OnPropertyChanged(); }
         }
 
-        private int _spiralOpacity = 10; // 0-50%
+        private int _spiralOpacity = 10; // 0-100%
         public int SpiralOpacity
         {
             get => _spiralOpacity;
-            set { _spiralOpacity = Math.Clamp(value, 0, 50); OnPropertyChanged(); }
+            set { _spiralOpacity = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
         }
 
         private bool _spiralLinkRamp = false;

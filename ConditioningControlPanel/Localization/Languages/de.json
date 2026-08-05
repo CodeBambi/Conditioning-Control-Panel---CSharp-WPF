@@ -458,7 +458,7 @@
   "monitor_label": "Monitor",
   "monitor_primary_marker": "Primär",
   "tooltip_spiral_transparency_level": "Spiral-Transparenzstufe",
-  "tooltip_spiral_opacity_5_50": "Spiral-Deckkraft (5% - 50%)",
+  "tooltip_spiral_opacity_5_100": "Spiral-Deckkraft (5% - 100%)",
   "tooltip_choose_a_spiral_gif_animation": "Wähle eine Spiral-GIF-Animation",
   "label_if_you_have_display_problems_try_setting_your": "⚠ Bei Anzeigeproblemen versuche, die DPI-Skalierung deines Monitors auf die empfohlenen Einstellungen zu setzen",
   "tooltip_pink_color_tint_overlay_for_all_screens_subtl": "Rosa Farbton-Overlay für alle Bildschirme.\r\nDezent oder intensiv, du entscheidest!\r\nWird bei Level 10 freigeschaltet.",

@@ -66,9 +66,9 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_opacity}"
                                            ToolTip="{loc:Str tooltip_spiral_transparency_level}"/>
-                                <Slider Grid.Column="1" x:Name="SliderSpiralOpacity" x:FieldModifier="internal" feat:SessionLock.Owned="True" Minimum="5" Maximum="50" Value="15" 
+                                <Slider Grid.Column="1" x:Name="SliderSpiralOpacity" x:FieldModifier="internal" feat:SessionLock.Owned="True" Minimum="5" Maximum="100" Value="15"
                                         Margin="10,0" ValueChanged="SliderSpiralOpacity_Changed"
-                                        ToolTip="{loc:Str tooltip_spiral_opacity_5_50}"/>
+                                        ToolTip="{loc:Str tooltip_spiral_opacity_5_100}"/>
                                 <TextBlock x:Name="TxtSpiralOpacity" x:FieldModifier="internal" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="15%"/>
                             </Grid>
                             <Button Content="{loc:Str btn_select_gif}" Style="{StaticResource OutlineButton}"
