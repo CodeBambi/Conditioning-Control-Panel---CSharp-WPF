@@ -29,7 +29,8 @@
  * score multiplier, the closeness dial, MERCY — is hidden by ui/hud.css off
  * .gg-hud--zen and html[data-gg-zen]. The monitor, the arsenal and the heat
  * gauge that feeds it stay: they are what the duel is played on. See the
- * toggle's own block below for why hiding MERCY is safe.
+ * toggle's own block below for why hiding MERCY is safe — and why the voice mic
+ * is the one thing zen has to hide in JS as well as in CSS.
  *
  * ANIMATION BUDGET. Chrome animations go through fx.play(): at most two run at
  * once and anything that waited more than 600 ms is dropped rather than played
@@ -381,6 +382,18 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   let zenOn = false;
   if (zenBtn) zenBtn.type = 'button';
 
+  /* THE MIC IS THE ONE THING ZEN CANNOT HIDE WITH CSS ALONE. Everything else on
+   * this toggle is chrome that stops being painted; the mic can be HELD, and a
+   * captured pointer bypasses hit testing — `display:none` would take the strip
+   * away and leave the recording (and the OS microphone light) running behind
+   * it. So the bit is pushed into ui/voice/micHud.js as well, which cancels a
+   * live hold on the same path the feature going away takes.
+   *
+   * Declared here and assigned after the mount ~300 lines down, because setZen
+   * is hoisted but the mic is not: null is the whole of the startup case, and
+   * the remembered preference is replayed into the handle the moment it exists. */
+  let micRef = null;
+
   function paintZen() {
     const label = zenOn ? S.hud.zenShow : S.hud.zenHide;
     text(zenBtn, zenOn ? S.hud.zenShowGlyph : S.hud.zenHideGlyph);
@@ -406,6 +419,7 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     if (next === zenOn) return;
     zenOn = next;
     paintZen();
+    try { micRef?.setHudHidden(zenOn); } catch (_e) { /* a no-op handle has no bit */ }
     // Persisting is a nicety, not the state: the bit above is already true.
     if (remember && prefs && typeof prefs.set === 'function') {
       try { prefs.set('hudZen', zenOn); } catch (_e) { /* no store, no problem */ }
@@ -714,6 +728,12 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
    * the desk subscribes to the answer instead of re-deriving any of it. With no
    * service at all this is a no-op handle and no DOM. */
   const mic = mountMicHud({ host: voiceHost, chipHost: voiceChipHost, voice, audio, onLog });
+  /* Zen is restored from prefs BEFORE this mount, so the handle is told the bit
+   * it was not there to hear. setZen's own early-return means it would never be
+   * re-sent, and a remembered zen with a visible mic under it is the one state
+   * that would make the toggle look broken on the first click. */
+  micRef = mic;
+  try { mic.setHudHidden(zenOn); } catch (_e) { /* a no-op handle has no bit */ }
 
   led.add(() => { try { mic.unmount(); } catch (_e) { /* gone */ } });
   led.add(() => { try { announcer.unmount(); } catch (_e) { /* gone */ } });

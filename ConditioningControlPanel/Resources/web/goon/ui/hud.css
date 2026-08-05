@@ -2426,7 +2426,11 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
  * parking them at heat costs no information.
  *
  * ZEN takes both away by name, like the dial and the effect chips: it exists to
- * hand the stage back, and a mic you are not holding is chrome.
+ * hand the stage back, and a mic you are not holding is chrome. THE RULE BELOW
+ * IS HALF THE FEATURE — ui/hud.js also pushes the bit into micHud
+ * (`setHudHidden`), because pointer capture bypasses hit testing and a
+ * `display:none` over a live hold would otherwise leave a recording running with
+ * no strip on screen. The stylesheet hides it; the module closes the microphone.
  * ======================================================================== */
 .gg-voice-host {
   position: relative;
@@ -2509,6 +2513,15 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
   color: var(--gg-text-1);
   white-space: nowrap;
 }
+/* THE LAST THREE SECONDS. The words already changed ("2s left" — ui/strings.js
+   voice.recordCountdown); this is the colour half of the same fact, and it is a
+   COLOUR and not an animation on purpose: the strip carries state classes and
+   the section's animation budget is spent on the dot (see the header). Cancel
+   wins over ending — a note that is about to be thrown away has nothing left to
+   be running out of. */
+.gg-voice.is-ending .gg-voice-time { color: var(--gg-hot); }
+.gg-voice.is-cancel .gg-voice-time { color: var(--gg-text-4); }
+
 .gg-voice-slide {
   font-size: 0.62rem; letter-spacing: 0.08em;
   color: var(--gg-text-4);
