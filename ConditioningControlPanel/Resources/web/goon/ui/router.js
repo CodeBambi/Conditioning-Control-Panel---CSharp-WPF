@@ -273,6 +273,9 @@ export function createRouter({ screens = {}, ctx = null, logger = null } = {}) {
       currentEl = section;
       section.replaceChildren();
       section.hidden = false;
+      // Sections persist across shows, and so does their scroll position — a
+      // screen taller than the viewport (assets) must not reopen mid-scroll.
+      try { section.scrollTop = 0; } catch (_e) { /* ignore */ }
       markScreen(name);
 
       const mountCtx = args ? Object.assign({}, ctx, args) : ctx;

@@ -93,10 +93,19 @@ html, body {
 .gg-screen {
   position: absolute; inset: 0;
   display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  padding: clamp(1rem, 4vw, 3rem);
+  align-items: center;
+  /* NO justify-content:center here: on a scroll container it pushes half the
+     overflow above scrollTop:0 where no amount of scrolling can reach it (the
+     assets card lost its whole header + compress-all row this way). The edge
+     children's auto margins below center the group when it fits and collapse
+     to 0 when it overflows, so the top always stays scrollable. */
+  padding: calc(clamp(1rem, 4vw, 3rem) + env(safe-area-inset-top, 0px))
+           clamp(1rem, 4vw, 3rem)
+           calc(clamp(1rem, 4vw, 3rem) + env(safe-area-inset-bottom, 0px));
   overflow-y: auto;
 }
+.gg-screen > :first-child { margin-top: auto; }
+.gg-screen > :last-child { margin-bottom: auto; }
 
 /* ---------------------------------------------------------------------------
  * COMPONENT KIT
