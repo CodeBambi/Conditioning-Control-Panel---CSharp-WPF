@@ -1,13 +1,13 @@
 ## STATUS: SP-048 — DTRH published-artifact payload location
-**Current Step:** Step 1 — evidence + decision + pre-approach consult
-**Last Updated:** 2026-08-05 (authored)
+**Current Step:** Step 1 — evidence + decision + pre-approach consult (in progress)
+**Last Updated:** 2026-08-05 (worker run 1)
 **Blockers:** none
 
 ### Step 1: evidence + decision + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] Empirical inventory (real publish output; runtime payload-root resolution; size/integrity trade-offs)
-- [ ] Decision in record.md (chosen location + rejected alternatives + integrity discipline)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Update STATUS.md before starting work
+- [x] Empirical inventory (real publish output; runtime payload-root resolution; size/integrity trade-offs)
+- [x] Decision in record.md (chosen location + rejected alternatives + integrity discipline)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: implement the decided shape
 - [ ] Payload root resolution per mode (Debug/Release/published)

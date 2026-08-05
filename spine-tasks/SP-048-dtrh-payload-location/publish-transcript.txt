@@ -1,0 +1,6 @@
+  Determining projects to restore...
+  Restored C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260805T030213\lane-2\client\src\CcpClient.Desktop\CcpClient.Desktop.csproj (in 8,05 sec).
+  CcpClient.Desktop -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260805T030213\lane-2\client\src\CcpClient.Desktop\bin\Release\net10.0\win-x64\CcpClient.Desktop.dll
+  CcpClient.Desktop -> C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260805T030213\lane-2\client\artifacts\publish\CcpClient.Desktop-0.1.0-win-x64\
+PUBLISHED CcpClient.Desktop-0.1.0-win-x64
+ARTIFACT C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260805T030213\lane-2\client\artifacts\publish\CcpClient.Desktop-0.1.0-win-x64
