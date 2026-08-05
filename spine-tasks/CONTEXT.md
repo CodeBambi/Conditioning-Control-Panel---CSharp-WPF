@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-21
 **Status:** CLOSED-OUT — no claimable board work remains (see below)
-**Next Task ID:** SP-052
+**Next Task ID:** SP-054
 
 ---
 
@@ -79,7 +79,14 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 
 **Next claimable work (land-consult ordering):** SP-052 = **the b4 defect row** (P0, silent data loss: Hourglass ownership-gated ceiling at persist + deal + the `endless` knob end-to-end; b4's 1200-clamp tests UPDATED never weakened; U + one headed round-trip per behavior) + SP-053 = **reduced-motion inheritance probe** (S, no deps) as lane-mate. The Graded Intake host (L) wants a wave to itself after these. Next unused task ID: SP-052.
 
-### Phase 5 — DTRH admit + host slices, quips/sound, AI companion, tail (ACTIVE — wave 13 next)
+### Wave 13 (staged 2026-08-05)
+
+| Task | Summary | Status | Deps |
+|------|---------|--------|------|
+| SP-052-dtrh-ownership-gates | Row: DTRH run-setup ownership gates (P0 b4 parity defects — Hourglass ownership-gated ceiling at persist + deal; endless knob end-to-end; b4's 1200-clamp tests UPDATED never weakened; U + one headed round-trip per behavior) | Authored 2026-08-05 | SP-050 |
+| SP-053-reduced-motion-probe | Row: Webview prefers-reduced-motion inheritance probe (pre-existing DTRH host obligation; measure matchMedia inside the embedded engine vs OS animation states; typed honoring mechanism only if inheritance fails; Linux unproven named limit) | Authored 2026-08-05 | SP-050 |
+
+### Phase 5 — DTRH admit + host slices, quips/sound, AI companion, tail (ACTIVE — wave 13 in flight)
 
 **WAVE-4 PARK LIFTED 2026-08-04 (~15:30 local, same day):** the anthropic-400 park was a pi request-shape defect, not account exhaustion — fixed by the `__PI_BILLING_HEADER_FIX__` local pi-ai patch (`x-anthropic-billing-header` system[0] per hermes-agent #48176; `pi -p` 200 on opus-5 AND fable-5). SP-037 landed earlier that day (floor restored). SP-035+SP-036 launch per plan. (The ~13:10 UTC park state is retained in the board's 2026-08-04 gate-history entry for the SP-037 substitution-land provenance.)
 
