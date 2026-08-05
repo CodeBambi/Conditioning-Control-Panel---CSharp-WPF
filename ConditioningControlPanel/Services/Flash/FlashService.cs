@@ -72,6 +72,10 @@ namespace ConditioningControlPanel.Services
         private static int BucketUp(int v) => ((Math.Max(0, v) + FLASH_SHELL_SLACK + FLASH_SHELL_BUCKET - 1) / FLASH_SHELL_BUCKET) * FLASH_SHELL_BUCKET;
         private List<string> _imageList = new();  // Cached image list for random selection
         private List<(string PackId, PackFileEntry File)> _packImageList = new();  // Cached pack images for random selection
+        // Size of DisabledAssetPaths when the live pools were last reconciled against it. Every
+        // asset-manager toggle moves that count, so one int compare per draw is enough to notice a
+        // pool that predates the user's latest selection — see PruneDeselectedFromPools.
+        private int _poolDisabledStamp = -1;
         private Queue<string> _soundQueue = new();  // Performance: Changed to Queue for O(1) dequeue
         private readonly List<string> _tempPackFiles = new();  // Track temp files for cleanup
         private readonly object _lockObj = new();
@@ -2513,6 +2517,10 @@ namespace ConditioningControlPanel.Services
                     RefreshImageLists();
                 }
 
+                // Safety net: never draw something the user has since deselected, even if whoever
+                // wrote DisabledAssetPaths forgot to invalidate the pools.
+                PruneDeselectedFromPools();
+
                 // If both lists are empty after refresh, no images available
                 if (_imageList.Count == 0 && _packImageList.Count == 0)
                 {
@@ -2586,6 +2594,7 @@ namespace ConditioningControlPanel.Services
             {
                 if (_tempPackFiles.Count > 50) CleanupTempPackFiles();
                 if (_imageList.Count == 0 && _packImageList.Count == 0) RefreshImageLists();
+                PruneDeselectedFromPools();
                 if (_imageList.Count == 0 && _packImageList.Count == 0) return new List<string>();
 
                 // Dedup on the SOURCE index (disk image / pack entry), not the resulting path: a pack
@@ -2647,8 +2656,44 @@ namespace ConditioningControlPanel.Services
             // Load pack images from active packs
             _packImageList = App.ContentPacks?.GetAllActivePackImages() ?? new List<(string, PackFileEntry)>();
 
+            // Both sources filtered against the live disabled set, so the pools are in sync with it.
+            _poolDisabledStamp = App.Settings?.Current?.DisabledAssetPaths.Count ?? 0;
+
             App.Logger?.Information("Image lists refreshed: {RegularCount} regular images, {PackCount} pack images from {Path}",
                 _imageList.Count, _packImageList.Count, _imagesPath);
+        }
+
+        /// <summary>
+        /// Drops anything the user has deselected in the Assets tab out of the LIVE pools.
+        ///
+        /// The pools are filtered when they are built (GetMediaFiles / GetAllActivePackImages) and
+        /// the asset manager empties them on every toggle
+        /// (MainWindow.InvalidateAssetPoolsAfterSelectionChange -> ClearFileCache). This is the
+        /// belt to those braces: a pool built before a toggle — or a toggle that reached settings
+        /// through a path that forgot to invalidate — otherwise keeps flashing content the user
+        /// turned off for the rest of the process, which reads as "unchecking does nothing until I
+        /// restart". Gated on the size of the disabled set so the normal draw costs one int
+        /// compare; the walk only runs on the first draw after a selection actually changed.
+        /// Caller must hold <see cref="_lockObj"/>.
+        /// </summary>
+        private void PruneDeselectedFromPools()
+        {
+            var disabled = App.Settings?.Current?.DisabledAssetPaths;
+            int count = disabled?.Count ?? 0;
+            if (count == _poolDisabledStamp) return;
+            _poolDisabledStamp = count;
+            if (disabled == null || count == 0) return;
+
+            // DisabledAssetPaths is OrdinalIgnoreCase and stored forward-slashed (AppSettings), so
+            // only the separator of the runtime relative path needs normalizing here.
+            var basePath = App.EffectiveAssetsPath;
+            int removed = _imageList.RemoveAll(f =>
+                disabled.Contains(Path.GetRelativePath(basePath, f).Replace('\\', '/')));
+            removed += _packImageList.RemoveAll(p =>
+                disabled.Contains($"pack:{p.PackId}/{p.File.OriginalName}"));
+
+            if (removed > 0)
+                App.Logger?.Information("FlashService: dropped {Count} deselected image(s) from the live pool", removed);
         }
 
         /// <summary>
