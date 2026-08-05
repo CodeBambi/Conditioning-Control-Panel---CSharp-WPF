@@ -370,7 +370,15 @@ export class GoonWebRtcTransport extends GoonTransportBase {
     this._setState(GoonTransportState.ConnectingP2P, this.isHost ? 'offering' : 'answering');
 
     try {
-      const pc = new RTCPeerConnection({ iceServers: STUN_URLS.map((urls) => ({ urls })) });
+      /* STUN always; TURN when the ROOM carried credentials (net/signaling.js
+       * iceServers — server-minted, short-lived, already sanitized). This is
+       * what lets a phone on carrier NAT and a desktop behind a home router
+       * actually meet: without a relay candidate those two networks never
+       * complete ICE, every duel lands on the HTTP-mailbox fallback, and the
+       * media transfer (P2P-only by design) never gets a channel to run on. */
+      const iceServers = STUN_URLS.map((urls) => ({ urls }))
+        .concat(Array.isArray(this._signaling?.iceServers) ? this._signaling.iceServers : []);
+      const pc = new RTCPeerConnection({ iceServers });
       this._pc = pc;
 
       // SYMMETRIC AND IMMEDIATE, on both roles, before any offer/answer work. A negotiated channel
