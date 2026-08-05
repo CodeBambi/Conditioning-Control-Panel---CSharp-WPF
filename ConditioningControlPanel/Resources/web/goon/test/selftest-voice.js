@@ -832,8 +832,26 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
       V.ack.headline + ' | ' + V.ack.line);
     ok(/hear/i.test(V.ack.lineTwo),
       'and the SECOND says you may hear THEM — the half a player can otherwise miss', V.ack.lineTwo);
-    ok(/server/i.test(V.ack.line) || /server/i.test(V.voice === undefined ? '' : V.lead),
-      'and somewhere on the way in it says no server is involved');
+    /* WHERE THE AUDIO GOES, PINNED HONEST (2026-08-05 privacy pass).
+     *
+     * This used to assert only that the word "server" appeared "somewhere on the
+     * way in", and the copy it was green against said "no server ever hears them"
+     * — which is false the moment ICE gives up. A voice note rides the CONTROL
+     * lane exactly so it survives a relayed link (see the voiceService.js header),
+     * and on that link every frame is plain JSON through /v2/goon/relay. So the
+     * assertions are now about CONTENT, in both directions:
+     *   · the sheet names the recipient, because that is the consent;
+     *   · the sheet and the lead both admit the relay hop; and
+     *   · neither of them may ever claim again that no server is involved. */
+    const voiceCopy = V.ack.line + ' ' + V.ack.lineTwo + ' ' + V.lead;
+    ok(/duelling|opponent|them|their/i.test(V.ack.line),
+      'the ack sheet names WHO gets the recording — that is the consent being asked for', V.ack.line);
+    ok(/relay|relayed/i.test(V.ack.line) && /relay|relayed/i.test(V.lead),
+      'and both the sheet and the screen lead admit the relayed hop through our server',
+      V.ack.line + ' | ' + V.lead);
+    ok(!/no server|never touches a server|nothing is uploaded|no server ever/i.test(voiceCopy),
+      'and NOTHING in the voice copy claims a server is never involved — it is, on the fallback path',
+      voiceCopy);
     ok(/hear|hears/i.test(V.toggleOn) && /drop/i.test(V.toggleOff),
       'the toggle hints name both directions on and the unread drop off',
       V.toggleOn + ' / ' + V.toggleOff);

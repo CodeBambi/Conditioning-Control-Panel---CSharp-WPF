@@ -346,7 +346,13 @@ export function mount(container, ctx) {
     if (document.activeElement !== xferRow.input) xferRow.input.checked = !!match.localMediaTransfer;
     xferRow.input.disabled = !!why || !editable;
     xferRow.row.classList.toggle('is-disabled', !!why);
-    xferRow.sub.textContent = why || hint || S.lobby.transferSub;
+    /* THE DISCLOSURE IS NOT OPTIONAL FURNITURE (2026-08-05 privacy pass). `hint`
+     * used to REPLACE S.lobby.transferSub, which meant a player whose library had
+     * nothing compressed yet could tick the box having read only "nothing ready to
+     * send yet" — never the sentence that says the media goes to their opponent.
+     * `why` still replaces it, and that is correct: those three arms all mean
+     * nothing can cross at all. Whenever the box is live, the sentence is there. */
+    xferRow.sub.textContent = why || (hint ? hint + ' ' + S.lobby.transferSub : S.lobby.transferSub);
     xferRow.value.textContent = match.remoteMediaTransfer
       ? S.lobby.transferTheirsOn : S.lobby.transferTheirsOff;
   }
