@@ -1937,7 +1937,12 @@ namespace ConditioningControlPanel.Services
                     // Bespoke voiced success response for this exact mantra.
                     var respAudio = App.MantraVoice?.ResolveAudio(mantra.ResponseAudio);
                     Speak(string.IsNullOrWhiteSpace(mantra.Response) ? "Good girl~" : mantra.Response, respAudio);
-                    App.Mantra?.TryCompleteMantra();
+                    // Typed-minigame credit if it happens to be running; otherwise credit the
+                    // spoken completion directly - TryCompleteMantra() bails when the minigame
+                    // is closed, which used to mean a mic-verified mantra credited nothing
+                    // (no XP, no quest, no program day).
+                    if (App.Mantra?.TryCompleteMantra() != true)
+                        App.Mantra?.CreditExternalMantra();
                     App.Logger?.Information("AutonomyService: SpokenMantra matched '{Phrase}' (score={Score:0.00}, conf={Conf:0.00})",
                         phrase, result.Score, result.Confidence);
                 }

@@ -1701,6 +1701,12 @@ namespace ConditioningControlPanel
                     App.Bubbles.Start(bypassLevelCheck: true);
                     App.Logger?.Information("Bubble burst started via SetBubblesActive");
                 }
+                else
+                {
+                    // Already spawning (e.g. left running from the dashboard) - the interval is
+                    // computed inside Start(), so apply the burst frequency we just wrote
+                    App.Bubbles.RefreshFrequency();
+                }
             }
             else
             {

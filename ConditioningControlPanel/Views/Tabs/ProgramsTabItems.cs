@@ -108,6 +108,15 @@ namespace ConditioningControlPanel.Views.Tabs
         public string TaskId { get; set; } = "";
         public string Description { get; set; } = "";
 
+        /// <summary>
+        /// The plain "how do I actually do this" line under the flavour text: the exact feature
+        /// the verifier draws credit from and what has to happen for the task to tick. Authored
+        /// descriptions carry the fiction; this line carries the mechanics (#805-era support
+        /// reports showed users guessing wrong). Collapsed once the task is complete.
+        /// </summary>
+        public string HowTo { get; set; } = "";
+        public Visibility HowToVisibility { get; set; } = Visibility.Collapsed;
+
         public string StatusGlyph { get; set; } = "";
         public Brush StatusBrush { get; set; } = Brushes.Gray;
 
