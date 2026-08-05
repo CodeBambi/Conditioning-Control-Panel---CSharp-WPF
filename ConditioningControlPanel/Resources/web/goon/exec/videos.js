@@ -779,7 +779,7 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
   }
 
   /** play(), with the autoplay-policy fallback: keep the PICTURE, drop the sound. */
-  function play(v) {
+  function play(v, onMutedFallback) {
     if (!v || typeof v.play !== 'function') return;
     let p = null;
     try { p = v.play(); } catch (_e) { return; }
@@ -788,6 +788,11 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
         try { v.muted = true; const q = v.play(); if (q && q.catch) q.catch(() => { /* give up quietly */ }); }
         catch (_e) { /* ignore */ }
         info('autoplay refused with sound — playing muted');
+        // The window path hands a callback so the SCREEN says so too (the
+        // is-muted glyph) — a phone that blocks unmuted autoplay otherwise
+        // plays every clip silent with nothing telling the player one tap
+        // fixes it (2026-08-05 play-test: "there is no audio to them").
+        if (typeof onMutedFallback === 'function') { try { onMutedFallback(); } catch (_e) { /* ignore */ } }
       });
     }
   }
@@ -844,7 +849,9 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     for (let i = 0; i < wins.length; i++) {
       const rec = wins[i];
       mark(rec, LIVE_CLASS, i === idx);
-      mark(rec, MUTED_CLASS, !!rec.muted);
+      // Click-silenced OR autoplay-blocked: either way the honest state is "this
+      // one is not speaking", and the glyph is the invitation to tap.
+      mark(rec, MUTED_CLASS, !!rec.muted || !!rec.autoplayMuted);
       const v = rec.video;
       if (!v || rampingTo(v, targets[i])) continue;
       rampVolume(v, targets[i]);
@@ -878,7 +885,9 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
    */
   function focusWindow(rec, unmute) {
     if (!rec || rec.finished) return;
-    if (unmute) rec.muted = false;
+    // The explicit "you, speak" gesture also clears the autoplay block: the tap
+    // IS the user gesture the platform wanted, so the ramp's unmute now sticks.
+    if (unmute) { rec.muted = false; rec.autoplayMuted = false; }
     focusedId = rec.wid;
     applyAudio();
   }
@@ -891,7 +900,11 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
    */
   function toggleMute(rec) {
     if (!rec || rec.finished) return;
-    rec.muted = !rec.muted;
+    // An autoplay-blocked window reads as muted, so the first tap must mean
+    // "speak" — flipping rec.muted would re-silence a window the player never
+    // silenced. The tap is also the gesture the platform's unmute needed.
+    if (rec.autoplayMuted) { rec.autoplayMuted = false; }
+    else rec.muted = !rec.muted;
     sfx('ui-select');
     applyAudio();
   }
@@ -1469,7 +1482,11 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     video.autoplay = true;
     video.controls = false;
     video.preload = 'auto';
-    video.loop = false;               // it ends when the CLIP ends
+    // A PAYLOAD window loops: the attack was bought for capMs and a short
+    // compressed clip (3s of somebody's footage) closing the window early read
+    // as "the video got removed" in the 2026-08-05 phone play-test. A LOCAL
+    // self-pop keeps the old contract — it ends when the CLIP ends (onended).
+    video.loop = !!payload;
     video.muted = true;               // applyAudio() hands the mic to the newest
     video.volume = 0;                 // …and it RAMPS up to volumeFor(intensity)
 
@@ -1520,6 +1537,8 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
       sha: peerSha,
       intensity: clamp01(intensity),
       wid: ++widSeq, muted: false,
+      // true = the platform refused unmuted autoplay; cleared by the first tap.
+      autoplayMuted: false,
       dx: 0, dy: 0, held: false, finished: false,
       // The CSS anchor a pinch measures against (left/top are written above and
       // never move; dx/dy is the whole travel) and the shape it grows by. The
@@ -1594,7 +1613,10 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
         try { node.style.setProperty('--gg-vwin-ar', `${w} / ${h}`); } catch (_e) { /* ignore */ }
       }
       const secs = num(video.duration, 0);
-      if (secs > 0 && isFinite(secs)) {
+      // A looping payload clip has no natural end to fade for — arming off the
+      // first pass would fade the audio out and then the loop restarts silent.
+      // Its only end is the cap, whose fade is already armed below.
+      if (!video.loop && secs > 0 && isFinite(secs)) {
         const endsIn = (secs - num(video.currentTime, 0)) * 1000;
         if (endsIn > 0 && endsIn < capMs) armFade(rec, endsIn - AUDIO_FADE_OUT_MS);
       }
@@ -1612,7 +1634,7 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     publishCount();
     soon(() => { if (!rec.finished && rec.node) rec.node.classList.add('is-on'); }, 16);
     applyAudio();
-    play(video);
+    play(video, () => { rec.autoplayMuted = true; applyAudio(); });
     rec.endTimer = soon(() => settleWindow(rec, true), capMs);
     // The cap is an end we can see coming, so its fade is armed with it. A clip
     // that ends first re-arms this tighter from onloadedmetadata.
