@@ -32,6 +32,35 @@
 //     been debugged for three times. Fail-open throughout — unknown codec or a peer that named
 //     none means OFFER IT (net/codecs.js owns that contract).
 //
+// AND A THIRD RULE, THE VARIETY ONE (2026-08-05, phone play-test r9): "SEEMS LIKE I AM RECEIVING
+// ALWAYS THE SAME GIF". Every gate above passed and every layer worked; the receiver's pool was
+// simply TOO SMALL AND TOO LOPSIDED for the first minute of the match, so the two animated images
+// that happened to land first were the two images every early burst had to choose between. Three
+// changes, all of them about the SHAPE of the pool rather than its existence:
+//
+//  3a. DEPTH IS EARNED BY SIZE, not fixed at four. `targetDepth()` keeps roughly QUEUE_AHEAD_MS of
+//      WIRE TIME landed ahead of the match instead of a flat count, so a library of 400 KB stills
+//      primes ten deep during the untimed draft while a library of 40 MB clips still primes four.
+//      The wire budget is unchanged — `eligible()` still refuses anything that cannot land inside
+//      MAX_XFER_MS at the measured rate — this only decides how many of the affordable ones we
+//      bother to keep ahead. LANDED_MAX (12) is deliberately above QUEUE_DEPTH_MAX (10) so the
+//      ring can never truncate the working set it was told to build.
+//
+//  3b. THE PUMP BALANCES KINDS AND FAVOURS DISTINCTNESS. The draw was a straight `deck.pop()`, so
+//      four consecutive videos was as likely as any other hand and the FlashBurst lane could sit
+//      empty for a minute. `nextPick` now scans the top PICK_SCAN entries of the (still shuffled,
+//      still Math.random) deck and prefers the kind the receiver's pool is SHORT of, then an
+//      `origin` that differs from the last pick — a soft score, never a filter, so a single-kind
+//      or all-gif library behaves exactly as it did. Ties keep the topmost card, which is what
+//      keeps the shuffle in charge of everything the score does not care about.
+//
+//  3c. TAGS REMEMBER WHAT THE PEER HAS ALREADY BEEN SHOWN. `markConsumed` was a pure delete; it
+//      now also writes a small `shown` ledger (sha -> {kind, seq}), and `tagsFor` fills a burst's
+//      spare slots from it least-recently-shown-first when the landed pool is short. THE LEDGER
+//      CAN ONLY TOP UP, NEVER OPEN: a tag set that found nothing fresh still comes back EMPTY, so
+//      "one landing, one drop" and the untagged diagnostic below both survive intact, and the
+//      receiver's own rotation (exec/media.js drawReceived) stays the answer for "nothing new".
+//
 // TWO tryFirePayload INSTANCE WRAPPERS NOW EXIST. boot.js applies the matchLog wrapper first
 // (attachMatch -> matchLog.attach), then this one, so the queue's wrapper is the OUTERMOST: a
 // payload gets its tags BEFORE the log sees it, and the log records exactly what went out. Order
@@ -49,12 +78,40 @@ import {
   XferDecline,
 } from './mediaChannel.js';
 
-/** Landed-or-in-flight artifacts we try to keep ahead of the match. */
+/**
+ * Landed-or-in-flight artifacts we try to keep ahead of the match — THE FLOOR, not the answer.
+ * `targetDepth()` raises it toward QUEUE_DEPTH_MAX when the library is cheap enough to go deeper
+ * (rule 3a in the header); it is never lowered, because four ahead is the depth the whole feature
+ * was tuned at and a slow link deserves the same patience it always had.
+ */
 export const QUEUE_DEPTH = 4;
+/**
+ * …and the ceiling. Held BELOW LANDED_MAX on purpose: the moment the target depth could exceed
+ * the landed ring, the pump would spend the wire on artifacts the ring then silently dropped.
+ */
+export const QUEUE_DEPTH_MAX = 10;
+/**
+ * How much WIRE TIME the queue tries to keep landed ahead of the match, which is the honest unit:
+ * "four artifacts" means half a minute of small stills and six minutes of long clips. 45 s is the
+ * draft's own dead time plus a margin — enough that a still-image library is primed several deep
+ * before the first payload fires, which is precisely the minute the owner saw repeats in.
+ */
+export const QUEUE_AHEAD_MS = 45000;
+/**
+ * How many cards off the top of the shuffled deck `nextPick` may score before it settles. Small
+ * on purpose: a window this size is enough to find a card of the hungrier kind in any mixed
+ * library, and short enough that the SHUFFLE — not the score — still decides most hands.
+ */
+export const PICK_SCAN = 12;
 /** The idle poll only bothers when fewer than this many have landed. */
 export const QUEUE_MIN = 2;
 /** How many landed artifacts are tracked per match, so a 12-minute run cannot grow unbounded. */
 export const LANDED_MAX = 12;
+/**
+ * Rows in the "already shown them this" ledger (rule 3c). Bounded for the same reason LANDED_MAX
+ * is; at 64 a twelve-minute match has never truncated anything a burst would have asked for.
+ */
+export const SHOWN_MAX = 64;
 /** Ported from exec/media.js: a reshuffled deck must not repeat the last N picks. */
 export const NO_ECHO = 8;
 /** Cheap wedge insurance while the match is running. */
@@ -132,6 +189,19 @@ export function createMediaQueue({
   /** The shuffled deck over eligible artifacts, drawn from the end. */
   let deck = [];
   const recent = [];
+  /**
+   * The `origin` of the last card taken ('' or 'gif'), so `nextPick` can lean away from four
+   * converted loops in a row. A ONE-CARD memory is all this needs: `seen` already guarantees the
+   * same FILE never goes twice, so the only repetition left to break up is of a KIND of thing.
+   */
+  let lastOrigin = '';
+  /**
+   * sha -> {kind, seq} for every artifact a fired payload has already pointed the peer at.
+   * `seq` is a monotonic counter, so "least recently shown" is a number comparison and nothing
+   * here has to know what time it is. Written ONLY by markConsumed (rule 3c).
+   */
+  const shown = new Map();
+  let showSeq = 0;
 
   const receivedSubs = new Set();
   let picks = 0;
@@ -245,6 +315,88 @@ export function createMediaQueue({
     }
   }
 
+  /* --------------------------------------------------------- depth + kind balance (rule 3) */
+
+  /**
+   * How deep to keep the queue RIGHT NOW, in artifacts. Wire time is the unit (see QUEUE_AHEAD_MS)
+   * and the MEAN artifact is the estimator — coarse on purpose, because the only decision it feeds
+   * is "a few more or not", and a median would cost a sort on every pump for an answer that
+   * differs by one.
+   *
+   * `estBps()` is the SAME budget `eligible()` filters against, so depth and admission can never
+   * disagree: nothing in the pool has already been refused for being too slow to land.
+   *
+   * @param {Array} [pool] the eligible set, when the caller already has one
+   */
+  function targetDepth(pool) {
+    let p = pool;
+    if (!Array.isArray(p)) { try { p = eligible(); } catch (_e) { return QUEUE_DEPTH; } }
+    if (!p.length) return QUEUE_DEPTH;
+    let sum = 0;
+    for (const a of p) sum += a.bytes;
+    const msEach = ((sum / p.length) / estBps()) * 1000;
+    if (!(msEach > 0)) return QUEUE_DEPTH;                 // NaN/0 -> the floor, never a huge depth
+    const n = Math.floor(QUEUE_AHEAD_MS / msEach);
+    return Math.max(QUEUE_DEPTH, Math.min(QUEUE_DEPTH_MAX, n));
+  }
+
+  /** How many of each media kind are landed or in flight right now. */
+  function kindCounts() {
+    let image = 0;
+    let video = 0;
+    for (const a of landed) { if (a.kind === 'video') video++; else image++; }
+    for (const sha of inFlight.keys()) {
+      const meta = pickInfo.get(sha);
+      if (!meta) continue;
+      if (meta.kind === 'video') video++; else image++;
+    }
+    return { image, video };
+  }
+
+  /**
+   * The kind the receiver's pool is SHORT of, or '' for "no opinion".
+   *
+   * '' is the answer whenever the preference could do harm rather than good: a pool that already
+   * holds the same number of each, and — the important one — a library that only HAS one kind,
+   * where wanting the other would just mean scoring every card identically. Both cases fall
+   * straight back to the shuffle.
+   */
+  function hungriestKind(pool) {
+    let hasImage = false;
+    let hasVideo = false;
+    for (const a of pool) {
+      if (a.kind === 'video') hasVideo = true; else hasImage = true;
+      if (hasImage && hasVideo) break;
+    }
+    if (!hasImage || !hasVideo) return '';
+    const c = kindCounts();
+    if (c.image === c.video) return '';
+    return c.image < c.video ? 'image' : 'video';
+  }
+
+  /**
+   * Which card of the deck to take: the best-scoring one in the top PICK_SCAN, index into `deck`.
+   *
+   * THE SCORE IS SOFT, TWICE OVER, and that is the whole design. Wanting the hungrier kind is
+   * worth 2 and a fresh `origin` is worth 1, so kind balance outranks distinctness but neither can
+   * EXCLUDE anything: on a library where no card scores, the topmost card of a shuffled deck wins,
+   * which is byte-identical to the `deck.pop()` this replaced. Ties go to the topmost for the same
+   * reason (the comparison is strict `>` while scanning downward from the top).
+   */
+  function pickIndex(want) {
+    let best = deck.length - 1;
+    let bestScore = -1;
+    const from = Math.max(0, deck.length - PICK_SCAN);
+    for (let i = deck.length - 1; i >= from; i--) {
+      const e = deck[i];
+      let score = 0;
+      if (want && e.kind === want) score += 2;
+      if ((e.origin || '') !== lastOrigin) score += 1;
+      if (score > bestScore) { bestScore = score; best = i; }
+    }
+    return best;
+  }
+
   /** The next artifact worth offering, or null. */
   function nextPick() {
     const pool = eligible();
@@ -252,8 +404,10 @@ export function createMediaQueue({
     const live = new Set(pool.map((e) => e.sha));
     deck = deck.filter((e) => live.has(e.sha) && !seen.has(e.sha) && !neverOffer.has(e.sha));
     if (!deck.length) reshuffle(pool);
-    const pick = deck.pop() || null;
+    if (!deck.length) return null;
+    const [pick] = deck.splice(pickIndex(hungriestKind(pool)), 1);
     if (!pick) return null;
+    lastOrigin = pick.origin || '';
     recent.push(pick.sha);
     if (recent.length > NO_ECHO) recent.shift();
     return pick;
@@ -263,18 +417,30 @@ export function createMediaQueue({
 
   function inFlightCount() { return inFlight.size; }
 
-  /** Fill to QUEUE_DEPTH. Event-driven: channel open, xfer_done, decline:'have', consumption. */
+  /**
+   * Fill to `targetDepth()`. Event-driven: channel open, xfer_done, decline:'have', consumption.
+   *
+   * The loop still terminates after ONE offer in practice — `offerNext` refuses while anything is
+   * in flight (MAX_CONCURRENT_OUT is 1 and lives on the channel, because two artifacts sharing one
+   * bulk lane is not throughput, it is interleaving) — so depth buys LANDINGS OVER TIME, not
+   * parallelism: each landing re-enters here and takes the next card.
+   */
   function pump() {
     if (!attached || !enabled()) return;
+    const depth = targetDepth();
     let guard = 0;
-    while (landed.length + inFlightCount() < QUEUE_DEPTH && guard++ < QUEUE_DEPTH) {
+    while (landed.length + inFlightCount() < depth && guard++ < QUEUE_DEPTH_MAX) {
       if (!offerNext()) break;
     }
   }
 
-  /** The 5 s idle poll's cheaper cousin — only bothers when the larder is actually low. */
+  /**
+   * The 5 s idle poll's cheaper cousin — only bothers when the larder is actually low. "Low"
+   * scales with the target: a two-artifact floor was the right hunger line at depth four and is
+   * plain wrong at depth ten, where three landed out of ten wanted is a starving queue.
+   */
   function pumpIfHungry() {
-    if (landed.length < QUEUE_MIN) pump();
+    if (landed.length < Math.max(QUEUE_MIN, targetDepth() >> 1)) pump();
   }
 
   /** @returns {boolean} true when an offer went out (or is being opened). */
@@ -401,6 +567,28 @@ export function createMediaQueue({
         out.push('xfer:' + a.sha);
         if (out.length >= want) break;
       }
+
+      /* THE LEDGER TOP-UP (rule 3c). A FlashBurst asks for three and the landed pool routinely
+       * holds one, so two of its three exact slots used to go out empty. Those slots are now
+       * filled from `shown`, LEAST-RECENTLY-SHOWN FIRST, with artifacts this peer demonstrably
+       * already holds (they landed, and a fired payload pointed at them).
+       *
+       * `out.length` GATES IT, and that guard is the load-bearing part: with nothing fresh at all
+       * the answer stays [], which keeps "one landing, one drop" true, keeps the untagged
+       * diagnostic below firing, and leaves "nothing new has landed" to the receiver's own
+       * rotation — exec/media.js drawReceived already spends the rest of every peer burst there
+       * and rotates least-recently-SHOWN, so a stale pin would only make that answer worse. */
+      if (out.length && out.length < want) {
+        const repeats = [];
+        for (const [sha, meta] of shown) {
+          if (meta.kind === mediaKind && out.indexOf('xfer:' + sha) < 0) repeats.push([sha, meta.seq]);
+        }
+        repeats.sort((x, y) => x[1] - y[1]);
+        for (const [sha] of repeats) {
+          out.push('xfer:' + sha);
+          if (out.length >= want) break;
+        }
+      }
     }
     if (!out.length) {
       const why = whyNoTags();
@@ -412,6 +600,26 @@ export function createMediaQueue({
     return out;
   }
 
+  /**
+   * Note that a fired payload has pointed the peer at this artifact. The ledger's ONLY writer —
+   * `tagsFor` deliberately does not touch it, so a tag set built for a payload that then failed
+   * its charge check cannot age the record of something the peer never actually saw.
+   */
+  function noteShown(sha, kind) {
+    const meta = shown.get(sha);
+    if (meta) { meta.seq = ++showSeq; return; }
+    shown.set(sha, { kind: kind === 'video' ? 'video' : 'image', seq: ++showSeq });
+    /* Over the cap we drop the MOST recently shown row, not the oldest: a row's whole value here
+     * is as a repeat candidate, and the least-recently-shown rows are the good ones. */
+    while (shown.size > SHOWN_MAX) {
+      let worstSha = '';
+      let worstSeq = -1;
+      for (const [s, m] of shown) if (m.seq > worstSeq) { worstSeq = m.seq; worstSha = s; }
+      if (!worstSha) break;
+      shown.delete(worstSha);
+    }
+  }
+
   /** A payload went out carrying these tags — those artifacts are spent. */
   function markConsumed(tags) {
     if (!Array.isArray(tags) || !tags.length) return;
@@ -420,6 +628,12 @@ export function createMediaQueue({
       if (typeof t === 'string' && t.startsWith('xfer:')) spent.add(t.slice(5));
     }
     if (!spent.size) return;
+    // The ledger is written BEFORE the filter, while `landed` still knows each artifact's kind.
+    // `pickInfo` is the backstop for a deliberate repeat (already gone from `landed`).
+    for (const sha of spent) {
+      const from = landed.find((a) => a.sha === sha) || pickInfo.get(sha) || null;
+      noteShown(sha, from ? from.kind : 'image');
+    }
     const before = landed.length;
     landed = landed.filter((a) => !spent.has(a.sha));
     consumed += before - landed.length;
@@ -573,6 +787,10 @@ export function createMediaQueue({
     neverOffer.clear();
     seen.clear();
     recent.length = 0;
+    // A new match has shown the new peer nothing, and owes the old one's taste nothing either.
+    shown.clear();
+    showSeq = 0;
+    lastOrigin = '';
     match = null;
     transport = null;
   }
@@ -659,6 +877,10 @@ export function createMediaQueue({
         picks,
         consumed,
         deck: deck.length,
+        // The variety dials, so a play-test can read the pool's SHAPE and not just its size.
+        depth: targetDepth(),
+        kinds: kindCounts(),
+        shown: shown.size,
         estBps: estBps(),
         channel: channel ? channel.stats() : null,
       };
