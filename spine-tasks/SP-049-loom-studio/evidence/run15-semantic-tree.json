@@ -1,0 +1,23 @@
+{
+  "capture": "avalonia-live get_semantic_tree, run 15 (CCP_MCP=1), target selector Window[Title=\"The Loom\"]",
+  "dimensionValidated": "The Loom window node bounds 1200x800 (matches DtrhLoomWindow.axaml Width/Height — correct window, not the 520x680 dashboard)",
+  "loomWindowSubtree": {
+    "id": "ctl-1f",
+    "role": "Window",
+    "name": "The Loom",
+    "bounds": { "x": 0, "y": 0, "width": 1200, "height": 800 },
+    "children": [
+      { "id": "ctl-15", "role": "Text", "name": "loom: studio live (loom-list posted)", "bounds": { "y": 774.3, "width": 1200, "height": 25.7 } },
+      { "id": "ctl-18", "role": "StackPanel", "name": "UnsupportedPanel", "bounds": { "width": 0, "height": 0 }, "note": "hidden — the supported path is live" },
+      { "id": "ctl-1b", "role": "Panel", "name": "WebHost", "bounds": { "width": 1200, "height": 774.3 },
+        "children": [
+          { "id": "ctl-1a", "role": "NativeWebView", "interactive": true, "states": ["focused"], "bounds": { "width": 1200, "height": 774.3 } }
+        ]
+      }
+    ]
+  },
+  "notes": [
+    "The page DOM lives inside the native WebView2 child — the Avalonia semantic tree sees the shell + the focused NativeWebView; page-content evidence is the raster set (run14-*.png) + screen captures (run5/run6/run11) + the served-200 log lines.",
+    "Status text 'loom: studio live (loom-list posted)' = the ready-gated boot completed (stripped LoomHostService-parity boot)."
+  ]
+}

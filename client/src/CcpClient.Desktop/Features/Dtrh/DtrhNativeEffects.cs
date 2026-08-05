@@ -93,6 +93,11 @@ public sealed class DtrhNativeEffects : IDisposable
         {
             "wave_clear" => (new[] { "wave_clear.mp3", "chime1.mp3" }, 0.8),
             "ripple_cast" => (new[] { "ripple_cast.mp3", "Pop2.mp3" }, 0.6),
+            // SP-049: boon_pick's WPF chain (ChaosSfx.cs:33 — chaos/boon_pick.mp3, falling
+            // back to chime2.mp3). The dedicated drop lives in the WPF sound library (not
+            // the DTRH payload pool), so the greenfield lands on chime2 — the same
+            // rewarding-chime outcome WPF serves when the library file is absent.
+            "boon_pick" => (new[] { "boon_pick.mp3", "chime2.mp3" }, scale),
             _ => (new[] { name is { Length: > 0 } n ? n + ".mp3" : "" }, scale),
         };
 

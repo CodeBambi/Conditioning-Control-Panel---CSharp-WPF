@@ -328,9 +328,25 @@ public partial class DtrhLoomWindow : Window
 
                         _ = _web.InvokeScript(script)
                             .ContinueWith(
-                                st => _host.LogDiagnostic(st.IsFaulted
-                                    ? $"loom: loom-drive '{bare}' faulted: {st.Exception?.GetBaseException().Message}"
-                                    : $"loom: loom-drive '{bare}' -> {st.Result}"),
+                                st =>
+                                {
+                                    if (st.IsFaulted)
+                                    {
+                                        _host.LogDiagnostic($"loom: loom-drive '{bare}' faulted: {st.Exception?.GetBaseException().Message}");
+                                        return;
+                                    }
+
+                                    if (bare.StartsWith("shot-fetch:", StringComparison.Ordinal))
+                                    {
+                                        // Presence+shape logging (the slug is a user-authored
+                                        // filename — the artifact carries the names, the log
+                                        // carries counts/bytes only, framing d).
+                                        _host.LogDiagnostic($"loom: loom-drive '{bare}' -> {PersistRackShot(bare["shot-fetch:".Length..], st.Result)}");
+                                        return;
+                                    }
+
+                                    _host.LogDiagnostic($"loom: loom-drive '{bare}' -> {st.Result}");
+                                },
                                 TaskScheduler.Default);
                     });
                 }, TaskScheduler.Default);
@@ -354,7 +370,68 @@ public partial class DtrhLoomWindow : Window
 
         return step switch
         {
-            // Two-click forget across the redraw: click 🗑, then (after the armed redraw)
+            // Geometry facts for the evidence record (the DPI-mismatch class needs
+            // measurement, not armchair math): viewport, devicePixelRatio, zoom.
+            "report" =>
+                "(function(){return 'loom-drive: report innerWidth='+window.innerWidth"
+                + "+' innerHeight='+window.innerHeight+' dpr='+window.devicePixelRatio"
+                + "+' bodyZoom='+(document.body.style.zoom||'(none)');})()",
+            // Bring the rack into view (stacked-layout pages scroll; grid pages no-op).
+            "scroll-rack" =>
+                "(function(){var r=document.querySelector('.wr-loom-rack');if(!r)return 'loom-drive: no rack';"
+                + "r.scrollIntoView({block:'start'});return 'loom-drive: rack scrolled to viewport top';})()",
+            // Scroller-topology probe (the run-11 mystery: which element actually scrolls
+            // the stacked page — every candidate set to max and MEASURED, no guesses).
+            "scroll-probe" =>
+                "(function(){var els=[['body',document.body],['doc',document.documentElement],"
+                + "['page',document.querySelector('.loom-page')],['loom',document.getElementById('loom')],"
+                + "['studio',document.querySelector('.wr-loom-studio')],['controls',document.querySelector('.loom-controls')]];"
+                + "var out=[];for(var i=0;i<els.length;i++){var e=els[i][1];if(!e){out.push(els[i][0]+'=null');continue;}"
+                + "e.scrollTop=99999;out.push(els[i][0]+':'+e.scrollTop+'/'+e.scrollHeight);}"
+                + "return 'loom-drive: scroll-probe '+out.join(' ');})()",
+            // stacked (narrow) mode the BODY is the overflow scroller (html/body height:
+            // 100% + body overflow-y:auto — the documentElement never overflows; run-9
+            // evidence fact: scrollingElement.scrollHeight == innerHeight).
+            "scroll-end" =>
+                "(function(){var b=document.body,d=document.documentElement;"
+                + "b.scrollTop=b.scrollHeight;d.scrollTop=d.scrollHeight;"
+                + "return 'loom-drive: scroll-end body='+b.scrollTop+'/'+b.scrollHeight+' doc='+d.scrollTop+'/'+d.scrollHeight;})()",
+            // HARNESS display adjustment for DPI-mismatched harness monitors (this laptop:
+            // the WebView2 child rasters at the creation monitor's scale — 1.75 — while
+            // the window sits on a 1.0-scale display, clipping the page). Zoom is a page
+            // display property; the protocol/store/serving path is untouched. Recorded.
+            _ when step.StartsWith("zoom:", StringComparison.Ordinal)
+                && double.TryParse(step["zoom:".Length..], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var zoom) =>
+                $"(function(){{document.documentElement.style.zoom='{zoom.ToString(System.Globalization.CultureInfo.InvariantCulture)}';document.body.style.zoom='{zoom.ToString(System.Globalization.CultureInfo.InvariantCulture)}';return 'loom-drive: zoom applied (documentElement+body)';}})()",
+            // HARNESS in-engine rack raster: the laptop's WebView2 raster scale (1.75,
+            // creation monitor) vs the window's display scale (1.0) means the OS only ever
+            // paints the page's top-left ~57% — the rack is NEVER on screen here (run 8-12
+            // forensics: body scroller 1630 CSS px tall, rack pinned last). This step has
+            // the REAL engine composite the rack region: each tile's SERVED GIF re-fetched
+            // CORS-clean (§4 media route sends Access-Control-Allow-Origin: page origin),
+            // decoded via createImageBitmap, drawn with its slug; the per-tile decode facts
+            // (complete + naturalWidth) ride the log line; the PNG comes back as the script
+            // result and lands in overlay staging (HARNESS-ONLY, never the read-only payload).
+            _ when step.StartsWith("shot-rack:", StringComparison.Ordinal) =>
+                "(function(){window.__loomShot='loom-drive: shot-rack PENDING';"
+                + "(async function(){var rows=document.querySelectorAll('.wr-loom-rackrow');"
+                + "if(!rows.length){window.__loomShot='loom-drive: shot-rack NO TILES';return;}"
+                + "var W=118*rows.length+20,H=140,c=document.createElement('canvas');c.width=W;c.height=H;"
+                + "var x=c.getContext('2d');x.fillStyle='#14101c';x.fillRect(0,0,W,H);var info=[];"
+                + "for(var i=0;i<rows.length;i++){var img=rows[i].querySelector('img.wr-loom-thumb');"
+                + "var nm=rows[i].querySelector('.wr-row-name');"
+                + "info.push((nm?nm.textContent:'?')+':'+(img&&img.complete&&img.naturalWidth>0?'decoded-'+img.naturalWidth+'px':'NOT-DECODED'));"
+                + "if(img&&img.complete&&img.naturalWidth>0){try{var blob=await (await fetch(img.src,{mode:'cors'})).blob();"
+                + "var bmp=await createImageBitmap(blob);x.drawImage(bmp,10+i*118,10,82,82);}catch(e){info[i]+='(fetch-fail)';}}"
+                + "x.fillStyle='#ffd7ec';x.font='12px sans-serif';if(nm)x.fillText(nm.textContent,10+i*118,110);}"
+                + "window.__loomShot='loom-drive: shot-rack ['+info.join(' | ')+'] DATAURL:'+c.toDataURL('image/png');"
+                + "})().catch(function(e){window.__loomShot='loom-drive: shot-rack ERROR '+e;});"
+                + "return 'loom-drive: shot-rack started (async raster armed)';})()",
+            // WebView2's ExecuteScript does NOT await returned promises (run-13 fact: the
+            // async IIFE came back as {}) — the raster is fetched one step later, sync.
+            _ when step.StartsWith("shot-fetch:", StringComparison.Ordinal) =>
+                "(function(){return window.__loomShot||'loom-drive: shot-fetch: no raster pending';})()",
             // click the armed 'forget?' — the second click sends the REAL loom-delete.
             "delete-first" =>
                 "(function(){var del=document.querySelector('.wr-loom-rackrow .wr-row-right .wr-craft-chip:last-child');"
@@ -367,6 +444,42 @@ public partial class DtrhLoomWindow : Window
                 + "if(chips.length<2)return 'loom-drive: no rack tile';chips[1].click();return 'loom-drive: reveal clicked';})()",
             _ => null,
         };
+    }
+
+    /// <summary>HARNESS-ONLY: persist the in-engine rack raster (the shot-rack script's
+    /// DATAURL result) into overlay staging — never the read-only payload, never a Z:\
+    /// reference. Returns the presence+shape log line (tile count + bytes, never names).</summary>
+    private string PersistRackShot(string fileName, string? scriptResult)
+    {
+        const string marker = "DATAURL:data:image/png;base64,";
+        if (scriptResult is null)
+        {
+            return "no result (harness no-op)";
+        }
+
+        var at = scriptResult.IndexOf(marker, StringComparison.Ordinal);
+        if (at < 0)
+        {
+            // The script's own refusal line (e.g. NO TILES) is name-free by construction.
+            return scriptResult.Trim('"');
+        }
+
+        try
+        {
+            var b64 = scriptResult[(at + marker.Length)..].TrimEnd('"');
+            var bytes = Convert.FromBase64String(b64);
+            var safeName = Path.GetFileName(fileName);
+            var dir = Path.Combine(DtrhParticipant.OverlayRoot, "loom");
+            Directory.CreateDirectory(dir);
+            var path = Path.Combine(dir, safeName);
+            File.WriteAllBytes(path, bytes);
+            var tiles = scriptResult[..at].Count(ch => ch == '|') + 1;
+            return $"rack raster staged ({tiles} tile(s), {bytes.Length} bytes, overlay staging '{safeName}' — names in the artifact only)";
+        }
+        catch (Exception ex)
+        {
+            return $"raster persist failed ({ex.GetType().Name}) — harness no-op";
+        }
     }
 
     private void SetStatus(string s) => Dispatcher.UIThread.Post(() => Status.Text = s);

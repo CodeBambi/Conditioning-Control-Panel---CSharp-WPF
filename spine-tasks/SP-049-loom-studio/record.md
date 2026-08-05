@@ -9,7 +9,7 @@
 
 | Step | Type | Result | Artifact |
 |------|------|--------|----------|
-| 1 | plan | (pending) | — |
+| 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — engine runs reviews after `.DONE`, SP-195) | `.reviews/2-20260805T052612.md` (called at the Step-2 boundary, covering Steps 1-2) |
 
 ---
 
@@ -79,7 +79,45 @@
 
 Step 1 archaeology ≈ 45 min (payload files, WPF LoomHostService/DtrhLoomStore, b4 record + client Dtrh tree read directly). Step 2 implementation + tests ≈ 50 min (build clean first pass; 628/628 + 33/33).
 
+---
+
+## Step 3 — in-engine evidence (Windows headed, avalonia-live + harness) + consolidation
+
+### Evidence index (`evidence/`)
+
+| Artifact | What it proves |
+|---|---|
+| `loom-run.log` … `loom-run15.log` (15 headed runs, all EXIT=0) | The full message-level story per run: ready → loom-list at ready (never before), per-tile `GET /spirals/loom_<slug>.gif -> 200 (spirals)` served lines, gifenc saves (`dtrh-loom: saved spiral (1072927 bytes)`), loom-result-driven list refreshes, deletes, sfx lines, graceful teardown |
+| `run5-studio-4tiles.png` (screen capture, dimension-validated 1214x837) | The studio SURFACE in-engine: THE LOOM title, stage card, the live WebGL spiral preview mid-animation, name input `run4-weave`, SAVE button, and the loom-result status line "kept as run4-weave. the tube knows it now." |
+| `run8-rack-stacked.png` (screen capture, stacked narrow layout) | The dial cards legible in-engine: the weave (arms/turns/body/style/spin), the threads (swatches/gradient/backing), the motion, the effects, the centerpiece; the preset chips with their WOVEN thumbnails (classic ccp / bambi haze / sissy swirl / locked in / hypno teal / candy tunnel — the shared field pipeline rendering in-engine) |
+| `run14-rack-ready.png` (in-engine raster, 3 tiles) | **Leg (a), unscripted:** the rack renders at ready from pre-existing spirals — aaa-seeded + bbb-seeded + run13-weave thumbnails, each decoded from its SERVED `/spirals/*` URL (per-tile decode facts in the harness result; the CORS-clean re-fetch is §4's own header) |
+| `run14-rack-4tiles.png` (in-engine raster, 4 tiles) | **Leg (b):** the gifenc SAVE round trip lands on the rack — run14-weave's tile (the page's own encoder output, 1,072,927 bytes) beside the pre-existing three |
+| `run14-rack-after-delete.png` (in-engine raster, 3 tiles) | **Leg (c):** the real loom-delete removes aaa-seeded's tile and the list refresh re-renders the rack |
+| `run15-proof-weave.gif` + `.json` (file-content proof) | The gifenc artifact on disk: **640x640, 60 FRAMES (framesFor2 speed table), GIF89a magic + 0x3B trailer, 1,072,927 bytes** (System.Drawing frame count) + the params sidecar |
+| `run15-semantic-tree.json` (avalonia-live, dimension-validated) | The Loom window node 1200x800 (= the axaml size — the correct window, not the 520x680 dashboard), NativeWebView interactive+focused 1200x774, status "loom: studio live (loom-list posted)" |
+| `capture-loom.ps1` / `wheel-loom.ps1` / `list-children.ps1` | The capture tooling (SetWindowPos topmost + GetWindowRect before every capture, the SP-026 norm) |
+
+**Scripted-pointer labeling (binding 3):** the SAVE/DELETE drives run ONE atomic InvokeScript per step through the engine's own script interface (the SP-011 W14 precedent) — the gifenc worker, the bridge messages, the store, the serving, and the rack re-render are ALL real; only the pointer is scripted. Leg (a) needed NO scripting at all. The `exists` refusal + overwrite-arm path was also observed live (run 9b: `dtrh-loom: save refused (exists — page arms overwrite)`).
+
+### Surprises (evidence-pass ledger)
+
+1. **The SP-023 ping-pong class recurred:** the demonstrator's `Closed → Shutdown()` re-fired Closed 31× (teardown loop). Fixed with the same one-shot Interlocked latch the dtrh-demo uses; run 2+ show exactly one shutdown.
+2. **sfx `boon_pick` was unresolved** (silent no-op): the WPF chain is `chaos/boon_pick.mp3` → fallback `chime2.mp3` (ChaosSfx.cs:33); the dedicated drop lives in the WPF sound library, not the DTRH payload pool. Added the chain (page-supplied scale kept) — run 2+: `dtrh-fx: sfx 'boon_pick' playing (chime2.mp3)`. This fix serves the GAME host too (chaosRun/biomeMech send boon_pick).
+3. **The laptop WebView2 raster-scale mismatch (environmental, never faked around):** the embedded child rasters at the CREATION monitor's scale (1.75) while the window sits on a 1.0-scale display — only the page's top-left ~1/1.75 ever paints on screen, and the rack (pinned at the page bottom in grid mode, last element in stacked) is NEVER in the painted band. Measured, not guessed: `innerWidth=1200 innerHeight=775 dpr=1.75` (drive `report`); the body is the stacked-mode scroller (`scroll-probe`: body 691/1630, all other candidates 0); a 937-CSS-px-wide window trips the page's own <980px stacked media query. style.zoom hacks break canvas compositing (run 7). **Mitigation: the in-engine raster harness** (`shot-rack`/`shot-fetch` drive steps) — the REAL engine re-fetches each tile's served URL CORS-clean (the §4 route's own `Access-Control-Allow-Origin: page origin`), decodes via createImageBitmap, and composites the rack to a PNG staged under the overlay (HARNESS-ONLY, honestly labeled — never claimed as an OS screenshot).
+4. **WebView2 ExecuteScriptAsync does NOT await returned promises** (run 13: the async IIFE came back `{}`) — async page results need the two-step arm (`shot-rack` sets `window.__loomShot`) / fetch (`shot-fetch` returns it synchronously).
+5. **The encoder is deterministic:** identical default params produced byte-identical 1,072,927-byte GIFs across 8 independent saves (runs 1-15) — the cross-run byte count in the logs is the sameness proof.
+6. **Background shells in this environment block the tool call until process exit or the timeout** (detach happens AT the timeout, process survives) — evidence runs must be scheduled around it (run 3's 900s block recorded honestly).
+7. The stderr transcript renders `—` as `�` (console codepage, the SP-026 culture class — cosmetic, display-only).
+
+### Linux
+
+**Named limit (owner-gated, never faked):** WSL has zero distros on this laptop — no Linux evidence. The dialog surface + `xdg-open` reveal path are code-reviewed but unproven; no Wayland claims.
+
 ### Consults
+
+#### Pre-completion consult (Step 3)
+
+(pending)
 
 #### Pre-approach consult (Step 1)
 

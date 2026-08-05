@@ -195,11 +195,19 @@ public partial class App : Application
             // dashboard has no Spiral Overlay card yet — typed named limit, record.md.
             if (_loomDemo)
             {
+                var loomEndedOnce = 0;
                 dashboard.Opened += (_, _) =>
                 {
                     var loomWindow = new Features.Dtrh.DtrhLoomWindow(_host, _loomDrive);
                     loomWindow.Closed += (_, _) =>
                     {
+                        // One-shot (the SP-023 ping-pong class): Shutdown() closes owned
+                        // windows again, which re-fires Closed — never a teardown loop.
+                        if (Interlocked.Exchange(ref loomEndedOnce, 1) != 0)
+                        {
+                            return;
+                        }
+
                         _host.LogDiagnostic("loom: studio window closed — shutting down the lifetime");
                         desktop.Shutdown();
                     };
