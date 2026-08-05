@@ -141,6 +141,13 @@ export const S = Object.freeze({
      * went unseen — the peer then spent the whole match "toggle off".
      */
     transferConnecting: 'checking the connection — this unlocks if it comes up direct…',
+    /**
+     * The lane is ON but the local library has nothing compressed to offer
+     * (round-11: every gate green, sendable=0, attacks silently fell back to
+     * the receiver's own pool). Not a block — receiving still works and the
+     * count climbs live as compression runs — just the honest reason.
+     */
+    transferNoAmmo: 'nothing ready to send yet — compress your library in the media screen, or your attacks will use their media instead.',
     transferTheirsOn: 'they opted in',
     transferTheirsOff: 'they have not',
     /* --- "they are still picking their media" (the `media_prep` wire message).
