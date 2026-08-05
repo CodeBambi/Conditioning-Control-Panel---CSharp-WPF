@@ -379,6 +379,31 @@ function fakeStore(seed) {
     ok(new RegExp('COACH\\.' + key + '\\b').test(all), 'every id in COACH has a caller — ' + key);
   }
 
+  /* THE "IT BANKED HEAT" GATE. ui/hud.js's NO_HEAT_REASONS is a hand-copy of
+   * ui/drops.js's three early returns, because the roller publishes those words
+   * on a return value rather than as a constant. If drops.js grows a fourth
+   * no-heat exit, the coached line starts claiming a gauge filled that did not —
+   * so the copy is checked against the source that produces it. */
+  {
+    const dropsSrc = stripComments(read('ui/drops.js'));
+    const listed = /const NO_HEAT_REASONS = Object\.freeze\(\[([^\]]*)\]\)/.exec(sources['ui/hud.js']);
+    ok(!!listed, 'ui/hud.js declares NO_HEAT_REASONS');
+    const names = listed ? Array.from(listed[1].matchAll(/'([a-z-]+)'/g)).map((m) => m[1]) : [];
+    ok(names.join(',') === 'clutter,phase,no-arsenal', 'and it lists the three', names.join(','));
+    // Every one of them must be a reason drops.js can actually return BEFORE the
+    // setHeat() call — i.e. it appears above it in the source.
+    const heatAt = dropsSrc.indexOf('setHeat(current() + gain)');
+    ok(heatAt > 0, 'ui/drops.js still banks heat with setHeat(current() + gain)');
+    for (const name of names) {
+      const at = dropsSrc.indexOf("reason: '" + name + "'");
+      ok(at > 0 && at < heatAt, '"' + name + '" is still an early return, before any heat is banked');
+    }
+    // ...and the reasons AFTER it must not be on the list, or a real pop goes uncoached.
+    for (const name of ['miss', 'no-candidate', 'refused', 'drop']) {
+      ok(names.indexOf(name) < 0, '"' + name + '" is a pop that DID bank heat and still coaches');
+    }
+  }
+
   // Nothing coached may block. The module reaches for one method on one tier.
   const coachSrc = stripComments(read('ui/coach.js'));
   ok(/toasts\s*&&\s*typeof toasts\.show === 'function'/.test(coachSrc),

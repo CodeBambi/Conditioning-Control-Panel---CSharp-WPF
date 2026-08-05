@@ -191,6 +191,22 @@ const GOAL_MAX_MATCHES = 3;
 /** How long it stays up once Live starts. Long enough to read twice. */
 const GOAL_DWELL_MS = 60000;
 
+/**
+ * ui/drops.js `onPop` verdicts where NO HEAT WAS BANKED.
+ *
+ * The roller's three early returns, in its own words: `clutter` (worth below
+ * MIN_WORTH — a bubble an opponent's BubbleSwarm minted, stamped 0), `phase`
+ * (a pop that arrived outside Live/SuddenDeath, which the recap window can
+ * still deliver before the HUD comes down) and `no-arsenal`. Every other
+ * verdict — miss, refused, no-candidate, drop — banked its gain first.
+ *
+ * It exists so the coached "popping fills your gauge" line can only ever ride a
+ * pop that actually filled it. Spelled here rather than imported because
+ * ui/drops.js publishes the strings on its return value and not as a constant;
+ * if it ever does, delete this.
+ */
+const NO_HEAT_REASONS = Object.freeze(['clutter', 'phase', 'no-arsenal']);
+
 /** Score count-up window. */
 const SCORE_LERP_MS = 250;
 /** Concurrent chrome animations, and how long a queued one may wait. */
@@ -877,13 +893,15 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
       if (res && res.dropped) emitAva('drop', 'you', res.id ? { item: res.id } : null);
       /* THE TWO COACHED BEATS OF THE ECONOMY, and they hang off the SAME two
        * facts rather than off the event, so neither can fire for a pop that
-       * banked nothing. `clutter` is a bubble an opponent's swarm minted: it is
-       * worth zero heat (exec/bubbles.js POP_WORTH_PAYLOAD), so coaching "this
-       * fills your gauge" off one would be a lie the gauge itself disproves.
+       * banked nothing. NO_HEAT_REASONS is ui/drops.js's three early returns —
+       * a swarm bubble worth zero (exec/bubbles.js POP_WORTH_PAYLOAD), a pop
+       * outside Live, and a desk with no arsenal — and coaching "this fills
+       * your gauge" off any of them would be a lie the gauge disproves in the
+       * same glance.
        *
        * `drop` names the item AND its number key, off SLOT_KEYS, which is
        * derived from the same list the keydown handler indexes. */
-      if (res && res.reason !== 'clutter') {
+      if (res && NO_HEAT_REASONS.indexOf(res.reason) < 0) {
         try { coach?.fire?.(COACH.POP, S.coach.pop); } catch (_e) { /* ignore */ }
       }
       if (res && res.dropped) {
