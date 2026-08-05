@@ -45,15 +45,18 @@ namespace ConditioningControlPanel.Services.Haptics
         // -------------------------------------------------------------------
 
         /// <summary>
-        /// THE intensity -> native-step mapper. Linear, with a small dead zone so a
-        /// mixer floor of exactly 0 stops the motor while any audible request lands on at
-        /// least step 1. Perceptual shaping belongs in the mixer, not here.
+        /// THE intensity -> native-step mapper. Linear: exactly 0 (or NaN) stops the motor and
+        /// ANY non-zero request lands on at least step 1 - deliberately no dead zone, because
+        /// the mixer's MinPerceptibleIntensity already filters true noise and
+        /// ButtplugProviderV2 bumps every non-zero request to its own minimum step. A dead zone
+        /// here made the same request "off" on Lovense and "min step" on Buttplug whenever a low
+        /// per-device IntensityTrim scaled the value below it. Perceptual shaping belongs in the
+        /// mixer, not here.
         /// </summary>
         public static int Quantize(double intensity, int steps)
         {
             if (steps <= 0) steps = 20;
             if (double.IsNaN(intensity) || intensity <= 0d) return 0;
-            if (intensity < 0.02d) return 0;            // dead zone: imperceptible, treat as off
             if (intensity >= 1d) return steps;
             var v = (int)Math.Round(intensity * steps, MidpointRounding.AwayFromZero);
             return Math.Clamp(v, 1, steps);

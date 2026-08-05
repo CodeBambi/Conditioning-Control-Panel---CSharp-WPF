@@ -69,7 +69,12 @@ namespace ConditioningControlPanel.Services.Haptics
                     }
                     catch { continue; }
 
-                    if (double.IsNaN(atMs) || double.IsNaN(posValue) || atMs < 0) continue;
+                    // Range-check BEFORE the cast: (int)Math.Round(1e12) is undefined-ish (it
+                    // wraps to int.MinValue), and a negative timestamp sorts to the very front of
+                    // the script, so one junk action would silently move the whole timeline.
+                    // NaN/±Infinity fall out of the same comparisons.
+                    if (double.IsNaN(atMs) || double.IsNaN(posValue)) continue;
+                    if (atMs < 0 || atMs > int.MaxValue) continue;   // catches ±Infinity too
                     var p = Math.Clamp(posValue, 0, 100);
                     if (inverted) p = 100 - p;
                     list.Add(new FunScriptAction((int)Math.Round(atMs), (int)Math.Round(p)));

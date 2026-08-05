@@ -59,7 +59,15 @@ namespace ConditioningControlPanel.Views.Controls
         /// <summary>Video background vibe: level lives on HapticSettings.VideoIntensity.</summary>
         VideoLevel,
         /// <summary>Audio sync: HapticService gates on HapticSettings.AudioSync.Enabled.</summary>
-        AudioSync
+        AudioSync,
+        /// <summary>
+        /// DtRH accents: the v2 rule IS the truth (DtrhHapticDirector reads it live), but the
+        /// legacy DtrhEnabled / DtrhIntensity pair is still mirrored so a downgrade to v6.6.3 —
+        /// where those two properties were the only control — keeps the user's intent. Writing
+        /// DtrhEnabled additionally carries the toggle to the Dtrh LAYER rule (the ambient floor)
+        /// via HapticSettings.SyncLegacyToRouting.
+        /// </summary>
+        Dtrh
     }
 
     /// <summary>
@@ -122,9 +130,15 @@ namespace ConditioningControlPanel.Views.Controls
             Hint = hint;
         }
 
+        /// <summary>
+        /// Event row. <paramref name="legacy"/> is only needed for the handful of kinds that still
+        /// have a legacy twin somebody reads (DtRH); everything else routes purely through the v2
+        /// rule, which is what HapticService.PostEvent consults.
+        /// </summary>
         public static HapticRoutingRowVm ForEvent(HapticSettings settings, HapticEventKind kind,
-                                                  string icon, string labelKey, string hintKey)
-            => new(settings, icon, Loc.Get(labelKey), Loc.Get(hintKey), kind, null, HapticRowLegacyBinding.None);
+                                                  string icon, string labelKey, string hintKey,
+                                                  HapticRowLegacyBinding legacy = HapticRowLegacyBinding.None)
+            => new(settings, icon, Loc.Get(labelKey), Loc.Get(hintKey), kind, null, legacy);
 
         public static HapticRoutingRowVm ForLayer(HapticSettings settings, HapticLayer layer,
                                                   string icon, string labelKey, string hintKey,
@@ -208,12 +222,19 @@ namespace ConditioningControlPanel.Views.Controls
                         _settings.AudioSync.Enabled = value;
                         if (LayerRule != null) LayerRule.Enabled = value;
                         break;
+                    case HapticRowLegacyBinding.Dtrh:
+                        if (EventRule != null) EventRule.Enabled = value;
+                        // Mirrors into the Dtrh LAYER rule (ambient floor) AND tells the director,
+                        // which listens for DtrhEnabled to kill anything already playing.
+                        _settings.DtrhEnabled = value;
+                        break;
                     default:
                         if (EventRule != null) EventRule.Enabled = value;
                         if (LayerRule != null) LayerRule.Enabled = value;
                         break;
                 }
                 SaveSettings();
+                NotifyEngine();
                 Raise();
                 Raise(nameof(ValueSummary));
                 Changed?.Invoke(this, EventArgs.Empty);
@@ -233,12 +254,17 @@ namespace ConditioningControlPanel.Views.Controls
                     case HapticRowLegacyBinding.VideoLevel:
                         _settings.VideoIntensity = clamped;
                         break;
+                    case HapticRowLegacyBinding.Dtrh:
+                        if (EventRule != null) EventRule.Intensity = clamped;
+                        _settings.DtrhIntensity = clamped;   // legacy twin, for a downgrade
+                        break;
                     default:
                         if (EventRule != null) EventRule.Intensity = clamped;
                         else if (LayerRule != null) LayerRule.Intensity = clamped;
                         break;
                 }
                 SaveSettings();
+                NotifyEngine();
                 Raise();
                 Raise(nameof(IntensityText));
                 Raise(nameof(ValueSummary));
@@ -265,6 +291,7 @@ namespace ConditioningControlPanel.Views.Controls
                 if (EventRule.Mode == mode) return;
                 EventRule.Mode = mode;
                 SaveSettings();
+                NotifyEngine();
                 Raise();
                 Raise(nameof(ValueSummary));
                 Changed?.Invoke(this, EventArgs.Empty);
@@ -287,6 +314,19 @@ namespace ConditioningControlPanel.Views.Controls
                 Raise(nameof(ValueSummary));
                 Changed?.Invoke(this, EventArgs.Empty);
             }
+        }
+
+        /// <summary>
+        /// The v2 rules are plain POCOs with no change notification, so writing one is invisible to
+        /// the engine: a pattern already in flight would keep playing after its row was switched
+        /// off. HapticService.NotifyRuleChanged is the engine's re-read hook (it cancels in-flight
+        /// patterns of that kind when the rule now forbids them). Layer rows have no event kind and
+        /// are already level-set, so they have nothing to cancel.
+        /// </summary>
+        private void NotifyEngine()
+        {
+            if (!_kind.HasValue) return;
+            try { App.Haptics?.NotifyRuleChanged(_kind.Value); } catch { }
         }
 
         /// <summary>Re-read everything from settings (after a load or an external change).</summary>

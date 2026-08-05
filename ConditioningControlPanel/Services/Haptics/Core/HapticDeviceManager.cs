@@ -137,16 +137,51 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             Rebuild();
         }
 
-        public async Task StopAllAsync()
+        /// <summary>Default per-provider budget for an all-stop.</summary>
+        public static readonly TimeSpan DefaultStopTimeout = TimeSpan.FromSeconds(2);
+
+        /// <summary>
+        /// Stop every connected provider IN PARALLEL, each with its own budget. This is the panic
+        /// path: a Lovense stop that is waiting on a dead LAN socket must not hold the Buttplug stop
+        /// hostage (they used to be awaited one after the other).
+        /// Returns true only when every connected provider's stop completed cleanly in time.
+        /// </summary>
+        public async Task<bool> StopAllAsync(TimeSpan perProviderTimeout)
         {
             List<IHapticProviderV2> providers;
             lock (_gate) providers = _providers.Where(p => p.IsConnected).ToList();
-            foreach (var p in providers)
+            if (providers.Count == 0) return true;
+
+            var results = await Task.WhenAll(providers.Select(async p =>
             {
-                try { await p.StopAllAsync().ConfigureAwait(false); }
-                catch (Exception ex) { App.Logger?.Debug("Haptics: {Provider} StopAll error: {E}", p.Key, ex.Message); }
-            }
+                try
+                {
+                    var stop = p.StopAllAsync();
+                    var done = await Task.WhenAny(stop, Task.Delay(perProviderTimeout)).ConfigureAwait(false);
+                    if (!ReferenceEquals(done, stop))
+                    {
+                        // Abandoned, but still observed: an unobserved fault later would surface as
+                        // an UnobservedTaskException on a random pool thread.
+                        _ = stop.ContinueWith(t => { _ = t.Exception; }, TaskScheduler.Default);
+                        App.Logger?.Warning("Haptics: {Provider} StopAll timed out after {Ms}ms", p.Key,
+                                            (int)perProviderTimeout.TotalMilliseconds);
+                        return false;
+                    }
+                    await stop.ConfigureAwait(false);   // observe faults
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("Haptics: {Provider} StopAll error: {E}", p.Key, ex.Message);
+                    return false;
+                }
+            })).ConfigureAwait(false);
+
+            return results.All(r => r);
         }
+
+        /// <summary>Back-compat overload: all-stop with the default per-provider budget.</summary>
+        public Task StopAllAsync() => StopAllAsync(DefaultStopTimeout);
 
         /// <summary>Liveness check that actually touches the wire. True when ANY connected
         /// provider answers — one dead provider must not tear down the other.</summary>

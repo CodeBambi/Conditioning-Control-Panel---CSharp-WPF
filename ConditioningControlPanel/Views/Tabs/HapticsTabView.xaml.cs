@@ -48,6 +48,9 @@ namespace ConditioningControlPanel.Views.Tabs
         private void TxtHapticUrl_TextChanged(object sender, TextChangedEventArgs e)
             => Owner?.TxtHapticUrl_TextChanged(sender, e);
 
+        private void TxtHapticIntifaceUrl_TextChanged(object sender, TextChangedEventArgs e)
+            => Owner?.TxtHapticIntifaceUrl_TextChanged(sender, e);
+
         private void SliderHapticIntensity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
             => Owner?.SliderHapticIntensity_ValueChanged(sender, e);
 

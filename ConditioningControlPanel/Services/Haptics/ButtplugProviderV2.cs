@@ -46,9 +46,16 @@ namespace ConditioningControlPanel.Services.Haptics
         /// <summary>Minimum gap between Error events raised from the 10 Hz output path.</summary>
         private static readonly TimeSpan OutputErrorThrottle = TimeSpan.FromSeconds(5);
 
+        /// <summary>Upper bound on consecutive latest-pending drain rounds inside one
+        /// <see cref="SetOutputsAsync"/> call, so a wedged wire plus a 10 Hz producer can never
+        /// spin here forever.</summary>
+        private const int MaxDrainRounds = 8;
+
         private readonly object _sync = new();
 
         private DateTime _lastOutputErrorUtc = DateTime.MinValue;
+        /// <summary>Bumped by every all-stop; a write batch parked before the stop is not delivered after it.</summary>
+        private long _stopEpoch;
         private ButtplugClient? _client;
         private ButtplugWebsocketConnector? _connector;
         private string? _urlOverride;
@@ -77,7 +84,22 @@ namespace ConditioningControlPanel.Services.Haptics
             public int Max { get; }
         }
 
+        /// <summary>
+        /// Per-device wire serialization for <see cref="SetOutputsAsync"/>. Kept OUT of
+        /// <see cref="Entry"/> on purpose: the registry rebuilds a fresh Entry whenever a device is
+        /// added or removed, and the in-flight flag has to outlive that or two writes for the same
+        /// toy could overlap across the rebuild.
+        /// </summary>
+        private sealed class SendState
+        {
+            /// <summary>True while this device has a write on the wire.</summary>
+            public bool InFlight;
+            /// <summary>Newest target parked while <see cref="InFlight"/>; only the latest survives.</summary>
+            public IReadOnlyList<ActuatorOutput>? Pending;
+        }
+
         private readonly Dictionary<string, Entry> _entries = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, SendState> _sendStates = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<uint, string> _idByNativeIndex = new();
         private IReadOnlyList<HapticDevice> _snapshot = Array.Empty<HapticDevice>();
 
@@ -200,17 +222,117 @@ namespace ConditioningControlPanel.Services.Haptics
         /// native step range and skips any actuator whose quantized value is unchanged (Buttplug
         /// latches values, so silence == "hold what you have").
         /// </summary>
+        /// <remarks>
+        /// <para><b>Serialized per device (latest-pending).</b> The mixer abandons its
+        /// <c>Task.WhenAll</c> after one tick's grace and then issues the next tick's call, so two
+        /// calls for the same toy overlap routinely. Because outputs LATCH, an overtaken write is
+        /// not merely late - if tick N (0.5) lands after tick N+1 (0), the toy holds 0.5 forever
+        /// while every cache says 0. So only one write per device is ever on the wire: a call that
+        /// arrives while one is in flight parks its targets and returns immediately, and the
+        /// in-flight caller delivers them when it is done. Parking keeps only the NEWEST target per
+        /// actuator - for a level-set nothing older matters, and a zero can never be lost that way
+        /// because a zero IS the newest thing anyone asked for.</para>
+        /// </remarks>
         public async Task SetOutputsAsync(string deviceId, IReadOnlyList<ActuatorOutput> outputs, CancellationToken ct)
         {
             if (_disposed || outputs == null || outputs.Count == 0) return;
 
-            Entry? entry;
-            lock (_sync) { _entries.TryGetValue(deviceId ?? "", out entry); }
-            if (entry == null || _client?.Connected != true) return;
+            var id = deviceId ?? "";
+            SendState state;
+            long epoch;
+            lock (_sync)
+            {
+                if (!_entries.ContainsKey(id)) return;
+                if (!_sendStates.TryGetValue(id, out var found) || found == null)
+                {
+                    found = new SendState();
+                    _sendStates[id] = found;
+                }
+                state = found;
 
+                if (state.InFlight)
+                {
+                    state.Pending = MergePending(state.Pending, outputs);
+                    return;                     // the in-flight call delivers it
+                }
+                state.InFlight = true;
+                state.Pending = null;           // our batch is newer than anything parked earlier
+                epoch = _stopEpoch;
+            }
+
+            try
+            {
+                var batch = outputs;
+                for (var round = 0; round < MaxDrainRounds; round++)
+                {
+                    if (_disposed || ct.IsCancellationRequested || _client?.Connected != true) return;
+
+                    // Re-resolve every round: a device add/remove replaces the Entry (and with it
+                    // the native handle and the target map) underneath us.
+                    Entry? entry;
+                    lock (_sync) { _entries.TryGetValue(id, out entry); }
+                    if (entry == null) return;
+
+                    await SendBatchAsync(entry, batch, ct).ConfigureAwait(false);
+
+                    if (_disposed || ct.IsCancellationRequested) return;
+
+                    lock (_sync)
+                    {
+                        var next = state.Pending;
+                        state.Pending = null;
+                        // An all-stop happened while we were on the wire: whatever was parked
+                        // before it must never be delivered after it.
+                        if (next == null || _stopEpoch != epoch) return;
+                        batch = next;
+                    }
+                }
+
+                // Bound reached: the wire is slower than the 10 Hz producer. Drop the tail instead
+                // of spinning - the mixer re-asserts held levels (and zeros) on a later tick.
+                lock (_sync) { state.Pending = null; }
+                Log.Debug("ButtplugProviderV2: output drain bound hit for {Device} (wire slower than the mixer)", id);
+            }
+            finally
+            {
+                lock (_sync) { state.InFlight = false; }
+            }
+        }
+
+        /// <summary>
+        /// Fold a newer target batch over a parked one: the newer value wins for every actuator it
+        /// mentions, and an actuator only the parked batch mentions is carried over. Straight
+        /// replacement would be wrong because the mixer's level tick and FunScript's position tick
+        /// are SEPARATE calls for the same device that touch disjoint actuators - one would silently
+        /// swallow the other. Both lists are actuator-count sized, so the nested scan is trivial.
+        /// </summary>
+        private static IReadOnlyList<ActuatorOutput> MergePending(
+            IReadOnlyList<ActuatorOutput>? parked, IReadOnlyList<ActuatorOutput> newer)
+        {
+            if (parked == null || parked.Count == 0) return newer;
+
+            List<ActuatorOutput>? merged = null;
+            foreach (var old in parked)
+            {
+                var superseded = false;
+                for (var i = 0; i < newer.Count; i++)
+                {
+                    if (newer[i].Type != old.Type || newer[i].Index != old.Index) continue;
+                    superseded = true;
+                    break;
+                }
+                if (superseded) continue;
+                (merged ??= new List<ActuatorOutput>(newer)).Add(old);
+            }
+            return merged ?? newer;
+        }
+
+        /// <summary>One pass over a target batch. Caller holds the device's in-flight slot.</summary>
+        private async Task SendBatchAsync(Entry entry, IReadOnlyList<ActuatorOutput> outputs, CancellationToken ct)
+        {
             foreach (var output in outputs)
             {
-                if (ct.IsCancellationRequested) return;
+                if (_disposed || ct.IsCancellationRequested) return;
 
                 var key = (output.Type, output.Index);
                 Target target;
@@ -260,6 +382,9 @@ namespace ConditioningControlPanel.Services.Haptics
             lock (_sync)
             {
                 foreach (var e in _entries.Values) e.LastSent.Clear();
+                // Anything parked by a tick that lost the race must not out-live the stop.
+                _stopEpoch++;
+                foreach (var s in _sendStates.Values) s.Pending = null;
             }
 
             var client = _client;
@@ -415,7 +540,12 @@ namespace ConditioningControlPanel.Services.Haptics
         /// </summary>
         private void RebuildDevices()
         {
-            var natives = _client?.Devices ?? Array.Empty<ButtplugClientDevice>();
+            // Ordered by the server's device index so the #n suffixes MakeStableId hands out are at
+            // least reproducible within a session (client.Devices is an array whose order follows
+            // whatever arrived first).
+            var natives = (_client?.Devices ?? Array.Empty<ButtplugClientDevice>())
+                .OrderBy(d => d.Index)
+                .ToList();
 
             lock (_sync)
             {
@@ -453,6 +583,8 @@ namespace ConditioningControlPanel.Services.Haptics
                 _idByNativeIndex.Clear();
                 foreach (var kv in byIndex) _idByNativeIndex[kv.Key] = kv.Value;
 
+                PruneSendStatesLocked();
+
                 _snapshot = _entries.Values.Select(x => x.Device).ToList();
             }
         }
@@ -464,8 +596,28 @@ namespace ConditioningControlPanel.Services.Haptics
                 foreach (var entry in _entries.Values) entry.Device.IsConnected = false;
                 _entries.Clear();
                 _idByNativeIndex.Clear();
+                PruneSendStatesLocked();
                 _snapshot = Array.Empty<HapticDevice>();
             }
+        }
+
+        /// <summary>
+        /// Drop dispatch state for ids that are gone. A state with a write still on the wire is
+        /// KEPT: dropping it would let the same id (after a reconnect) start a second write that
+        /// could overtake the first one and latch a stale level. It clears itself when the drain
+        /// finishes and is pruned on the next pass. Caller holds <see cref="_sync"/>.
+        /// </summary>
+        private void PruneSendStatesLocked()
+        {
+            if (_sendStates.Count == 0) return;
+            List<string>? dead = null;
+            foreach (var kv in _sendStates)
+            {
+                if (_entries.ContainsKey(kv.Key) || kv.Value.InFlight) continue;
+                (dead ??= new List<string>()).Add(kv.Key);
+            }
+            if (dead == null) return;
+            foreach (var key in dead) _sendStates.Remove(key);
         }
 
         /// <summary>
@@ -474,6 +626,18 @@ namespace ConditioningControlPanel.Services.Haptics
         /// one) and disambiguate duplicates with a #n suffix. ':' is stripped because
         /// <c>HapticDevice.DeviceKey</c> is "provider:id".
         /// </summary>
+        /// <remarks>
+        /// KNOWN LIMITATION - two toys of the SAME name. Buttplug 5.0.1 / message spec v4 exposes
+        /// no stable hardware identity to the client: <c>ButtplugClientDevice</c> carries only
+        /// Index, Name, DisplayName, MessageTimingGap and Features, and the wire's
+        /// <c>DeviceInfo</c> has no address/serial field either - the server keeps the Bluetooth
+        /// address to itself. So for two identically-named toys (say a pair of Lushes) the #2
+        /// suffix is decided by device INDEX, which follows connect order and can differ between
+        /// sessions; their Role / IntensityTrim / Nickname can therefore swap. Sorting by index
+        /// at least makes it deterministic within a session. The user-facing fix is to give each
+        /// toy its own display name in Intiface Central - Intiface persists that per hardware
+        /// address, and a distinct DisplayName removes the ambiguity here completely.
+        /// </remarks>
         private static string MakeStableId(ButtplugClientDevice native, HashSet<string> used)
         {
             var baseName = string.IsNullOrWhiteSpace(native.DisplayName) ? native.Name : native.DisplayName;
@@ -510,11 +674,20 @@ namespace ConditioningControlPanel.Services.Haptics
 
             foreach (var feature in features)
             {
+                // ONE actuator per (feature, actuator type). A feature that advertises both
+                // Position and HwPositionWithDuration is a single physical axis, and mapping both
+                // would publish two rival Position actuators pointing at the same FeatureIndex with
+                // different command shapes - whichever the position consumer's FirstOrDefault
+                // happened to pick would win. OutputMap is ordered preferred-first, so the first
+                // match for a type is the one we keep.
+                var boundTypes = new HashSet<ActuatorType>();
+
                 foreach (var (outputType, actuatorType) in OutputMap)
                 {
                     bool has;
                     try { has = feature.HasOutput(outputType); } catch { has = false; }
                     if (!has) continue;
+                    if (!boundTypes.Add(actuatorType)) continue;
 
                     int min = 0, max = 0;
                     try
@@ -543,14 +716,19 @@ namespace ConditioningControlPanel.Services.Haptics
         /// Led / Temperature / Spray have no haptic-contract equivalent and are ignored.
         /// Buttplug has no Thrust / Finger / Suction / Pump / Depth / Stroke output type -
         /// those are Lovense-only and live on LovenseProviderV2.
+        ///
+        /// ORDER MATTERS: two output types map to Position, and <see cref="BuildActuators"/> keeps
+        /// only the FIRST match per feature. HwPositionWithDuration is listed first because a
+        /// duration-aware move is strictly better for a stroker - the toy paces itself to the
+        /// target instead of slamming to it.
         /// </summary>
         private static readonly (OutputType Output, ActuatorType Actuator)[] OutputMap =
         {
             (OutputType.Vibrate, ActuatorType.Vibrate),
             (OutputType.Rotate, ActuatorType.Rotate),
             (OutputType.Oscillate, ActuatorType.Oscillate),
-            (OutputType.Position, ActuatorType.Position),
             (OutputType.HwPositionWithDuration, ActuatorType.Position),
+            (OutputType.Position, ActuatorType.Position),
             (OutputType.Constrict, ActuatorType.Constrict),
         };
 

@@ -39,6 +39,9 @@ namespace ConditioningControlPanel.Services.Haptics
         public const int RenderIntervalMs = 50;
         /// <summary>No playback report for this long = paused/stopped, so stop driving the toy.</summary>
         public const int StaleMs = 900;
+        /// <summary>Largest .funscript we will read into memory. Real scripts are tens to a few
+        /// hundred KB; anything past this is a mis-named file, not a stroke track.</summary>
+        public const long MaxScriptBytes = 10L * 1024 * 1024;
 
         private readonly Services.HapticService _haptics;
         private readonly HapticSettings _settings;
@@ -53,6 +56,10 @@ namespace ConditioningControlPanel.Services.Haptics
         private double _lastPositionSent = -1;
         private bool _vibeLayerOwned;
         private bool _disposed;
+        /// <summary>Bumped by every start AND every stop. A background load only installs its
+        /// script if the token it captured is still current, so a slow load for clip A can never
+        /// land on top of clip B (or after a stop).</summary>
+        private long _loadSeq;
 
         /// <summary>True while a script is loaded and following a video.</summary>
         public bool IsActive { get { lock (_gate) return _script != null; } }
@@ -101,6 +108,9 @@ namespace ConditioningControlPanel.Services.Haptics
 
             OnVideoStopped();   // never let a previous script bleed into the new clip
 
+            long mySeq;
+            lock (_gate) mySeq = ++_loadSeq;
+
             // Disk + JSON off the UI thread: PlayVideo's caller is mid-teardown-sensitive.
             _ = Task.Run(() =>
             {
@@ -111,7 +121,21 @@ namespace ConditioningControlPanel.Services.Haptics
                     foreach (var candidate in CandidatePaths(videoPath!))
                     {
                         if (!File.Exists(candidate)) continue;
-                        try { json = File.ReadAllText(candidate); foundPath = candidate; }
+                        try
+                        {
+                            var bytes = new FileInfo(candidate).Length;
+                            if (bytes > MaxScriptBytes)
+                            {
+                                App.Logger?.Warning(
+                                    "FunScript: ignoring {Path} — {Size:F1} MB is past the {Cap} MB cap",
+                                    candidate, bytes / (1024.0 * 1024.0), MaxScriptBytes / (1024 * 1024));
+                            }
+                            else
+                            {
+                                json = File.ReadAllText(candidate);
+                                foundPath = candidate;
+                            }
+                        }
                         catch (Exception ex)
                         {
                             App.Logger?.Debug("FunScript: could not read {Path}: {E}", candidate, ex.Message);
@@ -128,7 +152,9 @@ namespace ConditioningControlPanel.Services.Haptics
 
                     lock (_gate)
                     {
-                        if (_disposed) return;
+                        // Another clip (or a stop) claimed the toy while we were on disk: this
+                        // script is for a video that is no longer playing. Drop it silently.
+                        if (_disposed || _loadSeq != mySeq) return;
                         _script = parsed;
                         _scriptPath = foundPath;
                         _lastReportMs = -1;
@@ -158,6 +184,7 @@ namespace ConditioningControlPanel.Services.Haptics
             bool hadScript;
             lock (_gate)
             {
+                _loadSeq++;                 // invalidate any load still on the disk/parse path
                 hadScript = _script != null;
                 _script = null;
                 _scriptPath = null;

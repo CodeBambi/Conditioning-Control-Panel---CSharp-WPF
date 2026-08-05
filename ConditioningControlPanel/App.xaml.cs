@@ -1631,11 +1631,12 @@ namespace ConditioningControlPanel
             CatalogueLookup = new CatalogueLookupService();
 
             // Auto-connect haptics if enabled (runs in background).
-            // The v2 device manager connects every ENABLED provider concurrently and no-ops when
-            // none is enabled, so the old "skip when Provider == Mock" special case is gone: it
-            // meant a Mock user (the default provider!) could never auto-connect, and it could
-            // not express "Lovense + Intiface at once" either.
-            if (Settings.Current.Haptics.AutoConnect)
+            // The v2 device manager connects every ENABLED provider concurrently, so this no longer
+            // needs the old single-provider special case — but Mock is the LEGACY ENUM'S DEFAULT
+            // value, which means every v6.6.3 upgrader with AutoConnect on would silently bring up
+            // three virtual toys and a stream of pink toasts at each launch. Only a REAL provider
+            // justifies auto-connecting; Lovense and/or Buttplug still work in any combination.
+            if (Settings.Current.Haptics.AutoConnect && HasRealHapticProviderEnabled())
             {
                 _ = AutoConnectHapticsAsync();
             }
@@ -2734,6 +2735,22 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// True when a REAL haptic provider (Lovense and/or Buttplug) is enabled in the v2
+        /// per-provider config. Mock on its own never justifies an auto-connect: it is the value the
+        /// legacy <c>Provider</c> enum defaults to, so treating it as a provider choice would make
+        /// every upgrader auto-connect virtual toys they never asked for.
+        /// </summary>
+        private static bool HasRealHapticProviderEnabled()
+        {
+            try
+            {
+                var v2 = Settings.Current.Haptics.V2;
+                return v2.Provider("lovense").Enabled || v2.Provider("buttplug").Enabled;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>
         /// Auto-connect to haptics device on startup if enabled
         /// </summary>
         private async Task AutoConnectHapticsAsync()
@@ -3485,6 +3502,14 @@ Application State:
             // sentinels so the next launch doesn't false-report an abnormal exit.
             try { Services.Chaos.ChaosCrashSentinel.Clear(); } catch { }
             try { Services.EngineCrashSentinel.Clear(); } catch { }
+
+            // Haptics FIRST and synchronously (bounded ~2s): a Lovense level has no server-side
+            // watchdog, so a toy we don't countermand keeps running after the app is gone. This
+            // cannot be left to Haptics.Dispose() further down (the providers get torn down in the
+            // same breath) nor to the ProcessExit watchdog — OnExit ends in TerminateProcess, which
+            // skips ProcessExit handlers by design.
+            try { Haptics?.ShutdownStop(); }
+            catch (Exception ex) { Logger?.Warning(ex, "Haptics shutdown stop failed"); }
 
             // DtRH browser game: dispose the WebView2 window/process if it's up.
             try { Services.Chaos.DtrhHostService.CloseActive(); } catch { }

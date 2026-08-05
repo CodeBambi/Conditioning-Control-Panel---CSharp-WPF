@@ -462,6 +462,7 @@ namespace ConditioningControlPanel.Models
 
         private HapticSettingsV2 _v2 = new();
         private bool _v2Migrated;
+        private bool _mirroringLegacyProvider;
 
         /// <summary>Nested v2 engine config. Never null.</summary>
         [JsonProperty("v2")]
@@ -562,6 +563,26 @@ namespace ConditioningControlPanel.Models
             Ly(HapticLayer.Manual, true, 1.0);
         }
 
+        /// <summary>
+        /// Write the legacy <see cref="Provider"/> enum purely as a BACK-COMPAT MIRROR of the v2
+        /// per-provider flags, WITHOUT letting <see cref="SyncLegacyToRouting"/> fan that single
+        /// value back out over all three <c>V2.Provider(x).Enabled</c> flags.
+        ///
+        /// The v2 device manager connects every enabled provider concurrently, so the flags are a
+        /// SET, not a choice. Assigning <see cref="Provider"/> directly collapses that set back to
+        /// one member — which is exactly right when something genuinely picks one provider (the
+        /// setup wizard does), and exactly wrong when the caller is only keeping the old enum
+        /// readable for legacy consumers such as <c>HapticService.IsButtplugProvider</c>.
+        /// The Haptics tab's per-provider checkboxes are the latter case: without this, ticking a
+        /// second provider immediately un-ticked the first.
+        /// </summary>
+        public void SetLegacyProviderMirror(HapticProviderType provider)
+        {
+            _mirroringLegacyProvider = true;
+            try { Provider = provider; }
+            finally { _mirroringLegacyProvider = false; }
+        }
+
         private void SeedProvidersFromLegacy(HapticSettingsV2 v2)
         {
             // v1 could only ever have ONE provider active. Carry that choice forward; the v2
@@ -652,6 +673,11 @@ namespace ConditioningControlPanel.Models
                 case nameof(DtrhIntensity): v2.Rule(HapticEventKind.DtrhAccent).Intensity = _dtrhIntensity; break;
 
                 case nameof(Provider):
+                    // Post-migration the per-provider flags are authoritative and MULTI-select, so
+                    // a write that is only mirroring them back into the legacy enum must not fan
+                    // out again (see SetLegacyProviderMirror). Everything else — the setup wizard,
+                    // old code paths, the initial seed — still gets the v1 "one provider" fan-out.
+                    if (_mirroringLegacyProvider) break;
                     v2.Provider("mock").Enabled = _provider == HapticProviderType.Mock;
                     v2.Provider("lovense").Enabled = _provider == HapticProviderType.Lovense;
                     v2.Provider("buttplug").Enabled = _provider == HapticProviderType.Buttplug;
