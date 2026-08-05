@@ -264,6 +264,8 @@ namespace ConditioningControlPanel.Services.AIService
             return false;
         }
 
+        public string SanitizeVisibleText(string? response) => SanitizeResponse(response);
+
         private string SanitizeResponse(string? response)
         {
             if (string.IsNullOrEmpty(response))

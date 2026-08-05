@@ -48,8 +48,10 @@ namespace ConditioningControlPanel.Services.Moderation
         /// Records a moderation hit. <paramref name="source"/> is one of
         /// <c>input</c>, <c>output</c>, or <c>edit</c> (the latter reserved for
         /// future prompt-validator hooks). <paramref name="modelHint"/> should be
-        /// <c>cloud</c> for the proxy AI service or <c>local:&lt;modelname&gt;</c>
-        /// for the local Ollama service.
+        /// <c>cloud</c> for the proxy AI service, <c>local:&lt;modelname&gt;</c>
+        /// for the local Ollama service, or <c>openai_compat:&lt;modelname&gt;</c>
+        /// for the bring-your-own-endpoint provider (note: that model name is
+        /// user-typed free text, not a closed set).
         /// </summary>
         public void Record(ProhibitedCategory category, string source, string modelHint)
         {

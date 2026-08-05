@@ -599,7 +599,13 @@ namespace ConditioningControlPanel.Services.AIService
             var effectsEnabled = App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects == true;
             if (!effectsEnabled)
             {
-                if (PassesOutputModeration(content, returnRefusalSentinel, out var plainRefusal)) return content;
+                // Strip context-tag echoes BEFORE moderation, matching the cloud path's
+                // ordering (AiService.SanitizeResponse): an echoed awareness tag carries the
+                // user's raw tab title, which must not be able to trip the output guard and
+                // write a false model-output hit into the compliance log. The effects branch
+                // below gets this for free — Parse() sanitizes CleanText.
+                var visible = _parser.SanitizeVisibleText(content);
+                if (PassesOutputModeration(visible, returnRefusalSentinel, out var plainRefusal)) return visible;
                 outputBlocked = true;
                 return plainRefusal;
             }
