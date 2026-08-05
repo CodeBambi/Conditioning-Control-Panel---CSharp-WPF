@@ -270,3 +270,17 @@ never faked). No Wayland claims.
 - **Lesson candidate 3 (convention):** "byte-identical" claims must name the exact
   comparand (in-repo source at HEAD vs git-tree anchor) — anchor coverage and live-tree
   coverage diverge after a content delta lands (SP-037 class).
+
+## Step 4: contract verification
+
+- `node .spine/patches/verify.mjs` → OK (all patches applied on all roots), exit 0.
+- `dotnet build client/CcpClient.sln -c Debug` → 0W/0E; warnings measured on
+  `-t:Rebuild` → 0W/0E.
+- Unit `CcpClient.Tests` → **606/606** (floor 601; +5 new `DtrhPayloadRootTests`).
+  Headless `CcpClient.HeadlessTests` → **33/33** (floor 33). Contract exit 0.
+- `git diff --check` clean; branch delta touches only File Scope paths
+  (DtrhParticipant.cs, DtrhPayloadRootTests.cs, spine-tasks/SP-048-*). Enabler 2
+  honored: task-board.md / port-lessons.md untouched.
+- Engine-review presence (T-2): all three in-worker plan-review calls (steps 1/2/3)
+  SKIPPED by runtime per SP-195 (`skipped:true, spawnFailed:false`; artifacts under
+  `.reviews/`). Code/final reviews run on the engine after .DONE.

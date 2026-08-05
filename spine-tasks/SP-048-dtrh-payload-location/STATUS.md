@@ -1,5 +1,5 @@
 ## STATUS: SP-048 — DTRH published-artifact payload location
-**Current Step:** Step 4 — Testing & Verification (in progress)
+**Current Step:** COMPLETE — all steps green, .DONE
 **Last Updated:** 2026-08-05 (worker run 1)
 **Blockers:** none
 
@@ -22,6 +22,6 @@
 - [x] STATUS.md accurate before .DONE
 
 ### Step 4: Testing & Verification
-- [ ] Contract testCommand passes (verify.mjs + build 0W/0E + ≥601/33 floor)
-- [ ] git diff --check clean
-- [ ] git status --short shows only File Scope paths
+- [x] Contract testCommand passes (verify.mjs + build 0W/0E + ≥601/33 floor)
+- [x] git diff --check clean
+- [x] git status --short shows only File Scope paths
