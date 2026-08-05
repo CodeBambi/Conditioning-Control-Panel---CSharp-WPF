@@ -621,6 +621,44 @@ async function main() {
     ok(strays === 0, 'nextSpiral() only ever draws from the shared session', String(strays));
     ok(spiralGen.pickSpiralImage() === '',
       'and pickSpiralImage() (exec/bubbles.js‘s flick) goes through the same pool');
+
+    /* --- THE IDLE WARM (2026-08-05, the iPhone spiral stutter).
+     *
+     * The pool's stills used to be baked BY THE CUE THAT NEEDED ONE — ~1600
+     * path fills plus a PNG encode, on the main thread, one tick after a spiral
+     * landed, which on a phone is a bed that mounts and then holds still for a
+     * second or two. warmSpiralStills walks the pool during idle time instead.
+     * `schedule` is injected here so the walk is driven step by step: what is
+     * pinned is that NOTHING bakes synchronously and that a slice bakes exactly
+     * ONE variant (five in a row is one long task however idle the moment was).
+     * On this host every bake resolves to the '' it can only answer — which is
+     * the point of isBaked(): the pool tracks that it ASKED. ----------------- */
+    const warmPool = spiralGen.createSpiralSession({ rng: seeded(11) });
+    ok(warmPool.bakedCount() === 0, 'a fresh pool has baked nothing at all — every still starts lazy',
+      String(warmPool.bakedCount()));
+    const slices = [];
+    const stopWarm = spiralGen.warmSpiralStills({ session: warmPool, schedule: (fn) => slices.push(fn) });
+    ok(slices.length === 1 && warmPool.bakedCount() === 0,
+      'warmSpiralStills bakes NOTHING on the caller‘s stack — it queues one slice and returns',
+      `${slices.length} queued / ${warmPool.bakedCount()} baked`);
+    slices.shift()();
+    ok(warmPool.bakedCount() === 1, 'and one slice bakes exactly ONE variant, never the whole pool',
+      String(warmPool.bakedCount()));
+    let spins2 = 0;
+    while (slices.length && spins2++ < 50) slices.shift()();
+    ok(warmPool.bakedCount() === warmPool.count && slices.length === 0,
+      'the walk finishes the pool and then stops asking for slices',
+      `${warmPool.bakedCount()}/${warmPool.count}, ${slices.length} queued`);
+    stopWarm();
+    // CANCEL IS NOT DECORATION: beginSpiralSession() calls it, and a warm that
+    // kept walking a replaced pool would pay for five pictures nobody can ask
+    // for again — on the phone this whole path exists to spare.
+    const dropped = spiralGen.createSpiralSession({ rng: seeded(12) });
+    const dropQ = [];
+    spiralGen.warmSpiralStills({ session: dropped, schedule: (fn) => dropQ.push(fn) })();
+    while (dropQ.length && spins2++ < 50) dropQ.shift()();
+    ok(dropped.bakedCount() === 0, 'a cancelled warm bakes nothing, even if its slice still runs',
+      String(dropped.bakedCount()));
   }
 
   // ------------------------------------------------------------ spiral renders
@@ -629,12 +667,25 @@ async function main() {
     const ex = createExecutor({ media: fakeMedia(), layers, logger: quiet, toyBridge: null });
     const m = fakeMatch();
     ex.attach(m);
+    // The pool THIS executor rolled (createSpiral -> beginSpiralSession). Its
+    // pick counter is how the one-roll-per-cue rule below is pinned.
+    const pool = spiralGen.spiralSession();
+    const picksAtAttach = pool.picked();
 
     m.emitPayload({
       payload: payloadOf({ id: 'pSp', kind: GoonPayloadKind.Spiral, duration_ms: 1000, intensity: 0.9 }),
       fireAtLocalMs: localMonotonicMs(),
     });
     await sleep(120);
+    /* ONE ROLL PER CUE (2026-08-05, the iPhone spiral stutter). A payload on a
+     * FRESH pane used to roll twice — ensurePane() repicks for the pane it
+     * mints, then renderPayload repicked again on top — which threw away the
+     * frame the weave had just drawn and, before the still moved off the woven
+     * path, queued a SECOND 1280px raster bake behind the first, both landing on
+     * the main thread inside the cue's own fade. */
+    ok(pool.picked() - picksAtAttach === 1,
+      'a spiral payload on a fresh pane rolls ONE variant, not two',
+      String(pool.picked() - picksAtAttach));
     const panes = byId.get('gg-fx-spiral').findAll('gg-spiral');
     ok(panes.length === 1, 'spiral payload mounts exactly one pane', String(panes.length));
     // NO background-image on this host: the stub has no 2D canvas, so the bake
@@ -658,6 +709,12 @@ async function main() {
     m.emitStart({ element: GoonElement.Spiral, intensity: 0.4, durationMs: 0, elapsedMs: 0 });
     ok(byId.get('gg-fx-spiral').findAll('gg-spiral').length === 1,
       'element + payload share one pane', String(byId.get('gg-fx-spiral').findAll('gg-spiral').length));
+    // …and the skip above is ONLY for a pane that just rolled its own. A cue
+    // landing on a bed that was already up is exactly when the picture should
+    // change, so it still repicks.
+    ok(pool.picked() - picksAtAttach === 2,
+      'a cue on a bed that was ALREADY UP does roll a new spiral',
+      String(pool.picked() - picksAtAttach));
 
     await sleep(1100);
     ok(m.receipts.length === 1 && m.receipts[0].endured === true,
@@ -4675,6 +4732,27 @@ async function main() {
     ok(SP.LITE_MAX_DPR < SP.MAX_DPR && SP.LITE_FRAME_MS >= 30,
       'the spiral halves both of its dials: CSS-pixel backing and a ~30fps draw cadence',
       `${SP.LITE_MAX_DPR}/${SP.LITE_FRAME_MS}`);
+    // The RASTER bake is a third lite dial (2026-08-05): both halves of its cost
+    // are quadratic in the edge, and on a phone the still it bakes is the
+    // fallback for a live bed that already only draws at LITE_MAX_DPR.
+    ok(spiralGen.LITE_RASTER_PX < spiralGen.RASTER_PX,
+      'and it bakes its fallback still smaller on lite than on full',
+      `${spiralGen.LITE_RASTER_PX}/${spiralGen.RASTER_PX}`);
+
+    /* ---- THE LITE DRAW THROTTLE'S STARTUP EDGE (dueForDraw).
+     * rAF timestamps are a PAGE-lifetime clock shared with the pane that just
+     * died, so "have 33ms passed since the last draw" is the wrong question for
+     * the first frame of a new weave: a bed mounting inside 33ms of the last
+     * one's final frame would open by SKIPPING. weave() zeroes lastDraw and 0
+     * always draws. */
+    ok(SP.dueForDraw(1000, 0, false) === true && SP.dueForDraw(1000, 999, false) === true,
+      'the full tier never skips a draw — the throttle is lite-only, and desktop is byte-identical');
+    ok(SP.dueForDraw(1000, 0, true) === true,
+      'a lite bed ALWAYS draws the first loop frame of a weave, whatever the clock says');
+    ok(SP.dueForDraw(1000, 999, true) === false,
+      'a draw one millisecond ago is skipped — which is exactly why lastDraw is zeroed per weave');
+    ok(SP.dueForDraw(1000, 1000 - SP.LITE_FRAME_MS, true) === true,
+      `and the gate opens again at LITE_FRAME_MS (${SP.LITE_FRAME_MS}ms)`);
 
     // ---- the decision table, pure
     ok(PT.detectPerfTier({ coarse: false, viewportMinPx: 400, deviceMemoryGb: 2 }) === PT.PERF_FULL,
