@@ -131,6 +131,7 @@ Consult answers: (a) no dishonest discharge found beyond the four items; (b) the
 - Step 2 plan review (`spine_review_step step=2 type=plan`): **SKIPPED by runtime** — same SP-195 block; artifact `.reviews/2-20260805T005252.md`; `spawnFailed=false` → proceed.
 - Step 3 plan review (`spine_review_step step=3 type=plan`): **SKIPPED by runtime** — same SP-195 block; artifact `.reviews/3-20260805T011003.md`; `spawnFailed=false` → proceed.
 - Step 4 plan review (`spine_review_step step=4 type=plan`): **SKIPPED by runtime** — same SP-195 block; artifact `.reviews/4-20260805T015105.md`; `spawnFailed=false` → proceed.
+- Step 5 plan review (`spine_review_step step=5 type=plan`): **SKIPPED by runtime** — same SP-195 block; artifact `.reviews/5-20260805T015414.md`; `spawnFailed=false` → proceed. **Summary: zero in-worker reviews ran (uniform SP-195 runtime skip); all review phases are engine-owned post-.DONE.**
 
 ## 5. Evidence summary
 
