@@ -29,6 +29,15 @@ namespace ConditioningControlPanel
         private readonly DateTime _startupTime = DateTime.Now; // Track startup to prevent race conditions
 
         /// <summary>
+        /// True while an awareness / still-on LLM call is in flight. The reaction cooldown is
+        /// marked on DELIVERY now, not before the call, so it no longer doubles as the
+        /// re-entrancy guard it used to be — without this a burst of window switches would
+        /// fire overlapping requests against the same daily budget. Only ever touched on the
+        /// dispatcher thread (both handlers marshal first), so no locking needed.
+        /// </summary>
+        private bool _awarenessAiInFlight;
+
+        /// <summary>
         /// Handle activity change from WindowAwarenessService
         /// </summary>
         private async void OnActivityChanged(object? sender, ActivityChangedEventArgs e)
@@ -59,8 +68,9 @@ namespace ConditioningControlPanel
                 if (!App.WindowAwareness?.CanReact() ?? true)
                     return;
 
-                // Mark that we're reacting (resets cooldown timer)
-                App.WindowAwareness?.MarkReaction();
+                // Don't stack requests while one is still running (see field doc).
+                if (_awarenessAiInFlight)
+                    return;
 
                 // Always use the currently focused window's full context
                 // Use service name as primary, with page title for additional context
@@ -73,6 +83,7 @@ namespace ConditioningControlPanel
 
                 if (App.Settings?.Current?.AiChatEnabled == true && App.Ai?.IsAvailable == true)
                 {
+                    _awarenessAiInFlight = true;
                     try
                     {
                         // Pass full context from currently focused window. The duration is
@@ -90,6 +101,10 @@ namespace ConditioningControlPanel
                     {
                         App.Logger?.Warning(ex, "Failed to get AI awareness reaction");
                     }
+                    finally
+                    {
+                        _awarenessAiInFlight = false;
+                    }
                 }
 
                 // The await above may have spanned an app shutdown — re-check
@@ -99,6 +114,15 @@ namespace ConditioningControlPanel
 
                 // Use preset if AI didn't work
                 reaction ??= GetPhraseForCategory(e.Category, displayName);
+
+                if (string.IsNullOrWhiteSpace(reaction))
+                    return;
+
+                // Mark that we're reacting (resets cooldown timer). Deliberately AFTER the
+                // reaction is in hand: this used to run before the LLM call, so a failed,
+                // moderated or empty reaction still burned the whole cooldown window and the
+                // user got silence instead of the preset phrase they were owed.
+                App.WindowAwareness?.MarkReaction();
 
                 // AI responses get priority and double bounce, presets queue normally
                 if (isAiResponse)
@@ -149,8 +173,9 @@ namespace ConditioningControlPanel
                 if (!App.WindowAwareness?.CanStillOnReact() ?? true)
                     return;
 
-                // Mark that we're reacting (resets cooldown timer)
-                App.WindowAwareness?.MarkStillOnReaction();
+                // Don't stack requests while one is still running (see field doc).
+                if (_awarenessAiInFlight)
+                    return;
 
                 // Get duration from the awareness service
                 var duration = App.WindowAwareness?.CurrentActivityDuration ?? TimeSpan.Zero;
@@ -167,6 +192,7 @@ namespace ConditioningControlPanel
 
                 if (App.Settings?.Current?.AiChatEnabled == true && App.Ai?.IsAvailable == true)
                 {
+                    _awarenessAiInFlight = true;
                     try
                     {
                         // Use the selected display name based on 50/50 choice
@@ -180,6 +206,10 @@ namespace ConditioningControlPanel
                     catch (Exception ex)
                     {
                         App.Logger?.Warning(ex, "Failed to get AI still-on reaction");
+                    }
+                    finally
+                    {
+                        _awarenessAiInFlight = false;
                     }
                 }
 
@@ -195,6 +225,13 @@ namespace ConditioningControlPanel
                     var timeText = minutes < 1 ? "a bit" : $"{minutes} min";
                     reaction = $"Still on {displayName}? {timeText} already~ Do your nails instead!";
                 }
+
+                if (string.IsNullOrWhiteSpace(reaction))
+                    return;
+
+                // Mark that we're reacting (resets cooldown timer) — AFTER the reaction is in
+                // hand, for the same reason as OnActivityChanged above.
+                App.WindowAwareness?.MarkStillOnReaction();
 
                 // AI responses get priority
                 if (isAiResponse)
