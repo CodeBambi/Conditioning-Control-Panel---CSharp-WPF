@@ -1,12 +1,12 @@
 ## STATUS: SP-050 — Host-obligation audit (v6.6.3 remaining deltas)
-**Current Step:** Step 1 — delta inventory + payload enumeration + pre-approach consult
-**Last Updated:** 2026-08-05 (authored)
+**Current Step:** Step 1 — delta inventory + payload enumeration + pre-approach consult (IN PROGRESS)
+**Last Updated:** 2026-08-05 (worker session 1, Step 1 started)
 **Blockers:** none
 
 ### Step 1: inventory + payload enumeration + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] Per-delta payload-side facts (modules, bridge messages, self-driven surfaces; payload file:line)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Update STATUS.md before starting work
+- [x] Per-delta payload-side facts (modules, bridge messages, self-driven surfaces; payload file:line)
+- [x] Pre-approach solo consult (verdict + actual model in record.md — 3 calls, 2 truncations recorded; model not surfaced)
 
 ### Step 2: WPF host-side enumeration + obligation table
 - [ ] Per-delta WPF host provisions (File.cs:line; explicit nothing-records)
