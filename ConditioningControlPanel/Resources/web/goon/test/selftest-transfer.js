@@ -67,6 +67,10 @@ function makeSource(bytes, o = {}) {
     bytes,
     mime: o.mime || 'image/png',
     kind: o.kind || 'image',
+    // The two ADVISORY fields (2026-08-05). Absent on almost every fixture here on purpose:
+    // an offer without them is what a peer built before this change sends.
+    origin: o.origin,
+    codec: o.codec,
     data,
     reads,
     async read(offset, len) {
@@ -94,8 +98,10 @@ function makeStore(o = {}) {
     partialLength(sha) { const p = partials.get(sha); return p ? p.length : 0; },
     knowsBlocked(sha) { return blocked.has(sha); },
 
-    begin(sha, mime, bytes) {
+    /** `meta` is the offer's optional {origin, codec}; a store may ignore it and stay correct. */
+    begin(sha, mime, bytes, meta) {
       calls.begin++;
+      store.lastMeta = meta;
       if (store.refuseBegin) return false;
       if (!partials.has(sha)) partials.set(sha, { mime, bytes, chunks: [], length: 0 });
       return true;
@@ -154,11 +160,15 @@ async function makeRig(o = {}) {
   const hostCh = createMediaChannel(Object.assign(wire(pair.host), {
     store: hostStore, isHost: true, logger: quiet, tag: 'X:host',
     acceptOffers: o.hostAccepts || (() => true),
+    // Absent by default: node cannot probe, so the DEFAULT rig is two peers that advertise no
+    // decode list at all — which is also what every build before 2026-08-05 does.
+    acceptsCodecs: o.hostCodecs,
     timeouts: o.timeouts, limits: o.limits,
   }));
   const guestCh = createMediaChannel(Object.assign(wire(pair.guest), {
     store: guestStore, isHost: false, logger: quiet, tag: 'X:guest',
     acceptOffers: o.guestAccepts || (() => true),
+    acceptsCodecs: o.guestCodecs,
     timeouts: o.timeouts, limits: o.limits,
   }));
 
@@ -839,6 +849,138 @@ async function testSenderGuards() {
   rig.dispose();
 }
 
+/* ============================================================ 14. origin + codec on the offer
+ *
+ * Two optional fields, one rule: THEY MAY NEVER CHANGE WHETHER A TRANSFER HAPPENS. `origin` is
+ * downstream taste (keep a converted gif loop out of the VIDEO lane while real footage exists) and
+ * `codec` is only ever read by the SENDER's queue before it offers. An offer carrying neither —
+ * which is every offer a peer built before 2026-08-05 sends — must behave exactly as it always has.
+ */
+async function testOfferMetadata() {
+  // --- carried end to end, and handed to the store as advisory metadata
+  {
+    const rig = await makeRig();
+    const src = makeSource(2048, { mime: 'video/mp4', kind: 'video', origin: 'gif', codec: 'avc1' });
+    rig.hostCh.send(src);
+    ok(await until(() => rig.guestStore.committed.has(src.sha256), 3000), 'the gif-origin clip landed');
+
+    const offer = rig.guestSaw.find((m) => m.t === XferVerb.Offer);
+    ok(offer && offer.origin === 'gif' && offer.codec === 'avc1', 'the offer carries origin + codec',
+      JSON.stringify(offer && { origin: offer.origin, codec: offer.codec }));
+    ok(rig.guestStore.lastMeta && rig.guestStore.lastMeta.origin === 'gif'
+      && rig.guestStore.lastMeta.codec === 'avc1',
+      'and store.begin() is handed both as its optional 4th argument');
+
+    const landedIn = rig.events.guest.find((e) => e.ev === 'landed' && e.direction === 'in');
+    ok(landedIn && landedIn.origin === 'gif',
+      "the INBOUND landing reports it, which is how boot reaches exec/media.js addReceived");
+    const landedOut = rig.events.host.find((e) => e.ev === 'landed' && e.direction === 'out');
+    ok(landedOut && landedOut.origin === 'gif', 'and so does the outbound one, for the queue\'s own larder');
+    rig.dispose();
+  }
+
+  // --- an offer with NEITHER field is an old peer, and lands identically
+  {
+    const rig = await makeRig();
+    const src = makeSource(2048, { mime: 'video/mp4', kind: 'video' });
+    rig.hostCh.send(src);
+    ok(await until(() => rig.guestStore.committed.has(src.sha256), 3000),
+      'an offer with no origin and no codec transfers exactly as before');
+    const offer = rig.guestSaw.find((m) => m.t === XferVerb.Offer);
+    ok(offer && offer.origin === undefined && offer.codec === undefined,
+      'the fields are OMITTED rather than sent empty — an old parser sees the frame it expects');
+    const landedIn = rig.events.guest.find((e) => e.ev === 'landed' && e.direction === 'in');
+    ok(landedIn && landedIn.origin === '', 'and the landing reports origin "" — which reads as footage');
+    rig.dispose();
+  }
+
+  // --- a hostile peer cannot smuggle anything through either field
+  {
+    const rig = await makeRig();
+    const sha = shaOf(9911);
+    rig.rawFromHost({
+      t: XferVerb.Offer, v: XFER_PROTO, tid: 777, sha256: sha, bytes: 32,
+      mime: 'video/mp4', kind: 'video',
+      origin: '../../etc/passwd', codec: { nope: true },
+    });
+    await sleep(20);
+    ok(rig.guestStore.lastMeta && rig.guestStore.lastMeta.origin === '',
+      'a free-text origin is normalized to "" — the field is a two-valued flag, never a string we keep');
+    ok(rig.guestStore.lastMeta && rig.guestStore.lastMeta.codec === '',
+      'and a non-string codec normalizes to unknown rather than throwing');
+    ok(rig.hostSaw.some((m) => m.t === XferVerb.Accept && m.tid === 777),
+      'the offer was still ACCEPTED — neither field is ever a gate on the receiving side');
+    rig.dispose();
+  }
+}
+
+/* ============================================================ 15. the HEVC handshake
+ *
+ * The gap this closes, in one sentence: the sender's local decode probe only ever proved the
+ * SENDER could play the clip, so Safari shipped its own HEVC to a Windows peer with no HEVC
+ * decoder and the receiver watched a silent black window for the whole slot.
+ *
+ * The channel's job is only to ADVERTISE and to ANSWER; net/mediaQueue.js is what acts on the
+ * answer (selftest-flow.js §6f drives that end).
+ */
+async function testCodecHandshake() {
+  // --- advertised on the hello, and only when we have something to say
+  {
+    const rig = await makeRig({ hostCodecs: ['avc1', 'vp9'] });
+    const hello = rig.guestSaw.find((m) => m.t === XferVerb.Hello);
+    ok(hello && Array.isArray(hello.accepts_codecs)
+      && hello.accepts_codecs.join(',') === 'avc1,vp9',
+      'the hello carries accepts_codecs beside the untouched mime allowlist',
+      JSON.stringify(hello && hello.accepts_codecs));
+    ok(hello && Array.isArray(hello.accepts) && hello.accepts.includes('video/mp4'),
+      '`accepts` still means what it always meant — the CONTAINER allowlist, unchanged');
+
+    const back = rig.hostSaw.find((m) => m.t === XferVerb.Hello);
+    ok(back && back.accepts_codecs === undefined,
+      'a side with nothing to advertise OMITS the field (node cannot probe) — no empty-list claim');
+    rig.dispose();
+  }
+
+  // --- the answer the queue asks for
+  {
+    const rig = await makeRig({ guestCodecs: ['avc1'] });
+    ok(rig.hostCh.peerCanDecodeCodec('avc1.42E01E') === true, 'a listed family is decodable');
+    ok(rig.hostCh.peerCanDecodeCodec('hvc1.1.6.L93.B0') === false,
+      'THE POINT: an HEVC artifact is refused before it is ever offered to a peer without HEVC');
+    ok(rig.hostCh.peerCanDecodeCodec('orig') === true,
+      'an artifact whose codec we do not know is offered anyway — fail open');
+    ok(rig.hostCh.peerCanDecodeCodec('') === true, '…and so is one with no codec at all');
+    ok(rig.hostCh.stats().peer.acceptsCodecs.join(',') === 'avc1',
+      'stats surfaces the peer list for the ?debug=1 overlay');
+    rig.dispose();
+  }
+
+  // --- THE COMPATIBILITY CASE: a peer that says nothing takes everything
+  {
+    const rig = await makeRig();
+    ok(rig.hostCh.stats().peer.acceptsCodecs === null,
+      'a hello with no accepts_codecs reads as null — "they named none", not "they decode none"');
+    ok(rig.hostCh.peerCanDecodeCodec('hvc1') === true
+      && rig.hostCh.peerCanDecodeCodec('av01') === true,
+      'so every codec is offerable, which is byte-identical to the behaviour before the handshake');
+    const src = makeSource(1024, { mime: 'video/mp4', kind: 'video', codec: 'hvc1' });
+    rig.hostCh.send(src);
+    ok(await until(() => rig.guestStore.committed.has(src.sha256), 3000),
+      'and an HEVC clip really does still transfer to an old peer');
+    rig.dispose();
+  }
+
+  // --- the channel ADVERTISES and ANSWERS; it never refuses on its own
+  {
+    const rig = await makeRig({ guestCodecs: ['avc1'] });
+    const src = makeSource(1024, { mime: 'video/mp4', kind: 'video', codec: 'hvc1' });
+    const tid = rig.hostCh.send(src);
+    ok(tid !== null,
+      'send() does NOT gate on the peer\'s codecs: the queue is the policy, the channel is the wire');
+    rig.dispose();
+  }
+}
+
 // ============================================================ run
 const main = async () => {
   testFraming();
@@ -854,6 +996,8 @@ const main = async () => {
   await testHelloTimeout();
   await testDeadlines();
   await testSenderGuards();
+  await testOfferMetadata();
+  await testCodecHandshake();
 
   console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);
   process.exit(failures === 0 ? 0 : 1);

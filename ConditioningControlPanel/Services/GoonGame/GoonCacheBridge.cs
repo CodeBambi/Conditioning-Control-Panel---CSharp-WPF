@@ -533,6 +533,23 @@ namespace ConditioningControlPanel.Services.GoonGame
                             lane = it.Lane,
                             sha = it.Sha,
                             ext = it.Ext,
+                            // WHAT THE SOURCE WAS, for the goon transfer lane. An animated
+                            // gif/webp compresses into an mp4 and therefore travels as a VIDEO
+                            // (the wire refuses a kind/mime disagreement) — the page demotes such
+                            // an artifact behind real footage when it picks what to throw, so it
+                            // has to be able to tell the two apart. Taste only: nothing gates.
+                            origin = it.Kind == TransferKinds.Gif ? "gif" : "",
+                            // …and what the artifact IS. The page checks this against the peer's
+                            // advertised decoders before offering; "" / "orig" (an exempt
+                            // original, whose codec we never probed) means "offer it anyway".
+                            //
+                            // ONLY THE FULL LIST CARRIES IT: a job that finishes mid-session
+                            // arrives as a cache-progress delta, which has no codec field, so
+                            // that row stays "" until the next relist. That is the FAIL-OPEN
+                            // case by design — an unknown codec is offered — and it costs
+                            // nothing to leave alone, because everything this lane produces is
+                            // avc1 anyway.
+                            codec = it.Codec,
                             // srcBytes is the name the assets screen reads for "what compressing
                             // this would have to chew through"; `size` is the same number kept for
                             // anything that grew up on the C# field name.

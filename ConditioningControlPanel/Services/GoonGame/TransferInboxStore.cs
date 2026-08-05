@@ -15,6 +15,17 @@ namespace ConditioningControlPanel.Services.GoonGame
         [JsonProperty("ext")] public string Ext { get; set; } = "";
         /// <summary>The mime the sender declared AND the sniffer agreed with.</summary>
         [JsonProperty("mime")] public string Mime { get; set; } = "";
+        /// <summary>
+        /// "gif" when the SENDER said this artifact was a converted animated image rather than
+        /// footage; "" otherwise, which is also what every row written before 2026-08-05 says.
+        ///
+        /// ADVISORY AND UNTRUSTED, which is why it is safe to take a peer's word for it: it never
+        /// touches a filename, a size, a hash or a mime check, and the only thing that reads it is
+        /// the page's preference for real footage in the VIDEO lane. Persisted because a returning
+        /// session primes exec/media.js from this index — without it a gif loop received yesterday
+        /// comes back today looking like a clip.
+        /// </summary>
+        [JsonProperty("origin")] public string Origin { get; set; } = "";
         [JsonProperty("bytes")] public long Bytes { get; set; }
         [JsonProperty("lastAccessUtc")] public DateTime LastAccessUtc { get; set; } = DateTime.UtcNow;
     }
@@ -121,6 +132,9 @@ namespace ConditioningControlPanel.Services.GoonGame
             public required string Mime { get; init; }
             public required long Declared { get; init; }
             public required string PartPath { get; init; }
+            /// <summary>"gif" or "". Carried from Begin to Commit so it can be indexed — see
+            /// <see cref="InboxEntry.Origin"/> for why a peer's claim is safe here.</summary>
+            public string Origin { get; init; } = "";
             /// <summary>We already hold these bytes. Chunks are ACKED AND DISCARDED and Commit is a
             /// no-op success — a peer that ignored <c>decline:'have'</c> must not get us to rewrite
             /// 24 MB we already have.</summary>
@@ -320,6 +334,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                         sha = kv.Key,
                         ext = kv.Value.Ext,
                         mime = kv.Value.Mime,
+                        origin = kv.Value.Origin,
                         bytes = kv.Value.Bytes,
                     })
                     .ToList();
@@ -346,7 +361,10 @@ namespace ConditioningControlPanel.Services.GoonGame
         /// <c>from_offset = PartialLength</c>), because the commit hash is the backstop: a resume
         /// that stitched the wrong bytes together fails <c>hash-mismatch</c> and is deleted.
         /// </summary>
-        public string? Begin(string? id, string? sha, string? mime, long bytes)
+        /// <param name="origin">The offer's advisory <c>origin</c> ("gif" or anything else, which
+        /// is normalised to ""). Never validated beyond that string compare, and never used for
+        /// anything that can fail — see <see cref="InboxEntry.Origin"/>.</param>
+        public string? Begin(string? id, string? sha, string? mime, long bytes, string? origin = null)
         {
             if (string.IsNullOrEmpty(id)) return "bad-name";
             if (!IsSha(sha)) return "bad-name";
@@ -390,6 +408,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                         Mime = mime,
                         Declared = bytes,
                         PartPath = part,
+                        Origin = origin == "gif" ? "gif" : "",
                         Written = already,
                     };
                     return null;
@@ -514,6 +533,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                         {
                             Ext = ext,
                             Mime = s.Mime,
+                            Origin = s.Origin,
                             Bytes = len,
                             LastAccessUtc = DateTime.UtcNow,
                         };

@@ -29,6 +29,18 @@
 //
 // ORDERED + RELIABLE is assumed (the channel is created that way). Ordering is what guarantees
 // `xfer_end` can never overtake the last chunk, and it deletes a whole race class for free.
+//
+// TWO OPTIONAL FIELDS RIDE THE OFFER, AND BOTH ARE TOLERANT BY CONSTRUCTION (2026-08-05):
+//   `origin`  'gif' when the artifact is a converted animated image rather than real footage.
+//             Pure downstream taste — net/mediaQueue.js and exec/media.js use it to prefer real
+//             clips in the VIDEO lane — and NOTHING here gates on it.
+//   `codec`   the artifact's codec family, when the producing side knows it ('avc1', 'hvc1', …).
+//             Checked against the peer's advertised `accepts_codecs` BY THE QUEUE before it
+//             offers; see net/codecs.js for the fail-open contract.
+// A peer that sends neither is a peer from before this change, and reads exactly as it did then:
+// absent origin = "not a gif", absent codec = "unknown, offer it".
+
+import { acceptedCodecsFromHello, normalizeCodec, peerCanDecode } from './codecs.js';
 
 /** Protocol version carried on every control frame. */
 export const XFER_PROTO = 1;
@@ -142,10 +154,13 @@ export const XferCancel = Object.freeze({
  * @property {(sha:string) => number} partialLength
  *   Bytes already durably written for an INCOMPLETE artifact, 0 when there is no partial. This is
  *   the resume offset, and it is the receiver's promise: everything below it is on disk.
- * @property {(sha:string, mime:string, bytes:number) => boolean} begin
+ * @property {(sha:string, mime:string, bytes:number, meta?:{origin?:string, codec?:string}) => boolean} begin
  *   Open — or REOPEN, for a resume — the partial for `sha`. Returns false when the store refuses
  *   (full, io, quota); the caller answers `xfer_fail:'store_full'`. Must be idempotent: a resumed
  *   transfer calls it again with the same arguments and must keep the existing partial.
+ *   `meta` is ADVISORY and OPTIONAL — the offer's `origin`/`codec`, passed so a store that
+ *   persists rows (exec/receivedStore.js) can remember them. A store that ignores the fourth
+ *   argument (every store written before 2026-08-05, and every test stub) is fully correct.
  * @property {(sha:string, offset:number, bytes:ArrayBuffer) => boolean} write
  *   Append at exactly `offset` (never a seek past the end). False means the write failed and the
  *   caller answers `xfer_fail:'io'`.
@@ -176,6 +191,8 @@ export const XferCancel = Object.freeze({
  * @property {number} [dur_ms]
  * @property {number} [w]
  * @property {number} [h]
+ * @property {'gif'} [origin] the artifact came from an animated image, not from footage
+ * @property {string} [codec] codec family/label when the producer knows it ('avc1', 'hvc1', …)
  */
 
 const noop = () => {};
@@ -264,6 +281,10 @@ function toArrayBuffer(v) {
  *   Consulted FRESH on every offer, so a player who withdraws the toggle mid-match stops taking
  *   bytes on the very next offer.
  * @param {boolean} [o.isHost] mints ODD tids when true, EVEN when false — see `_nextTid`
+ * @param {string[]|null} [o.acceptsCodecs] what THIS runtime can decode (net/codecs.js
+ *   probeDecodeCodecs). Advertised on the hello as `accepts_codecs` so the PEER can skip artifacts
+ *   we would only ever render as a black rectangle. Null/absent advertises nothing, which every
+ *   peer reads as "send me anything" — the pre-2026-08-05 behaviour, and the node default.
  * @param {string} [o.tag] log prefix
  * @param {object} [o.timeouts] TEST AFFORDANCE (the relayTransport waitMs/minGapMs precedent):
  *   {offerMs, stallMs, helloMs, maxXferMs, watchdogMs}. Production passes nothing.
@@ -279,6 +300,10 @@ export function createMediaChannel(o = {}) {
   const blocklist = o.blocklist || null;
   const acceptOffers = typeof o.acceptOffers === 'function' ? o.acceptOffers : (() => false);
   const isHost = !!o.isHost;
+  /** Normalized once: whatever boot probed, reduced to the families net/codecs.js speaks. */
+  const acceptsCodecs = Array.isArray(o.acceptsCodecs)
+    ? o.acceptsCodecs.map(normalizeCodec).filter((c, i, a) => c && a.indexOf(c) === i)
+    : null;
 
   const sendBulk = typeof o.sendBulk === 'function' ? o.sendBulk : (() => false);
   const bufferedAmount = typeof o.bulkBufferedAmount === 'function' ? o.bulkBufferedAmount : (() => 0);
@@ -328,6 +353,8 @@ export function createMediaChannel(o = {}) {
   let dormant = false;          // hello never arrived — this peer does not transfer
   let helloSeen = false;
   let peerHello = null;
+  /** The peer's decodable families, or null when they named none (= accept everything). */
+  let peerCodecs = null;
   let strays = 0;
   let strayLimitHits = 0;
   let sessionBytesIn = 0;
@@ -363,6 +390,13 @@ export function createMediaChannel(o = {}) {
     return sendBulk(json) === true;
   }
 
+  /**
+   * `accepts` stays EXACTLY what it has always been — the container allowlist — and the decode
+   * answer rides beside it in `accepts_codecs`. Overloading `accepts` with parameterised mimes
+   * would have been the smaller diff and the bigger interop risk: it is documented as a mime
+   * allowlist and a peer doing a set lookup on it would stop recognising a single entry.
+   * An OMITTED `accepts_codecs` (node, an embedder with nothing to probe) is the fail-open case.
+   */
   function sendHello() {
     sendControl({
       t: XferVerb.Hello,
@@ -372,6 +406,7 @@ export function createMediaChannel(o = {}) {
       max_session_bytes: CAP_SESSION,
       max_concurrent: CAP_IN,
       accepts: Array.from(ACCEPT_MIME),
+      accepts_codecs: acceptsCodecs && acceptsCodecs.length ? acceptsCodecs.slice() : undefined,
     });
   }
 
@@ -448,6 +483,7 @@ export function createMediaChannel(o = {}) {
 
   const emitOffered = (direction, slot) => fire(ev.offered.set, {
     direction, tid: slot.tid, sha256: slot.sha256, bytes: slot.bytes, mime: slot.mime, kind: slot.kind,
+    origin: slot.origin || '', codec: slot.codec || '',
   }, log, tag, 'offered');
 
   const emitDeclined = (direction, slot, why) => fire(ev.declined.set, {
@@ -462,8 +498,11 @@ export function createMediaChannel(o = {}) {
     direction, tid: slot.tid, sha256: slot.sha256, transferred, bytes: slot.bytes,
   }, log, tag, 'progress');
 
+  /** `origin`/`codec` ride the landing so boot can register them with exec/media.js — the
+   *  receiver's soft "prefer real footage" preference is fed from exactly here. */
   const emitLanded = (direction, slot, extra) => fire(ev.landed.set, Object.assign({
     direction, tid: slot.tid, sha256: slot.sha256, bytes: slot.bytes, kind: slot.kind, mime: slot.mime,
+    origin: slot.origin || '', codec: slot.codec || '',
     ms: Math.max(0, Date.now() - slot.startedAtMs),
   }, extra || {}), log, tag, 'landed');
 
@@ -494,10 +533,16 @@ export function createMediaChannel(o = {}) {
     const kind = source.kind === 'video' ? 'video' : 'image';
     if (familyOf(mime) !== kind) { warn(`refusing to offer ${sha.slice(0, 8)}: kind/mime disagree`); return null; }
 
+    // Taste, not a gate: 'gif' or nothing, so a peer can never be handed a free-text field to
+    // switch on. The codec is passed through as the producer spelled it — net/codecs.js is the
+    // one place that decides what a spelling means.
+    const origin = source.origin === 'gif' ? 'gif' : '';
+    const codec = String(source.codec || '');
+
     const now = Date.now();
     const slot = {
       tid: nextTid(),
-      sha256: sha, bytes, mime, kind, source,
+      sha256: sha, bytes, mime, kind, source, origin, codec,
       state: 'offered',
       offset: 0, ackedOffset: 0, endSent: false, pumping: false,
       offeredAtMs: now, startedAtMs: now, lastProgressAtMs: now,
@@ -507,6 +552,8 @@ export function createMediaChannel(o = {}) {
     sendControl({
       t: XferVerb.Offer, v: XFER_PROTO,
       tid: slot.tid, sha256: sha, bytes, mime, kind,
+      origin: origin || undefined,
+      codec: codec || undefined,
       dur_ms: Number.isFinite(source.dur_ms) ? source.dur_ms : undefined,
       w: Number.isFinite(source.w) ? source.w : undefined,
       h: Number.isFinite(source.h) ? source.h : undefined,
@@ -661,10 +708,16 @@ export function createMediaChannel(o = {}) {
     // 8. the per-match, per-direction byte budget
     if (sessionBytesIn + bytes > CAP_SESSION) { decline(tid, sha, XferDecline.Quota, msg); return; }
 
+    // The two ADVISORY fields, read the way every untrusted field here is read: `origin` is
+    // 'gif' or nothing (never the peer's free text), `codec` is a label net/codecs.js reduces to
+    // a family it recognises or to ''. Neither can refuse an offer — see the header.
+    const origin = msg.origin === 'gif' ? 'gif' : '';
+    const codec = normalizeCodec(msg.codec);
+
     // 9. accept, from whatever is already on disk
     const from = safePartialLength(sha);
     let began = false;
-    try { began = store.begin(sha, mime, bytes) !== false; } catch (e) {
+    try { began = store.begin(sha, mime, bytes, { origin, codec }) !== false; } catch (e) {
       error(`store.begin(${sha.slice(0, 8)}) threw: ${(e && e.message) || e}`);
       began = false;
     }
@@ -675,7 +728,7 @@ export function createMediaChannel(o = {}) {
 
     const now = Date.now();
     const slot = {
-      tid, sha256: sha, bytes, mime, kind,
+      tid, sha256: sha, bytes, mime, kind, origin, codec,
       received: from, ackedAt: from, paused: false,
       startedAtMs: now, lastProgressAtMs: now,
     };
@@ -821,7 +874,11 @@ export function createMediaChannel(o = {}) {
         helloSeen = true;
         dormant = false;
         clearHelloTimeout();
-        info(`peer speaks xfer proto ${msg.proto ?? msg.v}`);
+        // null = they named none, which `peerCanDecode` reads as "send me anything". Every peer
+        // built before 2026-08-05 lands here, and that is the compatibility story in one line.
+        peerCodecs = acceptedCodecsFromHello(msg);
+        info(`peer speaks xfer proto ${msg.proto ?? msg.v}`
+          + (peerCodecs ? ` and decodes ${peerCodecs.join('/')}` : ' (no decode list — assuming anything)'));
         resumePaused();
         break;
       }
@@ -945,6 +1002,10 @@ export function createMediaChannel(o = {}) {
       sendControl({
         t: XferVerb.Offer, v: XFER_PROTO,
         tid: slot.tid, sha256: slot.sha256, bytes: slot.bytes, mime: slot.mime, kind: slot.kind,
+        // Re-offered VERBATIM, metadata included: a resume that dropped `origin` would land the
+        // same artifact with a different provenance story than the first attempt would have.
+        origin: slot.origin || undefined,
+        codec: slot.codec || undefined,
       });
     }
     for (const slot of inbound.values()) {
@@ -1080,10 +1141,24 @@ export function createMediaChannel(o = {}) {
           maxSessionBytes: peerHello.max_session_bytes ?? null,
           maxConcurrent: peerHello.max_concurrent ?? null,
           accepts: Array.isArray(peerHello.accepts) ? peerHello.accepts.slice() : [],
+          /** null means "they named none" — NOT "they can decode nothing". */
+          acceptsCodecs: peerCodecs ? peerCodecs.slice() : null,
         }
         : null,
+      /** What we advertise. Null under node and anywhere the probe could not be asked. */
+      acceptsCodecs: acceptsCodecs && acceptsCodecs.length ? acceptsCodecs.slice() : null,
     };
   }
+
+  /**
+   * Could the peer decode an artifact encoded like this? Asked by net/mediaQueue.js BEFORE it
+   * offers, because a refusal is only useful while it can still stop the bytes leaving.
+   *
+   * TRUE IS THE ANSWER FOR EVERY UNCERTAINTY: no hello yet, a peer that named no codecs, a codec
+   * we do not recognise. The only false is a known codec against a peer that listed families and
+   * did not list this one — see net/codecs.js peerCanDecode.
+   */
+  function peerCanDecodeCodec(codec) { return peerCanDecode(peerCodecs, codec); }
 
   return {
     open,
@@ -1091,6 +1166,7 @@ export function createMediaChannel(o = {}) {
     send,
     cancel,
     stats,
+    peerCanDecodeCodec,
 
     /** @returns {() => void} unsubscribe. {direction,tid,sha256,bytes,mime,kind} */
     onOffered: ev.offered.on,

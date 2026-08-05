@@ -802,6 +802,179 @@ function mountRecap(result) {
 
     a.dispose(); b.dispose(); pair.dispose();
   }
+
+  /* ---------- 6e. THE VIDEO LANE PREFERS FOOTAGE OVER CONVERTED GIF LOOPS
+   *
+   * The desktop compresses an animated gif into an mp4 so it can travel (the
+   * offer gate refuses any kind/mime disagreement), which makes it a perfectly
+   * valid VIDEO artifact — and a video attack that plays a two-second loop
+   * while a real clip sat in the same larder reads as a bug even though every
+   * layer worked. `tagsFor` spends the footage first. It is a PREFERENCE: when
+   * the loop is all that has landed it is still sent, because their gif beats
+   * the receiver's own library.
+   */
+  {
+    const pair = createLoopbackPair(loopbackOptions({
+      latencyMs: 0, jitterMs: 0, guestClockSkewMs: 0, bulk: true, logger: quiet,
+    }));
+    const { a, b } = await consentedPair(pair);
+
+    const GIF_VID = SHA('c');
+    const REAL_VID = SHA('d');
+    const artifacts = fakeArtifacts([
+      // The gif is offered FIRST by construction (it is first in the list and
+      // smaller), so a queue that just took `landed[0]` would send the loop.
+      { sha: GIF_VID, bytes: 8000, mime: 'video/mp4', kind: 'video', exempt: false, origin: 'gif', codec: 'avc1' },
+      { sha: REAL_VID, bytes: 40000, mime: 'video/mp4', kind: 'video', exempt: false, codec: 'avc1' },
+    ]);
+    const storeB = fakeStore();
+    const landedOrder = [];
+    const qA = createMediaQueue({
+      artifacts, store: fakeStore(), logger: quiet, canSend: () => true, idlePollMs: 40,
+    });
+    const qB = createMediaQueue({
+      artifacts: { listSendable: () => [], open: () => null },
+      store: storeB, logger: quiet, canSend: () => false, idlePollMs: 40,
+    });
+    qB.onReceived((e) => landedOrder.push(e.sha));
+
+    /* THE DECK IS SHUFFLED WITH Math.random (deliberately — see the header of
+     * net/mediaQueue.js), so without pinning it this test would only catch a
+     * regression half the time. `() => 0` makes the Fisher-Yates deterministic
+     * and lands the GIF FIRST, which is precisely the arrangement a queue that
+     * just took `landed[0]` would get wrong. */
+    const realRandom = Math.random;
+    try {
+      Math.random = () => 0;
+      qA.attach(a, pair.host);
+      qB.attach(b, pair.guest);
+      for (let i = 0; i < 120 && storeB.held.size < 2; i++) await tick(25);
+    } finally {
+      Math.random = realRandom;
+    }
+    ok(storeB.held.size === 2, '6e: both clips landed — one gif-origin, one real', String(storeB.held.size));
+    ok(landedOrder[0] === GIF_VID,
+      '6e: and the GIF landed first, so `landed[0]` is the wrong answer and the test can see it',
+      landedOrder.join(','));
+
+    const first = qA.tagsFor(GoonPayloadKind.Video);
+    ok(first.length === 1 && first[0] === 'xfer:' + REAL_VID,
+      '6e: the FIRST video tag is the real clip, even though the gif landed first', first.join(','));
+
+    // Spend it, and the loop is what is left — the fallback, not an exclusion.
+    qA.markConsumed(first);
+    const second = qA.tagsFor(GoonPayloadKind.Video);
+    ok(second.length === 1 && second[0] === 'xfer:' + GIF_VID,
+      '6e: with the footage spent the gif-origin clip IS sent — a gif of theirs beats our own pool',
+      second.join(','));
+
+    qA.detach(); qB.detach();
+    a.dispose(); b.dispose(); pair.dispose();
+  }
+
+  /* ---------- 6f. THE HEVC HANDSHAKE: never offer what they cannot decode
+   *
+   * The founding bug: ui/assetsStore.js probeVideoDecodable only ever proved
+   * the SENDER could play the clip. Safari decodes its own HEVC, adopts it,
+   * transfers it flawlessly, and the peer with no HEVC decoder paints a silent
+   * black window for the whole slot. Here the receiver advertises `avc1` only
+   * and the sender's eligibility filter drops the HEVC artifact BEFORE it is
+   * offered — with a warn, because a silent skip looks exactly like "the
+   * transfer doesn't work", which is what three rounds of this were.
+   */
+  {
+    const pair = createLoopbackPair(loopbackOptions({
+      latencyMs: 0, jitterMs: 0, guestClockSkewMs: 0, bulk: true, logger: quiet,
+    }));
+    const { a, b } = await consentedPair(pair);
+
+    const HEVC = SHA('e');
+    const H264 = SHA('f');
+    const artifacts = fakeArtifacts([
+      { sha: HEVC, bytes: 9000, mime: 'video/mp4', kind: 'video', exempt: false, codec: 'hvc1.1.6.L93.B0' },
+      { sha: H264, bytes: 9000, mime: 'video/mp4', kind: 'video', exempt: false, codec: 'avc1' },
+    ]);
+    const warns = [];
+    const loud = { info() {}, warn: (m) => warns.push(String(m)), error() {}, log() {} };
+
+    const storeB = fakeStore();
+    const qA = createMediaQueue({
+      artifacts, store: fakeStore(), logger: loud, canSend: () => true, idlePollMs: 40,
+    });
+    // THE RECEIVER IS THE ONE WITH THE OPINION: its hello carries the list.
+    const qB = createMediaQueue({
+      artifacts: { listSendable: () => [], open: () => null },
+      store: storeB, logger: quiet, canSend: () => false, idlePollMs: 40,
+      acceptsCodecs: ['avc1'],
+    });
+    qA.attach(a, pair.host);
+    qB.attach(b, pair.guest);
+    for (let i = 0; i < 120 && storeB.held.size < 1; i++) await tick(25);
+    await tick(200);                      // …and give the queue every chance to send the other one
+
+    ok(storeB.held.has(H264), '6f: the H.264 clip transferred normally');
+    ok(!storeB.held.has(HEVC),
+      '6f: the HEVC clip was NEVER offered — the peer advertised no HEVC decoder');
+    ok(qA.tagsFor(GoonPayloadKind.Video).indexOf('xfer:' + HEVC) < 0,
+      '6f: …so it can never end up on a payload either');
+    ok(warns.some((m) => /hvc1/.test(m) && /decoder/.test(m)),
+      '6f: and the skip SAYS SO once — the warn is what reaches the C# log and the ?debug=1 overlay',
+      warns.join(' | ').slice(0, 160));
+    ok(warns.filter((m) => /does not advertise a hvc1 decoder/.test(m)).length === 1,
+      '6f: exactly once per codec per match, on the saidWhy pattern — not once per poll');
+
+    qA.detach(); qB.detach();
+    a.dispose(); b.dispose(); pair.dispose();
+  }
+
+  /* ---------- 6g. THE SAME PAIR WITH AN OLD PEER: nothing is withheld.
+   * A hello with no `accepts_codecs` (every build before 2026-08-05) must be
+   * read as "send me anything", or the handshake would silently break the lane
+   * for everybody who has not updated.
+   */
+  {
+    const pair = createLoopbackPair(loopbackOptions({
+      latencyMs: 0, jitterMs: 0, guestClockSkewMs: 0, bulk: true, logger: quiet,
+    }));
+    const { a, b } = await consentedPair(pair);
+
+    const HEVC = SHA('e');
+    const artifacts = fakeArtifacts([
+      { sha: HEVC, bytes: 9000, mime: 'video/mp4', kind: 'video', exempt: false, codec: 'hvc1.1.6.L93.B0' },
+    ]);
+    const storeB = fakeStore();
+    const qA = createMediaQueue({
+      artifacts, store: fakeStore(), logger: quiet, canSend: () => true, idlePollMs: 40,
+    });
+    const qB = createMediaQueue({           // no acceptsCodecs — the old-peer shape
+      artifacts: { listSendable: () => [], open: () => null },
+      store: storeB, logger: quiet, canSend: () => false, idlePollMs: 40,
+    });
+    qA.attach(a, pair.host);
+    qB.attach(b, pair.guest);
+    for (let i = 0; i < 120 && storeB.held.size < 1; i++) await tick(25);
+    ok(storeB.held.has(HEVC),
+      '6g: a peer that advertises no codec list still receives the HEVC clip — fail open, end to end');
+
+    qA.detach(); qB.detach();
+    a.dispose(); b.dispose(); pair.dispose();
+  }
+
+  /* ---------- 6h. BOOT WIRES BOTH ENDS. Neither feature can work if the page
+   * forgets to read the fields off the artifact source or to probe at all, and
+   * both are one line in a 2,300-line file. */
+  {
+    const boot = read('boot.js');
+    ok(/origin\s*=\s*\(it\.origin === 'gif' \|\| it\.kind === 'gif'\)/.test(boot),
+      "6h: listSendable derives `origin` from the host's own flag OR the item kind (a host too "
+      + 'old to send `origin` still classifies gifs as kind "gif")');
+    ok(/out\.push\(\{ sha, bytes, mime, kind: wireKind, exempt, origin, codec \}\)/.test(boot),
+      '6h: …and both fields ride the sendable row the queue reads');
+    ok(/probeDecodeCodecs\(\)/.test(boot) && /acceptsCodecs: decodeCodecs/.test(boot),
+      '6h: boot probes what this device decodes ONCE and hands it to the queue for the hello');
+    ok(/origin: e\.origin \|\| ''/.test(boot),
+      '6h: and a received artifact keeps its origin all the way into exec/media.js addReceived');
+  }
 }
 
 /* ===========================================================================

@@ -7,10 +7,18 @@ using System.Threading.Tasks;
 
 namespace ConditioningControlPanel.Services.Transfer
 {
-    /// <summary>A queued/running/failed item as the assets screen wants to render it.</summary>
+    /// <summary>
+    /// A queued/running/failed item as the assets screen wants to render it.
+    ///
+    /// <c>Kind</c> is the SOURCE's ("gif" for an animated gif/webp) while <c>Ext</c>/<c>Codec</c>
+    /// describe the ARTIFACT — the two disagree for exactly the case the goon transfer lane cares
+    /// about, a gif that became an mp4. <c>Codec</c> is the compressor's own label ("avc1",
+    /// "webp", "jpeg", "orig") and reaches the page so a peer with no decoder for it is never
+    /// offered the file; "" / "orig" means unknown, which the page treats as "offer it anyway".
+    /// </summary>
     internal sealed record CacheItem(
         string SrcKey, string Rel, string Kind, string State, string Lane,
-        string Sha, string Ext, long Size, long Bytes, int W, int H, int DurMs,
+        string Sha, string Ext, string Codec, long Size, long Bytes, int W, int H, int DurMs,
         string? Fail, int Percent);
 
     /// <summary>One coalescable progress tick.</summary>
@@ -370,7 +378,7 @@ namespace ConditioningControlPanel.Services.Transfer
             foreach (var (key, e) in _store.Snapshot())
             {
                 seen.Add(key);
-                items.Add(new CacheItem(key, e.Rel, e.Kind, e.State, e.Lane, e.Sha, e.Ext,
+                items.Add(new CacheItem(key, e.Rel, e.Kind, e.State, e.Lane, e.Sha, e.Ext, e.Codec,
                     e.Size, e.Bytes, e.W, e.H, e.DurMs, e.Fail, 100));
             }
             lock (_lock)
@@ -383,7 +391,8 @@ namespace ConditioningControlPanel.Services.Transfer
                     if (_running.TryGetValue(j.SrcKey, out var r)) { pct = (int)r.Percent; state = "running"; }
                     else if (_pageOut.TryGetValue(j.SrcKey, out var d)) { pct = (int)d.Percent; state = "running"; }
                     else if (_queue.Any(q => q.SrcKey == j.SrcKey)) state = "queued";
-                    items.Add(new CacheItem(j.SrcKey, j.Rel, j.Kind, state, j.Lane, "", "",
+                    // Still outstanding: there is no artifact yet, so no ext and no codec.
+                    items.Add(new CacheItem(j.SrcKey, j.Rel, j.Kind, state, j.Lane, "", "", "",
                         j.Size, 0, j.SrcW, j.SrcH, j.DurMs, null, pct));
                 }
             }
