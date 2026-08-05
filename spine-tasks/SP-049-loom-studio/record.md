@@ -10,6 +10,16 @@
 | Step | Type | Result | Artifact |
 |------|------|--------|----------|
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — engine runs reviews after `.DONE`, SP-195) | `.reviews/2-20260805T052612.md` (called at the Step-2 boundary, covering Steps 1-2) |
+| 3 | plan | SKIPPED BY DESIGN (same) | (called at the Step-3/4 boundary, covering Steps 3-4) |
+
+---
+
+## Step 4 — verification (final tree, post consult fixes)
+
+- `node .spine/patches/verify.mjs` → **OK exit 0** (8 project + 5 engine patches applied).
+- `dotnet build client/CcpClient.sln -c Debug -t:Rebuild` → **0W/0E** (warnings measured on Rebuild per the xUnit1051 lesson).
+- CcpClient.Tests **629/629** (≥ the 614 floor; +15 this slice) with `--logger trx` (sp049-unit.trx); CcpClient.HeadlessTests **33/33** (≥ 33 floor) with TRX (sp049-headless.trx) — every failure would yield a name (skill-trx-failure-names amendment).
+- `git diff --check` clean; `git status --short` = File Scope paths only (Dtrh/** sources+tests + the documented 2-file wiring amendment Program.cs / App.axaml.cs + the task folder).
 
 ---
 
@@ -87,15 +97,18 @@ Step 1 archaeology ≈ 45 min (payload files, WPF LoomHostService/DtrhLoomStore,
 
 | Artifact | What it proves |
 |---|---|
-| `loom-run.log` … `loom-run15.log` (15 headed runs, all EXIT=0) | The full message-level story per run: ready → loom-list at ready (never before), per-tile `GET /spirals/loom_<slug>.gif -> 200 (spirals)` served lines, gifenc saves (`dtrh-loom: saved spiral (1072927 bytes)`), loom-result-driven list refreshes, deletes, sfx lines, graceful teardown |
-| `run5-studio-4tiles.png` (screen capture, dimension-validated 1214x837) | The studio SURFACE in-engine: THE LOOM title, stage card, the live WebGL spiral preview mid-animation, name input `run4-weave`, SAVE button, and the loom-result status line "kept as run4-weave. the tube knows it now." |
-| `run8-rack-stacked.png` (screen capture, stacked narrow layout) | The dial cards legible in-engine: the weave (arms/turns/body/style/spin), the threads (swatches/gradient/backing), the motion, the effects, the centerpiece; the preset chips with their WOVEN thumbnails (classic ccp / bambi haze / sissy swirl / locked in / hypno teal / candy tunnel — the shared field pipeline rendering in-engine) |
-| `run14-rack-ready.png` (in-engine raster, 3 tiles) | **Leg (a), unscripted:** the rack renders at ready from pre-existing spirals — aaa-seeded + bbb-seeded + run13-weave thumbnails, each decoded from its SERVED `/spirals/*` URL (per-tile decode facts in the harness result; the CORS-clean re-fetch is §4's own header) |
+| `loom-run*.log` (16 headed runs, 1-16 incl. 9b) | The full message-level story per run: ready → loom-list at ready (never before), per-tile `GET /spirals/loom_<slug>.gif -> 200 (spirals)` served lines, gifenc saves (`dtrh-loom: saved spiral (1072927 bytes)`), loom-result-driven list refreshes, deletes, sfx lines. **Exit honesty:** the auto-close runs (1, 2, 10, 13, 14, 15, 16) end in a clean graceful teardown with `EXIT=0`; runs 4-9b/11/12 were ended by taskkill or the shell timeout AFTER their evidence was captured (their transcripts end mid-session — recorded, never claimed as clean exits) |
+| `run5-studio-4tiles.png` (OS screen capture, dimension-validated 1214x837) | The studio SURFACE painted in-engine: THE LOOM title, stage card, the live WebGL spiral preview mid-animation, name input `run4-weave`, SAVE button, and the loom-result status line "kept as run4-weave. the tube knows it now." |
+| `run8-rack-stacked.png` (OS screen capture, stacked narrow layout) | The dial cards painted in-engine: the weave (arms/turns/body/style/spin), the threads (swatches/gradient/backing), the motion, the effects, the centerpiece; the preset chips with their WOVEN thumbnails (classic ccp / bambi haze / sissy swirl / locked in / hypno teal / candy tunnel — the shared field pipeline rendering in-engine) |
+| `run14-rack-ready.png` (in-engine raster, 3 tiles) | **Leg (a), unscripted:** the rack mounts at ready from pre-existing spirals — aaa-seeded + bbb-seeded + run13-weave tiles. **What the raster is and isn't (pre-completion consult binding):** a HARNESS COMPOSITE, not an OS screenshot of the painted pane — but each tile's pixels are gated on `img.complete && img.naturalWidth > 0` read from the RACK'S OWN `<img>` element, so a drawn tile PROVES the rack's own thumbnail decoded in-engine (an undecoded tile draws nothing and is marked NOT-DECODED). Combined with the per-tile served-200 log lines and the real 🗑 click → real loom-delete round trips, the discharge claim is exactly: **the rack pane is DRIVEN — it mounts, builds rows from the real loom-list, decodes the served thumbnails in-engine, and its controls round-trip real messages** — never "the painted rack was screenshotted" (the residual named limit below) |
 | `run14-rack-4tiles.png` (in-engine raster, 4 tiles) | **Leg (b):** the gifenc SAVE round trip lands on the rack — run14-weave's tile (the page's own encoder output, 1,072,927 bytes) beside the pre-existing three |
 | `run14-rack-after-delete.png` (in-engine raster, 3 tiles) | **Leg (c):** the real loom-delete removes aaa-seeded's tile and the list refresh re-renders the rack |
 | `run15-proof-weave.gif` + `.json` (file-content proof) | The gifenc artifact on disk: **640x640, 60 FRAMES (framesFor2 speed table), GIF89a magic + 0x3B trailer, 1,072,927 bytes** (System.Drawing frame count) + the params sidecar |
 | `run15-semantic-tree.json` (avalonia-live, dimension-validated) | The Loom window node 1200x800 (= the axaml size — the correct window, not the 520x680 dashboard), NativeWebView interactive+focused 1200x774, status "loom: studio live (loom-list posted)" |
+| `loom-run16.log` (headed reveal run) | **loom-reveal end-to-end:** the drive clicks the first tile's 📂 → the REAL loom-reveal through the real dispatch → `dtrh-loom: reveal launched` → a new explorer.exe observed with window title "Spirals - File Explorer" (the store folder, gif selected — WPF `explorer /select` parity) |
 | `capture-loom.ps1` / `wheel-loom.ps1` / `list-children.ps1` | The capture tooling (SetWindowPos topmost + GetWindowRect before every capture, the SP-026 norm) |
+
+**avalonia-live usage log (SP-036 binding — accept/reject + reasons per call):** `list_windows` ACCEPTED (window inventory + bounds; found The Loom 1200x800). `screenshot_window` **REJECTED for page-content evidence** (it renders the Avalonia visual tree only — the native WebView2 child is a black hole; the one exploratory call produced a 1200x800 black PNG with only the status bar, which is what EXPOSED the mismatch — kept honest, not used as evidence). `get_semantic_tree` ACCEPTED (dimension-validated shell + focused NativeWebView — run15-semantic-tree.json). OS-level CopyFromScreen captures (SP-026 norm) carried the painted-pixel evidence instead; the in-engine raster carried the rack.
 
 **Scripted-pointer labeling (binding 3):** the SAVE/DELETE drives run ONE atomic InvokeScript per step through the engine's own script interface (the SP-011 W14 precedent) — the gifenc worker, the bridge messages, the store, the serving, and the rack re-render are ALL real; only the pointer is scripted. Leg (a) needed NO scripting at all. The `exists` refusal + overwrite-arm path was also observed live (run 9b: `dtrh-loom: save refused (exists — page arms overwrite)`).
 
@@ -113,11 +126,23 @@ Step 1 archaeology ≈ 45 min (payload files, WPF LoomHostService/DtrhLoomStore,
 
 **Named limit (owner-gated, never faked):** WSL has zero distros on this laptop — no Linux evidence. The dialog surface + `xdg-open` reveal path are code-reviewed but unproven; no Wayland claims.
 
+### Residual named limits (for the board row at land)
+
+1. **The painted rack was never OS-screenshotted on THIS laptop** — the WebView2 child rasters at the creation monitor's 1.75 scale while the window displays at 1.0, so the page's bottom-pinned rack never paints on screen here (measured: dpr=1.75, viewport 1200x775; surprise 3). The discharge above is the DRIVEN rack (mount/list/decode/message round trips + harness composite). A single-monitor or matched-scale machine can take the plain screenshot with zero code changes.
+2. **WPF parity reachability = the Spiral Overlay feature card** (`SpiralFeatureControl.BtnOpenLoom_Click`); the greenfield dashboard has no such card yet (future dashboard row). The `--loom-demo` demonstrator is the current seam, never claimed as UI parity.
+3. **Landed-slice behavior change to call out on the board:** the `boon_pick` sfx chain (DtrhNativeEffects) now falls back to chime2.mp3 per ChaosSfx.cs:33 (was: typed silent no-op) — changes GAME-host behavior from b3 as well; pinned by `Sfx_BoonPick_ChainFallsBackToChime2_KeepingPageScale`.
+
 ### Consults
 
 #### Pre-completion consult (Step 3)
 
-(pending)
+**Mode:** solo (T-7). **Requested route:** Opus 5 main (2026-08-04 rewire). **Actual answering model:** NOT surfaced by the consult tool response (recorded honestly, same discipline as the pre-approach).
+
+**Verdict: the chain is closeable after four fix-first items — ALL CLOSED:**
+1. **Raster honesty reframed (CLOSED):** the raster is a harness composite, not a painted-pane screenshot — but the `img.complete && img.naturalWidth > 0` guard on the RACK'S OWN `<img>` makes each drawn tile proof the rack's own thumbnail decoded in-engine. The discharge sentence is scoped to exactly "the rack pane is DRIVEN" (mount/list/decode/round-trips); the painted-rack screenshot is a residual named limit (above). The transient per-tile decode-info claim was corrected (the guard logic IS the persisted proof).
+2. **loom-reveal was never fired in a real run (CLOSED):** run 16 drove `reveal-first` — the real page click → real message → real dispatch → `reveal launched` → explorer.exe observed titled "Spirals - File Explorer".
+3. **boon_pick fix needed a test (CLOSED):** `Sfx_BoonPick_ChainFallsBackToChime2_KeepingPageScale` pins the chain + the page-supplied scale (18/18 DtrhNativeEffects tests green). Recorded as a landed-slice behavior change for the board (residual 3).
+4. **Overclaims corrected (CLOSED):** the "15 runs all EXIT=0" line replaced with the honest split (7 auto-close clean exits; the rest taskkilled/timeout after capture); the avalonia-live accept/reject usage log added per the SP-036 binding.
 
 #### Pre-approach consult (Step 1)
 

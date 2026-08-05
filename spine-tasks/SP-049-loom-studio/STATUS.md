@@ -1,5 +1,5 @@
 ## STATUS: SP-049 — Loom studio promotion (v6.6.3 delta)
-**Current Step:** Step 2 — studio driving + protocol + tests (DONE; Step 3 next)
+**Current Step:** complete — all criteria met, .DONE
 **Last Updated:** 2026-08-05 (worker)
 **Blockers:** none
 
@@ -17,13 +17,13 @@
 - [x] Unit tests (round-trips, tolerance, serve discipline) — 14 new (628/628 + 33/33 green; floor 614/33)
 
 ### Step 3: in-engine evidence + consolidation + pre-completion consult
-- [ ] avalonia-live evidence (open/render/operate, save round-trip file proof, valid GIF)
-- [ ] Named-limit escalation if a host surface is missing (never fake)
-- [ ] record.md (dual archaeology, delta, design, consults, review presence)
-- [ ] Pre-completion solo consult (verdict + actual model in record.md)
-- [ ] STATUS.md accurate before .DONE
+- [x] avalonia-live evidence (open/render/operate, save round-trip file proof, valid GIF) — 16 headed runs; rack rasters (ready 3 / save 4 / delete 3 tiles); 640x640 60-frame GIF89a proof; semantic tree dimension-validated; reveal-first explorer proof
+- [x] Named-limit escalation if a host surface is missing (never fake) — painted-rack screenshot residual (laptop 1.75-raster/1.0-display mismatch, measured); Spiral-card reachability; boon_pick landed-slice change
+- [x] record.md (dual archaeology, delta, design, consults, review presence)
+- [x] Pre-completion solo consult (verdict + actual model in record.md) — 4 fix-first items all closed
+- [x] STATUS.md accurate before .DONE
 
 ### Step 4: Testing & Verification
-- [ ] Contract testCommand passes (verify.mjs + build 0W/0E + ≥614/33 floor; TRX logger on full-suite runs)
-- [ ] git diff --check clean
-- [ ] git status --short shows only File Scope paths
+- [x] Contract testCommand passes (verify.mjs exit 0 + Rebuild 0W/0E + 629/629 + 33/33 ≥ 614/33 floor; TRX loggers attached: sp049-unit.trx / sp049-headless.trx)
+- [x] git diff --check clean
+- [x] git status --short shows only File Scope paths

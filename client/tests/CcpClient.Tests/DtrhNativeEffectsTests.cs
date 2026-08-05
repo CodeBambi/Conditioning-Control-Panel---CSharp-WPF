@@ -111,6 +111,22 @@ public sealed class DtrhNativeEffectsTests : IDisposable
     }
 
     [Fact]
+    public void Sfx_BoonPick_ChainFallsBackToChime2_KeepingPageScale()
+    {
+        // SP-049: the studio's save-success cue (loomStudio.js:209, scale 0.4). WPF's chain
+        // (ChaosSfx.cs:33) is chaos/boon_pick.mp3 → chime2.mp3; the dedicated drop is not
+        // in the DTRH payload pool, so the chain lands on chime2 — and unlike the other
+        // chains the page-supplied scale passes through (WPF ChaosSfx.Play(name, scale)).
+        var chime2 = TouchSfx("chime2.mp3");
+        var (fx, audio, _) = Make();
+
+        fx.PlaySfx("boon_pick", 0.4);
+
+        Assert.Equal(chime2, audio.Players[0].Path, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(0.80f * 0.4f, audio.Players[0].Gain, 3);
+    }
+
+    [Fact]
     public void Sfx_DedicatedFile_WinsOverFallback()
     {
         var dedicated = TouchSfx("wave_clear.mp3");
