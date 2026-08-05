@@ -1,6 +1,6 @@
 ## STATUS: SP-050 — Host-obligation audit (v6.6.3 remaining deltas)
-**Current Step:** Step 1 — delta inventory + payload enumeration + pre-approach consult (IN PROGRESS)
-**Last Updated:** 2026-08-05 (worker session 1, Step 1 started)
+**Current Step:** Step 2 — WPF host-side enumeration + obligation table (IN PROGRESS)
+**Last Updated:** 2026-08-05 (worker session 1, Step 1 COMPLETE — plan review engine-skipped SP-195)
 **Blockers:** none
 
 ### Step 1: inventory + payload enumeration + pre-approach consult
