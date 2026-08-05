@@ -4581,6 +4581,226 @@ async function main() {
     for (const id of LAYER_IDS) byId.get(id).replaceChildren();
   }
 
+  /* ------- brain drain: the veil washes THEIR picture, not the receiver's own
+   *
+   * 2026-08-05, owner play-testing r12: "check IF we actually send our gifs as the
+   * braindrain — right now it seems like we are using the local assets of the
+   * receiver". He was right, and nothing was broken: a BrainDrain payload is not in
+   * net/mediaQueue.js's XFER_KINDS, so it never carries an `xfer:` tag, and
+   * exec/brainDrain.js only ever asked media.drawKind('image').
+   *
+   * The load-bearing rung is therefore the SECOND one — the received store's
+   * rotation, which needs no tags at all. These pin all three plus the invariant
+   * that keeps the ladder honest: an ELEMENT bed is not an attack and may never
+   * surface a peer file.
+   */
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const drainHost = byId.get('gg-fx-drain');
+    const { createGoonMediaPool } = await import('../exec/media.js');
+    const BD = await import('../exec/brainDrain.js');
+
+    // The wash arrives as --gg-drain-img: url("…"), never as background-image (an
+    // inline background-image would drop fx.css's dim + desaturate layers — the B&W bug).
+    const washUrl = () => {
+      const veil = drainHost.findAll('gg-drain')[0];
+      const raw = veil ? String(veil.style.getPropertyValue('--gg-drain-img') || '') : '';
+      const m = /url\("([^"]*)"\)/.exec(raw);
+      return m ? m[1] : '';
+    };
+
+    const junkTags = { tags: ['xfer:' + SHA_IMG, 'lol:no', 42, null] };
+    ok(BD.xferTags(junkTags).length === 1,
+      'brainDrain.xferTags keeps only the xfer: namespace and never throws on junk',
+      JSON.stringify(BD.xferTags(junkTags)));
+    ok(BD.xferTags({}).length === 0 && BD.xferTags(null).length === 0,
+      'a payload with no tags is an empty spend list, not a crash');
+
+    // ---- 1. a peer payload draws from the received store, with NO tags at all
+    {
+      const pool = createGoonMediaPool();
+      pool.setManifest(ownManifest());
+      pool.addReceived({ sha: SHA('e'), kind: 'image', mime: 'image/gif', url: 'https://ccp.cache/recv/d0.gif' });
+      pool.addReceived({ sha: SHA('f'), kind: 'image', mime: 'image/png', url: 'https://ccp.cache/recv/d1.png' });
+
+      const ex = createExecutor({ media: pool, layers, logger: quiet, toyBridge: null });
+      ex.attach(fakeMatch());
+      const R = ex.rendererFor(GoonElement.BrainDrain);
+
+      const cancel = R.renderPayload({ id: 'pD1', duration_ms: 40000, intensity: 0.8 }, () => {});
+      await sleep(60);
+      ok(washUrl().startsWith('https://ccp.cache/recv/'),
+        'an UNTAGGED brain drain washes an artifact the opponent transferred this match — '
+        + 'the rung that actually answers the owner report, because a drain never carries tags',
+        washUrl());
+      ok(drainHost.findAll('gg-drain').length === 1,
+        'and it is still exactly one veil pane', String(drainHost.findAll('gg-drain').length));
+      cancel();
+      ex.stopAll();
+      ex.detach();
+      await sleep(60);
+      for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    }
+
+    // ---- 2. an exact xfer: tag outranks the rotation. Rung 1 is built, not
+    //         aspirational — the day BrainDrain joins XFER_KINDS it just works.
+    {
+      const pool = createGoonMediaPool();
+      pool.setManifest(ownManifest());
+      pool.addReceived({ sha: SHA('e'), kind: 'image', mime: 'image/png', url: 'https://ccp.cache/recv/d0.png' });
+      pool.addReceived({ sha: SHA_IMG, kind: 'image', mime: 'image/webp', url: 'https://ccp.cache/recv/exact.webp' });
+
+      const ex = createExecutor({ media: pool, layers, logger: quiet, toyBridge: null });
+      ex.attach(fakeMatch());
+      const R = ex.rendererFor(GoonElement.BrainDrain);
+      const cancel = R.renderPayload({
+        id: 'pD2', duration_ms: 40000, intensity: 0.8, tags: ['xfer:' + SHA_IMG],
+      }, () => {});
+      await sleep(60);
+      ok(washUrl() === 'https://ccp.cache/recv/exact.webp',
+        'a tagged brain drain washes the EXACT artifact the tag names, ahead of the rotation',
+        washUrl());
+      cancel();
+      ex.stopAll();
+      ex.detach();
+      await sleep(60);
+      for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    }
+
+    // ---- 3. an EMPTY received store falls back to the receiver's own library —
+    //         byte-identical to the behaviour before this feature existed
+    {
+      const pool = createGoonMediaPool();
+      pool.setManifest(ownManifest());
+
+      const ex = createExecutor({ media: pool, layers, logger: quiet, toyBridge: null });
+      ex.attach(fakeMatch());
+      const R = ex.rendererFor(GoonElement.BrainDrain);
+      const cancel = R.renderPayload({ id: 'pD3', duration_ms: 40000, intensity: 0.8 }, () => {});
+      await sleep(60);
+      ok(washUrl().startsWith('https://ccp.assets/'),
+        'a peer drain with nothing landed still washes the receiver own library — the '
+        + 'transfer lane degrades to today behaviour, it never blanks the veil', washUrl());
+      cancel();
+      ex.stopAll();
+      ex.detach();
+      await sleep(60);
+      for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    }
+
+    // ---- 4. THE INVARIANT: an element bed is not an attack. Even with a full
+    //         received store, the ramp's own drain stays on the local library.
+    {
+      const pool = createGoonMediaPool();
+      pool.setManifest(ownManifest());
+      pool.addReceived({ sha: SHA('e'), kind: 'image', mime: 'image/png', url: 'https://ccp.cache/recv/d0.png' });
+      pool.addReceived({ sha: SHA('f'), kind: 'image', mime: 'image/png', url: 'https://ccp.cache/recv/d1.png' });
+
+      const ex = createExecutor({ media: pool, layers, logger: quiet, toyBridge: null });
+      const m = fakeMatch();
+      ex.attach(m);
+      m.emitStart({ element: GoonElement.BrainDrain, intensity: 1, durationMs: 0, elapsedMs: 0 });
+      await sleep(60);
+      ok(washUrl().startsWith('https://ccp.assets/'),
+        'the ELEMENT drain never surfaces a peer file — their media appears exactly where '
+        + 'their payload asked for it and nowhere else (exec/media.js header invariant)', washUrl());
+      ex.stopAll();
+      ex.detach();
+      await sleep(60);
+      for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    }
+  }
+
+  /* --------- overlay payloads INSTANT-SWAP, they never queue up behind each other
+   *
+   * 2026-08-05, owner: "we just instantly swap whats active for whatever's next
+   * immediately, should be easier on the performances".
+   *
+   * WHAT THE BUG WAS. Both overlay renderers held ONE `payloadIntensity` scalar and
+   * gave each renderPayload call its OWN end timer. Two overlapping payloads
+   * therefore shared a dial and kept two clocks: the second stamped its intensity
+   * over the first, and then the FIRST one's timer expired and put the dial down —
+   * killing the overlay while the second still had most of its duration left, whose
+   * only remaining effect was a late second settle. A backlog of dead durations, and
+   * on a phone also a second fullscreen decode inside the first one's frame budget.
+   *
+   * WHAT IS PINNED, per overlay type:
+   *   1. the outgoing payload settles IMMEDIATELY, endured=false (receipt
+   *      `completed`, no charge, no refund — executor.js's existing interrupt
+   *      semantic, reused rather than invented);
+   *   2. the pane is NOT torn down and re-created — the SAME node throughout, so
+   *      there is no blank frame and no second backdrop-filter pane;
+   *   3. the dead run's remaining duration cannot re-trigger and never settles twice;
+   *   4. the survivor still settles normally through the ordinary door.
+   *
+   * ACROSS types nothing changes, deliberately: spiral, drain and the bubbles' pink
+   * hold each own a DIFFERENT layer (exec/layers.js) and are designed to compose.
+   * The owner's complaint was about a QUEUE, not about layering.
+   */
+  {
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const { createGoonMediaPool } = await import('../exec/media.js');
+
+    for (const [label, kind, hostId, cls] of [
+      ['brain drain', GoonPayloadKind.BrainDrain, 'gg-fx-drain', 'gg-drain'],
+      ['spiral', GoonPayloadKind.Spiral, 'gg-fx-spiral', 'gg-spiral'],
+    ]) {
+      const host = byId.get(hostId);
+      host.replaceChildren();
+      const pool = createGoonMediaPool();
+      pool.setManifest(ownManifest());
+
+      const ex = createExecutor({ media: pool, layers, logger: quiet, toyBridge: null });
+      const m = fakeMatch();
+      ex.attach(m);
+
+      // Through the EXECUTOR, not the renderer, so the receipt path is the shipped
+      // one: a swap has to produce a real closing receipt or the sender waits forever.
+      m.emitPayload({ payload: { id: 'sw1', kind, duration_ms: 60000, intensity: 0.6 } });
+      await sleep(40);
+      const firstNode = host.findAll(cls)[0];
+      ok(!!firstNode, `${label}: the first payload raised a pane`);
+      ok(m.receipts.length === 0, `${label}: and nothing has been receipted yet`,
+        JSON.stringify(m.receipts));
+
+      m.emitPayload({ payload: { id: 'sw2', kind, duration_ms: 60000, intensity: 0.9 } });
+      await sleep(40);
+
+      ok(m.receipts.length === 1 && m.receipts[0].id === 'sw1' && m.receipts[0].endured === false,
+        `${label}: the incoming payload settles the active one IMMEDIATELY, endured=false — `
+        + 'receipt completed, no charge, and the sender is never left waiting',
+        JSON.stringify(m.receipts));
+      ok(ex.activeCount() === 1,
+        `${label}: exactly one payload runs afterwards — the backlog is gone, not queued`,
+        String(ex.activeCount()));
+
+      const panes = host.findAll(cls);
+      ok(panes.length === 1, `${label}: still exactly ONE pane after the swap`, String(panes.length));
+      ok(panes[0] === firstNode,
+        `${label}: and it is the SAME node — the swap re-dials the running pane instead of `
+        + 'tearing it down and re-creating it, which is what would flash a blank frame');
+
+      // The dead run must not come back: its timer is cleared, and even if a host
+      // fired it anyway it no longer owns the dial. Well past its own teardown delay.
+      await sleep(150);
+      ok(m.receipts.length === 1,
+        `${label}: the swapped-out payload never settles twice and its remaining duration `
+        + 'cannot re-trigger', JSON.stringify(m.receipts));
+      ok(host.findAll(cls).length === 1,
+        `${label}: and the survivor pane is still up long after the dead run would have swept`,
+        String(host.findAll(cls).length));
+
+      ex.stopAll();
+      ok(m.receipts.length === 2 && m.receipts[1].id === 'sw2',
+        `${label}: the survivor still settles through the normal door afterwards`,
+        JSON.stringify(m.receipts));
+      ok(ex.activeCount() === 0, `${label}: registry empty`, String(ex.activeCount()));
+      ex.detach();
+      await sleep(60);
+      for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    }
+  }
+
   /* ------------------------------------------------- the received store, hosted
    *
    * The disk backend talks to TransferInboxStore through five verbs that ALL reply

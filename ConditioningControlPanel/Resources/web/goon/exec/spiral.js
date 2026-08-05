@@ -205,6 +205,15 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
   let paneEl = null;
   let elementIntensity = null;    // null = element not running
   let payloadIntensity = null;    // null = no payload running
+  /**
+   * THE ONE payload run holding the pane, or null — the swap token. See
+   * renderPayload for the whole argument; the short version is that a second
+   * spiral arriving mid-run used to share this file's single `payloadIntensity`
+   * while keeping its own end timer, so the FIRST timer to expire took the pane
+   * down and left the second run's duration as a dead backlog. A run may only put
+   * the dial down while it still owns it.
+   */
+  let payloadRun = null;
 
   // THE SPIRAL CURRENTLY ON THE PANE — one roll from the session pool, driving
   // BOTH beds: `.params` is what the shader weaves, `.image()` is the baked
@@ -745,10 +754,55 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
       sfx('spiral-out');
     },
 
-    /** Spiral payload: ride the pane up for duration_ms, then hand it back. */
+    /**
+     * Spiral payload: ride the pane up for duration_ms, then hand it back.
+     *
+     * INSTANT SWAP, NEVER A BACKLOG (2026-08-05, owner: "we just instantly swap whats
+     * active for whatever's next immediately, should be easier on the performances").
+     * The full argument lives in exec/brainDrain.js renderPayload — this pane has the
+     * identical one-scalar/two-clocks shape and therefore had the identical bug — but
+     * the SPIRAL has a second, sharper reason to swap rather than stack:
+     *
+     * ONE PANE, ONE WEAVE, ONE BAKE. A teardown-then-restart between two overlapping
+     * spirals would detach the woven canvas, drop the shader context, mount a fresh
+     * pane and queue a fresh raster bake, all inside the incoming cue's own fade —
+     * which is the exact double-bake shape PR #137 already had to chase off an iPhone
+     * once. Keeping the pane and letting `repick()` roll a new spiral onto it is one
+     * bake and no context churn, and it is also the nicer picture: the spiral changes
+     * without the screen blinking.
+     *
+     * `mintedPane` still does its job unchanged. On a swap the pane already exists, so
+     * apply() mints nothing, so the repick below is the one and only roll of this cue.
+     */
     renderPayload(payload, done) {
       const p = payload || {};
       const runMs = Math.max(1000, (p.duration_ms | 0) || 12000);
+
+      const run = { settle: null };
+
+      let finished = false;
+      let endTimer = 0;
+      const settle = (endured) => {
+        if (finished) return;
+        finished = true;
+        try { clearTimeout(endTimer); } catch (_e) { /* ignore */ }
+        // Only the owner may put the dial down; a swapped-out run settles into
+        // thin air rather than tearing down its successor's pane.
+        if (payloadRun === run) {
+          payloadRun = null;
+          payloadIntensity = null;
+          apply();
+        }
+        if (typeof done === 'function') { try { done(endured); } catch (e) { warn(`done() threw: ${e && e.message}`); } }
+      };
+      run.settle = settle;
+
+      // Ownership moves BEFORE the outgoing run is settled — reversing these two
+      // lines is what would tear the pane down and blink.
+      const prev = payloadRun;
+      payloadRun = run;
+      if (prev) { try { prev.settle(false); } catch (e) { warn(`swap settle threw: ${e && e.message}`); } }
+
       payloadIntensity = Math.max(0.5, clamp01(p.intensity !== undefined ? p.intensity : 0.75));
       apply();
       // ONE ROLL PER CUE. apply() -> ensurePane() already repicks for a pane it
@@ -762,16 +816,6 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
       // change.
       if (!mintedPane) repick();
 
-      let finished = false;
-      let endTimer = 0;
-      const settle = (endured) => {
-        if (finished) return;
-        finished = true;
-        try { clearTimeout(endTimer); } catch (_e) { /* ignore */ }
-        payloadIntensity = null;
-        apply();
-        if (typeof done === 'function') { try { done(endured); } catch (e) { warn(`done() threw: ${e && e.message}`); } }
-      };
       endTimer = soon(() => settle(true), runMs);
       return () => settle(false);
     },

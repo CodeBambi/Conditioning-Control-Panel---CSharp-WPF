@@ -294,6 +294,26 @@ export function createGoonMediaPool() {
     return real.length ? real : pool;
   }
 
+  /**
+   * The LITE tier's version of footageFirst, for the image lane: stills ahead of animated
+   * artifacts, and NEVER a filter — see the drawStillImage banner above for why one more
+   * fullscreen decode loop is the thing a phone cannot afford, and the header's
+   * "preference, never a filter" promise for why an all-GIF peer pool still gets its GIF.
+   *
+   * IT IS DELIBERATELY A SET NARROWING, NOT A REDRAW LOOP. drawStillImage retries the deck
+   * because the deck is a consuming shuffle and a retry costs nothing but an echo-guard slot;
+   * the peer pool is a ROTATION whose whole job is fairness, so retrying here would burn
+   * rotation stamps on artifacts nobody was shown and quietly re-introduce the "always the
+   * same gif" run this rotation exists to kill. Narrowing the candidate set and rotating once
+   * keeps the ledger honest: the stills rotate among themselves, and the moment a still lands
+   * the gifs stop being drawn rather than being drawn and discarded.
+   */
+  function stillFirst(pool, kind) {
+    if (kind !== 'image' || pool.length < 2) return pool;
+    const stills = pool.filter((v) => !isAnimatedMedia(v));
+    return stills.length ? stills : pool;
+  }
+
   /** Every received view of that kind the blocklist still allows. Shared by draw and peek. */
   function receivedViews(kind) {
     const all = [];
@@ -534,14 +554,25 @@ export function createGoonMediaPool() {
      * this file for why random-with-an-echo-guard was the thing the owner was
      * seeing as "always the same gif". Least-recently-shown wins; the pick is
      * stamped so it goes to the back of the queue.
+     *
+     * @param {string} kind 'image' | 'video'
+     * @param {{preferStill?:boolean}} [opts] LITE-TIER ONLY, and only the image lane reads it:
+     *   a fullscreen wash (exec/brainDrain.js, a bubble's drain hold) would rather have a
+     *   texture than a decode loop. A PREFERENCE — an all-animated peer pool still hands one
+     *   back, because their gif beats our own library and that is the entire point of the
+     *   transfer lane. Omitted everywhere else, so every existing caller is byte-identical.
      */
-    drawReceived(kind) {
+    drawReceived(kind, opts) {
       const want = kind === 'video' ? 'video' : (kind === 'image' ? 'image' : '');
       if (!want) return null;
       const all = receivedViews(want);
       if (!all.length) return null;
       // Real footage if they have sent any this match; their gif loops if that is all there is.
-      const chosen = rotate(footageFirst(all, want));
+      let pool = footageFirst(all, want);
+      // …and, when the caller is paying per frame for it, a still ahead of an animation.
+      // Applied AFTER footageFirst so neither preference can empty what the other left.
+      if (opts && opts.preferStill) pool = stillFirst(pool, want);
+      const chosen = rotate(pool);
       peerShownAt.set(chosen.sha, ++peerDrawSeq);
       return chosen;
     },

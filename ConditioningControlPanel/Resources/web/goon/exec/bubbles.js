@@ -588,21 +588,41 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     }
   }
 
-  /** An image handle from the player's own pool (null when the pool has none).
+  /** An image handle for a pop effect (null when there is nothing to draw).
+   *
    *  LITE prefers a STILL (media.js drawStillImage — a preference, never a
    *  filter): a pop's flick and the drain hold both fire at the busiest moment
    *  a phone has, and an animated GIF is a decode loop where a still is a
-   *  texture. Full tier: the exact draw it has always made. */
-  function drawImage() {
+   *  texture. Full tier: the exact draw it has always made.
+   *
+   *  WHOSE IMAGE (2026-08-05, the same audit that fixed exec/brainDrain.js's wash).
+   *  A bubble the OPPONENT'S SWARM minted is their attack, so the flash or the drain
+   *  wash it bursts into should be THEIR picture when they have landed one — the
+   *  peer-first ladder, minus rung 1: a BubbleSwarm carries no `xfer:` tags and there
+   *  is no per-bubble slot to spend one on anyway. Their received store, then ours.
+   *
+   *  A FIELD BUBBLE STAYS ENTIRELY OURS, and that asymmetry is the point: the ambient
+   *  field is the player's own bed, not an attack, so it may never surface a peer file
+   *  (media.js's header invariant — their media appears exactly where their payload
+   *  asked for it and nowhere else). `fromPayload` is the only gate.
+   *
+   *  @param {boolean} [peer] this pop belongs to a bubble an inbound swarm minted
+   */
+  function drawImage(peer) {
     if (!media || typeof media.drawKind !== 'function') return null;
-    const entry = perfLite() ? drawStillImage(media) : media.drawKind('image');
+    const lite = perfLite();
+    let entry = null;
+    if (peer && typeof media.drawReceived === 'function') {
+      entry = media.drawReceived('image', lite ? { preferStill: true } : undefined);
+    }
+    if (!entry) entry = lite ? drawStillImage(media) : media.drawKind('image');
     if (!entry) return null;
     const handle = (typeof media.acquire === 'function') ? media.acquire(entry) : null;
     return (handle && handle.url) ? handle : null;
   }
 
   /** The scattered flash a popped flash-bubble throws (payloadFx.flash, bounded). */
-  function popFlash(strength) {
+  function popFlash(strength, peer) {
     pruneFlashes();
     const host = layer();
     if (!host || typeof document === 'undefined') return;
@@ -610,7 +630,7 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     const dur = scale(900, 1600, strength);
     for (let i = 0; i < amount; i++) {
       if (popFlashes.size >= MAX_POP_FLASH) break;
-      const handle = drawImage();
+      const handle = drawImage(peer);
       if (!handle) break;
       const img = document.createElement('img');
       img.className = 'gg-flash';
@@ -641,10 +661,10 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
   }
 
   /** The drain wash: dim + blur-behind with a faint image over it (showBraindrain). */
-  function popDrain(strength) {
+  function popDrain(strength, peer) {
     const h = holdOn('drain', 'gg-drain', scaleD(0.35, 0.62, strength), scale(1500, 4500, strength));
     if (!h) return h;
-    const handle = drawImage();
+    const handle = drawImage(peer);
     if (handle) {
       releaseHold(h);
       h.handle = handle;
@@ -653,11 +673,24 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     return h;
   }
 
-  /** What a popped bubble of each kind throws. Bounded, and never a new layer. */
-  function popFx(kind, strength) {
+  /**
+   * What a popped bubble of each kind throws. Bounded, and never a new layer.
+   *
+   * INSTANT SWAP IS ALREADY THE RULE HERE, and it is worth naming so nobody
+   * "fixes" it: every wash below rides holdOn(), whose `gen` counter means a
+   * fresh pop clears the previous hideTimer, re-raises the SAME pane and leaves
+   * the old removal callback to bail out on a stale generation. Two pops of the
+   * same kind can never stack two panes or queue two durations — the second one
+   * takes the pane over on the spot. (The paying-per-frame kinds — spiral, pink,
+   * drain — each own their own pane and are allowed to COMPOSE across kinds,
+   * which is a layer question, not a queue question.)
+   *
+   * @param {boolean} [peer] the bubble was minted by an inbound swarm — see drawImage
+   */
+  function popFx(kind, strength, peer) {
     switch (kind) {
       case 'flash':
-        popFlash(strength);
+        popFlash(strength, peer);
         break;
       case 'spiral': {
         const h = holdOn('spiral', 'gg-spiral', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength));
@@ -673,12 +706,12 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
         holdOn('pink', 'gg-pink', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength));
         break;
       case 'braindrain':
-        popDrain(strength);
+        popDrain(strength, peer);
         break;
       case 'glitch': {
         // RGB-split shudder OVER the drain wash — DtRH's showGlitch, hard-capped
         // so a fat bubble can never strobe forever.
-        const h = popDrain(strength);
+        const h = popDrain(strength, peer);
         if (!h) break;
         h.el.classList.add('is-glitching');
         const ms = Math.min(4000, scale(1200, 3000, strength));
@@ -742,7 +775,10 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     announcePop(rec, x, y);
     // Bubble size IS the strength dial in the Fall; same here.
     const strength = Math.round(clamp01((rec.size - BUB_MIN_PX) / (BUB_MAX_PX - BUB_MIN_PX)) * 100);
-    try { popFx(rec.kind, strength); } catch (e) { warn(`popFx ${rec.kind} threw: ${e && e.message}`); }
+    // `fromPayload` rides along: a bubble the opponent's swarm minted bursts into
+    // THEIR media when they have landed some (drawImage), a field bubble into ours.
+    try { popFx(rec.kind, strength, rec.fromPayload); }
+    catch (e) { warn(`popFx ${rec.kind} threw: ${e && e.message}`); }
     rec.bubble.addEventListener('animationend', () => recycle(rec), { once: true });
     soon(() => recycle(rec), 600);
   }
