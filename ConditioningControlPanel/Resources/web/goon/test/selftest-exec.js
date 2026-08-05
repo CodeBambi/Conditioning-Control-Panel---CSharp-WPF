@@ -4192,6 +4192,90 @@ async function main() {
       'an explicit xfer tag for a gif-origin clip still resolves to exactly that clip');
   }
 
+  /* ------------------------- THE PEER POOL ROTATES, IT DOES NOT SHUFFLE
+   *
+   * 2026-08-05, phone play-test r9: "seems like I am receiving always the same
+   * gif". The draw was uniform random with a one-item echo guard, which at the
+   * pool size this lane actually has — two or three files for the first minute —
+   * is a machine for producing runs. A burst spends thirty draws in eight
+   * seconds; at n=3 with only the immediate repeat blocked, one file comes back
+   * every other draw about half the time.
+   *
+   * The fix is a rotation: least-recently-shown first, ties broken at random.
+   * The pins below are the three claims that makes.
+   */
+  {
+    const { createGoonMediaPool } = await import('../exec/media.js');
+    const A = SHA('1');
+    const B = SHA('2');
+    const C = SHA('3');
+
+    const three = createGoonMediaPool();
+    three.addReceived({ sha: A, kind: 'image', mime: 'image/gif', url: 'r/a.gif' });
+    three.addReceived({ sha: B, kind: 'image', mime: 'image/png', url: 'r/b.png' });
+    three.addReceived({ sha: C, kind: 'image', mime: 'image/webp', url: 'r/c.webp' });
+
+    // --- 1. EVERY WINDOW OF THREE HOLDS ALL THREE. This is the claim uniform
+    //     random cannot make at any pool size, and the one the owner was seeing
+    //     violated. Thirty draws, checked as ten complete cycles.
+    const seq = [];
+    for (let i = 0; i < 30; i++) seq.push(three.drawReceived('image').sha);
+    let brokenCycles = 0;
+    for (let i = 0; i < 30; i += 3) {
+      if (new Set(seq.slice(i, i + 3)).size !== 3) brokenCycles++;
+    }
+    ok(brokenCycles === 0,
+      'thirty draws over a three-file pool are ten complete cycles — no file repeats until every '
+      + 'other one has had its turn', String(brokenCycles));
+    let backToBack = 0;
+    for (let i = 1; i < seq.length; i++) if (seq[i] === seq[i - 1]) backToBack++;
+    ok(backToBack === 0, 'and nothing is ever handed out twice in a row', String(backToBack));
+
+    // --- 2. IT CANNOT INVENT VARIETY IT DOES NOT HAVE. One file is one file.
+    const one = createGoonMediaPool();
+    one.addReceived({ sha: A, kind: 'image', mime: 'image/gif', url: 'r/a.gif' });
+    let same = 0;
+    for (let i = 0; i < 10; i++) if (one.drawReceived('image').sha === A) same++;
+    ok(same === 10, 'a pool of ONE still draws it every time — a rotation is not a filter',
+      String(same));
+
+    // --- 3. THE PREVIEW READS THE ROTATION WITHOUT SPENDING IT. Same contract as
+    //     peekKind: a preview that mutated the queue would change what it previews.
+    //     (The pool is settled here — every rank is distinct — so the answer is
+    //     unambiguous; on a fresh pool every candidate ties and the tie-break is
+    //     deliberately random.)
+    const nextUp = three.peekReceived('image').sha;
+    ok(three.peekReceived('image').sha === nextUp,
+      'peekReceived is stable on a settled pool — it reads the rotation, it does not turn it');
+    ok(three.drawReceived('image').sha === nextUp,
+      'and the render then draws exactly what the preview advertised', nextUp.slice(0, 8));
+    ok(three.peekReceived('image').sha !== nextUp,
+      'after the draw the rotation has moved on — the preview is not a cached answer');
+
+    // --- 4. dropReceived PRUNES THE LEDGER. A re-received artifact must come back
+    //     at the FRONT of the queue, not carrying the position it had when it left.
+    const drops = createGoonMediaPool();
+    drops.addReceived({ sha: A, kind: 'image', mime: 'image/png', url: 'r/a.png' });
+    drops.addReceived({ sha: B, kind: 'image', mime: 'image/png', url: 'r/b.png' });
+    drops.drawReceived('image');
+    drops.drawReceived('image');                    // both stamped, A first
+    drops.dropReceived(A);
+    drops.addReceived({ sha: A, kind: 'image', mime: 'image/png', url: 'r/a.png' });
+    ok(drops.drawReceived('image').sha === A,
+      'a dropped-and-re-received artifact is NEVER-SHOWN again, so it goes straight to the front');
+
+    // --- 5. THE FOOTAGE PREFERENCE STILL OUTRANKS THE ROTATION. A gif-origin clip
+    //     whose turn it is does not get to jump a real clip that has never been shown.
+    const vids = createGoonMediaPool();
+    vids.addReceived({ sha: A, kind: 'video', mime: 'video/mp4', origin: 'gif', url: 'r/a.mp4' });
+    vids.addReceived({ sha: B, kind: 'video', mime: 'video/mp4', url: 'r/b.mp4' });
+    let loopDraws = 0;
+    for (let i = 0; i < 20; i++) if (vids.drawReceived('video').sha === A) loopDraws++;
+    ok(loopDraws === 0,
+      'the rotation runs INSIDE footageFirst — a converted loop never takes a real clip\'s turn',
+      String(loopDraws));
+  }
+
   // -------------------------------- addReceived does not disturb the deck
   {
     const { createGoonMediaPool } = await import('../exec/media.js');

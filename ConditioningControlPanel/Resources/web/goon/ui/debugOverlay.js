@@ -37,6 +37,10 @@ export const OVERLAY_Z = 2147483000;
 
 const ON = /^(1|true|on|yes)$/i;
 
+/** The perf status row's look, minus its display: — setStatus rewrites the whole string. */
+const STATUS_CSS = 'padding:2px 8px;color:#9ff5d0;background:rgba(0,0,0,.25);'
+  + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+
 /** Is the flag on in a raw querystring? `?debug=1`, `?debug` and `?debug=true` all count. */
 export function debugInSearch(search) {
   const s = String(search || '');
@@ -89,7 +93,8 @@ export function describe(v) {
  * @param {number} [o.max] ring size
  * @param {() => number} [o.now] injectable clock
  * @returns {{push:(level:string,msg:any)=>void, lines:()=>string[], collapsed:()=>boolean,
- *            toggle:()=>void, node:object|null, dispose:()=>void}}
+ *            toggle:()=>void, setStatus:(text:string)=>void, status:()=>string,
+ *            node:object|null, dispose:()=>void}}
  */
 export function createDebugOverlay({ doc = null, max = MAX_LINES, now = () => Date.now() } = {}) {
   const d = doc || (typeof document !== 'undefined' ? document : null);
@@ -97,13 +102,15 @@ export function createDebugOverlay({ doc = null, max = MAX_LINES, now = () => Da
   let root = null;
   let body = null;
   let badge = null;
+  let statusRow = null;
+  let statusText = '';
   let collapsed = false;
   let disposed = false;
   const cap = Math.max(1, max | 0);
 
   const noop = {
     push() {}, lines() { return []; }, collapsed() { return false; },
-    toggle() {}, node: null, dispose() {},
+    toggle() {}, setStatus() {}, status() { return ''; }, node: null, dispose() {},
   };
   if (!d || !d.body || typeof d.createElement !== 'function') return noop;
 
@@ -125,6 +132,20 @@ export function createDebugOverlay({ doc = null, max = MAX_LINES, now = () => Da
       + 'cursor:pointer;touch-action:manipulation;');
     badge.textContent = 'debug 0';
 
+    /* THE STATUS LINE — one row, rewritten in place, never appended to the ring.
+     * ui/perfProbe.js repaints it twice a second; if it went through push() it
+     * would flush the last fifty warn lines out of the ring in twenty-five
+     * seconds, which would destroy the thing this overlay exists for.
+     *
+     * It sits ABOVE the scrolling body and OUTSIDE the collapse, on purpose: one
+     * folded 16px badge plus a live fps line is a readout you can play a match
+     * under, which is the only condition the numbers are worth anything in. It
+     * is created empty and hidden, so a page with no probe — every page before
+     * this one — shows exactly what it always showed. */
+    statusRow = d.createElement('div');
+    statusRow.id = 'gg-debug-perf';
+    style(statusRow, STATUS_CSS + 'display:none;');
+
     body = d.createElement('div');
     body.id = 'gg-debug-body';
     // 30vh, and the badge is the TOP row so one tap folds it to a 16px bar: a
@@ -133,6 +154,7 @@ export function createDebugOverlay({ doc = null, max = MAX_LINES, now = () => Da
     style(body, 'max-height:30vh;overflow:auto;padding:4px 8px 6px;white-space:pre-wrap;word-break:break-word;');
 
     root.appendChild(badge);
+    root.appendChild(statusRow);
     root.appendChild(body);
     // TAP ANYWHERE ON THE STRIP, not just a hit-box: a 10px close button on a
     // phone is a control that does not exist.
@@ -171,6 +193,22 @@ export function createDebugOverlay({ doc = null, max = MAX_LINES, now = () => Da
       } catch (_e) { /* a log line can never be the thing that breaks the page */ }
     },
     lines() { return ring.map((e) => e.at + ' ' + e.level + ' ' + e.msg); },
+
+    /**
+     * The perf readout, rewritten in place. NEVER throws and never allocates a
+     * node — the probe calls this on a timer and the overlay is not allowed to
+     * become the thing that costs frames on the machine it is measuring.
+     */
+    setStatus(text) {
+      if (disposed) return;
+      statusText = String(text == null ? '' : text).slice(0, 200);
+      try {
+        statusRow.textContent = statusText;
+        style(statusRow, STATUS_CSS + 'display:' + (statusText ? 'block' : 'none') + ';');
+      } catch (_e) { /* stub DOM */ }
+    },
+    status() { return statusText; },
+
     collapsed() { return collapsed; },
     toggle() {
       collapsed = !collapsed;

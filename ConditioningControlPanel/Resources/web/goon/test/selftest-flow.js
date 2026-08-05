@@ -979,6 +979,143 @@ function mountRecap(result) {
     ok(/origin: e\.origin \|\| ''/.test(boot),
       '6h: and a received artifact keeps its origin all the way into exec/media.js addReceived');
   }
+
+  /* ---------- 6i. TRANSFER VARIETY, THE SENDER'S HALF (2026-08-05, play-test r9)
+   *
+   * "Seems like I am receiving always the same gif." Every gate passed; the pool
+   * was simply too small and too lopsided for the first minute. Three rules, all
+   * pinned here — see rule 3 in net/mediaQueue.js's header.
+   */
+  {
+    const { QUEUE_DEPTH, QUEUE_DEPTH_MAX, EST_THROUGHPUT_BPS, QUEUE_AHEAD_MS } =
+      await import('../net/mediaQueue.js');
+
+    // --- 3a. DEPTH IS EARNED BY SIZE. Pure: no transport, no match — `targetDepth`
+    //     only needs the eligible set and the throughput estimate, and with no
+    //     channel attached that estimate is exactly EST_THROUGHPUT_BPS.
+    const depthOf = (bytes, n = 4) => {
+      const list = [];
+      for (let i = 0; i < n; i++) {
+        list.push({ sha: SHA(String(i)), bytes, mime: 'image/png', kind: 'image', exempt: false });
+      }
+      return createMediaQueue({
+        artifacts: { listSendable: () => list, open: () => null },
+        store: fakeStore(), logger: quiet, canSend: () => false,
+      }).stats().depth;
+    };
+    const msFor = (bytes) => (bytes / EST_THROUGHPUT_BPS) * 1000;
+    ok(depthOf(200000) === QUEUE_DEPTH_MAX,
+      '6i: a library of small stills primes to the CEILING — the pool the phone was starved of',
+      String(depthOf(200000)));
+    ok(depthOf(4000000) === Math.floor(QUEUE_AHEAD_MS / msFor(4000000)),
+      '6i: a mid-sized library lands in between — the unit is WIRE TIME, not a file count',
+      String(depthOf(4000000)));
+    ok(depthOf(8000000) === QUEUE_DEPTH,
+      '6i: and a library of big clips keeps the old depth — the wire budget is never widened',
+      String(depthOf(8000000)));
+    ok(depthOf(0, 0) === QUEUE_DEPTH, '6i: an empty library answers the floor, never NaN');
+    ok(QUEUE_DEPTH_MAX < 12,
+      '6i: the ceiling stays BELOW LANDED_MAX, or the pump would spend the wire on artifacts '
+      + 'the landed ring then dropped', String(QUEUE_DEPTH_MAX));
+
+    // --- 3b. THE PUMP BALANCES KINDS. Five images and three videos: the first card
+    //     is a tie and the shuffle takes it, but the SECOND is drawn against a pool
+    //     that is now one-sided, so the two kinds cannot both be missing at t+1.
+    const pair = createLoopbackPair(loopbackOptions({
+      latencyMs: 0, jitterMs: 0, guestClockSkewMs: 0, bulk: true, logger: quiet,
+    }));
+    const { a, b } = await consentedPair(pair);
+    const mixed = [];
+    for (let i = 0; i < 5; i++) {
+      mixed.push({ sha: SHA('a' + i), bytes: 6000, mime: 'image/png', kind: 'image', exempt: false });
+    }
+    for (let i = 0; i < 3; i++) {
+      mixed.push({ sha: SHA('b' + i), bytes: 6000, mime: 'video/mp4', kind: 'video', exempt: false, codec: 'avc1' });
+    }
+    const storeB = fakeStore();
+    const order = [];
+    const qA = createMediaQueue({
+      artifacts: fakeArtifacts(mixed), store: fakeStore(), logger: quiet, canSend: () => true, idlePollMs: 40,
+    });
+    const qB = createMediaQueue({
+      artifacts: { listSendable: () => [], open: () => null },
+      store: storeB, logger: quiet, canSend: () => false, idlePollMs: 40,
+    });
+    qB.onReceived((e) => order.push(e.kind));
+
+    /* Math.random pinned, exactly as 6e does it: the deck is shuffled with it on
+     * purpose, and an unpinned test would only catch this regression sometimes. */
+    const realRandom = Math.random;
+    try {
+      Math.random = () => 0;
+      qA.attach(a, pair.host);
+      qB.attach(b, pair.guest);
+      for (let i = 0; i < 160 && order.length < 4; i++) await tick(25);
+    } finally {
+      Math.random = realRandom;
+    }
+    ok(order.length >= 4, '6i: the queue primed several deep during the draft', order.join(','));
+    ok(order[0] !== order[1],
+      '6i: the FIRST TWO landings are one of each kind — the receiver has an image lane and a '
+      + 'video lane before the first payload fires', order.join(','));
+    ok(order.slice(0, 4).filter((k) => k === 'image').length >= 1
+      && order.slice(0, 4).filter((k) => k === 'video').length >= 1,
+      '6i: …and the balance holds through the first four', order.join(','));
+    qA.detach(); qB.detach();
+    a.dispose(); b.dispose(); pair.dispose();
+  }
+
+  /* ---------- 6j. THE SHOWN LEDGER (rule 3c): a burst's spare tag slots are filled
+   * with artifacts the peer already has, least-recently-shown first — but ONLY as a
+   * top-up. With nothing fresh at all the answer is still [], because that is what
+   * keeps "one landing, one drop" true and keeps the untagged diagnostic firing.
+   */
+  {
+    const pair = createLoopbackPair(loopbackOptions({
+      latencyMs: 0, jitterMs: 0, guestClockSkewMs: 0, bulk: true, logger: quiet,
+    }));
+    const { a, b } = await consentedPair(pair);
+
+    const four = [];
+    for (let i = 0; i < 4; i++) {
+      four.push({ sha: SHA(String(i)), bytes: 5000, mime: 'image/png', kind: 'image', exempt: false });
+    }
+    const storeB = fakeStore();
+    const qA = createMediaQueue({
+      artifacts: fakeArtifacts(four), store: fakeStore(), logger: quiet, canSend: () => true, idlePollMs: 40,
+    });
+    const qB = createMediaQueue({
+      artifacts: { listSendable: () => [], open: () => null },
+      store: storeB, logger: quiet, canSend: () => false, idlePollMs: 40,
+    });
+    qA.attach(a, pair.host);
+    qB.attach(b, pair.guest);
+    for (let i = 0; i < 200 && storeB.held.size < 4; i++) await tick(25);
+    ok(storeB.held.size === 4, '6j: all four stills landed (depth 10 for a library this small)',
+      String(storeB.held.size));
+
+    const t1 = qA.tagsFor(GoonPayloadKind.FlashBurst);
+    ok(t1.length === 3, '6j: a FlashBurst takes XFER_TAGS_MAX fresh artifacts', String(t1.length));
+    qA.markConsumed(t1);
+    ok(qA.stats().shown === 3, '6j: and consumption writes all three into the shown ledger',
+      String(qA.stats().shown));
+
+    const t2 = qA.tagsFor(GoonPayloadKind.FlashBurst);
+    ok(t2.length === 3, '6j: the next burst still gets three slots — one fresh, two topped up',
+      String(t2.length));
+    ok(t1.indexOf(t2[0]) < 0,
+      '6j: the FRESH artifact goes first — a never-seen file always outranks a repeat', t2[0]);
+    ok(t2[1] === t1[0] && t2[2] === t1[1],
+      '6j: and the repeats are the LEAST recently shown two, in that order', t2.join(','));
+
+    qA.markConsumed(t2);
+    ok(qA.tagsFor(GoonPayloadKind.FlashBurst).length === 0,
+      '6j: with nothing fresh left the answer is EMPTY, not a stale pin — "one landing, one drop" '
+      + 'survives, and the receiver\'s own rotation takes it from here');
+
+    qA.detach(); qB.detach();
+    a.dispose(); b.dispose(); pair.dispose();
+  }
 }
 
 /* ===========================================================================
@@ -1187,6 +1324,23 @@ function mountRecap(result) {
   panel.node.dispatchEvent({ type: 'click' });
   ok(panel.collapsed() === false, 'and back');
 
+  /* the PERF STATUS ROW (ui/perfProbe.js writes it twice a second). It is
+   * rewritten in place and must never reach the ring — a readout that pushed a
+   * line would flush the last fifty warnings out in twenty-five seconds, which
+   * is the one thing this overlay exists to prevent. */
+  const ringBefore = panel.lines().length;
+  panel.setStatus('58fps · worst 34ms · lt 0 · fx:idle');
+  ok(panel.status() === '58fps · worst 34ms · lt 0 · fx:idle', 'setStatus round-trips', panel.status());
+  ok(panel.lines().length === ringBefore,
+    'and it does NOT touch the ring — the readout can never flush a warning out');
+  panel.setStatus('19fps');
+  ok(panel.status() === '19fps', 'it is rewritten in place, not appended', panel.status());
+  panel.setStatus('');
+  ok(panel.status() === '', 'and an empty status clears it (the probe does this on stop)');
+  let statusThrew = false;
+  try { panel.setStatus(null); panel.setStatus(undefined); } catch (_e) { statusThrew = true; }
+  ok(!statusThrew, 'setStatus can never throw — it sits on a timer inside a debug session');
+
   // the two seams a logger never sees
   const fakeWin = (() => {
     const map = new Map();
@@ -1233,6 +1387,215 @@ function mountRecap(result) {
   const bridgeSrc = read('bridge.js');
   ok(/keep\.debug = /.test(bridgeSrc), 'bridge persists the flag next to server/token/uid/name');
   ok(/export function storedPrefs\(\)/.test(bridgeSrc), 'and exposes the stored blob for the pre-init decision');
+}
+
+/* ============================================================================
+ * 7b. THE PERF PROBE (ui/perfProbe.js) — the play-test's stopwatch.
+ *
+ * Added for the 2026-08-05 phone report: the owner says it lags, three rounds of
+ * code-reading have produced three theories and no evidence, and the device has
+ * no devtools. The next session has to come back with numbers.
+ *
+ * What must hold, or it is worse than not having it:
+ *   · ?debug=1 ONLY — the module is not even fetched otherwise, so the shipped
+ *     page's behaviour is byte-identical;
+ *   · it names WHICH detector fired. Safari has no `longtask` entry type, and a
+ *     probe that silently observed nothing on the one device it was built for
+ *     would be worse than none at all — so the rAF gap becomes the detector and
+ *     the readout says so;
+ *   · it never allocates per frame. A perf tool that makes garbage sixty times a
+ *     second is arguing against its own numbers.
+ * ==========================================================================*/
+{
+  const probeMod = await import('../ui/perfProbe.js');
+  const {
+    createPerfProbe, formatPerfLine, formatLoadContext, readLoadContext,
+    PERF_LONGTASK_WARN_MS, PERF_PAINT_MS, PERF_BUCKET_MS,
+  } = probeMod;
+
+  // ---- the two pure formatters (no DOM, no window — this is why they are pure)
+  ok(formatLoadContext({ heat: 'hot', flash: 14, vwin: 2, spiral: 1, drain: 1, gov: true, lite: true })
+    === 'fx:hot fl:14 vw:2 sp dr gov lite',
+    'the load context names the burst, the windows, the spiral, the veil, the governor and the tier',
+    formatLoadContext({ heat: 'hot', flash: 14, vwin: 2, spiral: 1, drain: 1, gov: true, lite: true }));
+  ok(formatLoadContext({ heat: 'idle' }) === 'fx:idle',
+    'and an idle page is ONE token — zero counts are omitted or the line does not fit on a phone',
+    formatLoadContext({ heat: 'idle' }));
+  ok(formatLoadContext(null) === 'fx:idle', 'a missing bag reads as idle, never as a throw');
+
+  ok(formatPerfLine({ fps: 59.6, worstMs: 18.2, hits: 0, longestMs: 0, observed: true, ctx: 'fx:idle' })
+    === '60fps · worst 18ms · lt 0 · fx:idle',
+    'a healthy page is one short line',
+    formatPerfLine({ fps: 59.6, worstMs: 18.2, hits: 0, longestMs: 0, observed: true, ctx: 'fx:idle' }));
+  const sick = formatPerfLine({ fps: 19.4, worstMs: 412.7, hits: 4, longestMs: 380.2, observed: true, ctx: 'fx:hot fl:14' });
+  ok(sick === '19fps · worst 413ms · lt 4/380ms · fx:hot fl:14',
+    'and a sick one carries the fps, the worst gap, the tally and the load that caused it', sick);
+  const safari = formatPerfLine({ fps: 19, worstMs: 412, hits: 4, longestMs: 412, observed: false, ctx: 'fx:hot' });
+  ok(/lt~ 4/.test(safari),
+    'WITHOUT the longtask API the tally is written `lt~` — the tilde is the whole caveat, and it '
+    + 'stops anyone comparing a Safari number to a Chromium one by accident', safari);
+
+  ok(typeof readLoadContext() === 'object' && readLoadContext().heat === 'idle',
+    'readLoadContext answers off a page with no DOM at all rather than throwing');
+  ok(readLoadContext() === readLoadContext(),
+    'and it refills ONE shared bag — a fresh object twice a second is the only garbage this '
+    + 'module could produce');
+
+  // ---- the loop, over a hand-cranked window
+  const mkWin = () => {
+    let clock = 0;
+    let pending = null;
+    let rafCalls = 0;
+    const seen = new Set();
+    return {
+      now: () => clock,
+      rafCalls: () => rafCalls,
+      distinctCallbacks: () => seen.size,
+      /** Advance the clock by `ms` and deliver one frame. */
+      step(ms) { clock += ms; const fn = pending; pending = null; if (fn) fn(clock); },
+      win: {
+        performance: { now: () => clock },
+        requestAnimationFrame(fn) { rafCalls++; seen.add(fn); pending = fn; return rafCalls; },
+        cancelAnimationFrame() { pending = null; },
+        // NO PerformanceObserver — this is the Safari/iOS shape on purpose.
+      },
+    };
+  };
+
+  {
+    const h = mkWin();
+    const warns = [];
+    let status = '';
+    const probe = createPerfProbe({
+      win: h.win,
+      setStatus: (t) => { status = t; },
+      onWarn: (m) => warns.push(m),
+      context: () => ({ heat: 'hot', flash: 12, vwin: 1, gov: true, lite: true }),
+      warnMs: 100, paintMs: 0, cooldownMs: 0,
+    });
+    ok(probe.start() === true, 'the probe starts');
+    for (let i = 0; i < 20; i++) h.step(16);          // ~320ms of healthy frames
+    ok(Math.round(probe.sample().fps) === 63,
+      'twenty 16ms frames read as ~63fps', String(Math.round(probe.sample().fps)));
+    ok(warns.length === 0, 'and a healthy page says nothing at all', warns.join(' | '));
+    ok(/63fps · worst 16ms · lt~ 0 · fx:hot fl:12 vw:1 gov lite/.test(status),
+      'the readout is one line and it carries the load context', status);
+
+    h.step(400);                                       // …and then the hitch
+    ok(probe.sample().worstMs === 400, 'the worst gap is captured exactly',
+      String(probe.sample().worstMs));
+    ok(warns.length === 1, 'one warn, not one per frame', String(warns.length));
+    ok(/^perf: frame stall 400ms/.test(warns[0]),
+      'WITHOUT the longtask API a 400ms gap IS the long task, and the line says which detector '
+      + 'saw it', warns[0]);
+    ok(/fx:hot fl:12 vw:1 gov lite/.test(warns[0]),
+      'and it names what was on screen when it happened — the whole point of the exercise',
+      warns[0]);
+    ok(/\|.*fps worst 400ms/.test(warns[0]), 'plus the running numbers, so one line is enough',
+      warns[0]);
+    ok(probe.sample().hits === 1 && probe.sample().observed === false,
+      'the stall is tallied and flagged as gap-derived');
+
+    // ONE function object, handed back to rAF every frame. An inline arrow here
+    // would be sixty closures a second in the loop that measures the page.
+    ok(h.distinctCallbacks() === 1,
+      'the frame callback is a single hoisted function, not a per-frame closure',
+      String(h.distinctCallbacks()));
+
+    probe.stop();
+    ok(probe.running() === false && status === '',
+      'stop unsubscribes and clears the readout');
+    const before = h.rafCalls();
+    h.step(16);
+    ok(h.rafCalls() === before, 'and a stopped probe never re-arms itself', String(h.rafCalls()));
+  }
+
+  // ---- the cooldown: a page genuinely on fire may not flood the C# log
+  {
+    const h = mkWin();
+    const warns = [];
+    const probe = createPerfProbe({
+      win: h.win, onWarn: (m) => warns.push(m), context: () => ({ heat: 'hot' }),
+      warnMs: 50, paintMs: 100000, cooldownMs: 1000,
+    });
+    probe.start();
+    h.step(16);
+    for (let i = 0; i < 4; i++) h.step(200);          // four stalls inside one cooldown
+    ok(warns.length === 1, 'four stalls inside one cooldown produce ONE line, not four',
+      String(warns.length));
+    h.step(2000);
+    ok(warns.length === 2 && /\(\+\d+ more/.test(warns[1]),
+      'and the next line that gets through REPORTS the ones the cooldown ate — the rate limit '
+      + 'costs a timestamp, not a fact', warns[1]);
+    probe.stop();
+  }
+
+  // ---- with a longtask observer, the rAF detector stands down (or every hitch
+  //      would be counted twice and every number on the line would be inflated)
+  {
+    const h = mkWin();
+    const warns = [];
+    let cb = null;
+    h.win.PerformanceObserver = function PO(fn) { cb = fn; };
+    h.win.PerformanceObserver.supportedEntryTypes = ['longtask', 'paint'];
+    h.win.PerformanceObserver.prototype.observe = function () {};
+    h.win.PerformanceObserver.prototype.disconnect = function () {};
+    const probe = createPerfProbe({
+      win: h.win, onWarn: (m) => warns.push(m), context: () => ({ heat: 'warm' }),
+      warnMs: 100, paintMs: 100000, cooldownMs: 0,
+    });
+    probe.start();
+    ok(probe.sample().observed === true, 'the observer took, so the readout drops the tilde');
+    h.step(16);
+    h.step(500);                                       // a huge gap the observer already saw
+    ok(probe.sample().hits === 0,
+      'the rAF detector does NOT double-count it — the observer owns the tally here',
+      String(probe.sample().hits));
+    cb({ getEntries: () => [{ duration: 312 }] });
+    ok(probe.sample().hits === 1 && Math.round(probe.sample().longestMs) === 312,
+      'and a real longtask entry is what counts', JSON.stringify(probe.sample().hits));
+    ok(/^perf: long task 312ms/.test(warns[0]), 'named as a long task, not a stall', warns[0]);
+    probe.stop();
+  }
+
+  // ---- no rAF at all (node, the import sweep) -> an inert handle, never a throw
+  const headless = createPerfProbe({ win: null });
+  ok(headless.start() === false && headless.running() === false && headless.sample() === null,
+    'no requestAnimationFrame -> every method is a no-op, exactly like the overlay handle');
+  headless.stop();
+
+  ok(PERF_LONGTASK_WARN_MS === 250 && PERF_PAINT_MS === 500 && PERF_BUCKET_MS === 2500,
+    'the dials: warn over 250ms, repaint at most 2x/s, two 2.5s buckets = the ~5s window');
+
+  // ---- and boot wires it BEHIND the debug flag and nowhere else
+  const bootSrc = read('boot.js');
+  ok(/import\('\.\/ui\/perfProbe\.js'\)/.test(bootSrc),
+    'the probe is a dynamic import, so a page that never asks for debug never fetches it');
+  ok(/function initPerfProbe\(\)/.test(bootSrc)
+    && bootSrc.indexOf('initPerfProbe();') > bootSrc.indexOf("import('./ui/debugOverlay.js')"),
+    'and it is armed INSIDE the branch that already decided the overlay was wanted — one gate, '
+    + 'not two that can disagree');
+  ok(/onWarn: \(m\) => logger\.warn\(m\)/.test(bootSrc),
+    'its warns go through logger.warn — the ONE sink that reaches the C# host log, the console '
+    + 'and the overlay ring at once');
+  ok(/setStatus: \(t\) =>/.test(bootSrc), 'and the readout goes to the overlay status row');
+
+  // ---- the fence: ui/ may import exec/, but never the other way round
+  const probeSrc = read('ui/perfProbe.js');
+  ok(!/from '\.\.\/net\//.test(probeSrc),
+    'ui/perfProbe.js imports nothing from net/ — it reads the render tier, not the wire');
+  ok(/from '\.\.\/exec\/loadGovernor\.js'/.test(probeSrc)
+    && /from '\.\.\/exec\/layers\.js'/.test(probeSrc)
+    && /from '\.\.\/exec\/perfTier\.js'/.test(probeSrc),
+    'it reads the governor, the layer registry and the device tier — three cheap READERS, no '
+    + 'renderer, no subscription');
+  const execFiles = fs.readdirSync(path.join(HERE, '..', 'exec'));
+  let leaked = '';
+  for (const f of execFiles) {
+    if (!f.endsWith('.js')) continue;
+    if (/perfProbe/.test(read('exec/' + f))) leaked += f + ' ';
+  }
+  ok(leaked === '', 'and nothing in exec/ knows the probe exists — the fence held', leaked);
 }
 
 /* ============================================================================

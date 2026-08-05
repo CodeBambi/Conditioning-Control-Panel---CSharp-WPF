@@ -55,6 +55,26 @@
  * the transfer lane. The sender applies the same rule when it picks tags (net/mediaQueue.js
  * tagsFor); this is the half that survives a tag miss and the peer-first fallback. */
 
+/* THE PEER POOL ROTATES, IT DOES NOT SHUFFLE (2026-08-05, phone play-test r9: "seems like I am
+ * receiving always the same gif").
+ *
+ * `drawReceived` used to pick uniformly at random with a one-item echo guard. On the pool this
+ * lane actually has — two or three artifacts for the first minute of a match — uniform random is
+ * a machine for producing runs: with three files and only the immediate repeat blocked, the SAME
+ * file comes back every other draw about half the time, and a burst that spends thirty draws in
+ * eight seconds shows the owner one gif over and over. That is not a transfer bug; it is what
+ * random looks like at n=3, which is exactly why it survived three rounds of code-reading.
+ *
+ * So the draw is now a ROTATION: least-recently-shown first, ties broken at random, and the pick
+ * stamped with a monotonic counter. A pool of three cycles A-B-C; a pool of ten walks all ten
+ * before it repeats one; a pool of one still draws that one, forever, because there is nothing
+ * else and a rotation is not allowed to invent variety it does not have.
+ *
+ * WHAT IT DELIBERATELY IS NOT: it is not the deck (`recent`/`reshuffle`) above. The deck indexes
+ * `entries` and is re-dealt whenever a manifest or a local library lands; the peer pool is a Map
+ * that only ever grows during a match and must survive both of those. One counter Map is the
+ * whole mechanism, and `dropReceived` prunes it so a blocklist sweep cannot leave a ghost row. */
+
 const NO_ECHO = 8; // a reshuffled deck avoids repeating the last N draws
 
 /** The one namespace `tags` carries for this feature. `tags` stays open for others. */
@@ -132,8 +152,14 @@ export function createGoonMediaPool() {
    */
   const received = new Map();
 
-  /** Last sha drawReceived handed out per kind, so a 2-3 file pool doesn't strobe. */
-  const lastPeerPick = { image: '', video: '' };
+  /**
+   * sha -> the draw counter at which drawReceived last handed it out. A sha that is absent has
+   * NEVER been shown and therefore sorts ahead of everything that has (see peerRank). One shared
+   * ledger across both kinds: a sha only ever belongs to one of them, so splitting it would buy
+   * nothing but a second Map to keep pruned.
+   */
+  const peerShownAt = new Map();
+  let peerDrawSeq = 0;
 
   /** Injected (never imported): {knows(sha), isBlocked(sha)} from net/blocklist.js. */
   let blocklist = null;
@@ -266,6 +292,49 @@ export function createGoonMediaPool() {
     if (kind !== 'video' || pool.length < 2) return pool;
     const real = pool.filter((v) => v.origin !== 'gif');
     return real.length ? real : pool;
+  }
+
+  /** Every received view of that kind the blocklist still allows. Shared by draw and peek. */
+  function receivedViews(kind) {
+    const all = [];
+    for (const sha of received.keys()) {
+      const v = viewReceived(sha, kind);
+      if (v) all.push(v);
+    }
+    return all;
+  }
+
+  /** How long ago this artifact was shown. -1 = never, which is the front of every queue. */
+  function peerRank(v) {
+    const at = peerShownAt.get(v.sha);
+    return at === undefined ? -1 : at;
+  }
+
+  /**
+   * The rotation: the least-recently-shown candidate, TIES BROKEN AT RANDOM.
+   *
+   * The tie-break is not decoration. Every artifact starts at rank -1, so on a fresh pool the
+   * whole set ties and a deterministic answer would walk the received Map's INSERTION ORDER —
+   * i.e. the order the wire happened to land things in, identically on every match, which is a
+   * different way of being predictable. Random among equals keeps the first cycle a surprise and
+   * the later ones fair.
+   *
+   * @param {Array} pool candidates, non-empty
+   * @returns {object} the chosen view — the caller decides whether to stamp it
+   */
+  function rotate(pool) {
+    let best = -2;
+    let ties = 0;
+    let chosen = pool[0];
+    for (const v of pool) {
+      const r = peerRank(v);
+      if (r < best || best === -2) { best = r; ties = 1; chosen = v; continue; }
+      if (r !== best) continue;
+      // Reservoir sampling over the tied set: one pass, no array, uniform among equals.
+      ties++;
+      if (((Math.random() * ties) | 0) === 0) chosen = v;
+    }
+    return chosen;
   }
 
   /** The deck draw, hoisted so `drawFor` can reach it without a `this` binding. */
@@ -410,7 +479,13 @@ export function createGoonMediaPool() {
     hasReceived(sha) { return typeof sha === 'string' && received.has(sha); },
 
     /** Blocklist sweep / eviction / user delete. Does not touch the file. */
-    dropReceived(sha) { return typeof sha === 'string' && received.delete(sha); },
+    dropReceived(sha) {
+      if (typeof sha !== 'string') return false;
+      // The rotation ledger is pruned with it, or a re-received artifact would come back
+      // carrying its old position at the BACK of the queue and skip its turn.
+      peerShownAt.delete(sha);
+      return received.delete(sha);
+    },
 
     receivedCount() { return received.size; },
 
@@ -453,45 +528,42 @@ export function createGoonMediaPool() {
      * The header's invariant survives because ONLY payload render paths call
      * this — draw()/drawKind() still never surface a peer file, so their media
      * still appears exactly where a payload of theirs asked for it. Blocklist
-     * and kind agreement ride on viewReceived; with any choice at all the same
-     * sha is never handed out twice in a row.
+     * and kind agreement ride on viewReceived.
+     *
+     * THE PICK IS A ROTATION, NOT A SHUFFLE — see the second banner at the top of
+     * this file for why random-with-an-echo-guard was the thing the owner was
+     * seeing as "always the same gif". Least-recently-shown wins; the pick is
+     * stamped so it goes to the back of the queue.
      */
     drawReceived(kind) {
       const want = kind === 'video' ? 'video' : (kind === 'image' ? 'image' : '');
       if (!want) return null;
-      const all = [];
-      for (const sha of received.keys()) {
-        const v = viewReceived(sha, want);
-        if (v) all.push(v);
-      }
+      const all = receivedViews(want);
       if (!all.length) return null;
       // Real footage if they have sent any this match; their gif loops if that is all there is.
-      const pool = footageFirst(all, want);
-      let at = (Math.random() * pool.length) | 0;
-      if (pool.length > 1 && pool[at].sha === lastPeerPick[want]) at = (at + 1) % pool.length;
-      lastPeerPick[want] = pool[at].sha;
-      return pool[at];
+      const chosen = rotate(footageFirst(all, want));
+      peerShownAt.set(chosen.sha, ++peerDrawSeq);
+      return chosen;
     },
 
     /**
-     * drawReceived without the echo-guard write: ui/throwPreview.js's rung for
+     * drawReceived without the rotation write: ui/throwPreview.js's rung for
      * "the render will draw SOME received artifact" (representative, not exact
-     * — same contract as peekKind, and mutating lastPeerPick from a preview
+     * — same contract as peekKind, and stamping the rotation from a preview
      * would let the preview change what it is previewing).
+     *
+     * It reads the SAME rotation, so on a settled pool the preview and the render
+     * usually agree on the next artifact — which is more than the old random pick
+     * could ever promise, and costs nothing.
      */
     peekReceived(kind) {
       const want = kind === 'video' ? 'video' : (kind === 'image' ? 'image' : '');
       if (!want) return null;
-      const all = [];
-      for (const sha of received.keys()) {
-        const v = viewReceived(sha, want);
-        if (v) all.push(v);
-      }
+      const all = receivedViews(want);
       if (!all.length) return null;
       // The SAME candidate set drawReceived would choose from, or the preview would advertise a
       // gif loop the render then refuses to play.
-      const pool = footageFirst(all, want);
-      return pool[(Math.random() * pool.length) | 0];
+      return rotate(footageFirst(all, want));
     },
   };
 }

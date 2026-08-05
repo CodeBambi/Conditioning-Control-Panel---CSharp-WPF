@@ -194,6 +194,15 @@ const el = (id) => (hasDom() ? document.getElementById(id) : null);
 let debugOverlay = null;
 let debugArming = false;
 const debugPrelog = [];
+/**
+ * ui/perfProbe.js, armed only alongside the overlay. It is the 2026-08-05
+ * play-test's instrument: the phone reports lag, code-reading has run out of
+ * road, and the next session has to come back with fps + frame-gap + long-task
+ * numbers instead of an adjective. Its warn lines go through `logger.warn`
+ * BELOW — one call that reaches the C# log, the console and the overlay's ring
+ * at once — and its one-line readout goes to the overlay's status row.
+ */
+let perfProbe = null;
 
 function teeDebug(level, m) {
   if (debugOverlay) { debugOverlay.push(level, m); return; }
@@ -242,9 +251,34 @@ function initDebugOverlay() {
         debugOverlay.push('warn', 'debug on — ' + (bridge.isHosted ? 'hosted' : 'standalone')
           + ' protocol v' + bridge.PROTOCOL);
         for (const [lvl, m] of debugPrelog.splice(0)) debugOverlay.push(lvl, m);
+        initPerfProbe();
       })
       .catch(() => { debugArming = false; });
   } catch (_e) { debugArming = false; }
+}
+
+/**
+ * The perf readout. A SECOND dynamic import, nested inside the branch that has
+ * already decided debug is on, so a shipped page never fetches it and a page
+ * whose probe module is missing still gets its overlay — same "optional wave"
+ * shape as loadSiblings, for the same reason.
+ */
+function initPerfProbe() {
+  if (perfProbe || !debugOverlay) return;
+  try {
+    import('./ui/perfProbe.js')
+      .then((mod) => {
+        if (!mod || typeof mod.createPerfProbe !== 'function' || !debugOverlay) return;
+        perfProbe = mod.createPerfProbe({
+          setStatus: (t) => { try { debugOverlay.setStatus(t); } catch (_e) { /* ignore */ } },
+          // logger.warn, NOT overlay.push: warn is the sink that reaches the C# host
+          // log as well, and a phone-only number nobody can collect is not telemetry.
+          onWarn: (m) => logger.warn(m),
+        });
+        perfProbe.start();
+      })
+      .catch(() => { /* no readout, no harm — the overlay still logs */ });
+  } catch (_e) { /* ditto */ }
 }
 
 /* ----------------------------------------------------------------------------
@@ -2344,6 +2378,9 @@ if (typeof window !== 'undefined') {
       get received() { return receivedStore; },
       get blocklist() { return blocklist; },
       get mediaQueue() { return mediaQueue; },
+      // null unless ?debug=1 armed it. `.sample()` is the fps/gap/long-task
+      // snapshot the C# play-test driver can read without a screenshot.
+      get perf() { return perfProbe; },
       get discord() { return discord; },
       get stubs() { return stubs.slice(); },
       actions,
