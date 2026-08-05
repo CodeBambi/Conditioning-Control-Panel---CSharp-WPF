@@ -631,7 +631,16 @@ function createArtifactSource() {
         if (!bytes) continue;
         urls.set(sha, url);
         mimes.set(sha, mime);
-        out.push({ sha, bytes, mime, kind: it.kind === 'video' ? 'video' : 'image', exempt });
+        /* THE WIRE KIND IS THE ARTIFACT'S, NOT THE SOURCE'S (2026-08-05). A gif
+         * compresses into an mp4 artifact: the ITEM stays kind 'image' (that is
+         * what it is in the deck), but what actually TRAVELS is video/mp4 — and
+         * the channel's offer gate refuses any offer whose kind and mime
+         * families disagree. In a gif-heavy library that refused nearly every
+         * artifact ("refusing to offer …: kind/mime disagree", over and over),
+         * the larder never filled, and every throw fired untagged into the
+         * receiver's own pool. */
+        const wireKind = mime.indexOf('video/') === 0 ? 'video' : 'image';
+        out.push({ sha, bytes, mime, kind: wireKind, exempt });
       }
       return out;
     },
