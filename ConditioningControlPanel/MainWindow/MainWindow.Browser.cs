@@ -1377,6 +1377,8 @@ namespace ConditioningControlPanel
             {
                 DiscordTab.ProfilePatreonTierBadge.Visibility = Visibility.Collapsed;
             }
+            // Nothing on screen belongs to anyone else any more, so the "back to me" chip retires.
+            SetProfileViewingSelf(true);
         }
 
         private void ProfileDiscordHandle_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -1806,14 +1808,20 @@ namespace ConditioningControlPanel
             }
             if (DiscordTab.TxtProfileViewerGifs != null) DiscordTab.TxtProfileViewerGifs.Text = FormatNumber(progress?.TotalFlashImages ?? 0);
             if (DiscordTab.TxtProfileViewerLockCards != null) DiscordTab.TxtProfileViewerLockCards.Text = FormatNumber(progress?.TotalLockCardsCompleted ?? 0);
+            // Free-only count so the patron-exclusive set is never folded into this number.
+            var unlockedCount = App.Achievements?.GetUnlockedCount(exclusive: false) ?? 0;
+            var totalCount = App.Achievements?.GetTotalCount(exclusive: false)
+                        ?? System.Linq.Enumerable.Count(Models.Achievement.All.Values, a => !a.IsExclusive && !a.IsHidden);
             if (DiscordTab.TxtProfileViewerAchievements != null)
             {
-                // Free-only count so the patron-exclusive set is never folded into this number.
-                var unlocked = App.Achievements?.GetUnlockedCount(exclusive: false) ?? 0;
-                var total = App.Achievements?.GetTotalCount(exclusive: false)
-                            ?? System.Linq.Enumerable.Count(Models.Achievement.All.Values, a => !a.IsExclusive && !a.IsHidden);
-                DiscordTab.TxtProfileViewerAchievements.Text = $"{unlocked} / {total}";
+                DiscordTab.TxtProfileViewerAchievements.Text = $"{unlockedCount} / {totalCount}";
             }
+
+            // Trainer Card surfaces (redesign Phase 1): hero XP meter, Showcase progress and the
+            // "back to me" chip. PlayerXP is progress inside the level; `xp` above is lifetime.
+            UpdateProfileXpMeter(level, localXp);
+            UpdateProfileShowcase(unlockedCount, totalCount, progress?.UnlockedAchievements);
+            SetProfileViewingSelf(true);
 
             // Patreon badge - use settings tier (works for Discord-only login with linked Patreon)
             var patreonTier = App.Settings?.Current?.PatreonTier ?? (int)(App.Patreon?.CurrentTier ?? 0);
@@ -2072,6 +2080,16 @@ namespace ConditioningControlPanel
                 DiscordTab.TxtNoAchievements.Text = $"{entry.AchievementsCount} achievements unlocked";
                 DiscordTab.TxtNoAchievements.Visibility = Visibility.Visible;
             }
+
+            // Trainer Card surfaces (redesign Phase 1). The leaderboard hands out a count, not the
+            // unlocked ids, so the Showcase's "next up" line stays hidden for other people's cards.
+            UpdateProfileXpMeter(entry.Level, entry.Xp);
+            UpdateProfileShowcase(
+                entry.AchievementsCount,
+                App.Achievements?.GetTotalCount(exclusive: false)
+                    ?? System.Linq.Enumerable.Count(Models.Achievement.All.Values, a => !a.IsExclusive && !a.IsHidden),
+                isOwnProfile ? App.Achievements?.Progress?.UnlockedAchievements : null);
+            SetProfileViewingSelf(isOwnProfile);
             }
             catch (Exception ex)
             {

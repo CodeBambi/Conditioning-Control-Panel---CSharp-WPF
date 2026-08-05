@@ -56,7 +56,14 @@ namespace ConditioningControlPanel
                 // the incoming one — parking it is exactly what a hide should do.
                 InitializeProfileFx();
                 ApplyOgBorderLoop();
-                if (!visible || !IsIncomingTab("discord")) return;  // the outgoing tab's fade-out re-show
+                if (!visible) return;
+                // The rail's footer reads settings, not checkboxes, so it is right even before the
+                // Privacy & Sharing dialog has ever been opened. Refreshed on every show because a
+                // toggle can be flipped from Settings or the Goon tab in between.
+                UpdateProfileSharingSummary();
+                // Me-first (redesign Phase 1): the tab opens on your own card, not a placeholder.
+                EnsureProfileMeFirst();
+                if (!IsIncomingTab("discord")) return;  // the outgoing tab's fade-out re-show
                 StaggerProfileCards();
             }
             catch (Exception ex) { App.Logger?.Debug("OnProfileTabVisibilityChanged: {E}", ex.Message); }
