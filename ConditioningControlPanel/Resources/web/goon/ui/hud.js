@@ -4,7 +4,7 @@
  * Composes the live-match HUD inside #gg-hud and owns the layout grid:
  *
  *   ┌ top ────────────────────────────────────────────────────────────────┐
- *   │ score · charges               11:47 ▮▮▯▯▯      attention  ⊟  ⚙      │
+ *   │ score                         11:47 ▮▮▯▯▯      attention  ⊟  ⚙      │
  *   ├ body ───────────────────────────────────────────────────────────────┤
  *   │ ┌ arsenal ──┐◂                                            [monitor] │
  *   │ │ HEAT ▰▰▱  │      (the stage well — never covered)       [receipts]│
@@ -324,7 +324,6 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
 
   const scoreBox = add(top, el('div', 'gg-scorebox'));
   const scoreEl = add(scoreBox, el('div', 'gg-score', '0'));
-  const chargeEl = add(scoreBox, el('div', 'gg-charges', S.hud.charges(0, GoonConsts.ChargeCap)));
 
   /* NO SCORE-MULTIPLIER READOUT (owner, 2026-08-05: "the risk level indicator
    * is not intuitive — the heat gauge already does the job").
@@ -344,29 +343,35 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
    * change. The score in the line above is the multiplier's whole visible
    * effect, which is the part a player could ever act on.
    *
-   * AND THE CHARGE PIPS WENT TOO (owner, 2026-08-05, second pass: "the little
-   * yellow squares that we were supposed to have removed"). The first pass kept
-   * them on the argument that they are NOT the risk indicator — they are what
-   * you are holding to throw, the wire validates throws against them and the
-   * arsenal pays its costs out of them, so they were real and load-bearing in a
-   * way the multiplier never was. That argument was about the DATA and the
-   * owner's complaint was about the SHAPE. A row of five rotated squares under
-   * the score is indistinguishable, on a phone, from the row of rotated squares
-   * that had just been taken off the draft tiles: the player cannot tell "your
-   * ammunition" from "the risk meter you asked me to delete" by looking, and
-   * being right about the difference does not help them at arm's length.
+   * AND THE CHARGE READOUT IS GONE AS WELL (owner, 2026-08-05, third pass: "we
+   * still have the charge system in (you need 3 to do X etc), we should remove
+   * the requirement entirely"). This is the end of a three-step demolition and
+   * the steps matter, because the last one is not a styling decision:
    *
-   * So the DATA stays and the SHAPE goes: one small line, "3 / 5 charges", in
-   * words. It is strictly more legible than the pips ever were — it survives a
-   * squint, it reads aloud, it does not depend on a fill colour, and it says the
-   * cap out loud instead of asking you to count outlines to find it. There is no
-   * diamond left anywhere in this HUD; the only pips on the desk now are the
-   * arsenal's amber `.gg-cost-pip` cost dots, which are round, attached to the
-   * tile whose price they are, and were never part of this complaint.
+   *   1. the charge PIPS came out (same day, second pass) and were replaced by
+   *      `.gg-charges`, one line reading "3 / 5 charges". The DATA was kept on
+   *      the argument that it was real: the wire validated throws against it and
+   *      the arsenal paid its costs out of it.
+   *   2. the owner then removed the REQUIREMENT itself. Nothing validates a
+   *      throw against the meter any more (core/match.js, both directions) and
+   *      no tile is priced (ui/arsenal.js).
+   *   3. which retired the argument that kept the line alive. So the line went.
    *
-   * THE GAIN JUICE SURVIVES INTACT — sfx('gg-charge') and the floating "+1"
-   * chip both still fire in paintCharges(). Only the per-pip pop animation died
-   * with the pips, because there is no longer a pip to pop. */
+   * WHAT CHARGES FEED, checked before deleting rather than assumed: the score is
+   * seconds x riskMultiplier x attentionMultiplier and never touches them; the
+   * recap reads `snapshot().score`, not `chargesEarned`/`chargesSpent` (nothing
+   * in the client reads either); the drop economy is paced by HEAT and picks by
+   * COST-AS-RARITY, and its old `creditCharges` gate could never actually refuse
+   * for want of charges; and enduring a payload still credits one, to nothing.
+   * The honest answer is NOTHING, and a number that feeds nothing is worse than
+   * no number — a player who reads "1 / 3 charges" beside a tile they can throw
+   * has been told they are short of something. The engine's meter is untouched
+   * and still rides `tick.charges`; this desk simply has no opinion on it.
+   *
+   * THE "+1" CHIP AND sfx('gg-charge') WENT WITH IT. They were the gain flourish
+   * for this readout and nothing else. The reward loop the player actually plays
+   * is unchanged and lives one row down: pop -> heat gauge climbs -> 'gg-drop'
+   * dings -> a sticker lights up with "+1 flash" and a ×N badge. */
 
   const timerBox = add(top, el('div', 'gg-timer gg-plate'));
   const timerClock = add(timerBox, el('div', 'gg-timer-clock', '0:00'));
@@ -883,7 +888,6 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   let targetScore = 0;
   let lerpFrom = 0;
   let lerpAt = 0;
-  let lastCharges = -1;
   let lastTickSecond = -1;
 
   function durationMs() {
@@ -906,30 +910,12 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
     text(scoreEl, String(shownScore));
   }
 
-  /* THE CHARGE COUNT. Memoised on `lastCharges` exactly as the pip row was, for
-   * the same two reasons: the 5 Hz poll would otherwise rewrite an unchanged
-   * string twenty times a second, and the "+1" flourish has to fire ONCE on the
-   * edge rather than on every tick that finds the number high.
-   *
-   * `lastCharges >= 0` is the mount guard: the very first paint moves 0 -> N and
-   * is not a gain the player did anything to earn, so it must not bang the sfx
-   * on the way into a match that resumed with charges already banked. */
-  function paintCharges() {
-    const s = match.scoring;
-    const c = s ? (s.charges | 0) : 0;
-    if (c === lastCharges) return;
-    const gained = c > lastCharges && lastCharges >= 0;
-    lastCharges = c;
-    text(chargeEl, S.hud.charges(c, GoonConsts.ChargeCap));
-    if (!gained) return;
-    sfx(audio, 'gg-charge');
-    fx.play(400, () => {
-      const chip = el('span', 'gg-plus1', '+1');
-      if (!chip) return;
-      add(scoreBox, chip);
-      setTimeout(() => { try { chip.remove(); } catch (_e) { /* gone */ } }, 900);
-    });
-  }
+  /* `paintCharges()` was here: it memoised `match.scoring.charges` on
+     `lastCharges`, wrote "3 / 5 charges" into `.gg-charges`, and on a rising
+     edge played gg-charge plus a floating "+1" chip. The whole function came out
+     on 2026-08-05 with the readout it painted — see the long note up in the top
+     bar for what charges turned out to feed (nothing) and why a dead number is
+     worse than no number. paintAll() below is one call shorter. */
 
   function paintTimer() {
     const total = durationMs();
@@ -1014,7 +1000,7 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   }
 
   function paintAll() {
-    try { paintScore(); paintCharges(); paintTimer(); paintHeat(); paintArmedBadge(); }
+    try { paintScore(); paintTimer(); paintHeat(); paintArmedBadge(); }
     catch (_e) { /* a paint must never take the match down */ }
   }
 

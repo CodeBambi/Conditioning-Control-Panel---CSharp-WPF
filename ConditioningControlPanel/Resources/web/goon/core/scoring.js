@@ -1,5 +1,20 @@
-// Score ticks, the charge economy, and the receiver-side payload rate limiter —
+// Score ticks, the charge meter, and the receiver-side payload rate limiter —
 // port of Services/GoonGame/GoonScoring.cs (GoonScoring + GoonPayloadRateLimiter).
+//
+// CHARGES NO LONGER BUY ANYTHING (owner, 2026-08-05: "we still have the charge
+// system in (you need 3 to do X etc), we should remove the requirement entirely
+// (and the Need 1/2/3 under the throwables)"). Every counter below is still
+// here, still named after GoonScoring.cs and still carried on the state tick —
+// core/match.js simply stopped asking it for permission. THE PACING IS THE
+// COOLDOWN NOW: GoonPayloadRateLimiter at the foot of this file (one payload per
+// PayloadMinGapMs, burst PayloadBurst) is the whole of it, on both sides.
+//
+// So `charges` is a number that accrues and is reported, and nothing reads it to
+// make a decision. It stays because it is WIRE STATE (tick.charges is a frozen
+// field a C# host and every older peer already send and parse) and because
+// GoonScoring.cs still has all of it — deleting the meter here would fork the
+// parity port for a field the protocol keeps sending either way. Do not build a
+// new gate on it; the owner removed the last one on purpose.
 //
 // Formula: 1 pt/s x (1 + DraftRiskStep x riskTier) x attention multiplier.
 //   Cam   : rolling attention % -> AttentionMultMin .. AttentionMultMax
@@ -163,6 +178,12 @@ export class GoonScoring {
   /**
    * Spends the cost of a payload kind. C# `TrySpend(kind, out cost)` -> {ok, cost}; on failure
    * `cost` is what the kind REQUIRES, which is what the caller puts in its error string.
+   *
+   * NO PRODUCTION CALLER SINCE 2026-08-05. core/match.js ran this inside tryFirePayload and handed
+   * the failure straight back to the arsenal as "needs N charge(s)". Firing is free now (see the
+   * header), so nothing spends and — critically — nothing refunds either: the two are a matched
+   * pair, and re-adding one without the other mints charges out of a rejected receipt. Kept
+   * because GoonScoring.cs still has TrySpend/Refund and this file is its port.
    */
   trySpend(kind) {
     const cost = costOf(kind);
@@ -175,7 +196,8 @@ export class GoonScoring {
     return { ok: true, cost };
   }
 
-  /** Refund after a receiver-side rejection (rate/filter). Never exceeds the cap. */
+  /** Refund after a receiver-side rejection (rate/filter). Never exceeds the cap.
+   *  Dormant with trySpend — see the note there before wiring either back up. */
   refund(cost) {
     if (!(cost > 0)) return;
     this._chargesSpent = Math.max(0, this._chargesSpent - cost);

@@ -35,7 +35,7 @@
  * TWO CUE BUSES, because "sfx" was one slider over two different jobs. `ui` is
  * the chrome you drive — menu ticks, the code cells, the lamps — and `game` is
  * everything that happens to you inside a match: the draft, the countdown,
- * charges, drops, payloads, bubbles, the recap. A player who wants the match
+ * drops, payloads, bubbles, the recap. A player who wants the match
  * loud and the menus quiet (or the reverse, on a phone at 2am) could not say so
  * with one number. Every SFX_REGISTRY entry declares which one it is on.
  *
@@ -184,9 +184,12 @@ export const SFX_REGISTRY = Object.freeze({
   'gg-tick':        gameCue({ files: [L('verify-tick-1.mp3'), L('verify-tick-2.mp3')], gain: 0.26 }),
   'gg-go':          gameCue({ files: [L('verify-resolve-1.mp3')],  gain: 0.50 }),
 
-  /* ---- the economy -------------------------------------------------- game - */
-  'gg-charge':      gameCue({ files: [L('chime-1.mp3')],           gain: 0.30 }),
-  'charge-earned':  gameCue({ files: [L('chime-1.mp3')],           gain: 0.30 }),
+  /* ---- the economy -------------------------------------------------- game -
+     `gg-charge` and its older alias `charge-earned` (both chime-1.mp3 at 0.30)
+     headed this block: the ding for banking a charge. Removed 2026-08-05 when
+     the owner deleted the charge requirement — ui/hud.js was the only caller and
+     its whole charge readout went with it. The loop keeps its payoff ding one
+     line down, which is the one players are actually listening for. */
   /** A bubble dropped an item and the slot lit up. The payoff cue of the loop. */
   'gg-drop':        gameCue({ files: [L('slip_dling.mp3')],        gain: 0.42 }),
   /** ...and the same roll refused because the arsenal is already full. A dud. */

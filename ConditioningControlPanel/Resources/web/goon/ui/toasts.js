@@ -2,7 +2,7 @@
  * ui/toasts.js — the transient notice stack on #gg-toasts (z50).
  *
  * A toast is for something that ALREADY HAPPENED and needs no decision: a
- * charge earned, a payload landed, the peer wobbling. Anything the player must
+ * a payload landed, the peer wobbling. Anything the player must
  * answer is a sheet (ui/sheets.js), never this.
  *
  * The layer is aria-live="polite" in index.html, so a screen reader announces

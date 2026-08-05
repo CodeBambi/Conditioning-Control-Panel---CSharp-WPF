@@ -604,6 +604,13 @@ function makeFakeMatch() {
     droppable: () => [{ id: 'flash', kind: GoonPayloadKind.FlashBurst, cost: 1, armed: 0 }],
     armDrop: (id) => { armedIds.push(id); return true; },
   };
+  /* THE ROLLER PAYS FOR NOTHING (2026-08-05). It used to call
+     match.creditCharges(cost, 'bubble-drop') before arming and refuse the drop
+     ('no-charge') if the engine said no — the receiver validated the sender's
+     wallet, so an armed slot with an empty meter would have fired into a
+     rejection. The owner deleted that requirement, so the roller now talks to
+     the arsenal ALONE. `credits` survives as a TRIPWIRE: the fake engine records
+     any call and the checks below assert there were none. */
   const credits = [];
   const match = {
     phase: GoonMatchPhase.Live,
@@ -614,33 +621,32 @@ function makeFakeMatch() {
 
   const clutter = roller.onPop({ kind: 'normal', worth: bub.POP_WORTH_PAYLOAD, payload: true });
   ok(clutter.dropped === false && clutter.reason === 'clutter', 'a payload-minted pop is skipped entirely');
-  ok(credits.length === 0, 'and never credits a charge');
 
   const hit = roller.onPop({ kind: 'flash', worth: bub.POP_WORTH_EFFECT, x: 10, y: 10 });
   ok(hit.dropped === true && hit.id === 'flash', 'a winning roll arms an item', JSON.stringify(hit));
-  ok(credits.length === 1 && credits[0].n === 1 && credits[0].reason === 'bubble-drop',
-    'and credits the charge the item will cost, on the engine seam', JSON.stringify(credits));
+  ok(credits.length === 0,
+    'and pays NOTHING for it — a drop is a grant now, not a purchase', JSON.stringify(credits));
   ok(armedIds.length === 1, 'exactly one arm per drop');
 
-  // the engine refusing (wrong phase, capped, whatever) must block the arm
+  // an engine that refuses every credit changes nothing, because we never ask
   const noCredit = createDropRoller({
     match: { phase: GoonMatchPhase.Live, creditCharges: () => false },
     arsenal: fakeArsenal,
     random: () => 0,
   });
   const blocked = noCredit.onPop({ kind: 'flash', worth: bub.POP_WORTH_EFFECT });
-  ok(blocked.dropped === false && blocked.reason === 'no-charge',
-    'creditCharges() saying no blocks the arm', JSON.stringify(blocked));
-  ok(armedIds.length === 1, 'and nothing was armed behind its back', String(armedIds.length));
+  ok(blocked.dropped === true && blocked.reason === 'drop',
+    'an engine that refuses every charge can no longer block a drop', JSON.stringify(blocked));
+  ok(armedIds.length === 2, 'and the arsenal armed it', String(armedIds.length));
 
-  // outside Live nothing rolls at all
+  // outside Live nothing rolls at all — THE phase check, and now the only gate
   const idle = createDropRoller({ match: { phase: GoonMatchPhase.Draft }, arsenal: fakeArsenal, random: () => 0 });
   ok(idle.onPop({ kind: 'flash', worth: bub.POP_WORTH_EFFECT }).reason === 'phase', 'no drops outside a live match');
 
   // a missing seam (older engine) must not break the loop
   const noSeam = createDropRoller({ match: { phase: GoonMatchPhase.Live }, arsenal: fakeArsenal, random: () => 0 });
   ok(noSeam.onPop({ kind: 'flash', worth: bub.POP_WORTH_EFFECT }).dropped === true,
-    'the roller still works against an engine without creditCharges');
+    'the roller still works against an engine with no charge seam at all');
 
   // a miss is a miss
   const missed = createDropRoller({ match, arsenal: fakeArsenal, random: () => 0.99 });
@@ -699,9 +705,16 @@ function makeFakeMatch() {
     ok(spender.heat < hotBefore, 'a drop spends heat back down', `${hotBefore} -> ${spender.heat}`);
     ok(spender.heat >= 0, 'never below empty', String(spender.heat));
 
+    /* A DROP THE PLAYER NEVER GOT MUST NOT SPEND THE GAUGE. The refusal used to
+       be the engine saying no to the charge; since 2026-08-05 there is no charge
+       to be refused, so the remaining way to win a roll and get nothing is a
+       FULL ARSENAL — armDrop() answering false. Same invariant, real cause. */
+    const fullArsenal = {
+      droppable: () => [{ id: 'flash', kind: GoonPayloadKind.FlashBurst, cost: 1, armed: 0 }],
+      armDrop: () => false,
+    };
     const refuser = createDropRoller({
-      match: { phase: GoonMatchPhase.Live, creditCharges: () => false },
-      arsenal: fakeArsenal, random: scripted, now: clock,
+      match, arsenal: fullArsenal, random: scripted, now: clock,
     });
     for (let i = 0; i < 2; i++) refuser.onPop({ kind: 'flash', worth: bub.POP_WORTH_EFFECT });
     const heldBefore = refuser.heat;
@@ -709,7 +722,7 @@ function makeFakeMatch() {
     win = true;
     const refused = refuser.onPop({ kind: 'flash', worth: bub.POP_WORTH_EFFECT });
     win = false;
-    ok(refused.reason === 'no-charge', 'the engine refuses the drop', JSON.stringify(refused));
+    ok(refused.reason === 'refused', 'the arsenal refuses the drop', JSON.stringify(refused));
     ok(refuser.heat > heldBefore,
       'and a drop the player never got does NOT spend the gauge', `${heldBefore} -> ${refuser.heat}`);
 
@@ -1113,48 +1126,47 @@ function makeFakeMatch() {
   hudRisk.unmount();
 }
 
-/* ---- 2c-iii. AND THE CHARGE PIPS WENT TOO (2026-08-05, second pass) --------
+/* ---- 2c-iii. AND THEN THE WHOLE CHARGE READOUT WENT (2026-08-05, third pass)
  *
- * The first pass argued the charge pips were not the risk indicator and kept
- * them: they are what you hold to throw, core/wire.js validates throws against
- * them and the arsenal pays its costs out of them, so they carried real state.
- * The owner saw them in play anyway — "the little yellow squares that we were
- * supposed to have removed" — and that settles it: the objection was to the
- * SHAPE, and a row of rotated squares under the score is not distinguishable,
- * at arm's length on a phone, from the row of rotated squares that had just
- * come off the draft tiles.
+ * THE THREE PASSES, because the last one is not a styling decision:
+ *   1. the risk pips came off the draft tiles;
+ *   2. the CHARGE pips came off the HUD ("the little yellow squares that we were
+ *      supposed to have removed"), replaced by a word count: `.gg-charges`
+ *      ("3 / 5 charges") under your score and `.gg-mon-charges` in their monitor
+ *      titlebar. That pass kept the DATA on the argument that it was real — the
+ *      wire validated throws against it and the arsenal paid its costs from it;
+ *   3. the owner then removed the REQUIREMENT itself: "we still have the charge
+ *      system in (you need 3 to do X etc), we should remove the requirement
+ *      entirely (and the Need 1/2/3 under the throwables)". That retired the
+ *      argument holding the readout up, so the readout went.
  *
- * So the data stayed and the diamond went, in BOTH places it was drawn: yours
- * under the score (`.gg-pips`) and theirs in the monitor titlebar
- * (`.gg-mon-pips`, the `.gg-pip--sm` variant). Leaving the second would have
- * kept the complained-about shape on screen two inches from where it was
- * deleted, and kept the CSS alive to grow a third user.
+ * WHAT CHARGES FEED, audited before deleting rather than assumed: the score is
+ * seconds x riskMultiplier x attentionMultiplier and never touches them; nothing
+ * in the client reads chargesEarned/chargesSpent; the drop economy is paced by
+ * HEAT and picks by cost-as-RARITY; enduring a payload still banks one, to
+ * nothing. The answer is NOTHING — and a readout of nothing is worse than no
+ * readout, because "1 / 3 charges" beside a tile you CAN throw says you cannot.
  *
- * WHAT THIS SECTION PINS, in order: the words are there and say the number; the
- * cap is still readable on YOUR line; the gain juice (sfx + "+1" chip) survived
- * the pips it used to be attached to; a SPEND is silent; and no `.gg-pip` node
- * or rule exists anywhere on the desk. The last one is the regression guard —
- * this comes back as somebody adding "just a little indicator". */
+ * WHAT THIS SECTION PINS, in order: no charge string survives in strings.js; the
+ * mounted desk builds no `.gg-charges`, no `.gg-mon-charges` and no `.gg-pip` of
+ * any kind; a charge gain is now SILENT and mints no chip; the arsenal tiles
+ * carry no cost pips and never enter the "poor" state; and neither the JS nor
+ * the CSS has a live reference left. The source-level checks are the regression
+ * guard — this comes back as somebody adding "just a little indicator". */
 {
   const fsChg = await import('node:fs/promises');
   const urlChg = await import('node:url');
   const readUi = (rel) => fsChg.readFile(urlChg.fileURLToPath(new URL('../' + rel, import.meta.url)), 'utf8');
 
   // ---- the strings themselves -------------------------------------------
-  ok(typeof S.hud.charges === 'function', 'strings.js carries hud.charges(n, cap)');
-  ok(typeof S.monitor.charges === 'function', 'and monitor.charges(n) for theirs');
-  ok(/\bcharges\b/.test(S.hud.charges(3, 5)), 'your line says the WORD charge, not a shape',
-    S.hud.charges(3, 5));
-  ok(S.hud.charges(3, 5).includes('3') && S.hud.charges(3, 5).includes('5'),
-    'and carries both the held count and the cap — the pips said the cap by being five',
-    S.hud.charges(3, 5));
-  ok(S.monitor.charges(1) === '1 charge' && S.monitor.charges(0) === '0 charges'
-    && S.monitor.charges(4) === '4 charges',
-    'their count pluralises, and never prints "1 charges" beside a live name',
-    [S.monitor.charges(1), S.monitor.charges(0), S.monitor.charges(4)].join(' | '));
-  ok(!/\//.test(S.monitor.charges(2)),
-    'their line omits the cap — their ceiling is not a number you can spend against',
-    S.monitor.charges(2));
+  ok(!('charges' in S.hud), 'strings.js has no hud.charges — the "3 / 5 charges" line is gone');
+  ok(!('charges' in S.monitor), 'and no monitor.charges for theirs either');
+  ok(!('charge' in S.toasts), 'and the never-called "+1 charge" toast went with them');
+  ok(!/charge/i.test(S.recap.chipEnduredNote),
+    'the recap endured chip stops promising them a charge', String(S.recap.chipEnduredNote));
+  ok(S.how.bullets.length === 6 && !S.how.bullets.some((b) => /charge/i.test(b)),
+    'and "how it works" is still six bullets, none of which teaches an economy that is gone',
+    S.how.bullets.filter((b) => /charge/i.test(b)).join(' | '));
 
   // ---- the mounted desk --------------------------------------------------
   const matchChg = makeFakeMatch();                 // scoring.charges starts at 3
@@ -1165,75 +1177,75 @@ function makeFakeMatch() {
   ok(findAll(hostChg, 'gg-pip').length === 0, 'the mounted HUD contains no .gg-pip node at all');
   ok(findAll(hostChg, 'gg-pips').length === 0, 'nor the row that held them');
   ok(findAll(hostChg, 'gg-mon-pips').length === 0, 'nor the monitor titlebar copy of it');
+  ok(findAll(hostChg, 'gg-charges').length === 0,
+    'and no .gg-charges line — the count that replaced the pips outlived them by one pass');
+  ok(findAll(hostChg, 'gg-mon-charges').length === 0, 'nor .gg-mon-charges in their titlebar');
+  ok(findAll(hostChg, 'gg-score').length > 0,
+    'the SCORE is still there — this took the meter, not the scorebox');
 
-  const chargeLine = findOne(hostChg, 'gg-charges');
-  ok(!!chargeLine, 'the scorebox carries one .gg-charges line instead');
-  ok(String(chargeLine && chargeLine.textContent) === S.hud.charges(3, GoonConsts.ChargeCap),
-    'painted from the engine on the very first paint, cap and all',
-    String(chargeLine && chargeLine.textContent));
-
-  const monLine = findOne(hostChg, 'gg-mon-charges');
-  ok(!!monLine, 'and their titlebar carries .gg-mon-charges');
-  ok(String(monLine && monLine.textContent).indexOf(S.monitor.charges(2)) >= 0,
-    'showing the count off match.opponent.charges (2 in the stub)',
-    String(monLine && monLine.textContent));
-
-  // ---- a GAIN: the number moves, and the juice the pips wore survives -----
+  // ---- a GAIN is now completely silent -----------------------------------
   audioChg.ids.length = 0;
   matchChg.scoring.charges = 4;
   await sleep(260);                                  // paintAll polls at 200ms
-  ok(String(chargeLine && chargeLine.textContent) === S.hud.charges(4, GoonConsts.ChargeCap),
-    'a gain repaints the line', String(chargeLine && chargeLine.textContent));
-  ok(audioChg.ids.includes('gg-charge'),
-    'and still plays gg-charge — the cue was never the pip, it was the charge',
-    audioChg.ids.join(','));
-  ok(findAll(hostChg, 'gg-plus1').length === 1,
-    'and still throws the floating "+1" chip, which is now the WHOLE flourish');
-
-  // ---- a SPEND: the number moves back, in silence ------------------------
-  await sleep(950);                                  // let the chip retire itself
-  ok(findAll(hostChg, 'gg-plus1').length === 0, 'the chip removes itself after its 900ms');
-  audioChg.ids.length = 0;
-  matchChg.scoring.charges = 1;
-  await sleep(260);
-  ok(String(chargeLine && chargeLine.textContent) === S.hud.charges(1, GoonConsts.ChargeCap),
-    'spending three on an item repaints the line down',
-    String(chargeLine && chargeLine.textContent));
-  ok(!audioChg.ids.includes('gg-charge'), 'and is silent — you only hear the ones you earn',
-    audioChg.ids.join(','));
-  ok(findAll(hostChg, 'gg-plus1').length === 0, 'with no "+1" on the way down');
-
-  // ---- an unchanged poll must not rewrite anything -----------------------
-  audioChg.ids.length = 0;
-  await sleep(260);
   ok(!audioChg.ids.includes('gg-charge'),
-    'and a poll that finds the same number does nothing at all — the memo still holds');
+    'banking a charge plays nothing — the cue had one caller and it went with the readout',
+    audioChg.ids.join(','));
+  ok(findAll(hostChg, 'gg-plus1').length === 0,
+    'and mints no floating "+1" chip: there is no number on screen for it to be about');
+  ok(findAll(hostChg, 'gg-charges').length === 0, 'and still no line, however the meter moves');
 
   hudChg.unmount();
-  ok(findAll(hostChg, 'gg-charges').length === 0, 'and unmount takes the line with it');
+
+  // ---- the arsenal: no price under a sticker, and no "need N" ------------
+  const matchArs = makeFakeMatch();
+  matchArs.scoring.charges = 0;                      // as broke as it is possible to be
+  const leftArs = document.createElement('div');
+  const rightArs = document.createElement('div');
+  const ars = arsenalMod.mountArsenal({ leftHost: leftArs, rightHost: rightArs, match: matchArs });
+  ok(findAll(leftArs, 'gg-cost-pip').length === 0 && findAll(rightArs, 'gg-cost-pip').length === 0,
+    'no tile carries a cost pip');
+  ok(findAll(leftArs, 'gg-item-cost').length === 0 && findAll(rightArs, 'gg-item-cost').length === 0,
+    'nor the row that held them');
+  // The heavy costs 3 and the player holds 0: the old code painted "need 3" and refused.
+  ars.armDrop('braindrain');
+  ok(ars.stateOf('braindrain') === 'ready',
+    'a 3-cost item on an EMPTY meter reads ready, not "need 3"', String(ars.stateOf('braindrain')));
+  const broke = ars.fire('braindrain');
+  ok(broke && broke.ok === true,
+    'and it FIRES — the owner request in one assertion', JSON.stringify(broke));
+  ars.unmount();
 
   // ---- the source, because that is where it regrows ----------------------
   const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
   for (const rel of ['ui/hud.js', 'ui/opponent.js']) {
     const code = strip(await readUi(rel));
-    ok(!/gg-pip/.test(code), `${rel} builds no gg-pip node (comments may name the dead class)`,
+    ok(!/gg-pip/.test(code), rel + ' builds no gg-pip node (comments may name the dead class)',
       (code.match(/.*gg-pip.*/) || [''])[0].trim());
+    ok(!/charges/.test(code), rel + ' reads no charge count out of the engine',
+      (code.match(/.*charges.*/) || [''])[0].trim());
   }
+  const arsCode = strip(await readUi('ui/arsenal.js'));
+  ok(!/scoring\.charges|gg-cost-pip|is-poor/.test(arsCode),
+    'ui/arsenal.js prices nothing and reads no balance',
+    (arsCode.match(/.*(scoring\.charges|gg-cost-pip|is-poor).*/) || [''])[0].trim());
 
-  /* The CSS half. Comments are allowed to name the class — the tombstone at the
-   * top of the score block does, on purpose — so this strips them first and then
-   * looks for a live SELECTOR. `.gg-cost-pip` is deliberately not caught by the
-   * word boundary: it is the arsenal's round amber cost dot, a different thing
-   * that was never part of the complaint, and it stays. */
+  /* The CSS half. Comments are allowed to name the class — the tombstones do, on
+   * purpose — so this strips them first and then looks for a live SELECTOR. */
   const cssChg = (await readUi('ui/hud.css')).replace(/\/\*[\s\S]*?\*\//g, '');
   ok(!/(^|[\s,{}])\.gg-pips?\b/.test(cssChg), 'hud.css has no live .gg-pip / .gg-pips rule',
     (cssChg.match(/.*\.gg-pips?\b.*/) || [''])[0].trim());
   ok(!/\.gg-pip--sm\b/.test(cssChg), 'and the small variant went with its one caller');
   ok(!/@keyframes\s+ggPipPop/.test(cssChg), 'and the pop keyframe has no pip left to bounce');
-  ok(/\.gg-cost-pip\s*\{/.test(cssChg),
-    'while the arsenal cost dots — round, amber, welded to their tile — are untouched');
-  ok(/\.gg-charges\s*\{/.test(cssChg) && /\.gg-mon-charges\s*\{/.test(cssChg),
-    'and both text readouts are styled');
+  ok(!/\.gg-cost-pip\b/.test(cssChg),
+    'the arsenal cost dots are gone too — the owner named them directly ("the Need 1/2/3 under '
+    + 'the throwables")', (cssChg.match(/.*\.gg-cost-pip\b.*/) || [''])[0].trim());
+  ok(!/\.gg-charges\b/.test(cssChg) && !/\.gg-mon-charges\b/.test(cssChg),
+    'and neither text readout is styled any more',
+    (cssChg.match(/.*\.gg-(mon-)?charges\b.*/) || [''])[0].trim());
+  ok(!/\.gg-plus1\b/.test(cssChg), 'nor the +1 chip that flourished them',
+    (cssChg.match(/.*\.gg-plus1\b.*/) || [''])[0].trim());
+  ok(/@keyframes\s+ggFloatUp/.test(cssChg),
+    'but ggFloatUp SURVIVES — two other rules still animate on it');
 }
 
 // -------------------------------------------------------- 3. closeness + emotes
@@ -2698,8 +2710,9 @@ const audioMod = await import('../ui/audio.js');
     'the prism and the effect bubbles have their own');
 
   ok(/sfx\('gg-drop'\)/.test(dropsSrc), 'ui/drops.js cues an armed drop');
-  ok((dropsSrc.match(/sfx\('gg-drop-dud'\)/g) || []).length === 2,
-    'and BOTH fizzle paths (no charge / arsenal full) cue the dud');
+  ok((dropsSrc.match(/sfx\('gg-drop-dud'\)/g) || []).length === 1,
+    'and the ONE fizzle path left (the arsenal already full) cues the dud — the other was '
+    + '"no charge", deleted 2026-08-05 with the requirement itself');
   ok(!/reason: 'miss'[^\n]*sfx\(/.test(dropsSrc),
     'a missed roll stays silent — most rolls miss');
 

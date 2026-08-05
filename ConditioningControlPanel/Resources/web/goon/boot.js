@@ -1884,32 +1884,37 @@ function logDeck(why) {
  * earned by popping bubbles (ui/drops.js), and on a fresh match nothing is
  * earned yet. In a DUEL that ramp is the game. In PRACTICE it is a wall in front
  * of the one question practice exists to answer — "does my library work?" — so
- * practice hands over the two slots that draw from the library, plus the charges
- * to spend them, and lets the player find out in the first ten seconds.
+ * practice hands over the two slots that draw from the library and lets the
+ * player find out in the first ten seconds.
+ *
+ * IT USED TO HAND OVER CHARGES TOO (`match.creditCharges(charges,
+ * 'practice-seed')`), because an armed slot with an empty meter would have fired
+ * into a rejection: the receiver validated the sender's wallet. The owner deleted
+ * that requirement on 2026-08-05, so the seed is now exactly the two stacks and
+ * nothing else — there is no second truth left to keep in step.
  *
  * DUEL GATING IS UNTOUCHED: this is reached from startSolo's own phase
- * subscription and from nowhere else, and it goes through the public seams
- * ui/drops.js already uses (creditCharges then armDrop), so the wire truth and
- * the local truth cannot disagree.
+ * subscription and from nowhere else, and it goes through the same public seam
+ * ui/drops.js uses (armDrop).
  * -------------------------------------------------------------------------- */
 const PRACTICE_SEED = Object.freeze([
-  Object.freeze({ id: 'flash', cost: 1 }),    // images, the cheap one
+  // `cost` is not spent — it is the drop-rarity weight these two carry elsewhere,
+  // kept here so the pair reads the same as an ARSENAL_ITEMS row.
+  Object.freeze({ id: 'flash', cost: 1 }),    // images, the common one
   Object.freeze({ id: 'video', cost: 2 }),    // a clip, in a floating window
 ]);
 
-function seedPracticeArsenal(match) {
+function seedPracticeArsenal() {
   const arsenal = hudHandle && hudHandle.parts && hudHandle.parts.arsenal;
   if (!arsenal || typeof arsenal.armDrop !== 'function') return;
-  let charges = 0;
   let armed = 0;
   for (const seed of PRACTICE_SEED) {
     // `silent` — the drop flourish is a reward animation and this is a gift, not
     // a reward. It would also fire before the HUD has finished its entrance.
-    if (arsenal.armDrop(seed.id, { count: 1, silent: true })) { armed++; charges += seed.cost; }
+    if (arsenal.armDrop(seed.id, { count: 1, silent: true })) armed++;
   }
   if (!armed) return;
-  try { match.creditCharges(charges, 'practice-seed'); } catch (_e) { /* the slot still lights */ }
-  logger.info('practice: seeded ' + armed + ' arsenal slot(s) and ' + charges + ' charge(s)');
+  logger.info('practice: seeded ' + armed + ' arsenal slot(s)');
 }
 
 /* ----------------------------------------------------------------------------
@@ -1942,7 +1947,7 @@ async function startSolo() {
    * it runs after boot's own phase handler, i.e. after mountHudNow() has built
    * the arsenal it seeds. On phaseUnsubs so it dies with the match. */
   phaseUnsubs.push(local.onPhaseChanged((p) => {
-    if (p === GoonMatchPhase.Live) seedPracticeArsenal(local);
+    if (p === GoonMatchPhase.Live) seedPracticeArsenal();
   }));
   /* PRACTICE HAS A FACE TOO — a tile, a name and dm:false (contract §6). It is
    * set AFTER attachMatch, which clears the peer, and it is the only way the

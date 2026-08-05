@@ -25,7 +25,7 @@ export const PREF_DEFAULTS = Object.freeze({
   /**
    * THE TWO CUE SLIDERS, split out of the old single `sfxVolume`. `ui` is the
    * chrome you drive (menus, sheets, the code cells); `game` is everything the
-   * match does at you (the draft, the countdown, charges, drops, payloads,
+   * match does at you (the draft, the countdown, drops, payloads,
    * bubbles, the recap). Every entry in ui/audio.js's SFX_REGISTRY declares
    * which bus it is on, and each is a real gain node under masterBus.
    *
