@@ -1516,6 +1516,9 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
  * carries Y (with a lob keyframe partway through, which is the entire arc), and
  * .gg-throw-art carries the spin. The splash is a fourth node for the same
  * reason, and the monitor's flare is a fifth on the monitor itself.
+ * The two nodes added by THE MARK (.gg-throw-mark, .gg-throw-word) take no slot
+ * at all: they fade on a TRANSITION, which is the only way to decorate a node
+ * whose animation belongs to somebody else.
  *
  * NOTHING HERE IS REMOVED ON animationend. A parked animation (data-gg-fx="hot"),
  * a reduced-motion override or a re-parented node all swallow that event; every
@@ -1540,11 +1543,13 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
   border-radius: 8px;
   pointer-events: none;
   opacity: 0;
+  /* --gg-throw-tint is written on .gg-mon by ui/opponent.js flareMonitor(), so
+     the flare wears the colour of whatever they just threw. Pink until then. */
   background: radial-gradient(72% 58% at 50% 40%,
-    rgba(var(--gg-pink-rgb), 0.42) 0%,
-    rgba(var(--gg-pink-rgb), 0.12) 56%,
+    rgba(var(--gg-throw-tint, var(--gg-pink-rgb)), 0.42) 0%,
+    rgba(var(--gg-throw-tint, var(--gg-pink-rgb)), 0.12) 56%,
     rgba(0, 0, 0, 0) 78%);
-  box-shadow: inset 0 0 26px rgba(var(--gg-pink-rgb), 0.5);
+  box-shadow: inset 0 0 26px rgba(var(--gg-throw-tint, var(--gg-pink-rgb)), 0.5);
 }
 .gg-mon.is-throwing .gg-mon-throw {
   opacity: 1;
@@ -1578,23 +1583,25 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
   animation: ggThrowY var(--gg-throw-ms, 760ms) cubic-bezier(.35, .1, .5, 1) 1 forwards;
   animation-play-state: var(--gg-deco-play);
 }
-/* The STICKER IS THE FLOOR: it is this node's background, painted from frame
-   one, and a live preview (if there is one) fades in over it. A clip that is
-   slow, broken or simply not applicable therefore degrades to the item art with
-   no timer and no branch — see ui/throwPreview.js. */
+/* The item cutout, revealed by `is-art` once it has DECODED — see the mark
+   below for why it cannot be trusted to be the floor on its own. A live preview
+   (if there is one) then fades in over it. */
 .gg-throw-art {
   position: absolute; inset: 0;
   background-image: var(--gg-throw-sticker, none);
   background-size: contain;
   background-position: center;
   background-repeat: no-repeat;
-  filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 18px rgba(var(--gg-pink-rgb), 0.55));
+  filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.7))
+          drop-shadow(0 0 18px rgba(var(--gg-throw-tint, var(--gg-pink-rgb)), 0.55));
   animation: ggThrowSpin var(--gg-throw-ms, 760ms) ease-out 1 forwards;
   animation-play-state: var(--gg-deco-play);
 }
-/* A live clip does not tumble — you are meant to be able to READ it on the way
-   in. Mutually exclusive with the rule above (one shorthand, one winner). */
-.gg-throw.is-live .gg-throw-art {
+/* Neither a live clip nor a phrase tumbles — you are meant to be able to READ
+   what is coming. Mutually exclusive with the rule above (one shorthand, one
+   winner), which is also why both states share the one keyframe. */
+.gg-throw.is-live .gg-throw-art,
+.gg-throw.is-word .gg-throw-art {
   animation: ggThrowSwell var(--gg-throw-ms, 760ms) ease-out 1 forwards;
 }
 .gg-throw-live {
@@ -1602,11 +1609,55 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
   width: 88%; height: 88%;
   object-fit: cover;
   border-radius: 10px;
-  box-shadow: 0 0 0 2px rgba(var(--gg-pink-rgb), 0.75), inset 0 0 20px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 0 2px rgba(var(--gg-throw-tint, var(--gg-pink-rgb)), 0.75), inset 0 0 20px rgba(0, 0, 0, 0.5);
   opacity: 0;                       /* the first decoded frame lifts this */
   transition: opacity .18s ease;    /* a transition, not an animation: no slot taken */
 }
 .gg-throw-live.is-ready { opacity: 1; }
+
+/* THE MARK — the floor UNDER the sticker, and the reason every kind now reads.
+   The item cutouts are ~650 KB each and their fetch used to start when the
+   projectile did, so the six kinds with no live preview routinely flew as an
+   empty box: nothing on screen, i.e. "the throw did not fire". This glyph is
+   text — it is on screen in frame one, for every kind, with no network in the
+   path — and it steps aside the moment something better has actually decoded.
+   Colour comes from the kind's tint, written inline by ui/opponent.js. */
+.gg-throw-mark {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-style: normal;
+  font-size: calc(var(--gg-throw-size, 128px) * 0.52);
+  line-height: 1;
+  color: rgb(var(--gg-throw-tint, var(--gg-pink-rgb)));
+  text-shadow: 0 0 12px rgba(var(--gg-throw-tint, var(--gg-pink-rgb)), 0.85),
+               0 2px 10px rgba(0, 0, 0, 0.8);
+  opacity: 1;
+  transition: opacity .18s ease;    /* a transition — the art's one animation slot is taken */
+}
+.gg-throw.is-art .gg-throw-mark,
+.gg-throw.is-live .gg-throw-mark { opacity: 0; }
+
+/* THEIR WORDS, for the two payloads that ARE text (LockCard, SubliminalStorm).
+   A child of the ARC and never of the art: the art tumbles. Remote text, always
+   written with textContent — ui/opponent.js's TRUST rule. */
+.gg-throw-word {
+  position: absolute;
+  left: 50%; top: 94%;
+  transform: translateX(-50%);
+  max-width: 15rem;
+  padding: 3px 10px;
+  border-radius: var(--gg-radius-pill, 999px);
+  font-size: .74rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--gg-text, #fff);
+  background: rgba(12, 6, 20, 0.86);
+  border: 1px solid rgba(var(--gg-throw-tint, var(--gg-pink-rgb)), 0.8);
+  box-shadow: 0 0 14px rgba(var(--gg-throw-tint, var(--gg-pink-rgb)), 0.4);
+  pointer-events: none;
+}
 @keyframes ggThrowX {
   from { transform: translateX(0); }
   to { transform: translateX(var(--gg-throw-dx, 0px)); }
@@ -1636,7 +1687,8 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
   margin: -11px 0 0 -11px;
   border-radius: 50%;
   pointer-events: none;
-  box-shadow: 0 0 0 2px rgba(var(--gg-pink-rgb), 0.9), 0 0 34px rgba(var(--gg-pink-rgb), 0.75);
+  box-shadow: 0 0 0 2px rgba(var(--gg-throw-tint, var(--gg-pink-rgb)), 0.9),
+              0 0 34px rgba(var(--gg-throw-tint, var(--gg-pink-rgb)), 0.75);
   animation: ggThrowHit .42s cubic-bezier(.2, .8, .3, 1) 1 forwards;
   animation-play-state: var(--gg-deco-play);
 }

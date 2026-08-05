@@ -9,6 +9,11 @@
  * media at all. Everything else keeps its sticker, which is why the sticker map
  * lives here too: it is the FLOOR, never a failure state.
  *
+ * …and UNDER that floor, for every kind alike, is THE MARK (2026-08-04): a
+ * glyph, a tint, and — for the two payloads that ARE text — their own words.
+ * See THE MARK below for why a sticker on its own left six of the eight kinds
+ * looking like nothing had been thrown at all.
+ *
  * ---------------------------------------------------------------------------
  * WHICH CLIP, AND HOW SURE WE ARE (read this before "fixing" a wrong preview)
  *
@@ -91,6 +96,167 @@ export const STICKER_FOR_PAYLOAD = Object.freeze({
 
 /** Where the cutouts live, relative to index.html (same base as ui/arsenal.js). */
 export const ITEM_ART_BASE = './assets/items/';
+
+/* ---------------------------------------------------------------------------
+ * THE MARK — every kind reads as ITSELF in the air (2026-08-04).
+ *
+ * "when an effect arrives from the opponent, flashes and videos show the little
+ *  incoming throw — the other kinds do not." (owner)
+ *
+ * The throw was never kind-gated: ui/hud.js hands EVERY accepted payload to
+ * ui/opponent.js markInbound and one projectile is launched per kind. What was
+ * missing is that only the four media-backed kinds in PREVIEW_MEDIA_KIND had
+ * anything to SHOW. The other four flew as `--gg-throw-sticker` alone — a
+ * ~650 KB item cutout whose fetch STARTS when the projectile is built, which
+ * routinely loses the race against a 380-760 ms flight (the whole flight is
+ * shorter than a cold PNG on a phone). A projectile whose only pixel source has
+ * not decoded yet is an empty box, and an empty box is indistinguishable from
+ * "the throw never fired" — which is exactly how it was reported.
+ *
+ * So every kind now carries three layers, in this order of precedence:
+ *   1. its GLYPH   — text, painted on frame one, no network, cannot fail;
+ *   2. its STICKER — revealed only once the PNG has actually decoded, and
+ *      warmed at ACCEPT time (warmSticker) so the lead the engine already
+ *      reserved pays for the fetch instead of the flight paying for it;
+ *   3. its LIVE PREVIEW — media kinds only, exactly as before.
+ * …plus a TINT, so the four kinds that share the sticker-only path still read
+ * apart at a glance: it themes the sender's flare, the projectile's glow and
+ * the landing splash.
+ *
+ * THE GLYPHS ARE A COPY, deliberately, of the vocabulary ui/hud.js's rail chips
+ * and ui/announcer.js's ribbon already use — the same reason STICKER_FOR_PAYLOAD
+ * is a copy of the arsenal's `img` column: this module is reached FROM the
+ * arsenal and must not drag the HUD tier in behind it. The self-test pins the
+ * copy against ui/announcer.js's ANNOUNCE_GLYPH so the two cannot drift.
+ *
+ * THE TINTS are goon.css's own hues (pink, violet, gold, green) plus two
+ * near-palette neighbours for the kinds that would otherwise collide. They are
+ * glow colours only: nothing here is ever the sole carrier of a meaning.
+ * ------------------------------------------------------------------------- */
+export const THROW_MARK = Object.freeze({
+  [GoonPayloadKind.FlashBurst]: Object.freeze({ glyph: '✦', tint: '255, 105, 180' }),   // --gg-pink-rgb
+  [GoonPayloadKind.SubliminalStorm]: Object.freeze({ glyph: '≋', tint: '236, 220, 255' }),
+  [GoonPayloadKind.BubbleSwarm]: Object.freeze({ glyph: '○', tint: '150, 226, 255' }),
+  [GoonPayloadKind.Video]: Object.freeze({ glyph: '▶', tint: '179, 136, 255' }),        // --gg-violet-rgb
+  [GoonPayloadKind.LockCard]: Object.freeze({ glyph: '▢', tint: '255, 212, 94' }),      // --gg-gold
+  [GoonPayloadKind.ToyPattern]: Object.freeze({ glyph: '∿', tint: '94, 242, 160' }),    // --gg-green-rgb
+  [GoonPayloadKind.BrainDrain]: Object.freeze({ glyph: '◍', tint: '138, 92, 246' }),
+  [GoonPayloadKind.Spiral]: Object.freeze({ glyph: '◎', tint: '255, 168, 214' }),
+});
+
+/**
+ * A kind we have never heard of (a newer peer's ninth code) still throws, and
+ * still throws something you can SEE. Unknown is never invisible.
+ */
+export const DEFAULT_THROW_MARK = Object.freeze({ glyph: '◆', tint: '255, 105, 180' });
+
+/** @param {number} kind GoonPayloadKind @returns {{glyph:string, tint:string}} */
+export function markFor(kind) {
+  return THROW_MARK[kind] || DEFAULT_THROW_MARK;
+}
+
+/**
+ * THE WORD — the two kinds whose payload IS text fly with it written under them.
+ *
+ * `payload.text` is the phrase a LockCard will make you type and the line a
+ * SubliminalStorm will chant (exec/lockCards.js, exec/subliminals.js both read
+ * it). Showing it in flight is the same promise the clip half makes — "this is
+ * what is about to play" — kept for two kinds no clip can cover.
+ *
+ * REMOTE TEXT. The engine sanitized it once and the renderer sanitizes it again
+ * on its way to the DOM; this is a third, narrower pass (control characters out,
+ * whitespace collapsed, hard length cap) and the caller writes the result with
+ * textContent, never markup — ui/opponent.js's TRUST rule, unchanged.
+ */
+export const WORD_KINDS = Object.freeze([GoonPayloadKind.SubliminalStorm, GoonPayloadKind.LockCard]);
+
+/** Longer than this and it stops being a glance. */
+export const THROW_WORD_MAX = 28;
+
+/**
+ * @param {number} kind      GoonPayloadKind
+ * @param {object} [payload] the wire payload
+ * @returns {string} the words to show, or '' for every kind that has none
+ */
+export function throwWord(kind, payload) {
+  if (WORD_KINDS.indexOf(kind) < 0) return '';
+  const raw = (payload && typeof payload.text === 'string') ? payload.text : '';
+  if (!raw) return '';
+  let clean = '';
+  for (const ch of raw) {
+    const c = ch.charCodeAt(0);
+    clean += (c < 0x20 || (c >= 0x7f && c <= 0x9f)) ? ' ' : ch;
+  }
+  clean = clean.replace(/\s+/g, ' ').trim();
+  if (!clean) return '';
+  return clean.length > THROW_WORD_MAX ? (clean.slice(0, THROW_WORD_MAX - 1) + '…') : clean;
+}
+
+// ------------------------------------------------------- warming the sticker
+
+/**
+ * url -> {done, waiters[]}. Module-level for the same reason `pool` is: the
+ * page has one HTTP cache and one set of nine cutouts, and a per-mount map
+ * would re-fetch them every match.
+ */
+const warmed = new Map();
+
+/** A stuck decode must not grow an unbounded callback list. */
+const WARM_WAITERS_MAX = 32;
+
+/**
+ * Start the item cutout's fetch and tell me when it can actually be shown.
+ *
+ * Called TWICE per throw, on purpose: once by markInbound the instant the
+ * engine admits the payload (which is ~1-1.5 s before the projectile exists —
+ * the schedule lead pays for the fetch), and once by the launch itself to learn
+ * whether the art is ready yet. The second call is free; the fetch is one.
+ *
+ * @param   {number}   kind      GoonPayloadKind
+ * @param   {Function} [onReady] run once the art has decoded (immediately if it
+ *                               already has). Never run if it errors — the
+ *                               glyph simply stays, which is the point of it.
+ * @returns {boolean} whether the art is decoded RIGHT NOW
+ */
+export function warmSticker(kind, onReady = null) {
+  const url = stickerUrl(kind);
+  if (!url) return false;
+  let rec = warmed.get(url);
+  if (!rec) {
+    const Img = (typeof Image === 'function') ? Image : null;
+    if (!Img) return false;                       // node / no DOM: nothing to warm
+    let img = null;
+    try { img = new Img(); } catch (_e) { img = null; }
+    if (!img) return false;
+    rec = { done: false, waiters: [] };
+    warmed.set(url, rec);
+    const settle = () => {
+      if (rec.done) return;
+      rec.done = true;
+      const list = rec.waiters.splice(0, rec.waiters.length);
+      for (const fn of list) { try { fn(); } catch (_e) { /* never break a throw */ } }
+    };
+    try { img.decoding = 'async'; } catch (_e) { /* stub */ }
+    try { if (typeof img.addEventListener === 'function') img.addEventListener('load', settle); } catch (_e) { /* stub */ }
+    try { img.src = url; } catch (_e) { /* stub */ }
+    try { if (img.complete) settle(); } catch (_e) { /* stub */ }
+  }
+  if (rec.done) {
+    if (typeof onReady === 'function') { try { onReady(); } catch (_e) { /* ignore */ } }
+    return true;
+  }
+  if (typeof onReady === 'function' && rec.waiters.length < WARM_WAITERS_MAX) rec.waiters.push(onReady);
+  return false;
+}
+
+/** Read-only, for a driver or a test. */
+export function stickerWarm(kind) {
+  const rec = warmed.get(stickerUrl(kind));
+  return !!(rec && rec.done);
+}
+
+/** Test seam: forget every warmed cutout. The page never calls this. */
+export function resetStickerWarm() { warmed.clear(); }
 
 /** A ghost nobody ever removed must still give its refcount back. */
 const GHOST_MAX_MS = 120000;
@@ -319,4 +485,7 @@ export function dressGhost(node, kind) {
   return live;
 }
 
-export default { createPreview, resolvePreview, dressGhost, setPreviewMedia, stickerUrl };
+export default {
+  createPreview, resolvePreview, dressGhost, setPreviewMedia, stickerUrl,
+  markFor, throwWord, warmSticker, stickerWarm,
+};

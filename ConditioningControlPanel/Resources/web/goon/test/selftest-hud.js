@@ -4901,6 +4901,154 @@ const audioMod = await import('../ui/audio.js');
     await sleep(THROW_MS + 140);
   }
 
+  /* --- EVERY KIND, AND EVERY KIND AS ITSELF (owner, 2026-08-05: "flashes and
+   * videos show the little incoming throw, the other kinds do not").
+   *
+   * markInbound was never kind-gated and these checks say so out loud. What the
+   * other six kinds lacked was anything to SHOW: their only pixels were a
+   * ~650 KB item cutout whose fetch began when the projectile did, so what flew
+   * was an empty box. The glyph is the fix — text, frame one, no network — and
+   * the warm is the other half: the fetch now starts at ACCEPT, inside the lead
+   * the engine already reserved. */
+  {
+    const announcerMod = await import('../ui/announcer.js');
+    const kinds = Object.keys(GoonPayloadKind).map((k) => GoonPayloadKind[k]);
+    ok(kinds.length === 8, 'the wire has eight payload kinds', String(kinds.length));
+
+    // The mark table is COMPLETE. A ninth wire code must fail HERE, in the
+    // suite, and not as an invisible projectile in somebody's duel.
+    for (const kind of kinds) {
+      const m = previewMod.THROW_MARK[kind];
+      ok(!!m && typeof m.glyph === 'string' && m.glyph.length > 0,
+        `payload kind ${kind} has a glyph of its own`);
+      ok(!!m && /^\d{1,3}, \d{1,3}, \d{1,3}$/.test(String(m && m.tint)),
+        `…and an rgb triple for its tint`, String(m && m.tint));
+    }
+    // …and the glyphs are the vocabulary the ribbon and the rail chips already
+    // speak, not a fourth private alphabet. (Bubbles is never announced, so the
+    // ribbon has no glyph to compare against for BubbleSwarm.)
+    for (const kind of kinds) {
+      const element = announcerMod.PAYLOAD_ANNOUNCE_ELEMENT[kind];
+      const want = announcerMod.ANNOUNCE_GLYPH[element];
+      if (!want) continue;
+      ok(previewMod.markFor(kind).glyph === want,
+        `kind ${kind} flies under the same glyph the announcer names it with`,
+        previewMod.markFor(kind).glyph + ' vs ' + want);
+    }
+    ok(previewMod.markFor(9999) === previewMod.DEFAULT_THROW_MARK,
+      'a kind from a newer peer still throws something you can see');
+
+    const match = makeFakeMatch();
+    const host = document.createElement('div');
+    const mon = opponentMod.mountOpponent({ host, match });
+
+    const hitsBefore = findAll(document.body, 'gg-throw-hit').length;
+    for (const kind of kinds) {
+      ok(mon.markInbound({ kind, waitMs: 0 }) === true, `kind ${kind} is thrown at us`);
+      const flies = findAll(document.body, 'gg-throw');
+      const fly = flies[flies.length - 1];
+      ok(!!fly, `kind ${kind} put a projectile on the page`);
+      const mark = fly && findOne(fly, 'gg-throw-mark');
+      ok(!!mark && mark.textContent === previewMod.markFor(kind).glyph,
+        `…carrying its own glyph, which needs no network to be visible (kind ${kind})`,
+        mark ? mark.textContent : 'none');
+      ok(!!fly && String(fly.style['--gg-throw-tint'] || '') === previewMod.markFor(kind).tint,
+        `…and its own tint, which themes the flare, the glow and the splash (kind ${kind})`,
+        fly ? String(fly.style['--gg-throw-tint']) : 'none');
+      ok(!!fly && fly.getAttribute('data-gg-kind') === String(kind),
+        `…and says which kind it is (kind ${kind})`);
+      const art = fly && findOne(fly, 'gg-throw-art');
+      ok(!!art && /item_[a-z]+\.png/.test(String(art.style['--gg-throw-sticker'] || '')),
+        `…with the cutout queued behind it (kind ${kind})`);
+      ok(!hasClass(fly, 'is-art'),
+        `…but NOT revealed, because it has not decoded — that hole was the bug (kind ${kind})`);
+    }
+    ok(hasClass(mon.root, 'is-throwing') && String(mon.root.style['--gg-throw-tint'] || '')
+      === previewMod.markFor(kinds[kinds.length - 1]).tint,
+      'their monitor flares in the colour of the thing it just threw');
+
+    await sleep(THROW_MIN_MS + 160);
+    const hits = findAll(document.body, 'gg-throw-hit');
+    ok(hits.length - hitsBefore === kinds.length,
+      'all eight land — the impact cue is not a two-kind feature either',
+      String(hits.length - hitsBefore));
+    const firstHit = hits[hitsBefore];
+    ok(!!firstHit && String(firstHit.style['--gg-throw-tint'] || '') === previewMod.markFor(kinds[0]).tint,
+      'and the splash wears the same colour the projectile did');
+
+    // THE WORD: the two payloads that ARE text arrive with their text.
+    ok(previewMod.throwWord(GoonPayloadKind.Video, { text: 'nope' }) === '',
+      'a kind whose payload is not text never grows a caption');
+    ok(previewMod.throwWord(GoonPayloadKind.LockCard, { text: '  good   girls\ndrift  ' }) === 'good girls drift',
+      'the caption is collapsed remote text, never a line break in a pill');
+    const longWord = previewMod.throwWord(GoonPayloadKind.SubliminalStorm, { text: 'z'.repeat(120) });
+    ok(longWord.length === previewMod.THROW_WORD_MAX && /…$/.test(longWord),
+      'a wall of text is clamped to a glance', String(longWord.length));
+    ok(previewMod.throwWord(GoonPayloadKind.LockCard, null) === ''
+      && previewMod.throwWord(GoonPayloadKind.LockCard, { text: String.fromCharCode(7, 0) }) === '',
+      'and control characters alone are not a caption');
+    {
+      mon.markInbound({ kind: GoonPayloadKind.LockCard, waitMs: 0, payload: { text: 'say it out loud' } });
+      const flies = findAll(document.body, 'gg-throw');
+      const fly = flies[flies.length - 1];
+      const word = fly && findOne(fly, 'gg-throw-word');
+      ok(!!word && word.textContent === 'say it out loud',
+        'a lock card flies with the phrase it is about to demand', word ? word.textContent : 'none');
+      ok(!!word && word.parentNode && word.parentNode._classes.has('gg-throw-arc'),
+        '…on the ARC, never on the art: the art tumbles and a spinning phrase cannot be read');
+      ok(hasClass(fly, 'is-word'), '…and the item steadies so it can be');
+    }
+
+    /* THE WARM. The cutout's fetch starts when the payload is ACCEPTED, which is
+     * a second and a half before the projectile exists — otherwise a 650 KB PNG
+     * has to arrive inside a 380 ms flight, and it does not. */
+    {
+      previewMod.resetStickerWarm();
+      const made = [];
+      globalThis.Image = class FakeImage {
+        constructor() { this.complete = false; this.src = ''; made.push(this); }
+        addEventListener(type, fn) { if (type === 'load') this._load = fn; }
+      };
+      ok(previewMod.warmSticker(GoonPayloadKind.Spiral) === false,
+        'a cutout nobody has fetched yet is not ready');
+      ok(made.length === 1 && /item_spiral\.png/.test(String(made[0].src || '')),
+        'and asking for it started exactly one fetch', String(made.length));
+      ok(previewMod.warmSticker(GoonPayloadKind.Spiral) === false && made.length === 1,
+        'asking twice does not fetch twice — one HTTP cache, one page');
+
+      let revealed = 0;
+      previewMod.warmSticker(GoonPayloadKind.Spiral, () => { revealed++; });
+      ok(revealed === 0, 'nothing is revealed while it is still in the air');
+      made[0]._load();
+      ok(revealed === 1 && previewMod.stickerWarm(GoonPayloadKind.Spiral) === true,
+        'the DECODE is what reveals it, exactly like .gg-throw-live is-ready');
+      let again = 0;
+      previewMod.warmSticker(GoonPayloadKind.Spiral, () => { again++; });
+      ok(again === 1, 'and from then on it is instant');
+
+      mon.markInbound({ kind: GoonPayloadKind.Spiral, waitMs: 0 });
+      const flies = findAll(document.body, 'gg-throw');
+      ok(hasClass(flies[flies.length - 1], 'is-art'),
+        'a warm cutout steps in front of the glyph on frame one');
+
+      // …and the accept itself is what warms it: a payload eight seconds out
+      // launches nothing yet, but the fetch is already running.
+      const before = made.length;
+      mon.markInbound({ kind: GoonPayloadKind.BrainDrain, waitMs: 8000 });
+      ok(made.length === before + 1,
+        'ACCEPT starts the fetch — the lead the engine reserved pays for it, not the flight');
+      ok(findAll(document.body, 'gg-throw').length === flies.length,
+        '…while the flight itself is still correctly parked inside that lead');
+
+      delete globalThis.Image;
+      previewMod.resetStickerWarm();
+    }
+
+    mon.unmount();
+    ok(match._subs.released === match._subs.taken, 'and none of it leaks a subscription');
+    await sleep(THROW_MS + 140);
+  }
+
   // --- the CSS half: one animation per node, the heat exemption, reduced motion
   {
     const fs = await import('node:fs/promises');
@@ -4921,6 +5069,26 @@ const audioMod = await import('../ui/audio.js');
     }
     ok(/\.gg-throw-live[^{]*\{[^}]*transition:\s*opacity/.test(css),
       'the live preview fades in on a TRANSITION — an animation there would take the spin\'s slot');
+
+    // THE MARK rides on the same rule, for the same reason.
+    ok(/transition:\s*opacity/.test(blockOf('.gg-throw-mark')) && !/animation:/.test(blockOf('.gg-throw-mark')),
+      'the per-kind glyph fades on a transition and takes no animation slot of its own');
+    ok(/\.gg-throw\.is-art\s+\.gg-throw-mark[\s\S]{0,80}opacity:\s*0/.test(css),
+      'and it only steps aside once the cutout has really DECODED (is-art), never on a timer');
+    ok(!/animation:/.test(blockOf('.gg-throw-word')), 'the caption takes no slot either');
+    ok(/white-space:\s*nowrap/.test(blockOf('.gg-throw-word'))
+      && /text-overflow:\s*ellipsis/.test(blockOf('.gg-throw-word')),
+      'a long phrase is one clipped line, never a paragraph flying across the screen');
+    ok(/\.gg-throw\.is-word\s+\.gg-throw-art[^{]*\{[^}]*ggThrowSwell/.test(css),
+      'and a payload carrying words stops tumbling so they can be read');
+
+    // one tint, every surface of the same event
+    for (const sel of ['.gg-mon-throw', '.gg-throw-art', '.gg-throw-mark', '.gg-throw-word', '.gg-throw-hit']) {
+      ok(/rgba?\(var\(--gg-throw-tint/.test(blockOf(sel)),
+        `${sel} is coloured by the thrown kind's tint`);
+      ok(/--gg-throw-tint,\s*var\(--gg-pink-rgb\)/.test(blockOf(sel)),
+        `…and falls back to the brand pink when nobody set one (${sel})`);
+    }
 
     // THE MONITOR IS INFORMATION: a throw flourish must survive the heat park.
     ok(/--gg-deco-play:\s*running/.test(blockOf('.gg-mon-throw')),
