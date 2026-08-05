@@ -30,8 +30,15 @@ namespace ConditioningControlPanel.Services.AIService
         /// </summary>
         Task<AiReplyResult> GetBambiReplyExAsync(string userInput, bool isUserMessage = false);
 
+        /// <summary>
+        /// <paramref name="duration"/> is how long the user has been on this activity. It is
+        /// formatted into the context tag with the same bucketing as
+        /// <see cref="GetStillOnReactionAsync"/>; null means "not known" and reads as zero.
+        /// The value used to be hardcoded to "0m" on all three providers, which lied to the
+        /// model on the double-click path where the user may have dwelled for half an hour.
+        /// </summary>
         Task<string?> GetAwarenessReactionAsync(string detectedName, string category, string serviceName = "",
-            string pageTitle = "");
+            string pageTitle = "", TimeSpan? duration = null);
 
         Task<string?> GetStillOnReactionAsync(string displayName, string category, TimeSpan duration);
 

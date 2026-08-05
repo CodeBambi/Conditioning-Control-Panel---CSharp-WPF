@@ -243,7 +243,10 @@ namespace ConditioningControlPanel
                         // Show quick thinking indicator
                         if (!_isGiggling) Giggle("Hmm...");
 
-                        var aiReaction = await App.Ai.GetAwarenessReactionAsync(detectedName, category.ToString(), serviceName, pageTitle);
+                        // Double-click can land long after the user settled on this window, so
+                        // the real dwell time is the interesting signal here.
+                        var aiReaction = await App.Ai.GetAwarenessReactionAsync(detectedName, category.ToString(), serviceName, pageTitle,
+                            awareness?.CurrentActivityDuration);
                         if (!string.IsNullOrEmpty(aiReaction))
                         {
                             reaction = aiReaction;

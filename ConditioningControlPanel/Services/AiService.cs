@@ -147,7 +147,7 @@ namespace ConditioningControlPanel.Services
         /// Used by Awareness Mode. Passes raw website and tab name for AI to interpret.
         /// Returns null if AI unavailable (caller should use preset phrase).
         /// </summary>
-        public async Task<string?> GetAwarenessReactionAsync(string detectedName, string category, string serviceName = "", string pageTitle = "")
+        public async Task<string?> GetAwarenessReactionAsync(string detectedName, string category, string serviceName = "", string pageTitle = "", TimeSpan? duration = null)
         {
             // Get prompt from active personality preset
             var prompt = _bambiSprite.GetSystemPrompt();
@@ -156,9 +156,19 @@ namespace ConditioningControlPanel.Services
             var website = string.IsNullOrEmpty(serviceName) ? detectedName : serviceName;
             var tabName = string.IsNullOrEmpty(pageTitle) ? detectedName : pageTitle;
 
+            // Format duration nicely (same bucketing as the still-on path)
+            var elapsed = duration ?? TimeSpan.Zero;
+            string durationText;
+            if (elapsed.TotalMinutes < 1)
+                durationText = $"{(int)elapsed.TotalSeconds}s";
+            else if (elapsed.TotalMinutes < 60)
+                durationText = $"{(int)elapsed.TotalMinutes}m";
+            else
+                durationText = $"{(int)elapsed.TotalHours}h";
+
             // Format context with category for accurate reactions
-            // Format: [Category: X | App: Y | Title: Z | Duration: 0m]
-            var userInput = $"[Category: {category} | App: {website} | Title: {tabName} | Duration: 0m]";
+            // Format: [Category: X | App: Y | Title: Z | Duration: Nm]
+            var userInput = $"[Category: {category} | App: {website} | Title: {tabName} | Duration: {durationText}]";
 
             return await GetAiResponseAsync(userInput, prompt);
         }

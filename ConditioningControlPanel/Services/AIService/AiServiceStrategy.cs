@@ -72,8 +72,8 @@ namespace ConditioningControlPanel.Services.AIService
             => Active.GetBambiReplyExAsync(userInput, isUserMessage);
 
         public Task<string?> GetAwarenessReactionAsync(string detectedName, string category,
-            string serviceName = "", string pageTitle = "")
-            => Active.GetAwarenessReactionAsync(detectedName, category, serviceName, pageTitle);
+            string serviceName = "", string pageTitle = "", TimeSpan? duration = null)
+            => Active.GetAwarenessReactionAsync(detectedName, category, serviceName, pageTitle, duration);
 
         public Task<string?> GetStillOnReactionAsync(string displayName, string category, TimeSpan duration)
             => Active.GetStillOnReactionAsync(displayName, category, duration);

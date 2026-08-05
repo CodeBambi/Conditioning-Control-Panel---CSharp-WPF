@@ -400,12 +400,20 @@ namespace ConditioningControlPanel.Services.AIService
 
         private static readonly Random _random = new();
 
-        public async Task<string?> GetAwarenessReactionAsync(string detectedName, string category, string serviceName = "", string pageTitle = "")
+        public async Task<string?> GetAwarenessReactionAsync(string detectedName, string category, string serviceName = "", string pageTitle = "", TimeSpan? duration = null)
         {
             var prompt = _bambiSprite.GetSystemPrompt();
             var website = string.IsNullOrEmpty(serviceName) ? detectedName : serviceName;
             var tabName = string.IsNullOrEmpty(pageTitle) ? detectedName : pageTitle;
-            var userInput = $"[Category: {category} | App: {website} | Title: {tabName} | Duration: 0m]";
+
+            // Same bucketing as the still-on path.
+            var elapsed = duration ?? TimeSpan.Zero;
+            string durationText;
+            if (elapsed.TotalMinutes < 1) durationText = $"{(int)elapsed.TotalSeconds}s";
+            else if (elapsed.TotalMinutes < 60) durationText = $"{(int)elapsed.TotalMinutes}m";
+            else durationText = $"{(int)elapsed.TotalHours}h";
+
+            var userInput = $"[Category: {category} | App: {website} | Title: {tabName} | Duration: {durationText}]";
             return await GetAiResponseAsync(userInput, prompt);
         }
 

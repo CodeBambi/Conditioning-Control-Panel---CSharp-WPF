@@ -75,8 +75,11 @@ namespace ConditioningControlPanel
                 {
                     try
                     {
-                        // Pass full context from currently focused window
-                        reaction = await App.Ai.GetAwarenessReactionAsync(displayName, e.Category.ToString(), e.ServiceName, pageTitle);
+                        // Pass full context from currently focused window. The duration is
+                        // near zero on a fresh switch — that's truthful, and beats the
+                        // hardcoded "0m" the providers used to send on every path.
+                        reaction = await App.Ai.GetAwarenessReactionAsync(displayName, e.Category.ToString(), e.ServiceName, pageTitle,
+                            App.WindowAwareness?.CurrentActivityDuration);
                         if (reaction != null)
                         {
                             // No truncation - scrollable speech bubble handles long text
