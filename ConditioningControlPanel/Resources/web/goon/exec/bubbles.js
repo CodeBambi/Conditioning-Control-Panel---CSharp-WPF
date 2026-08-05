@@ -68,6 +68,8 @@
 // spirals this match has been showing, because it is one of them.
 import { pickSpiralImage } from './spiralGen.js';
 import { perfLite } from './perfTier.js';
+// The lite tier's still-preferred image draw — see drawImage() below.
+import { drawStillImage } from './media.js';
 
 export const MAX_LIVE = 26;   // hard ceiling on bubble nodes, swarm included
 /* The LITE ceiling (exec/perfTier.js — phones). Bites in refresh(), on top of
@@ -586,10 +588,14 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
     }
   }
 
-  /** An image handle from the player's own pool (null when the pool has none). */
+  /** An image handle from the player's own pool (null when the pool has none).
+   *  LITE prefers a STILL (media.js drawStillImage — a preference, never a
+   *  filter): a pop's flick and the drain hold both fire at the busiest moment
+   *  a phone has, and an animated GIF is a decode loop where a still is a
+   *  texture. Full tier: the exact draw it has always made. */
   function drawImage() {
     if (!media || typeof media.drawKind !== 'function') return null;
-    const entry = media.drawKind('image');
+    const entry = perfLite() ? drawStillImage(media) : media.drawKind('image');
     if (!entry) return null;
     const handle = (typeof media.acquire === 'function') ? media.acquire(entry) : null;
     return (handle && handle.url) ? handle : null;

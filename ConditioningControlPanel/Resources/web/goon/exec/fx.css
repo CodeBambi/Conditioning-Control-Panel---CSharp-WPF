@@ -963,3 +963,24 @@ html[data-gg-perf="lite"] .gg-vwin-inner {
 html[data-gg-perf="lite"] .gg-vwin-inner::after {
   box-shadow: inset 0 0 14px rgba(var(--gg-pink-rgb), 0.3);
 }
+
+/* PASS 2 (2026-08-05) — the per-frame FILTER loops the first pass left behind.
+ *
+ * · the GLITCH SHUDDER. ggDrainGlitch hue-rotates and saturates a FULLSCREEN
+ *   pane 12.5 times a second for up to 4s — a repeated whole-screen filter
+ *   raster, which is backdrop-filter's little sibling and lands at the same
+ *   moment the pop economy is already busy. The lite tier swaps the NAME to a
+ *   transform-only twin (the longhand outranks the shorthand's name at this
+ *   specificity), so the shudder keeps its exact timing, steps and hard cap —
+ *   it just shakes without recolouring. The full-tier keyframes are untouched.
+ * · the BOUNCE HIT pop. Each wall hit animates brightness + a drop-shadow on
+ *   a text node — an offscreen filter pass per bounce, forever, for a garnish.
+ *   The word still travels (the rAF loop is not an animation); only the flash
+ *   on impact goes. */
+html[data-gg-perf="lite"] .gg-drain.is-glitching { animation-name: ggDrainGlitchLite; }
+@keyframes ggDrainGlitchLite {
+  0%   { transform: translate(0, 0); }
+  50%  { transform: translate(-1.2%, 0); }
+  100% { transform: translate(1.2%, 0); }
+}
+html[data-gg-perf="lite"] .gg-bounce-word.is-hit { animation: none; }

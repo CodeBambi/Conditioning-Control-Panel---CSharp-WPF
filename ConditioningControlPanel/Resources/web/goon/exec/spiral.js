@@ -72,6 +72,7 @@
 import { createSpiralField, loopMsFor } from './spiralField.js';
 import { beginSpiralSession, nextSpiral } from './spiralGen.js';
 import { perfLite } from './perfTier.js';
+import { governorBusy } from './loadGovernor.js';
 
 /* --- THE SHADER KILL SWITCH. The pref is ui/prefs.js's (`shaderSpirals`,
    default TRUE); it reaches this tier as a ROOT ATTRIBUTE, because exec/ does not
@@ -101,6 +102,12 @@ export const MAX_BACKING_PX = 3840 * 2160;
    bed already spinning. ----------------------------------------------------- */
 export const LITE_MAX_DPR = 1;
 export const LITE_FRAME_MS = 33;   // ~30fps draw cadence on the lite tier
+/* …and the deeper step the bed volunteers WHILE A BURST IS ON (2026-08-05,
+   exec/loadGovernor.js): ~15fps for the squall's few seconds, because the
+   burst's decodes and the shader's fill land in the same frames and the phase
+   maths already makes a skipped draw cost pixels, never tempo. Self-restoring
+   by the governor's own deadline; the full tier never consults it. */
+export const LITE_BURST_FRAME_MS = 67;
 
 /* --- THE IN-LOOP WATCHDOG. Checked once per HEALTH_CHECK_MS, never per frame:
    gl.getError()/isContextLost() can force a sync round-trip to the driver, which
@@ -402,8 +409,10 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
       // THE LITE THROTTLE. The PHASE above advanced by real elapsed time on
       // every callback, so skipping a draw skips pixels, never tempo — a
       // 30fps bed and a 120fps bed show the same rotation at the same second.
+      // While the load governor says a payload squall is on, the bed steps
+      // down further still (LITE_BURST_FRAME_MS) and climbs back by itself.
       // Full tier: no gate at all, byte-identical to the pre-tier loop.
-      if (!perfLite() || (now - lastDraw) >= LITE_FRAME_MS) {
+      if (!perfLite() || (now - lastDraw) >= (governorBusy() ? LITE_BURST_FRAME_MS : LITE_FRAME_MS)) {
         lastDraw = now;
         draw();
       }
