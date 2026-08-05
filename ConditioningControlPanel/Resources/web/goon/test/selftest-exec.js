@@ -1834,7 +1834,9 @@ async function main() {
       'the drift is biased UPWARD, away from the mercy gutter', drift.style.getPropertyValue('--gg-vwin-dy'));
     ok(vids()[0] && String(vids()[0].src).includes('ccp.assets'),
       'the clip comes from the player own library through media.acquire', String(vids()[0] && vids()[0].src));
-    ok(vids()[0] && vids()[0].loop === false, 'it does NOT loop — a window dies when its clip ends');
+    ok(vids()[0] && vids()[0].loop === true,
+      'a PAYLOAD window LOOPS — the attack was bought for capMs, and a short clip '
+      + 'ending early must not close it (2026-08-05 phone play-test)');
 
     // The cap: 1200ms was asked for, so 1200ms is what it gets. Ran out = endured.
     await sleep(1500);
