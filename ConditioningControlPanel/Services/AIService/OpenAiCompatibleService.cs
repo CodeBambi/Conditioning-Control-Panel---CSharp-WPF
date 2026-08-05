@@ -168,6 +168,16 @@ namespace ConditioningControlPanel.Services.AIService
             return model;
         }
 
+        /// <summary>
+        /// Model identifier recorded in moderation.log. Mirrors the "local:{model}" shape the
+        /// Ollama provider uses so the compliance record says which endpoint produced the hit.
+        /// </summary>
+        private static string ModelHint()
+        {
+            var model = GetConfiguredModel();
+            return "openai_compat:" + (string.IsNullOrWhiteSpace(model) ? "unknown" : model);
+        }
+
         private static string? GetApiKey()
         {
             var raw = Settings?.OpenAiCompatibleApiKey;
@@ -362,12 +372,48 @@ namespace ConditioningControlPanel.Services.AIService
             _dailyRequestCount++;
         }
 
-        private async Task<string?> SendChatAsync(string systemPrompt, string userInput)
+        /// <summary>
+        /// Core request path.
+        ///
+        /// Moderation: if <paramref name="returnRefusalSentinel"/> is true and the input or
+        /// output trips <see cref="App.ModerationGuard"/>, returns the appropriate
+        /// <see cref="ModerationRefusal"/> sentinel string so the chat UI can render the
+        /// refusal bubble + POLICY badge. When false (awareness, keyword, lockscreen, video
+        /// paths) a moderation hit returns null and the caller silently drops the reaction —
+        /// surfacing a refusal there would be jarring (user didn't actively prompt).
+        /// </summary>
+        private async Task<string?> SendChatAsync(string systemPrompt, string userInput, bool returnRefusalSentinel = false)
         {
             if (App.Settings?.Current?.OfflineMode == true)
             {
                 App.Logger?.Debug("OpenAiCompatibleService: Offline mode enabled, skipping AI request");
                 return null;
+            }
+
+            // INPUT MODERATION (Layer 1 — code-side, prompt cannot bypass). Runs BEFORE the
+            // HTTP request so prohibited inputs never leave the client. Same semantics as the
+            // cloud and local providers.
+            var guard = App.ModerationGuard;
+            if (guard != null)
+            {
+                var inputCheck = guard.CheckInput(userInput ?? string.Empty);
+                if (!inputCheck.Allow && inputCheck.Category.HasValue)
+                {
+                    App.ModerationLog?.Record(inputCheck.Category.Value, source: "input", modelHint: ModelHint());
+                    // Only escalate the user-facing Content Policy Notice for content the user
+                    // actually typed (interactive chat path). Background/auto reactions leave
+                    // returnRefusalSentinel false and must not pop the warning — that filtering
+                    // is "on us, not on them". Logged above for compliance either way.
+                    if (returnRefusalSentinel)
+                        App.ModerationCounter?.RecordHit(inputCheck.Category.Value, "input:openai_compat");
+                    App.Logger?.Information("OpenAiCompatibleService: input blocked by ModerationGuard (category={Cat})", inputCheck.Category);
+                    return returnRefusalSentinel ? ModerationRefusal.InputSentinel : null;
+                }
+                // ProfessionalAdvice is soft (Allow=true with Category set) — log only.
+                if (inputCheck.Allow && inputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
+                {
+                    App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "input", modelHint: ModelHint());
+                }
             }
 
             var apiKey = GetApiKey();
@@ -449,7 +495,7 @@ namespace ConditioningControlPanel.Services.AIService
                     }
 
                     var content = CleanTokenizerArtifacts(contentElement.GetString());
-                    return ProcessResponse(content);
+                    return ProcessResponse(content, returnRefusalSentinel);
                 }
                 catch (HttpRequestException) when (attempt == 0)
                 {
@@ -491,17 +537,54 @@ namespace ConditioningControlPanel.Services.AIService
             return messages;
         }
 
-        private string? ProcessResponse(string? content)
+        /// <summary>
+        /// OUTPUT MODERATION (Layer 1). Returns true when <paramref name="text"/> is safe to
+        /// show. On a block, <paramref name="refusal"/> carries the value the caller must
+        /// return — the sentinel on the interactive chat path, null everywhere else.
+        /// </summary>
+        private static bool PassesOutputModeration(string? text, bool returnRefusalSentinel, out string? refusal)
+        {
+            refusal = null;
+
+            var guard = App.ModerationGuard;
+            if (guard == null) return true;
+
+            var outputCheck = guard.CheckOutput(text ?? string.Empty);
+            if (!outputCheck.Allow && outputCheck.Category.HasValue)
+            {
+                App.ModerationLog?.Record(outputCheck.Category.Value, source: "output", modelHint: ModelHint());
+                // Model OUTPUT that trips the filter is never the user's doing, so it does NOT
+                // escalate the Content Policy Notice (logged above for compliance only). The
+                // warning is reserved for user-typed input.
+                App.Logger?.Information("OpenAiCompatibleService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
+                refusal = returnRefusalSentinel ? ModerationRefusal.OutputSentinel : null;
+                return false;
+            }
+            if (outputCheck.Allow && outputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
+            {
+                App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "output", modelHint: ModelHint());
+            }
+
+            return true;
+        }
+
+        private string? ProcessResponse(string? content, bool returnRefusalSentinel)
         {
             if (string.IsNullOrWhiteSpace(content))
                 return null;
 
             var effectsEnabled = App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects == true;
             if (!effectsEnabled)
-                return content;
+                return PassesOutputModeration(content, returnRefusalSentinel, out var plainRefusal) ? content : plainRefusal;
 
             var parsed = _parser.Parse(content);
             var commands = parsed.Commands;
+
+            // Moderate the user-visible text (JSON effects wrapper already stripped) BEFORE
+            // executing anything, as the local provider does: a blocked turn fires no effects
+            // and shows no text.
+            if (!PassesOutputModeration(parsed.CleanText, returnRefusalSentinel, out var blockedRefusal))
+                return blockedRefusal;
 
             if (commands.Count > 0)
             {
@@ -544,7 +627,21 @@ namespace ConditioningControlPanel.Services.AIService
                 return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
 
             var prompt = _bambiSprite.GetSystemPrompt();
-            var reply = await SendChatAsync(prompt, userInput).ConfigureAwait(false);
+            // Interactive path: a moderation block must surface as a POLICY bubble, not a
+            // silent drop, so ask for the refusal sentinel here (and only here).
+            var reply = await SendChatAsync(prompt, userInput, returnRefusalSentinel: true).ConfigureAwait(false);
+
+            var refusalSource = ModerationRefusal.GetSource(reply);
+            if (refusalSource.HasValue)
+            {
+                // Category was already logged inside SendChatAsync; the sentinel string can't
+                // carry it, so we surface only the source here.
+                return new AiReplyResult(
+                    string.Empty,
+                    IsAiGenerated: false,
+                    Refusal: new ModerationRefusalInfo(Category: null, Source: refusalSource.Value));
+            }
+
             if (string.IsNullOrWhiteSpace(reply))
                 return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
 
