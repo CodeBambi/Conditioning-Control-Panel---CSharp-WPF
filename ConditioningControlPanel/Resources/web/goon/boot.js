@@ -995,6 +995,16 @@ function attachMatch(match, transport) {
   try {
     if (prefs.get('voiceNotesEnabled')) match.setLocalVoiceNotes(true);
   } catch (e) { logger.warn('setLocalVoiceNotes threw: ' + ((e && e.message) || e)); }
+  /* SENDING DEFAULTS ON (owner call, 2026-08-05). Sending is free for every
+   * seat now and "my attacks carry MY media" is the product, so the standing
+   * answer is yes unless this player has explicitly unticked the lobby box
+   * before (prefs 'mediaTransferEnabled' === false — the checkbox writes it).
+   * Same seam as the voice seeding above, for the same rebuild reason; the
+   * engine still refuses the call outside Lobby/Consent, and the peer still
+   * has to be opted in too before a single byte moves. */
+  try {
+    if (prefs.get('mediaTransferEnabled') !== false) match.setMediaTransfer(true);
+  } catch (e) { logger.warn('setMediaTransfer threw: ' + ((e && e.message) || e)); }
   /* KEEP THE SCREEN ON for the duration. A phone that dims and locks mid-Live is
    * an unintended mercy; the lock is match-scoped (start here, stop in
    * detachMatch) so an idle title screen never holds one. Unsupported = no-op. */

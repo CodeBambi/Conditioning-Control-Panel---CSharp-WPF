@@ -134,6 +134,13 @@ export const S = Object.freeze({
     transferNoPremium: 'sending is a supporter perk — you can still receive theirs.',
     transferPeerOld: 'their app is too old for this — nothing crosses either way.',
     transferRelay: 'only on a direct connection. this one is relayed.',
+    /**
+     * ICE is still deciding (2026-08-05). The old code showed transferRelay
+     * during the 10-20s negotiation window, players read the terminal verdict,
+     * confirmed consent without the box, and the un-grey a few seconds later
+     * went unseen — the peer then spent the whole match "toggle off".
+     */
+    transferConnecting: 'checking the connection — this unlocks if it comes up direct…',
     transferTheirsOn: 'they opted in',
     transferTheirsOff: 'they have not',
     /* --- "they are still picking their media" (the `media_prep` wire message).

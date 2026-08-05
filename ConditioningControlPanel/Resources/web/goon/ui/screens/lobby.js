@@ -289,12 +289,19 @@ export function mount(container, ctx) {
     const caps = (ctx.session && ctx.session.caps) || {};
     const t = getTransport ? getTransport() : null;
     const onP2P = !!(t && t.state === GoonTransportState.ConnectedP2P);
+    /* Only a transport that has SETTLED somewhere else gets the terminal
+     * "relayed" sentence. During Signaling/ConnectingP2P the honest answer is
+     * "still deciding" — showing the verdict early is how the 2026-08-05
+     * play-test phone confirmed consent with the box greyed and spent the
+     * whole match reading "their toggle is off" on the other screen. */
+    const stillDeciding = !!(t && (t.state === GoonTransportState.Signaling
+      || t.state === GoonTransportState.ConnectingP2P));
     const editable = match.phase === GoonMatchPhase.Consent || match.phase === GoonMatchPhase.Lobby;
 
     let why = '';
     if (caps.mediaTransfer !== true) why = S.lobby.transferNoPremium;
     else if (!match.peerSupportsTransfer) why = S.lobby.transferPeerOld;
-    else if (!onP2P) why = S.lobby.transferRelay;
+    else if (!onP2P) why = stillDeciding ? S.lobby.transferConnecting : S.lobby.transferRelay;
 
     if (document.activeElement !== xferRow.input) xferRow.input.checked = !!match.localMediaTransfer;
     xferRow.input.disabled = !!why || !editable;
@@ -359,6 +366,9 @@ export function mount(container, ctx) {
   // already paints on a clear is the whole visible half.
   ledger.listen(xferRow.input, 'change', () => {
     match.setMediaTransfer(!!xferRow.input.checked);
+    // The STANDING answer, not just this match's: boot seeds the next lobby
+    // from it (default ON since 2026-08-05; an untick here is the opt-out).
+    prefs?.set?.('mediaTransferEnabled', !!xferRow.input.checked);
     paintTransfer();
     paintConfirm();
   });
