@@ -12,7 +12,7 @@ namespace CcpClient.Tests;
 /// guard for the clear → panic → re-arm → re-persist sequence through the real pipeline
 /// + store.
 /// </summary>
-public class AiMemoryPanicRearmTests
+public class CompanionMemoryRearmTests
 {
     private sealed class StubProvider : IAiProvider
     {

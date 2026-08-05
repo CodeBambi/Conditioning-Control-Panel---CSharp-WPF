@@ -130,6 +130,7 @@ Consult answers: (a) no dishonest discharge found beyond the four items; (b) the
 - Step 1 plan review (`spine_review_step step=1 type=plan`): **SKIPPED by runtime** — SP-195 nested-spawn block; artifact `.reviews/1-20260805T001731.md`; `spawnFailed=false` → proceed (engine-owned reviews run post-.DONE).
 - Step 2 plan review (`spine_review_step step=2 type=plan`): **SKIPPED by runtime** — same SP-195 block; artifact `.reviews/2-20260805T005252.md`; `spawnFailed=false` → proceed.
 - Step 3 plan review (`spine_review_step step=3 type=plan`): **SKIPPED by runtime** — same SP-195 block; artifact `.reviews/3-20260805T011003.md`; `spawnFailed=false` → proceed.
+- Step 4 plan review (`spine_review_step step=4 type=plan`): **SKIPPED by runtime** — same SP-195 block; artifact `.reviews/4-20260805T015105.md`; `spawnFailed=false` → proceed.
 
 ## 5. Evidence summary
 
@@ -189,7 +190,7 @@ Re-grep found 10 call sites in exactly the 6 PROMPT-named files; all migrated to
 1. **A REAL Ollama (0.32.5) now runs on this box** (127.0.0.1:11434; SP-019 limit 1 said absent at spike time). First full-suite run failed 6 tests on environment assumptions (mine asserted Unavailable; pre-existing lab test flaked under parallel load — passed isolated and in the final run). Assertions rewritten environment-honest (typed state either way); the deterministic lab stays the headed instrument via `--ai-ollama-host` (never the live model).
 2. **avalonia-live silent-param drops bite twice:** (a) `windowId` on click_at/get_text — clicks need `handle`/`selector` + top-level-relative coords; `automation_action invoke` did not fire Button.Click (click_at works); (b) **`windowId` on screenshot_window** — the ENTIRE first pixel pass captured the MainWindow, caught only by the dimension check (520x680 vs 480x620). Every pixel capture re-taken with `target`. The skill's "confirm the PNG exists with nonzero dimensions" rule is what caught it — dimensions MEAN the right window.
 3. **Focus needs layout:** focusing a just-visible control is a no-op until a layout pass — the default-No focus posts at `DispatcherPriority.Loaded`; the headless seat still couldn't prove focus (moved to the headed `get_focused_element` proof, which DID prove it).
-4. **The memory-persist "defect" was my own inspection bug:** the file-JSON field is camelCase `turns`; my node one-liner read `j.Turns` and reported EMPTY — I nearly root-caused a nonexistent store defect. A real repro test (`AiMemoryPanicRearmTests`) proved the live behavior correct (clear → panic → re-arm → re-persist works) and stayed as the regression guard. **Verify the inspection before the machinery.**
+4. **The memory-persist "defect" was my own inspection bug:** the file-JSON field is camelCase `turns`; my node one-liner read `j.Turns` and reported EMPTY — I nearly root-caused a nonexistent store defect. A real repro test (`CompanionMemoryRearmTests`) proved the live behavior correct (clear → panic → re-arm → re-persist works) and stayed as the regression guard. **Verify the inspection before the machinery.**
 
 **Durable-lesson candidates (orchestrator reconciles — enabler 2):**
 1. **Environment facts rot:** "no Ollama on the evidence box" was a spike-time fact that became false; capability assertions must be written typed-state-honest, never environment-assumed. (Class: evidence honesty.)
