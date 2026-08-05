@@ -1,0 +1,69 @@
+--- mode: debug
+ARTIFACT debug: C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260805T030213\lane-2\client\src\CcpClient.Desktop\bin\Debug\net10.0\CcpClient.Desktop.exe
+GATE2 debug: PASS - verify-assets exit 0 (verify-assets: PASS (1551 manifest entries, all required embedded assets open))
+GATE3 debug: PASS - version: 0.1.0+7a6e61b5a22fb004903b45f250a659f3b0f2396f (prefix == authority 0.1.0)
+dtrh: payload root 'C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260805T030213\lane-2\client\src\CcpClient.Desktop\bin\Debug\net10.0\payload\dtrh' -> Present (1542 files)
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)
+layout-probe: card 488.0x77.1 DIP @ scale 1.75 @ screen 216,310
+app: Exit — teardown begin
+dtrh: participant stop begin
+dtrh: participant stop end
+app: teardown end
+GATE4 debug: PASS - fresh-profile graceful exit 0; layout-probe: card 488.0x77.1 DIP @ scale 1.75 @ screen 216,310; no settings.json created
+persistence: settings file unreadable; preserved at C:\Users\Micha\AppData\Roaming\CcpClient\settings.corrupt-20260805-053938.json before falling back to flagged defaults
+dtrh: payload root 'C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260805T030213\lane-2\client\src\CcpClient.Desktop\bin\Debug\net10.0\payload\dtrh' -> Present (1542 files)
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)
+layout-probe: card 488.0x77.1 DIP @ scale 1.75 @ screen 392,486
+app: Exit — teardown begin
+dtrh: participant stop begin
+dtrh: participant stop end
+app: teardown end
+GATE5 debug: PASS - corrupt-settings graceful exit 0; quarantine preserved original bytes at C:\Users\Micha\AppData\Roaming\CcpClient\settings.corrupt-20260805-053938.json
+GATE7 debug: PASS - no log files beside artifact or in config dir (logging honestly absent)
+--- mode: release
+ARTIFACT release: C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260805T030213\lane-2\client\src\CcpClient.Desktop\bin\Release\net10.0\CcpClient.Desktop.exe
+GATE2 release: PASS - verify-assets exit 0 (verify-assets: PASS (1551 manifest entries, all required embedded assets open))
+GATE3 release: PASS - version: 0.1.0+58df6490fa06e4a9447c233ac0157d02113cc786 (prefix == authority 0.1.0)
+dtrh: payload root 'C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260805T030213\lane-2\client\src\CcpClient.Desktop\bin\Release\net10.0\payload\dtrh' -> Present (1542 files)
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)
+layout-probe: card 488.0x77.1 DIP @ scale 1.75 @ screen 172,266
+app: Exit — teardown begin
+dtrh: participant stop begin
+dtrh: participant stop end
+app: teardown end
+GATE4 release: PASS - fresh-profile graceful exit 0; layout-probe: card 488.0x77.1 DIP @ scale 1.75 @ screen 172,266; no settings.json created
+persistence: settings file unreadable; preserved at C:\Users\Micha\AppData\Roaming\CcpClient\settings.corrupt-20260805-053950.json before falling back to flagged defaults
+dtrh: payload root 'C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260805T030213\lane-2\client\src\CcpClient.Desktop\bin\Release\net10.0\payload\dtrh' -> Present (1542 files)
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)
+layout-probe: card 488.0x77.1 DIP @ scale 1.75 @ screen 304,398
+app: Exit — teardown begin
+dtrh: participant stop begin
+dtrh: participant stop end
+app: teardown end
+GATE5 release: PASS - corrupt-settings graceful exit 0; quarantine preserved original bytes at C:\Users\Micha\AppData\Roaming\CcpClient\settings.corrupt-20260805-053950.json
+GATE7 release: PASS - no log files beside artifact or in config dir (logging honestly absent)
+--- mode: published
+ARTIFACT published: C:\Users\Micha\AppData\Local\Temp\ccp-sp010-portable\CcpClient.Desktop.exe
+GATE2 published: PASS - verify-assets exit 0 (verify-assets: PASS (1551 manifest entries, all required embedded assets open))
+GATE3 published: PASS - version: 0.1.0+58df6490fa06e4a9447c233ac0157d02113cc786 (prefix == authority 0.1.0)
+dtrh: payload root 'C:\Users\Micha\AppData\Local\Temp\ccp-sp010-portable\payload\dtrh' -> Present (1542 files)
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)
+layout-probe: card 488.0x77.1 DIP @ scale 1.75 @ screen 172,266
+app: Exit — teardown begin
+dtrh: participant stop begin
+dtrh: participant stop end
+app: teardown end
+GATE4 published: PASS - fresh-profile graceful exit 0; layout-probe: card 488.0x77.1 DIP @ scale 1.75 @ screen 172,266; no settings.json created
+persistence: settings file unreadable; preserved at C:\Users\Micha\AppData\Roaming\CcpClient\settings.corrupt-20260805-054009.json before falling back to flagged defaults
+dtrh: payload root 'C:\Users\Micha\AppData\Local\Temp\ccp-sp010-portable\payload\dtrh' -> Present (1542 files)
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)
+layout-probe: card 488.0x77.1 DIP @ scale 1.75 @ screen 348,442
+app: Exit — teardown begin
+dtrh: participant stop begin
+dtrh: participant stop end
+app: teardown end
+GATE5 published: PASS - corrupt-settings graceful exit 0; quarantine preserved original bytes at C:\Users\Micha\AppData\Roaming\CcpClient\settings.corrupt-20260805-054009.json
+GATE7 published: PASS - no log files beside artifact or in config dir (logging honestly absent)
+GATE8 published: PASS - native sidecars observed: aspnetcorev2_inprocess.dll 0.4MB, av_libglesv2.dll 5.1MB, libHarfBuzzSharp.dll 1.7MB, libSkiaSharp.dll 11.1MB, miniaudio.dll 0.7MB
+GATE6 all: PASS - data path identical across modes (C:\Users\Micha\AppData\Roaming\CcpClient); published ran from MOVED dir C:\Users\Micha\AppData\Local\Temp\ccp-sp010-portable
+MATRIX PASS (windows)

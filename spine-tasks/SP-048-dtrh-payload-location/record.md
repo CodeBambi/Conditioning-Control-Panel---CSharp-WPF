@@ -159,3 +159,50 @@ Applied corrections:
 3. **Anti-invented-work:** "Do not manufacture a product change to feel like you did
    something" — the guard is the minimal change because the contract's
    `fileScopeMustChange` names `Features/Dtrh/`; nothing larger is justified.
+
+## Step 3: published boot proof + evidence + pre-completion consult
+
+### 3.1 Published win-x64 boots the DTRH host from the decided location (falsifiable)
+
+The published artifact (re-published AFTER the Step-2 guard, clean output dir) was copied
+to a MOVED location (`%TEMP%\ccp-sp048-portable` — the consult's falsifiability
+correction: proves the server does NOT read the repo tree) and booted:
+
+`CcpClient.Desktop.exe --dtrh-demo --dtrh-quick --dtrh-auto-close 30` → **exit 0**
+(transcript: `published-boot.log`, 165 lines). Needles:
+
+- **Line 1 (the guard, self-evidencing):** `dtrh: payload root
+  'C:\Users\Micha\AppData\Local\Temp\ccp-sp048-portable\payload\dtrh' -> Present (1542 files)`
+  — the served root is the MOVED publish copy, named in the transcript. Repo-tree serving
+  is disproven by the path itself.
+- `dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)` — §4 origins live.
+- WebView2 embedded surface AdapterCreated (Blink 151.0.4129.59) — the real engine.
+- `dtrh: ready received — flushing init+manifest` — **engine live** on the published binary.
+- **105 payload GETs → 200 `(page:payload)` + 1 `(page:overlay)`** (bridge.js shadow —
+  overlay-first provenance visible in the route-class logs). §4 contract green.
+- `dtrh: exit-done received — closing (graceful fast path)` + process exit 0.
+- Noise honestly named: favicon.ico 404 (route discipline), the post-exit WebView2
+  `Chrome_WidgetWin_0` unregister stderr line (runtime teardown noise after exit-done,
+  not a product failure).
+
+Scope honesty: boot evidence via the existing `--dtrh-demo` boot-matrix harness (headed
+laptop run) — the same evidence class SP-023's Windows half used, now against the
+PUBLISHED single-file binary from a moved directory. Linux publish = named limit
+(WSL zero distros — owner-gated, never faked).
+
+### 3.2 `--verify-assets` on the published artifact in the decided shape
+
+Run against the MOVED publish copy: `asset OK copied: 1544 entries present, case-exact,
+sweep clean` + `verify-assets: PASS (1551 manifest entries)` — **exit 0**.
+
+### 3.3 SP-010 publish gates — non-regression (full matrix)
+
+`pwsh client/tools/publish/matrix.ps1 -Mode all` → **MATRIX PASS (windows), exit 0**
+(transcript: `matrix-transcript.txt`, 18 PASS lines, zero FAIL): gates 2 (--verify-assets),
+3 (--version authority), 4 (fresh-profile), 5 (corrupt-settings quarantine, original
+bytes preserved), 6 (data-path identity across modes, published from MOVED dir), 7
+(logs-absence), 8 (native-deps floor) — debug + release + published all green.
+
+### 3.4 Pre-completion solo consult
+
+(pending — verdict + actual answering model recorded here before the checkbox)
