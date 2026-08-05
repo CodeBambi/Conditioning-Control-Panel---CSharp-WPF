@@ -951,12 +951,41 @@ async function main() {
     ok(/body:has\(#gg-stage\s*>\s*\*\)\s*\.gg-flash--hydra\s*\{[^}]*pointer-events:\s*none/.test(css),
       'the .gg-flash--hydra :has() rule is still there — flashes ARE scenery');
 
-    // ---- the heat split: the FIELD is exempt, the pop WASHES are not
+    /* ---- the heat split: the FIELD and the SPIRAL BED are exempt, the flat
+     * washes are not.
+     *
+     * THE SPIRAL CHANGED SIDES ON 2026-08-05 (owner play-test: "spirals
+     * sometimes render as a frozen static image"). It used to be in the loop
+     * below, and that pin was pinning the bug. goon.css flips --gg-deco-play to
+     * `paused` at html[data-gg-fx="hot"]; exec/layers.js calls hot at THREE
+     * concurrent effects; core/draft.js reaches three on an ordinary mid-match
+     * beat (Bubbles are always on, ROLL_SEGMENT_OVERLAP is 2). And this pane's
+     * entire content is a baked still whose only motion is ggSpiralSpin — so
+     * parking it does not calm the effect down, it replaces the effect with a
+     * photograph. That is the .gg-mon-proj bug ui/hud.css already had to fix for
+     * the opponent monitor's minis (selftest-hud §12b), and the bed now carries
+     * the same exemption, in the same shape, for the same reason. .gg-pink and
+     * .gg-drain stay parked: a wash that holds still is still a wash. */
     ok(!!base && /--gg-deco-play:\s*running/.test(base),
       'the bubble re-declares --gg-deco-play (gameplay, exempt from heat parking)');
     ok(/\.gg-bubble-wrap\s*\{[^}]*--gg-deco-play:\s*running/.test(css),
       'and so does its rising wrap');
-    for (const wash of ['.gg-spiral', '.gg-pink', '.gg-drain']) {
+    const spiralRule = ruleOf('.gg-spiral');
+    ok(!!spiralRule, 'fx.css still has the .gg-spiral bed rule', String(spiralRule));
+    ok(!!spiralRule && /--gg-deco-play:\s*running/.test(spiralRule),
+      'the spiral bed re-declares --gg-deco-play: running — a parked spiral is a still photo, not a saved frame',
+      String(spiralRule));
+    ok(!!spiralRule && /animation-play-state:\s*var\(--gg-deco-play/.test(spiralRule),
+      '…and still RIDES the token, so the exemption is load-bearing rather than ornamental (the .gg-mon-proj shape)',
+      String(spiralRule));
+    ok(!/--gg-deco-play:\s*paused/.test(css),
+      'and nothing in fx.css re-pauses anything: goon.css owns the armor switch, this file only opts out of it',
+      (/[^\n]*--gg-deco-play:\s*paused[^\n]*/.exec(css) || [''])[0]);
+    // The HARD off switch still beats the exemption: `paused` is a heat dial,
+    // `animation: none` is a person telling us they do not want motion.
+    ok(/prefers-reduced-motion[\s\S]*\.gg-spiral\s*\{[^}]*animation:\s*none/.test(css),
+      'prefers-reduced-motion still stops the spiral outright');
+    for (const wash of ['.gg-pink', '.gg-drain']) {
       const body = ruleOf(wash);
       ok(body === null || !/--gg-deco-play:\s*running/.test(body),
         `${wash} is decoration and still parks at hot heat`, String(body));
@@ -3685,7 +3714,19 @@ async function main() {
       sp.stop();
     }
 
-    // ------------------------------------------ the watchdog: rAF gap > 4s
+    /* ------------------------------------------ the watchdog: rAF gap > 4s
+     *
+     * TWO WITNESSES, NOT ONE (2026-08-05). This used to be a one-strike test of
+     * a one-strike rule: a single gap over RAF_STALL_MS while the page called
+     * itself visible set rasterLocked, which is FOREVER for that pane. A 4s
+     * frame gap is not only ever a dead driver, though — a major GC, an
+     * occluded or dragged WPF window, a power-state change, an app switch a
+     * WebView2 host never reports as a visibilitychange — and every one of
+     * those cost the player the shader for the rest of the effect on the
+     * strength of one hiccup. The first oversized gap now only makes the pane a
+     * SUSPECT and re-seeds the clocks; it takes a second one, measured on a
+     * fresh pair of frames, to convict. A real hang keeps hanging and loses its
+     * shader a health check later than it used to. */
     {
       const sp = fresh();
       ok(!!canvasOf(), 'woven, loop armed');
@@ -3693,9 +3734,29 @@ async function main() {
       pump(2000);            // a healthy 1s gap
       ok(!!canvasOf(), 'a normal frame cadence is left alone', String(SP.HEALTH_CHECK_MS));
       pump(2000 + SP.RAF_STALL_MS + 500);
+      ok(!!canvasOf(),
+        `ONE gap over RAF_STALL_MS (${SP.RAF_STALL_MS}) is a hitch, not a hang — the pane keeps its shader and is merely watched`);
+      pump(11000);           // the re-seeded poll clock starts again here
+      pump(16000);           // …and this pair is oversized too: corroborated
       ok(!canvasOf(),
-        `frame callbacks more than RAF_STALL_MS (${SP.RAF_STALL_MS}) apart, while the pane believes it is drawing, drop it to raster`);
+        'a SECOND oversized gap, on a fresh pair of frames, is the hang — now it drops to raster');
       ok(inlineOf('filter') === '', 'landing in the BLURRED raster branch, not a blurless hybrid', inlineOf('filter'));
+      sp.stop();
+    }
+
+    // --- ...and two hitches with a healthy check between them are two hitches.
+    //     The suspicion is cleared by any clean poll, so only CONSECUTIVE
+    //     oversized gaps convict — otherwise one hiccup a minute would sentence
+    //     a perfectly good GPU by attrition.
+    {
+      const sp = fresh();
+      pump(1000);
+      pump(1000 + SP.RAF_STALL_MS + 500);     // hitch 1 -> suspect
+      pump(6000);                              // re-seed
+      pump(7000);                              // a clean check clears it
+      pump(7000 + SP.RAF_STALL_MS + 500);      // hitch 2, a whole check later
+      ok(!!canvasOf(),
+        'two isolated hitches with a healthy check between them keep the shader — the witnesses have to be consecutive');
       sp.stop();
     }
 
@@ -3726,6 +3787,69 @@ async function main() {
       cv.fire('webglcontextrestored');
       ok(!!canvasOf(), 'so a polled loss can still re-upgrade');
       sp.stop();
+    }
+
+    /* --------------------- HOT HEAT IS A GEAR, NOT A HANDBRAKE (2026-08-05)
+     *
+     * The owner play-tested "spirals sometimes render as a frozen static
+     * image", and the woven half of that was here: step() opened with
+     * `if (!parked())`, so at html[data-gg-fx="hot"] the phase stopped
+     * advancing and the canvas held its last frame — for the whole cue, because
+     * exec/executor.js syncHeat()s a payload INTO the effect count before
+     * renderPayload runs it, so a spiral landing as the third effect was born
+     * parked. And three effects is not a storm: Bubbles are always on and two
+     * rolled elements overlap (core/draft.js).
+     *
+     * The frame budget the armor protects is real, so the answer is a cadence,
+     * not a stop: heat borrows the lite tier's burst step through the SAME
+     * dueForDraw() gate the phone diet uses. What this block pins is the
+     * difference between "fewer frames" and "no frames" — under the old code
+     * every count below would have been zero. (The phase advancing on every
+     * callback regardless is not observable through a fake GL; it is pinned by
+     * dueForDraw's own contract further down, which never gates the phase.) */
+    {
+      documentElement.setAttribute('data-gg-fx', 'hot');
+      const sp = fresh();
+      ok(!!canvasOf(), 'a hot stack still weaves a bed');
+      const opened = draws;
+      pump(1000);
+      ok(draws === opened + 1,
+        'and it DRAWS while hot — the old code held one frame for the whole cue', String(draws - opened));
+      const mark = draws;
+      pump(1010);
+      ok(draws === mark,
+        'a frame 10ms later is throttled away: hot is a gear, and this is the gear', String(draws - mark));
+      pump(1000 + SP.LITE_BURST_FRAME_MS);
+      ok(draws === mark + 1,
+        `the gate opens again at LITE_BURST_FRAME_MS (${SP.LITE_BURST_FRAME_MS}ms) — reduced fps, never zero fps`,
+        String(draws - mark));
+      ok(rafQ.length > 0, 'and the loop keeps re-arming itself through the heat', String(rafQ.length));
+      sp.stop();
+      documentElement.setAttribute('data-gg-fx', 'idle');
+    }
+
+    /* ------ THE RESUMES visibilitychange DOES NOT COVER (2026-08-05, RC#2's
+     * other half). A bfcache restore arrives as `pageshow`; a WebView2/WPF host
+     * that was occluded, minimised or behind another window can hand the page
+     * back with nothing but a window `focus`, having reported visibilityState
+     * 'visible' the entire time it was not being composited. Both deliver one
+     * enormous frame gap and neither is a hang. They cannot be exercised here —
+     * node defines no global addEventListener at all, which is exactly why the
+     * renderer guards on `typeof` — so the wiring is pinned by reading it. */
+    {
+      const fs = await import('node:fs/promises');
+      const url = await import('node:url');
+      const src = (await fs.readFile(url.fileURLToPath(new URL('../exec/spiral.js', import.meta.url)), 'utf8'))
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+      for (const evt of ['pageshow', 'focus']) {
+        ok(new RegExp(`(^|[^.\\w])addEventListener\\('${evt}'`, 'm').test(src),
+          `the woven bed listens for ${evt} — a resume is not a stall`);
+        ok(new RegExp(`removeEventListener\\('${evt}'`).test(src),
+          `…and drops that listener on teardown (a window listener outliving its pane is a leak)`);
+      }
+      ok(/lastTs = 0; lastCheck = 0; stallSuspect = false;/.test(src),
+        'and every resume zeroes BOTH clocks and the suspicion — a resume must not be the second witness');
     }
 
     // --------------------------------------------------- IDLE DISCIPLINE

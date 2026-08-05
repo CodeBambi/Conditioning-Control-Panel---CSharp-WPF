@@ -239,10 +239,10 @@ body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default
  * HEAT-EXEMPT. The field is GAMEPLAY, not ambience: it runs the whole match and
  * popping it is how the arsenal gets fed (exec/bubbles.js -> ui/drops.js), so a
  * frozen bubble is a broken economy, not a saved frame. The two rules below
- * re-declare --gg-deco-play exactly the way .gg-mon-proj does in ui/hud.css, and
- * they are the ONLY exemption in this layer: the pop WASHES (.gg-spiral,
- * .gg-drain.is-glitching, the pop flashes) are decoration and still park at
- * html[data-gg-fx="hot"].
+ * re-declare --gg-deco-play exactly the way .gg-mon-proj does in ui/hud.css.
+ * The SPIRAL bed joined them on 2026-08-05 for its own reasons (see its banner);
+ * the remaining pop washes (.gg-drain.is-glitching, the pop flashes) are
+ * decoration and still park at html[data-gg-fx="hot"].
  * ------------------------------------------------------------------------ */
 .gg-bubble-wrap {
   position: absolute;
@@ -361,6 +361,29 @@ body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default
  * path cancels this keyframe with an inline `animation` SHORTHAND and clears it
  * again with '' on the way back, and a shorthand clear takes every longhand it
  * owns with it.
+ *
+ * HEAT-EXEMPT (2026-08-05, owner play-test: "spirals sometimes render as a
+ * frozen static image"). THIS IS THE .gg-mon-proj BUG, WORD FOR WORD — the one
+ * ui/hud.css already had to fix for the opponent monitor's minis, pinned in
+ * test/selftest-hud.js §12b. The bed rode --gg-deco-play, goon.css flips that to
+ * `paused` at html[data-gg-fx="hot"], and exec/layers.js calls "hot" at THREE
+ * concurrent effects — which is not a rare storm, it is a normal mid-match
+ * moment: Bubbles are an always-on baseline (core/draft.js ALWAYS_ON_ELEMENT)
+ * and ROLL_SEGMENT_OVERLAP is 2, so two rolled elements plus the field IS three.
+ * The result was not a saved frame; it was A SPIRAL THAT IS A PHOTOGRAPH. The
+ * spin is not garnish on this pane — the pane's ENTIRE content is a baked still
+ * whose only motion is this keyframe, so parking it does not make the effect
+ * cheaper-and-calmer, it makes the effect NOT THE EFFECT. (Compare .gg-drain and
+ * .gg-pink, which stay parked quite happily: their picture is still a picture
+ * when it holds still.) A spiral is also gameplay, not chrome — it is a payload
+ * somebody spent charge to land and a duel element the ramp is scoring.
+ *
+ * So it re-declares the token exactly the way .gg-mon-proj does. The woven path
+ * has the identical exemption written in JS (exec/spiral.js step() throttles at
+ * hot instead of stopping), because a canvas cannot inherit a CSS custom
+ * property's intent. Reduced motion still stops this pane dead at the bottom of
+ * the file, and that is deliberate: `paused` is a heat dial, `animation: none`
+ * is a person telling us they do not want it to move.
  * ------------------------------------------------------------------------ */
 .gg-spiral {
   position: absolute;
@@ -373,6 +396,7 @@ body:has(#gg-stage > *) .gg-flash--hydra { pointer-events: none; cursor: default
   filter: blur(1.1px);
   will-change: opacity, transform;
   transition: opacity var(--gg-spiral-fade, 450ms) ease;
+  --gg-deco-play: running;         /* a parked spiral is a still photo — see the banner */
   animation: ggSpiralSpin var(--gg-spiral-spin, 14s) linear infinite var(--gg-spiral-dir, normal);
   animation-play-state: var(--gg-deco-play, running);
 }
