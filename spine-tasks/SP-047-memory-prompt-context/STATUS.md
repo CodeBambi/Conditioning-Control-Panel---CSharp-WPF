@@ -1,13 +1,13 @@
 ## STATUS: SP-047 — Wire companion memory into prompt context
 **Current Step:** Step 1 — archaeology + assembly design + pre-approach consult
-**Last Updated:** 2026-08-05 (authored)
+**Last Updated:** 2026-08-05 (Step 1 in progress)
 **Blockers:** none
 
 ### Step 1: archaeology + design + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] WPF archaeology (assembly shape, load-gating :113, ambient stateless, enrichment exclusion)
-- [ ] Design (assembly seam, read-gating behavior port, tension recorded, surface line update)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Update STATUS.md before starting work
+- [x] WPF archaeology (assembly shape, load-gating :113, ambient stateless, enrichment exclusion)
+- [x] Design (assembly seam, read-gating behavior port, tension recorded, surface line update)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: assembly implementation + tests
 - [ ] Assembly seam (interactive requests carry the store's pairs)
