@@ -173,6 +173,23 @@ export function createOptions({ prefs, audio = null, session = null, setFullscre
     body.appendChild(shaders.node);
     body.appendChild(el('p', { class: 'gg-panel-note', text: S.options.shaderSpiralsNote }));
 
+    /* LITE GRAPHICS — the device performance tier, and the third mid-match
+     * comfort knob in this run: the moment a player wants it is the moment the
+     * match is dropping frames. The toggle READS the resolved answer off
+     * <html data-gg-perf> (the pref may still be 'auto' — phones detect lite,
+     * desks full) and a touch writes the EXPLICIT tier, the same one-way door
+     * out of 'auto' the arsenal handle uses. The stamp itself is boot.js's:
+     * it subscribes to `perfMode` and re-applies exec/perfTier.js, because
+     * resolving 'auto' needs the detector and ui/ never imports exec/. */
+    const perf = toggleRow(S.options.perfLite,
+      () => {
+        try { return doc.documentElement.getAttribute('data-gg-perf') === 'lite'; }
+        catch (_e) { return false; }
+      },
+      (v) => prefs.set('perfMode', v ? 'lite' : 'full'));
+    body.appendChild(perf.node);
+    body.appendChild(el('p', { class: 'gg-panel-note', text: S.options.perfLiteNote }));
+
     /* OPPONENT AVATARS — the viewer's half of the Discord sharing feature
      * (contract §1). It is offered mid-match like the two knobs above it,
      * because it is the same kind of switch: what MY screen shows me. Turning
