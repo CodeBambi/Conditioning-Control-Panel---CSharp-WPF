@@ -164,7 +164,8 @@ globalThis.window = { innerWidth: 1280, innerHeight: 720 };
 const { createExecutor, PAYLOAD_ELEMENT } = await import('../exec/executor.js');
 const { createLockCardView } = await import('../exec/lockCards.js');
 const layers = await import('../exec/layers.js');
-const { pickSpiralUrl, SPIRAL_POOL } = await import('../exec/spiral.js');
+const spiralGen = await import('../exec/spiralGen.js');
+const spiralField = await import('../exec/spiralField.js');
 const { GoonElement, GoonPayloadKind } = await import('../core/contracts.js');
 const { localMonotonicMs } = await import('../core/clock.js');
 
@@ -455,23 +456,171 @@ async function main() {
     ok(PAYLOAD_ELEMENT[GoonPayloadKind.Spiral] === GoonElement.Spiral,
       'GoonPayloadKind.Spiral routes to GoonElement.Spiral', String(PAYLOAD_ELEMENT[GoonPayloadKind.Spiral]));
 
-    // The pool is the DtRH bundle, read off the same ccp.game origin — MINUS
-    // sp7.gif. Every entry is a dithered 256-colour file blown up to COVER the
-    // window, and at 360x360 sp7's dither read as crawling grain rather than
-    // shading (owner-approved cull, 2026-08-03). The FILE stays on disk: DtRH
-    // owns it and still draws it.
-    ok(SPIRAL_POOL.length === 6, 'the bundled spiral pool has 6 entries', String(SPIRAL_POOL.length));
-    ok(!SPIRAL_POOL.includes('sp7.gif'), 'sp7.gif is culled from the pool (the worst grain offender)',
-      SPIRAL_POOL.join(','));
-    let poolHits = 0;
-    let sp7 = 0;
-    for (let i = 0; i < 200; i++) {
-      const u = pickSpiralUrl();
-      if (u.startsWith('/dtrh/assets/bubbles/effects/spirals/') && SPIRAL_POOL.some((f) => u.endsWith(f))) poolHits++;
-      if (u.endsWith('sp7.gif')) sp7++;
+    // NOTHING BUNDLED. The pool of six DtRH sp*.gif files this bed used to draw
+    // from is gone from goon (the FILES stay on disk — DtRH owns them and still
+    // draws them). Nothing under exec/ may name that directory again.
+    // COMMENTS ARE STRIPPED FIRST, the way the fx.css pins below do it: the
+    // banners in both modules quote the retired path verbatim (that is the
+    // history worth keeping), and a regression pin a comment can turn red is
+    // not a pin.
+    {
+      const fs = await import('node:fs/promises');
+      const url = await import('node:url');
+      const read = async (rel) => (await fs.readFile(url.fileURLToPath(new URL(rel, import.meta.url)), 'utf8'))
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+      for (const name of ['spiral.js', 'bubbles.js']) {
+        const src = await read(`../exec/${name}`);
+        ok(!/\/dtrh\/assets\/bubbles\/effects\/spiral/.test(src),
+          `exec/${name} names no bundled spiral asset — every spiral is generated`,
+          (/[^\n]*\/dtrh\/assets\/bubbles\/effects\/spiral[^\n]*/.exec(src) || [''])[0]);
+      }
+      const fxSrc = await read('../exec/fx.css');
+      ok(!/\.gg-spiral\s*\{[^}]*url\(/.test(fxSrc),
+        'fx.css .gg-spiral declares NO background image — the renderer writes a baked one',
+        (/\.gg-spiral\s*\{[^}]*\}/.exec(fxSrc) || [''])[0]);
+      // The spin rate/direction MUST ride custom properties: the woven path
+      // cancels this keyframe with an inline `animation` shorthand and clears it
+      // with '' again, and a shorthand clear eats every longhand it owns.
+      ok(/animation:\s*ggSpiralSpin\s+var\(--gg-spiral-spin[^)]*\)[^;]*var\(--gg-spiral-dir/.test(fxSrc),
+        '.gg-spiral takes its spin rate AND direction from custom properties',
+        (/animation:\s*ggSpiralSpin[^;]*/.exec(fxSrc) || [''])[0]);
     }
-    ok(poolHits === 200, 'every picked spiral url is a bundled DtRH spiral', String(poolHits));
-    ok(sp7 === 0, 'and 200 picks never drew the culled one', String(sp7));
+  }
+
+  /* ------------------------------------------------- the spiral generator
+   * exec/spiralGen.js — the Loom's 🎲 roll, ported. Driven here through its
+   * INJECTABLE rng, which is the only reason a random content surface is
+   * testable at all: app code passes nothing and gets Math.random.
+   * ------------------------------------------------------------------- */
+  {
+    /** A seeded rng (mulberry32) — same seed, same spiral, every run. */
+    const seeded = (seed) => () => {
+      seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+
+    // --- deterministic under an injected rng
+    const a = spiralGen.rollSpiral(seeded(1234));
+    const b = spiralGen.rollSpiral(seeded(1234));
+    ok(JSON.stringify(a.params) === JSON.stringify(b.params),
+      'the same seed rolls the same spiral — the generator is rng-injectable, not clock-driven');
+    ok(JSON.stringify(spiralGen.rollSpiral(seeded(99)).params) !== JSON.stringify(a.params),
+      'and a different seed rolls a different one');
+
+    // --- the whole space, swept. 4000 rolls off the real rng.
+    let revOut = 0;
+    let symBreak = 0;
+    let dutyOut = 0;
+    let offPalette = 0;
+    let centrepiece = 0;
+    let hue = 0;
+    const stylesSeen = new Set();
+    const armsSeen = new Set();
+    let mostRecent = null;
+    for (let i = 0; i < 4000; i++) {
+      const roll = spiralGen.rollSpiral();
+      const L = roll.params.layer;
+      mostRecent = roll;
+      stylesSeen.add(L.style);
+      armsSeen.add(L.arms);
+      if (roll.revSec < spiralGen.REV_SEC_MIN - 1e-6 || roll.revSec > spiralGen.REV_SEC_MAX + 1e-6) revOut++;
+      // The symmetry rule: a multi-thread layer whose arm count is not a
+      // multiple of its thread count has no sub-2PI symmetry and spins
+      // arms/threads times too fast. See armChoices in exec/spiralGen.js.
+      if (L.arms % L.colors.length !== 0) symBreak++;
+      if (L.duty < 0.23 || L.duty > 0.37) dutyOut++;
+      for (const c of L.colors) if (!spiralGen.SPIRAL_PALETTE.includes(c)) offPalette++;
+      // THE OWNER'S EXPLICIT EXCLUSION: the Loom can stamp a dot/star/cross/x
+      // over the middle at 25%. Goon must never. It is excluded by CONSTRUCTION
+      // (the schema has no field) rather than filtered, so this check is a pin
+      // on the schema, not on a branch.
+      if ('centerpiece' in roll.params || 'centrepiece' in roll.params) centrepiece++;
+      if (roll.params.hueCycles !== 0) hue++;
+    }
+    ok(revOut === 0,
+      `every roll is solved into the ${spiralGen.REV_SEC_MIN}-${spiralGen.REV_SEC_MAX}s revolution band`,
+      String(revOut));
+    ok(symBreak === 0, 'no roll breaks the arms % threads === 0 symmetry rule', String(symBreak));
+    ok(dutyOut === 0, 'duty stays in the BED band (~0.24-0.36), not the Loom‘s 0.3-0.7', String(dutyOut));
+    ok(offPalette === 0, 'every thread is one of goon‘s five swatches', String(offPalette));
+    ok(centrepiece === 0, 'NO roll can carry a centerpiece — the dot/cross overlays are excluded', String(centrepiece));
+    ok(hue === 0, 'and hueCycles stays pinned off (a hue sweep on a screen blend is a strobe)', String(hue));
+    ok(stylesSeen.size === 6, '4000 rolls reach all six weave styles', Array.from(stylesSeen).join(','));
+    ok(armsSeen.size >= 5, 'and a spread of arm counts', Array.from(armsSeen).sort((x, y) => x - y).join(','));
+
+    // --- the solved revolution really is the field's own number
+    ok(Math.abs(spiralField.revolutionSecFor(mostRecent.params) - mostRecent.revSec) < 1e-9,
+      'the revSec a roll reports is the FIELD‘s formula, not the generator‘s opinion',
+      `${spiralField.revolutionSecFor(mostRecent.params)} vs ${mostRecent.revSec}`);
+
+    // --- junk rng: a host that hands back garbage must not poison a roll
+    const junk = spiralGen.rollSpiral(() => NaN);
+    ok(junk.params.layer.arms >= 1 && junk.revSec > 0,
+      'an rng that returns NaN still produces a valid spiral', JSON.stringify(junk.params.layer));
+
+    // --- the 2D raster bake, on a recording fake context
+    const calls = { fillRect: 0, arc: 0, fill: 0, gradients: 0 };
+    const fakeCtx = {
+      fillStyle: null,
+      fillRect() { calls.fillRect++; },
+      beginPath() {}, closePath() {}, lineTo() {},
+      arc() { calls.arc++; },
+      fill() { calls.fill++; },
+      createRadialGradient() { calls.gradients++; return { addColorStop() {} }; },
+    };
+    const rolled = spiralGen.rollSpiral(seeded(7));
+    ok(spiralGen.drawSpiralRaster(fakeCtx, 512, rolled.params, 0) === true,
+      'drawSpiralRaster draws the still the no-WebGL bed shows');
+    ok(calls.fillRect === 1, 'exactly one background fill', String(calls.fillRect));
+    ok(calls.fill > 100 && calls.arc > 100, 'and the arms are annular wedge strips, not one path',
+      `${calls.fill} fills / ${calls.arc} arcs`);
+    ok(spiralGen.drawSpiralRaster({}, 512, rolled.params) === false,
+      'a context that cannot draw is refused rather than thrown over');
+    // The stub DOM has no canvas 2D context at all, which is exactly the host
+    // that must get '' instead of a broken `url('')`.
+    ok(spiralGen.bakeSpiralImage(rolled.params, 64) === '',
+      'a host with no 2D canvas bakes to the empty string, not to junk',
+      spiralGen.bakeSpiralImage(rolled.params, 64));
+
+    // --- the session pool: pre-generated, and rotated rather than re-rolled
+    const sess = spiralGen.createSpiralSession({ rng: seeded(42) });
+    ok(sess.count === spiralGen.SESSION_SIZE, `a session pre-generates ${spiralGen.SESSION_SIZE} variants`,
+      String(sess.count));
+    ok(sess.all().length === spiralGen.SESSION_SIZE && sess.all() !== sess.all(),
+      'all() hands back a copy, so a caller cannot edit the session‘s pool');
+    const identities = new Set(sess.all().map((v) => JSON.stringify(v.params)));
+    ok(identities.size >= 4, 'and the five it rolled are (near enough) all different',
+      String(identities.size));
+    const seen = new Map();
+    let repeats = 0;
+    let prev = null;
+    for (let i = 0; i < 200; i++) {
+      const v = sess.next();
+      if (v === prev) repeats++;
+      prev = v;
+      seen.set(v, (seen.get(v) || 0) + 1);
+    }
+    ok(repeats === 0, 'next() never hands out the same variant twice running', String(repeats));
+    ok(seen.size === spiralGen.SESSION_SIZE, '200 picks rotate through every variant', String(seen.size));
+    const counts = Array.from(seen.values());
+    ok(Math.max(...counts) - Math.min(...counts) <= 1,
+      'and the rotation is even — a shuffled walk, not a re-roll', counts.join(','));
+    ok(sess.all().every((v) => v.image() === '' && v.image() === v.image()),
+      'image() caches (here: caches the empty string this host can only bake)');
+
+    // --- the shared session, which is what makes a popped spiral bubble throw a
+    //     spiral THIS MATCH has been showing rather than a seventh one
+    const shared = spiralGen.beginSpiralSession({ rng: seeded(5) });
+    ok(spiralGen.spiralSession() === shared, 'beginSpiralSession installs the shared pool');
+    const fromShared = new Set(shared.all());
+    let strays = 0;
+    for (let i = 0; i < 50; i++) if (!fromShared.has(spiralGen.nextSpiral())) strays++;
+    ok(strays === 0, 'nextSpiral() only ever draws from the shared session', String(strays));
+    ok(spiralGen.pickSpiralImage() === '',
+      'and pickSpiralImage() (exec/bubbles.js‘s flick) goes through the same pool');
   }
 
   // ------------------------------------------------------------ spiral renders
@@ -488,8 +637,20 @@ async function main() {
     await sleep(120);
     const panes = byId.get('gg-fx-spiral').findAll('gg-spiral');
     ok(panes.length === 1, 'spiral payload mounts exactly one pane', String(panes.length));
-    ok(String(panes[0].style.getPropertyValue('background-image')).includes('/dtrh/assets/bubbles/effects/spirals/'),
-      'the pane draws a bundled DtRH spiral', panes[0].style.getPropertyValue('background-image'));
+    // NO background-image on this host: the stub has no 2D canvas, so the bake
+    // returns '' and the renderer must leave the property alone rather than
+    // write `url('')` and blank a bed that was working. What it DOES write, on
+    // every host, is the roll's own spin — which is the pin that a variant
+    // actually reached the pane.
+    ok(!String(panes[0].style.getPropertyValue('background-image')).trim(),
+      'a host that cannot bake a still gets no background-image, not url(\'\')',
+      panes[0].style.getPropertyValue('background-image'));
+    const spin = parseFloat(panes[0].style.getPropertyValue('--gg-spiral-spin'));
+    ok(spin >= 10 && spin <= 18, 'the pane spins at the generated variant‘s own 10-18s revolution',
+      panes[0].style.getPropertyValue('--gg-spiral-spin'));
+    ok(/^(normal|reverse)$/.test(panes[0].style.getPropertyValue('--gg-spiral-dir')),
+      'and turns the way that variant was rolled to turn',
+      panes[0].style.getPropertyValue('--gg-spiral-dir'));
     const op = parseFloat(panes[0].style.getPropertyValue('--gg-spiral-op'));
     ok(op >= 0.25 && op <= 0.7, 'spiral opacity stays inside the 0.25..0.70 band', String(op));
 
@@ -3287,7 +3448,15 @@ async function main() {
       const el = realCreate(tag);
       if (String(tag).toLowerCase() === 'canvas') {
         el.width = 0; el.height = 0;
-        el.getContext = () => { contexts++; lastGl = fakeGl(el); return lastGl; };
+        // THE FAKE IS A GPU, NOT A CANVAS. '2d' is answered with null on
+        // purpose: exec/spiralGen.js's raster bake asks for a 2D context on its
+        // own scratch canvas, and handing it this object would both count a
+        // context this block never asked for and move `lastGl` off the weave
+        // that the loss tests below are about to kill.
+        el.getContext = (type) => {
+          if (String(type) === '2d') return null;
+          contexts++; lastGl = fakeGl(el); return lastGl;
+        };
       }
       return el;
     };
@@ -3326,8 +3495,17 @@ async function main() {
       ok(inlineOf('filter') === '' && inlineOf('scale') === '' && inlineOf('animation') === '',
         'shaders off: no inline overrides, so fx.css paints its blur(1.1px) + overscan + spin',
         `filter="${inlineOf('filter')}" scale="${inlineOf('scale')}"`);
-      ok(String(inlineOf('background-image')).includes('/dtrh/assets/bubbles/effects/spirals/'),
-        'shaders off: and a bundled spiral is what is actually on screen', inlineOf('background-image'));
+      // The variant reached the pane: its solved revolution and its rolled
+      // direction are on it. (The baked PNG is not — this fake GPU refuses a 2D
+      // context, which is exactly the "cannot bake" host, and the renderer must
+      // leave background-image alone rather than write url('').)
+      const spin = parseFloat(inlineOf('--gg-spiral-spin'));
+      ok(spin >= 10 && spin <= 18,
+        'shaders off: a GENERATED variant is on the pane, spinning at its own solved rate',
+        inlineOf('--gg-spiral-spin'));
+      ok(!String(inlineOf('background-image')).trim(),
+        'shaders off: and a host that cannot bake a still writes no background-image at all',
+        inlineOf('background-image'));
       sp.stop();
     }
 
@@ -3381,8 +3559,15 @@ async function main() {
       ok(inlineOf('scale') === '' && inlineOf('filter') === '' && inlineOf('animation') === '',
         'ALL THREE inline cancels are handed back — a leftover filter:none would be a magnified, UNBLURRED, still raster',
         `scale="${inlineOf('scale')}" filter="${inlineOf('filter')}" animation="${inlineOf('animation')}"`);
-      ok(String(inlineOf('background-image')).includes('/dtrh/assets/bubbles/effects/spirals/'),
-        'with the pool image already underneath it — the swap is one property removal', inlineOf('background-image'));
+      // The still underneath is the SAME roll the shader was weaving, so the
+      // swap is a change of renderer, not of picture. It cannot be asserted by
+      // its pixels here (this fake GPU refuses a 2D context, so nothing baked);
+      // what IS asserted is that the pane kept the variant's spin, which is
+      // what the CSS keyframe now needs to turn that still at the right rate.
+      const spin = parseFloat(inlineOf('--gg-spiral-spin'));
+      ok(spin >= 10 && spin <= 18,
+        'and the surviving pane keeps the variant‘s own revolution for the CSS spin to use',
+        inlineOf('--gg-spiral-spin'));
       ok(cv.width === 1 && cv.height === 1,
         'the dead canvas is shrunk to 1x1: an antenna for the restore, not a retained backing store',
         `${cv.width}x${cv.height}`);
@@ -4297,6 +4482,75 @@ async function main() {
       ok(typeof v.release === 'function', 'release() exists and is the no-op the disk backend wants');
       store.dispose();
     }
+  }
+
+  /* =========================================================================
+   * THE SPIRAL BED ON A HOST THAT CAN ACTUALLY BAKE.
+   *
+   * Every spiral check above ran on the bare stub, which has no 2D context —
+   * the "cannot bake" host, where the renderer must write no background-image
+   * at all. This block gives it one and pins the other half: a real pane gets
+   * a GENERATED still, as a data URL, and it lands ONE TICK LATE on purpose
+   * (~1600 path fills plus a PNG encode is not something to do inside the frame
+   * a cue lands on).
+   *
+   * IT RUNS LAST, AND THAT IS DELIBERATE. exec/spiralGen.js caches one scratch
+   * canvas per size for the life of the page; handing it a working 2D context
+   * earlier would leave every later block able to bake, and the freeze-defence
+   * block above depends on being the machine that cannot.
+   * ======================================================================= */
+  {
+    const SP = await import('../exec/spiral.js');
+    const realCreate = document.createElement;
+    let encodes = 0;
+    document.createElement = (tag) => {
+      const el = realCreate(tag);
+      if (String(tag).toLowerCase() === 'canvas') {
+        el.width = 0; el.height = 0;
+        el.getContext = (type) => (String(type) === '2d' ? {
+          fillStyle: null,
+          fillRect() {}, beginPath() {}, closePath() {}, lineTo() {}, arc() {}, fill() {},
+          createRadialGradient: () => ({ addColorStop() {} }),
+        } : null);
+        el.toDataURL = () => { encodes++; return 'data:image/png;base64,SPIRAL'; };
+      }
+      return el;
+    };
+
+    const spiralLayer = byId.get('gg-fx-spiral');
+    spiralLayer.replaceChildren();
+    const sp = SP.createSpiral({ layers, media: fakeMedia(), audio: { sfx() {} }, logger: quiet });
+    sp.start({ element: GoonElement.Spiral, intensity: 0.5, durationMs: 0, elapsedMs: 0 });
+    const pane = spiralLayer.findAll('gg-spiral')[0] || null;
+    ok(!!pane, 'the bed mounts on a bakeable host too');
+    const bgAtOnce = pane ? pane.style.getPropertyValue('background-image') : '(no pane)';
+    ok(!String(bgAtOnce).trim(),
+      'the bake does NOT happen inside the cue‘s own frame — the pane fades in over 450ms, the encode can wait a tick',
+      bgAtOnce);
+    await sleep(30);
+    const bg = pane ? pane.style.getPropertyValue('background-image') : '(no pane)';
+    ok(/^url\("data:image\/png;base64,/.test(String(bg)),
+      'a tick later the pane is wearing a GENERATED still — no file, no network, no bundled asset', String(bg));
+    ok(encodes >= 1, 'and it came from a real canvas encode', String(encodes));
+
+    // Rotation: a second cue must swap in a DIFFERENT variant, and the pane's
+    // spin must follow it (each roll carries its own solved revolution).
+    const firstSpin = pane.style.getPropertyValue('--gg-spiral-spin');
+    let spins = new Set([firstSpin]);
+    for (let i = 0; i < 8; i++) {
+      sp.stop();
+      sp.start({ element: GoonElement.Spiral, intensity: 0.5, durationMs: 0, elapsedMs: 0 });
+      const p = spiralLayer.findAll('gg-spiral').slice(-1)[0];
+      if (p) spins.add(p.style.getPropertyValue('--gg-spiral-spin'));
+    }
+    ok(spins.size > 1, 'consecutive cues rotate through the session‘s variants, they do not re-show one',
+      Array.from(spins).join(' '));
+    // One check, not one per spin: the set's size is a roll of the dice and a
+    // suite whose CHECK COUNT moves between runs is a suite nobody can diff.
+    const outOfBand = Array.from(spins).filter((s) => !(parseFloat(s) >= 10 && parseFloat(s) <= 18));
+    ok(outOfBand.length === 0, 'and every one of them spins inside the 10-18s band', outOfBand.join(' '));
+    sp.stop();
+    document.createElement = realCreate;
   }
 
   console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);

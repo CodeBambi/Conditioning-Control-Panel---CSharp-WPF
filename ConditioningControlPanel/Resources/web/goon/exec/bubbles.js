@@ -63,7 +63,10 @@
  * Uniform renderer shape — see the banner in exec/flashes.js.
  * ==========================================================================*/
 
-import { pickSpiralUrl } from './spiral.js';
+// A popped spiral bubble flicks a still. It comes from the SESSION POOL, not
+// from a bundled file and not from a fresh roll — the flick should look like the
+// spirals this match has been showing, because it is one of them.
+import { pickSpiralImage } from './spiralGen.js';
 
 export const MAX_LIVE = 26;   // hard ceiling on bubble nodes, swarm included
 const MAX_POP_FLASH = 4;      // pop-driven flash images live at once (payloadFx MAX_FLASH's cousin)
@@ -641,7 +644,12 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
         break;
       case 'spiral': {
         const h = holdOn('spiral', 'gg-spiral', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength));
-        if (h) { try { h.el.style.setProperty('background-image', `url('${pickSpiralUrl()}')`); } catch (_e) { /* ignore */ } }
+        if (h) {
+          // '' means the host could not bake one; the wash still reads without a
+          // picture, and `url('')` would be worse than nothing.
+          try { const img = pickSpiralImage(); if (img) h.el.style.setProperty('background-image', `url("${img}")`); }
+          catch (_e) { /* ignore */ }
+        }
         break;
       }
       case 'pinkfilter':

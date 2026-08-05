@@ -11,20 +11,32 @@
  * stack (whoever wants it louder wins); a payload landing on a running bed does
  * not add a second spinning cover pass.
  *
- * TWO WAYS TO FILL THAT PANE, AND THE GOOD ONE IS PREFERRED.
- *   1. WOVEN (default). exec/spiralField.js renders the Loom's own spiral field
- *      live in WebGL at the window's real pixel ratio — no magnification, no
- *      palette, no dither. The pane gets a <canvas> child and its CSS
- *      magnification/softening (`scale: 1.6`, `filter: blur(1.1px)`) and its
- *      spin keyframe are all cancelled INLINE, because a live renderer needs
- *      none of them: the shader oversizes to the corners itself and does its own
- *      rotation. See that module's banner for why the rasters were grainy.
+ * NOTHING HERE IS BAKED ANY MORE (2026-08-04). The bed used to draw from six
+ * bundled DtRH files (/dtrh/assets/bubbles/effects/spirals/sp*.gif|webp) and,
+ * on the shader path, from six hand-authored presets. Both are gone. Every
+ * spiral is now ROLLED at run time by exec/spiralGen.js — the Loom's "surprise
+ * me" generator, ported and re-tuned — which pre-generates a SESSION'S WORTH
+ * (five) at executor build and rotates through them, never the same one twice
+ * running. NO CENTERPIECE: the Loom's dot/cross overlays are excluded at the
+ * schema level, not filtered out. The DtRH files stay on disk; DtRH owns them
+ * and still draws them. Goon simply stopped pointing at them.
+ *
+ * TWO WAYS TO FILL THAT PANE, AND THEY NOW SHOW THE SAME SPIRAL.
+ *   1. WOVEN (default). exec/spiralField.js renders the variant's parameters
+ *      live in WebGL at the window's real pixel ratio. The pane gets a <canvas>
+ *      child and its CSS magnification/softening (`scale: 1.6`,
+ *      `filter: blur(1.1px)`) and its spin keyframe are all cancelled INLINE,
+ *      because a live renderer needs none of them: the shader oversizes to the
+ *      corners itself and does its own rotation.
  *   2. RASTER (fallback). No WebGL, no canvas, or a lost context -> the pane
- *      keeps the bundled sp*.gif pool exactly as it always worked, blur and
- *      overscan included. The fallback is never removed and never degraded; it
- *      is what a machine without a GPU still gets.
- * The pane always carries a pool background-image either way, so path 2 is one
- * property removal away at any moment.
+ *      falls back to a still PNG of THE SAME VARIANT, baked on a 2D canvas by
+ *      spiralGen (a port of the Loom's own no-WebGL renderer) and spun by the
+ *      fx.css keyframe at the variant's own solved revolution time. The
+ *      fallback is never removed and never degraded; it is what a machine
+ *      without a GPU still gets.
+ * The pane always carries the baked background-image either way, so path 2 is
+ * one property removal away at any moment — and because both paths draw the
+ * same roll, a mid-match context loss now changes the RENDERER, not the picture.
  *
  * THE FREEZE DEFENCE (2026-08-04). This pane is the only GPU context the duel
  * owns, and it went in hours before a session froze VISUALLY while its JS kept
@@ -49,37 +61,16 @@
  * armor has parked decoration: not painting is CORRECT in both, and a watchdog
  * that fires on correct behaviour gets switched off by the people it protects.
  *
- * ASSETS: the pool is the DtRH bundle under /dtrh/assets/bubbles/effects/spirals/
- * (same ccp.game origin — Resources/web is the host root, so /dtrh/... resolves
- * from /goon/). Deliberately NOT imported from dtrh/engine/loomSpirals.js: that
- * module pulls DtRH settings/Loom storage in with it. The pick is three lines.
- * exec/spiralField.js obeys the same rule — it is a COPY of the Loom's shader,
- * not an import, and it never touches the player's saved-spiral library.
+ * NO CROSS-IMPORT: nothing here reaches into dtrh/. dtrh/engine/loomSpirals.js
+ * would pull DtRH settings and the player's saved-spiral storage in with it, and
+ * goon must never read the player's Loom library. exec/spiralField.js and
+ * exec/spiralGen.js are COPIES of the Loom's renderer and its dice, not imports.
  *
  * Uniform renderer shape — see the banner in exec/flashes.js.
  * ==========================================================================*/
 
-import { createSpiralField, pickSpiralParams, loopMsFor } from './spiralField.js';
-
-/**
- * The bundled spiral pool — the FALLBACK bed (DtRH ships these; goon reads them
- * off the same host) and the source for the bubble-pop flick, which is a brief
- * transient where magnification never gets the chance to read as grain.
- *
- * sp7.gif IS DELIBERATELY NOT IN HERE. Measured, these are 360x360..720x720 with
- * palettes as thin as 8 and 16 colours, and a fullscreen cover plus
- * `.gg-spiral { scale: 1.6 }` magnifies them 4.3x (sp2/sp4) to 8.5x (sp7) — so
- * sp7 is the worst case by a wide margin. The rest are softened enough by
- * `.gg-spiral { filter: blur(1.1px) }` in fx.css, which is why that blur must
- * STAY for this path even though the woven path cancels it. The FILE stays on
- * disk — DtRH owns it and still uses it.
- */
-export const SPIRAL_DIR = '/dtrh/assets/bubbles/effects/spirals/';
-export const SPIRAL_POOL = Object.freeze([
-  'sp1.gif', 'sp2.webp', 'sp3.gif', 'sp4.webp', 'sp5.gif', 'sp6.gif',
-]);
-/** The one still that ships outside the pool — the floor if the pool is ever empty. */
-export const SPIRAL_FALLBACK = '/dtrh/assets/bubbles/effects/spiral.png';
+import { createSpiralField, loopMsFor } from './spiralField.js';
+import { beginSpiralSession, nextSpiral } from './spiralGen.js';
 
 /* --- THE SHADER KILL SWITCH. The pref is ui/prefs.js's (`shaderSpirals`,
    default TRUE); it reaches this tier as a ROOT ATTRIBUTE, because exec/ does not
@@ -110,12 +101,6 @@ export const RAF_STALL_MS = 4000;
 /** Context losses this pane will re-upgrade through before it stays on raster. */
 export const MAX_CONTEXT_RECOVERIES = 2;
 
-/** A random spiral URL. Shared with exec/bubbles.js (a popped spiral bubble flicks one). */
-export function pickSpiralUrl() {
-  if (!SPIRAL_POOL.length) return SPIRAL_FALLBACK;
-  return SPIRAL_DIR + SPIRAL_POOL[(Math.random() * SPIRAL_POOL.length) | 0];
-}
-
 const clamp01 = (n) => (typeof n === 'number' && n === n ? (n < 0 ? 0 : n > 1 ? 1 : n) : 0);
 const lerp = (a, b, t) => a + (b - a) * clamp01(t);
 const soon = (fn, ms) => {
@@ -143,9 +128,20 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
   const sfx = (id) => { try { if (audio && typeof audio.sfx === 'function') audio.sfx(id); } catch (_e) { /* stub */ } };
   const calm = reducedMotion();
 
+  // ROLL THE MATCH'S SPIRALS, ONCE, HERE. createSpiral runs exactly once per
+  // duel page (boot.js builds one executor), so this is the session boundary —
+  // and it is the shared pool, so exec/bubbles.js's popped-spiral flick throws
+  // a spiral this match has actually been showing.
+  try { beginSpiralSession(); } catch (_e) { /* the pool builds lazily on first ask anyway */ }
+
   let paneEl = null;
   let elementIntensity = null;    // null = element not running
   let payloadIntensity = null;    // null = no payload running
+
+  // THE SPIRAL CURRENTLY ON THE PANE — one roll from the session pool, driving
+  // BOTH beds: `.params` is what the shader weaves, `.image()` is the baked
+  // still underneath it, `.revSec` is the spin the CSS keyframe runs at.
+  let variant = null;
 
   // --- the woven path's state (all null on the raster fallback) -------------
   let canvasEl = null;
@@ -266,7 +262,11 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
     const f = createSpiralField(cv);
     if (!f) { canvasEl = null; return; }
     field = f;
-    params = pickSpiralParams();
+    // The pane's OWN roll, not a fresh one: the still already underneath this
+    // canvas has to be the same spiral, or the swap between the two paths would
+    // be a visible cut instead of a change of renderer.
+    if (!variant) variant = nextSpiral();
+    params = variant.params;
     const gen = ++weaveGen;
 
     phase = Math.random();      // never start every match on the same frame
@@ -432,9 +432,12 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
    * REMOVING THE THREE INLINE PROPERTIES IS THE WHOLE SWAP, and it has to remove
    * ALL THREE: fx.css's `.gg-spiral` carries `scale: 1.6`, `filter: blur(1.1px)`
    * and the spin keyframe as one treatment for one bed. Leaving `filter: none`
-   * behind would hand the player a magnified, unblurred, unspun raster — the
-   * dither this pane exists to hide, at 4-8x, held still. Setting each property
-   * to '' (not to its CSS value) is what lets the stylesheet answer again.
+   * behind would hand the player a magnified, unsoftened, UNSPUN still — the
+   * baked PNG's wedge edges at 2.4x, held perfectly still, which is the one way
+   * to make a generated spiral look worse than the GIFs it replaced. Setting
+   * each property to '' (not to its CSS value) is what lets the stylesheet
+   * answer again — and note the spin's rate and direction ride CUSTOM
+   * PROPERTIES (repick), precisely so this shorthand clear cannot eat them.
    */
   function unweave() {
     detachWoven()();
@@ -488,16 +491,47 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
   }
 
   /**
-   * Draw a different spiral. BOTH beds are repicked every time: the woven one
-   * takes a new preset, and the raster background-image is refreshed too so the
-   * fallback underneath is never stale if the context dies mid-match.
+   * Advance to the next spiral in the session's rotation, and put it on BOTH
+   * beds at once: the shader takes its parameters, the pane's background-image
+   * takes the baked still of the same roll. Doing both every time is what keeps
+   * the fallback underneath from ever being stale — or, now, from ever being a
+   * different picture — if the context dies mid-match.
+   *
+   * An UNBAKEABLE variant (no canvas, no 2D context, a toDataURL the host
+   * refuses) returns '' and the pane simply keeps whatever it had. Writing
+   * `url('')` instead would blank a bed that was working a moment ago.
+   *
+   * THE BAKE IS DEFERRED ONE TICK, and that is not a micro-optimisation. A
+   * first bake is ~1600 canvas path fills plus a PNG encode — tens of
+   * milliseconds, ON THE MAIN THREAD, and repick() is called from the middle of
+   * a cue landing. The pane fades in over 450-900ms, so an image that arrives
+   * on the next tick arrives invisibly; a bed that ate the cue's own frame
+   * would be felt. Cached after the first ask, so a repeat variant is free.
    */
   function repick() {
     if (!paneEl || !paneEl.style) return;
-    try { paneEl.style.setProperty('background-image', `url('${pickSpiralUrl()}')`); }
-    catch (_e) { /* a host without inline style support just keeps the CSS default */ }
+    variant = nextSpiral();
+    try {
+      // Both beds turn at the roll's own solved revolution time. These are
+      // CUSTOM PROPERTIES on purpose: unweave() clears the `animation`
+      // shorthand to hand the pane back to fx.css, and a shorthand clear would
+      // take plain animation-duration/-direction longhands with it.
+      paneEl.style.setProperty('--gg-spiral-spin', `${variant.revSec.toFixed(2)}s`);
+      paneEl.style.setProperty('--gg-spiral-dir', variant.params.layer.direction === -1 ? 'reverse' : 'normal');
+    } catch (_e) { /* a host without inline style support just keeps the CSS default */ }
+    const el = paneEl;
+    const v = variant;
+    soon(() => {
+      // A pane that has been torn down (or replaced) in the meantime must not
+      // be painted into — its node lingers 900ms on the way out by design.
+      if (paneEl !== el || !el.style) return;
+      try {
+        const img = v.image();
+        if (img) el.style.setProperty('background-image', `url("${img}")`);
+      } catch (_e) { /* the bed keeps whatever it had */ }
+    }, 0);
     if (field) {
-      params = pickSpiralParams();
+      params = variant.params;
       draw();
       return;
     }
