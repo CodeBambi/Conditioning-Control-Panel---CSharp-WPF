@@ -288,6 +288,7 @@ public class AiMemoryPromptAssemblyTests
         public WireListener()
         {
             HttpListener? bound = null;
+            Uri? prefix = null;
             for (var attempt = 0; attempt < 20 && bound is null; attempt++)
             {
                 var port = Random.Shared.Next(49152, 65535);
@@ -297,7 +298,7 @@ public class AiMemoryPromptAssemblyTests
                     candidate.Prefixes.Add($"http://127.0.0.1:{port}/");
                     candidate.Start();
                     bound = candidate;
-                    Prefix = new Uri($"http://127.0.0.1:{port}/");
+                    prefix = new Uri($"http://127.0.0.1:{port}/");
                 }
                 catch (HttpListenerException)
                 {
@@ -306,6 +307,7 @@ public class AiMemoryPromptAssemblyTests
             }
 
             _listener = bound ?? throw new InvalidOperationException("WireListener: no loopback port available");
+            Prefix = prefix!;
             _serve = Task.Run(ServeLoop);
         }
 

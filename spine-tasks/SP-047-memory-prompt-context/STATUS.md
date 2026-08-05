@@ -1,6 +1,6 @@
 ## STATUS: SP-047 — Wire companion memory into prompt context
-**Current Step:** Step 4 — Testing & Verification
-**Last Updated:** 2026-08-05 (Step 3 complete — line flipped, record.md + both consults persisted)
+**Current Step:** complete (all 4 steps; .DONE pending commit)
+**Last Updated:** 2026-08-05 (Step 4 green — verify.mjs OK, 0W/0E Rebuild, 609/609 + 33/33, diff-check clean, scope clean)
 **Blockers:** none
 
 ### Step 1: archaeology + design + pre-approach consult
@@ -21,6 +21,6 @@
 - [x] STATUS.md accurate before .DONE
 
 ### Step 4: Testing & Verification
-- [ ] Contract testCommand passes (verify.mjs + build 0W/0E + ≥601/33 floor)
-- [ ] git diff --check clean
-- [ ] git status --short shows only File Scope paths
+- [x] Contract testCommand passes (verify.mjs + build 0W/0E + ≥601/33 floor)
+- [x] git diff --check clean
+- [x] git status --short shows only File Scope paths

@@ -59,8 +59,8 @@
 |------|------|--------|---------|
 | Step 1 | plan | NO — engine-deferred (SP-195 nested-spawn block, `spawnFailed:false`, artifact `1-20260805T033252.md`) | n/a |
 | Step 2 | plan | NO — engine-deferred (SP-195, `spawnFailed:false`, artifact `2-20260805T040117.md`) | n/a |
-| Step 3 | plan | | |
-| Step 4 | plan | | |
+| Step 3 | plan | NO — engine-deferred (SP-195, `spawnFailed:false`, artifact `3-20260805T041132.md`) | n/a |
+| Step 4 | plan | NO — engine-deferred (SP-195, `spawnFailed:false`, artifact recorded at call) | n/a |
 
 ## 5. Evidence
 
@@ -83,7 +83,7 @@ Tests (`client/tests/CcpClient.Tests/AiMemoryPromptAssemblyTests.cs`, 8 new):
 7. `DefaultConsentStore_DeniesWriteAndRead_PlaceholderDefaultIsExecutable` — the Denied placeholder default as executable fact.
 8. `WirePayload_MessagesArrayCarriesPersistedPairBeforeNewPrompt` — the WIRE proof: real `LoopbackOllamaProvider` against a self-contained loopback listener (`AiProviderLab.cs` is outside File Scope); the payload's messages array = [persisted user, persisted assistant, new prompt]; stream/think shape intact.
 
-Results: **609/609 unit** (floor 601; 601 + 8 new) + **33/33 headless** (floor 33) green. Offline zero-network re-verified (`AiOfflineIntegrationTests` 2/2 — assembly is a pure local read placed after the admission chain; `SendAttempts` remains the sole network instrument). Content-free diagnostics maintained: ZERO new log/diagnostic sites in the diff; prompt/memory content rides only `AiRequest` to the provider (contract §12).
+Results: **609/609 unit** (floor 601; 601 + 8 new) + **33/33 headless** (floor 33) green; **0W/0E measured on `-t:Rebuild`** (one CS8618 in the new test file fixed during Step 4). Offline zero-network re-verified (`AiOfflineIntegrationTests` 2/2 — assembly is a pure local read placed after the admission chain; `SendAttempts` remains the sole network instrument). Content-free diagnostics maintained: ZERO new log/diagnostic sites in the diff; prompt/memory content rides only `AiRequest` to the provider (contract §12).
 
 Headless surface tests: unchanged — no headless test asserts the honesty-line text (grep-verified); the flip is AXAML text only. Honestly absent beyond that per the packet's allowance.
 
