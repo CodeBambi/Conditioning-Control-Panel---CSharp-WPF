@@ -360,10 +360,12 @@ namespace ConditioningControlPanel.Services.GoonGame
                 // builder verbatim (asset-tree deselection, size caps, sampling) — one enumerator
                 // for every web core.
                 var m = DtrhAssetManifest.Build();
-                // `received` rides the EXISTING manifest frame rather than a new boot milestone:
-                // boot.js already gates settle() on gotManifest, so the received-artifact set is
-                // primed before any screen mounts - which is what lets the very first offer of a
-                // match answer decline:'have' instead of re-transferring (spec 6.4).
+                // EPHEMERAL INBOX (owner decision, 2026-08-05): a fresh page means any committed
+                // artifact is a leftover from a session the page-side purge never saw (window
+                // closed from the recap, a reload). Wipe BEFORE listing, so the manifest's
+                // `received` rows - kept for frame-shape compatibility - are always empty and the
+                // page never re-primes a past partner's media into the pool (the Practice leak).
+                TransferInboxStore.Instance.PurgeCommittedSafe("page boot");
                 var received = SafeReceivedList();
                 _host?.Post(new
                 {
@@ -376,11 +378,9 @@ namespace ConditioningControlPanel.Services.GoonGame
                 });
 
                 // The compression cache's own feed. Attached AFTER the manifest so the page has its
-                // pool before the first cache-state lands, and pruned here because "page ready" is
-                // one of exactly two moments when nothing can be mid-transfer.
+                // pool before the first cache-state lands. (The inbox needs no prune here anymore -
+                // the ephemeral wipe above already emptied it.)
                 GoonCacheBridge.Attach(_host);
-                try { TransferInboxStore.Instance.PruneSafe(); }
-                catch (Exception ex) { App.Logger?.Debug("GoonHostService: inbox prune: {E}", ex.Message); }
 
                 // ...and tell the page which window it is actually painted in. Its affordances read
                 // the echoed state, never the requested one.
@@ -1619,7 +1619,10 @@ namespace ConditioningControlPanel.Services.GoonGame
                 // mid-match would otherwise leave the queue paused for the rest of the app session.
                 try { GoonCacheBridge.Detach(); } catch { }
                 try { Transfer.TransferCompressionService.Instance.ResumeAfterMatch(); } catch { }
-                try { TransferInboxStore.Instance.PruneSafe(); } catch { }
+                // Ephemeral inbox: the window is the session, and the session is over. A file the
+                // renderer still holds open just fails the delete - the page-boot wipe and the
+                // startup sweep are the backstops for whatever this one cannot take.
+                try { TransferInboxStore.Instance.PurgeCommittedSafe("window closed"); } catch { }
                 // Last word to the page before the window goes: a live match should get a chance
                 // to post its own abandon rather than just vanishing from the opponent's side.
                 try { _host?.Post(new { type = "end-run", reason = "dispose" }); } catch { }

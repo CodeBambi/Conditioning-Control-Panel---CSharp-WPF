@@ -352,10 +352,13 @@ bridge.on('init', (m) => {
 bridge.on('manifest', (m) => {
   gotManifest = true;
   session.manifest = media.setManifest(m);
-  // WHAT A PARTNER SENT US IN AN EARLIER SESSION rides this same frame (spec §6.4)
-  // rather than a new boot milestone — settle() already gates on gotManifest, so the
-  // received set is primed before any screen mounts, which is what lets the very
-  // first offer of a match answer `decline:'have'` instead of re-transferring 20 MB.
+  // EPHEMERAL INBOX (owner decision, 2026-08-05): a partner's media never survives
+  // the match — the page purges at teardownEverything and the host wipes at page
+  // boot, so `received` is empty in production. The priming path is kept because
+  // the manifest frame still carries the field (shape compatibility, and the
+  // standalone/test harness feeds rows through it), not because anything should
+  // arrive here. If this ever logs a nonzero count on a fresh page, a purge seam
+  // regressed — that is the bug that put past partners' media into Practice.
   session.received = Array.isArray(m.received) ? m.received : [];
   primeReceived(session.received);
   bridge.log('manifest: ' + session.manifest.images + ' images, ' + session.manifest.videos + ' videos'
@@ -800,6 +803,32 @@ function primeReceived(list) {
     registerReceived(receivedStore.list());
   } catch (e) {
     logger.warn('priming the received inbox failed: ' + ((e && e.message) || e));
+  }
+}
+
+/**
+ * THE EPHEMERAL-INBOX SEAM (owner decision, 2026-08-05): nothing a partner sent
+ * survives the match. Dropping goes through the SAME two ledgers priming filled —
+ * exec/media.js (so a Practice peer-run's drawReceived can never see a dead row)
+ * and the received store (whose drop() also deletes the host's disk file) — in
+ * that order, so no window exists where media can hand out a view the store has
+ * already destroyed. Called from teardownEverything, which every road out of a
+ * match funnels through and a relay REBUILD never touches; the recap always
+ * mounts BEFORE its match is torn down, so its report card keeps its plates.
+ */
+function purgeReceived(why) {
+  if (!receivedStore) return;
+  try {
+    const rows = receivedStore.list();
+    if (!rows.length) return;
+    for (const e of rows) {
+      try { media.dropReceived(e.sha); } catch (_e) { /* one bad row never stops the sweep */ }
+      try { receivedStore.drop(e.sha); } catch (_e) { /* ignore */ }
+    }
+    session.received = [];
+    logger.info('received inbox purged (' + why + '): ' + rows.length + ' artifact(s)');
+  } catch (e) {
+    logger.warn('purging the received inbox failed: ' + ((e && e.message) || e));
   }
 }
 
@@ -1785,6 +1814,9 @@ async function teardownEverything() {
   }
   try { layers.stopAll(); } catch (_e) { /* ignore */ }
   try { executor?.stopAll?.(); } catch (_e) { /* ignore */ }
+  // LAST, after the executor is stopped: nothing can be mid-draw on a view the
+  // drop is about to destroy. See purgeReceived for why this seam is the one.
+  purgeReceived('teardown');
 }
 
 const actions = {
