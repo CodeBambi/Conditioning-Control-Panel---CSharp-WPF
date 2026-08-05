@@ -1454,8 +1454,16 @@ html[data-gg-motion="reduced"] .gg-vs-splash * { transition: none !important; }
    quieter, because it is the consequence rather than the description. */
 .gg-voice-ack-2 { margin-top: 0.5rem; opacity: 0.92; }
 
-/* The lobby's read-only status line. */
-.gg-voice-lobbyline { text-align: center; }
+/* The lobby's voice-note ROW and the status line under it (2026-08-05 — it used
+   to be a lone centred sentence with no control to belong to, which is why the
+   centring is gone). The row is a plain .gg-row--check; the only extra is the
+   cursor, and it is there because the ROW is clickable while the acknowledgment
+   is unread — see ui/screens/lobby.js on why a disabled input has to have
+   something that answers a click. `is-on` is the one state worth a colour:
+   "both of you are switched on" is the answer the row exists to give. */
+.gg-voice-lobbyrow { cursor: pointer; }
+.gg-voice-lobbyrow.is-disabled { opacity: 0.75; }
+.gg-voice-lobbyrow.is-disabled .gg-row-label { color: var(--gg-text-2); }
 .gg-voice-lobbyline.is-on { color: var(--gg-violet); }
 
 /* ---------------------------------------------------------------------------

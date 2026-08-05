@@ -127,22 +127,45 @@ export function mount(container, ctx) {
   const gapRow = mkSlider(S.lobby.gap, { min: GAP_MIN_SEC, max: GAP_MAX_SEC, step: 5 });
   const xferRow = mkCheck(S.lobby.transfer);
 
-  /* THE VOICE-NOTE LINE — READ ONLY, and deliberately not a row.
+  /* THE VOICE-NOTE ROW (2026-08-05) — a real toggle now, not a status line.
    *
-   * There is no toggle for it here and there must not be: turning voice notes on
-   * is an acknowledgment (your real voice goes to them, theirs can come back),
-   * and that gate lives on one screen — ui/screens/voice.js, off the title menu.
-   * A second entry point without the modal would be a way to switch a mic on
-   * without ever reading what it does.
+   * IT WAS READ-ONLY UNTIL TODAY, and that was the whole bug. The reasoning was
+   * sound and the consequence was not: turning voice notes on is an
+   * acknowledgment (your real voice goes to them, theirs can come back), so the
+   * switch was put on ONE screen — ui/screens/voice.js, off the title menu —
+   * and the lobby only reported what somebody had already decided somewhere
+   * else. Nobody ever decided it. The owner play-tested the mic three times
+   * across three setups and never saw it once, because their own seat's
+   * `voiceNotesEnabled` had never been true and nothing on the road into a duel
+   * asked. A consent gate that nobody can find is not protecting anyone.
    *
-   * So this is a STATUS SENTENCE about a decision made elsewhere: whose side has
-   * it on, or that their build is too old to speak the family at all. It renders
-   * nothing at all when neither side has opted in, because a line that says
-   * "off" on a screen full of terms reads as a term. */
-  const voiceLine = el('p', { class: 'gg-row-sub gg-voice-lobbyline', text: '', hidden: true });
+   * So the toggle is here as well, and the gate came WITH it: the checkbox is
+   * `disabled` until `voiceAckSeen`, and a click on the ROW (which is not
+   * disabled) opens the very same acknowledgment sheet ui/screens/voice.js
+   * opens, from the same S.voice.ack copy. There is still exactly ONE way to
+   * switch this on for the first time and it still goes through both
+   * paragraphs. This is a second door to the same gate, not a way around it.
+   *
+   * IT WRITES BOTH HALVES, AND THAT ORDER MATTERS FOR *THIS* MATCH:
+   *   prefs.voiceNotesEnabled   the standing answer, and the one the RECEIVE
+   *                             path reads (ui/voice/voiceService.js drops an
+   *                             inbound note unread without it) — set first, so
+   *                             a consent frame can never announce a mic the
+   *                             local gate would still refuse.
+   *   match.setLocalVoiceNotes  the declaration the OPPONENT gets told, on the
+   *                             consent frame, immediately. Without this call a
+   *                             tick here would only take effect on the NEXT
+   *                             attachMatch, i.e. after a page reload — which
+   *                             is exactly the trap the raw-localStorage
+   *                             play-test hit (ui/prefs.js caches in memory).
+   * The engine clears both signatures and re-sends the sheet, so the lamp
+   * ripple this screen already paints is the whole visible half. */
+  const voiceRow = mkCheck(S.voice.toggle);
+  voiceRow.row.classList.add('gg-voice-lobbyrow');
+  voiceRow.sub.classList.add('gg-voice-lobbyline');
 
   const sheetBox = el('div', { class: 'gg-consent' }, [
-    durRow.row, toyRow.row, gapRow.row, xferRow.row, xferRow.sub, voiceLine,
+    durRow.row, toyRow.row, gapRow.row, xferRow.row, xferRow.sub, voiceRow.row, voiceRow.sub,
   ]);
 
   /* ---------------------------------------------------------- confirm UI */
@@ -322,21 +345,108 @@ export function mount(container, ctx) {
   }
 
   /**
-   * The voice-note status line. Four states, in the order that answers the
-   * question a player is actually asking ("can they hear me?"):
-   * both on, the peer's build cannot, only mine, only theirs. Silent otherwise.
+   * The voice-note row. The CHECKBOX is our own opt-in; the chip is theirs; the
+   * sub-line is the old four-state status sentence, in the order that answers
+   * the question a player is actually asking ("can they hear me?"): both on,
+   * the peer's build cannot, only mine, only theirs.
+   *
+   * UNLIKE THE TRANSFER ROW ABOVE, IT IS NEVER DISABLED FOR A PEER REASON. The
+   * peer's build being too old is said in the sub-line and nowhere else: this
+   * switch is also the RECEIVE gate and the standing answer for every future
+   * duel, so greying it out on account of the person you happen to be facing
+   * would hide a decision that is not about them. The only thing that disables
+   * it is the acknowledgment (below) and the phase.
    */
   function paintVoice() {
     const mine = !!match.localVoiceNotes;
     const theirs = !!match.remoteVoiceNotes;
-    let text = '';
-    if (mine && theirs && match.peerSupportsVoice) text = S.voice.lobbyBoth;
-    else if ((mine || theirs) && !match.peerSupportsVoice) text = S.voice.lobbyPeerOld;
-    else if (mine) text = S.voice.lobbyYours;
-    else if (theirs) text = S.voice.lobbyTheirs;
-    voiceLine.textContent = text;
-    voiceLine.hidden = !text;
-    voiceLine.classList.toggle('is-on', text === S.voice.lobbyBoth);
+    const acked = !!(prefs && prefs.get && prefs.get('voiceAckSeen'));
+    const editable = match.phase === GoonMatchPhase.Consent || match.phase === GoonMatchPhase.Lobby;
+
+    let status = '';
+    if (mine && theirs && match.peerSupportsVoice) status = S.voice.lobbyBoth;
+    else if ((mine || theirs) && !match.peerSupportsVoice) status = S.voice.lobbyPeerOld;
+    else if (mine) status = S.voice.lobbyYours;
+    else if (theirs) status = S.voice.lobbyTheirs;
+
+    if (document.activeElement !== voiceRow.input) voiceRow.input.checked = mine;
+    voiceRow.input.disabled = !acked || !editable;
+    voiceRow.row.classList.toggle('is-disabled', !acked);
+    // The status sentence when there is one, the explanation when there is not,
+    // and "read this first" ahead of both — a locked switch always says why.
+    voiceRow.sub.textContent = !acked ? S.voice.lobbyLocked : (status || S.voice.lobbySub);
+    voiceRow.sub.classList.toggle('is-on', status === S.voice.lobbyBoth);
+    voiceRow.value.textContent = theirs ? S.voice.lobbyTheirsOn : S.voice.lobbyTheirsOff;
+  }
+
+  /**
+   * The acknowledgment sheet, byte for byte the one ui/screens/voice.js opens —
+   * same icon, same two paragraphs, same two actions. It is duplicated as a
+   * CALL rather than shared as a module because ui/sheets.js takes one `line`
+   * and this consent needs two, and the injection that adds the second one is
+   * six lines of DOM either screen can do for itself; what must never diverge
+   * is the COPY, and the copy is S.voice.ack in both.
+   *
+   * Cancel changes nothing at all. "I understand" is the switch: the player got
+   * here by reaching for it, and making them press the same thing twice for one
+   * decision is how a safety gate turns into an annoyance people learn to click
+   * through.
+   */
+  async function openVoiceAck() {
+    if (!sheets || typeof sheets.open !== 'function') return;
+    const promise = sheets.open({
+      icon: S.voice.ack.icon,
+      headline: S.voice.ack.headline,
+      line: S.voice.ack.line,
+      actions: [
+        { id: 'cancel', label: S.voice.ack.cancel, variant: 'ghost' },
+        { id: 'go', label: S.voice.ack.go, variant: 'primary' },
+      ],
+    });
+    injectAckSecondLine();
+    let answer = null;
+    try { answer = await promise; } catch (e) { ledger._err('voice ack', e); }
+    if (ledger.isDisposed) return;
+    if (answer !== 'go') { paintVoice(); return; }
+    prefs?.set?.('voiceAckSeen', true);
+    setVoiceEnabled(true);
+  }
+
+  /** The second paragraph, appended to the sheet that has just been built. See
+   *  ui/screens/voice.js injectSecondLine — same seam, same merge fallback,
+   *  because the line that says they may HEAR you is never the one that goes
+   *  missing. */
+  function injectAckSecondLine() {
+    let line = null;
+    try {
+      const modal = typeof document !== 'undefined' && document ? document.getElementById('gg-modal') : null;
+      line = modal && modal.querySelector ? modal.querySelector('.gg-sheet-line') : null;
+      if (!line) return;
+      const p = el('p', { class: 'gg-sheet-line gg-voice-ack-2', text: S.voice.ack.lineTwo });
+      if (line.parentNode && typeof line.parentNode.insertBefore === 'function') {
+        line.parentNode.insertBefore(p, line.nextSibling);
+        return;
+      }
+    } catch (e) { ledger._err('voice ack line', e); }
+    try { if (line) line.textContent = S.voice.ack.line + ' ' + S.voice.ack.lineTwo; }
+    catch (_e) { /* no DOM at all */ }
+  }
+
+  /**
+   * Both halves, in the one order that is safe (see the row's block above):
+   * the local gate first, then the declaration the opponent reads.
+   *
+   * The engine REFUSES the declaration outside Lobby/Consent, which is the
+   * whole reason the pref is written unconditionally — a refusal there must
+   * still leave the standing answer recorded for the next attachMatch rather
+   * than silently discarding what the player just asked for.
+   */
+  function setVoiceEnabled(on) {
+    const want = !!on;
+    prefs?.set?.('voiceNotesEnabled', want);
+    try { match.setLocalVoiceNotes(want); } catch (e) { ledger._err('setLocalVoiceNotes', e); }
+    paintVoice();
+    paintConfirm();
   }
 
   function paintAll() { paintIdentity(); paintConnection(); paintSheet(); paintConfirm(); paintTransfer(); paintVoice(); }
@@ -381,6 +491,27 @@ export function mount(container, ctx) {
     prefs?.set?.('mediaTransferEnabled', !!xferRow.input.checked);
     paintTransfer();
     paintConfirm();
+  });
+
+  /* THE VOICE ROW'S TWO AFFORDANCES, for the one reason ui/screens/voice.js
+   * gives: "a disabled control that does nothing when you click it is the
+   * single most reported bug in this codebase's history", so the ROW answers
+   * when the INPUT cannot. */
+  ledger.listen(voiceRow.input, 'change', () => {
+    if (!(prefs && prefs.get && prefs.get('voiceAckSeen'))) {
+      // Belt and braces — a disabled input should never fire this, but a host
+      // that ignores `disabled` must not be able to switch a microphone on
+      // without the two paragraphs having been on screen.
+      voiceRow.input.checked = false;
+      void openVoiceAck();
+      return;
+    }
+    setVoiceEnabled(!!voiceRow.input.checked);
+  });
+  ledger.listen(voiceRow.row, 'click', (e) => {
+    if (prefs && prefs.get && prefs.get('voiceAckSeen')) return;   // the input handles itself
+    if (e && e.target === voiceRow.input) return;                  // a disabled input's click
+    void openVoiceAck();
   });
 
   /**
@@ -437,6 +568,16 @@ export function mount(container, ctx) {
     ledger.sub(match.onMediaPrepChanged(() => paintIdentity()));
   }
   ledger.sub(match.onPhaseChanged(() => { paintAll(); }));
+  /* The pref is the truth and this screen is one of its readers — ui/screens/
+   * voice.js and the options drawer's Reset can both move it out from under us,
+   * and a checkbox that disagrees with the thing it controls is worse than no
+   * checkbox. (voiceAckSeen too: reading the modal anywhere unlocks it here.) */
+  if (prefs && typeof prefs.subscribe === 'function') {
+    ledger.sub(prefs.subscribe((key) => {
+      if (ledger.isDisposed) return;
+      if (key === 'voiceNotesEnabled' || key === 'voiceAckSeen') paintVoice();
+    }));
+  }
   ledger.sub(match.onLobbyFailed((reason) => {
     sheets?.open?.({
       icon: S.sheets.lobbyFailed.icon,

@@ -572,6 +572,36 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const leftRail = add(railBox, el('div', 'gg-rail gg-rail--left'));
   const rightRail = add(railBox, el('div', 'gg-rail gg-rail--right'));
 
+  /* ---- THE MIC SLOT — under the emote tile, which is where it was looked for
+   *
+   * IT LIVED IN THE OPPONENT'S COLUMN UNTIL 2026-08-05, under their receipts.
+   * The reasoning was placement safety (a flow child of a column cannot land on
+   * MERCY's gutter or the dial), and it was correct and beside the point: the
+   * owner play-tested this three times across three devices and looked for the
+   * mic "right under the Emote icon" every time, because holding a mic is a
+   * thing you DO — it belongs with the other things you do, not with the readout
+   * of what is being done to you. The emote tile is the last item on the right
+   * rail (ui/arsenal.js ARSENAL_ITEMS), so a full-width row immediately after
+   * the rails is literally underneath it.
+   *
+   * IT IS STILL FLOW, NOT COORDINATES. Last child of `.gg-arsenal-panel`, so the
+   * browser keeps it inside the drawer at every viewport, including the
+   * short-viewport pass where the rails turn ninety degrees. Nothing here is
+   * positioned against the frame and there is no keep-out band to miss.
+   *
+   * WHAT IT COSTS, honestly: the drawer is SHUT by default on a phone
+   * (resolveArsenalOpen), so the mic is behind the handle there — exactly like
+   * every other control a player throws. That is the trade, and it is the same
+   * one the eight tiles already make.
+   *
+   * WHAT IT DOES NOT COST: the strip still cannot eat the stage. The panel is
+   * pointer-events:none at 0,2,0 (rule 1 up in the sidebar block) and ui/hud.css
+   * re-opts ONLY `.gg-voice-btn` back in, later in the file, at the same weight.
+   *
+   * The CHIP stays in their column, under their bezel — it is about THEIR voice
+   * and it belongs as close to their face as this file can put it. */
+  const voiceHost = add(sidePanel, el('div', 'gg-voice-host'));
+
   /* ---- THE HANDLE — the one node that never hides -------------------------
    * Last in the DOM so it sits on the panel's INNER edge (the side facing the
    * field) in both states, which is where a thumb reaches for it and where it
@@ -589,30 +619,28 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const rightCol = add(body, el('div', 'gg-rightcol'));
   const oppAvaBox = add(rightCol, el('div', 'gg-ava-minibox gg-ava-minibox--opp'));
   const monHost = add(rightCol, el('div', 'gg-mon-host'));
-  /* THEIR VOICE, IN THEIR COLUMN (ui/voice/micHud.js).
+  /* THEIR VOICE, IN THEIR COLUMN (ui/voice/micHud.js) — the CHIP half.
    *
-   * Two slots, both FLOW children of the monitor column, and that is the whole
-   * of the placement decision: the browser lays them out, so neither can land on
-   * MERCY's bottom-centre gutter, the closeness dial, either rail, the announcer
-   * ribbon or the monitor itself at ANY viewport — including the portrait pass,
-   * where this column moves to the top of the body (order: -1). Nothing here is
+   * A FLOW child of the monitor column, and that is the whole of the placement
+   * decision: the browser lays it out, so it cannot land on MERCY's
+   * bottom-centre gutter, the closeness dial, either rail, the announcer ribbon
+   * or the monitor itself at ANY viewport — including the portrait pass, where
+   * this column moves to the top of the body (order: -1). Nothing here is
    * absolutely placed against the frame, so there is no band to keep clear of
    * and nothing to re-measure when the phone rules move one.
    *
-   *   chip slot  directly under the bezel: the speaking indicator for a note
-   *              THEY sent, as close to their face as this file can put it
-   *              without reaching into ui/opponent.js.
-   *   mic slot   under the receipts, above their rail: the button you hold.
-   *              Its recording strip grows LEFTWARDS out of the button, inside
-   *              the slot, so holding it never moves anything on the desk.
+   * Directly under the bezel: the speaking indicator for a note THEY sent, as
+   * close to their face as this file can put it without reaching into
+   * ui/opponent.js. The MIC that sends yours moved to the arsenal drawer, under
+   * the emote tile (see THE MIC SLOT above) — the two halves of this feature
+   * point in opposite directions and now sit accordingly.
    *
-   * Both collapse to nothing when the feature is not live (hidden host, not an
+   * It collapses to nothing when the feature is not live (hidden host, not an
    * emptied one — see micHud's header on why it must not rebuild its nodes). */
   const voiceChipHost = add(rightCol, el('div', 'gg-voice-chiphost'));
   const receiptsHost = add(rightCol, el('div', 'gg-receipts'));
   const coolHost = add(rightCol, el('div', 'gg-cool'));
   if (coolHost) coolHost.hidden = true;
-  const voiceHost = add(rightCol, el('div', 'gg-voice-host'));
 
   /* ---- THE COLLAPSE BIT --------------------------------------------------
    * One class on one node; every hide, every slide and every layout consequence

@@ -287,6 +287,57 @@ export function createVoiceService({
     try { return !!match.voiceNotesAgreed && !!match.voicePhaseOpen; } catch (_e) { return false; }
   }
 
+  /**
+   * WHY is there no mic on the desk? One short phrase naming the FIRST failing
+   * gate, in the SAME ORDER available() applies them — the net/mediaQueue.js
+   * `whyNoTags()` pattern, and it exists for exactly the same reason that one
+   * does.
+   *
+   * THE BUG THIS EXISTS FOR (owner, 2026-08-05): the mic was play-tested three
+   * times across three setups — iPhone Safari, iPhone Safari incognito, and a
+   * desktop pair — and never once appeared. Every one of those was the FIRST
+   * gate below (their own opt-in had never been switched on, because until
+   * today the only switch was on a title-menu screen nobody visits before a
+   * duel), and the page said nothing at all about it in any of the three. Five
+   * ANDed booleans with no readout is a feature that can only be debugged by
+   * archaeology.
+   *
+   * `''` MEANS THE MIC IS LIVE. Everything else is a sentence to put in a warn.
+   * `micSupported` is passed in rather than sniffed here because this module is
+   * node-import-safe by charter and never touches `navigator`; a caller that
+   * does not know simply omits it and that gate is not reported.
+   *
+   * @param {object} [o]
+   * @param {boolean} [o.micSupported]  ui/voice/recorder.js `supported()`
+   * @param {boolean} [o.hudHidden]     the desk's zen bit (ui/hud.js)
+   * @returns {string} '' when live, else the first failing gate
+   */
+  function whyUnavailable(o = {}) {
+    if (disposed) return 'the voice service is disposed';
+    if (!match) return 'no match';
+    if (!localEnabled()) return 'local pref off (voice notes are not switched on for this seat)';
+    let peerBuild = false;
+    let mine = false;
+    let theirs = false;
+    let phase = false;
+    try {
+      peerBuild = !!match.peerSupportsVoice;
+      mine = !!match.localVoiceNotes;
+      theirs = !!match.remoteVoiceNotes;
+      phase = !!match.voicePhaseOpen;
+    } catch (_e) { return 'the match refused to answer'; }
+    // Our own declaration BEFORE theirs: with the pref on and this false, the
+    // seed at attachMatch was refused (a phase window) and that is our bug, not
+    // the peer's — a different sentence entirely from "they said no".
+    if (!mine) return 'our declaration never rode a consent frame (the seed was refused)';
+    if (!peerBuild) return 'the peer\'s build does not advertise caps.voice (stale page?)';
+    if (!theirs) return 'the peer never declared voice_notes (their side is switched off)';
+    if (!phase) return 'the phase is closed to voice (not Countdown/Live/SuddenDeath)';
+    if (o.micSupported === false) return 'no getUserMedia / MediaRecorder on this host';
+    if (o.hudHidden === true) return 'zen-hidden (the desk chrome is toggled off)';
+    return '';
+  }
+
   function emitState() {
     const next = available();
     if (next === lastAvailable) return;
@@ -587,6 +638,8 @@ export function createVoiceService({
 
   return {
     available,
+    /** '' when the mic is live, else the FIRST failing gate. See the block above. */
+    whyUnavailable,
     sendBlob,
     sendNote,
 

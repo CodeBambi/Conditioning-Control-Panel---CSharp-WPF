@@ -1053,5 +1053,236 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
   guest.dispose();
 }
 
+// ============================ 10. THE VISIBILITY CHAIN, AND WHY IT SAYS NOTHING
+//
+// THE ROUND THIS SECTION EXISTS FOR (owner, 2026-08-05). The mic was play-tested
+// three times — iPhone Safari, iPhone Safari incognito, a desktop-to-desktop
+// match — and never appeared once. Every gate above is individually pinned and
+// every one of them passed; what was NOT pinned was the whole chain end to end
+// from the boot ordering, and what did not exist at all was any way to find out
+// which gate had said no. Both are fixed here.
+//
+//   10a  whyUnavailable() names the FIRST failing gate, in available()'s own
+//        order — the net/mediaQueue.js whyNoTags() pattern.
+//   10b  two REAL engines, seeded the way boot.js seeds them (at Idle, inside
+//        attachMatch, BEFORE createInvite/join moves the phase), driven through
+//        a real handshake with nothing hand-set. This is the test that would
+//        have caught the Lobby-only setter bug of 2026-08-05 on its own.
+//   10c  the same, through the RELAY-REBUILD ordering (adoptLobby runs BEFORE
+//        the re-attach in net/session.js, so the seed lands in Lobby, not Idle)
+//        and through a rejoin onto a brand new engine pair.
+//   10d  the breadcrumb is wired, at warn, once per match.
+{
+  // ---- 10a. the ladder -----------------------------------------------------
+  {
+    const prefs = fakePrefs({ voiceNotesEnabled: false });
+    const m = fakeMatch({ agreed: false, phaseOpen: false });
+    // The stub answers the three flags the reporter reads individually.
+    m.peerSupportsVoice = false;
+    m.localVoiceNotes = false;
+    m.remoteVoiceNotes = false;
+    const svc = createVoiceService({ match: m, audio: fakeAudio(), prefs, logger: quiet });
+
+    ok(/local pref off/.test(svc.whyUnavailable()), 'gate 1: our own opt-in, named first', svc.whyUnavailable());
+    prefs.set('voiceNotesEnabled', true);
+    ok(/our declaration never rode/.test(svc.whyUnavailable()),
+      'gate 2: the pref is on but the declaration never went out — OUR bug, and it says so',
+      svc.whyUnavailable());
+    m.localVoiceNotes = true;
+    ok(/caps\.voice/.test(svc.whyUnavailable()), 'gate 3: their BUILD, named as a build problem', svc.whyUnavailable());
+    m.peerSupportsVoice = true;
+    ok(/peer never declared/.test(svc.whyUnavailable()), 'gate 4: their side is switched off', svc.whyUnavailable());
+    m.remoteVoiceNotes = true;
+    ok(/phase is closed/.test(svc.whyUnavailable()), 'gate 5: the phase', svc.whyUnavailable());
+    m.setPhaseOpen(true);
+    ok(svc.whyUnavailable({ micSupported: false }).indexOf('getUserMedia') >= 0,
+      'gate 6: a host with no microphone API at all — reported, never a silent dead button');
+    ok(/zen-hidden/.test(svc.whyUnavailable({ hudHidden: true })), 'gate 7: the desk chrome is off');
+    ok(svc.whyUnavailable({ micSupported: true, hudHidden: false }) === '',
+      'and with all seven answered it says NOTHING — a quiet log is the good outcome');
+    // The two host facts are OPTIONAL: this module never touches navigator.
+    ok(svc.whyUnavailable() === '', 'a caller that cannot answer them does not get them reported');
+    svc.dispose();
+    ok(/disposed/.test(svc.whyUnavailable()), 'and a dead service says that rather than blaming the player');
+  }
+
+  // ---- 10b/10c. two real engines, seeded in boot.js's own order -------------
+  /**
+   * A serialize/parse transport pair with the two lobby-entry verbs, so the
+   * WHOLE handshake runs: hello, caps, the host's proposal, the guest's confirm.
+   * Nothing about voice is hand-set anywhere below.
+   */
+  function realPair() {
+    const mk = (getPeer) => {
+      const msgSubs = new Set();
+      const stSubs = new Set();
+      // DISCONNECTED UNTIL _fireState, unlike section 9's pair. adoptLobby()
+      // sends the hello immediately if the transport is ALREADY up, and the
+      // rebuild case below needs the window between "in the lobby" and
+      // "connected" — that window is exactly where boot.js's re-attach seeds.
+      const t = {
+        state: 0,
+        send(msg) {
+          const back = parse(serialize(msg), { logger: quiet });
+          if (back) { const p = getPeer(); if (p) p._deliver(back); }
+          return Promise.resolve(true);
+        },
+        onMessageReceived(fn) { msgSubs.add(fn); return () => msgSubs.delete(fn); },
+        onStateChanged(fn) { stSubs.add(fn); return () => stSubs.delete(fn); },
+        createInviteAsync() { return Promise.resolve('AAAAAA'); },
+        joinAsync() { return Promise.resolve(true); },
+        _deliver(m) { for (const fn of Array.from(msgSubs)) fn(m); },
+        _fireState() { t.state = 3; for (const fn of Array.from(stSubs)) fn(3); },
+      };
+      return t;
+    };
+    const th = mk(() => tg);
+    const tg = mk(() => th);
+    const caps = () => localCaps({ voice: VOICE_CAP_VERSION, transfer: true });
+    return {
+      th,
+      tg,
+      host: new GoonMatchService(th, true, { logger: quiet, tag: 'GG:vh2', caps: caps() }),
+      guest: new GoonMatchService(tg, false, { logger: quiet, tag: 'GG:vg2', caps: caps() }),
+    };
+  }
+
+  /** boot.js attachMatch, reduced to the one line this section is about. */
+  const seedLikeBoot = (m, on) => (on ? m.setLocalVoiceNotes(true) : true);
+
+  {
+    const { host, guest, th, tg } = realPair();
+    // THE ORDER IS THE TEST. attachMatch runs while the engine is still Idle —
+    // net/session.js raises onCurrentMatchChanged from _beginSession, before
+    // createInviteAsync/joinAsync has moved the phase. A setter that refused
+    // Idle (as it did until 2026-08-05) ate this call on BOTH seats and the
+    // declaration never rode a single consent frame.
+    ok(host.phase === GoonMatchPhase.Idle && guest.phase === GoonMatchPhase.Idle, 'both seats start Idle');
+    ok(seedLikeBoot(host, true) === true && seedLikeBoot(guest, true) === true,
+      'the boot seed is ACCEPTED in Idle — a refusal here is the silent killer of the whole feature');
+
+    await host.createInviteAsync();
+    await guest.joinAsync('AAAAAA');
+    th._fireState();
+    tg._fireState();
+    await tick();
+
+    ok(host.peerSupportsVoice === true && guest.peerSupportsVoice === true,
+      'the hello carried caps.voice both ways');
+    ok(host.localVoiceNotes === true && guest.localVoiceNotes === true,
+      'and both declarations survived into the lobby');
+
+    host.confirmConsent();
+    guest.confirmConsent();
+    await tick();
+
+    ok(host.voiceNotesAgreed === true && guest.voiceNotesAgreed === true,
+      'BOTH ENGINES AGREE, from nothing but the two prefs and a real handshake');
+
+    // ...and the service on top of it answers the same, once the phase opens.
+    const svcH = createVoiceService({ match: host, audio: fakeAudio(), prefs: fakePrefs(), logger: quiet });
+    ok(svcH.available() === false && /phase is closed/.test(svcH.whyUnavailable()),
+      'the mic is still off in the draft, and says which gate that is');
+    host._phase = GoonMatchPhase.Live;
+    ok(svcH.available() === true && svcH.whyUnavailable() === '',
+      'and it comes on at Live with nothing left to explain');
+    svcH.dispose();
+    host.dispose();
+    guest.dispose();
+  }
+
+  {
+    // ONE SEAT OPTED IN is not enough, and the OTHER seat's log has to say whose
+    // side that is — this is the owner's desktop-to-desktop case exactly.
+    const { host, guest, th, tg } = realPair();
+    seedLikeBoot(host, true);
+    seedLikeBoot(guest, false);
+    await host.createInviteAsync();
+    await guest.joinAsync('AAAAAA');
+    th._fireState(); tg._fireState();
+    await tick();
+    host.confirmConsent();
+    guest.confirmConsent();
+    await tick();
+    host._phase = GoonMatchPhase.Live;
+    guest._phase = GoonMatchPhase.Live;
+
+    const svcH = createVoiceService({ match: host, audio: fakeAudio(), prefs: fakePrefs(), logger: quiet });
+    const svcG = createVoiceService({ match: guest, audio: fakeAudio(), prefs: fakePrefs({ voiceNotesEnabled: false }), logger: quiet });
+    ok(svcH.available() === false && /peer never declared/.test(svcH.whyUnavailable()),
+      'the opted-in seat is told THEIR side is off', svcH.whyUnavailable());
+    ok(svcG.available() === false && /local pref off/.test(svcG.whyUnavailable()),
+      'and the other seat is told it is its own', svcG.whyUnavailable());
+    svcH.dispose(); svcG.dispose(); host.dispose(); guest.dispose();
+  }
+
+  {
+    // THE RELAY-REBUILD ORDERING. net/session.js `_fallBackToRelay` calls
+    // adoptLobby() and only THEN raises onCurrentMatchChanged, so boot.js's
+    // seed lands with the engine already in Lobby — a different branch of
+    // setLocalVoiceNotes, on a brand new GoonMatchService whose declaration
+    // starts false. The declaration has to survive the rebuild.
+    const { host, guest, th, tg } = realPair();
+    ok(host.adoptLobby() === true && guest.adoptLobby() === true, 'the rebuild adopts the room first');
+    ok(host.phase === GoonMatchPhase.Lobby, '...so the re-attach seeds into Lobby, not Idle');
+    ok(seedLikeBoot(host, true) === true && seedLikeBoot(guest, true) === true,
+      'and the seed is accepted there too');
+    th._fireState(); tg._fireState();
+    await tick();
+    host.confirmConsent();
+    guest.confirmConsent();
+    await tick();
+    ok(host.voiceNotesAgreed === true && guest.voiceNotesAgreed === true,
+      'THE DECLARATION SURVIVES THE REBUILD — both sides agree over the relay-adopted room');
+    host.dispose(); guest.dispose();
+  }
+
+  {
+    // A REJOIN is a whole new pair of engines with a whole new pair of default
+    // (false) declarations. Nothing carries over but the prefs, which is exactly
+    // why boot.js re-seeds on EVERY attach rather than only on the first.
+    for (let round = 0; round < 2; round++) {
+      const { host, guest, th, tg } = realPair();
+      ok(host.localVoiceNotes === false, 'round ' + round + ': a fresh engine declares nothing by itself');
+      seedLikeBoot(host, true);
+      seedLikeBoot(guest, true);
+      await host.createInviteAsync();
+      await guest.joinAsync('AAAAAA');
+      th._fireState(); tg._fireState();
+      await tick();
+      host.confirmConsent();
+      guest.confirmConsent();
+      await tick();
+      ok(host.voiceNotesAgreed === true && guest.voiceNotesAgreed === true,
+        'round ' + round + ': and the re-seed puts it back');
+      host.dispose(); guest.dispose();
+    }
+  }
+
+  // ---- 10d. the breadcrumb is actually wired -------------------------------
+  {
+    const fs10 = await import('node:fs');
+    const url10 = await import('node:url');
+    const readSrc = (rel) => fs10.readFileSync(url10.fileURLToPath(new URL(rel, import.meta.url)), 'utf8').replace(/\r\n/g, '\n');
+    const boot = readSrc('../boot.js');
+    const bare = boot.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
+    ok(/function reportMicGate\(\)/.test(bare), 'boot.js carries the mic breadcrumb');
+    ok(/logger\.warn\('voice mic hidden: '/.test(bare),
+      'at WARN — the level that reaches the C# log through bridge.log and the phone ?debug=1 overlay');
+    ok(/reportMicGate\(\);/.test(bare.split('case GoonMatchPhase.Live:')[1] || ''),
+      'fired on the Live arm, where a player would first look for the button');
+    ok(bare.indexOf('mountHudNow();') < bare.indexOf('reportMicGate();'),
+      '...after the HUD, because the answer is partly about the strip that was just not mounted');
+    ok(/micGateSaid = false;/.test(bare) && /if \(micGateSaid\) return;/.test(bare),
+      'and ONCE per match — a rebuild re-arms it, SuddenDeath does not repeat it');
+
+    const svcSrc = readSrc('../ui/voice/voiceService.js');
+    ok(/whyUnavailable,/.test(svcSrc), 'the service exposes the reporter on its handle');
+    ok(!/navigator/.test(svcSrc.replace(/\/\*[\s\S]*?\*\//g, '')),
+      'and STILL touches no navigator — the host facts are passed in, so this module stays node-import-safe');
+  }
+}
+
 console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);
 process.exit(failures === 0 ? 0 : 1);

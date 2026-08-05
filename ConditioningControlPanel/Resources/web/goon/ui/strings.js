@@ -527,11 +527,26 @@ export const S = Object.freeze({
     /** ...and the emote-attached variant, anchored on the bubble instead. */
     incomingWithEmote: 'they said something',
 
-    /* --- the lobby line (read-only; the toggle lives in the screen only) --- */
+    /* --- the lobby ROW (2026-08-05) ---------------------------------------
+     * This used to be a read-only sentence, and the ONLY switch lived on a
+     * title-menu screen a player has no reason to visit before a duel. The
+     * owner then failed to find the mic three times running with the feature
+     * working exactly as written — because their own side had never been
+     * switched on, and nothing on the road into a match ever offered to. The
+     * toggle is here too now, behind the SAME acknowledgment gate (rule 1: the
+     * sentence that mentions HEARING them is never skippable), and the old
+     * status sentence stays as the sub-line under it. */
     lobbyBoth: 'voice notes on for this match',
     lobbyYours: 'you have voice notes on — they have not',
     lobbyTheirs: 'they have voice notes on — you have not',
     lobbyPeerOld: 'their app is too old for voice notes',
+    /** The row's own explanation, when there is no status to report yet. */
+    lobbySub: 'hold the mic under your items to send ten seconds of your voice. you both have to switch it on.',
+    /** Before the acknowledgment has been read. Says what to press, not "no". */
+    lobbyLocked: 'tap this row to read what it does first.',
+    /** The right-hand chip, exactly like the transfer row's pair. */
+    lobbyTheirsOn: 'they opted in',
+    lobbyTheirsOff: 'they have not',
 
     /* --- the refusals ----------------------------------------------------- */
     /** getUserMedia said no. NOT an error tone: it is a perfectly good answer. */

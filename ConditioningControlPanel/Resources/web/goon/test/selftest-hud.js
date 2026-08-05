@@ -4865,14 +4865,26 @@ const audioMod = await import('../ui/audio.js');
     const micHost20 = findOne(frame20, 'gg-voice-host');
     const chipHost20 = findOne(frame20, 'gg-voice-chiphost');
     ok(!!micHost20 && !!chipHost20, 'mountHud gives the mic and the chip a slot each');
-    ok(micHost20.parentNode === col20 && chipHost20.parentNode === col20,
-      'both are FLOW children of the opponent column — no coordinates, so no keep-out to miss');
+    /* THE MIC MOVED TO THE ARSENAL DRAWER (2026-08-05). It lived under the
+     * receipts in the opponent column, which is where nobody looked: the owner
+     * hunted for it "right under the Emote icon" across three play-tests. The
+     * emote tile is the last item on the RIGHT rail, so the slot is now the last
+     * child of `.gg-arsenal-panel`, immediately after the two rails. Still FLOW,
+     * still no coordinates, still no keep-out band to miss. */
+    const panel20 = findOne(frame20, 'gg-arsenal-panel');
+    ok(!!panel20 && micHost20.parentNode === panel20,
+      'the mic slot is a FLOW child of the arsenal panel — under the tiles, where the emote icon is');
+    const pkids = panel20.children;
+    ok(pkids.indexOf(micHost20) === pkids.length - 1 &&
+       pkids.indexOf(micHost20) > pkids.indexOf(findOne(panel20, 'gg-arsenal-rails')),
+      'and it is the LAST thing in the drawer, directly under the rails whose last right-hand tile is the emote');
+    ok(chipHost20.parentNode === col20,
+      'the CHIP stays in the opponent column — it is about THEIR voice, not a control');
     const kids = col20.children;
     ok(kids.indexOf(chipHost20) === kids.indexOf(findOne(col20, 'gg-mon-host')) + 1,
       'the chip sits directly under their bezel');
-    ok(kids.indexOf(micHost20) === kids.length - 1 &&
-       kids.indexOf(micHost20) > kids.indexOf(findOne(col20, 'gg-receipts')),
-      'and the mic last in the column, below the receipts (the rail moved into the arsenal drawer in batch 7)');
+    ok(kids.indexOf(micHost20) < 0,
+      'and the mic is no longer in that column at all');
     ok(!!findOne(frame20, 'gg-voice-btn'), 'the button is built');
     ok(micHost20.hidden === true, 'and hidden until the feature is live');
     ok(!!hud20.parts.mic && typeof hud20.parts.mic.isRecording === 'function',
@@ -4948,9 +4960,22 @@ const audioMod = await import('../ui/audio.js');
     ok(/\.gg-voice-host\s*\{[^}]*position:\s*relative/.test(bare20),
       'the slot is the containing block...');
     ok(/\.gg-voice\s*\{[^}]*position:\s*absolute/.test(bare20) && /\.gg-voice\s*\{[^}]*right:\s*0/.test(bare20),
-      '...and the strip is anchored to its right edge, so a recording grows LEFTWARDS and nothing on the desk moves');
+      '...and the strip is anchored to an edge of it, so a recording grows sideways and nothing on the desk moves');
     ok(!/position:\s*fixed/.test(bare20) && !/z-index/.test(bare20),
       'nothing here is fixed and nothing claims a z-index — MERCY owns z60 and this tier does not go near it');
+
+    /* THE DRAWER VARIANT (2026-08-05). The slot moved under the emote tile, and
+     * the arsenal is the LEFT gutter — a strip still growing leftwards out of it
+     * would be off the screen inside two words. It flips to left-anchored, and
+     * the button flips back to the outside edge WITHOUT the DOM order changing
+     * (micHud must never re-append a node: that releases pointer capture). */
+    ok(/\.gg-arsenal-panel\s+\.gg-voice\s*\{[^}]*left:\s*0/.test(bare20)
+      && /\.gg-arsenal-panel\s+\.gg-voice\s*\{[^}]*right:\s*auto/.test(bare20),
+      'in the arsenal drawer the strip is anchored LEFT and grows rightwards, away from the screen edge');
+    ok(/\.gg-arsenal-panel\s+\.gg-voice\s*\{[^}]*flex-direction:\s*row-reverse/.test(bare20),
+      '...with the button back on the outside edge by paint order, never by re-appending a captured node');
+    ok(css20.indexOf('.gg-arsenal-panel .gg-voice {') > css20.indexOf('.gg-voice:not(.gg-plate)'),
+      'and written after the idle padding reset it has to beat');
 
     ok(/\.gg-hud-frame\s+\.gg-voice,[\s\S]{0,120}pointer-events:\s*none/.test(bare20),
       'pointer-events: none at 0,2,0 — .gg-plate would otherwise turn the strip back on over the stage');
