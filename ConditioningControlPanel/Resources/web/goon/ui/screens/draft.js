@@ -25,10 +25,12 @@
 
 import { createLedger, el, button } from '../router.js';
 import { S, ELEMENTS } from '../strings.js';
-// matchRiskTier/riskMultiplier are the ENGINE's frozen names for "how heavy is this pool" and
-// "what does that multiply the score by" (core/scoring.js, C#-parity). The screen uses only the
-// product of the two — one honest "you both score ×N" — and shows the tier itself nowhere.
-import { ALWAYS_ON_ELEMENT, matchRiskTier, riskMultiplier, sharedPool } from '../../core/draft.js';
+// NOTHING RISK-SHAPED IS IMPORTED ANY MORE (2026-08-05). This file used to pull
+// matchRiskTier + riskMultiplier out of core/draft.js purely to print their product in the
+// footer; that readout is gone, so the import is too. Both functions are alive and well in
+// the engine — core/scoring.js multiplies by them every second — they simply have no reader
+// on any screen now. Re-importing one here means a risk number is back on a player's page.
+import { ALWAYS_ON_ELEMENT, sharedPool } from '../../core/draft.js';
 
 /** One 24x24 glyph per element. Literal markup — no interpolation, ever. */
 const GLYPHS = {
@@ -122,13 +124,19 @@ export function mount(container, ctx) {
 
   /* ---------------------------------------------------------- the footer */
 
-  const multLabel = el('span', { class: 'gg-draft-mult', text: '' });
+  /* NO MULTIPLIER LABEL EITHER (2026-08-05). `.gg-draft-mult` — "you both score
+   * ×1.30", in gold, in its own `.gg-draft-meterwrap` slot — was the last node
+   * on this screen fed by the risk tier, and it followed the meters and the
+   * per-tile pips out. `poolLabel` says the same fact in the unit the screen is
+   * about: how many effects the two of you just agreed to. */
   const poolLabel = el('span', { class: 'gg-draft-pool', text: '' });
   const errLabel = el('p', { class: 'gg-draft-error', text: '', role: 'status', hidden: true });
   const confirmBtn = button(ledger, S.draft.confirm, () => confirmIn(), { variant: 'primary', audio, sfx: 'draft-lock' });
 
+  /* The footer is two children now, not three: the empty `.gg-draft-meterwrap`
+   * that held the multiplier went with it rather than staying behind as a
+   * 0-wide flex item in a space-between row. */
   const footer = el('div', { class: 'gg-draft-foot' }, [
-    el('div', { class: 'gg-draft-meterwrap' }, [multLabel]),
     el('div', { class: 'gg-draft-poolwrap' }, [
       poolLabel,
       el('span', { class: 'gg-draft-rolled', text: S.draft.rolled }),
@@ -220,10 +228,9 @@ export function mount(container, ctx) {
       t.badge.textContent = theirsOff ? S.draft.theirsOff : '';
     }
 
-    // Both players endure the same pool, so there is ONE number here and it is the one a player
-    // can act on: agree to more, score faster. (The 0-7 "match risk" tier this used to paint as
-    // three seven-segment meters is gone — it was engine bookkeeping on a player's screen.)
-    multLabel.textContent = S.draft.score(riskMultiplier(matchRiskTier(shared)));
+    // ONE number in the footer, and it is the pool itself. (The 0-7 "match risk" tier this
+    // used to paint as three seven-segment meters, and the ×N multiplier that outlived them
+    // by a day, were both engine bookkeeping on a player's screen.)
     poolLabel.textContent = S.draft.pool(shared.length);
 
     youSig.textContent = match.localDraftConfirmed ? S.draft.confirmed : '';

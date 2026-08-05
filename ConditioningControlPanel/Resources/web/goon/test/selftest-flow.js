@@ -315,12 +315,16 @@ const recap = await import('../ui/screens/recap.js');
   ok(recap.assertStageClear(null) === 0, 'a clean stage is a no-op and needs no logger');
 }
 
-/** A match stub shaped like the two fields recap.js actually reads. */
+/** A match stub shaped like the two fields recap.js actually reads.
+ *  `scoring` is deliberately absent since 2026-08-05: the recap used to print
+ *  `scoring.riskMultiplier` in its fine print and that readout went with the
+ *  rest of the risk indicator, so a stub carrying one would be documenting a
+ *  read that no longer happens. If recap.js ever touches scoring again this
+ *  stub throws on undefined, which is the failure we want. */
 function fakeMatch(result) {
   return {
     result,
     opponent: { displayName: 'Kit' },
-    scoring: { riskMultiplier: 1.15 },
     onResultFinalized() { return () => {}; },
     onMatchEnded() { return () => {}; },
   };

@@ -470,10 +470,12 @@
   padding-top: 0.9rem;
   border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
-/* Once a meter, a "Match risk 4 / 7" label and a multiplier; since 2026-08-04
-   just the multiplier — the only one of the three a player could act on. */
-.gg-draft-meterwrap { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
-.gg-draft-mult { font-size: 0.8rem; color: var(--gg-gold); font-variant-numeric: tabular-nums; }
+/* THE FOOTER'S RISK SLOT IS GONE (2026-08-05). It held three things once — a
+   seven-segment meter, a "Match risk 4 / 7" label and a gold "you both score
+   ×1.30" — then only the multiplier, and now nothing: the wrapper
+   (.gg-draft-meterwrap) and the label (.gg-draft-mult) are both deleted, so the
+   row is the pool blurb and the confirm button. ui/screens/draft.js builds
+   neither node; a rule for either here would be styling a ghost. */
 
 .gg-draft-theirs { display: flex; align-items: center; gap: 0.5rem; }
 .gg-slots-label { font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gg-text-4); }

@@ -601,9 +601,12 @@ export function mount(container, ctx) {
 
     /* --- scoreline --- */
     if (result) {
-      // `riskMultiplier` is the engine's frozen name for the pool's score bonus
-      // (core/scoring.js, C#-parity). The word never reaches the page any more.
-      const mult = match?.scoring?.riskMultiplier || 1;
+      /* THE MULTIPLIER IS NOT READ HERE ANY MORE (2026-08-05). This block used
+       * to pull `match.scoring.riskMultiplier` — the engine's frozen name for
+       * the pool's score bonus — and print it in the fine print. It was the
+       * recap's copy of the live HUD's risk readout and left with it; the
+       * scoreline is the multiplier's whole effect, already added up. The
+       * engine value is untouched, it simply has no reader on any screen. */
       column.appendChild(el('section', { class: 'gg-card gg-recap-score' }, [
         el('h2', { class: 'gg-recap-h', text: S.recap.scoreline }),
         el('div', { class: 'gg-scoreline' }, [
@@ -611,7 +614,7 @@ export function mount(container, ctx) {
           el('span', { class: 'gg-scoredash', text: '·' }),
           el('span', { class: 'gg-scorenum is-them', text: String(result.remoteScore) }),
         ]),
-        el('p', { class: 'gg-recap-fine', text: S.recap.scoreFineprint(mult) }),
+        el('p', { class: 'gg-recap-fine', text: S.recap.scoreFineprint }),
         el('p', { class: 'gg-recap-fine', text: S.recap.survived(result.survivedMs) }),
       ]));
     }
