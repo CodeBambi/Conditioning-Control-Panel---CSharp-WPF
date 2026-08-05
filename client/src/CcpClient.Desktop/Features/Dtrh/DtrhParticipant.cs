@@ -12,6 +12,33 @@ namespace CcpClient.Desktop.Features.Dtrh;
 /// </summary>
 public sealed class DtrhParticipant : IBackgroundParticipant
 {
+    /// <summary>SP-048: payload-root presence states for the published-artifact location guard.</summary>
+    public enum DtrhPayloadState { Present, Missing, Incomplete }
+
+    /// <summary>SP-048: the payload-root probe outcome (state + observed file count).</summary>
+    public sealed record DtrhPayloadProbe(DtrhPayloadState State, int FileCount);
+
+    /// <summary>
+    /// SP-048 (b1 land condition — published-artifact payload location DECIDED: beside the
+    /// exe via the linked glob, served read-only through <see cref="AppContext.BaseDirectory"/>).
+    /// Non-fatal presence probe: names the RESOLVED root and its state at startup so a boot
+    /// transcript is self-evidencing about WHERE the payload is served from (a missing or
+    /// incomplete payload is refused by the §4 404 discipline — never a crash, never a
+    /// silent substitute).
+    /// </summary>
+    public static DtrhPayloadProbe ProbePayloadRoot(string payloadRoot)
+    {
+        if (!Directory.Exists(payloadRoot))
+        {
+            return new DtrhPayloadProbe(DtrhPayloadState.Missing, 0);
+        }
+
+        var count = Directory.EnumerateFiles(payloadRoot, "*", SearchOption.AllDirectories).Count();
+        return File.Exists(Path.Combine(payloadRoot, "index.html"))
+            ? new DtrhPayloadProbe(DtrhPayloadState.Present, count)
+            : new DtrhPayloadProbe(DtrhPayloadState.Incomplete, count);
+    }
+
     private readonly ILogSink _log;
     private readonly Inbox _inbox = new();
     private readonly IReadOnlyList<string>? _blockedRoutePrefixes;
@@ -79,6 +106,8 @@ public sealed class DtrhParticipant : IBackgroundParticipant
         Running = true;
         var generation = Owner.Begin();
         _ = generation; // the server is synchronous-bind + listener tasks owned by Dispose (below)
+        var probe = ProbePayloadRoot(PayloadRoot);
+        _log.Log($"dtrh: payload root '{PayloadRoot}' -> {probe.State} ({probe.FileCount} files)");
         _server = new LoopbackServer(PayloadRoot, OverlayRoot, MediaRoot, _inbox, BridgeToken, _log,
             spiralsRoot: SpiralsRoot, userMediaRoot: UserMediaRoot,
             blockedRoutePrefixes: _blockedRoutePrefixes);

@@ -91,6 +91,46 @@ failure modes and a writable second copy that weakens the read-only anchor).
 4. **Runtime read-only:** GET-only server, traversal-refused, never writes to the payload
    root (§4 contract unchanged).
 
+### Engine-review presence (T-2)
+
+| Call | Step / type | Result |
+|---|---|---|
+| 1 | Step 1 / plan | **SKIPPED by runtime** (SP-195: nested reviewer spawn blocked inside pi worker session; `skipped:true, spawnFailed:false`; artifact `.reviews/1-20260805T032127.md`) — engine runs reviews post-worker |
+| 2 | Step 2 / plan | **SKIPPED by runtime** (same SP-195 shape; artifact `.reviews/2-*.md`) |
+
+## Step 2: implement the decided shape
+
+**Product change (the minimal change the consult endorsed — non-fatal guard that earns
+its keep via falsifiability):** `DtrhParticipant.cs` —
+`ProbePayloadRoot(string)` (typed `DtrhPayloadState` Present/Missing/Incomplete +
+recursive file count) + one startup diagnostic in `StartAsync` naming the RESOLVED root
+and state: `dtrh: payload root '<full path>' -> <State> (<n> files)`. Non-fatal by
+construction: the participant starts regardless; a missing/incomplete payload is refused
+by the §4 404 discipline, never a crash, never a silent substitute. The log line makes
+every boot transcript self-evidencing about WHERE the payload is served from (the
+consult's falsifiability correction).
+
+**Publish wiring: UNCHANGED** (decision ratified the existing glob — zero csproj/script
+delta, so zero per-change justification owed).
+
+**Resolution per mode (empirical):**
+- Debug: `bin/Debug/net10.0/payload/dtrh` — 1542 payload + 2 overlay files after the
+  contract Debug build (CopyToOutputDirectory arm of the glob).
+- Release: same glob arm (mechanism identical to Debug; the win-x64 publish output was
+  measured directly in Step 1).
+- Published: beside the exe via CopyToPublishDirectory — set-identical, byte-identical,
+  `--verify-assets` exit 0 (Step 1 transcripts).
+
+**Tests:** `DtrhPayloadRootTests.cs` (5): probe Missing/Incomplete/Present shapes with
+temp trees; the one-code-path root shape (`PayloadRoot`/`OverlayRoot`/`MediaRoot` vs
+`AppContext.BaseDirectory`); participant start logs the resolved root + typed state and
+stays Running (non-fatal). 5/5 green.
+
+**Suite state:** unit 606/606 (floor 601 → +5 new), headless 33/33, build 0W/0E.
+Honesty note: the FIRST full unit run after the change reported 1 transient failure
+(test name not captured — tail-truncated output); unreproduced across 3 subsequent full
+runs (606/606 each). Watched; if it recurs it gets named and fixed.
+
 ### 1.5 Pre-approach solo consult
 
 **Route:** `consult` mode solo (per the 2026-08-04 rewire; council forbidden by the packet).

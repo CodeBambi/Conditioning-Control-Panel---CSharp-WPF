@@ -1,5 +1,5 @@
 ## STATUS: SP-048 — DTRH published-artifact payload location
-**Current Step:** Step 1 — evidence + decision + pre-approach consult (in progress)
+**Current Step:** Step 3 — published boot proof + evidence + pre-completion consult (in progress)
 **Last Updated:** 2026-08-05 (worker run 1)
 **Blockers:** none
 
@@ -10,9 +10,9 @@
 - [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: implement the decided shape
-- [ ] Payload root resolution per mode (Debug/Release/published)
-- [ ] Publish wiring if the decision changes glob/scripts
-- [ ] Tests (resolution per mode; SP-010 publish gates non-regression)
+- [x] Payload root resolution per mode (Debug/Release/published)
+- [x] Publish wiring if the decision changes glob/scripts
+- [x] Tests (resolution per mode; SP-010 publish gates non-regression)
 
 ### Step 3: published boot proof + evidence + pre-completion consult
 - [ ] Published win-x64 boots the DTRH host (engine live, §4 green)
