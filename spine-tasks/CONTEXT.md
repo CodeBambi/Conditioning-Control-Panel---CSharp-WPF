@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-21
 **Status:** CLOSED-OUT — no claimable board work remains (see below)
-**Next Task ID:** SP-047
+**Next Task ID:** SP-049
 
 ---
 
@@ -59,7 +59,14 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 
 **The c1–c7 slice cut is COMPLETE (2026-08-05); the AI row's acceptance is NOT (named limits on the row). Next: phase-scope re-derivation consult (land-consult condition) before further authoring — inventory: memory→prompt context row (new, OPEN), dashboard-surface question (owner 2026-07-22, unanswered), DTRH published-payload-location decision (b1 land condition), everything else owner-gated/excluded (camera, geometry, unified video, Wayland §5.1).**
 
-### Phase 5 — DTRH admit + host slices, quips/sound, AI companion, tail (ACTIVE — wave 9 in flight)
+### Wave 10 (staged 2026-08-05)
+
+| Task | Summary | Status | Deps |
+|------|---------|--------|------|
+| SP-047-memory-prompt-context | Row: wire companion memory into prompt context (c4 store consumed per request; read-gating ported as behavior fact `LocalAiService.cs:113`; consent-default tension WPF-true vs placeholder-Denied recorded verbatim; ambient stateless; round-trip INTO prompt falsifiable) | Authored 2026-08-05 | SP-046 |
+| SP-048-dtrh-payload-location | Row: DTRH published-artifact payload location (b1 land condition, oldest open in the port — evidence-first decision; published win-x64 boots the host from the decided location; SP-010 gates non-regression; Linux publish = named limit) | Authored 2026-08-05 | SP-037 |
+
+### Phase 5 — DTRH admit + host slices, quips/sound, AI companion, tail (ACTIVE — wave 10 in flight)
 
 **WAVE-4 PARK LIFTED 2026-08-04 (~15:30 local, same day):** the anthropic-400 park was a pi request-shape defect, not account exhaustion — fixed by the `__PI_BILLING_HEADER_FIX__` local pi-ai patch (`x-anthropic-billing-header` system[0] per hermes-agent #48176; `pi -p` 200 on opus-5 AND fable-5). SP-037 landed earlier that day (floor restored). SP-035+SP-036 launch per plan. (The ~13:10 UTC park state is retained in the board's 2026-08-04 gate-history entry for the SP-037 substitution-land provenance.)
 
