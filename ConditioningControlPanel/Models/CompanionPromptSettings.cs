@@ -417,7 +417,16 @@ FREQUENCY RULE:
                 KnowledgeBase = KnowledgeBase,
                 ContextReactions = ContextReactions,
                 OutputRules = OutputRules,
-                CustomDomains = new Dictionary<string, string>(CustomDomains)
+                CustomDomains = new Dictionary<string, string>(CustomDomains),
+                // The CCBill acknowledgement audit trail must survive a clone. Callers
+                // (PersonalityService.MigrateFromLegacy, CommunityPrompt) copy settings and
+                // write the clone back, so dropping these silently re-prompted the user and
+                // erased the recorded ack timestamp/locale.
+                ExplicitContentAcknowledged = ExplicitContentAcknowledged,
+                ExplicitAcknowledgedVersion = ExplicitAcknowledgedVersion,
+                ExplicitAcknowledgedAt = ExplicitAcknowledgedAt,
+                ExplicitAcknowledgedLocale = ExplicitAcknowledgedLocale,
+                PromptEditorDisclaimerAcknowledged = PromptEditorDisclaimerAcknowledged
             };
         }
     }
