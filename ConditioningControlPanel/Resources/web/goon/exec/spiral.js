@@ -63,16 +63,21 @@
  *   · a WATCHDOG inside the render loop, once a second, never per frame: a lost
  *     context (polled, because an event needs an event loop that a stall is
  *     busy eating) or rAF callbacks more than RAF_STALL_MS apart while the pane
- *     believes it is drawing;
+ *     believes it is drawing — TWICE OVER, on two separate pairs of frames,
+ *     because one fat gap is a GC/occlusion hitch far more often than it is a
+ *     hang and the lock it sets lasts the rest of the pane's life;
  *   · the KILL SWITCH — `shaderSpirals` in ui/prefs.js, default ON, mirrored to
  *     <html data-gg-shader>. Off, weave() never runs and a live weave is dropped
  *     within a second. exec/ never imports ui/, so it arrives as a root attribute
  *     exactly the way data-gg-vskip does;
  *   · and the backing store is capped (MAX_DPR / MAX_BACKING_PX) so a 4K display
  *     at devicePixelRatio 2 cannot ask the driver for an 8K fill every frame.
- * The rAF-stall check is deliberately blind while the page is hidden or the heat
- * armor has parked decoration: not painting is CORRECT in both, and a watchdog
- * that fires on correct behaviour gets switched off by the people it protects.
+ * The rAF-stall check is deliberately blind while the page is hidden: not
+ * painting is CORRECT there, and a watchdog that fires on correct behaviour gets
+ * switched off by the people it protects. It is blind at hot heat too, for a
+ * different reason now — the bed no longer STOPS when the armor goes hot (see
+ * step(); it changes gear), but hot is the busiest the machine ever gets, so a
+ * fat gap in the middle of one is the likeliest honest hitch on the page.
  *
  * NO CROSS-IMPORT: nothing here reaches into dtrh/. dtrh/engine/loomSpirals.js
  * would pull DtRH settings and the player's saved-spiral storage in with it, and
@@ -237,8 +242,14 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
   let onLost = null;
   let onResize = null;
   let onVisibility = null;
+  let onWake = null;              // pageshow/focus — the resumes visibilitychange does not cover
   let lastCheck = 0;              // in-loop watchdog: last health poll (rAF timestamp ms)
   let lastDraw = 0;               // lite-tier draw throttle: last frame actually rendered
+  // ONE fat frame gap is not a hang (2026-08-05). See healthCheck(): the first
+  // oversized gap only makes the pane a SUSPECT and re-seeds the clocks; it takes
+  // a second one, measured on a fresh pair of frames, to cost this pane its
+  // shader. Cleared by any healthy check, by a resume, and by every teardown.
+  let stallSuspect = false;
   // A defence fired and this pane stays on raster until it is replaced. Cleared
   // only by teardown (a new pane earns a fresh try) or by a context RESTORE
   // inside the recovery budget — never by a repick, or a machine whose driver is
@@ -259,7 +270,12 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
   const layer = () => (layers && typeof layers.get === 'function' ? layers.get('spiral') : null);
   const doc = () => (typeof document !== 'undefined' ? document : null);
   const hasRaf = () => typeof requestAnimationFrame === 'function' && typeof cancelAnimationFrame === 'function';
-  /** The heat armor parks decoration through CSS; a canvas has to check itself. */
+  /**
+   * Is the local effect stack HOT? (A canvas inherits no custom property, so the
+   * woven bed has to read the armor's attribute itself.) It is called `parked`
+   * for its history: it used to stop the render loop dead, the way
+   * --gg-deco-play parks every other keyframe. It no longer does — see step().
+   */
   const parked = () => {
     const d = doc();
     try { return !!(d && d.documentElement && d.documentElement.getAttribute('data-gg-fx') === 'hot'); }
@@ -285,8 +301,12 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
     mintedPane = true;
     stillOn = null;                 // a brand-new node carries no picture yet
     paneEl = document.createElement('div');
-    // .gg-deco so the heat armor can park the spin when the stack goes hot.
-    // (The woven path cancels the keyframe and parks itself — see step().)
+    // .gg-deco marks the pane as motion the armor is allowed to know about —
+    // but NOT to stop. Both fx.css rules resolve --gg-deco-play against this
+    // element, and .gg-spiral re-declares it `running` (the .gg-mon-proj
+    // exemption): a spiral whose only content is its rotation is a photograph
+    // when parked, not a cheaper spiral. The woven path makes the same call in
+    // JS, in step(), because a canvas inherits no custom properties.
     paneEl.className = calm ? 'gg-spiral' : 'gg-spiral gg-deco';
     repick();
     host.appendChild(paneEl);
@@ -361,6 +381,7 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
     lastTs = 0;
     lastCheck = 0;
     lastDraw = 0;               // this weave has not drawn a LOOP frame — see dueForDraw()
+    stallSuspect = false;       // a fresh weave is owed a fresh pair of witnesses
     // THE FIRST FRAME GOES IN BEFORE THE APPEND. The context is `alpha: false`,
     // so an un-drawn canvas is OPAQUE BLACK: appending it and drawing afterwards
     // blinks the bed out for a frame. It matters most on the re-upgrade after a
@@ -408,9 +429,24 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
     // first frame after a resume carries a gap of however long the player was
     // away. Forget the last timestamp on every visibility change and the
     // watchdog simply starts measuring again from the next frame pair.
+    //
+    // AND visibilitychange IS NOT THE ONLY DOOR BACK (2026-08-05). A bfcache
+    // restore arrives as `pageshow` (persisted), and a WebView2/WPF host that
+    // was merely occluded, minimised or behind another window may hand the page
+    // back with nothing but a window `focus` — visibilityState says "visible"
+    // the whole time it was not being composited. Both are resumes, both carry
+    // one huge frame gap, and neither is a hang, so they zero the same clocks
+    // and clear the suspicion the corroboration check may have banked.
     if (typeof d.addEventListener === 'function') {
-      onVisibility = () => { lastTs = 0; lastCheck = 0; };
+      onVisibility = () => { lastTs = 0; lastCheck = 0; stallSuspect = false; };
       try { d.addEventListener('visibilitychange', onVisibility); } catch (_e) { onVisibility = null; }
+    }
+    if (typeof addEventListener === 'function') {
+      onWake = () => { lastTs = 0; lastCheck = 0; stallSuspect = false; };
+      try {
+        addEventListener('pageshow', onWake);
+        addEventListener('focus', onWake);
+      } catch (_e) { onWake = null; }
     }
 
     // Reduced motion gets ONE still frame — and unlike a GIF, which ignores the
@@ -433,6 +469,21 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
    * ('off' | 'lost' | 'stall'). `now` is the rAF timestamp, i.e.
    * performance.now()'s clock, so the frame gap it measures is the real one and
    * not a timer's opinion of it.
+   *
+   * THE STALL VERDICT NEEDS TWO WITNESSES (2026-08-05). It used to need one:
+   * a single gap over RAF_STALL_MS while the page called itself visible set
+   * rasterLocked, and rasterLocked is FOREVER for that pane — nothing but a
+   * teardown or a context restore clears it. But a 4-second frame gap is not
+   * only ever a driver hang. A major GC, a WPF window that got occluded or
+   * dragged between monitors, a laptop coming off a power-state change, an app
+   * switch that never fires visibilitychange because the WebView2 host does not
+   * report one — every one of those hands the loop one enormous gap and then
+   * behaves perfectly, and the player paid for that single hiccup with the
+   * shader for the rest of the effect. So the first oversized gap makes the
+   * pane a SUSPECT and re-seeds the clocks; only a SECOND oversized gap,
+   * measured on a fresh pair of frames a health check later, is a hang. A real
+   * stall keeps stalling and loses its shader a second later than it used to; a
+   * hitch is forgiven, which is the whole point.
    */
   function healthCheck(now) {
     // 1. the player switched shaders off mid-match — the escape hatch has to
@@ -445,12 +496,30 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
       return 'lost';
     }
     // 3. frames are not arriving while this pane believes it is drawing. Blind
-    //    while hidden (rAF is suspended by design) and while the heat armor has
-    //    parked decoration; lastTs 0 means "no pair to measure yet".
+    //    while hidden (rAF is suspended by design), and blind at hot heat: the
+    //    bed still PAINTS there now (see step()), but hot is also the busiest
+    //    the machine ever gets, so a fat gap in the middle of a three-effect
+    //    stack is the likeliest legitimate hitch on the page and the least safe
+    //    thing to read as a dead driver. A stall that outlives the heat is
+    //    caught by the very next check. lastTs 0 means "no pair to measure yet".
     if (lastTs && visible() && !parked() && (now - lastTs) > RAF_STALL_MS) {
-      warn(`frame callbacks stalled ${Math.round(now - lastTs)}ms — falling back to the raster pool`);
+      const gap = Math.round(now - lastTs);
+      if (!stallSuspect) {
+        // FIRST WITNESS. Re-seed and look again rather than locking: lastCheck 0
+        // makes step() re-seed the poll clock on the next callback, and step's
+        // own `lastTs = now` (three lines after this returns) gives the next
+        // check a pair of frames that were both measured AFTER the hitch.
+        stallSuspect = true;
+        lastCheck = 0;
+        warn(`frame callbacks gapped ${gap}ms — watching for a second one before dropping the shader`);
+        return '';
+      }
+      warn(`frame callbacks stalled ${gap}ms twice over — falling back to the raster pool`);
       return 'stall';
     }
+    // A clean check clears the suspicion: two oversized gaps have to be
+    // CONSECUTIVE to be a hang, or one hitch a minute would eventually convict.
+    stallSuspect = false;
     return '';
   }
 
@@ -478,21 +547,43 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
         return;
       }
     }
-    // Parked at data-gg-fx="hot": hold the frame instead of advancing it, the
-    // same thing --gg-deco-play does to every keyframe in fx.css.
-    if (!parked()) {
-      const loop = Math.max(1, loopMsFor(params));
-      if (lastTs) phase = (phase + (now - lastTs) / loop) % 1;
-      // THE LITE THROTTLE. The PHASE above advanced by real elapsed time on
-      // every callback, so skipping a draw skips pixels, never tempo — a
-      // 30fps bed and a 120fps bed show the same rotation at the same second.
-      // While the load governor says a payload squall is on, the bed steps
-      // down further still (LITE_BURST_FRAME_MS) and climbs back by itself.
-      // Full tier: no gate at all, byte-identical to the pre-tier loop.
-      if (dueForDraw(now, lastDraw, perfLite(), governorBusy() ? LITE_BURST_FRAME_MS : 0)) {
-        lastDraw = now;
-        draw();
-      }
+    // HOT HEAT THROTTLES THIS BED; IT NO LONGER STOPS IT (2026-08-05, owner
+    // play-test: "spirals sometimes render as a frozen static image").
+    //
+    // This block used to be `if (!parked()) { …advance, draw… }` — hold the
+    // frame, the same thing --gg-deco-play does to every keyframe in fx.css.
+    // Two things were wrong with copying the CSS here. First, it copied a rule
+    // that was itself wrong for this pane: a spiral's whole content IS its
+    // rotation, so a parked spiral is not a cheaper spiral, it is a photograph
+    // (fx.css's .gg-spiral banner has the full argument, and it now carries the
+    // .gg-mon-proj exemption to match). Second, "hot" is a NORMAL mid-match
+    // state — exec/layers.js calls it at three concurrent effects and
+    // core/draft.js keeps Bubbles always on with two rolled elements overlapping
+    // — and exec/executor.js syncHeat()s a payload into the count BEFORE
+    // renderPayload runs it, so a spiral landing as the third effect was born
+    // parked and held one frame for its entire duration.
+    //
+    // The frame budget the armor is protecting is real, though, so heat is a
+    // GEAR, not a switch: the phase advances every callback exactly as before,
+    // and hot borrows the lite tier's burst cadence (~15fps) through the very
+    // same throttle the phone diet already uses. Reduced fps, never zero.
+    const hot = parked();
+    const loop = Math.max(1, loopMsFor(params));
+    if (lastTs) phase = (phase + (now - lastTs) / loop) % 1;
+    // THE LITE THROTTLE. The PHASE above advanced by real elapsed time on
+    // every callback, so skipping a draw skips pixels, never tempo — a
+    // 30fps bed and a 120fps bed show the same rotation at the same second.
+    // While the load governor says a payload squall is on, the bed steps
+    // down further still (LITE_BURST_FRAME_MS) and climbs back by itself.
+    // A HOT STACK enters the same gate from the other side: it turns the
+    // throttle ON for the full tier too (`hot ||`) and asks for the deeper
+    // step, so the one dial serves both callers and there is no second cadence
+    // to keep in sync. Full tier, idle stack: no gate at all, byte-identical to
+    // the pre-tier loop.
+    const busy = hot || governorBusy();
+    if (dueForDraw(now, lastDraw, hot || perfLite(), busy ? LITE_BURST_FRAME_MS : 0)) {
+      lastDraw = now;
+      draw();
     }
     lastTs = now;
     if (hasRaf()) rafId = requestAnimationFrame((t) => step(t, gen));
@@ -505,16 +596,26 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
    * swap a crisp spiral for a magnified raster one mid-fade, in full view.
    */
   function detachWoven() {
-    const w = { cv: canvasEl, f: field, raf: rafId, lost: onLost, resize: onResize, vis: onVisibility };
+    const w = {
+      cv: canvasEl, f: field, raf: rafId, lost: onLost, resize: onResize,
+      vis: onVisibility, wake: onWake,
+    };
     weaveGen++;                        // every queued frame for this weave is now stale
     canvasEl = null; field = null; params = null;
-    rafId = 0; lastTs = 0; lastCheck = 0; lastDraw = 0; onLost = null; onResize = null; onVisibility = null;
+    rafId = 0; lastTs = 0; lastCheck = 0; lastDraw = 0; stallSuspect = false;
+    onLost = null; onResize = null; onVisibility = null; onWake = null;
     return () => {
       if (w.raf && typeof cancelAnimationFrame === 'function') {
         try { cancelAnimationFrame(w.raf); } catch (_e) { /* ignore */ }
       }
       if (w.resize && typeof removeEventListener === 'function') {
         try { removeEventListener('resize', w.resize); } catch (_e) { /* ignore */ }
+      }
+      if (w.wake && typeof removeEventListener === 'function') {
+        try {
+          removeEventListener('pageshow', w.wake);
+          removeEventListener('focus', w.wake);
+        } catch (_e) { /* ignore */ }
       }
       if (w.vis) {
         const d = doc();

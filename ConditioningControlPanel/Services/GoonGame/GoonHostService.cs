@@ -595,7 +595,7 @@ namespace ConditioningControlPanel.Services.GoonGame
         /// The page's sha256 is a CLAIM until commit, where the host hashes the file it actually
         /// wrote and compares; the page's mime is a CLAIM until commit, where the magic bytes decide
         /// the extension and a disagreement is a rejection rather than a relabel. Commit runs the
-        /// hash on a worker (up to 24 MB) so a duel's frame budget is not spent on it.
+        /// hash on a worker (up to 64 MB) so a duel's frame budget is not spent on it.
         /// Error vocabulary: bad-name | too-big | bad-format | hash-mismatch | cap-reached |
         /// io-failed | bad-seq | unknown-job.
         /// </summary>
@@ -626,7 +626,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                     }
                     case "goon-recv-commit":
                     {
-                        // Off the UI thread: this is a full SHA-256 over up to 24 MB.
+                        // Off the UI thread: this is a full SHA-256 over up to 64 MB.
                         _ = Task.Run(() =>
                         {
                             var r = store.Commit(id);

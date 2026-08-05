@@ -56,8 +56,8 @@ namespace ConditioningControlPanel.Services.GoonGame
     /// checked against the sniffed magic and REJECTED (never silently re-labelled) on disagreement.
     /// Traversal is impossible because no peer-supplied string ever reaches <c>Path.Combine</c>.
     ///
-    /// Thread-safety: every public method takes the instance lock. Commit hashes up to 24 MB, so
-    /// callers should run it off the UI thread (the bridge does).
+    /// Thread-safety: every public method takes the instance lock. Commit hashes up to
+    /// <see cref="MaxRecvBytes"/>, so callers should run it off the UI thread (the bridge does).
     /// </summary>
     internal sealed class TransferInboxStore
     {
@@ -67,8 +67,11 @@ namespace ConditioningControlPanel.Services.GoonGame
         /// (<c>AppSettings.TransferInboxCapBytes</c>) once the assets screen has a slider for it.</summary>
         public const long DefaultCapBytes = 2L * 1024 * 1024 * 1024;
 
-        /// <summary>Mirrors the protocol's MAX_ARTIFACT_BYTES. A larger offer is refused at Begin.</summary>
-        public const long MaxRecvBytes = 24L * 1024 * 1024;
+        /// <summary>Mirrors the protocol's MAX_ARTIFACT_BYTES (net/mediaChannel.js — raised
+        /// 24→64 MB on 2026-08-04; this constant was missed, so the desktop refused every
+        /// 24..64 MB inbound artifact with `too-big` while a browser peer accepted them).
+        /// The two MUST move together.</summary>
+        public const long MaxRecvBytes = 64L * 1024 * 1024;
 
         /// <summary>~256 KiB of payload once decoded — the protocol's chunk size plus base64 slack.</summary>
         public const int MaxChunkB64Chars = 350_000;
@@ -137,7 +140,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             public string Origin { get; init; } = "";
             /// <summary>We already hold these bytes. Chunks are ACKED AND DISCARDED and Commit is a
             /// no-op success — a peer that ignored <c>decline:'have'</c> must not get us to rewrite
-            /// 24 MB we already have.</summary>
+            /// 64 MB we already have.</summary>
             public bool AlreadyHave { get; init; }
             public long Written;
             public int NextSeq;
@@ -473,7 +476,7 @@ namespace ConditioningControlPanel.Services.GoonGame
         /// disagrees with the claim is a rejection rather than a relabel.
         ///
         /// Errors: <c>unknown-job | too-big | hash-mismatch | bad-format | io-failed</c>.
-        /// Runs up to 24 MB of SHA-256 — call it off the UI thread.
+        /// Runs up to 64 MB of SHA-256 — call it off the UI thread.
         /// </summary>
         public (bool Ok, string Sha, string Ext, string? Url, string? Error) Commit(string? id)
         {

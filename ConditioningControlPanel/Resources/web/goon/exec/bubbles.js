@@ -693,6 +693,12 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
         popFlash(strength, peer);
         break;
       case 'spiral': {
+        // The wash wears exec/spiral.js's own class, so it inherits that bed's
+        // heat exemption for nothing (fx.css .gg-spiral re-declares
+        // --gg-deco-play: running, 2026-08-05). It needed it: a pop flick is a
+        // 1.5-4.5s spin of a baked still, and a pop landing while the stack was
+        // hot showed a photograph fading in and out — which is not a spiral,
+        // it is a slide.
         const h = holdOn('spiral', 'gg-spiral', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength));
         if (h) {
           // '' means the host could not bake one; the wash still reads without a

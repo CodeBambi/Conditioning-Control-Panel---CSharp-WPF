@@ -2041,6 +2041,21 @@ function buildApp() {
   // the version guard is what keeps a hosted cache-list out of the pool.
   assets.onItems(() => syncLocalDeck());
   syncLocalDeck();
+  /* THE ITEM TABLE IS PULL-ONLY, AND UNTIL 2026-08-05 EXACTLY ONE THING EVER
+   * PULLED IT: the assets screen (ui/screens/assets.js -> store.requestList()).
+   * But createArtifactSource().listSendable() reads assets.items too — it is
+   * how the media queue finds its ammo — so a hosted session that went
+   * title -> host -> duel without ever OPENING the assets screen played the
+   * whole match with an empty table: every consent/connection/hello gate
+   * passed and the tracer still said `sendable=0`, because nothing had ever
+   * asked the C# cache what it holds. (Every play-test that "worked" had
+   * visited the screen first — the round-11 harness even gated on it — which
+   * is why this survived seven rounds of transfer debugging.) Pull it once at
+   * build, hosted only: standalone has no C# cache behind the bridge, and its
+   * sendable set is the localItems map, which never needed this. */
+  if (session.hosted) {
+    try { assets.requestList(); } catch (e) { logger.warn('boot cache-list pull failed: ' + ((e && e.message) || e)); }
+  }
 
   /* --- DISCORD. Built once, like the store above and for the same reason: it
    * registers the `discord` and `peer-card` handlers and bridge.on throws on a
