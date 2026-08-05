@@ -71,6 +71,24 @@ export const PREF_DEFAULTS = Object.freeze({
    */
   shaderSpirals: true,
   /**
+   * THE DEVICE PERFORMANCE TIER — 'auto' | 'full' | 'lite'. Three values for
+   * the same reason arsenalOpen has three: a boolean cannot say "I have no
+   * opinion yet", and the right default genuinely differs by device. 'auto'
+   * lets exec/perfTier.js detect (coarse pointer + small viewport, or a low
+   * navigator.deviceMemory, resolves lite; a desktop always resolves full);
+   * the two explicit values are the player overruling the detection from the
+   * options drawer, and they travel with the player like every other pref.
+   *
+   * NOT in REFLECT below, on purpose, and this is the one pref whose mirror
+   * lives elsewhere: 'auto' cannot be resolved without the detector, the
+   * detector lives in exec/ (the tier that consumes it), and ui/ never imports
+   * exec/. boot.js — which imports both by charter — stamps the RESOLVED value
+   * onto <html data-gg-perf> at startup and re-stamps it on every change of
+   * this key (it subscribes), so the attribute contract is exactly the one
+   * data-gg-vskip and data-gg-shader already honour.
+   */
+  perfMode: 'auto',
+  /**
    * Whether an opponent's shared Discord picture is shown on this machine (the
    * VS splash, the HUD mini, the recap plate). ON by default — the sharer has
    * already opted in and hiding their choice by default would make the feature

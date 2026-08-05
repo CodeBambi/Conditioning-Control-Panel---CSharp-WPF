@@ -192,12 +192,20 @@ import {
   pinchEligible, pinchDistance, pinchMidpoint, pinchStarted, pinchStep,
   viewportCap, safeInsets,
 } from './pinch.js';
+import { perfLite } from './perfTier.js';
 
 const MAX_SOURCE_TRIES = 3;   // a broken entry costs one redraw, not the run
 
 /* --- the window dials. Exported because the self-test asserts against these
    numbers rather than re-typing them. ------------------------------------- */
 export const MAX_WINDOWS = 4;          // live floating windows; a 5th evicts the oldest
+/* The LITE tier's pool (exec/perfTier.js — phones). Four simultaneously
+ * DECODING <video>s is a real load on a phone's media pipeline; three is the
+ * most the small screen can even show unstacked. The receipt arithmetic is
+ * untouched by the smaller cap: an early eviction settles endured=true, which
+ * is the very receipt a 5th-window eviction (or the 60s cap) already posts —
+ * the thrown payload is never cheated, it is merely "survived" a bit sooner. */
+export const MAX_WINDOWS_LITE = 3;
 export const WINDOW_CAP_MS = 60000;    // nothing floats longer than this, ever
 export const DRAG_SLOP_PX = 6;         // <= this much travel and the press was a CLICK
 export const WHEEL_STEP = 1.08;        // size multiplier per wheel notch
@@ -638,6 +646,12 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
 
   const stage = () => (layers && typeof layers.get === 'function' ? layers.get('stage') : null);
   const winLayer = () => (layers && typeof layers.get === 'function' ? layers.get('vwin') : null);
+  /** THE POOL CAP, tier-resolved fresh per ask (exec/perfTier.js). Lazily like
+   *  skippable() below, so the options toggle reaches the very next spawn — a
+   *  pool already OVER a tightened cap is left alone and simply drains: closing
+   *  a window the player was thrown, on a settings flip, would be the receipt
+   *  deciding itself. */
+  const winCap = () => (perfLite() ? MAX_WINDOWS_LITE : MAX_WINDOWS);
 
   /**
    * Is "skippable videos" on RIGHT NOW? Read lazily, every time, off the root
@@ -1398,7 +1412,7 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     if (typeof document === 'undefined') return null;
     const host = winLayer();
     if (!host) return null;
-    if (mayEvict === false && wins.length >= MAX_WINDOWS) return null;
+    if (mayEvict === false && wins.length >= winCap()) return null;
     if (!media || typeof media.drawKind !== 'function') return null;
 
     let entry = (typeof media.drawFor === 'function')
@@ -1425,7 +1439,7 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
 
     // At the cap the OLDEST settles first — it has been watched the longest, so
     // it is endured, not interrupted. A LOCAL spawn never reaches this line.
-    while (wins.length >= MAX_WINDOWS) settleWindow(wins[0], true);
+    while (wins.length >= winCap()) settleWindow(wins[0], true);
 
     const baseW = baseWindowWidth(vpW());
     const pos = placeWindow(vpW(), vpH(), baseW, baseW * 9 / 16);
@@ -1720,8 +1734,8 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
      */
     spawnLocal(opts) {
       const o = opts || {};
-      if (wins.length >= MAX_WINDOWS) {
-        info(`local window fizzled — ${wins.length}/${MAX_WINDOWS} up, and a self-pop never displaces one`);
+      if (wins.length >= winCap()) {
+        info(`local window fizzled — ${wins.length}/${winCap()} up, and a self-pop never displaces one`);
         return false;
       }
       const capMs = windowCapMs(o.duration_ms);

@@ -382,6 +382,13 @@ export const S = Object.freeze({
        that stops moving while the game carries on is the exact symptom. Names
        the fallback too, so turning it off does not feel like losing the bed. */
     shaderSpiralsNote: 'draws the spiral bed live instead of stretching a gif. turn it off if the picture ever freezes while the sound and the clock keep going — the bed falls back to the bundled spirals and nothing else changes.',
+    /* The device tier (exec/perfTier.js). The toggle shows the RESOLVED answer
+       — phones start on, desks start off, via the 'auto' pref — and touching it
+       writes an explicit choice, same one-way door as the arsenal handle. The
+       note says what it costs, because "performance mode" toggles that hide
+       their trade read as snake oil. */
+    perfLite: 'Lite graphics',
+    perfLiteNote: 'fewer flashes and bubbles on screen at once, a lighter spiral and no glass-blur — for phones and small machines that drop frames mid-match. on by itself on most phones; nothing about the match itself changes.',
     /* THE VIEWER'S OWN SWITCH, and it is not the same decision as the sharing
      * toggles in the lobby: those say what leaves this machine, this says what
      * arrives. Off, their picture is never even FETCHED (ui/discord.js), which

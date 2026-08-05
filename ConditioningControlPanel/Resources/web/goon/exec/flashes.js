@@ -91,8 +91,15 @@ import {
   pinchEligible, pinchDistance, pinchMidpoint, pinchStarted, pinchStep,
   viewportCap, pxToVmin, safeInsets,
 } from './pinch.js';
+import { perfLite } from './perfTier.js';
 
 export const MAX_LIVE = 20;          // concurrent <img> nodes, hydra children included
+/* The LITE tier's cap (exec/perfTier.js — phones). Half the field: each flash is
+ * a ~44vmin GPU layer and twenty of them is most of what an iPhone was choking
+ * on. Read LAZILY at every spawn (liveCap in the factory), never captured at
+ * build, so the options toggle reaches a burst already in flight — a tightened
+ * cap simply stops admitting nodes and the live ones age out on their own. */
+export const MAX_LIVE_LITE = 10;
 export const HYDRA_CHILDREN = 2;     // what one click hatches (clamped to the cap)
 export const BASE_HOLD_MS = 5000;    // on-screen time a flash is centred on
 const HOLD_SPREAD_MS = 400;          // ± this across the intensity range (4600..5400)
@@ -210,6 +217,8 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
   let stepLast = 0;
 
   const layer = () => (layers && typeof layers.get === 'function' ? layers.get('flash') : null);
+  /** THE cap, resolved fresh per ask — the device tier owns the difference. */
+  const liveCap = () => (perfLite() ? MAX_LIVE_LITE : MAX_LIVE);
   const warn = (m) => { if (log && log.warn) log.warn(`[gg:flashes] ${m}`); };
   const sfx = (id) => { if (audio && typeof audio.sfx === 'function') { try { audio.sfx(id); } catch (_e) { /* ignore */ } } };
 
@@ -747,7 +756,7 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
     prune();
     const host = layer();
     if (!host || typeof document === 'undefined') return;
-    if (live.size >= MAX_LIVE) return;
+    if (live.size >= liveCap()) return;
     if (!media || typeof media.drawKind !== 'function') return;
 
     // media.js kinds are image|video; GIFs ride as images. A PEER run spends
@@ -877,8 +886,9 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
 
     // Headroom measured BEFORE the dismissal frees this one's slot: kids <= room
     // means the post-click population is at most (live.size - 1 + room) =
-    // MAX_LIVE - 1. At the cap room is 0 and the click is a plain dismissal.
-    const room = Math.max(0, MAX_LIVE - live.size);
+    // the cap - 1. At the cap room is 0 and the click is a plain dismissal.
+    // liveCap(), not MAX_LIVE: the hydra spends the same headroom the tier set.
+    const room = Math.max(0, liveCap() - live.size);
     dismiss(rec);
     sfx('flash-pop');
 
