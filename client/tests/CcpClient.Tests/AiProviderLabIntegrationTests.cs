@@ -326,7 +326,7 @@ public class AiProviderLabIntegrationTests
         h.Pipeline.SelectProvider(AiProviderId.LocalOllama);
 
         var interactive = await h.Pipeline.RunInteractiveAsync(Request);
-        var awareness = await h.Pipeline.RunAwarenessAsync(Request, awarenessConsent: true);
+        var awareness = await h.Pipeline.RunAwarenessAsync(Request, AiAwarenessConsent.Given);
 
         Assert.Equal(AiReplyCodes.ProviderUnproven, Assert.IsType<AiReply.Unavailable>(interactive.Reply).Code);
         Assert.Equal(AiReplyCodes.ProviderUnproven, Assert.IsType<AiReply.Unavailable>(awareness.Reply).Code);

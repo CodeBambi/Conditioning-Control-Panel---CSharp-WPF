@@ -91,7 +91,7 @@ public class AiModerationCoverageTests
                 }
                 case "awareness-operation-input":
                 {
-                    var result = await h.Pipeline.RunAwarenessAsync(new AiRequest(Forbidden), awarenessConsent: true);
+                    var result = await h.Pipeline.RunAwarenessAsync(new AiRequest(Forbidden), AiAwarenessConsent.Given);
                     var refused = Assert.IsType<AiReply.Refused>(result.Reply);
                     Assert.Equal(AiModerationSource.Input, refused.Refusal.Source);
                     break;
@@ -107,7 +107,7 @@ public class AiModerationCoverageTests
                 case "awareness-reply-output":
                 {
                     h.Provider.Reply = new AiReply.Generated(Forbidden, AiEndpointClass.Loopback);
-                    var result = await h.Pipeline.RunAwarenessAsync(new AiRequest("clean"), awarenessConsent: true);
+                    var result = await h.Pipeline.RunAwarenessAsync(new AiRequest("clean"), AiAwarenessConsent.Given);
                     var refused = Assert.IsType<AiReply.Refused>(result.Reply);
                     Assert.Equal(AiModerationSource.Output, refused.Refusal.Source);
                     break;
@@ -275,7 +275,7 @@ public class AiModerationCoverageTests
 
         var interactive = await h.Pipeline.RunInteractiveAsync(new AiRequest(Forbidden));
         Assert.Equal(AiReplyCodes.ProviderUnproven, Assert.IsType<AiReply.Unavailable>(interactive.Reply).Code);
-        var awareness = await h.Pipeline.RunAwarenessAsync(new AiRequest(Forbidden), awarenessConsent: true);
+        var awareness = await h.Pipeline.RunAwarenessAsync(new AiRequest(Forbidden), AiAwarenessConsent.Given);
         Assert.Equal(AiReplyCodes.ProviderUnproven, Assert.IsType<AiReply.Unavailable>(awareness.Reply).Code);
         Assert.Equal(0, h.Pipeline.SendAttempts);
         Assert.Equal(0, h.Boundary.Escalation.GetState().HitsInWindow);

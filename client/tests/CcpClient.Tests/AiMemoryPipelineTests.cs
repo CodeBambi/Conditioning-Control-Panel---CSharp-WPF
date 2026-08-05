@@ -181,7 +181,7 @@ public class AiMemoryPipelineTests
         using var h = new Harness();
         await h.AdmitProviderAsync(CleanReply);
 
-        var result = await h.Pipeline.RunAwarenessAsync(new AiRequest("ambient context"), awarenessConsent: true);
+        var result = await h.Pipeline.RunAwarenessAsync(new AiRequest("ambient context"), AiAwarenessConsent.Given);
 
         Assert.IsType<OperationOutcome.Completed>(result.Outcome);
         Assert.IsType<AiReply.Generated>(result.Reply); // the awareness reply exists...

@@ -136,11 +136,11 @@ public sealed class AiOperationPipeline
         RunCoreAsync(AiOperationClass.Interactive, request);
 
     /// <summary>
-    /// Awareness operation (contract §4): consent is code-enforced at admission. A
-    /// suppressed operation terminates Completed with a typed Suppressed result —
-    /// observable, never a silent no-op. (Cooldown machinery lands in c5.)
+    /// The typed consent gate shared by every awareness admission path (contract §4 rule 1):
+    /// consent NOT given → the operation is suppressed BEFORE any provider work — Completed
+    /// with a typed Suppressed result, observable, never a silent no-op.
     /// </summary>
-    public Task<AiOperationResult> RunAwarenessAsync(AiRequest request, bool awarenessConsent)
+    private Task<AiOperationResult> RunAwarenessCoreAsync(AiRequest request, bool awarenessConsent)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (!awarenessConsent)
@@ -161,13 +161,13 @@ public sealed class AiOperationPipeline
     /// Awareness operation with the TYPED consent state (c5; admission §5 rule 1; pre-approach
     /// consult, SP-042 record.md §4.1 (a)): the typed state is the admission vocabulary —
     /// granularity (per-context-field/per-source) tightens HERE without contract change
-    /// (§9.2 #4 owner-pending). The bool overload remains for pre-c5 call sites and shares
-    /// the same enforcement (the residual bool door is recorded in SP-042 record.md §3).
+    /// (§9.2 #4 owner-pending). The bool overload is RETIRED (SP-046 c7): every call site
+    /// speaks the typed state.
     /// </summary>
     public Task<AiOperationResult> RunAwarenessAsync(AiRequest request, AiAwarenessConsent consent)
     {
         ArgumentNullException.ThrowIfNull(consent);
-        return RunAwarenessAsync(request, consent.Granted);
+        return RunAwarenessCoreAsync(request, consent.Granted);
     }
 
     /// <summary>

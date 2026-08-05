@@ -100,7 +100,7 @@ public class AiModerationPipelineBoundaryTests
         var h = new Harness(Policy);
         await h.AdmitProviderAsync();
 
-        var result = await h.Pipeline.RunAwarenessAsync(new AiRequest($"context carries {Forbidden}"), awarenessConsent: true);
+        var result = await h.Pipeline.RunAwarenessAsync(new AiRequest($"context carries {Forbidden}"), AiAwarenessConsent.Given);
 
         // The typed refusal exists (the consumer drops it BY TYPE — contract §4 rule 3);
         // it is never an escalation hit (WPF: only user-typed content escalates).
@@ -137,7 +137,7 @@ public class AiModerationPipelineBoundaryTests
         await h.AdmitProviderAsync();
         h.Provider.Reply = new AiReply.Generated($"model said {Forbidden}", AiEndpointClass.Loopback);
 
-        var result = await h.Pipeline.RunAwarenessAsync(new AiRequest("clean context"), awarenessConsent: true);
+        var result = await h.Pipeline.RunAwarenessAsync(new AiRequest("clean context"), AiAwarenessConsent.Given);
 
         var refused = Assert.IsType<AiReply.Refused>(result.Reply);
         Assert.Equal(AiModerationSource.Output, refused.Refusal.Source);
@@ -198,7 +198,7 @@ public class AiModerationPipelineBoundaryTests
 
         // Awareness is NOT consulted (WPF baseline: user chat input only; extension is an
         // owner-pending VALUES question) — a clean awareness operation still runs.
-        var awareness = await h.Pipeline.RunAwarenessAsync(new AiRequest("clean context"), awarenessConsent: true);
+        var awareness = await h.Pipeline.RunAwarenessAsync(new AiRequest("clean context"), AiAwarenessConsent.Given);
         Assert.IsType<AiReply.Generated>(awareness.Reply);
         Assert.Equal(1, h.Provider.Calls);
     }

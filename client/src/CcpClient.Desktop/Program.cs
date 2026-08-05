@@ -93,8 +93,22 @@ public static class Program
         var dtrhKillRenderers = args.Contains("--dtrh-kill-renderers", StringComparer.Ordinal);
         var dtrhBlockRoute = ArgValue(args, "--dtrh-block-route");
 
+        // SP-046 c7 product config seam: --ai-ollama-host <url> points the companion's
+        // loopback provider at a specific host (headed-evidence lab, alternate local port).
+        // Loopback-only boundary: a non-loopback host classifies remote and is rejected
+        // pre-socket (admission policy + provider defense in depth) — the flag can NEVER
+        // widen the network boundary. Malformed URI = bounded startup failure.
+        var aiOllamaHost = ArgValue(args, "--ai-ollama-host");
+        if (aiOllamaHost is not null &&
+            (!Uri.TryCreate(aiOllamaHost, UriKind.Absolute, out var aiHostUri) ||
+             (aiHostUri.Scheme != "http" && aiHostUri.Scheme != "https")))
+        {
+            Console.Error.WriteLine("usage: --ai-ollama-host <absolute http(s) URI — loopback only; remote hosts are rejected pre-socket>");
+            return 1;
+        }
+
         var trace = new StartupTrace();
-        var root = new CompositionRoot { LogSinkFactory = () => log, DtrhBlockedRoutePrefixHarness = dtrhBlockRoute };
+        var root = new CompositionRoot { LogSinkFactory = () => log, DtrhBlockedRoutePrefixHarness = dtrhBlockRoute, AiOllamaHostOverride = aiOllamaHost };
         ApplicationHost? host = null;
         using var cts = new CancellationTokenSource();
 

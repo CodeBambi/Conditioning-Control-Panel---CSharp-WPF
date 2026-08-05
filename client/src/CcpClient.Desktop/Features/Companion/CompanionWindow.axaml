@@ -1,0 +1,234 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:companion="using:CcpClient.Desktop.Features.Companion"
+        x:Class="CcpClient.Desktop.Features.Companion.CompanionWindow"
+        x:DataType="companion:CompanionViewModel"
+        Title="Companion — CCP Client"
+        Width="480" Height="620" MinWidth="380" MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="#FF141018">
+
+  <!-- Hand-authored smallest AXAML (SP-046; A-013 advisory runs on this file — advisory
+       only). Evolved dashboard grammar: dark #FF141018 base, neon #FFE066FF accent,
+       #FF3A2F3E borders, restrained glow (MainWindow.axaml/FeaturePopupWindow.axaml
+       lineage) — designed, never WPF-cloned (owner decree 2026-08-04). Styling is
+       selectors + conditional classes + pseudo-classes (v12; never WPF triggers).
+       Escape: ONE path through the VM (confirm-open -> cancel (default No); else close). -->
+
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Escape" Command="{Binding EscapeCommand}" />
+  </Window.KeyBindings>
+
+  <Window.Styles>
+    <Style Selector="Border.chat-bubble">
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="10,7" />
+      <Setter Property="Margin" Value="0,3" />
+      <Setter Property="MaxWidth" Value="330" />
+      <Setter Property="Background" Value="#FF1E1822" />
+      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Border.chat-bubble.user">
+      <Setter Property="Background" Value="#FF241A2B" />
+      <Setter Property="BorderBrush" Value="#FF6B5B73" />
+      <Setter Property="HorizontalAlignment" Value="Right" />
+    </Style>
+    <Style Selector="Border.chat-bubble.thinking">
+      <Setter Property="Opacity" Value="0.6" />
+    </Style>
+    <!-- The badge: neon accent ring — visible ONLY on Generated bubbles (the class is
+         bound to the type-derived IsAiBadged, the single badge authority). -->
+    <Style Selector="Border.chat-bubble.badged">
+      <Setter Property="BorderBrush" Value="#FFE066FF" />
+      <Setter Property="BoxShadow" Value="0 0 8 0 #66E066FF" />
+    </Style>
+    <!-- The refusal class (evolved POLICY-pill equivalent): amber treatment, never badged. -->
+    <Style Selector="Border.chat-bubble.refusal">
+      <Setter Property="BorderBrush" Value="#FFFFC107" />
+      <Setter Property="Background" Value="#FF2A2118" />
+    </Style>
+    <Style Selector="Border.chat-bubble.subdued">
+      <Setter Property="Opacity" Value="0.75" />
+    </Style>
+    <Style Selector="Border.badge-pill">
+      <Setter Property="Background" Value="#FFE066FF" />
+      <Setter Property="Padding" Value="4,1" />
+      <Setter Property="CornerRadius" Value="3" />
+    </Style>
+    <Style Selector="Border.badge-pill TextBlock">
+      <Setter Property="Foreground" Value="#FF141018" />
+      <Setter Property="FontSize" Value="9" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <Style Selector="Button.companion">
+      <Setter Property="Padding" Value="10,5" />
+      <Setter Property="Background" Value="#FF2A2130" />
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+    </Style>
+    <Style Selector="Button.companion:pointerover">
+      <Setter Property="BorderBrush" Value="#FFE066FF" />
+    </Style>
+    <Style Selector="Button.companion:disabled">
+      <Setter Property="Opacity" Value="0.5" />
+    </Style>
+    <Style Selector="TextBlock.status">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Foreground" Value="#FF9A8FA3" />
+    </Style>
+    <Style Selector="TextBlock.status.available">
+      <Setter Property="Foreground" Value="#FFB8F0B8" />
+    </Style>
+  </Window.Styles>
+
+  <Grid RowDefinitions="Auto,*,Auto,Auto">
+
+    <!-- Header: title + status (status derives from the SP-006 capability state ONLY). -->
+    <Border Grid.Row="0" Background="#FF241A2B" BorderBrush="#FF3A2F3E" BorderThickness="0,0,0,1" Padding="14,10">
+      <Grid ColumnDefinitions="Auto,*">
+        <TextBlock Text="Companion" FontSize="15" FontWeight="SemiBold" Foreground="#FFE066FF" VerticalAlignment="Center" />
+        <TextBlock Grid.Column="1" Classes="status"
+                   Classes.available="{Binding StatusAvailable}"
+                   Text="{Binding StatusText}"
+                   HorizontalAlignment="Right" VerticalAlignment="Center" />
+      </Grid>
+    </Border>
+
+    <!-- Chat list (v12: ItemsControl + ItemTemplate inside a ScrollViewer; vertical only). -->
+    <ScrollViewer x:Name="ChatScroller" Grid.Row="1"
+                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                  AllowAutoHide="False" Padding="14,10">
+      <ItemsControl ItemsSource="{Binding Bubbles}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="companion:CompanionBubbleModel">
+            <Border Classes="chat-bubble"
+                    Classes.user="{Binding IsUser}"
+                    Classes.thinking="{Binding IsThinking}"
+                    Classes.badged="{Binding IsAiBadged}"
+                    Classes.refusal="{Binding IsRefusal}"
+                    Classes.subdued="{Binding IsSubdued}">
+              <StackPanel>
+                <!-- The AI badge pill: bound visibility to the SAME type-derived property
+                     that drives the ring — one authority, two presentations. -->
+                <Border IsVisible="{Binding IsAiBadged}" Classes="badge-pill" HorizontalAlignment="Left" Margin="0,0,0,3">
+                  <TextBlock Text="{Binding ProvenanceClass, StringFormat='AI · {0}'}" />
+                </Border>
+                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Foreground="#FFE8E0EE" />
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+
+    <!-- Settings surface: awareness consent + memory consent + cooldown values + the
+         memory-clear control. All states are session-scoped typed placeholders (owner-pending). -->
+    <Border Grid.Row="2" BorderBrush="#FF3A2F3E" BorderThickness="0,1,0,0" Padding="14,8">
+      <StackPanel Spacing="6">
+        <Grid ColumnDefinitions="Auto,Auto,Auto,*">
+          <CheckBox x:Name="AwarenessConsentToggle"
+                    Content="Awareness consent"
+                    IsChecked="{Binding AwarenessConsentGiven}"
+                    Foreground="#FFE8E0EE" FontSize="12" VerticalAlignment="Center"
+                    AutomationProperties.Name="awareness consent toggle" />
+          <CheckBox Grid.Column="1" x:Name="MemoryConsentToggle" Margin="14,0,0,0"
+                    Content="Memory consent"
+                    IsChecked="{Binding MemoryConsentGranted}"
+                    Foreground="#FFE8E0EE" FontSize="12" VerticalAlignment="Center"
+                    AutomationProperties.Name="memory consent toggle" />
+          <Button Grid.Column="2" x:Name="ClearMemoryButton" Margin="14,0,0,0"
+                  Classes="companion" Content="Reset companion memory"
+                  Command="{Binding RequestClearCommand}"
+                  AutomationProperties.Name="memory clear button"
+                  ToolTip.Tip="Deletes the saved companion memory. Asks first; can't be undone." />
+          <TextBlock Grid.Column="3" Margin="12,0,0,0" VerticalAlignment="Center"
+                     IsVisible="{Binding ClearOutcomeVisible}"
+                     Text="{Binding ClearOutcomeText}"
+                     FontSize="11" Foreground="#FFB8B0C0" TextWrapping="Wrap" />
+        </Grid>
+        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+          <TextBlock Text="Cooldowns (s):" FontSize="11" Foreground="#FF9A8FA3" VerticalAlignment="Center" Margin="0,0,8,0" />
+          <NumericUpDown x:Name="ReactionCooldownBox" Grid.Column="1" Width="72"
+                         Minimum="1" Maximum="600" Increment="1"
+                         Value="{Binding ReactionSeconds}"
+                         ToolTip.Tip="Reaction cooldown (placeholder baseline)"
+                         AutomationProperties.Name="reaction cooldown seconds" />
+          <NumericUpDown x:Name="GlobalCooldownBox" Grid.Column="2" Width="72" Margin="6,0,0,0"
+                         Minimum="1" Maximum="600" Increment="1"
+                         Value="{Binding GlobalSeconds}"
+                         ToolTip.Tip="Global cooldown (placeholder baseline)"
+                         AutomationProperties.Name="global cooldown seconds" />
+          <NumericUpDown x:Name="PerKeywordCooldownBox" Grid.Column="3" Width="72" Margin="6,0,0,0"
+                         Minimum="1" Maximum="600" Increment="1"
+                         Value="{Binding PerKeywordSeconds}"
+                         ToolTip.Tip="Per-keyword cooldown (placeholder baseline)"
+                         AutomationProperties.Name="per-keyword cooldown seconds" />
+          <NumericUpDown x:Name="LoopCooldownBox" Grid.Column="4" Width="72" Margin="6,0,0,0"
+                         Minimum="1" Maximum="600" Increment="1"
+                         Value="{Binding LoopProtectionSeconds}"
+                         ToolTip.Tip="Loop-protection cooldown (placeholder baseline)"
+                         AutomationProperties.Name="loop protection cooldown seconds" />
+        </Grid>
+        <!-- The honesty line (pre-approach consult #6): the surface must never imply recall. -->
+        <TextBlock Text="Memory is saved and can be cleared here; it is not yet used as conversation context. Consent and cooldowns are session-scoped placeholders pending owner decisions."
+                   FontSize="10" Opacity="0.6" Foreground="#FFE8E0EE" TextWrapping="Wrap" />
+      </StackPanel>
+    </Border>
+
+    <!-- Input row: Enter or Send; Stop while in-flight. -->
+    <Border Grid.Row="3" BorderBrush="#FF3A2F3E" BorderThickness="0,1,0,0" Padding="14,10">
+      <Grid ColumnDefinitions="*,Auto,Auto">
+        <TextBox x:Name="ChatInput"
+                 Text="{Binding InputText}"
+                 PlaceholderText="Message the companion…"
+                 Background="#FF1E1822" Foreground="#FFE8E0EE"
+                 BorderBrush="#FF3A2F3E" CornerRadius="4" Padding="8,6"
+                 AutomationProperties.Name="companion chat input">
+          <TextBox.KeyBindings>
+            <KeyBinding Gesture="Enter" Command="{Binding SendCommand}" />
+          </TextBox.KeyBindings>
+        </TextBox>
+        <Button Grid.Column="1" x:Name="SendButton" Margin="8,0,0,0"
+                Classes="companion" Content="Send"
+                Command="{Binding SendCommand}"
+                AutomationProperties.Name="companion send button" />
+        <Button Grid.Column="2" x:Name="StopButton" Margin="8,0,0,0"
+                Classes="companion" Content="Stop"
+                Command="{Binding StopCommand}"
+                IsEnabled="{Binding InFlight}"
+                AutomationProperties.Name="companion stop button"
+                ToolTip.Tip="Stop the in-flight operation (panic-quiet)" />
+      </Grid>
+    </Border>
+
+    <!-- In-window memory-clear confirm (modal within the window; WPF MessageBox shape,
+         Patreon.cs:920-927: Yes/No, default NO, can't-be-undone body; Esc = No). -->
+    <Border Grid.Row="0" Grid.RowSpan="4" x:Name="ConfirmOverlay"
+            IsVisible="{Binding ConfirmVisible}"
+            Background="#A0141018">
+      <Border Width="340" Padding="18" CornerRadius="8"
+              Background="#FF1E1822" BorderBrush="#FFE066FF" BorderThickness="1"
+              HorizontalAlignment="Center" VerticalAlignment="Center">
+        <StackPanel Spacing="12">
+          <TextBlock Text="Reset Companion Memory" FontWeight="SemiBold" FontSize="14" Foreground="#FFE066FF" />
+          <TextBlock Text="Delete the saved companion memory? This can't be undone."
+                     TextWrapping="Wrap" Foreground="#FFE8E0EE" />
+          <Grid ColumnDefinitions="*,Auto,Auto">
+            <Button Grid.Column="1" x:Name="ConfirmYesButton" Margin="0,0,8,0"
+                    Classes="companion" Content="Yes"
+                    Command="{Binding ConfirmClearCommand}"
+                    AutomationProperties.Name="memory clear confirm yes" />
+            <Button Grid.Column="2" x:Name="ConfirmNoButton"
+                    Classes="companion" Content="No"
+                    Command="{Binding CancelClearCommand}"
+                    AutomationProperties.Name="memory clear confirm no" />
+          </Grid>
+        </StackPanel>
+      </Border>
+    </Border>
+  </Grid>
+</Window>
