@@ -390,8 +390,8 @@ public sealed class AiAwarenessService
     private readonly IAiDiagnosticsSink _diagnostics;
     private readonly CapabilityRegistry _capabilities;
     private readonly AiCooldownRegistry _cooldowns;
-    private readonly AiCooldownValues _values;
     private volatile AiAwarenessConsent _consent = AiAwarenessConsent.NotGiven;
+    private volatile AiCooldownValues _values;
 
     public AiAwarenessService(
         AiOperationPipeline pipeline,
@@ -418,6 +418,19 @@ public sealed class AiAwarenessService
 
     /// <summary>The cooldown registry (mechanism; values injected at construction).</summary>
     public AiCooldownRegistry Cooldowns => _cooldowns;
+
+    /// <summary>
+    /// The cooldown VALUES in effect (placeholder baselines; §9.2 #4 owner-pending).
+    /// Settable (SP-046 c7 — the cooldown settings surface drives the typed state at
+    /// runtime; session-scoped, never persisted). A value edit applies to the NEXT
+    /// cooldown extension only: extend-not-shrink semantics (registry <see cref="AiCooldownRegistry.Extend"/>)
+    /// mean a live cooldown is NEVER shortened by an edit.
+    /// </summary>
+    public AiCooldownValues Values
+    {
+        get => _values;
+        set => _values = value ?? throw new ArgumentNullException(nameof(value));
+    }
 
     /// <summary>
     /// Keyword-trigger routing (admission §5 rule 4): trigger → OWNED awareness operation

@@ -348,9 +348,21 @@ public class CapabilityTests
             Assert.Contains("CapabilityProbes: ok", trace.Entries);
 
             var capabilities = Assert.IsType<CapabilityRegistry>(host!.Capabilities);
+            // SP-046: the companion participant's probes register at construction (before
+            // the demonstrator registrations) — registration order IS this list's order.
             Assert.Equal(
-                ["display-session", "atomic-filesystem", "dtrh-webview-embedded", "dtrh-web-dialog"],
+                ["ai.provider.local-ollama", "ai.provider.cloud", "display-session", "atomic-filesystem", "dtrh-webview-embedded", "dtrh-web-dialog"],
                 capabilities.Names);
+
+            // SP-046 AI provider probes: real typed states. local-ollama is a REAL
+            // loopback probe — Available iff an Ollama-shaped service answers api/version
+            // (environment fact, honestly read either way); cloud is deterministic typed
+            // absence (credentials-absent — inventory, never invented).
+            var ollamaState = capabilities.GetState("ai.provider.local-ollama");
+            Assert.True(ollamaState is CapabilityState.Available or CapabilityState.Unavailable,
+                $"unexpected ai.provider.local-ollama state: {ollamaState}");
+            var cloudState = Assert.IsType<CapabilityState.Unavailable>(capabilities.GetState("ai.provider.cloud"));
+            Assert.Equal("credentials-absent", cloudState.Reason.Code);
 
             // Real session probe: this test machine is Windows or a sessioned Linux.
             Assert.IsType<CapabilityState.Available>(capabilities.GetState("display-session"));

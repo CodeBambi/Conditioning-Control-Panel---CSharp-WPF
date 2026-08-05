@@ -50,6 +50,18 @@ public sealed class CompositionRoot
     public string? DtrhBlockedRoutePrefixHarness { get; init; }
 
     /// <summary>
+    /// SP-046 c7 product config seam: overrides the Ollama host for the companion's
+    /// loopback provider (the host is already a LoopbackOllamaProviderOptions field).
+    /// This can NEVER widen the network boundary: a non-loopback host classifies
+    /// RemoteHostOllama and is rejected pre-socket by the admission policy AND the
+    /// provider itself (defense in depth). Null = the default http://localhost:11434/.
+    /// </summary>
+    public string? AiOllamaHostOverride { get; init; }
+
+    /// <summary>The capability registry the NEXT ParticipantsFactory call composes into (set by Build/Validate before invoking the factory).</summary>
+    private CapabilityRegistry? _capabilitiesForParticipants;
+
+    /// <summary>
     /// Settings file location seam (persistence contract §4 rule 1). Production default is
     /// the per-user data path; tests substitute a temp path. The data-path authority itself
     /// is row 8/9's scope — this is the demonstrator's landing spot, not a product decision.
@@ -109,6 +121,15 @@ public sealed class CompositionRoot
             new Features.Dtrh.DtrhParticipant(infra.OwnerFor("DtrhHost"), infra.Log,
                 Path.GetDirectoryName(SettingsPathFactory())!,
                 DtrhBlockedRoutePrefixHarness is { Length: > 0 } blocked ? [blocked] : null),
+            // SP-046 AI companion slice c7: the product composition of the full AI chain
+            // (pipeline + provider seam + moderation boundary + memory store + awareness
+            // service + executor). Registered LAST: its memory store loads in phase-3
+            // order; its provider probes register into the shared registry for the
+            // CapabilityProbes phase. The host override is a loopback-only config seam.
+            new Features.Companion.CompanionParticipant(
+                infra, _capabilitiesForParticipants ?? new CapabilityRegistry(),
+                Path.GetDirectoryName(SettingsPathFactory())!,
+                AiOllamaHostOverride),
         ];
     }
 
@@ -125,11 +146,14 @@ public sealed class CompositionRoot
         }
 
         // Probe with a scratch infrastructure (participant constructors are cheap, contract §4.4).
+        _capabilitiesForParticipants = new CapabilityRegistry();
         if (ParticipantsFactory(new ParticipantInfrastructure(new OperationRegistry(), new UiDispatchBoundary(), log)) is null)
         {
             failure = new InitFailure("CompositionRoot", InitFailureKind.Fatal, "Missing registration: BackgroundParticipants");
             return false;
         }
+
+        _capabilitiesForParticipants = null;
 
         failure = null;
         return true;
@@ -140,17 +164,24 @@ public sealed class CompositionRoot
     {
         var log = LogSinkFactory() ?? throw new InvalidOperationException("Validate must run before Build.");
         var infra = new ParticipantInfrastructure(new OperationRegistry(), new UiDispatchBoundary(), log);
+        // Capability contract §3: the registry exists BEFORE participants so feature
+        // participants (SP-046 companion AI chain) can register their probes at
+        // construction; probes still execute only in the CapabilityProbes phase.
+        var capabilities = new CapabilityRegistry();
+        _capabilitiesForParticipants = capabilities;
         var participants = ParticipantsFactory(infra) ?? throw new InvalidOperationException("Validate must run before Build.");
+        _capabilitiesForParticipants = null;
         // Persistence contract §11: the store's flush is wired into the host's reserved
         // pre-drain slot. A custom participants factory without a store gets no flush.
         var store = participants.OfType<PersistenceStore<DemoSettings>>().FirstOrDefault();
         // SP-024: the DTRH slot stores flush in the same reserved pre-drain slot.
         var slotStores = participants.OfType<Features.Dtrh.DtrhSaveSlots>().FirstOrDefault();
+        // SP-046: the companion's memory store flushes in the same slot (SP-005 contract §11).
+        var companion = participants.OfType<Features.Companion.CompanionParticipant>().FirstOrDefault();
 
         // Capability contract §3: the demonstrator probes are registered at composition
         // (never run here) and execute as owned operations in the CapabilityProbes phase.
         // The fs probe targets the SAME data directory the store persists into.
-        var capabilities = new CapabilityRegistry();
         var dataDirectory = Path.GetDirectoryName(SettingsPathFactory())!;
         capabilities.Register("display-session", _ =>
             Task.FromResult(SessionProbe.Probe(new RuntimeSessionEnvironment())));
@@ -167,12 +198,13 @@ public sealed class CompositionRoot
 
         return new ApplicationHost(
             log, participants, trace, infra.Registry, infra.UiDispatch,
-            preDrainFlush: store is null && slotStores is null
+            preDrainFlush: store is null && slotStores is null && companion is null
                 ? null
                 : async () =>
                 {
                     if (store is not null) await store.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                     if (slotStores is not null) await slotStores.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
+                    if (companion is not null) await companion.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                 },
             capabilities: capabilities, probeRunner: probeRunner);
     }

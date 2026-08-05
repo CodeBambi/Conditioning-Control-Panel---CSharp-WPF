@@ -1,0 +1,33 @@
+{
+  "task": "SP-046-ai-companion-c7",
+  "captured": "2026-08-05",
+  "treeState": "lane worktree @ 4964db71 (Step 3 commit) + consult fix-first changes (remote-boundary test, repro guard, warning fix)",
+  "platform": "Windows 11 (DISPLAY3-class substitute: avalonia-live 27-tool seat, CCP_MCP=1, Keincheck embedded server on 127.0.0.1:3001)",
+  "renderScaling": "1.75 (per the dashboard layout probe line)",
+  "surface": "CcpClient.Desktop.Views.MainWindow -> CompanionWindow (owned, modeless, ShowInTaskbar=false)",
+  "app": "client/src/CcpClient.Desktop/bin/Debug/net10.0/CcpClient.Desktop.exe",
+  "provider": {
+    "run1": "REAL LoopbackOllamaProvider pointed at the task-local lab (tools/lab-ollama.mjs on 127.0.0.1:11734) via --ai-ollama-host; deterministic canned/refusal/slow-stream shapes; zero external network",
+    "run2": "same provider pointed at a DEAD port (127.0.0.1:11799) for the typed-Unavailable captures"
+  },
+  "content": "synthetic lab strings only (lab synthetic reply / REFUSE_ME / SLOW_ME / ECHO); no user data; content scan of app logs = zero chat-content hits",
+  "captures": [
+    { "file": "01b-describe-legend.json", "state": "window open, 26 automation-named marks (describe_screen; the screenshot from this pass was discarded: misaddressed windowId param, re-captured correctly below)" },
+    { "file": "02-badge-generated.png", "tree": "02-semantic-tree.json", "state": "Generated reply badged 'AI - Loopback' (badge pixels); status 'available (loopback)' (capability-derived)" },
+    { "file": "03-refusal-bubble.png", "tree": "03-semantic-tree.json", "state": "refusal bubble (output-side typed Refused), never badged; refused turn never persisted" },
+    { "file": "04-clear-confirm-default-no.png", "state": "memory-clear confirm overlay; get_focused_element = ConfirmNoButton (default-NO proof)" },
+    { "file": "05-clear-outcome.png", "tree": "05-semantic-tree.json", "state": "post-clear: chat log emptied, 'Companion memory cleared.' text; file-content proof: ai_memory.json deleted (shell-verified in the pre-rearm window)" },
+    { "file": "06-consent-cooldowns.png", "state": "awareness consent ON; memory consent ON; global cooldown 10 -> 42 through the VM into typed AiCooldownValues" },
+    { "file": "07-inflight-before-panic.png", "state": "real in-flight operation (SLOW_ME 8s slow stream): thinking bubble, Stop enabled" },
+    { "file": "08-panic-quiet-calm.png", "tree": "08-semantic-tree.json", "state": "panic-quiet: thinking bubble gone, zero partial text, calm surface (typed Cancelled underneath)" },
+    { "file": "09-rearm-post-panic.png", "state": "re-arm: post-panic send succeeds with badged reply (the calm state is a WORKING state)" },
+    { "file": "10-unavailable-unbadged.png", "tree": "10-semantic-tree.json", "state": "dead-port run: status 'unavailable (host-unreachable)'; send surfaces unbadged subdued Unavailable bubble (provider-unproven)" }
+  ],
+  "pixelValidation": "every PNG: 480x620 (the companion window, correctly targeted via the `target` param), nonzero, non-blank (distinct-byte sample check)",
+  "bindingErrors": "get_binding_errors count 0 at every checkpoint incl. session end (both runs)",
+  "notes": [
+    "first capture pass used the wrong param (windowId, silently ignored) and captured the MainWindow; ALL pixel captures were re-taken with correct targeting — the discarded pass is recorded honestly in record.md",
+    "Fallback never-badged is type-level (falsifiable identical-text pair in CompanionViewModelTests): no product path emits interactive Fallback today",
+    "headed teardown was taskkill (flush is integration-covered in CompanionCompositionTests)"
+  ]
+}

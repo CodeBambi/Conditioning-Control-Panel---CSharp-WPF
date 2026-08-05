@@ -294,7 +294,7 @@ public class AiOperationPipelineTests
         h.Pipeline.SelectProvider(AiProviderId.LocalOllama);
         await h.RunProbesAsync();
 
-        var result = await h.Pipeline.RunAwarenessAsync(Request, awarenessConsent: false);
+        var result = await h.Pipeline.RunAwarenessAsync(Request, AiAwarenessConsent.NotGiven);
 
         Assert.IsType<OperationOutcome.Completed>(result.Outcome); // suppressed ≠ failed
         var admission = Assert.IsType<AiAdmission.Suppressed>(result.Admission);

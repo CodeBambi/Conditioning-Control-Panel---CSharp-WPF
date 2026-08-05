@@ -77,6 +77,22 @@ public partial class MainWindow : Window
             Opened += (_, _) => _popups.Show();
         }
 
+        // SP-046 companion surface: owned, modeless, one-at-a-time (activate if already
+        // open — the W-04 discipline without reusing the demonstrator popup manager,
+        // pre-approach consult #1). The window closes with its owner automatically.
+        CompanionButton.Click += (_, _) =>
+        {
+            if (_companion is { IsVisible: true })
+            {
+                _companion.Activate();
+                return;
+            }
+
+            _companion = new Features.Companion.CompanionWindow(host);
+            _companion.Closed += (_, _) => _companion = null;
+            _companion.Show(this);
+        };
+
         // SP-007 layout probe (demonstrator-slice diagnostic): measured card bounds + actual
         // RenderScaling, visible in the window and logged once for the headed harness.
         TickerCard.LayoutUpdated += (_, _) =>
@@ -96,9 +112,13 @@ public partial class MainWindow : Window
 
     private bool _layoutProbeLogged;
     private FeaturePopupManager? _popups;
+    private Features.Companion.CompanionWindow? _companion;
 
     /// <summary>Demonstrator popup manager (SP-013); public so tests drive the real wiring.</summary>
     public FeaturePopupManager Popups => _popups!;
+
+    /// <summary>The open companion window (SP-046), if any; public so tests assert the real open path.</summary>
+    public Features.Companion.CompanionWindow? Companion => _companion;
 
     private static string Describe(CapabilityState state) => state switch
     {

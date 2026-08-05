@@ -50,7 +50,7 @@ public class AiOfflineIntegrationTests
         var interactiveLocal = await pipeline.RunInteractiveAsync(Request);
 
         // Awareness path (consent granted — admission reaches the provider checks).
-        var awareness = await pipeline.RunAwarenessAsync(Request, awarenessConsent: true);
+        var awareness = await pipeline.RunAwarenessAsync(Request, AiAwarenessConsent.Given);
 
         // Command path (c1: strict validation is pure — no execution pipeline exists until c6).
         var envelope = AiEnvelopeValidator.Validate(

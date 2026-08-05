@@ -62,6 +62,16 @@
       </StackPanel>
     </Border>
 
+    <!-- SP-046 AI companion slice c7: opens the owned modeless companion surface (the
+         real chat/badge/status/clear-control surface wired to the product AI chain). -->
+    <Button x:Name="CompanionButton"
+            Content="Open companion"
+            AutomationProperties.Name="open companion button"
+            HorizontalAlignment="Left"
+            Padding="12,6" Margin="0,10,0,0"
+            Background="#FF2A2130" Foreground="#FFE8E0EE"
+            BorderBrush="#FFE066FF" BorderThickness="1" CornerRadius="4" />
+
     <!-- Compiled-binding named-element case: this text FOLLOWS the live tick text — a delta
          proves #TickText resolves (a constant could be a hardcoded literal). -->
     <TextBlock Text="{Binding #TickText.Text, StringFormat='ElementName mirror: {0}'}"
