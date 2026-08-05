@@ -628,6 +628,18 @@ export const S = Object.freeze({
     lobbyTheirsOn: 'they opted in',
     lobbyTheirsOff: 'they have not',
 
+    /* --- the mic-gate toasts (2026-08-05, round two) ----------------------
+     * The lobby row says all of this — and the owner still sat in a PvP duel,
+     * drawer open, hunting a mic that was correctly hidden, because nothing
+     * IN THE MATCH said so. One of these fires as a single toast at Live,
+     * once per match, only for a seat that opted in (boot.js micGateToast).
+     * Each names the reason AND whose switch it is; none of them may read as
+     * "something broke", because nothing did. */
+    micPeerOffToast: 'no mic this duel — your partner has voice notes switched off',
+    micPeerOldToast: 'no mic this duel — their app is too old for voice notes',
+    micRelayToast: 'no mic this duel — relayed connection, and voice only crosses a direct one',
+    micZenToast: 'your mic is live but hidden by zen — bring the desk chrome back to use it',
+
     /* --- the refusals ----------------------------------------------------- */
     /** getUserMedia said no. NOT an error tone: it is a perfectly good answer. */
     micDenied: 'no microphone access — the mic stays off',
