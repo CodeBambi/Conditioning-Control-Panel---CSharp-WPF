@@ -273,6 +273,26 @@ public sealed class AiOperationPipeline
                 break;
         }
 
+        // Memory→prompt assembly (SP-047; admission §4 rule 1; contract §5): INTERACTIVE
+        // operations carry the store's consent-gated pairs (the WPF full-history shape,
+        // LocalAiService.cs:531-548). Assembly is PIPELINE-OWNED — History is ALWAYS
+        // overwritten, never passed through from the caller (pre-approach consult: a
+        // caller-supplied History must never leak into a request). Placed AFTER the
+        // admission/moderation chain: a short-circuited operation performs no read, and
+        // SendAttempts stays the sole network instrument (offline zero-network unchanged).
+        // AWARENESS operations NEVER carry memory (the WPF stateless ambient path,
+        // LocalAiService.cs:476-502) — History is explicitly stripped so the guarantee
+        // holds by construction, not by omission.
+        if (_memory is not null && operationClass == AiOperationClass.Interactive)
+        {
+            var history = _memory.ReadPromptContext();
+            request = request with { History = history.Count > 0 ? history : null };
+        }
+        else if (request.History is not null)
+        {
+            request = request with { History = null };
+        }
+
         // The ONLY I/O path: an SP-004 owned operation under the current generation.
         EnsureArmed();
         AiReply? reply = null;
@@ -318,8 +338,9 @@ public sealed class AiOperationPipeline
             // stateless ambient path, LocalAiService.cs:476-502) and app-authored Fallback
             // text is c3's recorded non-claim. Consent is enforced by the store at write
             // admission; the save is enqueued, not awaited (WPF latency discipline,
-            // LocalAiService.cs:644). Persisting memory is not remembering it into a prompt —
-            // context consumption lands in c7.
+            // LocalAiService.cs:644). Consumption of persisted memory as prompt context
+            // landed in SP-047 (the assembly seam above; the store's consent-gated
+            // ReadPromptContext).
             if (_memory is not null && operationClass == AiOperationClass.Interactive && produced is AiReply.Generated passed)
             {
                 _memory.Append(new AiMemoryTurn(AiMemoryRole.User, request.Prompt));

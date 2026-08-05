@@ -55,7 +55,9 @@ public sealed record LoopbackOllamaProviderOptions
 /// The first REAL provider (admission §8 slice c2): a loopback Ollama host speaking the
 /// WPF-observed NATIVE protocol — <c>POST {host}api/chat</c>, payload
 /// <c>{model, messages, stream:false, think:false}</c> (LocalAiService.cs:374-390, :23-24),
-/// reply extracted from <c>message.content</c>. Semantics:
+/// with the request's history turns (if any) rendered oldest-first before the final user
+/// message (SP-047 memory→prompt assembly), reply extracted from <c>message.content</c>.
+/// Semantics:
 /// - Cancellation: the caller's token is the ONLY cancellation mechanism. The body is read
 ///   as a stream (<see cref="HttpCompletionOption.ResponseHeadersRead"/>) so a mid-stream
 ///   cancel has a true partial-body position (<see cref="BytesReadSoFar"/>); OCE from the
@@ -139,7 +141,7 @@ public sealed class LoopbackOllamaProvider : IAiProvider
             {
                 using var msg = new HttpRequestMessage(HttpMethod.Post, new Uri(_options.Host, "api/chat"))
                 {
-                    Content = new StringContent(BuildPayload(request.Prompt), Encoding.UTF8, "application/json"),
+                    Content = new StringContent(BuildPayload(request), Encoding.UTF8, "application/json"),
                 };
 
                 Interlocked.Increment(ref _sendAttempts);
@@ -236,13 +238,25 @@ public sealed class LoopbackOllamaProvider : IAiProvider
         }
     }
 
-    private string BuildPayload(string prompt) => JsonSerializer.Serialize(new
+    private string BuildPayload(AiRequest request)
     {
-        model = _options.Model,
-        messages = new[] { new { role = "user", content = prompt } },
-        stream = false,
-        think = false,
-    });
+        // History turns render OLDEST FIRST before the final user message (the WPF
+        // outgoing-list order, LocalAiService.cs:531-548, minus system/enrichment — the
+        // greenfield request shape carries neither). Null/empty history ⇒ the pre-SP-047
+        // single-message payload, byte-identical.
+        var history = request.History;
+        var messages = history is { Count: > 0 }
+            ? history.Select(t => new { role = t.Role == AiMemoryRole.Assistant ? "assistant" : "user", content = t.Text })
+                .Append(new { role = "user", content = request.Prompt }).ToArray()
+            : [new { role = "user", content = request.Prompt }];
+        return JsonSerializer.Serialize(new
+        {
+            model = _options.Model,
+            messages,
+            stream = false,
+            think = false,
+        });
+    }
 
     private async Task<string> ReadBodyAsync(HttpResponseMessage resp, CancellationToken cancellationToken)
     {

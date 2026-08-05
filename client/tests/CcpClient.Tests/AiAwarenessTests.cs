@@ -48,6 +48,9 @@ public class AiAwarenessTests
 
         public IReadOnlyList<AiMemoryTurn> ReadRecent(int maxTurns) => [];
 
+        // SP-047 interface member (mechanical): the awareness path never consumes context.
+        public IReadOnlyList<AiMemoryTurn> ReadPromptContext() => [];
+
         public void Append(AiMemoryTurn turn) => Interlocked.Increment(ref Appends);
 
         public void Clear() { }

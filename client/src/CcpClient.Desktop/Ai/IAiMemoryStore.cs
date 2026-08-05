@@ -33,6 +33,17 @@ public interface IAiMemoryStore
     /// <summary>Reads up to <paramref name="maxTurns"/> most recent turns, oldest first.</summary>
     IReadOnlyList<AiMemoryTurn> ReadRecent(int maxTurns);
 
+    /// <summary>
+    /// The consent-gated CONVERSATION-CONSUMPTION read (SP-047; the WPF `:113` port,
+    /// LocalAiService.cs:111-126): the consent state is checked FIRST — not Granted ⇒ an
+    /// empty list, the document's turns untouched (consent off ⇒ history is neither read
+    /// nor written). Otherwise the current pairs, oldest first (already retention-capped at
+    /// append — trimming rides the c4 mechanism). Distinct from <see cref="ReadRecent"/>:
+    /// the inspection read stays ungated (clear/status consumers); only the read that feeds
+    /// a prompt is consent-gated.
+    /// </summary>
+    IReadOnlyList<AiMemoryTurn> ReadPromptContext();
+
     /// <summary>Appends one turn. Called only under an explicit memory-consent state (contract §5 rule 2).</summary>
     void Append(AiMemoryTurn turn);
 

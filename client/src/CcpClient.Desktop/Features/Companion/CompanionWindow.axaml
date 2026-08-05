@@ -173,8 +173,10 @@
                          ToolTip.Tip="Loop-protection cooldown (placeholder baseline)"
                          AutomationProperties.Name="loop protection cooldown seconds" />
         </Grid>
-        <!-- The honesty line (pre-approach consult #6): the surface must never imply recall. -->
-        <TextBlock Text="Memory is saved and can be cleared here; it is not yet used as conversation context. Consent and cooldowns are session-scoped placeholders pending owner decisions."
+        <!-- The honesty line (pre-approach consult #6 / SP-047): state exactly what memory
+             does — saved, clearable, consumed as context ONLY under the consent typed state.
+             Never imply recall under the Denied placeholder default. -->
+        <TextBlock Text="Memory is saved, can be cleared here, and is used as conversation context while memory consent is on. Consent and cooldowns are session-scoped placeholders pending owner decisions."
                    FontSize="10" Opacity="0.6" Foreground="#FFE8E0EE" TextWrapping="Wrap" />
       </StackPanel>
     </Border>
