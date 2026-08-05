@@ -1047,6 +1047,95 @@ export const S = Object.freeze({
     dropToast: (label) => (label || 'item') + ' dropped',
   },
 
+  /* ------------------------------------------------------------ the coaching
+   * THE ONE-TIME EXPLAINERS (ui/coach.js). Owner, 2026-08-05: "the whole game
+   * feels kinda random atm with no direction."
+   *
+   * Every line here fires ONCE EVER, the first time the mechanic it describes
+   * actually touches the player, and never again on any machine that has a prefs
+   * store. That is the whole reason the register is different from the rest of
+   * this file: these are not furniture the eye slides over, they are the single
+   * sentence a stranger gets about a thing that just happened to them, so each
+   * one has to name the ACT and the CONSEQUENCE and then get out of the way.
+   *
+   * THREE RULES THAT ARE CORRECTNESS, NOT STYLE, because a wrong explainer is
+   * worse than no explainer — a player will plan around it:
+   *
+   *   1. EVERY CLAUSE IS CHECKED AGAINST THE CODE. The numbers below are read
+   *      out of the modules that own them, not remembered: twelve seconds is
+   *      ui/attention.js GRACE_MS, x0.6 for a minute is GoonConsts
+   *      NoCamFailedCheckMult + NoCamFailedCheckPenaltyMs, thirty seconds and
+   *      "two back to back" are GoonConsts PayloadMinGapMs + PayloadBurst. Move
+   *      one of those constants and this copy is a lie — the checks in
+   *      test/selftest-coach.js are what stop that happening quietly.
+   *   2. NOTHING HERE MENTIONS CHARGES. The meter still exists in the engine and
+   *      still rides the wire, and since 2026-08-05 it buys exactly nothing (see
+   *      the tombstones in ui/hud.js and ui/arsenal.js). A hint that named a
+   *      currency the player cannot spend would be the most confusing sentence
+   *      on the page, which is the opposite of the job.
+   *   3. NOTHING HERE PROMISES A PAYLOAD DOES DAMAGE. Grepped before writing:
+   *      no payload touches score, multiplier, heat, cooldown or phase on the
+   *      receiving side. They are interference — they make you look away, and
+   *      looking away is what costs. `incoming` says exactly that and no more.
+   *
+   * Lowercase furniture like the rest of the deck. No exclamation marks: the
+   * announcer is the one voice on this page allowed to raise itself. */
+  coach: {
+    /* THE OBJECTIVE, and the only line here that is not a one-shot toast: it is
+       a quiet caption over the closeness dial for the first minute of the first
+       three matches (ui/hud.js). Deliberately carries NO per-second number —
+       the rate is seconds x riskMultiplier x attentionMultiplier and the two
+       multipliers were removed from this desk on purpose, so "1 pt/s" would be
+       a fourth readout of a number the owner deleted three of. "still here" is
+       the honest version: points tick for as long as you have not tapped out. */
+    goal: 'outlast them. points tick up every second you are still here — they tap out, or you are ahead when the clock runs out.',
+
+    /** The first bubble that banks heat. Says what popping is FOR. */
+    pop: 'popping bubbles fills your heat gauge. the fuller it is, the more likely the next pop drops you something to throw.',
+    /**
+     * The first slot a drop ever arms. BOTH gestures, because the drawer is shut
+     * by default on a phone (there is no number row there) and open by default
+     * on a desk (where nobody finds a drag on their own). `key` is the tile's
+     * position in ui/arsenal.js ARSENAL_ITEMS — 1..7, and it never renumbers.
+     */
+    drop: (label, key) => 'you earned a ' + (label || 'item') + '. tap it, then tap their monitor — or press '
+      + key + ', then ' + key + ' again.',
+    /** The first thing you actually throw. The cooldown, before it surprises you. */
+    fired: 'two throws back to back, then one every thirty seconds. the tiles count the wait down for you.',
+    /**
+     * The first payload of theirs that lands. The half a new player gets wrong is
+     * the middle clause: nothing on their side subtracts a point from you.
+     */
+    incoming: (label) => 'that ' + (label || 'one') + ' is them. payloads take no points off you — they are there to make you look away, or tap out.',
+    /** The first attention token. The one hint with a deadline attached. */
+    check: 'tap the circle within twelve seconds. miss it and you score at x0.6 for the next minute.',
+    /**
+     * The first time the player moves the dial. It is a CLAIM and the code says
+     * so twice (ui/closeness.js's header, core/match.js "Bluffable BY DESIGN"),
+     * so the hint says it too rather than letting anyone think it is measured.
+     */
+    dial: 'that goes on their screen and nothing checks it. tell them the truth, or do not.',
+    /** The first emote from them. Cosmetic, and the hint must not imply otherwise. */
+    emote: 'they said something at you. your own emote tile is in the items panel — it costs nothing and does nothing.',
+    /**
+     * PRACTICE COACHES HARDER, because practice is where a player is allowed to
+     * be bad at this. Names the two slots boot.js's PRACTICE_SEED actually arms
+     * (flash = key 1, video = key 3) and one concrete thing to press.
+     */
+    practice: 'you start with a flash and a video — keys 1 and 3. press 1, then 1 again, to throw the flash at them.',
+
+    /* ---- the switch (ui/options.js) ----
+     * ONE toggle for the whole feature, offered mid-match like every other knob
+     * about your own screen. The note says what OFF means precisely, because
+     * "hints" is a word that has meant "tooltips", "tutorials" and "nagging" in
+     * three different apps this week. */
+    hints: 'Coaching hints',
+    hintsNote: 'the one-line explainers that fire the first time each part of a duel happens to you. each one appears once, ever. off, none of them do.',
+
+    /** The lead line over the "how it works" bullets (ui/screens/title.js). */
+    howGoal: 'the goal: outlast them. they tap out, or you are ahead when the clock runs out.',
+  },
+
   /* --------------------------------------------------------------- toasts */
   toasts: {
     copied: 'invite line copied',

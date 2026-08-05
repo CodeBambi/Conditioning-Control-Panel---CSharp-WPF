@@ -50,6 +50,7 @@ import { mountEmotes } from './emotes.js';
 import { mountAnnouncer } from './announcer.js';
 import { mountMicHud } from './voice/micHud.js';
 import { createDropRoller } from './drops.js';
+import { COACH } from './coach.js';
 import { avatarNode, emitAva } from './avatar.js';
 import { setPreviewMedia } from './throwPreview.js';
 import { resolveArsenalOpen, ARSENAL_OPEN_ON, ARSENAL_OPEN_OFF } from './prefs.js';
@@ -101,7 +102,22 @@ export const ARSENAL_OPEN_CLASS = 'is-open';
 export const ARSENAL_NARROW_MQ = '(orientation: portrait), (max-width: 720px)';
 
 /** Keys 1..N, i.e. one per payload slot. ui/arsenal.js owns the binding. */
-const ARSENAL_KEY_COUNT = ARSENAL_ITEMS.filter((i) => i.kind !== null).length;
+const PAYLOAD_SLOTS = ARSENAL_ITEMS.filter((i) => i.kind !== null);
+const ARSENAL_KEY_COUNT = PAYLOAD_SLOTS.length;
+
+/**
+ * An arsenal id -> the number key that fires it, and the word on its sticker.
+ *
+ * DERIVED, never hand-listed: it is the same filter-and-index ui/arsenal.js's
+ * keydown handler uses (PAYLOAD_ITEMS[n - 1]), so a coached line that says
+ * "press 3" can never drift from the key that actually throws the thing. A slot
+ * hidden by our own caps leaves its number DEAD rather than renumbering the
+ * others, which is exactly why the index is taken off the unfiltered list.
+ */
+const SLOT_KEYS = Object.freeze(PAYLOAD_SLOTS.reduce((map, item, i) => {
+  map[item.id] = { key: i + 1, label: item.label };
+  return map;
+}, Object.create(null)));
 
 /**
  * THE MIC'S KEY — push to talk, and the desktop half of voice notes.
@@ -165,6 +181,31 @@ const PAYLOAD_META = Object.freeze({
  * seconds-to-minutes long and it closes on the receipt either way.
  */
 const PAYLOAD_LEAD_MS = Math.max(GoonConsts.MinScheduleBufferMs, 1500);
+
+/**
+ * THE OBJECTIVE CAPTION's two limits (see THE OBJECTIVE LINE in the bottom bar).
+ * Matches, not duels won: ui/prefs.js `matchesPlayed` counts every recap, which
+ * is the number of times this player has been through the loop at all.
+ */
+const GOAL_MAX_MATCHES = 3;
+/** How long it stays up once Live starts. Long enough to read twice. */
+const GOAL_DWELL_MS = 60000;
+
+/**
+ * ui/drops.js `onPop` verdicts where NO HEAT WAS BANKED.
+ *
+ * The roller's three early returns, in its own words: `clutter` (worth below
+ * MIN_WORTH — a bubble an opponent's BubbleSwarm minted, stamped 0), `phase`
+ * (a pop that arrived outside Live/SuddenDeath, which the recap window can
+ * still deliver before the HUD comes down) and `no-arsenal`. Every other
+ * verdict — miss, refused, no-candidate, drop — banked its gain first.
+ *
+ * It exists so the coached "popping fills your gauge" line can only ever ride a
+ * pop that actually filled it. Spelled here rather than imported because
+ * ui/drops.js publishes the strings on its return value and not as a constant;
+ * if it ever does, delete this.
+ */
+const NO_HEAT_REASONS = Object.freeze(['clutter', 'phase', 'no-arsenal']);
 
 /** Score count-up window. */
 const SCORE_LERP_MS = 250;
@@ -304,10 +345,14 @@ function logTo(sink, entry) {
  * @param {object} [o.voice]    ui/voice/voiceService.js handle — the mic + the
  *                              incoming chip. null (or a build with the feature
  *                              off) simply means there is no mic on the desk.
+ * @param {object} [o.coach]    ui/coach.js handle — the one-time explainers.
+ *                              null means an uncoached desk and nothing else:
+ *                              every call below is `coach?.fire(...)` and the
+ *                              hint is the only thing that does not happen.
  * @returns {{unmount:Function}}
  */
 export function mountHud({ match, session = null, audio = null, prefs = null, media = null,
-  matchLog = null, discord = null, voice = null } = {}) {
+  matchLog = null, discord = null, voice = null, coach = null } = {}) {
   const led = createLedger();
   const fx = createFx();
   const d = doc();
@@ -744,7 +789,46 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   // ---------------------------------------------------------------- bottom
   const bottom = add(root, el('div', 'gg-hud-bottom'));
   const fxRail = add(bottom, el('div', 'gg-fxrail'));
-  const dialHost = add(bottom, el('div', 'gg-dial-host'));
+
+  /* ---- THE OBJECTIVE LINE ------------------------------------------------
+   * "the whole game feels kinda random atm with no direction" (owner,
+   * 2026-08-05). The desk tells a new player what every readout on it is DOING
+   * and never once what any of it is FOR — so one quiet caption sits over the
+   * closeness dial and says the goal out loud.
+   *
+   * IT IS A COLUMN, NOT A NEW EDGE. `.gg-dial-col` wraps the caption and the
+   * dial host that was already the bottom bar's right-hand child, so the flex
+   * row is still two children and the dial is still bottom-right at every
+   * breakpoint. Nothing is absolutely placed and no keep-out band is involved:
+   * MERCY's strip is `.gg-hud-bottom`'s own padding, below all of this.
+   *
+   * IT LEAVES ON ITS OWN, twice over. It is only built for the first
+   * GOAL_MAX_MATCHES matches (ui/prefs.js `matchesPlayed`, which the recap
+   * increments) and it fades after GOAL_DWELL_MS of Live — a permanent caption
+   * on a desk this dense is furniture, and furniture is what the eye stops
+   * reading. The hints toggle silences it like everything else.
+   * -------------------------------------------------------------------- */
+  const dialCol = add(bottom, el('div', 'gg-dial-col'));
+  const goalLine = add(dialCol, el('div', 'gg-coach-goal', S.coach.goal));
+  const dialHost = add(dialCol, el('div', 'gg-dial-host'));
+
+  function goalWanted() {
+    if (!goalLine) return false;
+    try {
+      if (coach && coach.enabled === false) return false;
+      if (!prefs || typeof prefs.get !== 'function') return true;
+      return ((prefs.get('matchesPlayed') | 0) < GOAL_MAX_MATCHES);
+    } catch (_e) { return false; }
+  }
+  if (goalLine) {
+    goalLine.hidden = !goalWanted();
+    if (!goalLine.hidden) {
+      const t = setTimeout(() => {
+        try { cls(goalLine, 'is-gone', true); } catch (_e) { /* stub DOM */ }
+      }, GOAL_DWELL_MS);
+      led.add(() => { try { clearTimeout(t); } catch (_e) { /* gone */ } });
+    }
+  }
 
   // ------------------------------------------------------------ sub-mounts
   /* The media pool reaches the THROW PREVIEW here and nowhere else. It is a
@@ -779,6 +863,11 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
       // The FX beat first and unconditionally: it is about the ACT of firing,
       // which happened whether or not the monitor can draw the flight.
       emitAva('fire', 'you', shot && shot.kind !== undefined ? { kind: shot.kind } : null);
+      /* THE COOLDOWN, ONCE, ON THE FIRST THROW. It is the next thing that will
+       * surprise this player — the second throw is free (PayloadBurst = 2) and
+       * the third is thirty seconds away — and there is nowhere on the desk that
+       * says so until a tile is already greyed out and sweeping. */
+      try { coach?.fire?.(COACH.FIRED, S.coach.fired); } catch (_e) { /* never break a throw */ }
       if (!shot || typeof opponent.markPayloadFired !== 'function') return;
       opponent.markPayloadFired({
         id: shot.id,
@@ -802,15 +891,33 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
       // it to four a second), `drop` is the rare one that armed a slot.
       emitAva('pop', 'you');
       if (res && res.dropped) emitAva('drop', 'you', res.id ? { item: res.id } : null);
+      /* THE TWO COACHED BEATS OF THE ECONOMY, and they hang off the SAME two
+       * facts rather than off the event, so neither can fire for a pop that
+       * banked nothing. NO_HEAT_REASONS is ui/drops.js's three early returns —
+       * a swarm bubble worth zero (exec/bubbles.js POP_WORTH_PAYLOAD), a pop
+       * outside Live, and a desk with no arsenal — and coaching "this fills
+       * your gauge" off any of them would be a lie the gauge disproves in the
+       * same glance.
+       *
+       * `drop` names the item AND its number key, off SLOT_KEYS, which is
+       * derived from the same list the keydown handler indexes. */
+      if (res && NO_HEAT_REASONS.indexOf(res.reason) < 0) {
+        try { coach?.fire?.(COACH.POP, S.coach.pop); } catch (_e) { /* ignore */ }
+      }
+      if (res && res.dropped) {
+        const slot = SLOT_KEYS[res.id];
+        if (slot) { try { coach?.fire?.(COACH.DROP, S.coach.drop(slot.label, slot.key)); } catch (_e) { /* ignore */ } }
+      }
     } catch (_e) { /* a drop must never break the desk */ }
   });
 
-  const dial = mountCloseness({ host: dialHost, match, audio, onLog });
+  const dial = mountCloseness({ host: dialHost, match, audio, onLog, coach });
   const attention = mountAttention({
     host: attSlot,
     tokenHost: root,
     match,
     audio,
+    coach,
     /* `sideBox` rather than the two rails: it is the whole sidebar including the
      * handle, and it is the only one of the three whose rect is HONEST in both
      * states — a collapsed panel is display:none, so a rail measures 0x0 and an
@@ -1192,6 +1299,11 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
       // schedules ahead (PAYLOAD_LEAD_MS) and a bubble that recoiled a second
       // and a half early would read as a glitch, not a hit.
       emitAva('land', 'you', { kind: p.kind });
+      /* ...and so does the EXPLANATION, for exactly the same reason: a line
+       * saying "that is them" a second and a half before anything appears is
+       * about nothing. It rides the landing timer, naming the family off the
+       * same PAYLOAD_META the fx chip beside it uses. */
+      try { coach?.fire?.(COACH.INCOMING, S.coach.incoming(meta.label)); } catch (_e) { /* ignore */ }
     }, Math.min(wait, 30000));
     led.add(() => { try { clearTimeout(t); } catch (_e) { /* gone */ } });
     onLog({ t: 'payload-in', kind: meta.label, id: p.id });
@@ -1215,6 +1327,10 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   // rather than on avatarFx's 2600ms fallback.
   sub('onEmoteReceived', (e) => {
     emitAva('emote', 'opp', { emote: (e && (e.text || e.icon)) || '', ms: EMOTE_MINI_MS });
+    /* A bubble appearing over a stranger's face with no warning is the one beat
+     * on this desk that reads as the game doing something TO you when it is the
+     * only thing on it that does nothing at all. The hint says both halves. */
+    try { coach?.fire?.(COACH.EMOTE, S.coach.emote); } catch (_e) { /* ignore */ }
   });
 
   // The hello carries their display name; the mini is built before it lands.

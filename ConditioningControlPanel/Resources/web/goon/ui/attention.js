@@ -17,6 +17,8 @@
  * ==========================================================================*/
 
 import { GoonAttentionMode } from '../core/contracts.js';
+import { COACH } from './coach.js';
+import { S } from './strings.js';
 
 /** Mirrors match.js's private NO_CAM_CHECK_INTERVAL_MS. */
 const CHECK_INTERVAL_MS = 90000;
@@ -101,8 +103,11 @@ function viewport() {
  * @param {object}   [o.audio]
  * @param {Function} [o.getAvoid]  () => Element[] the token must not land on
  * @param {Function} [o.onLog]
+ * @param {object}   [o.coach]     ui/coach.js — the once-ever explainer for the
+ *                                 first token this player ever sees
  */
-export function mountAttention({ host, tokenHost = null, match, audio = null, getAvoid = null, onLog = null } = {}) {
+export function mountAttention({ host, tokenHost = null, match, audio = null, getAvoid = null,
+  onLog = null, coach = null } = {}) {
   const led = createLedger();
   const root = el('div', 'gg-att gg-plate');
   if (!root || !host) return { unmount() { led.run(); }, spawn() {} };
@@ -204,6 +209,14 @@ export function mountAttention({ host, tokenHost = null, match, audio = null, ge
     sfx(audio, 'gg-check');
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => cls(node, 'is-live', true));
     else cls(node, 'is-live', true);
+
+    /* THE FIRST TOKEN EVER, EXPLAINED — and it is coached HERE rather than off
+     * the engine's due event because this is the branch that actually put a
+     * circle on screen: spawn() early-returns for a token already up and for a
+     * seat that is not NoCam, and a hint about tapping a circle that was never
+     * drawn would be the most confusing line on the page. The copy carries
+     * GRACE_MS and the engine's failure penalty; see S.coach's rule 1. */
+    try { coach?.fire?.(COACH.CHECK, S.coach.check); } catch (_e) { /* a hint never breaks a check */ }
 
     led.listen(node, 'pointerdown', (e) => { if (e && e.preventDefault) e.preventDefault(); resolve(true); });
     tokenTimer = setTimeout(() => resolve(false), GRACE_MS);

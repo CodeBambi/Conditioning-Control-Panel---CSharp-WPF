@@ -62,6 +62,7 @@ import { createRouter } from './ui/router.js';
 import { createPrefs } from './ui/prefs.js';
 import { createAudio } from './ui/audio.js';
 import { createToasts } from './ui/toasts.js';
+import { createCoach, COACH } from './ui/coach.js';
 import { createSheets } from './ui/sheets.js';
 import { createOptions } from './ui/options.js';
 import { createSoloDriver } from './ui/soloDriver.js';
@@ -490,6 +491,11 @@ let audio = null;
 let toasts = null;
 let sheets = null;
 let options = null;
+/* ui/coach.js — the one-time explainers. A boot singleton rather than a per-match
+ * handle on purpose: "once ever" is a fact about the PLAYER, and a coach rebuilt
+ * on every attachMatch (the relay fallback rebuilds the whole graph) would keep
+ * its page-local ledger for a matter of seconds. */
+let coach = null;
 let router = null;
 let executor = null;
 let matchLog = null;
@@ -1535,7 +1541,7 @@ function mountHudNow() {
       // from inside the HUD. mountHud takes a destructured options object, so an
       // extra key is inert — and handing it over here means the mic lands as one
       // line in ui/hud.js rather than as a second wiring pass through this file.
-      match: currentMatch, session, audio, prefs, media, matchLog, discord, voice,
+      match: currentMatch, session, audio, prefs, media, matchLog, discord, voice, coach,
     }) || null;
   } catch (e) { logger.error('mountHud threw: ' + ((e && e.stack) || e)); hudHandle = null; }
 }
@@ -1543,6 +1549,9 @@ function mountHudNow() {
 function unmountHud() {
   if (!hudHandle) return;
   try { hudHandle.unmount?.(); } catch (e) { logger.warn('hud.unmount threw: ' + ((e && e.message) || e)); }
+  // A coached line still waiting its turn is about a match that has just ended.
+  // The marks stay; only the queue goes. See coach.clearPending.
+  try { coach?.clearPending?.(); } catch (_e) { /* a hint is never load-bearing */ }
   hudHandle = null;
   const hud = el('gg-hud');
   if (hud) { hud.replaceChildren(); hud.hidden = true; }
@@ -2042,6 +2051,18 @@ function seedPracticeArsenal() {
   }
   if (!armed) return;
   logger.info('practice: seeded ' + armed + ' arsenal slot(s)');
+  /* ...AND SAY SO. The seed is silent by design (`silent: true` above — a gift,
+   * not a reward), which solved the "nothing is happening" report and left a
+   * second one behind it: two stickers quietly light up in a drawer that is SHUT
+   * by default on a phone, and nothing anywhere says they are there or what to
+   * press. Practice is the one place coaching may be a little louder, so this is
+   * the one hint fired from outside the desk.
+   *
+   * Deferred a beat: mountHudNow() has only just run and the HUD's entrance is
+   * still animating, so a toast on this tick lands under a moving desk. */
+  setTimeout(() => {
+    try { coach?.fire?.(COACH.PRACTICE, S.coach.practice); } catch (_e) { /* never break practice */ }
+  }, 900);
 }
 
 /* ----------------------------------------------------------------------------
@@ -2114,6 +2135,10 @@ function buildApp() {
   prefs.subscribe((key, value) => { if (key === 'perfMode') applyPerfTier(value); });
   audio = createAudio({ prefs, logger });
   toasts = createToasts({ prefs });
+  /* AFTER the toasts, because that is its whole output tier, and BEFORE the
+   * options drawer, which offers its switch. Nothing coaches until a HUD is
+   * mounted — this only builds the ledger. */
+  coach = createCoach({ prefs, toasts, logger });
   sheets = createSheets({ audio, logger });
   matchLog = createMatchLog();
   // ONE store, built once, and the only thing on the page allowed to register a

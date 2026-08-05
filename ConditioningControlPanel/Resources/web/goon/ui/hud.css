@@ -1810,6 +1810,33 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
    lost a third of its width and most of its padding; it did NOT lose its touch
    targets — the four stops keep their 48px, which is what the tier rule is
    about, and the plate simply stopped padding them out. */
+/* THE DIAL'S COLUMN — the objective caption, then the dial (ui/hud.js THE
+   OBJECTIVE LINE). The bottom bar is still a two-child flex row, so the dial is
+   still hard right at every breakpoint; this only stacks a caption over it.
+   `align-items: flex-end` rather than a width, so the caption is as wide as its
+   own text wants to be and the dial keeps its own min/max. */
+.gg-dial-col { display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem; min-width: 0; }
+.gg-coach-goal {
+  max-width: min(22rem, 46vw);
+  text-align: right;
+  font-size: 0.6rem; line-height: 1.35;
+  color: var(--gg-text-4);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);   /* it floats over the stage, not a plate */
+  /* NOT a .gg-plate: a plate would re-enable pointer events at 0,2,0 and park a
+     dead box over the field the player is popping bubbles in. It is a caption. */
+  pointer-events: none;
+  transition: opacity .8s ease;
+}
+/* Its own exit, so nothing has to remove a node mid-match. */
+.gg-coach-goal.is-gone { opacity: 0; }
+/* Zen takes the dial; the caption over it goes at the same time, or the desk
+   keeps a line explaining a readout that is no longer on it. */
+.gg-hud-frame.gg-hud--zen .gg-coach-goal { display: none; }
+@media (orientation: portrait), (max-width: 720px) {
+  /* A phone has no room for a second sentence beside the fx chips. */
+  .gg-coach-goal { max-width: 60vw; font-size: 0.56rem; }
+}
+
 .gg-dial-host { display: flex; justify-content: flex-end; }
 .gg-dial { min-width: 10.5rem; max-width: 14rem; padding: 0.3rem 0.5rem 0.35rem; }
 .gg-dial-label { font-size: 0.56rem; letter-spacing: 0.14em; color: var(--gg-text-4); }
@@ -2320,6 +2347,10 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
   /* padding-bottom clears MERCY, measured not guessed: 1.4rem off the floor +
      a 50px button + a 0.25rem gap + an 11px fineprint = 5.46rem, so 6rem. */
   .gg-hud-bottom { flex-direction: row; align-items: flex-end; justify-content: flex-end; gap: 0.4rem; padding-bottom: 6rem; }
+  /* The dial's column takes the `flex: 0 0 auto` the host used to carry here —
+     it is the bottom deck's child now, and a stretched column would drag the
+     dial off the right edge it is pinned to. */
+  .gg-dial-col { flex: 0 0 auto; }
   .gg-dial-host { justify-content: flex-end; flex: 0 0 auto; }
   .gg-dial { min-width: 0; width: min(46vw, 11.5rem); max-width: none; padding: 0.28rem 0.4rem 0.32rem; }
   .gg-dial-label { font-size: 0.54rem; }
