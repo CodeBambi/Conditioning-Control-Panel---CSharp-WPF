@@ -1,6 +1,6 @@
 ## STATUS: SP-050 — Host-obligation audit (v6.6.3 remaining deltas)
-**Current Step:** Step 3 — sizing verdicts + board-row filings + pre-completion consult (IN PROGRESS)
-**Last Updated:** 2026-08-05 (worker session 1, Step 2 COMPLETE — plan review engine-skipped SP-195)
+**Current Step:** DONE — all 4 steps complete; .DONE created
+**Last Updated:** 2026-08-05 (worker session 1, task complete — 629/33 EXACT, 0W/0E, File Scope clean)
 **Blockers:** none
 
 ### Step 1: inventory + payload enumeration + pre-approach consult
@@ -17,9 +17,9 @@
 - [x] Board-row filings named for obligation-carrying deltas (9 filings incl. BLOCKED-ON rows; orchestrator writes at land)
 - [x] record.md (audit, table, verdicts, consults, review presence)
 - [x] Pre-completion solo consult (verdict + actual model in record.md — 2 calls, 1 truncation; 4 fixes + 2 mis-sizings ALL CLOSED; model not surfaced)
-- [ ] STATUS.md accurate before .DONE
+- [x] STATUS.md accurate before .DONE
 
 ### Step 4: Testing & Verification
-- [ ] Contract testCommand passes (verify.mjs + build 0W/0E + counts EXACTLY 629/33; TRX logger)
-- [ ] git diff --check clean
-- [ ] git status --short shows only File Scope paths
+- [x] Contract testCommand passes (verify.mjs + build 0W/0E + counts EXACTLY 629/33; TRX logger)
+- [x] git diff --check clean
+- [x] git status --short shows only File Scope paths

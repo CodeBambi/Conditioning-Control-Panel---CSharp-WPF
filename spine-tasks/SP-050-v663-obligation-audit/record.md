@@ -13,7 +13,7 @@
 |------|------|--------|----------|
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — engine runs reviews after `.DONE`, SP-195) | `.reviews/1-20260805T090014.md` |
 | 2 | plan | SKIPPED BY DESIGN (same) | `.reviews/2-20260805T091152.md` |
-| 3 | plan | (pending) | `.reviews/` |
+| 3 | plan | SKIPPED BY DESIGN (same) | `.reviews/3-20260805T092523.md` |
 
 ---
 
@@ -241,6 +241,17 @@ Filings exist for every delta with a real obligation (all six); the NOTHING verd
 
 ---
 
-## Step 4 — verification
+## Step 4 — verification (final tree, post consult fixes)
 
-(pending)
+- `node .spine/patches/verify.mjs` → **OK exit 0** (all patches applied on all roots, incl. `t5-reviews-autoclean`).
+- `dotnet build client/CcpClient.sln -c Debug --nologo` → **Build succeeded, 0 Warning(s), 0 Error(s)**.
+- `dotnet test client/tests/CcpClient.Tests/… --logger "trx;LogFileName=sp050-unit.trx"` → **Passed! Failed: 0, Passed: 629, Skipped: 0, Total: 629** — EXACTLY the 629 floor (zero product change).
+- `dotnet test client/tests/CcpClient.HeadlessTests/… --logger "trx;LogFileName=sp050-headless.trx"` → **Passed! Failed: 0, Passed: 33, Total: 33** — EXACTLY the 33 floor. TRX artifacts attached (git-ignored `TestResults/` — no `client/**` footprint).
+- `git diff --check` → **clean** (exit 0).
+- `git status --short` → **File Scope paths only** (`spine-tasks/SP-050-v663-obligation-audit/**`; TRX files confirmed git-ignored via `git check-ignore`). `fileScopeMustNotChange` (`ConditioningControlPanel/**`, `client/**`, `.spine/**`, `.pi/**`) untouched — the payload/WPF trees were READ-ONLY throughout (all WPF reads via `git show main:…`).
+
+---
+
+## Audit summary (the one-paragraph answer)
+
+Of the six remaining v6.6.3 deltas, **two carry small, immediately actionable DTRH host drift** (Hourglass: the ownership-gated 2h duration clamp; Bottomless Fall: the `endless` setup knob end-to-end — ONE S/M packet, two board rows), **one carries a whole new web-core host** (Weekly Intake Pass: the Graded Intake window class + 6-out/12-in bridge + 3 stores + pass service + profiler + session drafting — L, with named dependency fallbacks and a degraded-delivery contract), and **three carry NO current DTRH-host obligation** (Brain Drain/Melt — withheld by WPF itself, parity = the withheld behavior inside absent overlay/Deeper systems; FX overhaul — page-internal tiers + a pre-existing reduced-motion inheritance PROBE surfaced by this audit, chrome body BLOCKED-ON dashboard rows; NUX — zero payload, entirely client-shell, BLOCKED-ON five absent subsystems). Nine board-row filings named; the orchestrator writes them at land (enabler 2).
