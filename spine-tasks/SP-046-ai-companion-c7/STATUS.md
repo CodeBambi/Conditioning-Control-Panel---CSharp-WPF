@@ -1,14 +1,14 @@
 ## STATUS: SP-046 — AI companion slice c7: companion UI surface
-**Current Step:** Step 1 — archaeology + design + avalonia-research + pre-approach consult
-**Last Updated:** 2026-08-05 (authored)
+**Current Step:** Step 2 — companion surface + composition wiring (IN PROGRESS)
+**Last Updated:** 2026-08-05 (worker, Step 1 complete)
 **Blockers:** none
 
-### Step 1: archaeology + design + avalonia-research + pre-approach consult
-- [ ] Update STATUS.md before starting work
-- [ ] WPF archaeology (badge, chat input, clear flow, consent/cooldown surfaces, refusal presentation)
-- [ ] Design (evolved grammar; placement decision recorded; composition wiring for the full AI chain)
-- [ ] avalonia-research pass (current v12 facts cited for every API used)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+### Step 1 (COMPLETE): archaeology + design + avalonia-research + pre-approach consult
+- [x] Update STATUS.md before starting work
+- [x] WPF archaeology (badge, chat input, clear flow, consent/cooldown surfaces, refusal presentation)
+- [x] Design (evolved grammar; placement decision recorded; composition wiring for the full AI chain)
+- [x] avalonia-research pass (current v12 facts cited for every API used)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: companion surface + composition wiring
 - [ ] Features/Companion/ surface (chat, badge, status, refusal bubbles, clear control, consent/cooldown surfaces)
