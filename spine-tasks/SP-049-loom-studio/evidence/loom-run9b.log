@@ -1,0 +1,35 @@
+dtrh: payload root 'C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260805T045747\lane-1\client\src\CcpClient.Desktop\bin\Debug\net10.0\payload\dtrh' -> Present (1542 files)
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)
+layout-probe: card 488.0x77.1 DIP @ scale 1.75 @ screen 216,310
+dtrh-audio: 1 render endpoint(s): Speakers (Realtek(R) Audio) (default)
+dtrh-audio: playback device up (requested default)
+loom: store + dispatch + sfx channel up (null video — the studio has no video surface)
+loom: WebView2 UserDataFolder set (own profile, loom-suffixed); autoplay-policy=no-user-gesture-required
+loom: navigating embedded surface (page loom.html)
+loom: loom-drive armed (HARNESS-ONLY — scripted pointer, real everything else): save:run9-weave@25;scroll-end@95;report@100
+loom: studio demonstrator opened (--loom-demo)
+loom: AdapterCreated
+dtrh-loopback: GET /dtrh/loom.html/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/loomBoot.js/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/styles.css/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/bridge.js/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+loom: ready received — posting loom-list (stripped boot, LoomHostService parity)
+dtrh-loopback: GET /favicon.ico/ -> 404
+dtrh: loom-list posted (6 spiral(s))
+dtrh-loopback: GET /spirals/loom_run8-weave.gif/… -> 200 (spirals)
+dtrh-loopback: GET /spirals/loom_run4-weave.gif/… -> 200 (spirals)
+dtrh-loopback: GET /spirals/loom_run5-weave.gif/… -> 200 (spirals)
+dtrh-loopback: GET /spirals/loom_run6-weave.gif/… -> 200 (spirals)
+dtrh-loopback: GET /spirals/loom_run7-weave.gif/… -> 200 (spirals)
+dtrh-loopback: GET /spirals/loom_run9-weave.gif/… -> 200 (spirals)
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+loom: loom-drive 'save:run9-weave' -> "loom-drive: save clicked"
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loom: save refused (exists — page arms overwrite)
+loom: loom-drive 'scroll-end' -> "loom-drive: scroll-end top=0/938"
+loom: loom-drive 'report' -> "loom-drive: report innerWidth=937 innerHeight=938 dpr=1.75 bodyZoom=(none)"

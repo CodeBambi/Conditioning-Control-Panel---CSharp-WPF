@@ -204,6 +204,20 @@ public sealed partial class DtrhLoom
         }
     }
 
+    /// <summary>The on-disk GIF path for a slug, or null (bad slug / no such file).
+    /// DtrhLoomStore.GifPathFor :114-123 parity — the ONLY path source for loom-reveal;
+    /// page strings never become paths.</summary>
+    public string? GifPathFor(string? slug)
+    {
+        if (slug is null || !SlugRegex().IsMatch(slug)) return null;
+        try
+        {
+            var p = Path.Combine(_folder, Prefix + slug + ".gif");
+            return File.Exists(p) ? p : null;
+        }
+        catch { return null; }
+    }
+
     /// <summary>GIF87a/89a magic + 0x3B trailer, ≥16 bytes (DtrhLoomStore.LooksLikeGif
     /// :146-155) — enough to reject arbitrary bytes.</summary>
     public static bool LooksLikeGif(byte[] b)

@@ -1,0 +1,137 @@
+dtrh: payload root 'C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260805T045747\lane-1\client\src\CcpClient.Desktop\bin\Debug\net10.0\payload\dtrh' -> Present (1542 files)
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)
+layout-probe: card 488.0x77.1 DIP @ scale 1.75 @ screen 436,530
+dtrh-audio: 1 render endpoint(s): Speakers (Realtek(R) Audio) (default)
+dtrh-audio: playback device up (requested default)
+loom: store + dispatch + sfx channel up (null video — the studio has no video surface)
+loom: WebView2 UserDataFolder set (own profile, loom-suffixed); autoplay-policy=no-user-gesture-required
+loom: navigating embedded surface (page loom.html)
+loom: loom-drive armed (HARNESS-ONLY — scripted pointer, real everything else): save:evidence-weave@12;delete-first@75;delete-first@85
+loom: studio demonstrator opened (--loom-demo)
+loom: auto-close armed at 110s
+loom: AdapterCreated
+dtrh-loopback: GET /dtrh/loom.html/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/styles.css/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/loomBoot.js/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/bridge.js/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+loom: ready received — posting loom-list (stripped boot, LoomHostService parity)
+dtrh-loopback: GET /favicon.ico/ -> 404
+dtrh: loom-list posted (1 spiral(s))
+dtrh-loopback: GET /spirals/loom_aaa-seeded.gif/… -> 200 (spirals)
+loom: loom-drive 'save:evidence-weave' -> "loom-drive: save clicked"
+dtrh-loopback: GET /dtrh/engine/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/shared/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loom: saved spiral (1072927 bytes)
+dtrh: loom-list posted (2 spiral(s))
+dtrh-fx: sfx 'boon_pick' unresolved — silent no-op (no candidate on disk)
+dtrh-loopback: GET /spirals/loom_evidence-weave.gif/… -> 200 (spirals)
+loom: loom-drive 'delete-first' -> "loom-drive: delete armed"
+dtrh-loom: deleted spiral
+dtrh: loom-list posted (1 spiral(s))
+loom: loom-drive 'delete-first' -> "loom-drive: delete armed"
+dtrh-loom: deleted spiral
+dtrh: loom-list posted (0 spiral(s))
+loom: auto-close firing
+dtrh-fx: teardown complete
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+loom: studio window closed — shutting down the lifetime
+app: Exit — teardown begin
+dtrh: participant stop begin
+dtrh: participant stop end
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+app: Exit — teardown begin
+app: teardown end
+[0805/073058.147:ERROR:ui\gfx\win\window_impl.cc:172] Failed to unregister class Chrome_WidgetWin_0. Error = 1412
+EXIT=0

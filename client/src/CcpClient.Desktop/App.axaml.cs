@@ -24,13 +24,17 @@ public partial class App : Application
     private readonly string? _dtrhFxDrive;
     private readonly bool _dtrhM2Test;
     private readonly bool _dtrhKillRenderers;
+    private readonly bool _loomDemo;
+    private readonly string? _loomDrive;
+    private readonly int _loomAutoCloseSeconds;
     private StreamWriter? _avatarTraceWriter;
 
     public App(ApplicationHost host, bool popupDemo = false,
         bool avatarDemo = false, bool avatarCorrupt = false, string? avatarTracePath = null,
         bool avatarAnimate = false, bool dtrhDemo = false, string dtrhPage = "index.html",
         int dtrhAutoCloseSeconds = 0, bool dtrhQuick = false, int dtrhPickerTimeoutSeconds = 0,
-        string? dtrhFxDrive = null, bool dtrhM2Test = false, bool dtrhKillRenderers = false)
+        string? dtrhFxDrive = null, bool dtrhM2Test = false, bool dtrhKillRenderers = false,
+        bool loomDemo = false, string? loomDrive = null, int loomAutoCloseSeconds = 0)
     {
         _host = host;
         _popupDemo = popupDemo;
@@ -46,6 +50,9 @@ public partial class App : Application
         _dtrhFxDrive = dtrhFxDrive;
         _dtrhM2Test = dtrhM2Test;
         _dtrhKillRenderers = dtrhKillRenderers;
+        _loomDemo = loomDemo;
+        _loomDrive = loomDrive;
+        _loomAutoCloseSeconds = loomAutoCloseSeconds;
     }
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
@@ -178,6 +185,48 @@ public partial class App : Application
                                     }
                                 }), TaskScheduler.Default);
                         }
+                    }
+                };
+            }
+
+            // SP-049 THE LOOM studio DEMONSTRATOR (--loom-demo): the v6.6.3 standalone
+            // studio window (WPF LoomHostService parity — a plain titled window; closing
+            // it ends the demonstrator, the --dtrh-demo flow-ended class). The greenfield
+            // dashboard has no Spiral Overlay card yet — typed named limit, record.md.
+            if (_loomDemo)
+            {
+                var loomEndedOnce = 0;
+                dashboard.Opened += (_, _) =>
+                {
+                    var loomWindow = new Features.Dtrh.DtrhLoomWindow(_host, _loomDrive);
+                    loomWindow.Closed += (_, _) =>
+                    {
+                        // One-shot (the SP-023 ping-pong class): Shutdown() closes owned
+                        // windows again, which re-fires Closed — never a teardown loop.
+                        if (Interlocked.Exchange(ref loomEndedOnce, 1) != 0)
+                        {
+                            return;
+                        }
+
+                        _host.LogDiagnostic("loom: studio window closed — shutting down the lifetime");
+                        desktop.Shutdown();
+                    };
+                    loomWindow.Show(dashboard);
+                    _host.LogDiagnostic("loom: studio demonstrator opened (--loom-demo)");
+                    if (_loomAutoCloseSeconds > 0)
+                    {
+                        // WSLg exit evidence without input automation (SP-008 named limit):
+                        // the timed close exercises the same idempotent teardown path.
+                        _host.LogDiagnostic($"loom: auto-close armed at {_loomAutoCloseSeconds}s");
+                        _ = Task.Delay(TimeSpan.FromSeconds(_loomAutoCloseSeconds)).ContinueWith(
+                            _ => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                            {
+                                _host.LogDiagnostic("loom: auto-close firing");
+                                if (loomWindow.IsVisible)
+                                {
+                                    loomWindow.Close();
+                                }
+                            }), TaskScheduler.Default);
                     }
                 };
             }
