@@ -20,8 +20,9 @@
 
          Bio is out of scope for this build (needs a moderation path) - do not
          add the field here.
-         Wardrobe (avatar decoration + charms) lands in Phase 3 in the reserved
-         section at the bottom; the payload for it is already round-tripped.
+         The Wardrobe section (Phase 3) is driven entirely by
+         Resources/cosmetics/registry.json - adding an item is a data change, never
+         a XAML one.
          ===================================================================== -->
 
     <Grid Margin="18,16,18,16">
@@ -112,14 +113,49 @@
                     </StackPanel>
                 </Border>
 
-                <!-- ================= wardrobe (Phase 3) ================= -->
-                <Border CornerRadius="10" Padding="14,12,14,12"
-                        Background="#1FB478FF" BorderBrush="#33B478FF" BorderThickness="1">
+                <!-- ================= wardrobe (Phase 3) =================
+                     Mod tabs, then the two slot groups. Both grids are built in
+                     code from Resources/cosmetics/registry.json, and an item whose
+                     PNG is missing is not offered at all - equipping something that
+                     renders nothing is worse than not seeing it here. -->
+                <Border x:Name="WardrobeSection" CornerRadius="10" Padding="14,12,14,10"
+                        Background="#B3252542" BorderBrush="#335EC8F2" BorderThickness="1">
                     <StackPanel>
-                        <TextBlock Text="{loc:Str profile_customize_wardrobe_soon_title}" Foreground="#E7DEFF"
-                                   FontSize="11" FontWeight="Bold"/>
-                        <TextBlock Text="{loc:Str profile_customize_wardrobe_soon_body}" Foreground="#9A93B8"
-                                   FontSize="10" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                        <Grid Margin="0,0,0,3">
+                            <TextBlock Text="{loc:Str profile_customize_wardrobe}" Foreground="#5EC8F2"
+                                       FontSize="12" FontWeight="Bold"/>
+                            <TextBlock x:Name="TxtWardrobeSlots" Foreground="#8079A3" FontSize="11"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </Grid>
+                        <TextBlock Text="{loc:Str profile_customize_wardrobe_hint}" Foreground="#8079A3"
+                                   FontSize="10" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                        <!-- mod tabs -->
+                        <WrapPanel x:Name="WardrobeModTabs" Margin="0,0,0,10"/>
+
+                        <TextBlock x:Name="TxtWardrobeEmpty" Text="{loc:Str profile_customize_wardrobe_empty}"
+                                   Foreground="#8079A3" FontSize="11" FontStyle="Italic"
+                                   Visibility="Collapsed" Margin="0,0,0,6" TextWrapping="Wrap"/>
+
+                        <StackPanel x:Name="WardrobeGroups">
+                            <TextBlock x:Name="TxtWardrobeDecoHeader"
+                                       Text="{loc:Str profile_customize_wardrobe_decorations}"
+                                       Foreground="#B8B1CC" FontSize="11" FontWeight="SemiBold"
+                                       Margin="0,0,0,6"/>
+                            <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <WrapPanel x:Name="WardrobeDecoHost"/>
+                            </ScrollViewer>
+
+                            <TextBlock x:Name="TxtWardrobeCharmHeader"
+                                       Text="{loc:Str profile_customize_wardrobe_charms}"
+                                       Foreground="#B8B1CC" FontSize="11" FontWeight="SemiBold"
+                                       Margin="0,8,0,6"/>
+                            <ScrollViewer MaxHeight="140" VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <WrapPanel x:Name="WardrobeCharmHost"/>
+                            </ScrollViewer>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
             </StackPanel>

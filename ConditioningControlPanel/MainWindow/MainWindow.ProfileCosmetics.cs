@@ -64,6 +64,8 @@ namespace ConditioningControlPanel
             ApplyProfileAccent(cosmetics.Accent);
             ApplyProfileTitle(cosmetics.TitleId);
             ApplyProfilePins(cosmetics.PinnedAchievements);
+            // Phase 3: the worn decoration and the two card charms (MainWindow.ProfileWardrobe).
+            ApplyProfileWardrobe(cosmetics.AvatarDeco, cosmetics.Charms);
         }
 
         /// <summary>
@@ -233,9 +235,10 @@ namespace ConditioningControlPanel
                     App.Settings.Save();
                 }
 
-                App.Logger?.Information("Profile cosmetics saved: banner={Banner}, accent={Accent}, title={Title}, pins={Pins}",
+                App.Logger?.Information(
+                    "Profile cosmetics saved: banner={Banner}, accent={Accent}, title={Title}, pins={Pins}, deco={Deco}, charms={Charms}",
                     chosen.BannerId ?? "none", chosen.Accent ?? "none", chosen.TitleId ?? "none",
-                    chosen.PinnedAchievements.Count);
+                    chosen.PinnedAchievements.Count, chosen.AvatarDeco ?? "none", chosen.Charms.Count);
 
                 // Repaint immediately; the card on screen is the point of the dialog.
                 ApplyOwnProfileCosmetics();

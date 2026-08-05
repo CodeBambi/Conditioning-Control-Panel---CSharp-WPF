@@ -46,6 +46,13 @@ namespace ConditioningControlPanel.Views.Tabs
         internal CheckBox ChkGoonShareDiscordDm => PrivacyPanel.ChkGoonShareDiscordDm;
         internal CheckBox ChkGoonRichPresence => PrivacyPanel.ChkGoonRichPresence;
 
+        // The hero avatar became an AdornedAvatar in Phase 3 (avatar + decoration + presence dot in
+        // one reusable control). Its two writable parts keep their old names and types here, so the
+        // MainWindow partials that have always written DiscordTab.ProfileViewerAvatar.ImageSource
+        // and DiscordTab.ProfileOnlineIndicator.Fill did not have to change.
+        internal System.Windows.Media.ImageBrush ProfileViewerAvatar => ProfileHeroAvatar.AvatarBrush;
+        internal System.Windows.Shapes.Ellipse ProfileOnlineIndicator => ProfileHeroAvatar.PresenceDot;
+
         // ---- forwarding ---------------------------------------------------------------
 
         private void DiscordTabView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)

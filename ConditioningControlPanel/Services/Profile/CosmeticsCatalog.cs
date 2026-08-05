@@ -1,12 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using ConditioningControlPanel.Models;
-using Newtonsoft.Json.Linq;
 
 namespace ConditioningControlPanel.Services
 {
@@ -57,8 +55,6 @@ namespace ConditioningControlPanel.Services
     {
         private static readonly object _gate = new();
         private static readonly Dictionary<string, ImageSource?> _imageCache = new(StringComparer.Ordinal);
-        private static HashSet<string>? _wardrobeIds;
-        private static bool _wardrobeLoadAttempted;
 
         /// <summary>
         /// The banner pool. Seeded from art the installer already ships plus three generated
@@ -169,44 +165,12 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Ids from the Phase 3 wardrobe registry (Resources/cosmetics/registry.json, shipped as
-        /// Content next to the exe). Returns null when the file is absent or unreadable, which
-        /// Sanitize reads as "cannot validate - pass the ids through" so a Phase 2 build never
-        /// strips a loadout it simply does not have the manifest for.
+        /// Ids from the Phase 3 wardrobe registry, via <see cref="WardrobeCatalog"/> (which owns
+        /// the registry and the art). Returns null when the file is absent or unreadable, which
+        /// Sanitize reads as "cannot validate - pass the ids through" so a build without the
+        /// manifest never strips a loadout it simply cannot check.
         /// </summary>
-        public static ISet<string>? WardrobeIds()
-        {
-            lock (_gate)
-            {
-                if (_wardrobeLoadAttempted) return _wardrobeIds;
-                _wardrobeLoadAttempted = true;
-
-                try
-                {
-                    var path = Path.Combine(AppContext.BaseDirectory, "Resources", "cosmetics", "registry.json");
-                    if (!File.Exists(path)) return _wardrobeIds = null;
-
-                    var root = JObject.Parse(File.ReadAllText(path));
-                    var items = root["items"] as JArray;
-                    if (items == null) return _wardrobeIds = null;
-
-                    var ids = new HashSet<string>(StringComparer.Ordinal);
-                    foreach (var item in items)
-                    {
-                        var id = item?["id"]?.ToString();
-                        if (!string.IsNullOrWhiteSpace(id)) ids.Add(id!);
-                    }
-                    _wardrobeIds = ids.Count > 0 ? ids : null;
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Debug("CosmeticsCatalog: wardrobe registry unreadable: {E}", ex.Message);
-                    _wardrobeIds = null;
-                }
-
-                return _wardrobeIds;
-            }
-        }
+        public static ISet<string>? WardrobeIds() => WardrobeCatalog.KnownIds();
 
         /// <summary>
         /// Sanitize for the viewer's OWN card: every check available, including the unlock filter

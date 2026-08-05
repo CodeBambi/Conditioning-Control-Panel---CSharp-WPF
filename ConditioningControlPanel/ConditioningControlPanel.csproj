@@ -200,7 +200,11 @@
          Remove from the default None glob first so the no-copy None item doesn't
          suppress this Content copy. -->
     <None Remove="Resources\cosmetics\**\*.png;Resources\cosmetics\*.json" />
-    <Content Include="Resources\cosmetics\**\*.png;Resources\cosmetics\*.json">
+    <!-- The art pipeline leaves downscale sanity checks (<id>_104.png, <id>_28.png) and
+         placement guides (<id>_guide.png) beside the finals. Only ids the registry names
+         are ever loaded, so those would ship as dead weight - keep them out of the build. -->
+    <Content Include="Resources\cosmetics\**\*.png;Resources\cosmetics\*.json"
+             Exclude="Resources\cosmetics\**\*_28.png;Resources\cosmetics\**\*_104.png;Resources\cosmetics\**\*_guide.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>

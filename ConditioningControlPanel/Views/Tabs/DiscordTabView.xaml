@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+             xmlns:ctrl="clr-namespace:ConditioningControlPanel.Views.Controls"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignHeight="620" d:DesignWidth="1460">
@@ -152,22 +153,16 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
 
-                                    <!-- ==== avatar (104px) + presence dot + deco slot ==== -->
-                                    <Grid Grid.Column="0" Width="104" Height="104" VerticalAlignment="Top">
-                                        <Border CornerRadius="52" BorderBrush="#FF69B4" BorderThickness="3">
-                                            <Border.Background>
-                                                <ImageBrush x:Name="ProfileViewerAvatar" x:FieldModifier="internal" Stretch="UniformToFill"/>
-                                            </Border.Background>
-                                        </Border>
-                                        <!-- Phase 3 wardrobe: a 512 canvas PNG stacked 1:1 over the
-                                             avatar. Placement is baked into the art, so this needs
-                                             no anchor metadata - only a Source and a Visibility. -->
-                                        <Image x:Name="ProfileAvatarDeco" x:FieldModifier="internal"
-                                               Stretch="Fill" Visibility="Collapsed" IsHitTestVisible="False"/>
-                                        <Ellipse x:Name="ProfileOnlineIndicator" x:FieldModifier="internal" Width="20" Height="20"
-                                                 HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                                 Margin="0,0,4,4" Stroke="#1E1E3F" StrokeThickness="3" Fill="#43B581"/>
-                                    </Grid>
+                                    <!-- ==== avatar (104px) + presence dot + decoration ====
+                                         AdornedAvatar owns all three layers; the avatar brush and
+                                         presence dot are re-exposed by the code-behind under their
+                                         original names, so MainWindow's ~16 call sites are unchanged.
+                                         An equipped decoration is drawn at 104/0.70 = 148px, centred
+                                         and unclipped - the 6px margin buys back the room a hat
+                                         needs above the head before the hero card's clip. -->
+                                    <ctrl:AdornedAvatar x:Name="ProfileHeroAvatar" x:FieldModifier="internal"
+                                                        Grid.Column="0" AvatarSize="104"
+                                                        VerticalAlignment="Top" Margin="6,6,0,0"/>
 
                                     <!-- ==== identity ==== -->
                                     <StackPanel Grid.Column="1" Margin="16,0,14,0" VerticalAlignment="Top">
