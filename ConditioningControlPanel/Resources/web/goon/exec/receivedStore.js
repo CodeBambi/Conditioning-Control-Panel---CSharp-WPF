@@ -10,7 +10,11 @@
 //     Services/GoonGame/TransferInboxStore.cs -> transfer-cache/recv/<sha>.<ext>, served back as
 //     https://ccp.cache/recv/... A 24 MB blob: URL in a <video> forces the whole artifact into
 //     renderer memory and breaks seeking; a virtual-host URL streams exactly like the existing
-//     ccp.assets path, release() stays the no-op it already is, and cross-session persistence is free.
+//     ccp.assets path, and release() stays the no-op it already is. THE INBOX IS EPHEMERAL
+//     (owner decision, 2026-08-05): boot.js purges every committed artifact at teardownEverything
+//     and the host wipes recv/ at app start, page boot and window close — a partner's media never
+//     outlives the match it arrived in. decline:'have' therefore only dedupes WITHIN a match; a
+//     rematch re-transfers, and that cost is the accepted price of the privacy guarantee.
 //
 //   STANDALONE (a plain browser)  an in-memory Blob map capped at MEM_STORE_BYTES with a REAL
 //     refcount: at zero the object URL is revoked, and the next view() mints a fresh one off the
