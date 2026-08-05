@@ -346,7 +346,13 @@ export function mount(container, ctx) {
     if (document.activeElement !== xferRow.input) xferRow.input.checked = !!match.localMediaTransfer;
     xferRow.input.disabled = !!why || !editable;
     xferRow.row.classList.toggle('is-disabled', !!why);
-    xferRow.sub.textContent = why || hint || S.lobby.transferSub;
+    /* THE DISCLOSURE IS NOT OPTIONAL FURNITURE (2026-08-05 privacy pass). `hint`
+     * used to REPLACE S.lobby.transferSub, which meant a player whose library had
+     * nothing compressed yet could tick the box having read only "nothing ready to
+     * send yet" — never the sentence that says the media goes to their opponent.
+     * `why` still replaces it, and that is correct: those three arms all mean
+     * nothing can cross at all. Whenever the box is live, the sentence is there. */
+    xferRow.sub.textContent = why || (hint ? hint + ' ' + S.lobby.transferSub : S.lobby.transferSub);
     xferRow.value.textContent = match.remoteMediaTransfer
       ? S.lobby.transferTheirsOn : S.lobby.transferTheirsOff;
   }
@@ -363,15 +369,33 @@ export function mount(container, ctx) {
    * duel, so greying it out on account of the person you happen to be facing
    * would hide a decision that is not about them. The only thing that disables
    * it is the acknowledgment (below) and the phase.
+   *
+   * ...AND THAT NOW INCLUDES A RELAYED LINK (2026-08-05). Voice notes went
+   * P2P-only, exactly like media, so a relayed duel has no mic on either side —
+   * but the reason it is SAID here rather than enforced here is the same as
+   * above: the box is a standing answer, not a per-link one, and the next duel
+   * may well come up direct. The sentence takes the TOP of the status ladder
+   * because it outranks every other one: with no direct link, whose toggle is on
+   * is moot. Terminal, too — net/session.js never upgrades a relayed match back.
    */
   function paintVoice() {
     const mine = !!match.localVoiceNotes;
     const theirs = !!match.remoteVoiceNotes;
     const acked = !!(prefs && prefs.get && prefs.get('voiceAckSeen'));
     const editable = match.phase === GoonMatchPhase.Consent || match.phase === GoonMatchPhase.Lobby;
+    /* ConnectedRelay AND NOTHING ELSE — narrower than paintTransfer's read on
+     * purpose. That row treats every settled non-P2P state as relayed; here the
+     * only state that has actually decided anything is the mailbox being live.
+     * Signaling/ConnectingP2P is still deciding (showing the verdict early is the
+     * bug that row's own comment describes), and Disconnected/Closed is a link
+     * that has not happened yet — neither is a reason to tell somebody their mic
+     * is off for the match. */
+    const t = getTransport ? getTransport() : null;
+    const settledRelay = !!t && t.state === GoonTransportState.ConnectedRelay;
 
     let status = '';
-    if (mine && theirs && match.peerSupportsVoice) status = S.voice.lobbyBoth;
+    if (settledRelay) status = S.voice.lobbyRelay;
+    else if (mine && theirs && match.peerSupportsVoice) status = S.voice.lobbyBoth;
     else if ((mine || theirs) && !match.peerSupportsVoice) status = S.voice.lobbyPeerOld;
     else if (mine) status = S.voice.lobbyYours;
     else if (theirs) status = S.voice.lobbyTheirs;
@@ -595,10 +619,12 @@ export function mount(container, ctx) {
 
   const transport = getTransport ? getTransport() : null;
   if (transport && typeof transport.onStateChanged === 'function') {
-    // Relay vs direct decides whether the transfer row is even offerable.
-    ledger.sub(transport.onStateChanged(() => { paintConnection(); paintTransfer(); }));
+    // Relay vs direct decides whether the transfer row is even offerable — and,
+    // since 2026-08-05, whether there is a mic on the desk at all. Both rows read
+    // the link, so both repaint on its edge.
+    ledger.sub(transport.onStateChanged(() => { paintConnection(); paintTransfer(); paintVoice(); }));
   } else {
-    ledger.interval(() => { paintConnection(); paintTransfer(); }, 1000);   // no event seam: poll cheaply
+    ledger.interval(() => { paintConnection(); paintTransfer(); paintVoice(); }, 1000);   // no event seam: poll cheaply
   }
 
   // Seed the sheet from the player's last duel the FIRST time we reach Consent

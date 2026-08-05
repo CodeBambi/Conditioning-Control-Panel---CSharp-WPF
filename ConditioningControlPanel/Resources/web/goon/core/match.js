@@ -335,12 +335,18 @@ export class GoonMatchService {
       connectionHealthChanged: makeEvent(),
       emoteReceived: makeEvent(),
       voiceFrameReceived: makeEvent(),
+      linkChanged: makeEvent(),
       mediaPrepChanged: makeEvent(),
       interactionCheckDue: makeEvent(),
       lobbyFailed: makeEvent(),
       matchEnded: makeEvent(),
       resultFinalized: makeEvent(),
     };
+
+    /* The last answer `linkIsP2P` gave, so `linkChanged` is an EDGE. Seeded from the
+     * transport as it is right now: a service built on an already-connected transport
+     * (the relay rebuild does exactly that) must not raise a change that did not happen. */
+    this._lastLinkP2P = this.linkIsP2P;
 
     const onMsg = bindFn(transport, ['onMessageReceived', 'onMessage']);
     const onState = bindFn(transport, ['onStateChanged', 'onState']);
@@ -398,6 +404,35 @@ export class GoonMatchService {
     return this._phase === GoonMatchPhase.Countdown
       || this._phase === GoonMatchPhase.Live
       || this._phase === GoonMatchPhase.SuddenDeath;
+  }
+
+  /**
+   * IS THIS LINK DIRECT? The one fact that decides whether a person's recorded voice may
+   * exist on this wire at all (owner call, 2026-08-05: voice notes are P2P-ONLY, exactly
+   * like media).
+   *
+   * ConnectedP2P is a DTLS/SCTP channel between the two machines — a TURN hop still
+   * qualifies, because TURN forwards ciphertext and never our JSON. ConnectedRelay is the
+   * `/v2/goon/relay` mailbox: our server, our TLS termination, plain base64 in a frame we
+   * could read. Voice used to ride that path on purpose (it is the CONTROL lane, and the
+   * control lane survives a fallback); it does not any more. On a relayed duel the mic is
+   * simply absent — see ui/voice/voiceService.js `available()` — and both the send door
+   * and the receive door below refuse, so an unpatched or hostile peer cannot push one
+   * through us either.
+   *
+   * NOT `transport.supportsBulk`, deliberately, even though that is the media lane's own
+   * P2P-only predicate: supportsBulk ALSO requires the out-of-band media channel to be
+   * open, and voice does not ride it. A P2P pair whose `goon-media` channel failed to
+   * construct (net/webrtcTransport.js catches that and carries on) still has a perfectly
+   * private control lane, and taking the mic off it would be a second, invisible reason
+   * for a missing button. The privacy claim is about the LINK, so the link is what is read.
+   *
+   * @returns {boolean} false for every transport that cannot answer — this fails CLOSED.
+   */
+  get linkIsP2P() {
+    try {
+      return !!this._transport && this._transport.state === GoonTransportState.ConnectedP2P;
+    } catch (_e) { return false; }
   }
 
   /** Are WE the one still picking media (`media_prep`, as last declared)? */
@@ -507,6 +542,15 @@ export class GoonMatchService {
    * ran. What core owes the service is a frame that is the right shape, from the right phase.
    */
   onVoiceFrame(fn) { return this._ev.voiceFrameReceived.on(fn); }
+  /**
+   * fn(isP2P) on the EDGE of `linkIsP2P` — the transport settling on a direct channel, or
+   * losing one. It exists for ui/voice/voiceService.js, whose availability bit (and therefore
+   * the mic on the desk) is now partly a fact about the link: without an edge to hang off, a
+   * link that changed under a live match would leave a mic on screen that can send nothing.
+   *
+   * EDGE, NOT STATE: Signaling -> ConnectingP2P raises nothing, because neither is direct.
+   */
+  onLinkChanged(fn) { return this._ev.linkChanged.on(fn); }
   /** fn(preparing) whenever the OPPONENT's `media_prep` declaration changes. */
   onMediaPrepChanged(fn) { return this._ev.mediaPrepChanged.on(fn); }
   /** No-cam only: prompt an interaction check, then call reportInteractionCheck(). */
@@ -850,6 +894,11 @@ export class GoonMatchService {
    *
    *   · not disposed, not ended, and the PHASE is Countdown/Live/SuddenDeath. A note that lands
    *     on a recap has nowhere to play and a note before the countdown is a mic hot in a lobby;
+   *   · THE LINK IS DIRECT (`linkIsP2P`, 2026-08-05). A voice note is somebody's actual voice
+   *     and it may only exist on a wire we cannot read: on the relay mailbox every frame is
+   *     plain base64 JSON through our own server, so the answer there is not "encrypt it
+   *     later", it is NOTHING LEAVES. The mic is hidden for that duel and this door is the
+   *     backstop under the hidden mic;
    *   · BOTH consents plus the peer's `caps.voice` (voiceNotesAgreed). Sending to a build that
    *     never heard of the family is not "harmless": the frame is dropped silently at the far end
    *     and this family has NO receipt, so the sender would sit there believing it landed;
@@ -867,6 +916,10 @@ export class GoonMatchService {
   sendVoiceFrame(sub, fields = {}) {
     if (this._disposed || this._ended) return false;
     if (!this.voicePhaseOpen) return false;
+    // P2P ONLY. Ahead of the consent check on purpose: the consents are about each other,
+    // this one is about US, and no agreement either side can reach makes it acceptable for
+    // a recording of a voice to cross our server.
+    if (!this.linkIsP2P) return false;
     if (!this.voiceNotesAgreed) return false;
 
     const msg = makeVoice(Object.assign({}, fields, {
@@ -1125,6 +1178,13 @@ export class GoonMatchService {
     this._info(`transport state ${state}`);
     if (state === GoonTransportState.ConnectedP2P || state === GoonTransportState.ConnectedRelay) {
       this._sendHelloOnce();
+    }
+    // THE LINK EDGE, for whoever's feature is P2P-only (voice notes, today). Raised from the
+    // getter rather than from `state` so there is exactly one definition of "direct".
+    const p2p = this.linkIsP2P;
+    if (p2p !== this._lastLinkP2P) {
+      this._lastLinkP2P = p2p;
+      this._ev.linkChanged.emit(p2p, (e) => this._warn(`linkChanged handler threw: ${e && e.message}`));
     }
   }
 
@@ -1588,12 +1648,17 @@ export class GoonMatchService {
   }
 
   /**
-   * An inbound voice frame. TWO gates and nothing else:
+   * An inbound voice frame. THREE gates and nothing else:
    *
    *   1. the PHASE. A note that arrives on the recap (or in the lobby) is dropped without being
    *      looked at — post-match frames are ignored, per the protocol, and a mic that could reach
    *      somebody after they tapped out is the one shape of this feature nobody agreed to;
-   *   2. the SUB. '' is what clampVoiceSub answers for a kind we do not know, which is how a
+   *   2. THE LINK (2026-08-05). A voice frame that came up the relay mailbox is dropped where it
+   *      lands. Our own send door refuses to put one there, so anything arriving over the server
+   *      is a peer running an older build or a modified one — and "they sent it anyway" must not
+   *      be a way to make somebody's voice pass through us. DEFENCE IN DEPTH: the promise the
+   *      copy now makes is about this wire, not about the politeness of the other end;
+   *   3. the SUB. '' is what clampVoiceSub answers for a kind we do not know, which is how a
    *      newer peer's fourth sub arrives — ignored, never routed, never an error.
    *
    * Everything else — the local opt-in, the size ceilings, the rate limit, the assembly, the
@@ -1603,6 +1668,7 @@ export class GoonMatchService {
    */
   _handleVoice(frame) {
     if (!this.voicePhaseOpen) return;
+    if (!this.linkIsP2P) return;
     if (!frame.sub || !VOICE_SUBS.includes(frame.sub)) return;
     frame.emote = frame.emote == null ? null : (sanitizeText(frame.emote, EMOTE_ICON_MAX_CHARS) || null);
     this._ev.voiceFrameReceived.emit(frame, (e) => this._warn(`voiceFrame handler threw: ${e && e.message}`));

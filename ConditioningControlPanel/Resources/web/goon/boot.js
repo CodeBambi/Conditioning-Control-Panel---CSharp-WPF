@@ -1427,9 +1427,21 @@ function reportMicGate() {
     // whether this host has a microphone API at all. Both are read defensively —
     // a handle-shaped stub (no service = a no-op mic) answers neither.
     let hudHidden = false;
+    let deskWhy = '';
     let micSupported;
-    try { if (mic && typeof mic.shown === 'function' && typeof mic.available === 'function') hudHidden = mic.available() && !mic.shown(); }
-    catch (_e) { /* leave it false */ }
+    /* WHICH piece of chrome, not just "some chrome". Zen and the arsenal drawer
+     * both take the slot away and they are undone by opposite gestures — and the
+     * drawer is the DESKTOP failure this breadcrumb existed for and could not
+     * name: an in-app seat plays with the drawer shut (every payload is on the
+     * number row) and the mic is a flow child of the panel that shutting it
+     * removes. Read defensively: a handle-shaped stub answers none of this. */
+    try { if (mic && typeof mic.hiddenBy === 'function') deskWhy = String(mic.hiddenBy() || ''); }
+    catch (_e) { /* an older handle simply cannot say */ }
+    if (deskWhy) hudHidden = deskWhy === 'zen';
+    else {
+      try { if (mic && typeof mic.shown === 'function' && typeof mic.available === 'function') hudHidden = mic.available() && !mic.shown(); }
+      catch (_e) { /* leave it false */ }
+    }
     try { if (mic && mic.recorder && typeof mic.recorder.supported === 'function') micSupported = !!mic.recorder.supported(); }
     catch (_e) { /* leave it undefined — the gate is then not reported */ }
 
@@ -1438,6 +1450,10 @@ function reportMicGate() {
       : (voice.available() ? '' : 'unknown (this build has no whyUnavailable)');
     // Shown and working: say nothing. A quiet log is the good outcome.
     if (!why && mic && typeof mic.shown === 'function' && mic.shown()) return;
+    if (!why && deskWhy === 'drawer') {
+      logger.warn('voice mic hidden: the arsenal drawer is shut and the mic is inside it — hold V to record, or open the drawer');
+      return;
+    }
     if (!why) { logger.warn('voice mic hidden: the service says live but the desk has no strip (mount failure?)'); return; }
     logger.warn('voice mic hidden: ' + why);
   } catch (e) {

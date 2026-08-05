@@ -46,7 +46,14 @@ export const S = Object.freeze({
     options: 'Options',
     how: 'How it works',
     quit: 'Quit',
-    fineprint: 'Both players endure their own library. Nothing you own leaves this machine.',
+    /* THE FINEPRINT SAYS WHAT ACTUALLY CROSSES (2026-08-05 privacy pass). It read
+       "Nothing you own leaves this machine" until today, which was written before
+       media transfer and voice notes existed and has been the exact opposite of
+       the truth ever since: with sending switched on, copies of your images and
+       clips are sent to your opponent, and a voice note is your recorded voice
+       going to a stranger. Both are opt-in and both are off until you say so —
+       which is the honest version of the same reassurance, so that is what it says. */
+    fineprint: 'Both players endure their own library. Nothing you own is sent anywhere until you switch sending on — then it goes to your opponent, and nowhere else.',
   },
 
   /** The "how it works" modal — exactly six bullets, in reading order. */
@@ -135,7 +142,19 @@ export const S = Object.freeze({
     /* --- the media-transfer opt-in. Per-side: this row says what YOU are
        willing to send, and the chip says what THEY answered. --- */
     transfer: 'Send them your own media',
-    transferSub: 'a few of your images and clips go straight to them, machine to machine. never through a server.',
+    /* THE CONSENT SENTENCE FOR SHARING, and every clause in it is checked against
+       the code (2026-08-05 privacy pass):
+         · "sent to them"   — net/mediaQueue.js puts compressed copies on the wire.
+                              This is the half the old copy buried; it now leads.
+         · "encrypted"      — the bulk lane is a WebRTC data channel, so DTLS/SCTP.
+         · "never through our servers" — `supportsBulk` is P2P-ONLY (see
+                              net/mediaQueue.js:625 and paintTransfer below): on the
+                              ws-mailbox relay the row greys out and nothing crosses.
+                              A TURN hop is still this data channel and still sees
+                              nothing but ciphertext.
+         · "theirs to keep"  — exec/receivedStore.js writes it down on their side.
+                              We cannot unsend it and the copy must not imply we can. */
+    transferSub: 'a few of your images and clips are sent to your opponent — encrypted, straight to their machine, never through our servers. what lands on their side is theirs to keep.',
     /**
      * NO LONGER A PITCH, because it is no longer a perk (owner call 2026-08-05):
      * sending is free for every seat and the only thing money buys is HOSTING
@@ -447,10 +466,23 @@ export const S = Object.freeze({
    *      is two consents in one switch — your voice goes to them, and theirs can
    *      come back — and a player who only reads the button must not be able to
    *      miss the second half. That is why the ack gate exists at all.
-   *   2. NOTHING HERE PROMISES DELETION OR PRIVACY IT CANNOT KEEP. The audio is
-   *      peer-to-peer and never touches a server, so the copy says exactly that
-   *      and nothing more — no "disappears after", no "only you can hear it".
-   *      What happens on their machine is theirs, and the ack line says so.
+   *   2. NOTHING HERE PROMISES DELETION OR PRIVACY IT CANNOT KEEP — and this block
+   *      has now been wrong in BOTH directions, which is why the history is kept.
+   *      It first said "no server ever hears them", which was false the moment ICE
+   *      gave up: voice rode the CONTROL lane precisely so it survived a relayed
+   *      link, and on that link every frame was plain JSON through our
+   *      /v2/goon/relay mailbox — TLS to us, readable by us. The 2026-08-05 privacy
+   *      pass made the copy admit that hop. Later the same day the owner made the
+   *      better call: don't disclose the hop, DELETE it. Voice notes are now
+   *      P2P-ONLY, exactly like media (core/match.js `linkIsP2P` gates the send
+   *      door, the receive door and the mic itself), so the unconditional sentence
+   *      is true again — straight to them over the encrypted direct link, never
+   *      through our servers — and the relayed case gets its own honest line
+   *      saying the feature is simply off for that duel. If anything ever puts a
+   *      voice frame back on the mailbox, THIS COPY BECOMES A LIE: the assertions
+   *      in test/selftest-voice.js §6 are what stop that happening quietly.
+   *      Still no "disappears after" and no "only you can hear it": what happens on
+   *      their machine is theirs, and the ack line says so.
    *   3. THE OFF PATH IS NEVER SCOLDED. Cancelling a recording, refusing the mic
    *      and turning the whole thing off are all ordinary things to do, phrased
    *      as ordinary things.
@@ -464,7 +496,7 @@ export const S = Object.freeze({
 
     /* --- the screen ----------------------------------------------------- */
     eyebrow: 'voice notes',
-    lead: 'ten seconds each, straight to whoever you are duelling. nothing is uploaded and no server ever hears them.',
+    lead: 'ten seconds each, sent to whoever you are duelling. straight to them over your encrypted direct link, never through our servers. no direct link, no voice notes — the mic simply is not there.',
     back: 'back',
 
     /* --- the acknowledgment gate (shown ONCE, before the toggle will move)
@@ -473,8 +505,8 @@ export const S = Object.freeze({
     ack: {
       icon: '🎙',
       headline: 'This records your real voice',
-      line: 'Holding the mic records you and sends the audio straight to the person you are duelling, machine to machine. There is no server in the middle and nothing is stored anywhere but on the two of you.',
-      lineTwo: 'Switching this on also means you may HEAR them: if you have both turned it on, their voice plays on your side too. Once a note has left your machine, what happens to it is on theirs.',
+      line: 'Holding the mic records your real voice and sends that recording to the person you are duelling. It travels straight to their machine over your encrypted direct link, and never through our servers. If your two networks can only reach each other through our relay, voice notes are switched off for that duel rather than routed through us.',
+      lineTwo: 'Switching this on also means you may HEAR them: if you have both turned it on, their voice plays on your side too. Once a note has reached them it is on their machine, and what happens to it there is theirs — it cannot be taken back.',
       go: 'I understand',
       cancel: 'Not now',
     },
@@ -527,6 +559,14 @@ export const S = Object.freeze({
     hudLabel: 'voice note',
     /** A tap that was too short to be a recording. A hint, never an error. */
     holdHint: 'hold the mic to record',
+    /** THE DESK'S KEY. A desktop seat fires its whole arsenal off the number row
+       (ui/arsenal.js binds 1..7 on `window` precisely so the drawer can stay
+       shut), and the mic is the one control in that drawer with no key of its
+       own — which is how an in-app player ends up with no way to record at all.
+       ui/hud.js owns the binding; ui/voice/micHud.js still has no key handler,
+       so the Escape-is-Mercy ladder is untouched. Said on the button's tooltip,
+       and shown as the hint when the key is TAPPED rather than held. */
+    holdKeyHint: 'hold V to record',
     /** While held. The gesture out is a slide, and it has to be said, not guessed. */
     slideToCancel: 'slide left to cancel',
     /** The last three seconds (micHud.MIC_COUNTDOWN_MS). The question stops being
@@ -539,6 +579,15 @@ export const S = Object.freeze({
     cancelled: 'cancelled',
     /** The recorder came back with nothing usable (a mic that produced silence). */
     sendFailed: 'that one did not record — try again',
+    /**
+     * THE MIC NEVER OPENED, which is a different sentence from the one above and
+     * used to borrow it. `sendFailed` blames the recording ("that one did not
+     * record"); this is for the case where there was no recording to blame —
+     * getUserMedia timed out, MediaRecorder would not construct, the recorder
+     * fell over mid-note. Both end in "try again" because both are recoverable,
+     * and after 2026-08-05 both actually are.
+     */
+    micFailed: 'the mic did not open — try again',
     /** The 4 s floor between sends, phrased as a wait rather than a refusal. */
     tooSoon: (sec) => 'one more in ' + sec + 's',
 
@@ -561,6 +610,16 @@ export const S = Object.freeze({
     lobbyYours: 'you have voice notes on — they have not',
     lobbyTheirs: 'they have voice notes on — you have not',
     lobbyPeerOld: 'their app is too old for voice notes',
+    /**
+     * THE RELAYED DUEL, said where the transfer row says its own version of it
+     * (S.lobby.transferRelay). Voice notes are P2P-only as of 2026-08-05, so a
+     * link that could not come up direct has no mic on it at all — and the one
+     * thing this line must never do is let a player think their opt-in failed.
+     * The row is not disabled: this checkbox is also the RECEIVE gate and the
+     * standing answer for the next duel, and greying it out would hide a
+     * decision that is not about this link. See lobby.js paintVoice.
+     */
+    lobbyRelay: 'this connection is relayed — voice notes only cross a direct one, so the mic is off this match.',
     /** The row's own explanation, when there is no status to report yet. */
     lobbySub: 'hold the mic under your items to send ten seconds of your voice. you both have to switch it on.',
     /** Before the acknowledgment has been read. Says what to press, not "no". */
@@ -576,6 +635,15 @@ export const S = Object.freeze({
     micMissing: 'no microphone found',
     /** The one line that explains a hidden mic button mid-match. */
     notActive: 'voice notes need both of you switched on',
+    /**
+     * ...and the OTHER reason there is no mic, which is not a switch anybody can
+     * flip. Short, because this one lands on the strip (ui/voice/micHud.js
+     * sendReasonLine) in the race where a link degrades between the release and
+     * the send. Never phrased as a failure: nothing broke, the note just has no
+     * private road to travel and we would rather send nothing than send it
+     * through ourselves.
+     */
+    relayOff: 'no direct link — voice notes stay home',
     /** Where the volume lives, from the screen that made the note. */
     volumeHint: 'their notes play at the Voice notes volume in options.',
   },
@@ -601,7 +669,7 @@ export const S = Object.freeze({
     /** Standalone's OWN library: files picked straight off the device. */
     local: {
       headline: 'add media to send',
-      line: 'pick files from this device and they can travel to your opponent mid-duel, straight from you to them. nothing is uploaded anywhere.',
+      line: 'pick files from this device and copies of them can be sent to your opponent mid-duel, encrypted, straight from you to them. nothing is uploaded to our servers — but what reaches them is theirs to keep.',
       add: 'add files',
       limits: (max, vmax) => 'jpg, png, gif, webp, mp4, webm, mov · or a zip of them · up to ' + max
         + ' travels as-is, bigger photos and gifs are compressed to fit, clips up to ' + vmax,
@@ -737,8 +805,12 @@ export const S = Object.freeze({
    * Two rules the copy has to keep:
    *   1. the twenty-item suggestion is a SUGGESTION and must read as one. The
    *      button unlocks on the first file; nothing here may sound like a gate.
-   *   2. it says where the media STAYS. A stranger asking a first-time visitor
-   *      for their porn folder has about one sentence to be honest in. */
+   *   2. it says where the media GOES. A stranger asking a first-time visitor
+   *      for their porn folder has about one sentence to be honest in, and until
+   *      the 2026-08-05 privacy pass that sentence spent it on the wrong half
+   *      ("travel nowhere") — true only for as long as the lobby toggle stays
+   *      off, and read by everybody as a promise about the whole feature. It now
+   *      names the toggle AND what crossing it means. */
   mediaSetup: {
     eyebrow: 'before you play',
     headline: 'bring something to endure',
@@ -775,7 +847,7 @@ export const S = Object.freeze({
     lockBusy: 'still adding…',
     /** The opponent is watching a "picking their media" line while this is up. */
     waiting: 'they know you are still picking. take your time.',
-    note: 'your picks stay on this device and travel nowhere unless you switch sending on in the lobby.',
+    note: 'your picks stay on this device unless you switch sending on in the lobby — then copies of a few of them are sent to your opponent, encrypted and never through our servers, and whatever reaches them is theirs to keep.',
     leave: 'Leave',
   },
 
