@@ -610,8 +610,11 @@ namespace ConditioningControlPanel.Services.GoonGame
                 {
                     case "goon-recv-begin":
                     {
+                        // `origin` is the offer's advisory "this used to be a gif" flag, passed
+                        // through so the inbox can remember it across sessions. It is normalised
+                        // inside Begin and can never make the call fail.
                         var err = store.Begin(id, (string?)o["sha256"], (string?)o["mime"],
-                            (long?)o["bytes"] ?? 0);
+                            (long?)o["bytes"] ?? 0, (string?)o["origin"]);
                         ReplyRecv(id, err == null, null, 0, err);
                         break;
                     }

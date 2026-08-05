@@ -879,6 +879,15 @@ function normalizeItem(raw) {
     // Local (browser-picked) files live behind blob: URLs, which carry no
     // extension for boot's mimeOf() to sniff — the mime must ride the item.
     mime: typeof o.mime === 'string' ? o.mime : '',
+    /* WHAT THE SOURCE WAS, when the artifact is no longer it. An animated gif compressed into an
+     * mp4 travels as `video/mp4` (the wire refuses a kind/mime disagreement), and the VIDEO lane
+     * wants to know it is a loop rather than footage — boot.js listSendable passes this through
+     * to the offer, net/mediaQueue.js and exec/media.js demote it, nothing excludes it.
+     * '' everywhere else, including every hosted row from a build that predates the field. */
+    origin: o.origin === 'gif' ? 'gif' : '',
+    /* The artifact's codec family as its PRODUCER labelled it ("avc1"): the cheap, reliable
+     * source the HEVC handshake consults. '' means unknown, which means "offer it anyway". */
+    codec: typeof o.codec === 'string' ? o.codec : '',
     bytes: Math.max(0, Number(o.bytes) || 0),
     srcBytes: Math.max(0, Number(o.srcBytes) || 0),
     w: Math.max(0, Number(o.w) || 0),
@@ -1356,6 +1365,13 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
     landArtifact({
       name, blob: out.blob, sha, mime: outMime, bytes: outBytes, srcBytes: bytes,
       w: out.w, h: out.h, durMs: out.durMs, compressed: true, report,
+      /* THE ORIGIN, on the one road in this file that changes a file's family: an animated
+       * gif/webp came in and an mp4 came out, so the wire will call it a video and the VIDEO
+       * lane deserves to know better. `animated` is the same flag that chose the lane three
+       * lines up, so the two answers cannot drift. A still that became a WebP stays an image
+       * and is not flagged — the image lane has no opinion about gifs. */
+      origin: animated ? 'gif' : '',
+      codec: String(out.codec || ''),
     });
   }
 
@@ -1369,7 +1385,8 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
    * the source — the offer gate declines any offer whose kind and mime disagree,
    * and a GIF that became an mp4 changes family.
    */
-  function landArtifact({ name, blob, sha, mime, bytes, srcBytes, w, h, durMs, compressed, report }) {
+  function landArtifact({ name, blob, sha, mime, bytes, srcBytes, w, h, durMs, compressed,
+    origin, codec, report }) {
     const id = 'local:' + sha;
     if (localItems.has(id)) { report.dupes++; return; }
     let artUrl = '';
@@ -1379,6 +1396,10 @@ export function createAssetsStore({ bridge = defaultBridge, session = null, logg
       artUrl, sha, ext: extForMime(mime), mime,
       bytes, srcBytes: Math.max(bytes, Number(srcBytes) || 0),
       w: w || 0, h: h || 0, durMs: durMs || 0,
+      // Only the gif->mp4 road sets these; an as-is video pick knows neither and says so
+      // (unknown codec = offered anyway, which is the fail-open half of the handshake).
+      origin: origin === 'gif' ? 'gif' : '',
+      codec: String(codec || ''),
     }));
     localVersion++;
     localSrcShas.add(sha);

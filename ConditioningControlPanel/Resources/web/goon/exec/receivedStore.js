@@ -209,11 +209,15 @@ export function createReceivedStore({
 
   /* ------------------------------------------------------------------ the jobs */
 
-  function newJob(sha, mime, bytes) {
+  function newJob(sha, mime, bytes, origin) {
     return {
       id: 'r' + (++seq) + '-' + sha.slice(0, 8),
       sha, mime, declared: bytes,
       kind: kindForMime(mime),
+      /* 'gif' or ''. ADVISORY, and it never touches a filename, a size or a hash — it is only
+       * ever read back by exec/media.js to keep a converted gif loop out of the VIDEO lane while
+       * real footage is available. An old peer sends none and the row reads as footage. */
+      origin: origin === 'gif' ? 'gif' : '',
       written: 0,            // bytes handed to us by the protocol (the resume offset)
       seq: 0,                // next chunk sequence number the host expects
       buf: [],               // Uint8Array pieces not yet flushed
@@ -330,8 +334,12 @@ export function createReceivedStore({
     return job ? job.written : 0;
   }
 
-  /** Open — or REOPEN, for a resume — the partial for `sha`. Idempotent by contract. */
-  function begin(sha, mime, bytes) {
+  /**
+   * Open — or REOPEN, for a resume — the partial for `sha`. Idempotent by contract.
+   * @param {{origin?:string, codec?:string}} [meta] the offer's advisory metadata. OPTIONAL in
+   *   the ReceivedStore contract, so nothing breaks when a caller (or a test stub) omits it.
+   */
+  function begin(sha, mime, bytes, meta) {
     if (disposed) return false;
     if (typeof sha !== 'string' || !SHA_RE.test(sha)) return false;
     if (!kindForMime(mime)) return false;
@@ -350,15 +358,19 @@ export function createReceivedStore({
       return false;
     }
 
-    const job = newJob(sha, mime, bytes);
+    const job = newJob(sha, mime, bytes, meta && meta.origin);
     jobs.set(sha, job);
 
     if (isHosted) {
       // Sent optimistically: `begin` is synchronous by contract, so a host refusal
       // (cap-reached, bad-format) poisons the job and surfaces at commit as the
       // same store failure the protocol would have reported here.
+      // `origin` rides along so the host can persist it: without that, a gif-origin clip
+      // received today comes back from recv_index.json tomorrow looking like footage.
       after(job, async () => {
-        const r = await ask({ type: 'goon-recv-begin', id: job.id, sha256: sha, mime, bytes });
+        const r = await ask({
+          type: 'goon-recv-begin', id: job.id, sha256: sha, mime, bytes, origin: job.origin,
+        });
         job.begun = r.ok;
         if (!r.ok) {
           job.error = r.error || 'io-failed';
@@ -422,7 +434,7 @@ export function createReceivedStore({
     // a blob: URL carries nothing, so the memory backend falls back to the mime.
     const ext = isHosted ? (extFromUrl(result.url) || extFromMime(job.mime)) : extFromMime(job.mime);
     index.set(sha, {
-      sha, ext, mime: job.mime, kind: job.kind,
+      sha, ext, mime: job.mime, kind: job.kind, origin: job.origin,
       bytes: result.bytes || job.declared,
       url: result.url || '',
     });
@@ -466,7 +478,7 @@ export function createReceivedStore({
     abort,
 
     /**
-     * Prime the index from the manifest frame's `received:[{sha,ext,mime,bytes}]`.
+     * Prime the index from the manifest frame's `received:[{sha,ext,mime,bytes,origin?}]`.
      * boot.js owns the 'manifest' handler and passes the array in — this module
      * registers no manifest listener of its own (one handler per type, always).
      * @returns {string[]} the shas now known, for the blocklist prefetch.
@@ -483,6 +495,9 @@ export function createReceivedStore({
         if (!kind) continue;
         index.set(sha, {
           sha, ext, mime, kind,
+          // Absent on rows written before the host persisted it — and absent reads as footage,
+          // which is exactly how those rows behaved before the preference existed.
+          origin: e.origin === 'gif' ? 'gif' : '',
           bytes: Math.max(0, Number(e.bytes) || 0),
           url: 'https://ccp.cache/recv/' + sha + '.' + ext,
         });
@@ -492,17 +507,17 @@ export function createReceivedStore({
       return out;
     },
 
-    /** Everything committed, as exec/media.js wants it. */
+    /** Everything committed, as exec/media.js wants it (`origin` included — addReceived reads it). */
     list() {
       return Array.from(index.values()).map((e) => ({
-        sha: e.sha, kind: e.kind, mime: e.mime, bytes: e.bytes, url: e.url,
+        sha: e.sha, kind: e.kind, mime: e.mime, bytes: e.bytes, url: e.url, origin: e.origin || '',
       }));
     },
 
     /** Only what landed during THIS page's life — the recap report card's shortlist. */
     thisMatch() {
       return Array.from(thisSession).map((sha) => index.get(sha)).filter(Boolean).map((e) => ({
-        sha: e.sha, kind: e.kind, mime: e.mime, bytes: e.bytes, url: e.url,
+        sha: e.sha, kind: e.kind, mime: e.mime, bytes: e.bytes, url: e.url, origin: e.origin || '',
       }));
     },
 

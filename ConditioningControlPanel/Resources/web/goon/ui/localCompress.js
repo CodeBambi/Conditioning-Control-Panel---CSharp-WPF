@@ -539,7 +539,13 @@ export async function compressImage(src, mime, o = {}) {
 /**
  * Compress one animated GIF / animated WebP into an mp4, via lane B's worker.
  *
- * @returns {Promise<{blob:Blob, mime:'video/mp4', w:number, h:number, durMs:number, kind:'video'}>}
+ * `codec` is reported because the transfer lane's HEVC handshake needs to know what this artifact
+ * actually IS: encode/encodeWorker.js only ever asks with an `avc1.*` string (codecForSize picks
+ * the level, never the family), so H.264 is a fact here, not a guess — and a peer with any video
+ * decoder at all has that one.
+ *
+ * @returns {Promise<{blob:Blob, mime:'video/mp4', w:number, h:number, durMs:number,
+ *                    kind:'video', codec:'avc1'}>}
  */
 export async function compressGif(src, mime, o = {}) {
   const driver = o.driver || createLocalEncodeDriver({ logger: o.logger || null });
@@ -560,7 +566,7 @@ export async function compressGif(src, mime, o = {}) {
     if (typeof B !== 'function') throw new Error('no-blob');
     const blob = new B([out.art], { type: 'video/mp4' });
     if (!blob.size) throw new Error('empty-output');
-    return { blob, mime: 'video/mp4', w: out.w, h: out.h, durMs: out.durMs, kind: 'video' };
+    return { blob, mime: 'video/mp4', w: out.w, h: out.h, durMs: out.durMs, kind: 'video', codec: 'avc1' };
   } finally {
     if (owned) { try { driver.dispose(); } catch (_e) { /* ignore */ } }
   }

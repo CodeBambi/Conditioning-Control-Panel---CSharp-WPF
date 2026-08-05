@@ -4056,6 +4056,83 @@ async function main() {
     ok(leaked === 0, 'peekKind can never surface a received artifact', String(leaked));
   }
 
+  /* ----------------------- GIF-ORIGIN CLIPS COME LAST IN THE VIDEO LANE
+   *
+   * A desktop gif is compressed into an mp4 to travel (the wire refuses a
+   * kind/mime disagreement), so a Video payload could land a two-second loop
+   * while real footage sat in the same received map — every layer working, and
+   * the owner watching a gif. `drawReceived`/`peekReceived` prefer footage.
+   *
+   * IT IS A PREFERENCE, NOT A FILTER, and both halves are pinned below: with
+   * footage present a gif is never drawn, and with ONLY gifs the lane still
+   * draws one — because their gif still beats the receiver's own library, which
+   * is the entire reason the transfer lane exists.
+   */
+  {
+    const { createGoonMediaPool } = await import('../exec/media.js');
+    const REAL_A = SHA('7');
+    const REAL_B = SHA('8');
+    const LOOP_A = SHA('9');
+    const LOOP_B = SHA('0');
+
+    const pool = createGoonMediaPool();
+    pool.setManifest(ownManifest());
+    pool.addReceived({ sha: LOOP_A, kind: 'video', mime: 'video/mp4', origin: 'gif', url: 'r/loopA.mp4' });
+    pool.addReceived({ sha: LOOP_B, kind: 'video', mime: 'video/mp4', origin: 'gif', url: 'r/loopB.mp4' });
+    pool.addReceived({ sha: REAL_A, kind: 'video', mime: 'video/mp4', url: 'r/realA.mp4' });
+    pool.addReceived({ sha: REAL_B, kind: 'video', mime: 'video/mp4', origin: '', url: 'r/realB.mp4' });
+
+    let loops = 0;
+    for (let i = 0; i < 80; i++) {
+      const v = pool.drawReceived('video');
+      if (v && (v.sha === LOOP_A || v.sha === LOOP_B)) loops++;
+    }
+    ok(loops === 0, 'eighty video draws never hand back a gif-origin clip while real footage has landed',
+      String(loops));
+
+    let peeked = 0;
+    for (let i = 0; i < 40; i++) {
+      const v = pool.peekReceived('video');
+      if (v && (v.sha === LOOP_A || v.sha === LOOP_B)) peeked++;
+    }
+    ok(peeked === 0,
+      'and the throw PREVIEW draws from the same candidate set — or it would advertise a clip the '
+      + 'render then refuses to play', String(peeked));
+
+    // …and the demotion is only ever a demotion.
+    const gifOnly = createGoonMediaPool();
+    gifOnly.addReceived({ sha: LOOP_A, kind: 'video', mime: 'video/mp4', origin: 'gif', url: 'r/loopA.mp4' });
+    gifOnly.addReceived({ sha: LOOP_B, kind: 'video', mime: 'video/mp4', origin: 'gif', url: 'r/loopB.mp4' });
+    const fallback = gifOnly.drawReceived('video');
+    ok(!!fallback && (fallback.sha === LOOP_A || fallback.sha === LOOP_B),
+      'with ONLY gif-origin clips landed the lane still draws one — their gif beats our own library');
+    ok(!!gifOnly.peekReceived('video'), 'the preview says the same thing');
+
+    // An UNKNOWN origin (an old peer, a row primed from a previous session) is
+    // footage: absence must never demote anything.
+    const unknown = createGoonMediaPool();
+    unknown.addReceived({ sha: REAL_A, kind: 'video', mime: 'video/mp4', url: 'r/realA.mp4' });
+    unknown.addReceived({ sha: LOOP_A, kind: 'video', mime: 'video/mp4', origin: 'gif', url: 'r/loopA.mp4' });
+    let unknownLoops = 0;
+    for (let i = 0; i < 40; i++) if (unknown.drawReceived('video').sha === LOOP_A) unknownLoops++;
+    ok(unknownLoops === 0, 'a row with NO origin field outranks a known gif — absent reads as footage',
+      String(unknownLoops));
+
+    // The IMAGE lane has no opinion: a gif is exactly what a gif should be there.
+    const flashes = createGoonMediaPool();
+    flashes.addReceived({ sha: SHA('a'), kind: 'image', mime: 'image/gif', origin: 'gif', url: 'r/a.gif' });
+    flashes.addReceived({ sha: SHA('b'), kind: 'image', mime: 'image/png', url: 'r/b.png' });
+    const seenImg = new Set();
+    for (let i = 0; i < 60; i++) seenImg.add(flashes.drawReceived('image').sha);
+    ok(seenImg.size === 2, 'the FlashBurst lane keeps drawing both — the preference is video-only',
+      String(seenImg.size));
+
+    // A tag is an EXACT instruction and outranks taste: the sender already
+    // applied the same preference when it chose which tag to send.
+    ok(pool.drawFor('video', { tags: ['xfer:' + LOOP_A] }).sha === LOOP_A,
+      'an explicit xfer tag for a gif-origin clip still resolves to exactly that clip');
+  }
+
   // -------------------------------- addReceived does not disturb the deck
   {
     const { createGoonMediaPool } = await import('../exec/media.js');

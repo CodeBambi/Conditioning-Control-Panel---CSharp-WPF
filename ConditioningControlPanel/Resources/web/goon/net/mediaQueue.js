@@ -17,12 +17,28 @@
 // untagged — byte-identical to the wire before this feature existed. There is no "relay mode"
 // branch anywhere, and there must never be one.
 //
+// TWO QUALITY RULES LIVE HERE, AND NEITHER IS ALLOWED TO EMPTY THE LANE (2026-08-05):
+//
+//  1. GIF-ORIGIN CLIPS ARE A LAST RESORT IN THE VIDEO LANE, NOT AN EXCLUSION. The desktop
+//     compresses an animated gif into an mp4, so what travels is `video/mp4` — deliberately, the
+//     offer gate refuses any kind/mime disagreement — and a Video payload could therefore land a
+//     two-second loop where the owner expected footage. `tagsFor` now prefers a landed artifact
+//     whose `origin` is NOT 'gif' and falls back to one that is, because a gif of THEIRS still
+//     beats a clip of the receiver's own, which is the whole point of the lane.
+//
+//  2. AN ARTIFACT THE PEER CANNOT DECODE IS NEVER OFFERED. `eligible()` drops it with a
+//     once-per-reason warn, on exactly the saidWhy pattern below: a silent skip here would look
+//     identical to "the transfer doesn't work", which is the failure mode this file has already
+//     been debugged for three times. Fail-open throughout — unknown codec or a peer that named
+//     none means OFFER IT (net/codecs.js owns that contract).
+//
 // TWO tryFirePayload INSTANCE WRAPPERS NOW EXIST. boot.js applies the matchLog wrapper first
 // (attachMatch -> matchLog.attach), then this one, so the queue's wrapper is the OUTERMOST: a
 // payload gets its tags BEFORE the log sees it, and the log records exactly what went out. Order
 // matters for readability, not correctness — both are instance patches that die with the match.
 
 import { GoonMatchPhase, GoonPayloadKind } from '../core/contracts.js';
+import { codecFromMime, normalizeCodec } from './codecs.js';
 import {
   createMediaChannel,
   ACCEPT_MIME,
@@ -75,12 +91,15 @@ const noop = () => {};
  * @param {object} [o.blocklist] net/blocklist.js
  * @param {object} [o.logger]
  * @param {() => boolean} [o.canSend] the PREMIUM gate: session.caps.mediaTransfer === true
+ * @param {string[]|null} [o.acceptsCodecs] what THIS runtime can decode (net/codecs.js
+ *   probeDecodeCodecs, probed once by boot). Handed to the channel, which advertises it on the
+ *   hello; null advertises nothing and every peer keeps offering us everything.
  * @param {number} [o.idlePollMs] TEST AFFORDANCE
  * @param {object} [o.channelOptions] TEST AFFORDANCE — {timeouts, limits} for the channel
  */
 export function createMediaQueue({
   artifacts = null, store = null, blocklist = null, logger = null,
-  canSend = null, idlePollMs, channelOptions = null,
+  canSend = null, acceptsCodecs = null, idlePollMs, channelOptions = null,
 } = {}) {
   const info = (m) => { try { logger?.info?.('[GG queue] ' + m); } catch (_e) { /* ignore */ } };
   const warn = (m) => { try { logger?.warn?.('[GG queue] ' + m); } catch (_e) { /* ignore */ } };
@@ -151,6 +170,13 @@ export function createMediaQueue({
     return rate > 0 ? rate : EST_THROUGHPUT_BPS;
   }
 
+  /**
+   * Reasons an artifact was skipped for a codec the peer cannot decode — said ONCE per codec per
+   * match, exactly like `saidWhy` below and for the same reason: the alternative is a lane that
+   * quietly does nothing and a play-test that can only guess why.
+   */
+  const saidSkip = new Set();
+
   /** Everything from the local source we would be willing to offer RIGHT NOW. */
   function eligible() {
     let all = [];
@@ -175,7 +201,31 @@ export function createMediaQueue({
       if (bytes > (a.exempt ? MAX_EXEMPT_BYTES : MAX_ARTIFACT_BYTES)) continue;
       // …and nothing is offered that cannot plausibly land inside the match's patience.
       if ((bytes / budget) * 1000 > MAX_XFER_MS) continue;
-      out.push({ sha, bytes, mime, kind, exempt: !!a.exempt });
+
+      /* THE CODEC GATE. The artifact's codec comes off the producer (the C# cache knows it made
+       * an "avc1" mp4; the page encoder knows the same; an exempt ORIGINAL knows nothing and is
+       * the fail-open case the design accepts) or, failing that, off the mime's `codecs=`
+       * parameter. `peerCanDecodeCodec` answers true for every uncertainty, so the only thing
+       * that ever drops out here is a KNOWN codec against a peer that KNOWN-ly lacks it. */
+      const codec = String(a.codec || '') || codecFromMime(mime);
+      if (kind === 'video' && channel && typeof channel.peerCanDecodeCodec === 'function'
+        && !channel.peerCanDecodeCodec(codec)) {
+        const fam = normalizeCodec(codec);
+        if (!saidSkip.has(fam)) {
+          saidSkip.add(fam);
+          warn('skipping ' + fam + ' video artifacts — the peer\'s build does not advertise a '
+            + fam + ' decoder, and sending one would land a silent black window '
+            + '(said once per codec)');
+        }
+        continue;
+      }
+
+      out.push({
+        sha, bytes, mime, kind, exempt: !!a.exempt,
+        // 'gif' or nothing. Taste that travels: see rule 1 in the header.
+        origin: a.origin === 'gif' ? 'gif' : '',
+        codec,
+      });
     }
     return out;
   }
@@ -235,7 +285,12 @@ export function createMediaQueue({
     if (!pick) return false;
 
     seen.add(pick.sha);
-    pickInfo.set(pick.sha, { kind: pick.kind, mime: pick.mime, bytes: pick.bytes });
+    // `origin` is kept here too, because the `decline:'have'` landing (cross-session reuse) never
+    // sees the artifact again and would otherwise land it as un-flagged footage.
+    pickInfo.set(pick.sha, {
+      kind: pick.kind, mime: pick.mime, bytes: pick.bytes,
+      origin: pick.origin || '', codec: pick.codec || '',
+    });
     inFlight.set(pick.sha, { state: 'offered', attempts: attempts.get(pick.sha) || 0 });
     picks++;
 
@@ -257,6 +312,8 @@ export function createMediaQueue({
         bytes: Number(src.bytes) || pick.bytes,
         mime: src.mime || pick.mime,
         kind: pick.kind,
+        origin: pick.origin || undefined,
+        codec: pick.codec || undefined,
         read: (offset, len) => src.read(offset, len),
       });
       if (tid == null) {
@@ -328,8 +385,19 @@ export function createMediaQueue({
     if (enabled()) {
       const want = KIND_TAGS[kind] || 1;
       const mediaKind = KIND_MEDIA[kind];
-      for (const a of landed) {
-        if (a.kind !== mediaKind) continue;
+      const pool = landed.filter((a) => a.kind === mediaKind);
+
+      /* THE SOFT PREFERENCE (rule 1 in the header), and every word of "soft" is load-bearing.
+       * A Video payload takes real footage first and a converted gif loop only when footage is
+       * all that is missing — TWO PASSES over the same list, never a filter, because a filter
+       * would turn "the owner does not like gif videos" into "a gif-only library sends nothing"
+       * and hand the receiver back its own pool. The FlashBurst/image lane never asks: a gif
+       * there is exactly what a gif is supposed to be. */
+      const gifLast = mediaKind === 'video'
+        ? pool.filter((a) => a.origin !== 'gif').concat(pool.filter((a) => a.origin === 'gif'))
+        : pool;
+
+      for (const a of gifLast) {
         out.push('xfer:' + a.sha);
         if (out.length >= want) break;
       }
@@ -371,6 +439,7 @@ export function createMediaQueue({
       blocklist,
       logger,
       acceptOffers,
+      acceptsCodecs,
       isHost: !!(match && match.isHost),
       tag: (match && match.isHost) ? 'GG:xfer:host' : 'GG:xfer:guest',
     }, channelOptions || {}));
@@ -378,7 +447,10 @@ export function createMediaQueue({
     unsubs.push(channel.onLanded((e) => {
       if (e.direction === 'out') {
         inFlight.delete(e.sha256);
-        pushLanded({ sha: e.sha256, kind: e.kind, mime: e.mime, bytes: e.bytes });
+        pushLanded({
+          sha: e.sha256, kind: e.kind, mime: e.mime, bytes: e.bytes,
+          origin: e.origin || deckKindFor(e.sha256).origin || '',
+        });
         info(`sent ${e.sha256.slice(0, 8)} (${Math.round(e.bytes / 1024)} KB in ${e.ms}ms)`);
         pump();
         return;
@@ -386,7 +458,14 @@ export function createMediaQueue({
       // INBOUND: the store already committed it. Announce it so boot can register it
       // with exec/media.js — this module never imports exec/.
       for (const fn of Array.from(receivedSubs)) {
-        try { fn({ sha: e.sha256, kind: e.kind, mime: e.mime, bytes: e.bytes, url: e.url || '' }); }
+        try {
+          fn({
+            sha: e.sha256, kind: e.kind, mime: e.mime, bytes: e.bytes, url: e.url || '',
+            // Straight through to exec/media.js addReceived — the receiver's own
+            // "prefer real footage" preference is fed from this field and nothing else.
+            origin: e.origin || '',
+          });
+        }
         catch (err) { warn('onReceived handler threw: ' + ((err && err.message) || err)); }
       }
     }));
@@ -398,7 +477,10 @@ export function createMediaQueue({
         // read as a failure anywhere, in the code or the logs.
         inFlight.delete(e.sha256);
         const kindOf = deckKindFor(e.sha256);
-        pushLanded({ sha: e.sha256, kind: kindOf.kind, mime: kindOf.mime, bytes: kindOf.bytes });
+        pushLanded({
+          sha: e.sha256, kind: kindOf.kind, mime: kindOf.mime, bytes: kindOf.bytes,
+          origin: kindOf.origin || '',
+        });
         info(`they already had ${e.sha256.slice(0, 8)} — reusing it`);
         pump();
         return;
@@ -421,7 +503,7 @@ export function createMediaQueue({
   }
 
   function deckKindFor(sha) {
-    return pickInfo.get(sha) || { kind: 'image', mime: '', bytes: 0 };
+    return pickInfo.get(sha) || { kind: 'image', mime: '', bytes: 0, origin: '', codec: '' };
   }
 
   function onPhase(phase) {
@@ -472,6 +554,7 @@ export function createMediaQueue({
   function detach() {
     attached = false;
     saidWhy.clear();                 // a new match earns fresh diagnostics
+    saidSkip.clear();                // …and so does the codec-skip warn (a new peer, a new answer)
     stopPoll();
     for (const off of unsubs) { try { off(); } catch (_e) { /* ignore */ } }
     unsubs = [];

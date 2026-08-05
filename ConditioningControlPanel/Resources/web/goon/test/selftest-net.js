@@ -1282,6 +1282,99 @@ async function testIceServers() {
     'a server that never heard of ice_servers leaves the client with []');
 }
 
+/* ============================================================ 14. net/codecs.js
+ *
+ * THE FAIL-OPEN CONTRACT IS THE TEST. Everything below is one question asked six ways: can this
+ * module ever refuse an artifact it should not? The HEVC handshake is only allowed to block a
+ * KNOWN codec against a peer that KNOWN-ly cannot decode it; every uncertainty — no list, an empty
+ * list, an unrecognised spelling, a peer from before the feature existed — must answer "send it",
+ * because a wrongly-refused good clip is invisible to the player while a black window at least
+ * looks like a bug.
+ */
+async function testCodecs() {
+  const {
+    CodecFamily, DECODE_PROBES, normalizeCodec, codecFromMime, baseMime,
+    probeDecodeCodecs, resetDecodeProbe, peerCanDecode, acceptedCodecsFromHello,
+  } = await import('../net/codecs.js');
+
+  // --- the vocabulary: four families, many spellings
+  ok(normalizeCodec('avc1') === CodecFamily.Avc && normalizeCodec('avc1.42E01E') === CodecFamily.Avc,
+    'the C# cache label and the page encoder\'s full string are the same family');
+  ok(normalizeCodec('AVC1.640028') === CodecFamily.Avc, 'case does not matter');
+  ok(normalizeCodec('hev1.1.6.L93.B0') === CodecFamily.Hevc && normalizeCodec('hvc1') === CodecFamily.Hevc,
+    'both HEVC box names normalize to one family — hev1 and hvc1 are the same decoder');
+  ok(normalizeCodec('vp09.00.10.08') === CodecFamily.Vp9 && normalizeCodec('vp9') === CodecFamily.Vp9, 'vp9');
+  ok(normalizeCodec('av01.0.04M.08') === CodecFamily.Av1, 'av1');
+  ok(normalizeCodec('orig') === '' && normalizeCodec('') === '' && normalizeCodec(null) === ''
+    && normalizeCodec('vp8') === '' && normalizeCodec('webp') === '',
+    'an exempt original, a still and anything unrecognised are UNKNOWN — never a wrong family');
+
+  ok(codecFromMime('video/mp4;codecs="hvc1.1.6.L93.B0"') === CodecFamily.Hevc,
+    'the codecs= parameter is the other cheap source of truth');
+  ok(codecFromMime('video/mp4; codecs=avc1.42E01E') === CodecFamily.Avc, 'unquoted and spaced, too');
+  ok(codecFromMime('video/mp4') === '', 'a plain mime says nothing, and says it as UNKNOWN');
+  ok(baseMime('video/mp4;codecs="avc1"') === 'video/mp4', 'baseMime strips the parameters');
+
+  // --- the decision, which is the whole feature
+  ok(peerCanDecode(['avc1'], 'hvc1.1.6.L93.B0') === false,
+    'THE ONE FALSE: a known codec against a peer that listed families and not this one');
+  ok(peerCanDecode(['avc1', 'hvc1'], 'hev1.1.6.L93.B0') === true, 'listed (under its other name) — fine');
+  ok(peerCanDecode(null, 'hvc1') === true, 'a peer that named NO codecs accepts everything (old build)');
+  ok(peerCanDecode([], 'hvc1') === true, 'an empty list is read the same way — never as "nothing"');
+  ok(peerCanDecode(['avc1'], 'orig') === true, 'an UNKNOWN codec is offered: fail open, exactly like today');
+  ok(peerCanDecode(['avc1'], '') === true, 'and so is a missing one');
+  ok(peerCanDecode('avc1', 'hvc1') === true, 'junk where the list should be still fails OPEN');
+
+  // --- reading a peer's hello, tolerantly
+  ok(acceptedCodecsFromHello({ accepts_codecs: ['avc1', 'vp9'] }).join(',') === 'avc1,vp9',
+    'the field this build writes');
+  ok(acceptedCodecsFromHello({ accepts: ['video/mp4;codecs="avc1.42E01E"', 'image/png'] }).join(',') === 'avc1',
+    'a peer that parameterised its mime list is understood too; plain mimes contribute nothing');
+  ok(acceptedCodecsFromHello({ accepts: ['video/mp4', 'image/gif'] }) === null,
+    'TODAY\'S HELLO — a plain mime allowlist — reads as null, i.e. "they named none"');
+  ok(acceptedCodecsFromHello({}) === null && acceptedCodecsFromHello(null) === null,
+    'and so does a hello with nothing at all');
+  ok(acceptedCodecsFromHello({ accepts_codecs: ['avc1', 'AVC1', 'avc1.42E01E'] }).length === 1,
+    'the list is de-duplicated by family, not by spelling');
+
+  // --- the probe: under node there is nothing to ask, and that must read as "unknown"
+  resetDecodeProbe();
+  ok(probeDecodeCodecs() === null,
+    'node has no MediaSource and no <video>, so the probe answers null — NOT [] — and we advertise nothing');
+
+  // A fake runtime with MediaSource, to prove the probe reads a real answer.
+  const realMS = globalThis.MediaSource;
+  try {
+    globalThis.MediaSource = { isTypeSupported: (t) => /avc1|vp09/.test(String(t)) };
+    resetDecodeProbe();
+    const list = probeDecodeCodecs(true);
+    ok(Array.isArray(list) && list.indexOf('avc1') >= 0 && list.indexOf('vp9') >= 0,
+      'a runtime that supports H.264 and VP9 reports both', JSON.stringify(list));
+    ok(list.indexOf('hvc1') < 0, '…and does NOT claim the HEVC it refused');
+    ok(probeDecodeCodecs() !== null && probeDecodeCodecs().length === list.length,
+      'the answer is cached — one probe per page, not one per hello');
+  } finally {
+    if (realMS === undefined) delete globalThis.MediaSource; else globalThis.MediaSource = realMS;
+    resetDecodeProbe();
+  }
+
+  // A runtime that says no to everything is a BROKEN PROBE, not a decoder-less device.
+  try {
+    globalThis.MediaSource = { isTypeSupported: () => false };
+    resetDecodeProbe();
+    ok(probeDecodeCodecs(true) === null,
+      'a runtime that refuses every probe answers null — "we could not ask", never "we decode nothing"');
+  } finally {
+    if (realMS === undefined) delete globalThis.MediaSource; else globalThis.MediaSource = realMS;
+    resetDecodeProbe();
+  }
+
+  ok(DECODE_PROBES.length === 4, 'the probe list stays SMALL — four families, asked once each');
+  ok(readSource('../net/codecs.js').indexOf('document') > 0
+    && /typeof document !== 'undefined'/.test(readSource('../net/codecs.js')),
+    'every DOM lookup in codecs.js is guarded — net/mediaChannel.js imports it and must stay node-safe');
+}
+
 // ============================================================ run
 const main = async () => {
   await testSignaling();
@@ -1297,6 +1390,7 @@ const main = async () => {
   await testSeatRelease();
   await testSelfDuel();
   await testBetaGates();
+  await testCodecs();
 
   console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);
   process.exit(failures === 0 ? 0 : 1);

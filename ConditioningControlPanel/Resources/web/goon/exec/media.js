@@ -32,7 +32,7 @@
  * RECEIVED ARTIFACTS (P2P media transfer, spec §4.3) live in a SECOND map that
  * the deck never sees:
  *
- *   addReceived({sha,kind,mime,url,bytes,acquire?})   incremental; never the deck
+ *   addReceived({sha,kind,mime,url,bytes,origin?,acquire?})  incremental; never the deck
  *   hasReceived(sha) / dropReceived(sha) / receivedCount()
  *   acquireByTag('xfer:<sha>') -> {url, release(), provenance:'peer'} | null
  *   drawFor(kind, payload)     -> THE resolution order (tag hit, else own library)
@@ -45,6 +45,15 @@
  *   - "incremental add" is a Map write: no reshuffle, no disturbance of the
  *     8-draw echo guard.
  * ==========================================================================*/
+
+/* GIF-ORIGIN CLIPS COME LAST IN THE VIDEO LANE (2026-08-05, owner call). The desktop compresses
+ * an animated gif into an mp4, so a transferred loop arrives as `video/mp4` and is a perfectly
+ * valid VIDEO artifact — it just is not FOOTAGE, and a video attack that plays a two-second loop
+ * reads as a bug even though every layer worked. `drawReceived`/`peekReceived` therefore prefer
+ * `origin !== 'gif'` and fall back to gif-origin when that is all this match has landed. It is a
+ * PREFERENCE, never a filter: their gif still beats our own library, which is the entire point of
+ * the transfer lane. The sender applies the same rule when it picks tags (net/mediaQueue.js
+ * tagsFor); this is the half that survives a tag miss and the peer-first fallback. */
 
 const NO_ECHO = 8; // a reshuffled deck avoids repeating the last N draws
 
@@ -187,9 +196,23 @@ export function createGoonMediaPool() {
       url: rec.url,
       mime: rec.mime,
       sha,
+      /** '' or 'gif' — what the SENDER said this artifact was made from. See the header. */
+      origin: rec.origin,
       provenance: 'peer',
       acquire: () => acquirePeer(rec),
     };
+  }
+
+  /**
+   * Which received views a VIDEO draw may choose between: the real footage if this match has any,
+   * and otherwise everything (which is then all gif-origin). NEVER EMPTY when `pool` was not —
+   * that is the "preference, not filter" promise in the header, and it is why the fallback returns
+   * `pool` rather than the empty `real`. The image lane passes straight through untouched.
+   */
+  function footageFirst(pool, kind) {
+    if (kind !== 'video' || pool.length < 2) return pool;
+    const real = pool.filter((v) => v.origin !== 'gif');
+    return real.length ? real : pool;
   }
 
   /** The deck draw, hoisted so `drawFor` can reach it without a `this` binding. */
@@ -304,7 +327,7 @@ export function createGoonMediaPool() {
     /**
      * Register one artifact a duel partner sent (or one this machine already had,
      * primed from the manifest frame). Touches a Map, NEVER the deck.
-     * @param {{sha:string, kind:string, mime?:string, url:string, bytes?:number,
+     * @param {{sha:string, kind:string, mime?:string, url:string, bytes?:number, origin?:string,
      *          acquire?:() => ({url:string, release?:() => void}|null)}} a
      */
     addReceived(a) {
@@ -320,6 +343,11 @@ export function createGoonMediaPool() {
         mime: String(o.mime || ''),
         url: String(o.url || ''),
         bytes: Math.max(0, Number(o.bytes) || 0),
+        /* 'gif' or ''. ABSENT READS AS NOT-A-GIF, deliberately: a peer too old to send the field,
+         * a row primed from a previous session's inbox and every existing caller all land here,
+         * and treating an unknown origin as footage keeps them exactly as eligible as they are
+         * today. The preference only ever DEMOTES something we positively know is a loop. */
+        origin: o.origin === 'gif' ? 'gif' : '',
         acquire: typeof o.acquire === 'function' ? o.acquire : null,
       });
       return true;
@@ -378,12 +406,14 @@ export function createGoonMediaPool() {
     drawReceived(kind) {
       const want = kind === 'video' ? 'video' : (kind === 'image' ? 'image' : '');
       if (!want) return null;
-      const pool = [];
+      const all = [];
       for (const sha of received.keys()) {
         const v = viewReceived(sha, want);
-        if (v) pool.push(v);
+        if (v) all.push(v);
       }
-      if (!pool.length) return null;
+      if (!all.length) return null;
+      // Real footage if they have sent any this match; their gif loops if that is all there is.
+      const pool = footageFirst(all, want);
       let at = (Math.random() * pool.length) | 0;
       if (pool.length > 1 && pool[at].sha === lastPeerPick[want]) at = (at + 1) % pool.length;
       lastPeerPick[want] = pool[at].sha;
@@ -399,12 +429,16 @@ export function createGoonMediaPool() {
     peekReceived(kind) {
       const want = kind === 'video' ? 'video' : (kind === 'image' ? 'image' : '');
       if (!want) return null;
-      const pool = [];
+      const all = [];
       for (const sha of received.keys()) {
         const v = viewReceived(sha, want);
-        if (v) pool.push(v);
+        if (v) all.push(v);
       }
-      return pool.length ? pool[(Math.random() * pool.length) | 0] : null;
+      if (!all.length) return null;
+      // The SAME candidate set drawReceived would choose from, or the preview would advertise a
+      // gif loop the render then refuses to play.
+      const pool = footageFirst(all, want);
+      return pool[(Math.random() * pool.length) | 0];
     },
   };
 }

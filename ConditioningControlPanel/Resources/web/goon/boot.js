@@ -54,6 +54,7 @@ import { GoonReceiptStatus } from './core/scoring.js';
 import { GoonSession } from './net/session.js';
 import { createLoopbackPair, loopbackPresets } from './net/loopbackTransport.js';
 import { createMediaQueue } from './net/mediaQueue.js';
+import { probeDecodeCodecs } from './net/codecs.js';
 import { createBlocklist } from './net/blocklist.js';
 import { createReceivedStore } from './exec/receivedStore.js';
 
@@ -644,7 +645,19 @@ function createArtifactSource() {
          * the larder never filled, and every throw fired untagged into the
          * receiver's own pool. */
         const wireKind = mime.indexOf('video/') === 0 ? 'video' : 'image';
-        out.push({ sha, bytes, mime, kind: wireKind, exempt });
+        /* …AND THE ORIGIN IS THE SOURCE'S, WHICH IS THE OTHER HALF OF THE SAME STORY. The wire
+         * kind above deliberately forgets that this mp4 used to be a gif; the VIDEO lane wants
+         * that fact back, so it travels beside it as `origin` and demotes (never excludes) the
+         * artifact when a real clip is also available. `it.origin` is the host's own answer
+         * (GoonCacheBridge, from TransferKinds.Gif); `it.kind === 'gif'` is the same answer read
+         * off the item a host too old to send `origin` still provides; a browser-picked file
+         * carries the flag from ui/assetsStore.js's compression lane.
+         *
+         * `codec` is what the producer knows it made ("avc1" from either compressor). An exempt
+         * ORIGINAL knows nothing, which is the fail-open case: net/mediaQueue.js offers it. */
+        const origin = (it.origin === 'gif' || it.kind === 'gif') ? 'gif' : '';
+        const codec = String(it.codec || '');
+        out.push({ sha, bytes, mime, kind: wireKind, exempt, origin, codec });
       }
       return out;
     },
@@ -760,6 +773,8 @@ function registerReceived(list) {
     try {
       media.addReceived({
         sha: e.sha, kind: e.kind, mime: e.mime, url: e.url, bytes: e.bytes,
+        // '' for everything that predates the field — which reads as footage, i.e. as today.
+        origin: e.origin || '',
         acquire: () => receivedStore.view(e.sha),
       });
     } catch (_err) { /* one bad row is never the whole inbox */ }
@@ -1920,11 +1935,29 @@ function buildApp() {
   });
 
   artifacts = createArtifactSource();
+
+  /* WHAT THIS DEVICE CAN DECODE, asked ONCE and told to the peer on the xfer hello.
+   *
+   * The sender's own probe (ui/assetsStore.js probeVideoDecodable) only ever proved that the
+   * SENDER can play its clip — Safari decodes its own HEVC, adopts it, transfers it perfectly,
+   * and the Windows peer paints a silent black window for the whole slot with no error anywhere.
+   * This is the missing half: the peer's list reaches net/mediaQueue.js, which stops offering
+   * what the other side has no decoder for. A runtime that cannot be asked (and node) advertises
+   * nothing, which every peer reads as "send me anything" — the old behaviour, exactly. */
+  let decodeCodecs = null;
+  try { decodeCodecs = probeDecodeCodecs(); } catch (e) {
+    logger.warn('the decode probe threw (' + ((e && e.message) || e)
+      + ') — advertising nothing, so the peer will keep offering everything');
+    decodeCodecs = null;
+  }
+  logger.info('decodes: ' + (decodeCodecs ? decodeCodecs.join(', ') : '(could not probe)'));
+
   mediaQueue = createMediaQueue({
     artifacts,
     store: receivedStore,
     blocklist,
     logger,
+    acceptsCodecs: decodeCodecs,
     // === true, NOT !== false (the idiom brainDrain/spiral use above). Deliberate
     // inversion: sending is a new, Patreon-gated capability, so a host that
     // predates the flag must default it OFF. Receiving is never gated.
