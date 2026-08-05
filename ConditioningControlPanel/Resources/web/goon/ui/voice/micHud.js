@@ -78,6 +78,26 @@
  *   `pointerType` the way the pinch gesture is — desktop is a mouse and this is
  *   a desktop app first.
  *
+ *   THE DRAWER IS A THIRD WAY TO BE HIDDEN, AND IT IS THE DESKTOP ONE (fixed
+ *   2026-08-05). The mic's slot is the last flow child of `.gg-arsenal-panel`,
+ *   and that panel is `display:none` when the drawer is shut ("collapsed is
+ *   empty, not invisible" — ui/hud.css sidebar rule 3). A desktop seat fires its
+ *   whole arsenal off the number row, so it plays with the drawer shut for the
+ *   stage room — and the mic, the one control in there with no key of its own,
+ *   simply was not on the desk. That is why an in-app player could opt in on
+ *   both seats and still never see a microphone while their phone opponent saw
+ *   one the moment they tapped the handle.
+ *
+ *   Two halves, and neither of them moves a node. `setDeskShut()` is the same
+ *   pushed bit `setHudHidden()` is, so a drawer closing mid-hold ends the
+ *   recording on the ordinary cancel path instead of leaving a microphone open
+ *   behind a panel that is not rendered. `hold()` is the gesture the desk can
+ *   drive from its own key binding (ui/hud.js — this file still has NO key
+ *   handler of any kind), and it asks for the drawer through `onReveal` BEFORE
+ *   it opens the microphone, so a recording is never running without its strip
+ *   somewhere on screen. The drawer goes back to how the player left it when the
+ *   strip folds.
+ *
  *   A HIDDEN HUD IS A CLOSED MICROPHONE. ui/hud.css already takes both voice
  *   slots away by name under zen, but CSS alone is not enough: pointer capture
  *   BYPASSES HIT TESTING, so a `display:none` (or the `pointer-events:none` that
@@ -204,12 +224,16 @@ export function sendReasonLine(reason, waitSec = 1) {
  * @param {object}   [o.recorder]  TEST SEAM — a pre-built recorder (see recorder.js)
  * @param {Function} [o.now]       TEST SEAM — the clock the hold/slide read
  * @param {Function} [o.onLog]
+ * @param {Function} [o.onReveal]  fn(true|false) — "put my slot on screen / you
+ *                                 can have it back". ui/hud.js opens and re-shuts
+ *                                 the arsenal drawer with it for a keyed hold.
  * @returns {{unmount:Function, isRecording:Function, available:Function,
- *            shown:Function, setHudHidden:Function, parts:object}}
+ *            shown:Function, setHudHidden:Function, setDeskShut:Function,
+ *            hold:Function, hiddenBy:Function, parts:object}}
  */
 export function mountMicHud({
   host, chipHost = null, voice = null, audio = null,
-  recorder = null, now = nowMs, onLog = null,
+  recorder = null, now = nowMs, onLog = null, onReveal = null,
 } = {}) {
   const led = createLedger();
   const clock = typeof now === 'function' ? now : nowMs;
@@ -228,8 +252,12 @@ export function mountMicHud({
       unmount() { led.run(); },
       isRecording() { return false; },
       available() { return false; },
-      /** Nothing to hide, but the desk pushes the bit unconditionally. */
+      /** Nothing to hide, but the desk pushes both bits unconditionally. */
       setHudHidden() {},
+      setDeskShut() {},
+      /** ...and drives the gesture from its own binding, which finds nothing. */
+      hold() { return false; },
+      hiddenBy() { return 'no-service'; },
       shown() { return false; },
       parts: {},
     };
@@ -246,7 +274,9 @@ export function mountMicHud({
   if (btn) {
     btn.type = 'button';
     attr(btn, 'aria-label', S.voice.hudLabel);
-    attr(btn, 'title', S.voice.holdHint);
+    // Both affordances on the one tooltip: the hold, and the key that does the
+    // same thing for the seat that never opens this drawer with a pointer.
+    attr(btn, 'title', S.voice.holdHint + ' · ' + S.voice.holdKeyHint);
     // Chromium turns a long press into a text selection / callout otherwise, and
     // on a phone it would also try to scroll the page out from under the hold.
     try { btn.style.touchAction = 'none'; btn.style.userSelect = 'none'; } catch (_e) { /* stub */ }
@@ -300,6 +330,9 @@ export function mountMicHud({
   let lastSentAt = -Infinity;
   let live = false;              // the availability bit, from voice.onStateChanged
   let hudHidden = false;         // the zen bit, pushed in by ui/hud.js
+  let deskShut = false;          // the arsenal-drawer bit, pushed in by ui/hud.js
+  let keyed = false;             // this gesture came from the desk, not a pointer
+  let revealed = false;          // we asked the desk for its drawer and owe it back
   let unmounted = false;
 
   function log(entry) {
@@ -308,6 +341,20 @@ export function mountMicHud({
   }
 
   function clearTimer(id) { if (id) { try { clearTimeout(id); } catch (_e) { /* gone */ } } return 0; }
+
+  /**
+   * ASK THE DESK FOR THE SLOT, AND GIVE IT BACK. Edge-triggered, never load
+   * bearing: a desk that does not answer (no callback, a throw) leaves the
+   * gesture exactly as it would have been, and `hold()` below still refuses to
+   * open a microphone it cannot draw a strip for.
+   */
+  function reveal(want) {
+    const next = !!want;
+    if (next === revealed) return;
+    revealed = next;
+    if (typeof onReveal !== 'function') return;
+    try { onReveal(next); } catch (_e) { /* the drawer is a nicety, not the state */ }
+  }
 
   function showHint(line) {
     if (!hint || !line) return;
@@ -373,6 +420,11 @@ export function mountMicHud({
     if (next !== 'rec') ending = false;
     paintPhase();
     if (next === 'rec') paintTimer();
+    /* IDLE IS THE ONLY MOMENT THE DRAWER IS OWED BACK — not the release, which
+     * still has "sending…" and then "sent" to say, and both of those belong on
+     * screen. Every road out of a gesture ends here (the flash timer, a tap, a
+     * refusal), so one line covers all of them. */
+    if (next === 'idle') { keyed = false; reveal(false); }
   }
 
   /** A terminal word on the strip (sent / cancelled / a refusal), then fold. */
@@ -443,6 +495,17 @@ export function mountMicHud({
   function onDown(e) {
     if (!live || phase !== 'idle') return;
     if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    beginGesture(e);
+  }
+
+  /**
+   * THE ONE ENTRANCE. `e` is a pointer event for the button, and null for the
+   * desk's own binding — the only difference between the two is the capture and
+   * the slide, both of which need a pointer to exist at all. Everything that
+   * decides whether a note happens (the hold threshold, the cap, the send) is
+   * one machine on purpose, so a keyed hold cannot drift from a held one.
+   */
+  function beginGesture(e) {
     pointerId = e && e.pointerId != null ? e.pointerId : null;
     downX = e && typeof e.clientX === 'number' ? e.clientX : 0;
     downAt = clock();
@@ -517,6 +580,7 @@ export function mountMicHud({
    */
   function finishGesture(how) {
     const wasRec = phase === 'rec';
+    const wasKeyed = keyed;          // setPhase('idle') clears it — read it first
     const held = clock() - downAt;
     holdTimer = clearTimer(holdTimer);
     releasePointer();
@@ -528,8 +592,11 @@ export function mountMicHud({
       // on pointerdown closes on the same call a real cancel makes.
       setPhase('idle');
       void rec.cancel();
-      if (held < MIC_HOLD_MS) showHint(S.voice.holdHint);
-      log({ t: 'voice-tap', heldMs: Math.round(held) });
+      // The hint names the affordance they actually used — telling somebody who
+      // tapped a key to "hold the mic" is an instruction for a button they may
+      // not even have on screen.
+      if (held < MIC_HOLD_MS) showHint(wasKeyed ? S.voice.holdKeyHint : S.voice.holdHint);
+      log({ t: 'voice-tap', heldMs: Math.round(held), keyed: wasKeyed });
       return;
     }
     if (wasRec) { void cancelRecording(how); return; }
@@ -592,7 +659,7 @@ export function mountMicHud({
    * @param {'lost'|'zen'} why  what to log the abandoned recording as
    */
   function applyPresence(why) {
-    const shown = live && !hudHidden;
+    const shown = live && !hudHidden && !deskShut;
     host.hidden = !shown;
     cls(host, 'is-live', shown);
     // A caption that outlived its slot: the hint is a child of the host, so it
@@ -620,6 +687,66 @@ export function mountMicHud({
     if (next === hudHidden) return;
     hudHidden = next;
     applyPresence('zen');
+  }
+
+  /**
+   * THE ARSENAL DRAWER, pushed in on exactly the terms zen is (ui/hud.js
+   * paintSide). A shut drawer is `display:none` over the whole panel this slot
+   * lives in, and CSS alone has the same hole zen had: pointer capture bypasses
+   * hit testing, so shutting the drawer with a second hand while the first holds
+   * the mic would leave a recording running with the OS mic light on and no
+   * strip rendered anywhere. This ends it on the ordinary cancel path.
+   */
+  function setDeskShut(on) {
+    const next = !!on;
+    if (next === deskShut) return;
+    deskShut = next;
+    applyPresence('desk');
+  }
+
+  /**
+   * THE GESTURE, WITHOUT A POINTER — what ui/hud.js's key binding drives, and
+   * the whole of this feature's desktop parity. There is deliberately no key
+   * handling in this file (Escape during Live is Mercy and the mic may not add a
+   * rung to that ladder); the desk owns the binding and calls in here.
+   *
+   *   hold(true)          begin. Refused unless the mic is genuinely live.
+   *   hold(false)         release: send if it was a recording, hint if a tap.
+   *   hold(false,'lost')  the hand is empty (focus gone) — cancel, never send.
+   *
+   * THE DRAWER IS ASKED FOR FIRST, AND THE MICROPHONE ONLY OPENS IF IT ARRIVES.
+   * A recording whose strip is not on screen is the one state this module
+   * refuses to be in, so a desk that cannot show the slot gets no recording —
+   * `hold` answers false and the caller is free to say so.
+   *
+   * @returns {boolean} whether the call did anything
+   */
+  function hold(on, how) {
+    if (unmounted) return false;
+    if (on) {
+      if (!live || phase !== 'idle') return false;
+      reveal(true);
+      if (hudHidden || deskShut) { reveal(false); return false; }
+      keyed = true;
+      beginGesture(null);
+      return true;
+    }
+    if (phase !== 'hold' && phase !== 'rec') return false;
+    finishGesture(how === 'lost' ? 'lost' : 'up');
+    return true;
+  }
+
+  /**
+   * WHY IS THERE NO MIC ON THE DESK, for the two reasons the SERVICE cannot see
+   * (boot.js reportMicGate turns this into the one warn line a play-test reads).
+   * '' when it is on screen, or when it is the service's own five-fact gate that
+   * is closed — that half has its own sentence in ui/voice/voiceService.js.
+   */
+  function hiddenBy() {
+    if (!live) return '';
+    if (hudHidden) return 'zen';
+    if (deskShut) return 'drawer';
+    return '';
   }
   host.hidden = true;
   try { setLive(voice.available()); } catch (_e) { setLive(false); }
@@ -664,14 +791,23 @@ export function mountMicHud({
     /** The phase name, for a driver that wants more than a boolean. */
     phase() { return phase; },
     available() { return live; },
-    /** Is it actually on the desk? available() AND the HUD not hidden. */
-    shown() { return live && !hudHidden; },
+    /** Is it actually on the desk? available() AND nothing hiding the slot. */
+    shown() { return live && !hudHidden && !deskShut; },
     /** ui/hud.js's zen toggle, pushed in. See applyPresence(). */
     setHudHidden,
+    /** ...and its arsenal drawer, on the same terms. See setDeskShut(). */
+    setDeskShut,
+    /** The desk's own binding drives the gesture through here. See hold(). */
+    hold,
+    /** '' | 'zen' | 'drawer' — which piece of chrome is sitting on the mic. */
+    hiddenBy,
     /** The recorder, so the library screen could share one if it ever wants to. */
     recorder: rec,
 
     unmount() {
+      // The drawer goes back BEFORE the flag, or reveal() would be talking to a
+      // desk that is already tearing itself down with a debt still open.
+      reveal(false);
       unmounted = true;
       holdTimer = clearTimer(holdTimer);
       flashTimer = clearTimer(flashTimer);
