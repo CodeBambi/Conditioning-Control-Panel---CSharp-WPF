@@ -72,3 +72,4 @@ continuous-run sessions).
 staging, RDP auto-traces, June hang dumps (CCP logs\hang_20260616_*.dmp 5.9 GB),
 NVIDIA DXCache. **WSL gate-tree debris convention established** — clean spine
 worktrees/gate trees per that convention, not ad-hoc.
+- **bpx-consult configs aligned 2026-08-05:** BOTH the project (`.pi/bpx-consult.json`) and the global (`~/.pi/agent/bpx-consult.json`) now say solo = `anthropic/claude-opus-5` (the 2026-08-04 rewire updated only the project file; aligned at the wave-12 reconcile). Project shadows global in this repo. Worker/orchestrator records dated before 2026-08-05 may cite fable-5 as "the configured solo route" — correct-as-of-then.

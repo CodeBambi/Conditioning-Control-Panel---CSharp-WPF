@@ -47,11 +47,7 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 | SP-044-ai-companion-c6 | Row: implement AI companion and awareness integration — slice c6 (command execution: envelope → plan → gated dispatch behind master + per-effect consent gates, none-admitted default with WPF divergence verbatim; moderation through ForBoundary; canary zero-execution proofs; NotExecuted(SupersededGeneration) lands — SP-019 limit 7 discharged; assigned obligations: Reserved→Wired flip + bool-door retirement) | **Done 2026-08-04** (landed `b1a5b5f8`; batch `20260804T225957` lane-1 — FULL review chain: code APPROVE + final PASS; generation-first per-command check (limit 7 discharged); FromPolicy single consent source; none-admitted default + divergence verbatim; type-level zero-execution + canary silence; EffectUnavailable additive (contract §9 updated at land); Reserved flip LANDED (6/5 + arm); bool-door retirement blocked honestly (6 files, 3 out-of-scope — all-or-nothing condition recorded); 581/581 + 29/29; row WIP — c7 = companion UI next) | SP-042 |
 | SP-045-dtrhfxrouter-manualclock | Tooling: DtrhFxRouterTests ManualClock hygiene (SP-043 §7.4 discovery — class-wide injection, zero assertion changes, zero product change; Review Level 1) | **Done 2026-08-04** (landed `b1a5b5f8`; batch `20260804T225957` lane-2 — final PASS + contract ok; 1 construction (the Make factory = class-wide); zero assertion/new-test/wall-clock changes grep-proven; DTRH classes 181/181; worker recovered the bare-consult council trap via mode:"solo") | SP-043 |
 
-### Wave 9 (next)
-
-**Next claimable work:** SP-046 = AI companion c7 (**companion UI surface — the FIRST UI slice**): chat view wired to the typed pipeline; badge/status accuracy headed proof (provenance drives badge; capability state drives status); refusal bubbles (interactive); user-reachable memory-clear control; awareness consent + cooldown settings surfaces; panic-quiet headed proof. **First packet under the owner's improve-don't-clone decree** (behavior parity = constraint; UI/architecture improvements a must) + avalonia-live evidence on this machine (27 verified tools — laptop substitute for DISPLAY3-class headed evidence) + A-013 advisory steps. Also carries: bool-overload retirement (6-file all-or-nothing migration — c7 naturally touches pipeline call sites). Lane partner TBD. Next unused task ID: SP-046.
-
-### Wave 9 (staged 2026-08-05)
+### Wave 9 (LANDED 2026-08-05, `4479689a`)
 
 | Task | Summary | Status | Deps |
 |------|---------|--------|------|
@@ -66,28 +62,24 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 | SP-047-memory-prompt-context | Row: wire companion memory into prompt context (c4 store consumed per request; read-gating ported as behavior fact `LocalAiService.cs:113`; consent-default tension WPF-true vs placeholder-Denied recorded verbatim; ambient stateless; round-trip INTO prompt falsifiable) | **Done 2026-08-05** (landed `10f087b9`; batch `20260805T030213` lane-1 — FULL review chain: code APPROVE + final PASS; read-gating at conversation-consumption level (startup-load divergence named); falsifiable wire proof; read-gating ≠ deletion; anti-overclaim line binding (recall owner-gated by Denied placeholder + session scope); 609/609 + 33/33; row WIP) | SP-046 |
 | SP-048-dtrh-payload-location | Row: DTRH published-artifact payload location (b1 land condition, oldest open in the port — evidence-first decision; published win-x64 boots the host from the decided location; SP-010 gates non-regression; Linux publish = named limit) | **Done 2026-08-05** (landed `10f087b9`; batch `20260805T030213` lane-2 — FULL review chain: code APPROVE + final PASS; ratified copy-beside-exe (measured 380MB/117.5MB, byte-identical); published boot from MOVED dir (guard names resolved root — repo-tree serving disproven); engine live; `--verify-assets` exit 0; SP-010 matrix 18/18 PASS; Linux publish named limit; 606/606 + 33/33; b1 condition DISCHARGED ON WINDOWS) | SP-037 |
 
-### Wave 11 (next)
-
-**Next claimable work:** SP-049 = **Loom studio promotion (v6.6.3 behavior delta)** — the port's next parity work per the phase re-derivation order. **Authoring constraint (land consult):** archaeology reads BOTH the v6.6.3 payload changes (loom.html/loomBoot.js/loomField.js/gifenc — main-sync inventory `client/docs/main-sync-2026-08-04.md`) AND the landed b4 Loom implementation (`DtrhLoom`, save/delete/list, `/spirals/*` serving, sidecar discipline — the rack pane was "not driven" in b4) — frame = what v6.6.3 adds ON TOP of b4's landed Loom and what is genuinely user-observable. Lane partner TBD. Next unused task ID: SP-049.
-
-### Wave 11 (staged 2026-08-05)
+### Wave 11 (LANDED 2026-08-05, `7a26a661`)
 
 | Task | Summary | Status | Deps |
 |------|---------|--------|------|
 | SP-049-loom-studio | Row: Loom studio promotion (v6.6.3 behavior delta — dual archaeology: v6.6.3 payload changes AND b4's landed DtrhLoom; drive the studio surface in-engine; discharge or honestly limit the b4 rack-pane limit; GIF export through the serving contract; avalonia-live evidence) | **Done 2026-08-05** (landed `7a26a661`; batch `20260805T045747` — FULL review chain: code APPROVE + final PASS; DtrhLoomWindow sibling shape; loom-reveal end-to-end; gifenc round trip byte-deterministic ×8; rack DISCHARGED AS DRIVEN (painted screenshot = residual laptop scale limit, zero-code-change discharge condition); boon_pick chain fix (b3 text corrected; audit row filed); 629/629 + 33/33 TRX'd; row WIP with residual limits) | SP-048 |
 
-### Wave 12 (next)
-
-**Next claimable work:** SP-050 = **host-obligation audit across the remaining v6.6.3 deltas** (land-consult directive — enumerate, from the payload + WPF host sources, what the client must provide per delta: new bridge messages / new windows/stores / new capability probes / NOTHING — with packet-sizing verdicts; output = one record + board rows for deltas with real obligations). Deltas: Brain Drain rework + Brain Melt, FX overhaul (AmbientFxCanvas/tiers/reduced-motion), Hourglass, Bottomless Fall, NUX first-run, Weekly Intake Pass. Cheap, evidence-first decomposition instead of blind feature packets. Lane partner TBD (ChaosSfx audit is a candidate). Next unused task ID: SP-050.
-
-### Wave 12 (staged 2026-08-05)
+### Wave 12 (LANDED 2026-08-05, `87b80a24`)
 
 | Task | Summary | Status | Deps |
 |------|---------|--------|------|
-| SP-050-v663-obligation-audit | Row: host-obligation audit across remaining v6.6.3 deltas (Brain Drain + Brain Melt, FX overhaul, Hourglass, Bottomless Fall, NUX, Weekly Intake Pass — per-delta client obligations: messages/windows-stores/probes/NOTHING + sizing verdicts; zero product code; board filings at land) | Authored 2026-08-05 | SP-049 |
-| SP-051-chaossfx-chain-audit | Row: ChaosSfx cue→fallback-chain audit (complete map or not evidence; per cue resolve-per-chain or named typed gap; resolution layer typed; tests pin each chain + gap) | Authored 2026-08-05 | SP-049 |
+| SP-050-v663-obligation-audit | Row: host-obligation audit across remaining v6.6.3 deltas (Brain Drain + Brain Melt, FX overhaul, Hourglass, Bottomless Fall, NUX, Weekly Intake Pass — per-delta client obligations: messages/windows-stores/probes/NOTHING + sizing verdicts; zero product code; board filings at land) | **Done 2026-08-05** (landed `87b80a24`; batch `20260805T083347` lane-1 — FULL review chain: code APPROVE + final PASS; obligation table + sizing verdicts; TWO b4 parity defects measured (→ P0 defect row); filings executed per land-consult framing (defect row + probe + intake host OPEN; blocked inventory as one entry; content-pack to Decisions-needed); 629/629 + 33/33 exact) | SP-049 |
+| SP-051-chaossfx-chain-audit | Row: ChaosSfx cue→fallback-chain audit (complete map or not evidence; per cue resolve-per-chain or named typed gap; resolution layer typed; tests pin each chain + gap) | **Done 2026-08-05** (landed `87b80a24`; batch `20260805T083347` lane-2 — FULL review chain: code APPROVE + final PASS; complete tiered map; 3 resolves + 39 named gaps; off-chain substitutions REMOVED (behavior change recorded, net-delta sentence on the row); typed ResolveSfxCue; 669/669 + 33/33; row WIP — owner ratifies + content-row urgency) | SP-049 |
 
-### Phase 5 — DTRH admit + host slices, quips/sound, AI companion, tail (ACTIVE — wave 12 in flight)
+### Wave 13 (next)
+
+**Next claimable work (land-consult ordering):** SP-052 = **the b4 defect row** (P0, silent data loss: Hourglass ownership-gated ceiling at persist + deal + the `endless` knob end-to-end; b4's 1200-clamp tests UPDATED never weakened; U + one headed round-trip per behavior) + SP-053 = **reduced-motion inheritance probe** (S, no deps) as lane-mate. The Graded Intake host (L) wants a wave to itself after these. Next unused task ID: SP-052.
+
+### Phase 5 — DTRH admit + host slices, quips/sound, AI companion, tail (ACTIVE — wave 13 next)
 
 **WAVE-4 PARK LIFTED 2026-08-04 (~15:30 local, same day):** the anthropic-400 park was a pi request-shape defect, not account exhaustion — fixed by the `__PI_BILLING_HEADER_FIX__` local pi-ai patch (`x-anthropic-billing-header` system[0] per hermes-agent #48176; `pi -p` 200 on opus-5 AND fable-5). SP-037 landed earlier that day (floor restored). SP-035+SP-036 launch per plan. (The ~13:10 UTC park state is retained in the board's 2026-08-04 gate-history entry for the SP-037 substitution-land provenance.)
 
