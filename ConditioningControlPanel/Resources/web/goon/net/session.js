@@ -23,6 +23,23 @@
 // first currentMatch instance. The rebuild window is safe: ICE can only fail in Lobby, before the
 // hello/consent exchange has happened.
 //
+// THE FALLBACK IS ONE-WAY, AND THAT IS A DELIBERATE NON-FEATURE (investigated 2026-08-05).
+// It looks tempting to keep the peer connection alive through the downgrade and "upgrade back"
+// when a TURN pair finally completes — the match already survives one rebuild, why not two. It
+// does not work, for two reasons that are not about effort:
+//   1. A TRANSPORT SWITCH IS BILATERAL. The downgrade is safe only because BOTH peers independently
+//      reach the same verdict about the same room and meet again on the mailbox. An upgrade would
+//      be decided by whichever side's channel opened first, and the moment it switched it would be
+//      talking into a pipe the other side is not listening to — a duel with zero frames crossing,
+//      strictly worse than a relayed one. Making it safe needs a handshake ON the relay ("I have
+//      P2P, switch at N"), i.e. a new protocol frame, a new phase, and its own play-test.
+//   2. THE REBUILD WINDOW HAS CLOSED BY THEN. adoptLobby() only accepts a match in Idle, and it is
+//      only safe at all because nothing has been said yet. A late upgrade lands after hello and
+//      quite possibly after consent, and a fresh match object knows none of it.
+// So the fix for "cellular duels lose their media lane" lives one layer down, in how patient the
+// ICE budget is BEFORE _fallBackToRelay is ever reached — see GoonConsts.IceRelayGraceMs and
+// webrtcTransport.iceBudgetMs. Anyone revisiting the upgrade idea starts at point 1, not here.
+//
 // This facade does NOT gate on entitlement — the server enforces the tier-2 HOST bar at
 // /v2/goon/invite (403 no_host_access) and nothing at all at /join, which is free for everyone,
 // account or not. UI may pre-gate for niceness (title.js dims Host on caps.canHost), never here.
@@ -54,6 +71,29 @@ function invoke(target, names, ...args) {
     if (target && typeof target[n] === 'function') return target[n](...args);
   }
   throw new Error(`match object exposes none of: ${names.join(', ')}`);
+}
+
+/**
+ * Why did P2P give up? Two answers only, because only two matter when reading a play-test log:
+ *   deadline — a stopwatch of OURS fired. The browser may well still have been making progress,
+ *              so a recurring `deadline` is a signal the budget is wrong (webrtcTransport
+ *              iceBudgetMs / GoonConsts.IceRelayGraceMs), not that the network is hopeless.
+ *   failed   — the browser, the peer or the SDP said no. Nothing to tune; the link is unusable.
+ * Anything unrecognised reads `other` rather than being guessed at.
+ */
+function classifyFallback(lastError) {
+  switch (lastError) {
+    case 'ice_timeout':
+    case 'no_offer':
+      return 'deadline';
+    case 'ice_failed':
+    case 'sdp_rejected':
+    case 'peer_setup_failed':
+    case 'webrtc_unavailable':
+      return 'failed';
+    default:
+      return 'other';
+  }
 }
 
 function emit(listeners, arg, logger, what) {
@@ -268,7 +308,20 @@ export class GoonSession {
 
     const code = webrtc.code;
     const token = webrtc.token;
-    this._info(`P2P failed (${webrtc.lastError || '?'}), adopting room ${code} over relay`);
+    /**
+     * THE FALLBACK BREADCRUMB (2026-08-05). A warn, not an info, because info dies before the C#
+     * log and the phone's ?debug=1 overlay — and this is the single most consequential line in a
+     * duel's life: past it `supportsBulk` is false FOREVER (the ws mailbox is the one transport
+     * media may never ride), so every artifact the player queues for the rest of the match fires
+     * untagged. When a cellular play-test comes back saying "no transfers again", this line is
+     * what says whether we ran out of patience or the link genuinely died.
+     *
+     * `deadline` = a stopwatch fired while the browser may still have been working
+     * (ice_timeout / no_offer). `failed` = the browser or the SDP said no. See
+     * GoonConsts.IceRelayGraceMs for what the deadline is worth now.
+     */
+    this._warn(`relay fallback (${classifyFallback(webrtc.lastError)}: ${webrtc.lastError || '?'})`
+      + ` — adopting room ${code} over the server mailbox; bulk media lane is OFF for this match`);
 
     // Old match FIRST (it unsubscribes the dying transport; dispose sends nothing), then the
     // transport. The shared signaling client stays — the relay needs it.

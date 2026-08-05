@@ -14,7 +14,9 @@ import { GoonFakeSignalingServer, shadowGuestUid, isShadowUid } from '../net/fak
 import { createLoopbackPair, loopbackOptions, loopbackPresets } from '../net/loopbackTransport.js';
 import { GoonRelayTransport } from '../net/relayTransport.js';
 import { GoonSession } from '../net/session.js';
-import { GoonWebRtcTransport } from '../net/webrtcTransport.js';
+import {
+  GoonWebRtcTransport, STUN_URLS, entryHasTurn, turnOnlyIceServers, iceBudgetMs, iceChecksInFlight,
+} from '../net/webrtcTransport.js';
 import { GoonTransportState, GoonConsts, makeEmote, makeTick } from '../core/contracts.js';
 
 let failures = 0;
@@ -1282,6 +1284,122 @@ async function testIceServers() {
     'a server that never heard of ice_servers leaves the client with []');
 }
 
+/* ================================================================ 14b. THE CELLULAR ICE BUDGET
+ *
+ * The 2026-08-05 play-test: iPhone on 5G joins cclabs.app/goon-beta, desktop WPF host on a home
+ * LAN. The duel never reached ConnectedP2P, fell back to the ws mailbox, and because `supportsBulk`
+ * is P2P-only every artifact after that fired untagged — the media-transfer feature silently died
+ * for the whole match. The desktop's own log said the interesting part: it gathered FOUR relay
+ * candidates, while three metered `stun:` urls and the UDP TURN allocate all 701'd on the full
+ * ~9.5 s STUN retransmit ladder. The flat 10 s GoonConsts.IceTimeoutMs was spent on GATHERING; the
+ * TURN-over-TLS pair that a carrier-NAT'd phone actually needs never got a chance to be checked.
+ *
+ * Everything below pins the two halves of the remedy: a budget that knows whether a relay is even
+ * in play, and an ice server list that does not pay for candidates it does not need. The wall-clock
+ * behaviour itself needs a browser (and a phone on cellular) — these are the pure pieces
+ * waitForChannel is built out of, plus source pins that it really uses them.
+ * ==============================================================================*/
+async function testIceBudget() {
+  // --- the budget arithmetic ----------------------------------------------------
+  ok(iceBudgetMs(false) === GoonConsts.IceTimeoutMs,
+    'a STUN-only room keeps the old fail-fast budget — with no relay to wait for, waiting is only a spinner');
+  ok(iceBudgetMs(true) === GoonConsts.IceTimeoutMs + GoonConsts.IceRelayGraceMs,
+    'a room carrying TURN creds gets the relay grace on top', String(iceBudgetMs(true)));
+  ok(iceBudgetMs(true) > 20000,
+    'and the relayed budget clears 20s — gathering alone burned ~10s on the cellular play-test',
+    String(iceBudgetMs(true)));
+  ok(Number.isFinite(GoonConsts.IceProgressGraceMs) && GoonConsts.IceProgressGraceMs > 0,
+    'there is a one-shot progress extension on top of that');
+  // A runaway upper bound is a player staring at a spinner. The hard-fail edge
+  // (pc.connectionState === 'failed') is the real backstop; this is only the "nothing at all is
+  // happening" one, and it must stay inside what a person will sit through.
+  ok(iceBudgetMs(true) + GoonConsts.IceProgressGraceMs <= 40000,
+    'the absolute worst case stays under 40s', String(iceBudgetMs(true) + GoonConsts.IceProgressGraceMs));
+
+  // --- what counts as "still working" -------------------------------------------
+  ok(iceChecksInFlight('checking'), 'checking = pairs are being probed right now, extend');
+  ok(iceChecksInFlight('connected'), 'connected = a pair WON and only DTLS/SCTP is left, extend');
+  ok(iceChecksInFlight('completed'), 'completed = same, with gathering done, extend');
+  ok(!iceChecksInFlight('new'), 'new = nothing started, no extension');
+  ok(!iceChecksInFlight('failed') && !iceChecksInFlight('closed'), 'terminal states never extend');
+  ok(!iceChecksInFlight('disconnected'), 'disconnected = a pair died, no extension');
+  ok(!iceChecksInFlight(undefined) && !iceChecksInFlight(null) && !iceChecksInFlight(''),
+    'a missing state never extends (no pc = nothing in flight)');
+
+  // --- the room list, turn urls only --------------------------------------------
+  ok(entryHasTurn({ urls: 'turn:a.example:443' }) && entryHasTurn({ urls: ['stun:b', 'turns:c:443'] }),
+    'entryHasTurn spots turn and turns, single or list');
+  ok(!entryHasTurn({ urls: 'stun:b.example' }) && !entryHasTurn(null),
+    'a stun-only entry (and junk) carries no turn');
+
+  const metered = turnOnlyIceServers([
+    { urls: 'stun:stun.relay.metered.ca:80' },
+    { urls: ['stun:global.relay.metered.ca:80', 'turn:global.relay.metered.ca:80'], username: 'u', credential: 'c' },
+    { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: 'u', credential: 'c' },
+  ]);
+  ok(metered.length === 2, 'the stun-only entry is dropped whole', JSON.stringify(metered));
+  ok(metered[0].urls.length === 1 && metered[0].urls[0] === 'turn:global.relay.metered.ca:80',
+    'and the stun url is stripped OUT of a mixed entry — a dead stun leg holds gathering open for ~9.5s');
+  ok(metered[0].username === 'u' && metered[0].credential === 'c', 'credentials ride along untouched');
+  ok(turnOnlyIceServers(null).length === 0 && turnOnlyIceServers([]).length === 0,
+    'no room list (old server, TURN unconfigured) -> [], i.e. exactly the STUN-only behaviour');
+  ok(turnOnlyIceServers([{ urls: ['stun:a', 'stun:b'] }]).length === 0,
+    'a server that hands out nothing but stun contributes nothing');
+  ok(STUN_URLS.length === 3, 'the built-in public STUN list still covers srflx on its own');
+
+  // --- the transport really wires all of it -------------------------------------
+  {
+    const src = readSource('../net/webrtcTransport.js');
+    ok(/this\._turnConfigured = roomTurn\.length > 0/.test(src),
+      'the budget switch is set from the ROOM list, not from a candidate we have already gathered');
+    ok(/budgetMs = iceBudgetMs\(this\._turnConfigured\)/.test(src),
+      'waitForChannel arms the budget off iceBudgetMs when negotiation starts');
+    ok(/turnOnlyIceServers\(this\._signaling\?\.iceServers\)/.test(src),
+      'the room list goes through turnOnlyIceServers before it reaches RTCPeerConnection');
+    const wait = src.slice(src.indexOf('async waitForChannel'), src.indexOf('signaling pump'));
+    ok(/!graceUsed && iceChecksInFlight\(iceState\)/.test(wait),
+      'the progress extension is gated on iceChecksInFlight');
+    ok((wait.match(/graceUsed = true/g) || []).length === 1 && /graceUsed = false/.test(src),
+      'it is ONE-SHOT — a second extension would be an unbounded wait dressed as a budget');
+    ok(/GoonTransportState\.ConnectedP2P\b/.test(src.slice(src.indexOf('get supportsBulk'), src.indexOf('get supportsBulk') + 220)),
+      'supportsBulk is STILL P2P-only — a TURN pair qualifies because it ends in ConnectedP2P, the mailbox never does');
+  }
+
+  // --- the two breadcrumbs the next cellular play-test reads ---------------------
+  {
+    const src = readSource('../net/webrtcTransport.js');
+    ok(/_logSelectedPair\(\)/.test(src) && /p2p link up via \$\{lt\}\/\$\{rt\}/.test(src),
+      'a connected transport warns which candidate pair actually won (host/srflx/relay)');
+    ok(/this\._pairLogged/.test(src), 'and it says so exactly once per transport');
+    ok(/selectedCandidatePairId/.test(src) && /r\.selected === true/.test(src),
+      'both stat shapes are read — Chromium hangs it off transport, Safari marks the pair');
+    ok(/this\._warn\(`p2p link up/.test(src),
+      'it is a WARN: info lines never reach the C# log or the ?debug=1 overlay');
+
+    const ses = readSource('../net/session.js');
+    ok(/function classifyFallback/.test(ses), 'session.js classifies WHY the fallback fired');
+    ok(/this\._warn\(`relay fallback \(\$\{classifyFallback\(webrtc\.lastError\)\}/.test(ses),
+      'and warns it once, on the way down to the mailbox');
+    ok(/bulk media lane is OFF for this match/.test(ses),
+      'the line spells out the consequence — this is the moment media transfer dies');
+    ok(!/this\._info\(`P2P failed/.test(ses), 'the old info-level line is gone, not duplicated');
+  }
+
+  // --- the invariant the no-offer budget lives under ----------------------------
+  // NoOfferTimeoutMs guards a DIFFERENT window (before negotiation starts) and the two are mutually
+  // exclusive in waitForChannel, so the relayed budget overtaking it is fine. What must stay true
+  // is the original point: a slow poll cycle must not eat a live host.
+  ok(GoonConsts.NoOfferTimeoutMs > GoonConsts.IceTimeoutMs,
+    'the no-offer budget still clears the BASE ice budget');
+  {
+    const src = readSource('../net/webrtcTransport.js');
+    const wait = src.slice(src.indexOf('async waitForChannel'), src.indexOf('signaling pump'));
+    ok(/if \(!negotiationSeen && Date\.now\(\) > noOfferDeadline\)/.test(wait)
+      && /if \(negotiationSeen && Date\.now\(\) > deadline\)/.test(wait),
+      'the two budgets stay mutually exclusive on negotiationSeen');
+  }
+}
+
 /* ============================================================ 14. net/codecs.js
  *
  * THE FAIL-OPEN CONTRACT IS THE TEST. Everything below is one question asked six ways: can this
@@ -1379,6 +1497,7 @@ async function testCodecs() {
 const main = async () => {
   await testSignaling();
   await testIceServers();
+  await testIceBudget();
   await testLoopback();
   await testRelayTransport();
   await testSessionFallback();

@@ -87,7 +87,50 @@ export const GoonConsts = Object.freeze({
   MinScheduleBufferMs: 1000,
   ClockPingRounds: 10,
   ClockResyncIntervalMs: 30000,
+  /**
+   * THE BASE ICE BUDGET, spent from the moment negotiation STARTS. This is the
+   * number for a STUN-only room: with no relay credentials in hand there is no
+   * candidate left to wait for once host and srflx pairs have failed, so failing
+   * fast to the ws relay is strictly better than making the player watch a
+   * spinner. See IceRelayGraceMs for what happens when TURN IS in play.
+   */
   IceTimeoutMs: 10000,
+  /**
+   * THE TURN EXTENSION (2026-08-05, the cellular play-test). Added to
+   * IceTimeoutMs whenever the room actually handed us TURN credentials, because
+   * 10 s is not a budget a relayed pair on a carrier link can meet:
+   *
+   *   * a dead STUN/TURN url does not fail fast — libwebrtc runs its full STUN
+   *     retransmit ladder (~9.5 s) before it reports 701. The desktop's own log
+   *     from that evening shows THREE of those (metered's stun urls + UDP TURN
+   *     allocate) finishing at roughly the same moment gathering completed —
+   *     the ENTIRE base budget went on gathering, before one check ran;
+   *   * the candidate that actually works for a phone behind carrier-grade NAT
+   *     is TURN over TCP/TLS 443, which is the LAST one gathered (TCP connect +
+   *     TLS handshake + Allocate, all over a link with 100-300 ms RTT);
+   *   * every candidate then crosses the /v2/goon/signal MAILBOX, polled every
+   *     2 s, so each side's relay candidate reaches the other up to a poll
+   *     cycle plus an HTTP round trip late.
+   *
+   * Ten seconds killed a connection that was still legitimately in progress,
+   * and because the fallback is TERMINAL (no upgrade path; see net/session.js)
+   * that one impatient deadline turned the whole media-transfer feature off for
+   * the rest of the match — `supportsBulk` is P2P-only by design.
+   *
+   * Waiting longer costs nothing when the link is genuinely broken: the
+   * pc.connectionState === 'failed' edge is the real backstop and fires as soon
+   * as the browser has exhausted its checks, well inside this budget.
+   */
+  IceRelayGraceMs: 15000,
+  /**
+   * THE ONE-SHOT PROGRESS EXTENSION. Granted at most once, when the budget above
+   * runs out while the browser says checks are still in flight
+   * (iceConnectionState checking/connected/completed — see iceChecksInFlight).
+   * 'connected' without an open data channel is the DTLS+SCTP handshake still
+   * running over a relay, which is precisely the case where giving up would be
+   * absurd: the pair already won.
+   */
+  IceProgressGraceMs: 8000,
   /**
    * GUEST ONLY: how long a joined guest waits for the host's first offer before
    * giving up on P2P (webrtcTransport.waitForChannel). A guest that has redeemed
