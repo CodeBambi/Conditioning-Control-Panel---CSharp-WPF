@@ -378,8 +378,29 @@ export class GoonWebRtcTransport extends GoonTransportBase {
        * media transfer (P2P-only by design) never gets a channel to run on. */
       const iceServers = STUN_URLS.map((urls) => ({ urls }))
         .concat(Array.isArray(this._signaling?.iceServers) ? this._signaling.iceServers : []);
+      /* DIAGNOSTIC WARNS, deliberately (2026-08-05): info lines die before the
+       * C# log and the phone's ?debug=1 overlay, and this exact spot is where
+       * three play-test evenings' worth of "still relayed" questions get their
+       * answer — did the room carry TURN entries at all, did the browser take
+       * them, and what did gathering actually produce. */
+      const turnEntries = iceServers.filter((s) => {
+        const u = Array.isArray(s.urls) ? s.urls : [s.urls];
+        return u.some((x) => /^turns?:/i.test(String(x)));
+      }).length;
+      this._warn(`ice config: ${iceServers.length} entr(ies), ${turnEntries} carrying turn urls`);
       const pc = new RTCPeerConnection({ iceServers });
       this._pc = pc;
+      const iceTally = { host: 0, srflx: 0, relay: 0, prflx: 0 };
+      pc.onicecandidateerror = (e) => {
+        // 701 = unreachable/DNS (often noise when one of several urls is slow);
+        // 401/403 from a TURN url = credentials refused — THE line to look for.
+        this._warn(`ice candidate error ${e && e.errorCode}: ${(e && e.errorText) || ''} (${(e && e.url) || '?'})`);
+      };
+      pc.onicegatheringstatechange = () => {
+        if (pc.iceGatheringState === 'complete') {
+          this._warn(`ice gathering complete: host=${iceTally.host} srflx=${iceTally.srflx} relay=${iceTally.relay} prflx=${iceTally.prflx}`);
+        }
+      };
 
       // SYMMETRIC AND IMMEDIATE, on both roles, before any offer/answer work. A negotiated channel
       // is out-of-band by definition, so both sides must create it themselves and neither will see
@@ -401,6 +422,8 @@ export class GoonWebRtcTransport extends GoonTransportBase {
       pc.onicecandidate = (e) => {
         // Trickle: every candidate goes out the moment it is gathered.
         if (!e || !e.candidate || this.isDisposed) return;
+        const t = String(e.candidate.type || '');
+        if (t in iceTally) iceTally[t]++;
         try { this._enqueueSignal('ice', JSON.stringify(e.candidate.toJSON())); }
         catch (err) { this._info(`Failed to queue local candidate: ${(err && err.message) || err}`); }
       };

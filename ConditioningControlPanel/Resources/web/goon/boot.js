@@ -631,7 +631,16 @@ function createArtifactSource() {
         if (!bytes) continue;
         urls.set(sha, url);
         mimes.set(sha, mime);
-        out.push({ sha, bytes, mime, kind: it.kind === 'video' ? 'video' : 'image', exempt });
+        /* THE WIRE KIND IS THE ARTIFACT'S, NOT THE SOURCE'S (2026-08-05). A gif
+         * compresses into an mp4 artifact: the ITEM stays kind 'image' (that is
+         * what it is in the deck), but what actually TRAVELS is video/mp4 — and
+         * the channel's offer gate refuses any offer whose kind and mime
+         * families disagree. In a gif-heavy library that refused nearly every
+         * artifact ("refusing to offer …: kind/mime disagree", over and over),
+         * the larder never filled, and every throw fired untagged into the
+         * receiver's own pool. */
+        const wireKind = mime.indexOf('video/') === 0 ? 'video' : 'image';
+        out.push({ sha, bytes, mime, kind: wireKind, exempt });
       }
       return out;
     },
@@ -993,8 +1002,29 @@ function attachMatch(match, transport) {
    * remount to notice. core/match.js refuses the call outside Lobby/Consent, so
    * a mid-match re-attach is a no-op rather than a signature-clearing surprise. */
   try {
-    if (prefs.get('voiceNotesEnabled')) match.setLocalVoiceNotes(true);
+    if (prefs.get('voiceNotesEnabled') && !match.setLocalVoiceNotes(true)) {
+      // The engine refused the seed. That was the SILENT killer of the whole
+      // transfer lane until 2026-08-05 (attachMatch runs while the match is
+      // still Idle; the setter used to be Lobby/Consent-only), so a refusal is
+      // never allowed to be quiet again.
+      logger.warn('voice-note seed REFUSED by the engine (phase ' + match.phase + ') — declaration will not ride the consent frames');
+    }
   } catch (e) { logger.warn('setLocalVoiceNotes threw: ' + ((e && e.message) || e)); }
+  /* SENDING DEFAULTS ON (owner call, 2026-08-05). Sending is free for every
+   * seat now and "my attacks carry MY media" is the product, so the standing
+   * answer is yes unless this player has explicitly unticked the lobby box
+   * before (prefs 'mediaTransferEnabled' === false — the checkbox writes it).
+   * Same seam as the voice seeding above, for the same rebuild reason; the
+   * engine accepts the seed in Idle too (core/match.js _seedDeclaration —
+   * attachMatch runs BEFORE createInvite/join flips the phase, and the old
+   * Lobby/Consent-only gate ate this exact call on every fresh P2P match),
+   * still refuses it mid-match, and the peer still has to be opted in too
+   * before a single byte moves. */
+  try {
+    if (prefs.get('mediaTransferEnabled') !== false && !match.setMediaTransfer(true)) {
+      logger.warn('media-transfer seed REFUSED by the engine (phase ' + match.phase + ') — attacks will fall back to the receiver\'s local pool');
+    }
+  } catch (e) { logger.warn('setMediaTransfer threw: ' + ((e && e.message) || e)); }
   /* KEEP THE SCREEN ON for the duration. A phone that dims and locks mid-Live is
    * an unintended mercy; the lock is match-scoped (start here, stop in
    * detachMatch) so an idle title screen never holds one. Unsupported = no-op. */
@@ -2247,7 +2277,10 @@ if (hasDom()) {
   startHeartbeat();
   armDeadline();
   bridge.announceReady();
-  bridge.log('boot: ready posted, waiting for init + manifest');
+  // The build stamp is the FIRST diagnostic of every cross-device session:
+  // "which build is that phone actually running" must be answerable from the
+  // C# log / ?debug=1 overlay alone (see GOON_BUILD in bridge.js).
+  bridge.log('boot: ready posted, build ' + bridge.GOON_BUILD + ' (' + (bridge.isHosted ? 'hosted' : 'standalone') + '), waiting for init + manifest');
 }
 
 /* Handy for the play-test driver and for anything that needs the shell's guts

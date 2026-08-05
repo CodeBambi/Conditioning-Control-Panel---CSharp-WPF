@@ -604,9 +604,10 @@ export class GoonMatchService {
    * The re-sent sheet carries the new declaration; the peer's `_handleConsent` reads it back out
    * and the two sides converge without the fingerprint ever changing.
    *
-   * @returns {boolean} true when the toggle was taken (Lobby/Consent only).
+   * @returns {boolean} true when the toggle was taken (Idle/Lobby/Consent only).
    */
   setMediaTransfer(on) {
+    if (this._phase === GoonMatchPhase.Idle) return this._seedDeclaration('media', on);
     if (this._phase !== GoonMatchPhase.Lobby && this._phase !== GoonMatchPhase.Consent) return false;
 
     this._localMediaTransfer = !!on;
@@ -631,9 +632,10 @@ export class GoonMatchService {
    * It is NOT the whole gate either: the peer's build has to speak the family (`caps.voice`) and
    * the phase has to be open. `voiceNotesAgreed` ANDs the consents; the service ANDs the rest.
    *
-   * @returns {boolean} true when the toggle was taken (Lobby/Consent only).
+   * @returns {boolean} true when the toggle was taken (Idle/Lobby/Consent only).
    */
   setLocalVoiceNotes(on) {
+    if (this._phase === GoonMatchPhase.Idle) return this._seedDeclaration('voice', on);
     if (this._phase !== GoonMatchPhase.Lobby && this._phase !== GoonMatchPhase.Consent) return false;
 
     this._localVoiceNotes = !!on;
@@ -641,6 +643,42 @@ export class GoonMatchService {
     this._remoteConsentConfirmed = false;
     this._consentSheet = cloneSheet(this._consentSheet, false, this._localMediaTransfer, this._localVoiceNotes);
     this._send(this._consentSheet);
+    this._ev.consentChanged.emit(undefined, (e) => this._warn(`consentChanged handler threw: ${e && e.message}`));
+    return true;
+  }
+
+  /**
+   * IDLE-PHASE SEEDING, the shared tail of both setters above.
+   *
+   * THE BUG THIS EXISTS FOR (proven in test/selftest-transfer.js "boot seeding
+   * order", 2026-08-05): boot.js seeds the standing declarations inside
+   * attachMatch, and net/session.js raises onCurrentMatchChanged from
+   * _beginSession — BEFORE createInviteAsync/joinAsync has moved the phase off
+   * Idle. The old Lobby/Consent-only gate silently refused that call on BOTH
+   * seats of every fresh P2P match, the declaration never rode a single consent
+   * frame, and the peer read "their lobby send toggle is off" no matter what
+   * the player had opted into. (Only the relay-rebuild path dodged it, because
+   * adoptLobby() runs before the re-attach there.)
+   *
+   * Idle is the SAFE phase to record a standing answer: no peer, no signatures
+   * to clear, nothing on the wire to desync. So this records the flag and
+   * re-signs the local sheet — and deliberately does NOT send (there is no
+   * open channel to send on) and does NOT touch the confirmations (both are
+   * already false). Every consent frame authored later (proposeConsent,
+   * confirmConsent, the counter-proposal adopt) reads the flags fresh, so the
+   * declaration rides out with the first real frame exactly as if the player
+   * had ticked the box in the lobby.
+   *
+   * Mid-match phases still refuse in the callers, unchanged: a re-attach during
+   * Live must never become a signature-clearing surprise.
+   *
+   * JS-ONLY ADDITION: the C# GoonMatchService seeds its declarations after its
+   * own lobby entry and never hits this window.
+   */
+  _seedDeclaration(which, on) {
+    if (which === 'media') this._localMediaTransfer = !!on;
+    else this._localVoiceNotes = !!on;
+    this._consentSheet = cloneSheet(this._consentSheet, false, this._localMediaTransfer, this._localVoiceNotes);
     this._ev.consentChanged.emit(undefined, (e) => this._warn(`consentChanged handler threw: ${e && e.message}`));
     return true;
   }

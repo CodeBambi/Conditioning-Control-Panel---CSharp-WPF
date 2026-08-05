@@ -235,7 +235,14 @@ export class GoonSignalingClient {
 
   /** Records `ice_servers` off a parsed /invite or /join response. Absent = old server = no-op. */
   _noteIceServers(json) {
-    if (json && Array.isArray(json.ice_servers)) this.iceServers = sanitizeIceServers(json.ice_servers);
+    if (json && Array.isArray(json.ice_servers)) {
+      this.iceServers = sanitizeIceServers(json.ice_servers);
+      // WARN, not info (2026-08-05 diagnostics): this is the receipt that the
+      // room actually carried TURN entries — 0 here means the SERVER minted
+      // nothing (key/provider trouble), before any browser gathering runs.
+      this._warn(`room carried ${this.iceServers.length} ice server entr(ies)`
+        + (this.iceServers.length !== json.ice_servers.length ? ` (${json.ice_servers.length} raw, rest dropped by sanitize)` : ''));
+    }
     return this.iceServers;
   }
 
