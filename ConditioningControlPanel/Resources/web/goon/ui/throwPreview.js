@@ -310,6 +310,25 @@ function fromTags(mediaKind, payload) {
   return null;
 }
 
+/**
+ * The peer-first middle rung (mirrors exec/media.js drawFor + drawReceived):
+ * an untagged payload — or one whose tag has not landed — still renders from
+ * the received store when anything of that kind has landed, so the preview
+ * must guess PEER before it guesses own-library. Representative, not exact:
+ * peekReceived never touches the render's echo guard.
+ */
+function fromReceived(mediaKind) {
+  if (!pool || typeof pool.peekReceived !== 'function') return null;
+  let entry = null;
+  try { entry = pool.peekReceived(mediaKind); } catch (_e) { entry = null; }
+  if (!entry) return null;
+  let h = null;
+  if (typeof entry.acquire === 'function') { try { h = entry.acquire(); } catch (_e) { h = null; } }
+  const url = (h && h.url) || entry.url;
+  if (!url) { releaseHandle(h); return null; }
+  return { url: String(url), release: () => releaseHandle(h), provenance: 'peer', exact: false };
+}
+
 /** The representative half: our own deck, PEEKED — see the header. */
 function fromOwnPool(mediaKind) {
   if (!pool || typeof pool.peekKind !== 'function') return null;
@@ -337,7 +356,11 @@ function fromOwnPool(mediaKind) {
 export function resolvePreview(kind, payload) {
   const mediaKind = PREVIEW_MEDIA_KIND[kind];
   if (!mediaKind) return null;
-  const hit = fromTags(mediaKind, payload) || fromOwnPool(mediaKind);
+  // The received rung is INBOUND-only (payload present): an outbound preview
+  // shows what WE are about to send, and that draw is always our own library.
+  const hit = fromTags(mediaKind, payload)
+    || (payload ? fromReceived(mediaKind) : null)
+    || fromOwnPool(mediaKind);
   return hit ? Object.assign({ mediaKind }, hit) : null;
 }
 

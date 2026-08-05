@@ -389,6 +389,23 @@ export function createGoonMediaPool() {
       lastPeerPick[want] = pool[at].sha;
       return pool[at];
     },
+
+    /**
+     * drawReceived without the echo-guard write: ui/throwPreview.js's rung for
+     * "the render will draw SOME received artifact" (representative, not exact
+     * — same contract as peekKind, and mutating lastPeerPick from a preview
+     * would let the preview change what it is previewing).
+     */
+    peekReceived(kind) {
+      const want = kind === 'video' ? 'video' : (kind === 'image' ? 'image' : '');
+      if (!want) return null;
+      const pool = [];
+      for (const sha of received.keys()) {
+        const v = viewReceived(sha, want);
+        if (v) pool.push(v);
+      }
+      return pool.length ? pool[(Math.random() * pool.length) | 0] : null;
+    },
   };
 }
 
