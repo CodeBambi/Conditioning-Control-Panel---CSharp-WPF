@@ -99,10 +99,12 @@
  * monitor and the arsenal. One bit (ui/hud.js HUD_ZEN_CLASS/HUD_ZEN_ATTR), every
  * hide below it, nothing in JS.
  *
- * WHAT GOES: the score + its +1 flourish, your name plate, the closeness dial,
- * the closeness THEY claim, the live-effect chips and MERCY.
- * WHAT STAYS: the monitor, the rails, the charge count (it is the arsenal's
- * currency, not a readout), the timer, the attention ring and the toggle itself.
+ * WHAT GOES: the score, your name plate, the closeness dial, the closeness THEY
+ * claim, the live-effect chips and MERCY.
+ * WHAT STAYS: the monitor, the rails, the timer, the attention ring and the
+ * toggle itself. (The charge count used to be on the STAYS list, as "the
+ * arsenal's currency, not a readout". There is no currency and no count since
+ * 2026-08-05 — see the tombstone at the top bar.)
  *
  * THE TWO ADDED 2026-08-04 (owner: "we need space to see the animations"):
  *   .gg-mon-close   the "they claim / warm" panel. It is the opponent's half of
@@ -123,8 +125,9 @@
  * the layer is restored by the same button that took it away, and Escape
  * concedes throughout (boot.js's ladder calls declareMercy() directly).
  * ------------------------------------------------------------------------ */
+/* (`.gg-hud--zen .gg-plus1` was the second line of this list. The chip it hid
+   was deleted on 2026-08-05 with the charge readout it belonged to.) */
 .gg-hud-frame.gg-hud--zen .gg-score,
-.gg-hud-frame.gg-hud--zen .gg-plus1,
 .gg-hud-frame.gg-hud--zen .gg-me,
 .gg-hud-frame.gg-hud--zen .gg-dial-host,
 .gg-hud-frame.gg-hud--zen .gg-mon-close,
@@ -161,37 +164,25 @@ html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
    ui/hud.js builds no such node, so do not restyle one back into being. */
 .gg-me { font-size: 0.68rem; color: var(--gg-text-3); }
 
-/* THE CHARGE PIPS ARE GONE (2026-08-05). `.gg-pips` / `.gg-pip` / `.gg-pip--sm`
-   and @keyframes ggPipPop drew five 16px squares rotated 45° — outline for the
-   cap, filled pink for what you held — under the score here and, at 12px, in the
+/* THE CHARGE READOUT IS GONE, IN TWO STEPS ON THE SAME DAY (2026-08-05).
+   STEP ONE took the SHAPE: `.gg-pips` / `.gg-pip` / `.gg-pip--sm` and
+   @keyframes ggPipPop drew five 16px squares rotated 45° — outline for the cap,
+   filled pink for what you held — under the score here and, at 12px, in the
    opponent monitor's titlebar. The owner asked twice for "the little yellow
-   squares" to go: the risk pips went in the first pass and these read as the
-   same indicator to anyone not holding the source, which is everyone.
-   ui/hud.js and ui/opponent.js now print the count in words instead (.gg-charges
-   and .gg-mon-charges below), so THE DIAMOND IS NOT A SHAPE THIS UI USES ANY
-   MORE. Do not reintroduce one for a count — a rotated square in this app has a
-   history, and the next person to see it will read it as the risk meter.
-   (The arsenal's `.gg-cost-pip` is a different thing and stays: round, amber,
-   welded to the tile whose price it is, and never part of this complaint.) */
-.gg-charges {
-  font-size: 0.68rem;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-  color: var(--gg-text-2);
-}
-/* The charge-gain flourish, and the WHOLE flourish since the pips went — it used
-   to land at top:1.4rem, on the pip row, where covering an outline for 900ms
-   cost nothing. That row is a SENTENCE now and a chip parked on top of it is a
-   readout you cannot read, so the chip moved up beside the score instead: 3.2rem
-   clears five tabular digits at 1.35rem bold, and it floats away from the count
-   rather than across it. */
-.gg-plus1 {
-  position: absolute; left: 3.2rem; top: 0.15rem;
-  font-size: 0.8rem; font-weight: 700; color: var(--gg-pink);
-  text-shadow: 0 0 12px rgba(var(--gg-pink-rgb), 0.7);
-  animation: ggFloatUp .9s ease-out forwards;
-  pointer-events: none;
-}
+   squares" to go. THE DIAMOND IS NOT A SHAPE THIS UI USES ANY MORE: do not
+   reintroduce one for a count, because a rotated square in this app has a
+   history and the next person to see it will read it as the risk meter.
+   STEP TWO took the DATA. `.gg-charges` ("3 / 5 charges") and, in the monitor
+   titlebar, `.gg-mon-charges` replaced the pips in the morning and were deleted
+   the same evening, when the owner removed the charge REQUIREMENT itself. A
+   charge now gates nothing, so both were counting something that decides
+   nothing — the audit is in ui/hud.js's top-bar note. Neither file builds the
+   node; there is nothing left on this desk for these rules to style.
+   `.gg-plus1` (position:absolute, floated up beside the score) went with them:
+   it was the +1 flourish for a charge gain and had no other producer. NOTE
+   @keyframes ggFloatUp SURVIVES — two other rules in this file animate on it.
+   The arsenal's amber `.gg-cost-pip` price dots went in the same pass; their
+   tombstone is down at the item rail. */
 @keyframes ggFloatUp {
   from { opacity: 1; transform: translateY(0); }
   to { opacity: 0; transform: translateY(-22px); }
@@ -562,13 +553,13 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
 }
 
 .gg-item-name { font-size: 0.6rem; letter-spacing: 0.04em; color: var(--gg-text-2); text-align: center; }
-.gg-item-cost { display: flex; gap: 3px; }
-.gg-cost-pip {
-  width: 7px; height: 7px; transform: rotate(45deg); border-radius: 2px;
-  background: var(--gg-pink);
-  box-shadow: 0 0 6px rgba(var(--gg-pink-rgb), 0.5);
-}
-.gg-cost-pip.is-short { background: var(--gg-amber); box-shadow: 0 0 6px rgba(255, 180, 84, 0.5); }
+/* THE PRICE ROW IS GONE (2026-08-05). `.gg-item-cost` was a flex row of one
+   `.gg-cost-pip` per charge the item cost — 7px, pink, and amber (`.is-short`)
+   on a tile you could not afford. The owner named it directly: "remove the
+   requirement entirely (and the Need 1/2/3 under the throwables)". Nothing is
+   priced any more, so a price under a sticker would be a number about nothing.
+   ui/arsenal.js builds neither node. A tile now says only what it IS and what
+   state it is in, and its inventory is the ×N stack badge. */
 .gg-item-state { font-size: 0.55rem; color: var(--gg-text-4); text-align: center; min-height: 0.7em; line-height: 1.1; }
 
 /* reach states — a glow on the alpha, never an outline box */
@@ -590,11 +581,13 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
   filter: drop-shadow(0 3px 7px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 16px rgba(var(--gg-pink-rgb), 0.95)) brightness(1.08);
 }
 
-/* out-of-reach states — desaturate + dim, on top of the word */
-.gg-item.is-poor,
+/* out-of-reach states — desaturate + dim, on top of the word.
+   `.gg-item.is-poor` (too few charges) headed this list until 2026-08-05: the
+   state does not exist any more, because holding an item is the whole of being
+   able to throw it. The three that are left are all real refusals — spent
+   heavy, kind the peer cannot receive, cooldown. */
 .gg-item.is-used,
 .gg-item.is-filtered { opacity: 0.5; }
-.gg-item.is-poor .gg-item-img, .gg-item.is-poor .gg-item-fallback,
 .gg-item.is-used .gg-item-img, .gg-item.is-used .gg-item-fallback,
 .gg-item.is-filtered .gg-item-img, .gg-item.is-filtered .gg-item-fallback,
 .gg-item.is-cooling .gg-item-img, .gg-item.is-cooling .gg-item-fallback {
@@ -1004,15 +997,13 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
 .gg-mon-dot.is-gone { background: #6d6d78; box-shadow: none; }
 /* `min-width: 0` is what lets the ellipsis actually happen: without it a
    nowrap name is a flex item that refuses to be narrower than its own text, and
-   it pushes the score and the charge count off the end of the head row. */
+   it pushes the score off the end of the head row. */
 .gg-mon-name { color: var(--gg-text-1); font-weight: 600; max-width: 9rem; min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gg-mon-score { margin-left: auto; padding-left: 0.3rem; font-variant-numeric: tabular-nums; color: var(--gg-text-2); flex: 0 0 auto; }
-/* Their charges, in words since 2026-08-05 (this was `.gg-mon-pips`, five 12px
-   diamonds — see the tombstone up at .gg-charges). `white-space: nowrap` because
-   this is the LAST item in the narrowest row in the layout: the name has the
-   ellipsis budget and this must never be the thing that wraps the titlebar into
-   two lines, which would move the grip out from under a finger mid-drag. */
-.gg-mon-charges { flex: 0 0 auto; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--gg-text-3); }
+/* `.gg-mon-charges` stood here — their charge count, in words for one morning
+   and as `.gg-mon-pips` (five 12px diamonds) before that. Deleted the same
+   evening with the requirement itself; the score above is now the last item in
+   this row. See the tombstone up at the top bar. */
 
 /* THE MONITOR FRAME, AND THE FOUR NUMBERS EVERYTHING INSIDE IT IS MEASURED FROM.
  *
@@ -2232,12 +2223,9 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
   .gg-hud-top > * { min-width: 0; }
   .gg-scorebox { min-width: 0; }
   .gg-me { overflow-wrap: anywhere; }
-  /* The charge line is a SENTENCE now, not a 104px row of diamonds (2026-08-05),
-     which is part of why the score column can be the compressible track: text
-     wraps where a flex row of fixed-size pips could only overflow. Both counts
-     shrink a notch on a phone and neither goes below legible. */
-  .gg-charges { font-size: 0.64rem; }
-  .gg-mon-charges { font-size: 0.64rem; }
+  /* (`.gg-charges` and `.gg-mon-charges` each dropped to 0.64rem here. Both
+     readouts were deleted on 2026-08-05 — the score column is simply narrower
+     than the measurements above assume now, which is slack, not a problem.) */
   .gg-timer { min-width: 92px; padding: 0.35rem 0.6rem 0.45rem; }
   .gg-hud-topright { gap: 0.35rem; }
   .gg-att { gap: 0.4rem; padding: 0.3rem 0.45rem; }
@@ -2312,7 +2300,7 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
   .gg-item-img, .gg-item-fallback { width: 92%; max-width: 42px; }
   .gg-item-name { font-size: 0.5rem; letter-spacing: 0.01em; line-height: 1.15; }
   .gg-item-state { font-size: 0.5rem; min-height: 0; line-height: 1.15; }
-  .gg-cost-pip { width: 5px; height: 5px; }
+  /* (`.gg-cost-pip` shrank to 5px here; the price row was deleted 2026-08-05.) */
   .gg-item-lock { font-size: 0.95rem; }
   /* "locked" was a full text line under five of the nine tiles. On a phone the
      lock is the "?" badge and the full desaturation instead — but the WORD is
@@ -2410,10 +2398,10 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
   .gg-sd-track.is-close .gg-sd-notch.is-end,
   .gg-timer.is-urgent .gg-timer-clock { animation: none !important; }
   /* `.gg-pip.is-pop` used to head this list — the charge pips' 1.55x scale
-     bounce. It went with the pips themselves on 2026-08-05, and the flourish
-     that replaced nothing (the `.gg-plus1` chip) is unchanged: it was never in
-     this block, because a chip that floats 22px and deletes itself is the
-     feedback, not decoration on top of it. */
+     bounce. It went with the pips themselves on 2026-08-05, and the `.gg-plus1`
+     chip that briefly replaced it went the same evening with the whole charge
+     readout. Neither was ever listed in this block: a chip that floats 22px and
+     deletes itself is the feedback, not decoration on top of it. */
   .gg-item.is-shake, .gg-sd-card.is-slip { animation: none !important; }
   /* the drawer still ARRIVES and the handle still lights — they just stop
      moving. Neither animation has a fill-mode, so removing it lands both nodes

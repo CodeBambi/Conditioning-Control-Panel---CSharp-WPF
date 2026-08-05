@@ -3,26 +3,35 @@
  * gesture that turns an item into a payload aimed at the opponent's monitor.
  *
  * One tile per payload kind (plus the emote sheet opener). A tile is a BARE ITEM
- * IMAGE — a sticker cutout sitting on the desk, no plate, no border, no fill —
- * with its cost in tiny diamonds under it. It always says what state it is in
- * with a WORD, never colour alone:
+ * IMAGE — a sticker cutout sitting on the desk, no plate, no border, no fill.
+ * It always says what state it is in with a WORD, never colour alone:
  *
  *   locked     greyed sticker + "?" — you have not DROPPED one yet (see below)
- *   ready      full colour + a ×N stack badge; the priciest affordable one glows
- *   too poor   45% + amber pips; tap -> shake + "costs {n} — you have {m}"
+ *   ready      full colour + a ×N stack badge; the rarest one you hold glows
  *   cooling    conic sweep + the shared "next payload in {n}s" readout
  *   used       brain drain only, once per match: struck through
  *   filtered   hatched, "they can't receive this" (kind outside the peer caps)
  *   hidden     the kind is outside OUR OWN caps — the slot never renders
  *
- * THE DROP ECONOMY (2026-08-03 owner redesign). Items are NOT simply "affordable
- * or not" any more. Every slot starts LOCKED and lights up only when a popped
- * bubble drops it: exec/bubbles.js dispatches `gg-bubble-pop`, ui/drops.js rolls
- * it, and a hit calls armDrop(id) here. Firing consumes ONE stack; at zero the
- * slot goes back to locked. Charges remain the WIRE truth (the receiver still
- * validates "sender charges >= cost"), so ui/drops.js credits the charge before
- * it arms — charges beyond your armed stacks are just headroom, and a charge
- * earned by SURVIVING a payload never arms anything on its own.
+ * THERE IS NO "TOO POOR" STATE, AND NO COST PIPS (owner, 2026-08-05: "we still
+ * have the charge system in (you need 3 to do X etc), we should remove the
+ * requirement entirely (and the Need 1/2/3 under the throwables)"). A sixth
+ * state used to sit in that list — 45% opacity, a row of amber pips under the
+ * sticker, the word "need 3", and a tap that shook the tile and said "costs 3 —
+ * you have 1". It is gone at every layer: the tile paints no price, the fire
+ * path checks no balance, and the engine underneath stopped validating one on
+ * both sides of the wire (core/match.js). IF YOU ARE HOLDING IT, YOU CAN THROW
+ * IT — the only things that can still say no are the cooldown, the once-per-
+ * match heavy, and the peer's own caps.
+ *
+ * THE DROP ECONOMY IS WHAT SURVIVED, and it is now the whole economy. Every slot
+ * starts LOCKED and lights up only when a popped bubble drops it: exec/bubbles.js
+ * dispatches `gg-bubble-pop`, ui/drops.js rolls it against the heat gauge, and a
+ * hit calls armDrop(id) here. Firing consumes ONE stack; at zero the slot goes
+ * back to locked. So an item is EARNED, never bought, and the tile's ×N badge is
+ * the only inventory number left on the desk. `cost` survives on the record for
+ * exactly one reason — ui/drops.js weights the drop roll by 1/cost^1.6, which
+ * makes an expensive kind a RARE one — see droppable() at the foot of this file.
  *
  * The emote slot is social, costs nothing, and is therefore never locked and
  * never dropped (see needsArming()).
@@ -46,7 +55,8 @@ import { S } from './strings.js';
  * items go on the end and never renumber a finger that already knows the deck.
  * `durationMs` is the payload length we request; the engine clamps to
  * 1000..180000 so every one of these lands unchanged. `cost` is documentation
- * and a fallback only: costOf() is authority whenever it knows the kind.
+ * and a fallback only: costOf() is authority whenever it knows the kind. Since
+ * 2026-08-05 a cost is a RARITY WEIGHT, not a price — nothing is ever paid.
  *
  * THERE IS NO BUBBLE THROWABLE (owner, 2026-08-04). BubbleSwarm used to sit here
  * as a 1-charge sticker, from before bubbles became the ALWAYS-ON baseline field
@@ -77,8 +87,9 @@ const PAYLOAD_ITEMS = ARSENAL_ITEMS.filter((i) => i.kind !== null);
  *
  * A free slot (the emote sheet: no kind, no cost) never locks and never drops —
  * chatting at someone is social, not economy. The rule is written against the
- * COST rather than against the id, so the day emote grows a price it joins the
- * drop pool with everything else and nothing here needs editing.
+ * COST rather than against the id, so the day emote grows a cost it joins the
+ * drop pool with everything else and nothing here needs editing. (A cost is a
+ * drop WEIGHT now, not a price; zero still means "outside the drop pool".)
  *
  * @param {object} item ARSENAL_ITEMS entry
  * @param {number} cost resolved cost (costOf is authority; see buildTile)
@@ -191,7 +202,10 @@ function receiptWord(status) {
   switch (status) {
     case GoonReceiptStatus.Accepted: return { word: 'landed', tone: 'ok' };
     case GoonReceiptStatus.Completed: return { word: 'landed', tone: 'ok' };
-    case GoonReceiptStatus.Survived: return { word: 'endured', tone: 'gold', note: '+1 charge for them' };
+    // 'endured' carried the note "+1 charge for them" until 2026-08-05. It was
+    // true and it is not any more — enduring buys them nothing, because nothing
+    // is bought. The word is the whole story: they rode it out.
+    case GoonReceiptStatus.Survived: return { word: 'endured', tone: 'gold', note: 'they rode it out' };
     case GoonReceiptStatus.RejectedRate: return { word: 'too soon', tone: 'warn' };
     case GoonReceiptStatus.RejectedFiltered: return { word: 'blocked', tone: 'warn' };
     default: return { word: String(status || 'sent'), tone: 'dim' };
@@ -244,8 +258,8 @@ export function mountArsenal({
   function buildTile(item, host) {
     if (!host) return null;
     // costOf is authority; the item's own `cost` only covers a kind the shared
-    // contract has not landed yet (it returns Infinity for those, which would
-    // otherwise pin the tile at "too poor" forever).
+    // contract has not landed yet (it returns Infinity for those, and an
+    // Infinity weight would take that item out of the drop roll entirely).
     const known = item.kind === null ? 0 : costOf(item.kind);
     const cost = item.kind === null ? 0 : (Number.isFinite(known) ? known : (item.cost | 0));
     // NO PLATE: the item art IS the button. Chrome would fight the sticker cutouts.
@@ -267,9 +281,12 @@ export function mountArsenal({
     const fallbackArt = add(root, el('i', 'gg-item-fallback'));
     if (fallbackArt) fallbackArt.setAttribute && fallbackArt.setAttribute('aria-hidden', 'true');
     const nameEl = add(root, el('span', 'gg-item-name', item.label));
-    const pipRow = add(root, el('span', 'gg-item-cost'));
-    const costPips = [];
-    for (let i = 0; i < cost; i++) costPips.push(add(pipRow, el('i', 'gg-cost-pip')));
+    /* NO PRICE ROW. `.gg-item-cost` held one round amber `.gg-cost-pip` per
+       charge the item cost, and paint() lit them all when you could not afford
+       it. The owner removed the requirement on 2026-08-05, so a price under a
+       sticker is a number about nothing — the tile is holding it or it is not,
+       and the ×N badge says which. Nothing is built here any more; the CSS
+       tombstone is in ui/hud.css. */
     const stateEl = add(root, el('span', 'gg-item-state'));
     const sweep = add(root, el('i', 'gg-item-sweep'));
     // The economy chrome: a "?" while the slot is locked, a ×N badge once it is
@@ -283,7 +300,7 @@ export function mountArsenal({
 
     add(host, root);
     const rec = {
-      item, cost, root, img, fallbackArt, nameEl, pipRow, costPips, stateEl, sweep,
+      item, cost, root, img, fallbackArt, nameEl, stateEl, sweep,
       lockEl, stackEl, tip,
       state: 'ready', tipTimer: 0,
       needsArm: needsArming(item, cost),
@@ -296,10 +313,11 @@ export function mountArsenal({
 
   // ------------------------------------------------------------- state pass
 
-  function charges() {
-    const s = match && match.scoring;
-    return s ? (s.charges | 0) : 0;
-  }
+  /* `charges()` used to live here — `match.scoring.charges | 0`, read by paint()
+     for the "too poor" state, by the glow picker and by the refusal message.
+     Deleted with the requirement (2026-08-05). The meter still exists in the
+     engine and still rides the state tick; this file no longer has an opinion
+     about it, and re-adding a reader here would be re-adding the gate. */
 
   function peerCanTake(kind) {
     const list = match && match.availablePayloadKinds;
@@ -318,18 +336,20 @@ export function mountArsenal({
   }
 
   function paint() {
-    const have = charges();
     const coolMs = cool.msLeft();
     const cooling = coolMs > 0;
 
-    // The priciest ARMED + affordable tile earns the glow — "you could spend
-    // this". A locked tile never glows: there is nothing there to spend yet.
+    // The RAREST thing you are holding earns the glow — "this is the good one,
+    // and it is available". It used to read "the priciest one you can currently
+    // afford", which is the same tile whenever you could afford anything; with
+    // affordability gone the highest cost is simply the rarest drop, and that is
+    // the tile worth pointing at. A locked tile never glows: you do not have it.
     let glowId = null;
     let glowCost = -1;
     for (const rec of tiles.values()) {
       if (rec.item.kind === null) continue;
       if (rec.needsArm && rec.armed <= 0) continue;
-      if (rec.cost <= have && rec.cost > glowCost && peerCanTake(rec.item.kind)) { glowCost = rec.cost; glowId = rec.item.id; }
+      if (rec.cost > glowCost && peerCanTake(rec.item.kind)) { glowCost = rec.cost; glowId = rec.item.id; }
     }
 
     for (const rec of tiles.values()) {
@@ -346,13 +366,14 @@ export function mountArsenal({
       if (isSpent(rec)) { state = 'used'; word = 'used'; }
       else if (!peerCanTake(item.kind)) { state = 'filtered'; word = "they can't receive this"; }
       else if (rec.armed <= 0) { state = 'locked'; word = S.arsenal.locked; }
-      else if (rec.cost > have) { state = 'poor'; word = 'need ' + rec.cost; }
       else if (cooling) { state = 'cooling'; word = 'cooling'; }
+      /* `else if (rec.cost > have) { state = 'poor'; word = 'need ' + rec.cost; }`
+         was the "Need 1/2/3" the owner named. Removed 2026-08-05: an item you are
+         holding is an item you can throw. */
 
       setState(rec, state, word);
       paintStack(rec);
       cls(rec.root, 'is-glow', state === 'ready' && item.id === glowId);
-      for (const pip of rec.costPips) cls(pip, 'is-short', state === 'poor');
       if (rec.sweep && rec.sweep.style) {
         const pct = cooling ? Math.max(0, Math.min(100, 100 - (coolMs / GoonConsts.PayloadMinGapMs) * 100)) : 100;
         rec.sweep.style.setProperty && rec.sweep.style.setProperty('--gg-sweep', pct.toFixed(1) + '%');
@@ -368,7 +389,8 @@ export function mountArsenal({
 
   function setState(rec, state, word) {
     if (rec.state !== state) {
-      for (const s of ['ready', 'poor', 'cooling', 'used', 'filtered', 'locked']) cls(rec.root, 'is-' + s, s === state);
+      // ('poor' left this list on 2026-08-05 with the charge requirement.)
+      for (const s of ['ready', 'cooling', 'used', 'filtered', 'locked']) cls(rec.root, 'is-' + s, s === state);
       rec.state = state;
     }
     text(rec.stateEl, word);
@@ -424,7 +446,8 @@ export function mountArsenal({
     // LOCKED outranks every other refusal: nothing else about the tile matters
     // until a bubble has dropped one.
     if (rec.needsArm && rec.armed <= 0) { refuse(rec, S.arsenal.lockedTip); return { ok: false, error: 'locked', id: null }; }
-    if (rec.state === 'poor') { refuse(rec, 'costs ' + rec.cost + ' — you have ' + charges()); return { ok: false, error: 'charges', id: null }; }
+    /* The affordability refusal stood next — shake + "costs 3 — you have 1" +
+       {error:'charges'}. Gone 2026-08-05: there is no balance to be short of. */
     if (rec.state === 'filtered') { refuse(rec, "they can't receive this"); return { ok: false, error: 'filtered', id: null }; }
     if (rec.state === 'used') { refuse(rec, 'one brain drain a match'); return { ok: false, error: 'used', id: null }; }
     if (rec.state === 'cooling') { refuse(rec, 'next payload in ' + Math.ceil(cool.msLeft() / 1000) + 's'); return { ok: false, error: 'cooling', id: null }; }
@@ -493,6 +516,9 @@ export function mountArsenal({
    * caps are dropped here, and a spent heavy is dropped here too — arming an
    * item that can never be fired is a dead drop.
    *
+   * `cost` rides along because it is the roller's RARITY WEIGHT (1/cost^1.6):
+   * it is the last consumer of the number now that nothing is bought with it.
+   *
    * @returns {Array<{id:string, kind:number, cost:number, armed:number}>}
    */
   function droppable() {
@@ -507,9 +533,10 @@ export function mountArsenal({
   }
 
   /**
-   * Arm one (or `count`) of an item. THE only way a slot leaves `locked`.
-   * ui/drops.js calls this AFTER match.creditCharges() said yes, so the wire
-   * truth (charges) and the local truth (stacks) can never disagree.
+   * Arm one (or `count`) of an item. THE only way a slot leaves `locked`, and
+   * since 2026-08-05 the only inventory there is: ui/drops.js used to credit a
+   * charge first so the receiver would believe the shot, and there is nothing
+   * left to believe — the stack IS the truth.
    *
    * @param {string} id ARSENAL_ITEMS id
    * @param {{count?:number, from?:{x:number,y:number}|null, silent?:boolean}} [o]
@@ -530,7 +557,7 @@ export function mountArsenal({
     return rec ? (rec.armed | 0) : 0;
   }
 
-  /** Current tile state word ('locked' | 'ready' | 'poor' | ...), for tests/HUD. */
+  /** Current tile state word ('locked' | 'ready' | 'cooling' | ...), for tests/HUD. */
   function stateOf(id) {
     const rec = tiles.get(id);
     return rec ? rec.state : null;
@@ -765,10 +792,12 @@ export function mountArsenal({
   }
   sub('onPayloadReceiptReceived', onReceipt);
   sub('onPhaseChanged', () => paint());
-  if (match && match.scoring && typeof match.scoring.onChargesChanged === 'function') {
-    const off = match.scoring.onChargesChanged(() => paint());
-    led.add(typeof off === 'function' ? off : null);
-  }
+  /* THE CHARGE SUBSCRIPTION IS GONE (2026-08-05). `match.scoring.onChargesChanged(paint)` sat
+     here so a tile could leave "too poor" the instant a charge landed. No tile state depends on
+     the meter any more, so the repaint it bought is the repaint the 250 ms poll below already
+     does — and a live subscription to a number this file no longer reads is exactly the sort of
+     thing that gets re-wired into a gate by accident. The engine's seam stays; we just do not
+     listen. */
   led.interval(250, () => { try { paint(); } catch (_e) { /* never break the HUD */ } });
   paint();
 

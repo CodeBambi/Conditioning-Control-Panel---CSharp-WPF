@@ -6,8 +6,8 @@
  *   exec/bubbles.js   dispatches `gg-bubble-pop` {kind, worth, payload, size}
  *   ui/hud.js         hears it and hands the detail to this roller
  *   THIS FILE         adds heat, rolls the chance the heat bought, picks a
- *                     payload kind, credits the charge, arms the slot, and
- *                     spends a chunk of the heat back
+ *                     payload kind, arms the slot, and spends a chunk of the
+ *                     heat back
  *   ui/arsenal.js     lights the sticker up and counts the stack
  *   ui/hud.js         paints the gauge off `roller.heat`
  *
@@ -34,15 +34,27 @@
  * how often you actually get something. Retune the shape freely; move that
  * ratio only when you mean to move the economy.
  *
- * WHY THE CHARGE STILL MATTERS. Charges are the WIRE truth: the receiving side
- * validates "sender charges >= cost" and rejects anything it does not believe,
- * so an armed sticker with no charge behind it would fire into a rejection. A
- * drop therefore credits `match.creditCharges(cost, 'bubble-drop')` FIRST and
- * only arms if the engine said yes (it refuses outside Live and clamps at the
- * cap). Charges earned the old way — by SURVIVING what they sent you — still
- * accrue, they just do not arm anything: they are headroom, not inventory.
- * A roll the engine or a full arsenal refuses does NOT spend heat: the player
- * got nothing, so the gauge keeps what it earned.
+ * THE CHARGE NO LONGER MATTERS (owner, 2026-08-05: "we should remove the
+ * requirement entirely"). A drop used to call `match.creditCharges(cost,
+ * 'bubble-drop')` FIRST and arm only if the engine said yes, for one reason: the
+ * RECEIVER validated "sender charges >= cost" and would have bounced a shot
+ * fired off an empty meter. With that validation deleted on both sides of the
+ * wire, the credit was a payment into an account nobody audits — so the call is
+ * gone and this roller talks to the arsenal alone. THE DROP IS THE WHOLE GRANT.
+ *
+ * (Worth being precise about what that gate ever was: `creditCharges` returns
+ * true for any integer >= 1 while the phase is Live and silently discards
+ * overflow at the cap, so it never once refused a drop for want of charges. It
+ * refused for being outside Live — which is the `isLive()` check in onPop, six
+ * lines above where the credit used to sit. The economy was a phase check in a
+ * costume, and the honest version of it is the one that is left.)
+ *
+ * A roll a full arsenal refuses does NOT spend heat: the player got nothing, so
+ * the gauge keeps what it earned.
+ *
+ * WHAT A COST IS NOW: purely a RARITY WEIGHT. weightOf() below prices the pick
+ * at 1/cost^COST_BIAS, so brain drain (3) is rare and a flash (1) is common.
+ * That is the only surviving consumer of the number in the whole client.
  *
  * RANDOMNESS. Plain Math.random on purpose. This is client-local economy, it
  * crosses no wire and it is not part of the deterministic engine RNG (core/rng
@@ -155,7 +167,7 @@ export function pickDrop(candidates, roll) {
 
 /**
  * @param {object}   o
- * @param {object}   o.match      GoonMatchService (creditCharges + phase)
+ * @param {object}   o.match      GoonMatchService (read for `phase` and nothing else)
  * @param {object}   o.arsenal    mountArsenal handle (droppable/armDrop)
  * @param {object}   [o.audio]
  * @param {Function} [o.onLog]
@@ -196,9 +208,10 @@ export function createDropRoller({ match, arsenal, audio = null, onLog = null, r
 
   /** The roll has exactly two audible outcomes: a slot lit up ('gg-drop', the
    *  payoff ding of the whole loop) or the roll WON and could not be taken —
-   *  no charge, or the arsenal already full ('gg-drop-dud', a small nothing).
-   *  A miss stays silent: most rolls miss, and a sound for "nothing happened"
-   *  would be the loudest thing in the match. */
+   *  the arsenal was already full of that item ('gg-drop-dud', a small nothing;
+   *  "no charge" was the other way to get here until 2026-08-05). A miss stays
+   *  silent: most rolls miss, and a sound for "nothing happened" would be the
+   *  loudest thing in the match. */
   const sfx = (id) => {
     try { if (audio && typeof audio.sfx === 'function') audio.sfx(id); } catch (_e) { /* stub */ }
   };
@@ -208,16 +221,10 @@ export function createDropRoller({ match, arsenal, audio = null, onLog = null, r
     return p === GoonMatchPhase.Live || p === GoonMatchPhase.SuddenDeath;
   }
 
-  /**
-   * Credit the charge the item will cost to fire. Returns true when the arsenal
-   * may arm. Until core/match.js publishes the seam this degrades to "yes" so
-   * the loop is playable today; the moment it lands, the engine is authority.
-   */
-  function credit(cost) {
-    if (!match || typeof match.creditCharges !== 'function') return true;
-    try { return match.creditCharges(cost | 0, 'bubble-drop') === true; }
-    catch (_e) { return false; }
-  }
+  /* `credit(cost)` stood here: one call to match.creditCharges() whose boolean
+     decided whether the slot was allowed to arm. See the header — the charge it
+     paid buys nothing since 2026-08-05, and the only thing it ever actually
+     enforced is the isLive() check that is already in onPop. */
 
   /**
    * One pop. Safe to call with anything: a malformed detail is a no-op.
@@ -243,7 +250,6 @@ export function createDropRoller({ match, arsenal, audio = null, onLog = null, r
 
     const pick = pickDrop(arsenal.droppable(), rnd());
     if (!pick) return { dropped: false, id: null, reason: 'no-candidate', heat: hot };
-    if (!credit(pick.cost)) { stats.refused++; sfx('gg-drop-dud'); return { dropped: false, id: null, reason: 'no-charge', heat: hot }; }
 
     const from = (typeof d.x === 'number' && typeof d.y === 'number') ? { x: d.x, y: d.y } : null;
     const armed = arsenal.armDrop(pick.id, { count: DROP_TUNING.STACK_PER_DROP, from });

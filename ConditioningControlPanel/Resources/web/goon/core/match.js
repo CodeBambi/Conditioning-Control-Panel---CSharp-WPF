@@ -3,9 +3,8 @@
 //   Idle -> Lobby -> Consent -> Draft -> Countdown -> Live -> SuddenDeath -> Recap -> Idle
 //
 // Owns a transport (injected), the SHARED endurance ramp rolled from the draft agreement (the
-// intersection of both players' allowed sets) and the combined match seed, the scoring/charge
-// economy, the mercy and abandon flows, the receiver-side payload gate and the two-way result
-// handshake.
+// intersection of both players' allowed sets) and the combined match seed, the scoring meters,
+// the mercy and abandon flows, the receiver-side payload gate and the two-way result handshake.
 //
 // DRAFT (2026-08-03 redesign): both players toggle what they ALLOW, the pool is the intersection,
 // any toggle clears BOTH signatures, and the ramp both sides run is one seeded roll over that
@@ -18,9 +17,14 @@
 //  * Mercy is available in EVERY phase and always ends the match locally, even if the wire is
 //    dead. Pre-Live it degrades to a clean cancel that never reaches the ledger.
 //  * No payload kind can touch panic/lockdown/tray/session state — no such message exists.
-//  * The RECEIVER enforces the economy: burst/gap rate limit, charge cost against the opponent's
-//    last self-reported meter, one heavy per match, schedule-buffer clamp and text cap —
-//    regardless of what the wire claims.
+//  * The RECEIVER enforces admission: burst/gap rate limit, one heavy per match, schedule-buffer
+//    clamp and text cap — regardless of what the wire claims.
+//    THE CHARGE CHECK IS NOT ON THAT LIST ANY MORE (owner, 2026-08-05: "we should remove the
+//    requirement entirely"). The receiver used to hold a sender to the charge count on their last
+//    state tick and reject anything dearer. Nothing gates on a balance now, on either side, so a
+//    throw costs nothing and the RATE LIMIT is the whole of the pacing. `tick.charges` still rides
+//    every frame (frozen field, C# parity) and this class still tracks the opponent's copy of it —
+//    it is reported state, not a permission.
 //
 // ---------------------------------------------------------------------------------------------
 // TRANSPORT SURFACE CONSUMED (duck-typed; net/ owns the implementations). Mechanical camelCase of
@@ -211,6 +215,11 @@ export class GoonMatchService {
     this._liveWatchStoppedLocalMs = null;
     this._inboundLimiter = new GoonPayloadRateLimiter();
     this._outboundLimiter = new GoonPayloadRateLimiter();
+    /* id -> the kind's cost. It was the REFUND LEDGER: a rejected receipt looked its payload up
+       here and handed the charges back. Nothing refunds since 2026-08-05 (charges buy nothing),
+       so what survives is the MEMBERSHIP test — "this id is one of ours, still unreceipted" —
+       which is what guards the once-per-match heavy restore in _handleReceipt. The cost is kept
+       as the value because it is free to keep and it is what the entry has always meant. */
     this._outboundCosts = new Map();
     this._activeElements = new Set();
     // The agreement: two allowed sets, two signatures, one intersection.
@@ -270,7 +279,12 @@ export class GoonMatchService {
     this._localHeavyUsed = false;
     this._localHeavyPayloadId = null;
     this._remoteHeavyUsed = false;
-    this._opponentChargesKnown = 0;
+    /* `_opponentChargesKnown` used to live here: the ceiling the receiver held a sender to,
+       refreshed off every state tick and decremented by each admitted payload's cost. It had
+       exactly one reader — the charge gate in _handleInboundPayload — and the owner removed that
+       gate on 2026-08-05, so the ledger went with it rather than sitting here accruing a number
+       nobody consults. `this._opponent.charges` still mirrors what they report; that is the
+       reported state, and it never gated anything on its own. */
 
     this._localMercyMatchMs = null;
     this._remoteMercyMatchMs = null;
@@ -911,9 +925,16 @@ export class GoonMatchService {
   // ---------------------------------------------------------- payloads
 
   /**
-   * Fires an offensive payload at the opponent. Sender-side mirror of the receiver's gate
-   * (charges, rate limit, one heavy per match) so a well-behaved client is never rejected; the
+   * Fires an offensive payload at the opponent. Sender-side mirror of the receiver's gate (rate
+   * limit, one heavy per match, the agreed pool) so a well-behaved client is never rejected; the
    * receiver re-checks everything anyway. C# out-error -> {ok, error, id}.
+   *
+   * A THROW IS FREE (owner, 2026-08-05). Two lines used to sit in the middle of this method: a
+   * `charges < cost` pre-check that produced "needs N charge(s)", and the trySpend() that actually
+   * debited the meter. Both are gone, and the receiver's matching check went with them. What is
+   * left is the pacing the owner kept: ONE payload per GoonConsts.PayloadMinGapMs with a burst of
+   * PayloadBurst, enforced by _outboundLimiter here and _inboundLimiter over there. If you are
+   * about to add a "but only if…" to this method, that is the requirement that was just deleted.
    */
   msUntilNextPayloadMs() {
     return this._outboundLimiter.msUntilNextToken(localMonotonicMs());
@@ -931,9 +952,10 @@ export class GoonMatchService {
       return { ok: false, error: `opponent's client cannot run ${request.kind}`, id: null };
     }
 
-    let cost = costOf(request.kind);
+    // costOf is still the UNKNOWN-KIND guard (Infinity for a kind we have no entry for). It is
+    // no longer a price: nothing is checked against the meter and nothing is debited.
+    const cost = costOf(request.kind);
     if (cost <= 0 || !Number.isFinite(cost)) return { ok: false, error: 'unknown payload', id: null };
-    if (this._scoring.charges < cost) return { ok: false, error: `needs ${cost} charge(s)`, id: null };
 
     const nowLocal = localMonotonicMs();
     if (!this._outboundLimiter.tryAdmit(nowLocal)) {
@@ -944,9 +966,6 @@ export class GoonMatchService {
         id: null,
       };
     }
-    const spend = this._scoring.trySpend(request.kind);
-    if (!spend.ok) return { ok: false, error: `needs ${spend.cost} charge(s)`, id: null };
-    cost = spend.cost;
 
     const id = `p${++this._payloadSeq}${this._isHost ? 'h' : 'g'}`;
     const msg = makePayload({
@@ -967,16 +986,24 @@ export class GoonMatchService {
     }
     this._outboundCosts.set(id, cost);
     this._send(msg);
-    this._info(`payload out ${id} ${request.kind} cost ${cost}`);
+    this._info(`payload out ${id} ${request.kind}`);
     return { ok: true, error: '', id };
   }
 
   /**
-   * Credits charges earned outside the payload/round economy (the bubble economy is the first
-   * consumer). Integer count >= 1; the total is clamped to GoonConsts.ChargeCap exactly like every
-   * other earning, and the next state tick reports the new meter. No-ops outside the Live phase.
+   * Credits charges earned outside the payload/round economy. Integer count >= 1; the total is
+   * clamped to GoonConsts.ChargeCap exactly like every other earning, and the next state tick
+   * reports the new meter. No-ops outside the Live phase.
    *
-   * MIRROR: GoonMatchService.CreditCharges(int, string).
+   * NO PRODUCTION CALLER SINCE 2026-08-05. ui/drops.js, ui/soloDriver.js and boot.js all called
+   * this before arming an item, for ONE reason: the receiver validated the sender's wallet, so an
+   * armed sticker with no charge behind it would have fired into a rejection. That validation is
+   * gone, so crediting a meter nobody reads was ceremony — the calls came out and the seam stayed.
+   *
+   * It stays because it is C# parity (GoonMatchService.CreditCharges(int, string)) and because
+   * test/vectors-engine.js pins its contract: Live-only, integer >= 1, clamped at the cap. If a
+   * future feature wants a visible meter again, credit it here — but give it a READER first, and
+   * do not make it a permission to throw.
    *
    * @returns {boolean} true when at least the request was accepted (credited, cap permitting)
    */
@@ -995,7 +1022,12 @@ export class GoonMatchService {
 
   /**
    * The executor calls this when an accepted inbound payload finishes.
-   * endured = the receiver took it all the way -> +1 charge.
+   *
+   * `endured` = the receiver took it all the way, which is the difference between the `survived`
+   * and `completed` receipt statuses — the thrower's log says "endured" and the arsenal plays
+   * gg-endured off it. It still ticks the local charge meter (parity with GoonScoring.cs), but
+   * that is now bookkeeping: since 2026-08-05 nothing anywhere spends a charge, so riding out a
+   * payload buys the receiver no ammunition. The RECEIPT is the whole of what it earns.
    */
   notifyInboundPayloadFinished(payloadId, endured) {
     if (!payloadId) return;
@@ -1443,9 +1475,11 @@ export class GoonMatchService {
     this._opponent.lastTickLocalMs = localMonotonicMs();
     this._opponent.hasSeenTick = true;
 
-    // The opponent's self-reported meter is the ceiling we hold them to when their next payload
-    // lands (C# assigns unconditionally — a lower claim tightens the ceiling immediately).
-    this._opponentChargesKnown = this._opponent.charges;
+    /* Their meter is now PURELY REPORTED STATE. It used to be copied into `_opponentChargesKnown`
+       as the ceiling their next payload was held to; the gate went on 2026-08-05 and the ledger
+       with it. The field itself stays parsed, clamped and mirrored because it is a frozen tick
+       field a C# host still sends — a reader that wants to draw it can, and nothing decides
+       anything with it. */
 
     if (this._opponent.health !== GoonConnectionHealth.Fresh) {
       this._opponent.health = GoonConnectionHealth.Fresh;
@@ -1484,14 +1518,15 @@ export class GoonMatchService {
       this._rejectPayload(payload, GoonReceiptStatus.RejectedRate, 'rate limit');
       return;
     }
-    if (this._opponentChargesKnown < cost) {
-      // Economy violation. No dedicated receipt status exists in v1, so it rides rejected_rate.
-      this._rejectPayload(payload, GoonReceiptStatus.RejectedRate,
-        `charge economy: claimed ${this._opponentChargesKnown} < cost ${cost}`);
-      return;
-    }
-
-    this._opponentChargesKnown -= cost;
+    /* THE CHARGE GATE STOOD HERE and it is gone on purpose (owner, 2026-08-05: "we should remove
+       the requirement entirely"). It held the sender to the count on their last state tick —
+       `claimed N < cost M` -> rejected_rate — and decremented a local ledger by every admitted
+       cost. With throws free on the sending side, an inbound payload backed by an empty meter is
+       CORRECT BEHAVIOUR, not an economy violation, and keeping the check would have made every
+       throw from an updated peer bounce off the first receiver to read its wallet.
+       Both seats run the same deployed build in this beta, so there is no mixed-version window to
+       cover. Everything that actually protects this seat is still above and below: the phase, our
+       own advertised caps, the once-per-match heavy, the rate limit, and the clamps. */
     if (payload.kind === GoonPayloadKind.BrainDrain) this._remoteHeavyUsed = true;
 
     // Defensive normalisation. exec/ still owns full receiver-side resolution (tags -> own
@@ -1529,15 +1564,16 @@ export class GoonMatchService {
   _handleReceipt(receipt) {
     const status = typeof receipt.status === 'string' ? receipt.status : '';
     if (receipt.id && status.toLowerCase().startsWith('rejected') && this._outboundCosts.has(receipt.id)) {
-      const cost = this._outboundCosts.get(receipt.id);
       this._outboundCosts.delete(receipt.id);
-      this._scoring.refund(cost);
-      // A rejected heavy was never delivered — give the once-per-match slot back.
+      /* NO REFUND ANY MORE. Nothing was spent to send it (2026-08-05), so handing charges back
+         here would MINT them: a peer that rejected everything would have filled the sender's
+         meter. The once-per-match heavy is the only thing a rejection still restores, and that
+         one matters more than ever — it is now the single scarce item in the deck. */
       if (this._localHeavyPayloadId === receipt.id) {
         this._localHeavyPayloadId = null;
         this._localHeavyUsed = false;
       }
-      this._info(`payload ${receipt.id} rejected (${status}) - ${cost} charge(s) refunded`);
+      this._info(`payload ${receipt.id} rejected (${status})`);
     } else if (receipt.id && (status === GoonReceiptStatus.Completed || status === GoonReceiptStatus.Survived)) {
       this._outboundCosts.delete(receipt.id);
     }

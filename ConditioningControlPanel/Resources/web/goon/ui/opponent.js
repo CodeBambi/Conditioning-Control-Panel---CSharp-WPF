@@ -1,8 +1,8 @@
 /* ============================================================================
  * ui/opponent.js — the streamer-cam "monitor" that IS the opponent.
  *
- * Everything the other player lets us see lands here: their name, their charge
- * meter, their attention bar, the closeness they CLAIM, their emotes, and — in a
+ * Everything the other player lets us see lands here: their name, their score,
+ * their attention bar, the closeness they CLAIM, their emotes, and — in a
  * centred PROJECTION RECT inside the bezel — a stylized miniature of their
  * screen. The miniature is DOM/CSS only: it is a caricature, never a stream, and
  * no frame of their machine ever crosses the wire.
@@ -458,20 +458,24 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     };
   }
 
-  // ---- head: grip · connection dot · name · their score · their charges ----
+  // ---- head: grip · connection dot · name · their score -------------------
   // The head row is ALSO the titlebar (MON_GRIP_CLASS, see THE GRIP above): on a
   // docked monitor it is the only strip hud.css lets the pointer reach, so it is
   // where the drag and the wheel both have to start. Nothing in it is
-  // interactive — a dot and three little readouts — which is exactly why it is
+  // interactive — a dot and two little readouts — which is exactly why it is
   // safe to claim the whole row rather than a corner of it.
   //
-  // THEIR CHARGES ARE A COUNT, NOT PIPS (2026-08-05). This row carried five
-  // `.gg-pip--sm` diamonds until the owner asked, for the second time, for "the
-  // little yellow squares" to go: the HUD's own charge row went in the same
-  // pass, and leaving these would have kept the exact shape being complained
-  // about on screen — two inches from where it was removed — while letting the
-  // dead CSS live on. See the long note in ui/hud.js for the full reasoning.
-  // Nothing about the mechanic changed; only the way it is drawn.
+  // THEIR CHARGE COUNT IS GONE (2026-08-05). It was five `.gg-pip--sm` diamonds,
+  // then briefly a `.gg-mon-charges` word count, and now nothing: the owner
+  // removed the charge REQUIREMENT that day, so their meter stopped predicting
+  // anything about what they are able to throw at you. Knowing an opponent has
+  // "2 charges" was only ever useful as a threat forecast, and there is no
+  // forecast left to make — they throw when their cooldown is up, same as you.
+  // Their tick still carries the number (`match.opponent.charges`, frozen wire
+  // field) and this titlebar simply does not draw it. The full reasoning, and
+  // the audit of what charges actually feed, is in the top-bar note in
+  // ui/hud.js. THE ROW IS ALSO THE NARROWEST STRIP IN THE LAYOUT, so anything
+  // added back here costs the name its ellipsis budget on a phone.
   const head = add(root, el('div', 'gg-mon-head ' + MON_GRIP_CLASS));
   if (head && head.setAttribute) head.setAttribute('title', S.monitor.dragHint);
   // …and the affordance, first in the row: nobody drags a thing that does not
@@ -480,7 +484,6 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
   const dot = add(head, el('i', 'gg-mon-dot'));
   const nameEl = add(head, el('span', 'gg-mon-name', 'opponent'));
   const scoreEl = add(head, el('span', 'gg-mon-score', '0'));
-  const chargeEl = add(head, el('span', 'gg-mon-charges', S.monitor.charges(0)));
 
   // ---- the screen inside the bezel ---------------------------------------
   // THE STACKING ORDER HERE IS LOAD-BEARING. assets/monitor_frame.png (935x667
@@ -727,12 +730,9 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     const p = stalePrefix();
 
     text(nameEl, op.displayName || 'opponent');
+    // The stale prefix rides on their score and their focus. It rode on their
+    // charge count too until that readout came out (2026-08-05).
     text(scoreEl, p + String(op.score | 0));
-    // The stale prefix rides on the charge count too. It did NOT ride on the
-    // pips — a lit diamond had nowhere to put a "~" — and that was a small lie
-    // the shape forced: a frozen count is exactly as out of date as the frozen
-    // score sitting beside it, and the words have room to say so.
-    text(chargeEl, p + S.monitor.charges(op.charges | 0));
 
     const pct = Math.max(0, Math.min(100, Number(op.attentionPct) || 0));
     if (attFill && attFill.style) attFill.style.width = pct + '%';

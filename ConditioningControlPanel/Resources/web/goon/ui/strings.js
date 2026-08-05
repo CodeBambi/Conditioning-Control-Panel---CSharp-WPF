@@ -54,8 +54,13 @@ export const S = Object.freeze({
     bullets: [
       'two players, one clock. you both endure your own library at the same time.',
       'you both agree what stays switched on. whatever is left, you BOTH endure — same effects, same moments.',
-      'holding still earns points; enduring what they send you earns charges.',
-      'charges buy payloads you fire at them. the receiver decides what it can run.',
+      /* These two read "…enduring what they send you earns charges." and
+         "charges buy payloads you fire at them." until 2026-08-05, when the
+         owner deleted the charge requirement. They now teach the loop that
+         actually exists: pop bubbles, get items, throw when the cooldown lets
+         you. STILL EXACTLY SIX BULLETS — do not let this become seven. */
+      'holding still earns points; popping bubbles drops the items you throw.',
+      'throw one whenever your cooldown is up. the receiver decides what it can run.',
       'mercy is always one key away. escape, any phase, no confirmation.',
       'if nobody breaks before the clock runs out, the higher score wins.',
     ],
@@ -287,7 +292,10 @@ export const S = Object.freeze({
     back: 'Back to menu',
     chipLanded: 'landed',
     chipEndured: 'endured',
-    chipEnduredNote: '+1 charge for them',
+    /* Was "+1 charge for them" — accurate until 2026-08-05, when charges stopped
+       buying anything. Riding a payload out now earns exactly the credit for
+       having ridden it out, which is what the note says. */
+    chipEnduredNote: 'they rode it out',
     chipBlocked: 'blocked',
     chipTooSoon: 'too soon',
     dirIn: 'they sent',
@@ -842,23 +850,18 @@ export const S = Object.freeze({
      * fixed at the draft, unchangeable mid-match and unexplained by anything on
      * the desk. Deleted rather than reworded — the score above it is the same
      * information, already counted. */
-    /* ---- the charge count (ui/hud.js) ----
-     * WHAT REPLACED THE PIP ROW on 2026-08-05. Five rotated squares under the
-     * score used to carry this: outlines for the cap, filled for what you hold.
-     * The owner read them as the risk pips they had just had removed ("the
-     * little yellow squares"), which is a fair reading — same shape, same
-     * neighbourhood — so the count is a sentence now.
+    /* THERE IS NO `charges` STRING ANY MORE (2026-08-05). `charges: (n, cap) =>
+     * n + " / " + cap + " charges"` lived here for a matter of hours: it was
+     * what replaced the five-diamond pip row in the morning's pass, and by the
+     * evening the owner had removed the charge REQUIREMENT it described ("we
+     * still have the charge system in (you need 3 to do X etc), we should remove
+     * the requirement entirely"). A count of a currency that buys nothing is not
+     * a readout, it is a rumour of a rule — and this one actively misinforms,
+     * because "1 / 3" beside an item you CAN throw says you cannot.
      *
-     * THE CAP IS IN THE STRING ON PURPOSE. The pips said it by being five, and
-     * a bare "3" would have quietly dropped it. It is actionable: at the cap the
-     * endurance you are grinding out stops banking, and the arsenal's costs are
-     * priced against the same ceiling. Their count (S.monitor.charges) omits it,
-     * because nothing you can do turns their ceiling into a decision.
-     *
-     * Spaces around the slash so "3 / 5" cannot be misread as a date or a score
-     * line at a glance, and the noun is always plural — "1 / 5 charge" reads
-     * like a typo, and the number this labels is the pair, not the 1. */
-    charges: (n, cap) => (n | 0) + ' / ' + (cap | 0) + ' charges',
+     * Nothing in ui/hud.js builds the line. Do not restore this key without a
+     * mechanic behind it; the engine's meter (core/scoring.js) is still there
+     * and still on the wire, and that is deliberately not the same thing. */
     /* ---- the heat gauge (ui/drops.js) ----
      * ONE word, because it sits over the arsenal rail and the bar is the rest of
      * the sentence. `heatValue` is the aria-valuetext: colour never travels
@@ -873,15 +876,13 @@ export const S = Object.freeze({
     dropHint: 'drop it here',
     /** The green checkmark on their projection: they took the whole payload. */
     passed: 'they held it',
-    /* Their charge count in the monitor's titlebar — the same 2026-08-05 removal
-     * as S.hud.charges: five little `.gg-pip--sm` diamonds sat here beside their
-     * score and were the last diamonds on the desk once the HUD's own row went.
-     * NO CAP HERE, unlike yours: their ceiling is not a number you can spend
-     * against, and the head row is the narrowest strip in the whole layout (it
-     * shares 200px with a grip, a health dot, their name and their score on a
-     * phone). Singular is spelled out because "1 charges" beside a live opponent
-     * name looks like a bug in the app rather than a count. */
-    charges: (n) => (n | 0) + ((n | 0) === 1 ? ' charge' : ' charges'),
+    /* THEIR CHARGE COUNT IS GONE TOO (2026-08-05) — `charges: (n) => n + " charge(s)"`,
+     * and five `.gg-pip--sm` diamonds before that. It followed S.hud.charges out
+     * the door and for the sharper reason: yours was at least a fact about you,
+     * while theirs was only ever a THREAT FORECAST — "they can afford the heavy"
+     * — and with the requirement removed there is no forecast to make. They
+     * throw when their cooldown is up, exactly like you do. ui/opponent.js draws
+     * no such span; the titlebar is grip · dot · name · score. */
     /** The titlebar's tooltip. All three gestures, because not one of them is
      *  discoverable and the grip dots only ever promise the first. */
     dragHint: 'drag to move · wheel to resize · double-tap to put it back',
@@ -956,7 +957,10 @@ export const S = Object.freeze({
     copyFailed: 'could not copy — select the code instead',
     peerWobbly: 'their connection is wobbling',
     peerBack: 'they are back',
-    charge: '+1 charge',
+    /* `charge: '+1 charge'` was here with no caller at all — the HUD played its
+       own inline "+1" chip instead. Removed 2026-08-05 with the rest of the
+       charge surface rather than left as a toast for a thing that no longer
+       means anything. */
     left: 'left the match',
   },
 });

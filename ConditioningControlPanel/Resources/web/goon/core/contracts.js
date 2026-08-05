@@ -248,6 +248,20 @@ const COSTS = Object.freeze({
 /**
  * Charge cost per payload kind. Unknown kind -> Infinity, mirroring C#'s int.MaxValue
  * default: a cost nothing can afford, i.e. the payload is rejected rather than free.
+ *
+ * WHAT A COST STILL MEANS (owner, 2026-08-05: the charge REQUIREMENT is gone). Nothing is paid
+ * for any more — neither core/match.js nor ui/arsenal.js checks a balance before a throw. TWO
+ * consumers survive, and both are about SHAPE rather than payment:
+ *
+ *   1. THE UNKNOWN-KIND GUARD. `Infinity` is still how both ends say "that is not a payload kind
+ *      I know", which is the check that stops a malformed or future frame being scheduled. That
+ *      guard is why costOf() is still called on the hot path at all.
+ *   2. THE DROP RARITY CURVE. ui/drops.js weights each arsenal candidate at 1/cost^COST_BIAS, so
+ *      a cost now reads as a RARITY: flash (1) rains, brain drain (3) is a treat. Moving a number
+ *      here retunes how often that item DROPS, and nothing else.
+ *
+ * Keep the table in step with the C# side regardless: it is parity, and the wire still carries
+ * the meter these numbers were once priced against.
  */
 export function costOf(kind) {
   const c = COSTS[kind];

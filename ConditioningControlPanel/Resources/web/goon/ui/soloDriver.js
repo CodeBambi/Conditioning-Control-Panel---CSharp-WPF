@@ -21,7 +21,8 @@ import { createLedger } from './router.js';
 import { GoonRng } from '../core/rng.js';
 import { GoonStimulusKind, fakeRoundInputs } from '../core/rounds/model.js';
 import { GoonSuddenDeathRunner } from '../core/suddenDeath.js';
-import { GoonMatchPhase, GoonPayloadKind, GoonConsts, costOf } from '../core/contracts.js';
+// (`costOf` left this import on 2026-08-05 with the bot's affordability filter.)
+import { GoonMatchPhase, GoonPayloadKind, GoonConsts } from '../core/contracts.js';
 
 /** How long the bot "thinks" before signing the consent sheet. */
 const CONSENT_THINK_MS = [700, 1600];
@@ -50,12 +51,15 @@ const BUBBLE_POP_MS = [420, 900];
  * through to drawKind), so the bot's flash burst is drawn from the player's OWN
  * uploads. That is the loop that shows a phone player their library, and it used
  * to depend on the bot first earning charges the slow way: `tryPayload` waits
- * PAYLOAD_TRY_MS, skips 35% of its turns and needs `charges >= cost`, which on a
- * fresh match can be minutes of nothing.
+ * PAYLOAD_TRY_MS, skips 35% of its turns and (until 2026-08-05) also needed
+ * `charges >= cost`, which on a fresh match could be minutes of nothing.
  *
- * So the bot opens on a clock instead of on its economy. The charges are still
- * credited through the engine (`creditCharges`), so the wire truth the receiver
- * validates is the truth — this buys the bot no shot it could not have taken.
+ * So the bot opens on a clock instead of on its economy — and since the owner
+ * removed the charge requirement outright there is no economy left to open on.
+ * The salvo's `creditCharges` step went with it: the only reason it ever existed
+ * was that the RECEIVER validated the sender's wallet off the last state tick,
+ * and it does not any more. See SALVO_RESERVE_LEAD_MS for what the lead is FOR
+ * now, because the answer changed and the number did not.
  *
  * PRACTICE ONLY, structurally: createSoloDriver is constructed in exactly one
  * place (boot.js startSolo). Duel balance cannot reach this file.
@@ -68,15 +72,25 @@ export const SALVO = Object.freeze([
 ]);
 
 /**
- * How long BEFORE a salvo shot its charges are credited.
+ * How long BEFORE a salvo shot the slot is RESERVED (`salvoArmed++`).
  *
- * THE RECEIVER IS THE AUTHORITY ON THE SENDER'S WALLET, and it reads that wallet
- * off the last state tick, not off the payload frame — credit-then-fire in the
- * same turn is rejected with `charge economy: claimed 0 < cost 1`, which is
- * exactly what the first cut of this salvo did. GoonConsts.TickIntervalMs is
- * 3000, so a lead comfortably past one tick is what makes the shot land.
+ * WAS `SALVO_CREDIT_LEAD_MS`, and the rename is the whole story. The lead used
+ * to exist because THE RECEIVER WAS THE AUTHORITY ON THE SENDER'S WALLET and
+ * read that wallet off the last state tick, not off the payload frame:
+ * credit-then-fire in the same turn came back as `charge economy: claimed 0 <
+ * cost 1`, which is exactly what the first cut of this salvo did. That check was
+ * deleted on 2026-08-05 with the rest of the charge requirement, so there is no
+ * wallet to fund and no tick to beat.
+ *
+ * THE LEAD STILL EARNS ITS KEEP, on the constraint that replaced it: the RATE
+ * LIMIT. One payload per GoonConsts.PayloadMinGapMs is now the only pacing on
+ * the wire, so an ordinary-cadence shot fired a second before a scheduled salvo
+ * shot eats the token the salvo needed and the scripted moment silently does not
+ * happen. Reserving the slot early (see `salvoArmed` in tryPayload) is what
+ * stops that. A lead comfortably past one tick interval is still the right size:
+ * it is longer than any single cadence turn.
  */
-export const SALVO_CREDIT_LEAD_MS = 5000;
+export const SALVO_RESERVE_LEAD_MS = 5000;
 
 /**
  * @param {object} o
@@ -219,29 +233,32 @@ export function createSoloDriver({ match, name = 'Practice', seed = 0xB0BBn, log
     }, pick(DRAFT_THINK_MS));
   }
 
-  /** Salvo shots whose charges are credited and not yet spent (see fireSalvo). */
+  /** Salvo shots that are RESERVED and not yet fired (see fireSalvo). */
   let salvoArmed = 0;
 
   function tryPayload() {
     if (match.phase !== GoonMatchPhase.Live && match.phase !== GoonMatchPhase.SuddenDeath) return;
-    // A salvo shot's charges are already credited and SPOKEN FOR. Letting the
-    // ordinary cadence spend them would turn "the practice player sees a clip at
-    // 45s" into a coin flip.
+    // A salvo shot has the next rate-limit token SPOKEN FOR. Letting the ordinary
+    // cadence take it would turn "the practice player sees a clip at 45s" into a
+    // coin flip. (It used to be the shot's CHARGES that were spoken for; charges
+    // buy nothing since 2026-08-05, and the token is the scarce thing now.)
     if (salvoArmed > 0) return;
-    const charges = match.scoring.charges;
     // BrainDrain: once per match, and the bot must not spend it on a whim.
     // BubbleSwarm: the human has no such sticker any more (ui/arsenal.js, owner
     // 2026-08-04 — bubbles are the always-on field, so a bubble throwable bought
     // nothing) and the practice bot throws from the player's own deck. The kind
     // stays legal on the wire and stays rendered inbound; nothing local sends one.
-    const affordable = (match.availablePayloadKinds || [])
+    //
+    // `&& costOf(k) <= charges` was the third filter here, and it is gone with the
+    // charge requirement (2026-08-05): the bot throws what the agreement allows,
+    // when the clock and the rate limiter let it.
+    const throwable = (match.availablePayloadKinds || [])
       .filter((k) => k !== GoonPayloadKind.BrainDrain
-        && k !== GoonPayloadKind.BubbleSwarm
-        && costOf(k) <= charges);
-    if (affordable.length === 0) return;
+        && k !== GoonPayloadKind.BubbleSwarm);
+    if (throwable.length === 0) return;
     if (rng.nextDouble() < 0.35) return;    // it does not fire the instant it can
 
-    const kind = affordable[rng.nextInt(0, affordable.length)];
+    const kind = throwable[rng.nextInt(0, throwable.length)];
     const res = match.tryFirePayload({
       kind,
       durationMs: 20000 + rng.nextInt(0, 25000),
@@ -252,10 +269,15 @@ export function createSoloDriver({ match, name = 'Practice', seed = 0xB0BBn, log
   }
 
   /**
-   * Step one of a salvo shot: put the charges in the wallet, early enough that a
-   * state tick carries them to the receiver (SALVO_CREDIT_LEAD_MS). A kind the
-   * agreement left out never gets funded — the bot cannot send what the two of
-   * you did not allow, salvo or not.
+   * Step one of a salvo shot: RESERVE it, SALVO_RESERVE_LEAD_MS ahead, so the
+   * ordinary cadence cannot take the rate-limit token out from under it. A kind
+   * the agreement left out is never reserved — the bot cannot send what the two
+   * of you did not allow, salvo or not.
+   *
+   * This used to also credit the charges the shot would cost
+   * (`match.creditCharges(cost - have, 'practice-salvo')`), because the receiver
+   * checked the sender's wallet before admitting anything. It does not any more
+   * (2026-08-05), so the funding step is gone and only the reservation is left.
    */
   function armSalvo(spec) {
     if (ledger.isDisposed || match.phase !== GoonMatchPhase.Live) return;
@@ -263,16 +285,13 @@ export function createSoloDriver({ match, name = 'Practice', seed = 0xB0BBn, log
       log('salvo ' + spec.kind + ' skipped (not in the agreed pool)');
       return;
     }
-    const cost = costOf(spec.kind);
-    const have = (match.scoring && match.scoring.charges) | 0;
-    if (have < cost) match.creditCharges(cost - have, 'practice-salvo');
     salvoArmed++;
   }
 
   /**
    * Step two: fire, through the SAME public API tryPayload uses, so every engine
-   * gate (phase, rate limit, caps, the shared pool, the charge check) still
-   * applies. Whatever happens the shot stops being reserved.
+   * gate (phase, rate limit, caps, the shared pool) still applies. Whatever
+   * happens the shot stops being reserved.
    */
   function fireSalvo(spec) {
     if (ledger.isDisposed) return;
@@ -318,7 +337,7 @@ export function createSoloDriver({ match, name = 'Practice', seed = 0xB0BBn, log
         // predictable clock. Through the ledger, so leaving mid-match cannot land
         // a flash burst on the recap.
         for (const spec of SALVO) {
-          ledger.timer(() => armSalvo(spec), Math.max(0, spec.atMs - SALVO_CREDIT_LEAD_MS));
+          ledger.timer(() => armSalvo(spec), Math.max(0, spec.atMs - SALVO_RESERVE_LEAD_MS));
           ledger.timer(() => fireSalvo(spec), spec.atMs);
         }
         payloadTimer = ledger.interval(tryPayload, PAYLOAD_TRY_MS);
@@ -349,7 +368,8 @@ export function createSoloDriver({ match, name = 'Practice', seed = 0xB0BBn, log
     const p = ev && ev.payload;
     if (!p) return;
     // It endures everything, all the way. A bot that flinched would hide the
-    // "+1 charge for them" path from the human's recap.
+    // `survived` receipt — the "endured" chip on the human's recap — behind a
+    // `completed` one they would never see the difference in.
     const wait = Math.max(1000, (p.duration_ms | 0)) + 300;
     // A landed video "opens a window" on the bot's screen (see fake block above).
     if (p.kind === GoonPayloadKind.Video) fakeWindow(Math.min(60000, Math.max(1000, p.duration_ms | 0)));

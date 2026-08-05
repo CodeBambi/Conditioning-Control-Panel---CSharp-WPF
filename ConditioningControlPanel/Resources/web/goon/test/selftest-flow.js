@@ -645,14 +645,16 @@ function mountRecap(result) {
       'the bytes that landed are the bytes that were sent, start and end',
       `${got.length} vs ${sent.length}`);
 
-    // --- the payload. Live phase + charges are forced: this section is about the
-    // wrapper and the tag, not about the charge economy (selftest-core owns that).
+    // --- the payload. The Live phase is forced: this section is about the wrapper
+    // and the tag, not about the phase machine.
+    //
+    // TWO LINES USED TO SIT HERE, `a._scoring._charges = 9` and
+    // `b._opponentChargesKnown = 9`, because we skip Live entirely and the inbound
+    // gate would otherwise refuse A's shot on the charge economy. That gate went on
+    // 2026-08-05 with the charge requirement, so a payload fired off an empty meter
+    // is simply admitted now — which is the point of this whole change.
     a._phase = GoonMatchPhase.Live;
     b._phase = GoonMatchPhase.Live;
-    a._scoring._charges = 9;
-    // B only knows what A's state frames told it, and we skipped Live entirely — so
-    // hand it the same number by hand or the inbound gate refuses on the economy.
-    b._opponentChargesKnown = 9;
 
     const kind = received[0].kind === 'video' ? GoonPayloadKind.Video : GoonPayloadKind.FlashBurst;
     const tags = qA.tagsFor(kind);
@@ -710,10 +712,9 @@ function mountRecap(result) {
     ok(q.enabled() === false, 'the queue is dormant even though everything else agreed');
     ok(q.tagsFor(GoonPayloadKind.Video).length === 0, 'so tagsFor returns []');
 
+    // (No charge priming: neither seat has a balance to be short of since 2026-08-05.)
     a._phase = GoonMatchPhase.Live;
     b._phase = GoonMatchPhase.Live;
-    a._scoring._charges = 9;
-    b._opponentChargesKnown = 9;
     let inbound = null;
     b.onPayloadAccepted((e) => { inbound = e && e.payload; });
     const res = a.tryFirePayload({ kind: GoonPayloadKind.Video, durationMs: 5000, intensity: 0.5 });
@@ -1871,21 +1872,26 @@ function mountRecap(result) {
  * throws BACK. An inbound payload resolves against the RECEIVER's library
  * (exec/media.js drawFor -> drawKind), so the bot's flash burst is drawn from the
  * player's own uploads — that is the loop, and it used to wait on the bot's
- * economy (PAYLOAD_TRY_MS, a 35% skip, and charges it has not earned yet).
+ * economy (PAYLOAD_TRY_MS, a 35% skip, and charges it had not earned yet).
  *
  * Two fixes, both practice-only:
  *   · the bot opens with a scheduled salvo of the two MEDIA-CARRYING kinds;
  *   · boot seeds the practice arsenal, so the slots that draw from the library
  *     are not locked behind a bubble-drop grind.
  *
- * THE REGRESSION THIS BLOCK EXISTS FOR: the receiver validates the SENDER's
- * charges off the last state TICK, not off the payload frame, so crediting and
- * firing in the same turn is rejected with "claimed 0 < cost 1". The first cut
- * did exactly that and the salvo never landed.
+ * THE REGRESSION THIS BLOCK EXISTED FOR, and what replaced it. The receiver used
+ * to validate the SENDER's charges off the last state TICK rather than off the
+ * payload frame, so crediting and firing in the same turn came back as "claimed
+ * 0 < cost 1" — the first cut of the salvo did exactly that and never landed.
+ * That gate went on 2026-08-05 with the entire charge requirement, so the lead is
+ * no longer funding anything. IT STILL HAS A JOB: it reserves the shot
+ * (`salvoArmed`) so the ordinary cadence cannot take the RATE-LIMIT TOKEN the
+ * scheduled shot needs — the same silent-failure shape, on the one constraint
+ * that is left. Hence SALVO_RESERVE_LEAD_MS, and hence the same assertions.
  * ==========================================================================*/
 {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  const { createSoloDriver, SALVO, SALVO_CREDIT_LEAD_MS } = await import('../ui/soloDriver.js');
+  const { createSoloDriver, SALVO, SALVO_RESERVE_LEAD_MS } = await import('../ui/soloDriver.js');
   const { GoonConsts, GoonPayloadKind, costOf } = await import('../core/contracts.js');
 
   // ---- the shape of the salvo
@@ -1895,17 +1901,20 @@ function mountRecap(result) {
     'and it is the two MEDIA-CARRYING kinds — the ones that draw off the deck', JSON.stringify(salvoKinds));
   ok(SALVO[0].atMs <= 10000, 'the first shot lands in the first ten seconds, not after a grind',
     String(SALVO[0].atMs));
-  ok(SALVO_CREDIT_LEAD_MS > GoonConsts.TickIntervalMs,
-    'the charges are credited more than one state tick ahead of the shot — the receiver reads the '
-    + 'wallet off the tick, so credit-and-fire in one turn is rejected',
-    SALVO_CREDIT_LEAD_MS + 'ms vs ' + GoonConsts.TickIntervalMs + 'ms');
-  ok(SALVO.every((s) => s.atMs - SALVO_CREDIT_LEAD_MS >= 0),
-    'every shot has room for its own credit lead');
+  ok(SALVO_RESERVE_LEAD_MS > GoonConsts.TickIntervalMs,
+    'a salvo shot is reserved more than one state tick ahead of firing — comfortably longer than '
+    + 'any single cadence turn, so nothing can slip in and take its rate-limit token',
+    SALVO_RESERVE_LEAD_MS + 'ms vs ' + GoonConsts.TickIntervalMs + 'ms');
+  ok(SALVO.every((s) => s.atMs - SALVO_RESERVE_LEAD_MS >= 0),
+    'every shot has room for its own reserve lead');
   const soloSrc = stripComments(read('ui/soloDriver.js'));
   ok(/if \(salvoArmed > 0\) return;/.test(soloSrc),
-    'and the ordinary cadence cannot spend a salvo shot\'s charges out from under it');
-  ok(/match\.creditCharges\(cost - have, 'practice-salvo'\)/.test(soloSrc),
-    'the charges go through the engine, so the wire truth stays the truth (no back door)');
+    'and the ordinary cadence stands down while a shot is reserved');
+  ok(!/creditCharges/.test(soloSrc),
+    'THE BOT FUNDS NOTHING. The practice-salvo creditCharges call went with the charge '
+    + 'requirement (2026-08-05): a throw is free, so there is no wallet to top up first');
+  ok(!/costOf/.test(soloSrc),
+    'and its affordability filter went too — the bot throws whatever the agreement allows');
   ok(/match\.tryFirePayload\(\{/.test(soloSrc),
     'and the shot goes through the same public API a human uses — every engine gate still applies');
 
@@ -1952,16 +1961,19 @@ function mountRecap(result) {
 
   // ---- boot seeds the practice arsenal, and ONLY the practice arsenal
   const bootSeed = stripComments(read('boot.js'));
-  ok(/function seedPracticeArsenal\(match\)/.test(bootSeed), 'boot.js has seedPracticeArsenal()');
-  ok(/const PRACTICE_SEED = Object\.freeze\(\[[\s\S]{0,300}?id: 'flash'[\s\S]{0,200}?id: 'video'/.test(bootSeed),
+  ok(/function seedPracticeArsenal\(\)/.test(bootSeed), 'boot.js has seedPracticeArsenal()');
+  ok(/const PRACTICE_SEED = Object\.freeze\(\[[\s\S]{0,400}?id: 'flash'[\s\S]{0,200}?id: 'video'/.test(bootSeed),
     'and it seeds the two slots that draw from the library (flash + video)');
-  ok(/arsenal\.armDrop\(seed\.id, \{ count: 1, silent: true \}\)/.test(bootSeed)
-    && /match\.creditCharges\(charges, 'practice-seed'\)/.test(bootSeed),
-    'through the same two public seams ui/drops.js uses — armDrop, and the charges that back it');
+  ok(/arsenal\.armDrop\(seed\.id, \{ count: 1, silent: true \}\)/.test(bootSeed),
+    'through the same public seam ui/drops.js uses — armDrop');
+  ok(!/creditCharges/.test(bootSeed),
+    'and NOTHING ELSE. The practice-seed charge credit went with the charge requirement '
+    + '(2026-08-05), so the two stacks are the whole gift and there is no second truth to keep '
+    + 'in step with them');
   const seedCalls = (bootSeed.match(/seedPracticeArsenal\(/g) || []).length;
   ok(seedCalls === 2, 'seedPracticeArsenal is defined once and called once', String(seedCalls));
-  ok(/async function startSolo\(\)[\s\S]*?seedPracticeArsenal\(local\)/.test(bootSeed)
-    || /seedPracticeArsenal\(local\)[\s\S]*?async function startSolo\(\)/.test(bootSeed),
+  ok(/async function startSolo\(\)[\s\S]*?seedPracticeArsenal\(\)/.test(bootSeed)
+    || /seedPracticeArsenal\(\)[\s\S]*?async function startSolo\(\)/.test(bootSeed),
     'and that one call is wired from startSolo — practice only, duel gating untouched');
   const arsenalSrc = stripComments(read('ui/arsenal.js'));
   const armDropAt = arsenalSrc.indexOf('function armDrop');
