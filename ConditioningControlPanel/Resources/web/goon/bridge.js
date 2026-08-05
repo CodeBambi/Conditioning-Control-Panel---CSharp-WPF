@@ -292,15 +292,27 @@ export function standaloneInit() {
       // transfer-cache to talk to: the assets screen renders "compression lives in
       // the app" instead of a spinner that never resolves.
       assetCache: false,
-      // SENDING is premium-gated. Against a real server (a `?server=` launch,
-      // one remembered in prefs, or the public deployment's built-in default)
-      // it starts OFF and boot.js adopts the server's `media_send` verdict from
-      // the /invite //join answer. Only the pure-local dev path (no server
-      // anywhere) keeps the old always-on affordance, because it is the one way
-      // to exercise the transfer without two Patreon accounts. The page reads
-      // this as `=== true`, so a real host that predates the flag still
-      // defaults it OFF.
-      mediaTransfer: !(q.get('server') || prefs.serverBase || defaultServerBase()),
+      /* SENDING IS FREE FOR EVERY SEAT (owner call, 2026-08-05). This WAS a
+       * premium default — OFF against any real server, ON only on the pure-local
+       * dev path — and boot.js flipped it on once the server's `media_send`
+       * verdict landed. That defaulting is what a free guest experienced as
+       * "my attacks throw blanks": the paid perk is HOSTING (caps.canHost, the
+       * server's tier-2 bar at /v2/goon/invite) and once a room exists BOTH
+       * players sending their own media is the whole shape of a duel.
+       *
+       * It stays TRUE here and the server's verdict stays the AUTHORITY: boot.js
+       * still folds `media_send` in (adoptServerSendVerdict), so a server that
+       * answers false turns sending off again with no client release, and a
+       * server that predates the field (null) leaves this default alone. The
+       * inversion matters — defaulting ON and letting the server veto is a very
+       * different failure mode from defaulting OFF and hoping a verdict arrives
+       * in time, and the second one is the bug this replaced.
+       *
+       * NOT an enforcement point either way: media is P2P, so this gate is
+       * advisory UX (the lobby row's explanation, the queue's send arm). The
+       * REAL gates are the two lobby consent toggles, which are untouched.
+       */
+      mediaTransfer: true,
     }, prefs.caps || {}),
     consent: Object.assign({
       liveDurationSec: 720,    // GoonConsts.LiveDurationSecDefault

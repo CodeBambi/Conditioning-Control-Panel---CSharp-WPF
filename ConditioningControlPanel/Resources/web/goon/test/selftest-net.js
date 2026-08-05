@@ -1185,12 +1185,15 @@ async function testSelfDuel() {
 /* ================================================================================
  * 12. BETA GATES (pre-ship follow-ups, 2026-08-04)
  *
- *   a) THE PREMIUM SEND VERDICT. The standalone page used to grant itself
- *      caps.mediaTransfer=true unconditionally (the dev affordance). Now the
- *      server answers /invite and /join with `media_send` (tier>=1 — the same
- *      bar the C# host applies), the signaling client records it, boot.js folds
- *      it into session.caps for the standalone page, and bridge.js only keeps
- *      the always-on default when there is NO server in play at all.
+ *   a) THE SEND VERDICT. Was "the PREMIUM send verdict": the server answered
+ *      /invite and /join with `media_send` (tier>=1), the standalone cap
+ *      defaulted OFF against any real server, and boot.js flipped it on when the
+ *      verdict landed. Owner call 2026-08-05 made SENDING FREE FOR EVERY SEAT —
+ *      the paid perk is hosting alone — so the default inverted to ON and the
+ *      verdict became a VETO the server can still exercise (`media_send:false`)
+ *      rather than the grant that turns the lane on. Both directions are pinned
+ *      below, along with the free-seat fixture: a guest with no account at all
+ *      may send, and hosting is still refused to it.
  *   b) THE OWED OFFER. A guest that redeemed a code is owed the host's offer
  *      within a poll round trip; a dead host used to leave it on "joining…"
  *      forever because the ICE budget never started. NoOfferTimeoutMs now feeds
@@ -1219,17 +1222,134 @@ async function testBetaGates() {
       '/join carries the verdict and the client records true (premium)');
   }
 
+  /* --- a) THE FREE-SEAT FIXTURE (2026-08-05) -----------------------------------
+   * The owner's decision in one runnable shape: the seat with the LEAST standing
+   * this protocol has — an anonymous invite-link click, no account, no tier, a
+   * server-minted `g_` id — may SEND its media, and still may not HOST. The two
+   * halves are asserted against the same server instance on purpose: one gate
+   * moving must not drag the other with it.
+   * -------------------------------------------------------------------------- */
+  {
+    // Prod's answer as of 2026-08-04: media_send true unconditionally, host gate on.
+    const prod = new GoonFakeSignalingServer({ mediaSend: true, hostGate: true });
+    prod.setLabAccess('u_lab', true);
+
+    const labHost = new GoonSignalingClient({ post: prod.post, unifiedId: 'u_lab', logger: quiet });
+    const room = await labHost.createInvite('Lab');
+    ok(!!room && labHost.mediaSend === true, 'the tier-2 host mints a room and may send');
+
+    // `anonymous: true` is the whole free seat — /join omits unified_id and the
+    // server hands back the `g_` identity it minted (see net/signaling.js).
+    const freeSeat = new GoonSignalingClient({ post: prod.post, anonymous: true, logger: quiet });
+    const joined = await freeSeat.join(room.code, 'Nobody');
+    ok(!!joined, 'an anonymous invite-link click gets a seat with no account at all');
+    ok(/^g_[a-f0-9]{16}$/.test(freeSeat.guestId), 'and a server-minted guest identity');
+    ok(joined.mediaSend === true && freeSeat.mediaSend === true,
+      'AND THE SERVER SAYS IT MAY SEND — the free seat is a full participant in the media lane');
+
+    // The other half, unmoved: the same seat cannot mint a room of its own.
+    const wouldHost = new GoonSignalingClient({
+      post: prod.post, unifiedId: freeSeat.guestId, logger: quiet,
+    });
+    const refused = await wouldHost.createInvite('Nobody');
+    ok(refused === null && wouldHost.lastError === GoonSignalError.NoHostAccess,
+      'while HOSTING stays tier 2 — free to send, not free to host');
+
+    // And the veto still works, so the field is a live policy hook rather than
+    // decoration: a server that answers false is obeyed.
+    prod.setMediaSend(false);
+    prod.setLabAccess('u_lab2', true);          // clears the host gate; the veto is the subject here
+    const vetoed = new GoonSignalingClient({ post: prod.post, unifiedId: 'u_lab2', logger: quiet });
+    await vetoed.createInvite('Vetoed');
+    ok(vetoed.mediaSend === false,
+      'a server that answers media_send:false is still obeyed — the grant can be taken back');
+  }
+
   // --- a) the page halves, pinned at source level -------------------------------
   {
     const bridge = readSource('../bridge.js');
-    ok(/mediaTransfer:\s*!\(q\.get\('server'\)\s*\|\|\s*prefs\.serverBase\s*\|\|\s*defaultServerBase\(\)\)/.test(bridge),
-      'standaloneInit only self-grants sending when NO server is in play (query, prefs, or the public-deploy default)');
+    /* THE INVERSION, pinned. Was `!(q.get('server') || prefs.serverBase ||
+     * defaultServerBase())` — sending self-granted ONLY with no server in play.
+     * A free seat always has a server in play, so that expression was the client
+     * half of "my attacks throw blanks". */
+    ok(/mediaTransfer:\s*true,/.test(bridge),
+      'standaloneInit grants sending to every seat — the capability is free, hosting is the perk');
+    ok(!/mediaTransfer:\s*!\(q\.get\('server'\)/.test(bridge),
+      'and the old server-presence default is gone, not commented out beside it');
     ok(/\(\^\|\\\.\)cclabs\\\.app\$/.test(bridge),
       'defaultServerBase is pinned to the public deployment host, so dev origins keep the serverless playground');
+
     const boot = readSource('../boot.js');
-    ok(/typeof goonSession\.signaling\.mediaSend === 'boolean'/.test(boot)
-      && /!session\.hosted/.test(boot.slice(boot.indexOf('mediaSend') - 600, boot.indexOf('mediaSend') + 600)),
-      'boot.js folds the server verdict into session.caps — standalone only, hosted init stays authoritative');
+    ok(/function adoptServerSendVerdict\(\)/.test(boot),
+      'boot.js folds the server verdict through one named function');
+    const fold = boot.slice(boot.indexOf('function adoptServerSendVerdict()'));
+    ok(/if \(session\.hosted\) return;/.test(fold.slice(0, 400)),
+      'standalone only — the hosted init frame stays authoritative');
+    ok(/typeof verdict !== 'boolean'/.test(fold.slice(0, 600)),
+      'and a server that predates the field (null) changes nothing');
+    /* THE ORDERING, pinned at source. One call is not enough — see the runtime
+     * proof below for WHY — so all three sites have to survive a refactor. */
+    ok((boot.match(/adoptServerSendVerdict\(\);/g) || []).length >= 3,
+      'and it is called on every road into a match: attach, hostStart, joinStart');
+    ok(/await s\.host\(\);[\s\S]{0,400}?adoptServerSendVerdict\(\);/.test(boot),
+      'hostStart folds AFTER /invite answers');
+    ok(/await s\.join\(inviteCode\);[\s\S]{0,400}?adoptServerSendVerdict\(\);/.test(boot),
+      'joinStart folds AFTER /join answers');
+  }
+
+  /* --- a) WHY THE POST-AWAIT FOLD EXISTS, proven rather than asserted ----------
+   * GoonSession._beginSession constructs the signaling client, builds the match
+   * and raises currentMatchChanged — boot's attachMatch seam — and only THEN
+   * awaits createInvite/join, which is the round trip that learns `media_send`.
+   * So the verdict read at attach time is ALWAYS null on a first connect. Under
+   * the old default-OFF cap that left a free seat unable to send for the whole
+   * match no matter how loudly the server agreed. This models boot's fold with
+   * the same predicate and shows the two readings disagree.
+   * -------------------------------------------------------------------------- */
+  {
+    let mediaSend = null;                       // the signaling client's field
+    const signaling = { get mediaSend() { return mediaSend; }, dispose() {} };
+
+    class Leg {
+      constructor(isHost) { this.isHost = isHost; this.code = null; this.token = null; }
+      // The POST is what learns the verdict — exactly like the real client's
+      // _noteMediaSend, and deliberately not a line earlier.
+      async createInvite() { mediaSend = true; this.code = 'ROOM01'; this.token = 't'; return this.code; }
+      async join(c) { mediaSend = true; this.code = c; this.token = 't'; return true; }
+      async waitForChannel() { await sleep(5); return true; }
+      async close() {} dispose() {}
+    }
+    class Match {
+      constructor(t) { this.transport = t; }
+      createInvite() { return this.transport.createInvite(); }
+      join(c) { return this.transport.join(c); }
+      adoptLobby() { return true; }
+      cancelMatch() {} dispose() {}
+    }
+
+    // boot.js's fold, in miniature: same `typeof === 'boolean'` predicate.
+    const caps = { mediaTransfer: true };
+    const adopt = () => { if (typeof signaling.mediaSend === 'boolean') caps.mediaTransfer = signaling.mediaSend; };
+
+    const atAttach = [];
+    const session = new GoonSession({
+      logger: quiet,
+      createMatch: (t) => new Match(t),
+      createSignaling: () => signaling,
+      createWebrtc: (isHost) => new Leg(isHost),
+      createRelay: (isHost) => new Leg(isHost),
+    });
+    session.onCurrentMatchChanged((m) => { if (m) atAttach.push(signaling.mediaSend); });
+
+    const code = await session.host();
+    ok(code === 'ROOM01', 'the stub session mints a room');
+    ok(atAttach.length === 1 && atAttach[0] === null,
+      'THE RACE: at the attachMatch seam the verdict does not exist yet — it reads null');
+    ok(signaling.mediaSend === true,
+      'and only after the await does the server verdict exist at all');
+    adopt();
+    ok(caps.mediaTransfer === true, 'so the post-await fold is the one that can ever see it');
+    await session.dispose();
   }
 
   // --- b) the owed offer, transport half (needs a browser to run for real) ------

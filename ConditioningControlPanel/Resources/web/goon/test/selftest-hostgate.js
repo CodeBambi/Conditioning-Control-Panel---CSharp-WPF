@@ -287,7 +287,14 @@ function recorder(server) {
     'and says what is still free, rather than stopping at "no"');
   ok(S.sheets.noPass === undefined, 'the weekly-pass copy is retired — the server never sends it');
   ok(typeof S.title.hostNoLab === 'string' && S.title.hostNoLab === S.title.hostNoLab.toLowerCase(),
-    'the menu note is lowercase, same voice as lobby.transferNoPremium');
+    'the menu note is lowercase, same voice as lobby.transferOff');
+  /* HOSTING IS THE LAST PAID THING IN THE DUEL (2026-08-05). The lobby's
+   * send-side copy used to make the same pitch; it does not any more, and this
+   * pins that so a future edit cannot quietly re-sell a free capability. */
+  ok(S.lobby.transferNoPremium === undefined,
+    'the old "sending is a supporter perk" key is gone, not merely reworded');
+  ok(typeof S.lobby.transferOff === 'string' && !/supporter|perk|premium/i.test(S.lobby.transferOff),
+    'and its replacement explains the dark row without selling anything');
 
   const sheets = read('ui/sheets.js');
   ok(/case 'no_host_access':\s*\n\s*case 'no_pass':/.test(sheets),

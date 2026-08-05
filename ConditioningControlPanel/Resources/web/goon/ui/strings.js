@@ -35,7 +35,8 @@ export const S = Object.freeze({
   title: {
     kicker: '1v1 · endurance duel · first to break loses',
     host: 'Host a match',
-    // The dimmed-Host note. Same voice as lobby.transferNoPremium — lowercase, an explanation
+    // The dimmed-Host note, and since 2026-08-05 the ONLY "this costs money"
+    // sentence in the duel — sending stopped being one. Lowercase, an explanation
     // rather than a pitch, and it names the thing that is still free instead of stopping at "no".
     hostNoLab: 'hosting is a supporter perk — joining a room is always free.',
     join: 'Join with a code',
@@ -135,8 +136,20 @@ export const S = Object.freeze({
        willing to send, and the chip says what THEY answered. --- */
     transfer: 'Send them your own media',
     transferSub: 'a few of your images and clips go straight to them, machine to machine. never through a server.',
-    // Lowercase "supporter perk" on purpose: an explanation, not a pitch.
-    transferNoPremium: 'sending is a supporter perk — you can still receive theirs.',
+    /**
+     * NO LONGER A PITCH, because it is no longer a perk (owner call 2026-08-05):
+     * sending is free for every seat and the only thing money buys is HOSTING
+     * (title.hostNoLab, above). Renamed off `transferNoPremium` so the key stops
+     * lying about why the row is dark.
+     *
+     * Deliberately still HERE rather than deleted. caps.mediaTransfer can be
+     * false in exactly two ways now — a server that answers `media_send:false`
+     * (the policy hook the field was kept alive for), or a host frame so old it
+     * never carried the flag — and a greyed row with no sentence under it is the
+     * precise bug report this string family exists to prevent. Vague on purpose:
+     * naming a cause we cannot tell apart would be a guess.
+     */
+    transferOff: 'sending is switched off for this seat — you can still receive theirs.',
     transferPeerOld: 'their app is too old for this — nothing crosses either way.',
     transferRelay: 'only on a direct connection. this one is relayed.',
     /**

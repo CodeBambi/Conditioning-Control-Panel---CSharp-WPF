@@ -304,9 +304,16 @@ export function mount(container, ctx) {
   /**
    * The transfer row. THREE separate reasons it can be off, and each one gets its
    * own line, because "greyed out with no explanation" is the thing players report
-   * as a bug: not a supporter (send-side only — receiving is never gated), the
-   * peer's build does not speak the protocol, or the link is relayed (media never
-   * touches the server, so a relay physically cannot carry it).
+   * as a bug: the send capability is off for this seat, the peer's build does not
+   * speak the protocol, or the link is relayed (media never touches the server,
+   * so a relay physically cannot carry it).
+   *
+   * THE FIRST REASON USED TO BE "not a supporter" AND IS NOT ANY MORE (owner call
+   * 2026-08-05). Sending is free for every seat — the paid perk is hosting — so
+   * caps.mediaTransfer is true on every current host and this arm is now reserved
+   * for a server that vetoes sending (`media_send:false`) or a frame too old to
+   * carry the flag. Kept as an arm rather than deleted so the row can never go
+   * dark in silence; see S.lobby.transferOff.
    */
   function paintTransfer() {
     const caps = (ctx.session && ctx.session.caps) || {};
@@ -322,7 +329,7 @@ export function mount(container, ctx) {
     const editable = match.phase === GoonMatchPhase.Consent || match.phase === GoonMatchPhase.Lobby;
 
     let why = '';
-    if (caps.mediaTransfer !== true) why = S.lobby.transferNoPremium;
+    if (caps.mediaTransfer !== true) why = S.lobby.transferOff;
     else if (!match.peerSupportsTransfer) why = S.lobby.transferPeerOld;
     else if (!onP2P) why = stillDeciding ? S.lobby.transferConnecting : S.lobby.transferRelay;
 
