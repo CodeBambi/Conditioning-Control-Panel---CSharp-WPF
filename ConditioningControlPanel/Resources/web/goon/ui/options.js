@@ -201,6 +201,21 @@ export function createOptions({ prefs, audio = null, session = null, setFullscre
     body.appendChild(oppAva.node);
     body.appendChild(el('p', { class: 'gg-panel-note', text: S.options.oppAvatarsNote }));
 
+    /* COACHING HINTS — the one-time explainers (ui/coach.js), and the fourth
+     * mid-match knob for the fourth time for the same reason: the moment a
+     * player wants this off is the moment a hint has just told them something
+     * they already knew. It is read live on every fire, so flipping it here
+     * silences the very next one rather than the next match.
+     *
+     * The pref alone is the switch — no handle is threaded in. ui/coach.js reads
+     * `coachHints` off the same store on every fire, which is what keeps this
+     * drawer free of a dependency on a singleton it is built before. */
+    const hints = toggleRow(S.coach.hints,
+      () => prefs.get('coachHints'),
+      (v) => prefs.set('coachHints', v));
+    body.appendChild(hints.node);
+    body.appendChild(el('p', { class: 'gg-panel-note', text: S.coach.hintsNote }));
+
     if (session && session.hosted && setFullscreen) {
       const fs = toggleRow(S.options.fullscreen,
         () => !!session.fullscreen,
