@@ -278,12 +278,14 @@
                                     <!-- ==== plates + card actions ==== -->
                                     <StackPanel Grid.Column="2" VerticalAlignment="Top" HorizontalAlignment="Right">
                                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                            <!-- Phase 2 flips IsEnabled and wires the Customize dialog. -->
+                                            <!-- Phase 2: opens the customization kit. Always edits YOUR
+                                                 loadout, even while someone else's card is on screen. -->
                                             <Button x:Name="BtnProfileCustomize" x:FieldModifier="internal"
-                                                    Content="{loc:Str profile_btn_customize}" IsEnabled="False"
+                                                    Content="{loc:Str profile_btn_customize}"
                                                     Background="#33B478FF" Foreground="#E7DEFF" BorderThickness="0"
                                                     Padding="14,6" Margin="0,0,8,0" FontSize="11" FontWeight="SemiBold"
-                                                    Cursor="Hand" ToolTip="{loc:Str profile_btn_customize_soon_tip}"/>
+                                                    Cursor="Hand" ToolTip="{loc:Str profile_btn_customize_tip}"
+                                                    Click="BtnProfileCustomize_Click"/>
                                             <Button x:Name="BtnProfilePrivacy" x:FieldModifier="internal"
                                                     Content="{loc:Str profile_btn_privacy}"
                                                     Background="#FF69B4" Foreground="#1A1A2E" BorderThickness="0"
@@ -365,7 +367,9 @@
                                 VerticalAlignment="Top" CornerRadius="12" Padding="14,12,14,10"
                                 Background="#B3252542" BorderBrush="#33FF69B4" BorderThickness="1">
                             <StackPanel>
-                                <TextBlock Text="{loc:Str profile_record_title}"
+                                <!-- Column headers carry the equipped accent (Phase 2). -->
+                                <TextBlock x:Name="TxtProfileRecordHeader" x:FieldModifier="internal"
+                                           Text="{loc:Str profile_record_title}"
                                            FontFamily="/Fonts/#Fredoka" FontWeight="Medium"
                                            FontSize="15" Foreground="White" Margin="0,0,0,10"/>
 
@@ -480,7 +484,8 @@
                                 Background="#B3252542" BorderBrush="#33B478FF" BorderThickness="1">
                             <StackPanel>
                                 <Grid Margin="0,0,0,10">
-                                    <TextBlock Text="{loc:Str profile_showcase_title}"
+                                    <TextBlock x:Name="TxtProfileShowcaseHeader" x:FieldModifier="internal"
+                                               Text="{loc:Str profile_showcase_title}"
                                                FontFamily="/Fonts/#Fredoka" FontWeight="Medium"
                                                FontSize="15" Foreground="White"/>
                                     <TextBlock Text="{loc:Str profile_showcase_hint}" Foreground="#8079A3" FontSize="10"
@@ -599,7 +604,8 @@
                         <Border Grid.Column="4" VerticalAlignment="Top" CornerRadius="12" Padding="14,12,14,12"
                                 Background="#B3252542" BorderBrush="#33FF69B4" BorderThickness="1">
                             <StackPanel>
-                                <TextBlock Text="{loc:Str profile_community_title}"
+                                <TextBlock x:Name="TxtProfileCommunityHeader" x:FieldModifier="internal"
+                                           Text="{loc:Str profile_community_title}"
                                            FontFamily="/Fonts/#Fredoka" FontWeight="Medium"
                                            FontSize="15" Foreground="White" Margin="0,0,0,10"/>
 

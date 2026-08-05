@@ -1822,6 +1822,9 @@ namespace ConditioningControlPanel
             UpdateProfileXpMeter(level, localXp);
             UpdateProfileShowcase(unlockedCount, totalCount, progress?.UnlockedAchievements);
             SetProfileViewingSelf(true);
+            // Phase 2 cosmetics. Applied AFTER UpdateProfileShowcase because both touch the empty
+            // pin placeholders and this one is the authority on whether anything is pinned.
+            ApplyOwnProfileCosmetics();
 
             // Patreon badge - use settings tier (works for Discord-only login with linked Patreon)
             var patreonTier = App.Settings?.Current?.PatreonTier ?? (int)(App.Patreon?.CurrentTier ?? 0);
@@ -2090,6 +2093,12 @@ namespace ConditioningControlPanel
                     ?? System.Linq.Enumerable.Count(Models.Achievement.All.Values, a => !a.IsExclusive && !a.IsHidden),
                 isOwnProfile ? App.Achievements?.Progress?.UnlockedAchievements : null);
             SetProfileViewingSelf(isOwnProfile);
+
+            // Phase 2 cosmetics. The leaderboard entry carries none, so someone else's card starts
+            // bare and is dressed by the /user/lookup round-trip already in flight above; your own
+            // card is dressed from settings immediately and never waits on the network.
+            if (isOwnProfile) ApplyOwnProfileCosmetics();
+            else ApplyViewedProfileCosmetics(null);
             }
             catch (Exception ex)
             {
@@ -2169,6 +2178,23 @@ namespace ConditioningControlPanel
                             // No avatar URL - clear any previous image
                             DiscordTab.ProfileViewerAvatar.ImageSource = null;
                         }
+                    }
+
+                    // Trainer Card cosmetics (Phase 2). Your own card is dressed from settings
+                    // instead: the local copy is what you just picked in the Customize dialog and
+                    // the server echo may still be a sync behind it.
+                    var ownName = App.Settings?.Current?.UserDisplayName
+                                  ?? App.Discord?.CustomDisplayName
+                                  ?? App.Discord?.DisplayName
+                                  ?? App.Patreon?.DisplayName;
+                    if (!string.IsNullOrEmpty(ownName) &&
+                        displayName.Equals(ownName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        ApplyOwnProfileCosmetics();
+                    }
+                    else
+                    {
+                        ApplyViewedProfileCosmetics(lookup.Cosmetics);
                     }
 
                     // Load achievements from lookup result (for other users)

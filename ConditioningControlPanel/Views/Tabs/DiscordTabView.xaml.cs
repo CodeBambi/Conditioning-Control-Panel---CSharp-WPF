@@ -89,6 +89,11 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.OpenProfilePrivacyDialog();
         }
+        private void BtnProfileCustomize_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.OpenProfileCustomizeDialog();
+        }
         private void TxtProfileSearch_KeyDown(object sender, KeyEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

@@ -1,0 +1,146 @@
+<Window x:Class="ConditioningControlPanel.ProfileCustomizeDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str profile_customize_title}"
+        Width="620" Height="740" MinWidth="520" MinHeight="460"
+        Background="{DynamicResource DarkerBgBrush}"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize"
+        ShowInTaskbar="False">
+
+    <!-- =====================================================================
+         The customization kit (Profile redesign Phase 2, "Own It").
+
+         Every section's tiles are BUILT IN CODE, not by a DataTemplate. That is
+         deliberate: templated item art in this app needs its converters hoisted
+         into Window.Resources or it silently fails to resolve inside the
+         template, and none of these grids are large enough to want
+         virtualization. Code-built tiles keep the whole picker converter-free.
+
+         Bio is out of scope for this build (needs a moderation path) - do not
+         add the field here.
+         Wardrobe (avatar decoration + charms) lands in Phase 3 in the reserved
+         section at the bottom; the payload for it is already round-tripped.
+         ===================================================================== -->
+
+    <Grid Margin="18,16,18,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,14">
+            <TextBlock Text="{loc:Str profile_customize_title}"
+                       FontFamily="/Fonts/#Fredoka" FontWeight="SemiBold"
+                       FontSize="22" Foreground="White">
+                <TextBlock.Effect>
+                    <DropShadowEffect Color="#FF69B4" BlurRadius="16" ShadowDepth="0" Opacity="0.6"/>
+                </TextBlock.Effect>
+            </TextBlock>
+            <TextBlock Text="{loc:Str profile_customize_sub}" Foreground="#9A93B8" FontSize="12"
+                       TextWrapping="Wrap" Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      Padding="0,0,8,0">
+            <StackPanel>
+
+                <!-- ================= banner ================= -->
+                <Border CornerRadius="10" Padding="14,12,14,10" Margin="0,0,0,12"
+                        Background="#B3252542" BorderBrush="#33B478FF" BorderThickness="1">
+                    <StackPanel>
+                        <TextBlock Text="{loc:Str profile_customize_banner}" Foreground="#B478FF"
+                                   FontSize="12" FontWeight="Bold" Margin="0,0,0,3"/>
+                        <TextBlock Text="{loc:Str profile_customize_banner_hint}" Foreground="#8079A3"
+                                   FontSize="10" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                        <WrapPanel x:Name="BannerHost"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ================= accent ================= -->
+                <Border CornerRadius="10" Padding="14,12,14,10" Margin="0,0,0,12"
+                        Background="#B3252542" BorderBrush="#33FF69B4" BorderThickness="1">
+                    <StackPanel>
+                        <TextBlock Text="{loc:Str profile_customize_accent}" Foreground="#FF69B4"
+                                   FontSize="12" FontWeight="Bold" Margin="0,0,0,3"/>
+                        <TextBlock Text="{loc:Str profile_customize_accent_hint}" Foreground="#8079A3"
+                                   FontSize="10" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                        <WrapPanel x:Name="AccentHost"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ================= title ================= -->
+                <Border CornerRadius="10" Padding="14,12,14,10" Margin="0,0,0,12"
+                        Background="#B3252542" BorderBrush="#33FFD700" BorderThickness="1">
+                    <StackPanel>
+                        <TextBlock Text="{loc:Str profile_customize_title_section}" Foreground="#FFD700"
+                                   FontSize="12" FontWeight="Bold" Margin="0,0,0,3"/>
+                        <TextBlock Text="{loc:Str profile_customize_title_hint}" Foreground="#8079A3"
+                                   FontSize="10" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                        <TextBlock x:Name="TxtNoTitlesYet" Text="{loc:Str profile_customize_locked_empty}"
+                                   Foreground="#8079A3" FontSize="11" FontStyle="Italic"
+                                   Visibility="Collapsed" Margin="0,0,0,6"/>
+                        <!-- Bounded so a 40-achievement account cannot push the footer off screen. -->
+                        <ScrollViewer MaxHeight="176" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel x:Name="TitleHost"/>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
+
+                <!-- ================= pinned achievements ================= -->
+                <Border CornerRadius="10" Padding="14,12,14,10" Margin="0,0,0,12"
+                        Background="#B3252542" BorderBrush="#33B478FF" BorderThickness="1">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,3">
+                            <TextBlock Text="{loc:Str profile_customize_pins}" Foreground="#B478FF"
+                                       FontSize="12" FontWeight="Bold"/>
+                            <TextBlock x:Name="TxtPinCount" Foreground="#8079A3" FontSize="11"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </Grid>
+                        <TextBlock Text="{loc:Str profile_customize_pins_hint}" Foreground="#8079A3"
+                                   FontSize="10" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                        <TextBlock x:Name="TxtNoPinsYet" Text="{loc:Str profile_customize_locked_empty}"
+                                   Foreground="#8079A3" FontSize="11" FontStyle="Italic"
+                                   Visibility="Collapsed" Margin="0,0,0,6"/>
+                        <ScrollViewer MaxHeight="212" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <WrapPanel x:Name="PinHost"/>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
+
+                <!-- ================= wardrobe (Phase 3) ================= -->
+                <Border CornerRadius="10" Padding="14,12,14,12"
+                        Background="#1FB478FF" BorderBrush="#33B478FF" BorderThickness="1">
+                    <StackPanel>
+                        <TextBlock Text="{loc:Str profile_customize_wardrobe_soon_title}" Foreground="#E7DEFF"
+                                   FontSize="11" FontWeight="Bold"/>
+                        <TextBlock Text="{loc:Str profile_customize_wardrobe_soon_body}" Foreground="#9A93B8"
+                                   FontSize="10" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Grid Grid.Row="2" Margin="0,14,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="0" Content="{loc:Str profile_customize_reset}"
+                    Background="#26FFFFFF" Foreground="#B8B1CC" BorderThickness="0"
+                    Padding="14,9" FontSize="12" Cursor="Hand" Click="BtnReset_Click"/>
+            <Button Grid.Column="2" Content="{loc:Str btn_cancel}"
+                    Background="{DynamicResource PanelAccentBrush}" Foreground="White" BorderThickness="0"
+                    Padding="20,9" Margin="0,0,10,0" FontSize="12" Cursor="Hand" Click="BtnCancel_Click"/>
+            <Button Grid.Column="3" Content="{loc:Str profile_customize_save}"
+                    Background="#FF69B4" Foreground="#1A1A2E" BorderThickness="0"
+                    Padding="24,9" FontWeight="Bold" FontSize="12" Cursor="Hand" Click="BtnSave_Click"/>
+        </Grid>
+    </Grid>
+</Window>

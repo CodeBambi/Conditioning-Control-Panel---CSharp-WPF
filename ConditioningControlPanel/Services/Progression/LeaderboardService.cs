@@ -742,6 +742,16 @@ public class UserLookupResult
     public bool IsSeason0Og { get; set; }
 
     /// <summary>
+    /// The owner's Trainer Card customization (Profile redesign Phase 2): banner, accent, worn
+    /// title, pinned achievements. Null on any server that predates the field — the card then
+    /// renders exactly as it did in Phase 1. Always route it through
+    /// <see cref="CosmeticsCatalog.SanitizeViewed"/> before rendering: this is another user's
+    /// data and their build may ship art ids this one does not.
+    /// </summary>
+    [JsonProperty("cosmetics")]
+    public Models.ProfileCosmetics? Cosmetics { get; set; }
+
+    /// <summary>
     /// Display name with OG star prefix if applicable
     /// </summary>
     public string DisplayNameWithFlair => DisplayName ?? "";
