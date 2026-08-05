@@ -216,6 +216,35 @@ const MAX_WINDOW_MS = 180000;
  *   · desktop-only, deliberately. A phone has no wheel and this is not worth a
  *     pinch: the drag alone already works there through pointer events.
  *
+ * THE GRIP, AND WHY IT HAD TO EXIST (owner, 2026-08-04 round 2: "the opponent
+ * monitor cannot be moved"). The first cut of this listened on .gg-mon itself,
+ * and NO POINTERDOWN EVER ARRIVED. #gg-hud > .gg-hud-frame is `pointer-events:
+ * none` (hud.css) so the desk chrome does not swallow the clicks the bubble
+ * field is played with, and every hittable thing on it is named in one small
+ * allowlist — `button`, .gg-plate, .gg-item, .gg-dial, .gg-emotes,
+ * .gg-att-token. .gg-mon was not on it. The one rule that WOULD have made the
+ * monitor hittable, `.gg-mon-host.is-mon-loose > .gg-mon`, only applies once it
+ * has detached — and it could never detach, because detaching needs the press
+ * that pointer-events:none was eating. A closed loop, and the tests could not
+ * see it: they dispatch straight at the node, where no CSS exists.
+ *
+ * The fix is NOT "make the whole card hittable". That is the law this desk is
+ * built on (hud.css, THE ARSENAL SIDEBAR rule 1: it may not eat the field) —
+ * the monitor sits over the top-right of the stage and bubbles drift under it,
+ * so a card that took clicks would silently swallow pops in that corner. So the
+ * card keeps its transparency and the HEAD ROW becomes a titlebar: one small
+ * strip, `pointer-events: auto`, with a visible grip. Everything else follows
+ * from that —
+ *   · DOCKED, the grip is the only way in (and the only thing the wheel can
+ *     find, which is why the resize was dead too);
+ *   · LOOSE, the whole card is grabbable, because a floating window the player
+ *     has deliberately parked is a window, not desk chrome — that is the
+ *     existing .gg-mon-host.is-mon-loose rule and exec/fx.css's .gg-vwin doing
+ *     the same thing;
+ *   · the CAPTURE TARGET is whichever of the two the press came through, never
+ *     blindly the root: capturing on a pointer-events:none element is exactly
+ *     the kind of thing that works in one engine and not the next.
+ *
  * AND THE ONE THING THE GIFS DID NOT HAVE TO SOLVE: the monitor is a ROW IN A
  * COLUMN. A floating window is born detached; this starts life in the HUD's
  * right-hand column and only leaves it when the player asks. See DETACH-ON-
@@ -246,6 +275,9 @@ export const MON_WIDTH_VAR = '--gg-mon-loose-w';
 /** On .gg-mon while it is detached; on .gg-mon while it is in hand. */
 export const MON_LOOSE_CLASS = 'is-loose';
 export const MON_GRABBED_CLASS = 'is-grabbed';
+/** The titlebar. Rides the head row, and is the ONE part of a docked monitor
+ *  hud.css lets the pointer reach — see THE GRIP above. */
+export const MON_GRIP_CLASS = 'gg-mon-grip';
 /** On the HOST element ui/hud.js hands us, while it is holding the column open. */
 export const MON_HOST_LOOSE_CLASS = 'is-mon-loose';
 
@@ -404,14 +436,23 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
   if (!root || !host) {
     return {
       unmount() { led.run(); },
-      root: null, dropTarget: null,
+      root: null, dropTarget: null, grip: null,
       showEmote() {}, markEmoteFired() { return false; },
       isLoose() { return false; }, loosePlacement() { return null; }, redock() { return false; },
     };
   }
 
-  // ---- head: name · connection dot · their score · charge pips ------------
-  const head = add(root, el('div', 'gg-mon-head'));
+  // ---- head: grip · connection dot · name · their score · charge pips -----
+  // The head row is ALSO the titlebar (MON_GRIP_CLASS, see THE GRIP above): on a
+  // docked monitor it is the only strip hud.css lets the pointer reach, so it is
+  // where the drag and the wheel both have to start. Nothing in it is
+  // interactive — a dot, two words and five pips — which is exactly why it is
+  // safe to claim the whole row rather than a corner of it.
+  const head = add(root, el('div', 'gg-mon-head ' + MON_GRIP_CLASS));
+  if (head && head.setAttribute) head.setAttribute('title', S.monitor.dragHint);
+  // …and the affordance, first in the row: nobody drags a thing that does not
+  // look draggable, which is half of why this went unnoticed for a whole batch.
+  add(head, el('i', 'gg-mon-grip-dots'));
   const dot = add(head, el('i', 'gg-mon-dot'));
   const nameEl = add(head, el('span', 'gg-mon-name', 'opponent'));
   const scoreEl = add(head, el('span', 'gg-mon-score', '0'));
@@ -1136,6 +1177,8 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
   let grab = null;
   /** Sub-slop taps: two inside MON_RESET_TAP_MS re-dock. */
   let lastTapAt = -Infinity;
+  /** The last wheel event OBJECT, so one notch seen twice is still one notch. */
+  let lastWheelEvent = null;
 
   const winRef = (typeof window !== 'undefined' && window) ? window : null;
   const vpW = () => { const v = winRef ? Number(winRef.innerWidth) : 0; return v > 0 ? v : 1280; };
@@ -1243,18 +1286,39 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
 
   /* ------------------------------------------------------------- the press */
 
+  /**
+   * The move/up/cancel listeners go on BOTH the surface the press came through
+   * and the root, and that is not belt-and-braces — it is the only arrangement
+   * that is correct in a browser AND legible to a test. In a browser the grip is
+   * a CHILD of the root, so a captured event fires the grip's handler and then
+   * bubbles into the root's; the handlers are idempotent by construction (a move
+   * recomputes the same absolute position from the same anchor, and the second
+   * endGrab finds no grab and returns), so the duplicate costs nothing. In the
+   * node suite, where nothing bubbles, it means a press dispatched at either
+   * node is a press either way.
+   */
+  function grabNodes(g) {
+    const out = [root];
+    if (g && g.surface && g.surface !== root) out.push(g.surface);
+    return out;
+  }
+
   function forgetGrab() {
     if (!grab) return;
     const g = grab;
     grab = null;
     try { clearTimeout(g.watchdog); } catch (_e) { /* gone */ }
-    if (typeof root.removeEventListener === 'function') {
+    for (const n of grabNodes(g)) {
+      if (!n || typeof n.removeEventListener !== 'function') continue;
       try {
-        root.removeEventListener('pointermove', onMonMove);
-        root.removeEventListener('pointerup', onMonUp);
-        root.removeEventListener('pointercancel', onMonCancel);
-        root.removeEventListener('lostpointercapture', onMonCancel);
+        n.removeEventListener('pointermove', onMonMove);
+        n.removeEventListener('pointerup', onMonUp);
+        n.removeEventListener('pointercancel', onMonCancel);
+        n.removeEventListener('lostpointercapture', onMonCancel);
       } catch (_e) { /* stub DOM */ }
+    }
+    if (g.surface && typeof g.surface.releasePointerCapture === 'function' && g.pointerId != null) {
+      try { g.surface.releasePointerCapture(g.pointerId); } catch (_e) { /* never had it */ }
     }
   }
 
@@ -1281,30 +1345,58 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     if (why === 'up') persistLoose();
   }
 
-  function onMonDown(e) {
+  /**
+   * WHERE A DRAG IS ALLOWED TO START. Docked, only the grip: the rest of the
+   * card is transparent to the bubble field behind it and must stay a place
+   * where a pop lands, not a place where the monitor moves. Loose, anywhere on
+   * it — by then it is a floating window the player put there on purpose.
+   *
+   * An event with NO target is one dispatched straight at a node (the node
+   * suite, a driver): there is nothing to test, and the caller has already said
+   * which node it means by choosing it.
+   */
+  function fromGrip(e) {
+    if (loose) return true;
+    const t = e && e.target;
+    if (!t || !head || typeof head.contains !== 'function') return true;
+    try { return head.contains(t); } catch (_e) { return true; }
+  }
+
+  function onMonDown(e, surface) {
     // A right press is not a drag, and swallowing it here is how a browser gets
     // talked out of its own context menu — which this element does not want to
     // be in the business of suppressing.
     if (e && e.button != null && e.button !== 0) return;
+    const pid = (e && e.pointerId != null) ? e.pointerId : null;
+    // The SAME press, seen twice: the grip's handler ran and the event then
+    // bubbled into the root's. One press is one grab, and the first one wins —
+    // it is the one holding the capture.
+    if (grab && grab.pointerId === pid) return;
     if (grab) endGrab('restart');
     const x = ptX(e), y = ptY(e);
     grab = {
-      pointerId: (e && e.pointerId != null) ? e.pointerId : null,
+      pointerId: pid,
+      surface: surface || root,
       x0: x, y0: y, baseX: 0, baseY: 0, moved: false, watchdog: 0,
     };
-    if (typeof root.addEventListener === 'function') {
+    for (const n of grabNodes(grab)) {
+      if (!n || typeof n.addEventListener !== 'function') continue;
       try {
-        root.addEventListener('pointermove', onMonMove);
-        root.addEventListener('pointerup', onMonUp);
-        root.addEventListener('pointercancel', onMonCancel);
-        root.addEventListener('lostpointercapture', onMonCancel);
+        n.addEventListener('pointermove', onMonMove);
+        n.addEventListener('pointerup', onMonUp);
+        n.addEventListener('pointercancel', onMonCancel);
+        n.addEventListener('lostpointercapture', onMonCancel);
       } catch (_e) { /* stub DOM */ }
     }
     if (typeof setTimeout === 'function') {
       grab.watchdog = setTimeout(() => { if (grab) endGrab('watchdog'); }, MON_HOLD_WATCHDOG_MS);
     }
+    // Capture on the element the press actually came through — the grip while
+    // docked, since the root is pointer-events:none there and an engine is
+    // within its rights to route nothing to it.
     try {
-      if (typeof root.setPointerCapture === 'function' && e && e.pointerId != null) root.setPointerCapture(e.pointerId);
+      const cap = grab.surface;
+      if (cap && typeof cap.setPointerCapture === 'function' && pid != null) cap.setPointerCapture(pid);
     } catch (_e) { /* capture is a nicety; the node listeners still work without it */ }
   }
 
@@ -1355,6 +1447,11 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
    * reflow the whole right-hand side of the desk.
    */
   function onMonWheel(e) {
+    // One notch is one step: the grip's handler and the root's both see the
+    // same event once it bubbles, and two steps per notch is a resize that
+    // runs away under the hand.
+    if (e && e === lastWheelEvent) return;
+    lastWheelEvent = e;
     const dy = Number(e && e.deltaY) || 0;
     if (!dy) return;
     if (e && typeof e.preventDefault === 'function') e.preventDefault();   // the page never scrolls
@@ -1369,9 +1466,16 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     persistLoose();
   }
 
-  led.listen(root, 'pointerdown', onMonDown);
+  /* THE TWO WAYS IN. The grip is the one a DOCKED monitor can actually be
+   * reached through (hud.css hands it `pointer-events: auto` and hands the card
+   * nothing); the root is the one a LOOSE monitor is grabbed anywhere by, and it
+   * is guarded so it can never quietly become a second docked grab surface if
+   * somebody widens the CSS later. Both land in the same handler. */
+  led.listen(head, 'pointerdown', (e) => onMonDown(e, head));
+  led.listen(root, 'pointerdown', (e) => { if (fromGrip(e)) onMonDown(e, root); });
   // passive:false or the preventDefault above is ignored and the page scrolls.
-  led.listen(root, 'wheel', onMonWheel, { passive: false });
+  led.listen(head, 'wheel', onMonWheel, { passive: false });
+  led.listen(root, 'wheel', (e) => { if (fromGrip(e)) onMonWheel(e); }, { passive: false });
   // The viewport changed under a parked monitor: same two rules, re-applied. The
   // width is re-DERIVED from the scale rather than kept in px, so a monitor at
   // 1.5x is 1.5x of the new --gg-mon-w and not a stale pixel count.
@@ -1409,6 +1513,8 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     dropTarget: frame,
     /** The projection rect — exposed so a play-test driver can find the minis. */
     projection: proj,
+    /** The titlebar: the only part of a DOCKED monitor a pointer can reach. */
+    grip: head,
     /** Detached from the HUD column? selftest-hud and the play-test driver pin these. */
     isLoose: () => !!loose,
     loosePlacement: () => (loose ? { x: loose.x, y: loose.y, scale: loose.scale } : null),

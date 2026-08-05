@@ -72,11 +72,17 @@
 .gg-hud-top,
 .gg-hud-body,
 .gg-hud-bottom { min-width: 0; }
+/* THE ALLOWLIST. `pointer-events` is INHERITED, so the `none` above reaches
+   every descendant of the frame and this is the complete list of things on the
+   desk a pointer can touch. A control that is not on it is invisible to the
+   mouse no matter what its own JS listens for — which is exactly how the
+   opponent monitor shipped undraggable (see .gg-mon-grip below). */
 .gg-hud-frame button,
 .gg-hud-frame .gg-plate,
 .gg-hud-frame .gg-item,
 .gg-hud-frame .gg-dial,
 .gg-hud-frame .gg-emotes,
+.gg-hud-frame .gg-mon-grip,
 .gg-hud-frame .gg-att-token { pointer-events: auto; }
 
 /* Sudden death contracts the desk: rails, monitor and dial step aside. */
@@ -915,6 +921,58 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
   animation: none;
 }
 .gg-mon.is-grabbed { cursor: grabbing; }
+
+/* 5. THE GRIP — and the bug it exists to fix (owner, 2026-08-04 round 2: "the
+ *    opponent monitor cannot be moved").
+ *
+ *    Rule 1 above says the grab surface is the whole card. It was not, and it
+ *    could not be: `#gg-hud > .gg-hud-frame { pointer-events: none }` at the top
+ *    of this file makes the entire desk transparent so the bubble field can be
+ *    played through it, `pointer-events` inherits, and .gg-mon was not on the
+ *    allowlist that opts things back in. No pointerdown ever reached the
+ *    monitor, so it could never detach — and `.gg-mon-host.is-mon-loose >
+ *    .gg-mon { pointer-events: auto }` below, the rule that would have made it
+ *    grabbable, only applies AFTER a detach that could not happen. The drag, the
+ *    wheel and the double-tap reset were all dead behind one inherited keyword.
+ *
+ *    Putting .gg-mon on the allowlist would have fixed the drag and broken the
+ *    game: the monitor sits over the top-right of the stage, bubbles drift under
+ *    it, and a card that takes clicks eats every pop in that corner (the arsenal
+ *    learned this the same way — see IT MAY NOT EAT THE FIELD). So the CARD stays
+ *    transparent and the HEAD ROW becomes a titlebar. It is ~20px of a 280px
+ *    card, it contains nothing interactive, and it is the whole cost.
+ *
+ *    Once the monitor is LOOSE the card takes pointers anyway (the is-mon-loose
+ *    rule below) and the grip stops being the only way in — by then it is a
+ *    floating window the player parked on purpose, and exec/fx.css's .gg-vwin is
+ *    grabbable all over for the same reason. */
+.gg-mon-grip {
+  cursor: grab;
+  touch-action: none;              /* a finger's first 6px is ours, not a page pan */
+  min-height: 20px;
+  padding: 2px 0;
+  /* VERTICAL ONLY. A negative inline margin would make the titlebar wider than
+     the card it sits on, and this column is the right-hand EDGE of the desk —
+     4px of overflow there is 4px off the screen on a phone. */
+  margin: -2px 0;
+  border-radius: 7px;
+  transition: background .18s ease;
+}
+.gg-mon-grip:hover { background: rgba(var(--gg-pink-rgb), 0.1); }
+.gg-mon.is-grabbed .gg-mon-grip { cursor: grabbing; }
+/* the affordance: six dots, the universal "this is a handle". Flex-frozen so it
+   never gives the name row its width back under pressure. */
+.gg-mon-grip-dots {
+  flex: 0 0 auto;
+  width: 9px; height: 13px;
+  background-image: radial-gradient(circle, rgba(var(--gg-pink-rgb), 0.85) 1px, transparent 1.3px);
+  background-size: 4.5px 4.5px;
+  background-position: center;
+  opacity: 0.5;
+  transition: opacity .18s ease;
+}
+.gg-mon-grip:hover .gg-mon-grip-dots,
+.gg-mon.is-loose .gg-mon-grip-dots { opacity: 1; }
 /* THE HOLE IT LEFT. ui/opponent.js writes a measured `min-height` on this host
    so the receipts under it do not jump up the frame the monitor detaches. The
    placeholder is an empty box over the desk, so it stops taking clicks — and the
@@ -2087,6 +2145,13 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
   /* the head row of a 190px monitor: the name gives way, the score and the
      charge pips never do */
   .gg-mon-name { max-width: 100%; }
+  /* …and the grip, which is that same row, has to survive the squeeze AND be a
+     finger target: 26px is the whole drag surface on a phone, where there is no
+     wheel and no hover to find it with. The dots narrow rather than leave —
+     they are the only thing that says the row can be dragged at all. */
+  .gg-mon-head { gap: 0.3rem; }
+  .gg-mon-grip { min-height: 26px; }
+  .gg-mon-grip-dots { width: 7px; background-size: 3.5px 4.5px; }
   .gg-mon-att-label { font-size: 0.6rem; }
   /* a receipt is right-aligned in a 190px column, so a long one has to wrap
      rather than reach back across the stage */

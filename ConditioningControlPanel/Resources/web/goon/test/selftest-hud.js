@@ -5015,8 +5015,13 @@ const audioMod = await import('../ui/audio.js');
     return { get: (k) => v[k], set: (k, x) => { v[k] = x; return true; }, _v: v };
   };
   const PID = 4200;
-  const ptr = (node, type, x, y) => {
+  /** `target` is a fifth argument on purpose: an event WITHOUT one is a press
+   *  dispatched straight AT a node, i.e. the suite naming the surface it means
+   *  rather than a hit test. One with a target is the browser's version, and it
+   *  is what the docked grab surface is decided by. */
+  const ptr = (node, type, x, y, target) => {
     const e = { type, button: 0, pointerId: PID, clientX: x, clientY: y, preventDefault() {}, stopPropagation() {} };
+    if (target) e.target = target;
     if (node && node.dispatchEvent) node.dispatchEvent(e);
     return e;
   };
@@ -5043,6 +5048,44 @@ const audioMod = await import('../ui/audio.js');
     ptr(mon.root, 'pointermove', 153, 152);           // 3.6px — inside the slop
     ptr(mon.root, 'pointerup', 153, 152);
     ok(mon.isLoose() === false, 'a sub-slop press does nothing at all — it is not a drag and it is not a click');
+
+    /* THE GRIP. The whole feature shipped unreachable: `#gg-hud > .gg-hud-frame`
+     * is pointer-events:none so the bubble field can be played through the desk,
+     * pointer-events INHERITS, and .gg-mon was not on the allowlist that opts
+     * things back in — so no press ever arrived, so it could never detach, so
+     * the `.is-mon-loose > .gg-mon { pointer-events: auto }` rule that would
+     * have unlocked it never applied. These pins are the closed loop, opened. */
+    ok(!!mon.grip, 'the monitor exposes a GRIP — the strip a docked card can actually be touched by');
+    ok(hasClass(mon.grip, O.MON_GRIP_CLASS) && hasClass(mon.grip, 'gg-mon-head'),
+      'and it IS the head row, not a bar bolted on above it', mon.grip.className);
+    ok(findAll(mon.root, 'gg-mon-grip-dots').length === 1,
+      'with the six-dot handle in it — nobody drags a thing that does not look draggable');
+    ok(!!mon.grip.getAttribute('title'),
+      '…and a tooltip, because not one of the three gestures is discoverable on its own');
+
+    // a press that came through any OTHER part of the card is not a drag: the
+    // card is transparent so a bubble under it is still poppable, and JS says so
+    // too rather than trusting one line of CSS to hold that line forever
+    ptr(mon.root, 'pointerdown', 150, 150, mon.projection);
+    ptr(mon.root, 'pointermove', 400, 300);
+    ptr(mon.root, 'pointerup', 400, 300);
+    ok(mon.isLoose() === false,
+      'a press that came through the projection rect is NOT a drag — the docked card is field, not handle');
+
+    // …and one through the grip is
+    ptr(mon.grip, 'pointerdown', 150, 150, mon.grip);
+    ptr(mon.grip, 'pointermove', 400, 300, mon.grip);
+    ok(mon.isLoose() === true, 'a drag from the grip takes it off the shelf');
+    ptr(mon.grip, 'pointerup', 400, 300, mon.grip);
+    ok(store._v.monitorX === 350, 'and lands where the grip was dragged to', String(store._v.monitorX));
+
+    // once it is LOOSE the whole card is a handle again — by then it is a window
+    // the player parked, not a row in the column (exec/fx.css's .gg-vwin, same)
+    ptr(mon.root, 'pointerdown', 400, 300, mon.projection);
+    ptr(mon.root, 'pointermove', 600, 400);
+    ok(mon.loosePlacement().x === 550,
+      'and a loose monitor is grabbable anywhere on it, projection rect included', JSON.stringify(mon.loosePlacement()));
+    ptr(mon.root, 'pointerup', 600, 400);
 
     mon.unmount();
   }
@@ -5150,6 +5193,35 @@ const audioMod = await import('../ui/audio.js');
     const before = mon.root.style[O.MON_WIDTH_VAR];
     wheel(mon.root, 0);
     ok(mon.root.style[O.MON_WIDTH_VAR] === before, 'a wheel event with no delta changes nothing');
+
+    /* ONE NOTCH IS ONE STEP. The grip listens and so does the root, and in a
+     * browser the second of those sees the SAME event a moment later, bubbled.
+     * Stepping twice per notch is a resize that runs away under the hand. */
+    for (let i = 0; i < 20; i++) wheel(mon.root, 100);   // back off the ceiling
+    const scale0 = mon.loosePlacement().scale;
+    const one = { type: 'wheel', deltaY: -100, preventDefault() {}, stopPropagation() {} };
+    mon.grip.dispatchEvent(one);
+    mon.root.dispatchEvent(one);
+    ok(Math.abs(mon.loosePlacement().scale - scale0 * O.MON_WHEEL_STEP) < 1e-9,
+      'one wheel event seen by BOTH the grip and the root is still one notch',
+      `${scale0} -> ${mon.loosePlacement().scale}`);
+
+    mon.unmount();
+  }
+
+  /* ---- D2. the wheel can be REACHED on a docked monitor ----------------- */
+  {
+    // The resize died of the same cause the drag did: while docked, the grip is
+    // the only thing on the card a wheel event can possibly land on.
+    const match = makeFakeMatch();
+    const host = document.createElement('div');
+    const mon = O.mountOpponent({ host, match, prefs: prefsOf() });
+    await sleep(50);
+
+    mon.grip.dispatchEvent({ type: 'wheel', deltaY: -100, preventDefault() {}, stopPropagation() {} });
+    ok(mon.isLoose() === true, 'a wheel over the GRIP of a docked monitor detaches and resizes it');
+    ok(mon.root.style[O.MON_WIDTH_VAR] === Math.round(200 * O.MON_WHEEL_STEP) + 'px',
+      'by exactly one notch', String(mon.root.style[O.MON_WIDTH_VAR]));
 
     mon.unmount();
   }
@@ -5285,6 +5357,26 @@ const audioMod = await import('../ui/audio.js');
     ok(/user-select:\s*none/.test(monBlocks), "and the mouse's half of the same claim");
     ok(/cursor:\s*grab/.test(monBlocks), 'and it looks grabbable');
     ok(/\.gg-mon\.is-grabbed\s*\{[^}]*cursor:\s*grabbing/.test(css), 'and held while it is held');
+
+    /* THE ONE THAT WOULD HAVE CAUGHT IT. Everything above was true on the day
+     * the monitor shipped undraggable: the drag was not broken, it was
+     * UNREACHABLE. pointer-events inherits, the desk is none so the bubble field
+     * can be played through it, and only the allowlist near the top of hud.css
+     * opts anything back in. */
+    ok(/#gg-hud\s*>\s*\.gg-hud-frame\s*\{[^}]*pointer-events:\s*none/.test(css),
+      'the desk is transparent to the pointer — the rule every gesture on it has to be let out of');
+    const gripAllow = /\.gg-hud-frame\s+\.gg-mon-grip[^{]*\{([^}]*)\}/.exec(css);
+    ok(!!gripAllow && /pointer-events:\s*auto/.test(gripAllow[1]),
+      'and the grip is on the allowlist that lets it out — without this line the drag, the wheel and the reset are all dead');
+    ok(!/\.gg-hud-frame\s+\.gg-mon\s*[,{]/.test(css),
+      'the CARD deliberately is not: it sits over the stage, and a card that took clicks would eat every bubble pop under it');
+
+    const gripBlock = blockOf('.gg-mon-grip');
+    ok(/touch-action:\s*none/.test(gripBlock),
+      "the grip claims the finger too, or the first 6px of a phone drag is a page pan", gripBlock);
+    ok(/cursor:\s*grab/.test(gripBlock), 'and it looks like what it is');
+    ok(/\.gg-mon\.is-grabbed\s+\.gg-mon-grip\s*\{[^}]*cursor:\s*grabbing/.test(css),
+      'and like a held one while it is held');
 
     ok(/\.gg-mon-host\.is-mon-loose\s*\{[^}]*pointer-events:\s*none/.test(css),
       'the placeholder it leaves behind is an empty box that stops taking clicks');
