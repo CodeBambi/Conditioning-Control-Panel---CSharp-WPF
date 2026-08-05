@@ -70,6 +70,9 @@ export function createGoonMediaPool() {
    */
   const received = new Map();
 
+  /** Last sha drawReceived handed out per kind, so a 2-3 file pool doesn't strobe. */
+  const lastPeerPick = { image: '', video: '' };
+
   /** Injected (never imported): {knows(sha), isBlocked(sha)} from net/blocklist.js. */
   let blocklist = null;
 
@@ -357,6 +360,34 @@ export function createGoonMediaPool() {
         }
       }
       return drawKindInner(kind);                                          // <- today's line
+    },
+
+    /**
+     * A random received (peer) artifact of that kind, or null. This is how a
+     * PAYLOAD keeps rendering the sender's files after its few `xfer:` tags are
+     * spent (2026-08-05 play-test: one desktop gif and then local-only reads as
+     * "the transfer doesn't work"): everything the opponent has transferred this
+     * match is fair game, and the pool only grows as the queue keeps landing.
+     *
+     * The header's invariant survives because ONLY payload render paths call
+     * this — draw()/drawKind() still never surface a peer file, so their media
+     * still appears exactly where a payload of theirs asked for it. Blocklist
+     * and kind agreement ride on viewReceived; with any choice at all the same
+     * sha is never handed out twice in a row.
+     */
+    drawReceived(kind) {
+      const want = kind === 'video' ? 'video' : (kind === 'image' ? 'image' : '');
+      if (!want) return null;
+      const pool = [];
+      for (const sha of received.keys()) {
+        const v = viewReceived(sha, want);
+        if (v) pool.push(v);
+      }
+      if (!pool.length) return null;
+      let at = (Math.random() * pool.length) | 0;
+      if (pool.length > 1 && pool[at].sha === lastPeerPick[want]) at = (at + 1) % pool.length;
+      lastPeerPick[want] = pool[at].sha;
+      return pool[at];
     },
   };
 }

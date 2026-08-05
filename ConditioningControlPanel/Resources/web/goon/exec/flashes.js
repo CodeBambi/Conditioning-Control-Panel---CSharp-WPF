@@ -750,11 +750,19 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
     if (live.size >= MAX_LIVE) return;
     if (!media || typeof media.drawKind !== 'function') return;
 
-    // media.js kinds are image|video; GIFs ride as images.
+    // media.js kinds are image|video; GIFs ride as images. A PEER run spends
+    // its exact xfer: tags first, then keeps drawing from whatever else the
+    // opponent has transferred this match (media.drawReceived) — the local
+    // library is the last resort, not the rest of the burst.
     const drawWith = takeTag(run);
-    const entry = (typeof media.drawFor === 'function')
+    const wantPeer = !!(run && run.peer);
+    let entry = (drawWith && typeof media.drawFor === 'function')
       ? media.drawFor('image', drawWith)
-      : media.drawKind('image');
+      : null;
+    if (wantPeer && (!entry || entry.provenance !== 'peer') && typeof media.drawReceived === 'function') {
+      entry = media.drawReceived('image') || entry;
+    }
+    if (!entry) entry = media.drawKind('image');
     if (!entry) return;
     const handle = (typeof media.acquire === 'function') ? media.acquire(entry) : null;
     if (!handle || !handle.url) return;
@@ -787,6 +795,7 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
 
     const rec = {
       node: img, handle, x: pos.x, y: pos.y, gen, tune, popped: false, kill: null,
+      peer: wantPeer,                         // hydra children keep drawing peer media
       rot,                                    // tilt, re-applied by every paint()
       dx: 0, dy: 0,                           // drag/fling offset in px off the anchor
       sizeVmin, baseSizeVmin: sizeVmin,       // current vs. born size (the wheel clamp)
@@ -883,7 +892,10 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
       // A live sustained run re-tunes the children to the CURRENT intensity;
       // otherwise they inherit whatever tune spawned their parent.
       const tune = sustained ? flashTuning(sustained.intensity, calm) : rec.tune;
-      soon(() => showOne(tune, opts), HATCH_MS[k] != null ? HATCH_MS[k] : 70 + k * 140);
+      // A child of a peer flash is still the opponent's moment: pass a tagless
+      // peer run so it draws received media too (takeTag on it answers null).
+      const kidRun = rec.peer ? { peer: true } : undefined;
+      soon(() => showOne(tune, opts, kidRun), HATCH_MS[k] != null ? HATCH_MS[k] : 70 + k * 140);
     }
   }
 
@@ -956,6 +968,10 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
         // tags, which is every payload before this feature and every payload on a
         // relayed connection.
         tags: xferTags(payload),
+        // PEER run: after `tags` is spent, showOne keeps drawing from the
+        // received store instead of the local library (null in solo, where
+        // nothing was ever received — the fallback is unchanged there).
+        peer: true,
       };
       let finished = false;
       const settle = (endured) => {
