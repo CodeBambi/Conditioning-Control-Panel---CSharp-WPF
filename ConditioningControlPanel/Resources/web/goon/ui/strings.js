@@ -466,16 +466,21 @@ export const S = Object.freeze({
    *      is two consents in one switch — your voice goes to them, and theirs can
    *      come back — and a player who only reads the button must not be able to
    *      miss the second half. That is why the ack gate exists at all.
-   *   2. NOTHING HERE PROMISES DELETION OR PRIVACY IT CANNOT KEEP — and until the
-   *      2026-08-05 privacy pass this block broke its own rule. It said "no server
-   *      ever hears them" and "there is no server in the middle", which is FALSE on
-   *      the fallback path and was false the day it was written: a voice note rides
-   *      the CONTROL lane precisely so it survives a relayed link (see the header of
-   *      ui/voice/voiceService.js and core/contracts.js makeVoice), and on that link
-   *      every frame is plain JSON through our /v2/goon/relay mailbox. There is no
-   *      application-layer encryption on that hop — TLS to us, readable by us.
-   *      So the copy now says the true thing in two clauses: direct link, straight
-   *      to them and we never see it; relayed link, it passes through our server.
+   *   2. NOTHING HERE PROMISES DELETION OR PRIVACY IT CANNOT KEEP — and this block
+   *      has now been wrong in BOTH directions, which is why the history is kept.
+   *      It first said "no server ever hears them", which was false the moment ICE
+   *      gave up: voice rode the CONTROL lane precisely so it survived a relayed
+   *      link, and on that link every frame was plain JSON through our
+   *      /v2/goon/relay mailbox — TLS to us, readable by us. The 2026-08-05 privacy
+   *      pass made the copy admit that hop. Later the same day the owner made the
+   *      better call: don't disclose the hop, DELETE it. Voice notes are now
+   *      P2P-ONLY, exactly like media (core/match.js `linkIsP2P` gates the send
+   *      door, the receive door and the mic itself), so the unconditional sentence
+   *      is true again — straight to them over the encrypted direct link, never
+   *      through our servers — and the relayed case gets its own honest line
+   *      saying the feature is simply off for that duel. If anything ever puts a
+   *      voice frame back on the mailbox, THIS COPY BECOMES A LIE: the assertions
+   *      in test/selftest-voice.js §6 are what stop that happening quietly.
    *      Still no "disappears after" and no "only you can hear it": what happens on
    *      their machine is theirs, and the ack line says so.
    *   3. THE OFF PATH IS NEVER SCOLDED. Cancelling a recording, refusing the mic
@@ -491,7 +496,7 @@ export const S = Object.freeze({
 
     /* --- the screen ----------------------------------------------------- */
     eyebrow: 'voice notes',
-    lead: 'ten seconds each, sent to whoever you are duelling. on a direct link it goes straight to them, encrypted, and we never see it — on a relayed one it passes through our server to reach them.',
+    lead: 'ten seconds each, sent to whoever you are duelling. straight to them over your encrypted direct link, never through our servers. no direct link, no voice notes — the mic simply is not there.',
     back: 'back',
 
     /* --- the acknowledgment gate (shown ONCE, before the toggle will move)
@@ -500,7 +505,7 @@ export const S = Object.freeze({
     ack: {
       icon: '🎙',
       headline: 'This records your real voice',
-      line: 'Holding the mic records your real voice and sends that recording to the person you are duelling. On a direct connection it travels straight to their machine, encrypted, and our servers never see it. If your two networks can only reach each other through our relay, the note passes through our server on the way to them.',
+      line: 'Holding the mic records your real voice and sends that recording to the person you are duelling. It travels straight to their machine over your encrypted direct link, and never through our servers. If your two networks can only reach each other through our relay, voice notes are switched off for that duel rather than routed through us.',
       lineTwo: 'Switching this on also means you may HEAR them: if you have both turned it on, their voice plays on your side too. Once a note has reached them it is on their machine, and what happens to it there is theirs — it cannot be taken back.',
       go: 'I understand',
       cancel: 'Not now',
@@ -605,6 +610,16 @@ export const S = Object.freeze({
     lobbyYours: 'you have voice notes on — they have not',
     lobbyTheirs: 'they have voice notes on — you have not',
     lobbyPeerOld: 'their app is too old for voice notes',
+    /**
+     * THE RELAYED DUEL, said where the transfer row says its own version of it
+     * (S.lobby.transferRelay). Voice notes are P2P-only as of 2026-08-05, so a
+     * link that could not come up direct has no mic on it at all — and the one
+     * thing this line must never do is let a player think their opt-in failed.
+     * The row is not disabled: this checkbox is also the RECEIVE gate and the
+     * standing answer for the next duel, and greying it out would hide a
+     * decision that is not about this link. See lobby.js paintVoice.
+     */
+    lobbyRelay: 'this connection is relayed — voice notes only cross a direct one, so the mic is off this match.',
     /** The row's own explanation, when there is no status to report yet. */
     lobbySub: 'hold the mic under your items to send ten seconds of your voice. you both have to switch it on.',
     /** Before the acknowledgment has been read. Says what to press, not "no". */
@@ -620,6 +635,15 @@ export const S = Object.freeze({
     micMissing: 'no microphone found',
     /** The one line that explains a hidden mic button mid-match. */
     notActive: 'voice notes need both of you switched on',
+    /**
+     * ...and the OTHER reason there is no mic, which is not a switch anybody can
+     * flip. Short, because this one lands on the strip (ui/voice/micHud.js
+     * sendReasonLine) in the race where a link degrades between the release and
+     * the send. Never phrased as a failure: nothing broke, the note just has no
+     * private road to travel and we would rather send nothing than send it
+     * through ourselves.
+     */
+    relayOff: 'no direct link — voice notes stay home',
     /** Where the volume lives, from the screen that made the note. */
     volumeHint: 'their notes play at the Voice notes volume in options.',
   },

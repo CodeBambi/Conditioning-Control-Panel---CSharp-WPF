@@ -235,13 +235,19 @@ function createLedger() {
  * the suite pins the mapping rather than re-deriving it, and so a reason nobody
  * anticipated still says something true instead of nothing.
  *
- * @param {string} reason  sent|unavailable|too-soon|busy|empty|too-big|unreadable|aborted|send-failed
+ * @param {string} reason  sent|relay|unavailable|too-soon|busy|empty|too-big|unreadable|aborted|send-failed
  * @param {number} [waitSec] seconds left on the 4s floor, for 'too-soon'
  */
 export function sendReasonLine(reason, waitSec = 1) {
   switch (reason) {
     case 'sent':        return S.voice.sent;
     case 'too-soon':    return S.voice.tooSoon(Math.max(1, Math.ceil(waitSec)));
+    /* THE RELAYED DUEL. Its own sentence rather than `notActive`, because it is not a
+     * switch anybody can flip: voice notes are P2P-only and this link never came up
+     * direct. In practice the mic is already gone by the time a send could answer this
+     * (the service's availability bit carries the same fact), so this is the copy for
+     * the race — a link that degraded between the release and the send. */
+    case 'relay':       return S.voice.relayOff;
     case 'unavailable': return S.voice.notActive;
     case 'aborted':
     case 'busy':        return S.voice.cancelled;
@@ -902,8 +908,9 @@ export function mountMicHud({
    * THE ONE PRESENCE RULE. Two independent bits decide whether the mic is on the
    * desk at all, and NEITHER of them may leave a gesture running:
    *
-   *   live       ui/voice/voiceService.js's five-fact predicate — both consents,
-   *              the peer's build, the phase, your own opt-in.
+   *   live       ui/voice/voiceService.js's six-fact predicate — the LINK being
+   *              direct (voice notes are P2P-only), both consents, the peer's
+   *              build, the phase, your own opt-in.
    *   hudHidden  the desk's zen toggle, pushed in by ui/hud.js.
    *
    * The mic is not DISABLED when either is false — it is NOT THERE. A greyed-out
@@ -1001,8 +1008,9 @@ export function mountMicHud({
 
   /**
    * WHY IS THERE NO MIC ON THE DESK, for the two reasons the SERVICE cannot see
+   * (the relayed link is one it CAN — whyUnavailable names it)
    * (boot.js reportMicGate turns this into the one warn line a play-test reads).
-   * '' when it is on screen, or when it is the service's own five-fact gate that
+   * '' when it is on screen, or when it is the service's own six-fact gate that
    * is closed — that half has its own sentence in ui/voice/voiceService.js.
    */
   function hiddenBy() {

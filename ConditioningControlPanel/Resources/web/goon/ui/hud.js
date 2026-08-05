@@ -824,8 +824,9 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const announcer = mountAnnouncer({ host: root, match, audio, onLog });
 
   /* The mic. Mounted unconditionally and hidden by itself: whether a duel has
-   * voice in it is five facts wide (both consents, the peer's build, the phase,
-   * your own opt-in) and ui/voice/voiceService.js is the one place that knows —
+   * voice in it is six facts wide (the LINK being direct — voice notes are
+   * P2P-only, like media — both consents, the peer's build, the phase, your own
+   * opt-in) and ui/voice/voiceService.js is the one place that knows —
    * the desk subscribes to the answer instead of re-deriving any of it. With no
    * service at all this is a no-op handle and no DOM. */
   /* WHAT THE DRAWER OWES BACK. `null` = we have not opened it for the mic;

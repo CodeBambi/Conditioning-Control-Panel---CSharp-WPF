@@ -4836,7 +4836,12 @@ const audioMod = await import('../ui/audio.js');
   }
 
   {
-    // the feature going away under a live hold
+    /* The feature going away under a live hold — and since 2026-08-05 the commonest
+     * REAL cause of that edge is the link: voice notes are P2P-only, so a duel that
+     * degrades to the relay mailbox mid-recording drops `available()` and lands here.
+     * The service raises the edge (test/selftest-voice.js §5), and this is the half
+     * that says a running microphone dies with it rather than staying hot behind a
+     * button nobody can see. */
     const m = mountMic();
     m.v._set(true);
     ptr(m.btn, 'pointerdown', 200);
@@ -4845,6 +4850,7 @@ const audioMod = await import('../ui/audio.js');
     await sleep(20);
     ok(m.r.st.cancels === 1, 'voice going unavailable mid-hold cancels the recording');
     ok(m.host.hidden === true, 'and the mic leaves with it');
+    ok(m.v._sends.length === 0, 'and NOTHING was sent — a cancelled hold is not a note');
     m.mic.unmount();
   }
 
@@ -4993,6 +4999,16 @@ const audioMod = await import('../ui/audio.js');
     ok(micMod.sendReasonLine('unavailable') === S20.voice.notActive, 'a dead feature explains itself');
     ok(micMod.sendReasonLine('nonsense-from-the-future') === S20.voice.sendFailed,
       'and an unknown reason still says something true');
+    /* THE RELAYED LINK (2026-08-05). Voice notes are P2P-only, so 'relay' is a
+     * refusal a player cannot act on — and it must NOT borrow `notActive`, which
+     * sends them looking for a toggle that would change nothing. In practice the
+     * mic is already off the desk by then; this line is for the race where the
+     * link degrades between the release and the send. */
+    ok(micMod.sendReasonLine('relay') === S20.voice.relayOff,
+      'a relayed link gets its own sentence', micMod.sendReasonLine('relay'));
+    ok(micMod.sendReasonLine('relay') !== micMod.sendReasonLine('unavailable')
+      && micMod.sendReasonLine('relay') !== micMod.sendReasonLine('nope'),
+    '...which is neither the "switch it on" line nor the generic failure');
 
     /* TWO KINDS OF NO, AND THEY ARE NOT THE SAME SENTENCE. sendReasonLine is
      * about a NOTE that failed to cross; micReasonLine is about a MICROPHONE
