@@ -1,6 +1,6 @@
 ## STATUS: SP-051 — ChaosSfx cue→chain audit + typed resolution
-**Current Step:** Step 1 — complete cue→chain map + gap classification + pre-approach consult
-**Last Updated:** 2026-08-05 (worker, Step 1 complete pending plan review)
+**Current Step:** Step 3 — evidence consolidation + pre-completion consult
+**Last Updated:** 2026-08-05 (worker, Step 2 complete)
 **Blockers:** none
 **Discoveries:** (1) Pre-audit drift removed in Step 2: greenfield substituted `chime1.mp3` for the `wave_clear` chain and `Pop2.mp3` for the `ripple_cast` chain — neither is a chain member. Per the audit binary (chain OR named gap) + pre-approach consult ruling, both become typed named gaps; `wave_clear`/`ripple_cast` go SILENT in the greenfield until the WPF chaos sound-library content row lands. User-observable behavior change, surfaced for the owner. (2) Page-sent `detonate_thud`/`dive` are absent even from the WPF library — silent in WPF too. (3) Solo consult route on this laptop answers with anthropic/claude-fable-5 (bpx-consult.json).
 
@@ -11,9 +11,9 @@
 - [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: typed chain resolution + tests
-- [ ] Resolution layer handles audited chains typed (chain target + scale kept; gaps typed + recorded)
-- [ ] Tests pin every resolved chain + every named gap
-- [ ] Complete table in record.md
+- [x] Resolution layer handles audited chains typed (chain target + scale kept; gaps typed + recorded)
+- [x] Tests pin every resolved chain + every named gap
+- [x] Complete table in record.md
 
 ### Step 3: evidence consolidation + pre-completion consult
 - [ ] record.md (map, classification, design, consults, review presence)

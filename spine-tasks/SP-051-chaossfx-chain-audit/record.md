@@ -135,6 +135,41 @@ case-insensitive (Linux honest). Resolution outcome typed:
 and never touches the pool; an unknown unlisted cue keeps the existing silent-no-op log.
 Presence+shape logging discipline unchanged (cue names are stable tokens; no user paths).
 
+## Step 2 — typed chain resolution + tests (landed)
+
+`DtrhNativeEffects.cs`:
+- `AuditedChains` — the static ordinal-keyed table (A1-A4, A6 fixed chains;
+  `boon_reveal_rare`/`boon_reveal_common` as table rows for future consumers, per consult
+  ruling 2). `ticktock` intentionally has NO row: its page path rides the generic chain
+  (`DtrhHostService.cs:262` → `ChaosSfx.cs:47`), which the generic arm reproduces exactly.
+- `ChaosSfxChain` / `ChaosSfxResolution` — the typed chain + outcome records
+  (`Resolved(path, scale)` vs `GapNote` carrying the WPF chain + cite).
+- `ResolveSfxCue(name, pageScale)` — the shared resolution entry point (PlaySfx is a thin
+  wrapper; tests + future consumers call it directly). Table row → fixed scale or page
+  scale passthrough (`FixedScale ?? pageScale`); generic arm → `{name}.mp3` @ page scale.
+  Unresolved non-empty cue → GapNote "named content gap (WPF chain …, File.cs:line — WPF
+  sound-library content, future content row)"; null/empty cue → plain silent no-op.
+- The off-chain substitutions (wave_clear→chime1, ripple_cast→Pop2) are REMOVED
+  (consult ruling 1). Prior stand-in knowledge preserved: chime1 had been chosen as the
+  "rewarding-chime outcome" stand-in, Pop2 as the "dull-thud outcome" stand-in.
+
+Tests (`DtrhNativeEffectsTests.cs`, all green — 669/33 total, floor 629/33):
+- `Sfx_AuditedChains_ResolvePerChain_AndGenericResolution` — boon_reveal_rare→chime1 @0.6,
+  boon_reveal_common→Pop2 @0.65 (page scale ignored), generic pop @ page scale.
+- `Sfx_FixedChainGaps_TypedAndRecorded` — wave_clear/ripple_cast/ticktock: no player, gap
+  log names the cue + the exact WPF chain + the cite.
+- `Sfx_GenericPageCues_NamedGaps` — theory over all 36 generic page-sent cues + unlock_card:
+  each a typed named gap with `chaos/{cue}.mp3` + `ChaosSfx.cs:47` cited.
+- `Sfx_ChainFallsBack_ResolvesWhenDedicatedAbsent` — wave_clear→lvup.mp3 @0.8,
+  boon_reveal_rare→chime1 @0.6 when the fallback member is present.
+- `Sfx_DedicatedFile_WinsOverFallback` + `Sfx_BoonReveal_DedicatedFile_WinsOverFallback` —
+  first-exists order per chain (wave_clear.mp3 over lvup.mp3; dling/thud over fallbacks).
+- `Sfx_ResolveSfxCue_TypedOutcomes` — the typed entry point: resolved scale + path, gap
+  notes, null-name plain no-op.
+- `Sfx_BoonPick_ChainFallsBackToChime2_KeepingPageScale` — untouched, still green (SP-049).
+
+The complete cue→chain table is the Step 1 section above (the audit deliverable).
+
 ## Consults
 
 ### Pre-approach solo consult (Step 1)
@@ -168,8 +203,8 @@ Presence+shape logging discipline unchanged (cue names are stable tokens; no use
 
 ## Engine-review presence (T-2)
 
-- Step 1 plan review: PENDING
-- Step 2 plan review: PENDING
+- Step 1 plan review: ABSENT (in-worker reviewer spawn blocked, SP-195; engine runs reviews after .DONE — artifact `.reviews/1-20260805T085456.md`)
+- Step 2 plan review: ABSENT (in-worker reviewer spawn blocked, SP-195; engine runs reviews after .DONE)
 - Step 3 plan review: PENDING
 
 ## Durable-lesson candidates
