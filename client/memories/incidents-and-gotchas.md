@@ -77,3 +77,10 @@ The wave-4 land needed 4 clean+retry cycles: bin/obj build outputs regenerate pe
 - **Zombie test-host flake class:** progressive 1→2→3 red across identical runs = leaked dotnet test hosts holding loopback ports; kill zombies first, then judge the floor. TRX logger for failing test names (console truncates). T-15 filed for the c2 lab harness.
 - **Consult provenance anomaly (T-7 class):** SP-039's worker consults self-reported "GPT-5" — self-report is non-evidence; route pin says opus-5. Substance applied; engine reviews independently green. Flagged to owner.
 - **3rd gate-history edit slip today (recurrence):** structure audit after EVERY board edit before the next one; standing-order candidate.
+
+## 2026-08-05 — wave-9 (SP-046) era
+
+- **Real Ollama 0.32.5 NOW RUNS on the laptop** (127.0.0.1:11434) — SP-019 limit 1 ("absent") was spike-time true, now stale. The deterministic lab stays the contract instrument; future AI slices may opt into real-model LAB evidence. Environment facts rot — re-probe per session.
+- **avalonia-live windowId silent drop:** the seat ignores `windowId` on screenshot/click calls — use `target`/`handle` and validate capture dimensions against the intended window BEFORE the evidence pass (bit twice in one task).
+- **Panic surfaces need an explicit re-arm** (SelectProvider(current) after PanicAsync) — the calm state must be a WORKING state; proof = post-panic success.
+- **Memory→prompt context is NOT built** (board row filed 2026-08-05): c4's store persists/clears; nothing consumes it as conversation context yet. WPF shape: full dialogue history per request (`LocalAiService.cs:374-390`).

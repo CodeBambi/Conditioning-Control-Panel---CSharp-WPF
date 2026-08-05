@@ -96,3 +96,10 @@ only with RATIFIED decree citation placed in evidence cells. Never flip without 
 - **SP-045 (ManualClock hygiene):** done, grep-proven zero assertion/wall-clock changes.
 - **First ZERO-recovery wave** — no merge-stage T-5 cycles at all (T-14 hook + T-15 harness era).
 - **Next: SP-046 = c7 companion UI (FIRST UI SLICE)** — improve-don't-clone decree + avalonia-live evidence + A-013 advisory; carries the bool-overload retirement.
+
+## Wave 9 (2026-08-05, integrate 4479689a; floor now 601/601 + 33/33)
+
+- **SP-046 (c7 companion UI):** owned modeless CompanionWindow on the REAL typed pipeline; badge truth type-computed; status from capability state; refusal bubble; memory-clear control (default-No + file deletion); consent/cooldown surfaces; panic-quiet + RE-ARM; bool-door RETIRED; avalonia-live carried the WH-class discharge (windowId silent-drop quirk recorded); K3 review PASS. **The c1–c7 slice cut is COMPLETE; the AI row's acceptance is NOT** (remaining limits on the row: Linux halves, Fallback type-level, reserved moderation rows, memory-not-consumed, none-admitted commands, §9.2 ×7, owner ratification).
+- **New row: memory→prompt context (OPEN)** — the real functional gap (WPF: full dialogue history per request).
+- **Next: phase-scope re-derivation consult** before further authoring (claimable inventory: prompt-context, dashboard-surface question, DTRH payload-location decision; rest owner-gated/excluded).
+- Real Ollama 0.32.5 now runs on the laptop (SP-019 limit 1 stale).
