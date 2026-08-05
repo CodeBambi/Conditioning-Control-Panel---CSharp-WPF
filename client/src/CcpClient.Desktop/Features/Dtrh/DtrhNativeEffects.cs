@@ -167,6 +167,11 @@ public sealed class DtrhNativeEffects : IDisposable
             // ChaosSfx.cs:41 — helper ignores the page scale (DtrhHostService.cs:261).
             ["ripple_cast"] = new(["ripple_cast.mp3", "snap.mp3"], 0.6,
                 "chaos/ripple_cast.mp3 → chaos/snap.mp3", "ChaosSfx.cs:41"),
+            // ChaosSfx.cs:37 helper is @0.45, but the page path rides the generic chain at
+            // the PAGE scale (DtrhHostService.cs:262 → ChaosSfx.cs:47) — a table row (not
+            // the generic arm) so the gap log self-cites the named helper chain.
+            ["ticktock"] = new(["ticktock.mp3"], null,
+                "chaos/ticktock.mp3", "ChaosSfx.cs:37; page path ChaosSfx.cs:47"),
         };
 
     /// <summary>Resolve one cue against the sfx pool through the audited chains (SP-051):
@@ -180,7 +185,13 @@ public sealed class DtrhNativeEffects : IDisposable
         double scale;
         string? chain;
         string? cite;
-        if (name is { Length: > 0 } && AuditedChains.TryGetValue(name, out var audited))
+        ChaosSfxChain? audited = null;
+        if (name is { Length: > 0 })
+        {
+            AuditedChains.TryGetValue(name, out audited);
+        }
+
+        if (audited is not null)
         {
             candidates = audited.Candidates;
             scale = audited.FixedScale ?? pageScale;
@@ -197,9 +208,15 @@ public sealed class DtrhNativeEffects : IDisposable
 
         var path = ResolveSfx(candidates);
         if (path is not null) return new ChaosSfxResolution(path, scale, null);
+        // Two honest gap phrasings (SP-051 pre-completion consult): an AUDITED table row's
+        // members are verified WPF sound-library content (a future content row); a GENERIC
+        // cue's file may not exist even in the WPF library (page-sent detonate_thud/dive
+        // don't) — claim only what was verified.
         return new ChaosSfxResolution(null, scale,
             chain is null ? null
-                : $"named content gap (WPF chain {chain}, {cite} — WPF sound-library content, future content row)");
+                : audited is not null
+                    ? $"named content gap (WPF chain {chain}, {cite} — WPF sound-library content, future content row)"
+                    : $"named content gap (WPF chain {chain}, {cite} — no chain member in the payload sfx pool)");
     }
 
     /// <summary>Resolve the first candidate that exists in the sfx pool (payload

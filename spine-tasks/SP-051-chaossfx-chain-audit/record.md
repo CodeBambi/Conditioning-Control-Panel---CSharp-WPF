@@ -8,6 +8,20 @@ Pop.mp3, Pop2.mp3, Pop3.mp3, chime1.mp3, chime2.mp3, chime3.mp3). The WPF chaos 
 (`ConditioningControlPanel/Resources/sounds/`, incl. `chaos/` with 66 files) is WPF-tree content —
 a future content row, never copied ad hoc into this slice.
 
+> **USER-OBSERVABLE BEHAVIOR CHANGE (for the land-time board reconciliation):**
+> `wave_clear` and `ripple_cast` were previously resolved off-chain in the greenfield
+> (chime1 / Pop2 stand-ins — not members of those WPF chains). Per the audit binary +
+> pre-approach consult ruling, both are now typed named gaps: **the greenfield goes SILENT
+> on `wave_clear` / `ripple_cast` / `ticktock` (and all generic chaos page cues) until the
+> WPF chaos sound-library content row lands.** WPF today plays `lvup.mp3` / `ripple_cast.mp3`
+> / `ticktock.mp3` etc. Suggested board-row evidence sentence: "Audit complete (SP-051):
+> 3 chains resolve per WPF (boon_reveal_rare→chime1, boon_reveal_common→Pop2,
+> boon_pick→chime2); every other chaos cue is a typed named content gap pending the WPF
+> chaos sound-library content row (wave_clear/ripple_cast lose their off-chain stand-ins —
+> silent until the content row)." **Follow-up row to file:** port the WPF chaos sound
+> library (`Resources/sounds/chaos/` + `lvup.mp3` + `chime1-3.mp3`, 66+ files) into the
+> greenfield content — closes every named gap in this audit at once.
+
 ## Step 1 — the complete cue→chain map
 
 ### Tier A — fixed fallback chains (`Services/Chaos/ChaosSfx.cs`)
@@ -24,6 +38,10 @@ a future content row, never copied ad hoc into this slice.
 Resolution mechanics (all chains): first candidate that exists on disk wins
 (`ChaosSfx.cs:62-79` `PlayFirstAvailable`); absent-everything = silent no-op, logged
 (`ChaosSfx.cs:75-77`); volume = `master × scale` clamped 0..1 (`ChaosSfx.cs:96-103`).
+Candidates resolve through `ModResourceResolver.ResolveAudioPath` — an ACTIVE MOD can
+override any chain member before the fallback order runs (pre-completion consult note);
+the greenfield analogue is `DtrhNativeEffectsOptions.SfxRoots` overlay-first ordering
+(`DtrhHostWindow.axaml.cs:304`).
 
 ### Tier B — page-sent cues riding the generic chain
 
@@ -88,6 +106,20 @@ Dynamic call sites: payload stingers `fx_drain`/`fx_freeze`/`fx_rain_start`
 rows). All are named content gaps on the same generic chain; the typed generic-gap
 mechanism covers any of them the moment a consumer sends the name.**
 
+### Tier C-bis — consumer-side chains assembled at WPF call sites (audible outcomes)
+
+Not ChaosSfx-internal chains, but user-observable hearing behavior the future chaos
+feature rows must carry (pre-completion consult addition):
+
+- `BubbleService.cs:1829-1833` `PlayChaosCue(name)`: `ResolvePath(name)` empty →
+  **`PlayPopSound(false)` — an AUDIBLE ambient-pop fallback, not silence.** The greenfield
+  gap outcome for these cues is silence; when the bubble feature row lands, its consumer
+  must reproduce the pop fallback or the row records the deviation.
+- `BubbleService.cs:4108-4109`: `shield_thunk` → `toy_denied` two-step `ResolvePath` chain.
+- `BubbleService.cs:1349`: `defuse_hiss` presence gate (`ResolvePath(...).Length > 0`)
+  switches a defuse outcome sound on/off.
+- `ChaosModeService.cs:1374`: `glass_shatter`-or-`trigger` presence-selected ternary.
+
 ### Tier D — WPF library content with no identifiable call site (content ahead of code)
 
 `capstone_reached`, `chain_pop`, `fx_text`, `menu_theme`, `pocket_sewn`, `rabbit_catch`,
@@ -138,17 +170,20 @@ Presence+shape logging discipline unchanged (cue names are stable tokens; no use
 ## Step 2 — typed chain resolution + tests (landed)
 
 `DtrhNativeEffects.cs`:
-- `AuditedChains` — the static ordinal-keyed table (A1-A4, A6 fixed chains;
-  `boon_reveal_rare`/`boon_reveal_common` as table rows for future consumers, per consult
-  ruling 2). `ticktock` intentionally has NO row: its page path rides the generic chain
-  (`DtrhHostService.cs:262` → `ChaosSfx.cs:47`), which the generic arm reproduces exactly.
+- `AuditedChains` — the static ordinal-keyed table (A1-A4, A6 fixed chains + `ticktock`
+  as a page-scale row so its gap log self-cites the helper chain; `boon_reveal_rare`/
+  `boon_reveal_common` as table rows for future consumers, per consult ruling 2).
 - `ChaosSfxChain` / `ChaosSfxResolution` — the typed chain + outcome records
   (`Resolved(path, scale)` vs `GapNote` carrying the WPF chain + cite).
 - `ResolveSfxCue(name, pageScale)` — the shared resolution entry point (PlaySfx is a thin
   wrapper; tests + future consumers call it directly). Table row → fixed scale or page
   scale passthrough (`FixedScale ?? pageScale`); generic arm → `{name}.mp3` @ page scale.
-  Unresolved non-empty cue → GapNote "named content gap (WPF chain …, File.cs:line — WPF
-  sound-library content, future content row)"; null/empty cue → plain silent no-op.
+  Two honest gap phrasings (pre-completion consult): an audited table row logs "named
+  content gap (WPF chain …, cite — WPF sound-library content, future content row)"
+  (members verified present in the WPF library); a generic-arm cue logs "named content
+  gap (WPF chain chaos/{name}.mp3, ChaosSfx.cs:47 — no chain member in the payload sfx
+  pool)" (its file may not exist even in the WPF library — detonate_thud/dive don't).
+  Null/empty cue → plain silent no-op.
 - The off-chain substitutions (wave_clear→chime1, ripple_cast→Pop2) are REMOVED
   (consult ruling 1). Prior stand-in knowledge preserved: chime1 had been chosen as the
   "rewarding-chime outcome" stand-in, Pop2 as the "dull-thud outcome" stand-in.
@@ -199,14 +234,49 @@ The complete cue→chain table is the Step 1 section above (the audit deliverabl
 
 ### Pre-completion solo consult (Step 3)
 
-- PENDING
+- Route: solo. Actual answering model: **anthropic/claude-fable-5** (bpx-consult.json —
+  the configured solo route on this laptop; Opus 5 main not registered here).
+- Verdict: map COMPLETE (every ChaosSfx.cs chain member accounted for). Four findings,
+  all applied:
+  1. **Record the mod-resolution layer** — `ModResourceResolver.ResolveAudioPath` lets an
+     active mod override any chain member pre-fallback; greenfield analogue = overlay-first
+     `SfxRoots`. Added to the map's resolution mechanics.
+  2. **Consumer-side chains were under-recorded** — `BubbleService.PlayChaosCue`'s
+     `ResolvePath`-miss → `PlayPopSound(false)` is an AUDIBLE ambient-pop fallback (not
+     silence), plus shield_thunk→toy_denied, the defuse_hiss presence gate, and the
+     glass_shatter/trigger ternary. Added as Tier C-bis with the future-row obligation.
+  3. **Overclaim in the generic gap log (fixed in code)** — claiming "WPF sound-library
+     content" for every unresolved cue was false for detonate_thud/dive/arbitrary tokens.
+     `ResolveSfxCue` now emits two phrasings: table rows cite the verified WPF-library
+     content row; the generic arm claims only "no chain member in the payload sfx pool".
+  4. **ticktock under-cited at runtime** — promoted to a page-scale table row so its gap
+     log self-cites `ChaosSfx.cs:37; page path ChaosSfx.cs:47`. No behavior change
+     (single-member chain, page scale — identical to the generic arm).
+  Plus a land-time ambiguity risk: the wave_clear/ripple_cast silence must be unmissable
+  at board reconciliation — addressed with the banner + suggested board-paste sentence +
+  the named follow-up content row at the top of this record.
+- Scale-semantics check (verdict): fixed vs page scale per WPF routing confirmed correct —
+  helper-routed cues (wave_clear/ripple_cast via DtrhHostService.cs:260-261) ignore the
+  page scale in WPF and in the greenfield; boon_pick's union chain + page scale is the
+  packet-blessed SP-049 precedent; volume = master × scale clamped 0..1 both sides.
 
 ## Engine-review presence (T-2)
 
 - Step 1 plan review: ABSENT (in-worker reviewer spawn blocked, SP-195; engine runs reviews after .DONE — artifact `.reviews/1-20260805T085456.md`)
 - Step 2 plan review: ABSENT (in-worker reviewer spawn blocked, SP-195; engine runs reviews after .DONE)
-- Step 3 plan review: PENDING
+- Step 3 plan review: ABSENT (in-worker reviewer spawn blocked, SP-195; engine runs reviews after .DONE)
 
 ## Durable-lesson candidates
 
-- PENDING
+- **Gap logs must claim only what was verified.** A template that asserts "WPF-library
+  content, future content row" for every unresolved cue overclaims the moment a cue is
+  absent from the WPF library too (detonate_thud/dive). Two phrasings: verified-content
+  gaps vs absence-only gaps. (port-lessons candidate: honesty in typed-gap messaging.)
+- **Off-chain "close enough" substitutions hide parity gaps.** The pre-audit chime1/Pop2
+  stand-ins made wave_clear/ripple_cast audible while masking that the WPF chain content
+  was never ported — the exact gap class the board row exists to expose. Chain-or-named-
+  gap, never a silent third option.
+- **Consumer-side fallback chains live outside the resolver.** WPF hearing outcomes are
+  also assembled at call sites (PlayChaosCue → ambient-pop fallback; presence-gated
+  ternaries). A resolver-level audit must enumerate call-site chains too or the map
+  under-reports what users hear.
