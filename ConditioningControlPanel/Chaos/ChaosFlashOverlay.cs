@@ -220,14 +220,23 @@ public sealed class ChaosFlashOverlay : Window
 
     /// <summary>Pick one random image from the SAME enabled pool the flashes draw on (disk +
     /// content packs, honoring the asset manager's disabled set) — see FlashService.GetChaosImagePaths.
-    /// Falls back to the raw folder listing only if the flash service isn't up yet. Returns null if
-    /// nothing is enabled. One image = at most one pack decrypt, so it's cheap on the UI thread.</summary>
+    /// Falls back to the raw folder listing ONLY when the flash service isn't up at all. Returns null if
+    /// nothing is enabled. One image = at most one pack decrypt, so it's cheap on the UI thread.
+    ///
+    /// #762/#798/#619: the fallback used to trigger on an EMPTY result, which cannot tell "service not
+    /// initialized" from "the user unchecked everything" — so deselecting all assets made the wash fall
+    /// back to the RAW folder and flash exactly the content the user had just turned off. An empty
+    /// enabled pool means show nothing, so gate on the service reference instead.</summary>
     private static string? PickImage()
     {
         try
         {
-            var picks = App.Flash?.GetChaosImagePaths(1);
-            if (picks != null && picks.Count > 0) return picks[0];
+            var flash = App.Flash;
+            if (flash != null)
+            {
+                var picks = flash.GetChaosImagePaths(1);
+                return picks != null && picks.Count > 0 ? picks[0] : null;
+            }
             // Fallback (Flash service not initialized): raw folder pool.
             var files = ChaosImagePool.GetFiles();
             if (files.Count == 0) return null;

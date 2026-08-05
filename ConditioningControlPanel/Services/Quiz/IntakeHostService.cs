@@ -721,23 +721,53 @@ namespace ConditioningControlPanel.Services.Quiz
             catch { return string.Empty; }
         }
 
+        /// <summary>
+        /// Deselected-asset lookup set, built from <c>AppSettings.DisabledAssetPaths</c> (the blacklist
+        /// the Assets tree writes: paths relative to EffectiveAssetsPath). Normalized exactly like
+        /// <c>FlashService.GetMediaFiles</c> — separator-agnostic and case-insensitive — so the same
+        /// uncheck that hides an image from the flashes hides it from the intake page too.
+        /// </summary>
+        internal static HashSet<string> BuildDisabledAssetSet(IEnumerable<string>? disabledPaths) => new(
+            (disabledPaths ?? Enumerable.Empty<string>()).Select(p => (p ?? "").Replace('\\', '/')),
+            StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>True when <paramref name="fullPath"/> is still enabled for the user's preset.
+        /// Empty set = nothing deselected = everything active (identical to the pre-fix behavior).</summary>
+        internal static bool IsAssetActive(HashSet<string> disabled, string root, string fullPath)
+        {
+            if (disabled.Count == 0) return true;
+            string rel;
+            try { rel = Path.GetRelativePath(root, fullPath).Replace('\\', '/'); }
+            catch { return true; }   // unrelatable path: never silently drop content over a path quirk
+            return !disabled.Contains(rel);
+        }
+
         /// <summary>MediaManifest (contracts.js): a small random sample of the user's flash images,
         /// split gifs/stills, as ccp.assets URLs. Null on any failure — the page's effect layer
-        /// falls back to its particle stand-ins.</summary>
+        /// falls back to its particle stand-ins.
+        ///
+        /// #762/#798/#619: this walk used to list the images folder RAW, so anything the user
+        /// unchecked in the Assets tree still rode the manifest and showed up in the intake page's
+        /// effect layer / captcha grid. It now applies the same DisabledAssetPaths filter the flash
+        /// pool uses; users with nothing deselected see exactly what they saw before.</summary>
         private static object? BuildMediaManifest()
         {
             try
             {
                 var gifs = new List<string>();
                 var stills = new List<string>();
-                var imagesRoot = Path.Combine(App.EffectiveAssetsPath, "images");
+                var assetsRoot = App.EffectiveAssetsPath;
+                var imagesRoot = Path.Combine(assetsRoot, "images");
+                var disabled = BuildDisabledAssetSet(App.Settings?.Current?.DisabledAssetPaths);
                 if (Directory.Exists(imagesRoot))
                 {
                     foreach (var file in Directory.EnumerateFiles(imagesRoot, "*", SearchOption.AllDirectories))
                     {
                         var ext = Path.GetExtension(file).ToLowerInvariant();
+                        if (ext != ".gif" && ext is not (".png" or ".jpg" or ".jpeg" or ".webp")) continue;
+                        if (!IsAssetActive(disabled, assetsRoot, file)) continue;   // unchecked in the Assets tree
                         if (ext == ".gif") gifs.Add(file);
-                        else if (ext is ".png" or ".jpg" or ".jpeg" or ".webp") stills.Add(file);
+                        else stills.Add(file);
                     }
                 }
 
