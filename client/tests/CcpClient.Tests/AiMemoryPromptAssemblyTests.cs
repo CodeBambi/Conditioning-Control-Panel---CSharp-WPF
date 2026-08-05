@@ -255,6 +255,13 @@ public class AiMemoryPromptAssemblyTests
         await pipeline.RunInteractiveAsync(new AiRequest("wire question two"));
 
         Assert.Equal(2, listener.ChatBodies.Count);
+        // The FIRST request's payload is the pre-SP-047 single-message shape (wire-level
+        // proof that empty history leaves the payload unchanged).
+        using (var firstDoc = JsonDocument.Parse(listener.ChatBodies[0]))
+        {
+            Assert.Single(firstDoc.RootElement.GetProperty("messages").EnumerateArray());
+        }
+
         using var doc = JsonDocument.Parse(listener.ChatBodies[1]);
         var messages = doc.RootElement.GetProperty("messages").EnumerateArray().ToArray();
         Assert.Equal(3, messages.Length);
@@ -304,7 +311,13 @@ public class AiMemoryPromptAssemblyTests
 
         public Uri Prefix { get; }
 
-        public List<string> ChatBodies { get; } = [];
+        /// <summary>Snapshot under the gate (the serve thread records on a listener thread; assertions read a stable copy — pre-completion consult hardening).</summary>
+        public IReadOnlyList<string> ChatBodies
+        {
+            get { lock (_bodies) { return _bodies.ToArray(); } }
+        }
+
+        private readonly List<string> _bodies = [];
 
         public void Dispose()
         {
@@ -340,9 +353,9 @@ public class AiMemoryPromptAssemblyTests
                     {
                         using var ms = new MemoryStream();
                         await req.InputStream.CopyToAsync(ms);
-                        lock (ChatBodies)
+                        lock (_bodies)
                         {
-                            ChatBodies.Add(System.Text.Encoding.UTF8.GetString(ms.ToArray()));
+                            _bodies.Add(System.Text.Encoding.UTF8.GetString(ms.ToArray()));
                         }
 
                         await Write(ctx.Response, $$"""{"model":"wire-lab","message":{"role":"assistant","content":"{{ReplyText}}"},"done":true}""");

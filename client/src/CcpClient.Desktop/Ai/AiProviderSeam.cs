@@ -43,6 +43,10 @@ public sealed record AiProviderDescriptor(AiProviderId Id, AiEndpointClass Endpo
 /// (WPF full-history shape, LocalAiService.cs:531-548); awareness operations NEVER carry
 /// history (WPF stateless ambient path, LocalAiService.cs:476-502) — the pipeline
 /// overwrites/strips this field, so a caller-supplied value never reaches a provider.
+/// CLOSED DOOR (SP-047 pre-completion consult): a future in-memory-history consumer
+/// (quiz-style stateless multi-turn, admission §5 rule 5 — never the persistent store)
+/// cannot pass history through this field today; admitting one requires an explicit seam
+/// change (retirement condition recorded in record.md §6).
 /// </summary>
 public sealed record AiRequest(string Prompt, IReadOnlyList<AiMemoryTurn>? History = null);
 
