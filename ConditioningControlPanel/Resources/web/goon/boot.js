@@ -1485,6 +1485,42 @@ function reportMicGate() {
     }
     if (!why) { logger.warn('voice mic hidden: the service says live but the desk has no strip (mount failure?)'); return; }
     logger.warn('voice mic hidden: ' + why);
+    micGateToast(deskWhy);
+  } catch (e) {
+    // A diagnostic that can break a match is worse than no diagnostic.
+    logger.warn('voice mic gate check threw: ' + ((e && e.message) || e));
+  }
+}
+
+/**
+ * THE PLAYER-FACING HALF of reportMicGate (owner, 2026-08-05, round two): the
+ * warn above ended the log archaeology, and then the owner sat in a PvP duel
+ * with the drawer open, no mic, and no way to know WHY without reading logs —
+ * the exact blindness the warn was built to end, one audience over. One toast,
+ * once per match (this runs inside reportMicGate's micGateSaid latch), and ONLY
+ * for a seat that opted in: a player who never switched voice notes on has not
+ * lost anything worth interrupting them over. Practice is exempt for the same
+ * reason the mic is off there at all — the bot never consents, and "your
+ * partner has voice off" about a bot is noise dressed as help.
+ *
+ * FACTS, NOT PROSE: the service's whyUnavailable sentences are pinned by
+ * selftest-voice, so matching on them would couple a toast to a test vector.
+ * The match object is re-read directly, in the same order available() applies
+ * its gates, and anything unreadable simply does not toast — a missing toast
+ * is a shrug, a wrong one is a lie.
+ */
+function micGateToast(deskWhy) {
+  try {
+    if (soloPair) return;
+    if (!prefs || !prefs.get || !prefs.get('voiceNotesEnabled')) return;
+    const m = currentMatch;
+    if (!m) return;
+    let msg = '';
+    if (deskWhy === 'zen') msg = S.voice.micZenToast;
+    else if (!m.linkIsP2P) msg = S.voice.micRelayToast;
+    else if (!m.peerSupportsVoice) msg = S.voice.micPeerOldToast;
+    else if (!m.remoteVoiceNotes) msg = S.voice.micPeerOffToast;
+    if (msg) toasts?.warn?.(msg);
   } catch (e) {
     // A diagnostic that can break a match is worse than no diagnostic.
     logger.warn('voice mic gate check threw: ' + ((e && e.message) || e));
