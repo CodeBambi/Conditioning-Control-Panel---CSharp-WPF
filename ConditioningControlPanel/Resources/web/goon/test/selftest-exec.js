@@ -934,11 +934,22 @@ async function main() {
       'the pane declares no static filter — the glitch keyframes animate filter and would wipe it',
       String(drain));
     // the blur is the most expensive thing this page draws: exactly one pane,
-    // exactly one backdrop-filter (+ its -webkit- twin), and the count is pinned.
-    const bdf = (css.match(/backdrop-filter:/g) || []).length;
-    ok(bdf === 2, 'fx.css still declares backdrop-filter exactly twice (one pane, one -webkit- twin)', String(bdf));
+    // exactly one blur-behind (+ its -webkit- twin), and the count is pinned.
+    // Counted by VALUE since the lite tier (2026-08-05): `backdrop-filter: none`
+    // is the phone diet switching this very pane OFF, not a second pane, so the
+    // guard splits the declarations into "the blur" and "the offs" and pins both
+    // sides — anything that is neither is a new pane and still fails.
+    const bdfAll = css.match(/backdrop-filter:[^;}]*/g) || [];
+    const bdfBlur = bdfAll.filter((d) => /blur\(/.test(d)).length;
+    const bdfNone = bdfAll.filter((d) => /:\s*none/.test(d)).length;
+    ok(bdfBlur === 2, 'fx.css still declares ONE blur-behind (+ its -webkit- twin)', bdfAll.join(' | '));
+    ok(bdfBlur + bdfNone === bdfAll.length,
+      'and every other backdrop-filter is a `none` — the lite tier switching the same pane off, never a second pane',
+      bdfAll.join(' | '));
     ok(/\.gg-drain\s*\{[^}]*backdrop-filter:\s*blur\(7px\)/.test(css),
-      'and the one that exists is the drain blur', String(bdf));
+      'and the one that exists is the drain blur', String(bdfBlur));
+    ok(/html\[data-gg-perf="lite"\]\s*\.gg-drain\s*\{[^}]*backdrop-filter:\s*none/.test(css),
+      'the lite tier drops the drain blur-behind outright — the most expensive declaration on the page does not run on phones');
     // the shudder still rides the veil, and still recolours what is under it
     const glitchKf = /@keyframes\s+ggDrainGlitch\s*\{([\s\S]*?)\n\}/.exec(css);
     ok(!!glitchKf && /hue-rotate\(/.test(glitchKf[1]) && /saturate\(/.test(glitchKf[1]),
@@ -4557,6 +4568,62 @@ async function main() {
     ok(outOfBand.length === 0, 'and every one of them spins inside the 10-18s band', outOfBand.join(' '));
     sp.stop();
     document.createElement = realCreate;
+  }
+
+  /* --------- THE DEVICE PERFORMANCE TIER (exec/perfTier.js, 2026-08-05)
+   * The owner's iPhone dropped frames in a live duel, so the renderers grew a
+   * second, smaller set of caps behind <html data-gg-perf="lite">. What is
+   * pinned here is the DECISION TABLE and the polarity, because both are
+   * contracts other files lean on:
+   *   · a FINE pointer can never resolve lite — "desktop byte-identical" is a
+   *     requirement, not a tendency, and no memory claim may override it;
+   *   · ABSENT MEANS FULL — every check in this suite ran without the
+   *     attribute, and that is exactly the guarantee that keeps them honest;
+   *   · the explicit pref values beat detection, junk falls through to it.
+   * ------------------------------------------------------------------------ */
+  {
+    const PT = await import('../exec/perfTier.js');
+    const F = await import('../exec/flashes.js');
+    const B = await import('../exec/bubbles.js');
+    const V = await import('../exec/videos.js');
+    const SP = await import('../exec/spiral.js');
+
+    ok(F.MAX_LIVE_LITE === 10 && B.MAX_LIVE_LITE === 10 && V.MAX_WINDOWS_LITE === 3,
+      'the lite caps are the shipped dials (flashes 10, bubbles 10, windows 3)',
+      `${F.MAX_LIVE_LITE}/${B.MAX_LIVE_LITE}/${V.MAX_WINDOWS_LITE}`);
+    ok(F.MAX_LIVE_LITE < F.MAX_LIVE && B.MAX_LIVE_LITE < B.MAX_LIVE && V.MAX_WINDOWS_LITE < V.MAX_WINDOWS,
+      'and every one of them is strictly under its full-tier twin — a "lite" cap above full would be a typo, not a tier');
+    ok(SP.LITE_MAX_DPR < SP.MAX_DPR && SP.LITE_FRAME_MS >= 30,
+      'the spiral halves both of its dials: CSS-pixel backing and a ~30fps draw cadence',
+      `${SP.LITE_MAX_DPR}/${SP.LITE_FRAME_MS}`);
+
+    // ---- the decision table, pure
+    ok(PT.detectPerfTier({ coarse: false, viewportMinPx: 400, deviceMemoryGb: 2 }) === PT.PERF_FULL,
+      'a fine pointer is FULL whatever else the device claims — the desktop can never detect its way to lite');
+    ok(PT.detectPerfTier({ coarse: true, viewportMinPx: 428 }) === PT.PERF_LITE,
+      'coarse + phone-sized viewport is lite (the iPhone 13 Pro Max is 428)');
+    ok(PT.detectPerfTier({ coarse: true, viewportMinPx: 1024 }) === PT.PERF_FULL,
+      'coarse + a big tablet viewport stays full — an iPad Pro renders the full stack fine');
+    ok(PT.detectPerfTier({ coarse: true, viewportMinPx: 1024, deviceMemoryGb: 4 }) === PT.PERF_LITE,
+      'unless a low deviceMemory casts the second vote');
+    ok(PT.detectPerfTier() === PT.PERF_FULL && PT.detectPerfTier({}) === PT.PERF_FULL,
+      'and an empty/unreadable env is FULL: a missing signal must never degrade somebody’s picture');
+
+    // ---- the pref resolution: explicit beats detection, junk falls through
+    const phone = { coarse: true, viewportMinPx: 428 };
+    ok(PT.resolvePerfTier('full', phone) === PT.PERF_FULL && PT.resolvePerfTier('lite', {}) === PT.PERF_LITE,
+      'the explicit pref values overrule detection in BOTH directions');
+    ok(PT.resolvePerfTier('auto', phone) === PT.PERF_LITE && PT.resolvePerfTier(undefined, phone) === PT.PERF_LITE
+      && PT.resolvePerfTier(42, phone) === PT.PERF_LITE,
+      'auto, undefined and junk all fall through to detection — a corrupt store can only land on "what this device deserves"');
+
+    // ---- the attribute contract: absent means full, only the exact value bites
+    ok(PT.perfLite() === false, 'no stamp = full tier — which is the tier this whole suite just ran under');
+    documentElement.setAttribute(PT.PERF_ATTR, PT.PERF_LITE);
+    ok(PT.perfLite() === true, 'the stamped lite value is read live off <html>');
+    documentElement.setAttribute(PT.PERF_ATTR, 'sideways');
+    ok(PT.perfLite() === false, 'anything that is not exactly "lite" is full — same polarity contract as data-gg-shader');
+    documentElement.removeAttribute(PT.PERF_ATTR);
   }
 
   console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);

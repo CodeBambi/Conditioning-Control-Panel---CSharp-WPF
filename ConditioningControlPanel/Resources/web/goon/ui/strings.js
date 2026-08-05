@@ -141,6 +141,13 @@ export const S = Object.freeze({
      * went unseen — the peer then spent the whole match "toggle off".
      */
     transferConnecting: 'checking the connection — this unlocks if it comes up direct…',
+    /**
+     * The lane is ON but the local library has nothing compressed to offer
+     * (round-11: every gate green, sendable=0, attacks silently fell back to
+     * the receiver's own pool). Not a block — receiving still works and the
+     * count climbs live as compression runs — just the honest reason.
+     */
+    transferNoAmmo: 'nothing ready to send yet — compress your library in the media screen, or your attacks will use their media instead.',
     transferTheirsOn: 'they opted in',
     transferTheirsOff: 'they have not',
     /* --- "they are still picking their media" (the `media_prep` wire message).
@@ -222,11 +229,13 @@ export const S = Object.freeze({
     lock: 'Lock in',
     locked: 'locked — waiting for them',
     theirs: 'their picks',
-    /* The "match risk N/7" readout and its seven-segment meters were removed on
-     * 2026-08-04: the tier was an engine number wearing a player-facing hat, and
-     * nobody could tell you what a 4 meant. What survives is the consequence,
-     * which needs no glossary — a heavier agreement scores faster. */
-    score: (mult) => 'you both score ×' + mult.toFixed(2),
+    /* NO `score` MULTIPLIER LINE (2026-08-05). The "match risk N/7" readout and
+     * its seven-segment meters went on 2026-08-04; the multiplier they fed
+     * ("you both score ×1.30") survived one more day and then went with the
+     * rest of the risk indicator. It was the tier in disguise — the same engine
+     * number, two decimal places, still no glossary. `pool` below says the same
+     * thing in the unit the screen is actually about: how many effects you both
+     * just agreed to take. */
     unsupported: "your opponent's app can't do this",
     /* --- the agreement pass (2026-08-03 redesign) --- */
     confirm: "I'm good with this",
@@ -261,7 +270,13 @@ export const S = Object.freeze({
     abandonLine: 'Connection lost for a minute.',
     drawLine: 'You both let go at the same moment.',
     scoreline: 'scoreline',
-    scoreFineprint: (mult) => '1 pt/s · score ×' + mult.toFixed(2),
+    /* Was `'1 pt/s · score ×' + mult`, off the engine's riskMultiplier — the
+     * recap's copy of the risk readout, and it left with the other two on
+     * 2026-08-05. The BASE RATE stays because it is the one thing the scoreline
+     * above it cannot say on its own, and attention is named instead of the
+     * multiplier because attention is the only part of the formula that was
+     * ever yours to move: the pool bonus was identical for both of you. */
+    scoreFineprint: '1 pt/s, for as long as your attention holds',
     survived: (ms) => 'survived ' + mmss(ms),
     payloads: 'payload log',
     noPayloads: 'nothing crossed the wire.',
@@ -375,6 +390,13 @@ export const S = Object.freeze({
        that stops moving while the game carries on is the exact symptom. Names
        the fallback too, so turning it off does not feel like losing the bed. */
     shaderSpiralsNote: 'draws the spiral bed live instead of stretching a gif. turn it off if the picture ever freezes while the sound and the clock keep going — the bed falls back to the bundled spirals and nothing else changes.',
+    /* The device tier (exec/perfTier.js). The toggle shows the RESOLVED answer
+       — phones start on, desks start off, via the 'auto' pref — and touching it
+       writes an explicit choice, same one-way door as the arsenal handle. The
+       note says what it costs, because "performance mode" toggles that hide
+       their trade read as snake oil. */
+    perfLite: 'Lite graphics',
+    perfLiteNote: 'fewer flashes and bubbles on screen at once, a lighter spiral and no glass-blur — for phones and small machines that drop frames mid-match. on by itself on most phones; nothing about the match itself changes.',
     /* THE VIEWER'S OWN SWITCH, and it is not the same decision as the sharing
      * toggles in the lobby: those say what leaves this machine, this says what
      * arrives. Off, their picture is never even FETCHED (ui/discord.js), which
@@ -798,13 +820,13 @@ export const S = Object.freeze({
     zenHideGlyph: '⊟',
     zenShowGlyph: '⊞',
     zenShowTitle: 'show panels · escape still ends the match',
-    /**
-     * The pool's score bonus, in the top bar. It used to read "×1.30 risk" off a
-     * 0-7 "match risk tier" nobody could explain; the tiers are gone from every
-     * screen and what is left is the only part a player could ever act on —
-     * a heavier agreement scores faster.
-     */
-    scoreMult: (mult) => '×' + Number(mult || 1).toFixed(2) + ' score',
+    /* THERE IS NO `scoreMult` ANY MORE (2026-08-05). The top bar's third line
+     * read "×1.30 score" (and "×1.30 risk" before that) off the engine's
+     * riskMultiplier. It was the last player-facing piece of the risk system,
+     * and the owner's verdict on the whole family holds for it too: a number
+     * fixed at the draft, unchangeable mid-match and unexplained by anything on
+     * the desk. Deleted rather than reworded — the score above it is the same
+     * information, already counted. */
     /* ---- the heat gauge (ui/drops.js) ----
      * ONE word, because it sits over the arsenal rail and the bar is the rest of
      * the sentence. `heatValue` is the aria-valuetext: colour never travels

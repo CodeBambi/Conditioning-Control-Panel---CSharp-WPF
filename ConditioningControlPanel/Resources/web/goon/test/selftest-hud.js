@@ -221,6 +221,11 @@ function makeFakeMatch() {
   const scoring = {
     score: 120,
     charges: 3,
+    /* KEPT ON PURPOSE, THOUGH NO UI READS THEM ANY MORE (2026-08-05). The real
+     * GoonScoring still exposes both — they are the engine's C#-parity names
+     * for the pool bonus — so the stub keeps the shape honest, and section 2c-ii
+     * leans on them: a HUD that ignores a 1.3 sitting right there is the proof
+     * the readout is gone rather than merely blank. */
     riskMultiplier: 1.3,
     riskTier: 2,
     _charge: new Set(),
@@ -1053,6 +1058,59 @@ function makeFakeMatch() {
   ok(!!spiral && spiral.name === 'spiral' && typeof spiral.blurb === 'string' && spiral.blurb.length > 10,
     'the draft pool carries a spiral tile with copy');
   ok(!!spiral && spiral.blurb === spiral.blurb.toLowerCase(), 'element blurbs stay lowercase');
+}
+
+/* ---- 2c-ii. THE RISK READOUT IS GONE FROM EVERY SCREEN (2026-08-05) --------
+ *
+ * Batch 7 took the meters and the pips; what it left behind was the MULTIPLIER
+ * — the same engine number (`scoring.riskMultiplier`, product of the 0-7 tier)
+ * printed in three places: "×1.30 score" under the live HUD's charge pips,
+ * "you both score ×1.30" in gold in the draft footer, and "1 pt/s · score
+ * ×1.30" in the recap's fine print. The owner's verdict covered the family:
+ * not intuitive, and the heat gauge is the readout the desk actually needed.
+ * All three are deleted.
+ *
+ * THIS PINS THE ABSENCE, AT THE SOURCE, BECAUSE THAT IS WHERE IT REGRESSES.
+ * A mounted-DOM check would only catch the live HUD, and the way this comes
+ * back is somebody re-reading `riskMultiplier` in a UI file — so the assertion
+ * is that no ui/ file reads it at all. The ENGINE is deliberately not part of
+ * this: core/scoring.js and core/draft.js still compute the tier and the
+ * multiplier every second (C#-parity, and the score depends on it), they just
+ * have no reader on a player's screen any more. */
+{
+  const fsRisk = await import('node:fs/promises');
+  const urlRisk = await import('node:url');
+  const readUi = (rel) => fsRisk.readFile(urlRisk.fileURLToPath(new URL('../' + rel, import.meta.url)), 'utf8');
+
+  for (const rel of ['ui/hud.js', 'ui/screens/draft.js', 'ui/screens/recap.js', 'ui/strings.js']) {
+    const src = await readUi(rel);
+    // Comments are where the tombstones live and they are allowed to say the
+    // word; a READ of the value is what must not exist. Strip line comments and
+    // block comments before looking.
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+    ok(!/riskMultiplier|matchRiskTier|riskTierOf/.test(code),
+      `${rel} reads no risk value out of the engine`,
+      (code.match(/.*(riskMultiplier|matchRiskTier|riskTierOf).*/) || [''])[0].trim());
+  }
+
+  // and the copy that dressed it is gone with it
+  ok(!('scoreMult' in S.hud), 'strings.js has no hud.scoreMult');
+  ok(!('score' in S.draft), 'strings.js has no draft.score multiplier line');
+  ok(typeof S.recap.scoreFineprint === 'string',
+    'the recap fine print is a flat string now, not a mult => string',
+    typeof S.recap.scoreFineprint);
+  ok(!/×|multipl/i.test(S.recap.scoreFineprint),
+    'and it names no multiplier', String(S.recap.scoreFineprint));
+
+  // the live desk builds no such node
+  const matchRisk = makeFakeMatch();          // its scoring stub still carries riskMultiplier 1.3
+  const hudRisk = hudMod.mountHud({ match: matchRisk, audio: { sfx() {} } });
+  const hostRisk = dom.byId.get('gg-hud');
+  ok(findAll(hostRisk, 'gg-mult').length === 0, 'the live HUD builds no .gg-mult readout');
+  ok(findAll(hostRisk, 'gg-risk').length === 0, 'and nothing wearing the old .gg-risk name');
+  ok(findAll(hostRisk, 'gg-pips').length === 1,
+    'while the CHARGE pips — which are not risk and never were — are still there');
+  hudRisk.unmount();
 }
 
 // -------------------------------------------------------- 3. closeness + emotes
@@ -3169,10 +3227,10 @@ const audioMod = await import('../ui/audio.js');
 }
 
 /* ===========================================================================
- * 13. THE ZEN TOGGLE — one button, four panels (owner, 2026-08-04).
+ * 13. THE ZEN TOGGLE — one button, three panels (owner, 2026-08-04).
  *
- * "add a button that hides the ui": the score, the risk multiplier, the
- * closeness dial ("you're telling them") and MERCY step off together; the
+ * "add a button that hides the ui": the score, the closeness dial ("you're
+ * telling them") and MERCY step off together; the
  * opponent monitor and the arsenal stay. The whole feature is one bit, so this
  * pins the bit, both of its names, and the CSS that reads them — a toggle that
  * flips a class no stylesheet mentions is an invisible feature.
@@ -3275,11 +3333,15 @@ const audioMod = await import('../ui/audio.js');
   const zenBlocks = hudCss13.match(/[^{}]*\.gg-hud--zen[^{}]*\{[^}]*\}/g) || [];
   ok(zenBlocks.length > 0, 'hud.css reads the modifier class at all');
   const zenText = zenBlocks.join('\n');
-  // .gg-mult was .gg-risk until 2026-08-04 — same slot in the score column, same
-  // engine number, renamed with the rest of the player-facing risk system.
-  for (const sel of ['.gg-score', '.gg-mult', '.gg-dial-host']) {
+  /* .gg-mult IS NOT ON THIS LIST ANY MORE. It was .gg-risk, then .gg-mult, then
+   * nothing (2026-08-05) — the whole risk readout left the desk, so zen has one
+   * less thing to hide and hud.css must not still be naming it. Both halves are
+   * pinned: the survivors below, and the absence right after. */
+  for (const sel of ['.gg-score', '.gg-dial-host']) {
     ok(zenText.includes(sel), `zen hides ${sel}`);
   }
+  ok(!zenText.includes('.gg-mult'),
+    'and it no longer hides .gg-mult, because there is no multiplier readout left to hide');
   // The heat gauge is NOT on that list and must not be: it is the arsenal's own
   // meter, and zen keeps the arsenal.
   ok(!zenText.includes('.gg-heat'), 'and zen keeps the heat gauge, like the rails it feeds');

@@ -67,8 +67,14 @@
 // from a bundled file and not from a fresh roll — the flick should look like the
 // spirals this match has been showing, because it is one of them.
 import { pickSpiralImage } from './spiralGen.js';
+import { perfLite } from './perfTier.js';
 
 export const MAX_LIVE = 26;   // hard ceiling on bubble nodes, swarm included
+/* The LITE ceiling (exec/perfTier.js — phones). Bites in refresh(), on top of
+ * the width-based COUNT_MIN/COUNT_MAX below: those are captured at build off
+ * innerWidth, which lies on a phone held sideways (926px "wide" on the very
+ * iPhone this tier exists for), while the tier is read fresh on every cue. */
+export const MAX_LIVE_LITE = 10;
 const MAX_POP_FLASH = 4;      // pop-driven flash images live at once (payloadFx MAX_FLASH's cousin)
 const SWARM_BONUS = 4;        // extra bubbles a BubbleSwarm payload puts on the bed
 
@@ -483,11 +489,14 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
       return;
     }
     const want = Math.max.apply(null, wants);
+    // The tier's ceiling, read fresh: on lite the whole field — swarm bonus
+    // included — is clamped, and the mid-match toggle bites on the next cue.
+    const cap = perfLite() ? MAX_LIVE_LITE : MAX_LIVE;
     tune = bubbleTuning(want, calm, COUNT_MIN, COUNT_MAX);
-    targetCount = Math.min(MAX_LIVE, tune.targetCount + (payloadRuns.size ? SWARM_BONUS : 0));
+    targetCount = Math.min(cap, tune.targetCount + (payloadRuns.size ? SWARM_BONUS : 0));
     fieldTarget = elementIntensity === null
       ? 0
-      : Math.min(MAX_LIVE, bubbleTuning(elementIntensity, calm, COUNT_MIN, COUNT_MAX).targetCount);
+      : Math.min(cap, bubbleTuning(elementIntensity, calm, COUNT_MIN, COUNT_MAX).targetCount);
     ensureTopup();
   }
 
@@ -497,7 +506,9 @@ export function createBubbles({ layers, media, audio, logger } = {}) {
   function sparkleBurst(x, y) {
     const host = layer();
     if (!host || typeof document === 'undefined') return;
-    const n = 9;
+    // 9 shards is DtRH's number; the lite tier throws 5 — each shard is a
+    // box-shadowed node minted mid-pop, exactly when the phone is busiest.
+    const n = perfLite() ? 5 : 9;
     for (let i = 0; i < n; i++) {
       const p = document.createElement('div');
       p.className = 'gg-spark';

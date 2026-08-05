@@ -918,3 +918,48 @@ html[data-gg-vskip="on"] .gg-vwin-x { display: flex; }
   .gg-lock, .gg-lock.is-wrong { animation: none; }
   .gg-lock.is-solved { animation: none; opacity: 0; transition: opacity 300ms ease; }
 }
+
+/* ---------------------------------------------------------------------------
+ * THE LITE TIER — html[data-gg-perf="lite"], stamped by exec/perfTier.js
+ * (boot.js applies it; ui/prefs.js `perfMode` overrides the detection). This is
+ * the CSS HALF of the phone diet: the JS half (smaller caps, the spiral's
+ * 30fps/CSS-pixel throttle) lives in the renderers. Absent attribute = every
+ * rule above exactly as written, which is what keeps the desktop byte-identical.
+ *
+ * What goes, and why it is these and not others:
+ *   · the FLASH HALO. `drop-shadow` forces every flash — up to MAX_LIVE_LITE
+ *     44vmin layers — through an offscreen filter pass and inflates its texture
+ *     by the blur radius on all four sides. iOS pays that in layer memory it
+ *     does not have. The tilt, the fade and the whole gesture set survive.
+ *   · the DRAIN'S BLUR-BEHIND. backdrop-filter re-blurs everything under a
+ *     fullscreen pane every frame anything under it moves — the single most
+ *     expensive declaration on this page, on iOS by a distance. The veil keeps
+ *     its dim/desat/wash stack and leans a little harder on the dim
+ *     (0.42 -> 0.54) so "heavy" survives losing "blurry".
+ *   · the RASTER SPIRAL'S 1.1px blur. It hides wedge seams under MAGNIFICATION;
+ *     a phone shows the 1280px bake DOWNscaled, where there is nothing to hide.
+ *   · the WINDOW GLOW stack: three box-shadows on every .gg-vwin-inner plus two
+ *     on its breathing ::after. One pink ring each says the same thing for a
+ *     fraction of the texture. The border, the dot and the exits are untouched.
+ * What deliberately STAYS: the bubble kind halos (the coloured drop-shadow IS
+ * the kind — see the sprite banner), every gameplay pointer affordance, and
+ * every exit/teardown animation (a stranded node costs more than any shadow).
+ * ------------------------------------------------------------------------ */
+html[data-gg-perf="lite"] .gg-flash { filter: none; }
+html[data-gg-perf="lite"] .gg-flash--grabbed.is-held {
+  /* The lift keeps ONE cheap cue (the held scale is in the inline transform);
+     the double drop-shadow it wore is exactly the cost this tier exists to shed. */
+  filter: none;
+}
+html[data-gg-perf="lite"] .gg-drain {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  --gg-drain-dim: 0.54;
+}
+html[data-gg-perf="lite"] .gg-spiral { filter: none; }
+html[data-gg-perf="lite"] .gg-vwin-inner {
+  box-shadow: 0 0 18px rgba(var(--gg-pink-rgb), 0.45);
+}
+html[data-gg-perf="lite"] .gg-vwin-inner::after {
+  box-shadow: inset 0 0 14px rgba(var(--gg-pink-rgb), 0.3);
+}

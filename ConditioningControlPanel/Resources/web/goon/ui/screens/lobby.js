@@ -303,10 +303,20 @@ export function mount(container, ctx) {
     else if (!match.peerSupportsTransfer) why = S.lobby.transferPeerOld;
     else if (!onP2P) why = stillDeciding ? S.lobby.transferConnecting : S.lobby.transferRelay;
 
+    /* Ammo honesty (round-11's last root cause): everything above can pass and
+     * the lane still starves when nothing local is compressed. A HINT, not a
+     * block — the box stays live (receiving works regardless) and the 1s
+     * repaint updates the line as compression fills the count. */
+    let hint = '';
+    if (!why && ctx.mediaQueue && typeof ctx.mediaQueue.sendableCount === 'function') {
+      try { if (match.localMediaTransfer && ctx.mediaQueue.sendableCount() === 0) hint = S.lobby.transferNoAmmo; }
+      catch (_e) { /* never let the hint break the paint */ }
+    }
+
     if (document.activeElement !== xferRow.input) xferRow.input.checked = !!match.localMediaTransfer;
     xferRow.input.disabled = !!why || !editable;
     xferRow.row.classList.toggle('is-disabled', !!why);
-    xferRow.sub.textContent = why || S.lobby.transferSub;
+    xferRow.sub.textContent = why || hint || S.lobby.transferSub;
     xferRow.value.textContent = match.remoteMediaTransfer
       ? S.lobby.transferTheirsOn : S.lobby.transferTheirsOff;
   }

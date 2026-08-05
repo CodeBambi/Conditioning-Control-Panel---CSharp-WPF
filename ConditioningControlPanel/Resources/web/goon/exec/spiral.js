@@ -71,6 +71,7 @@
 
 import { createSpiralField, loopMsFor } from './spiralField.js';
 import { beginSpiralSession, nextSpiral } from './spiralGen.js';
+import { perfLite } from './perfTier.js';
 
 /* --- THE SHADER KILL SWITCH. The pref is ui/prefs.js's (`shaderSpirals`,
    default TRUE); it reaches this tier as a ROOT ATTRIBUTE, because exec/ does not
@@ -90,6 +91,16 @@ export const SHADER_OFF = 'off';               // …anything else, or absent, i
    display in front of this game can actually show. ------------------------- */
 export const MAX_DPR = 1.5;
 export const MAX_BACKING_PX = 3840 * 2160;
+/* --- THE LITE TIER'S HALF OF BOTH DIALS (exec/perfTier.js — phones). The
+   shader is a per-pixel per-frame cost and a phone GPU pays it twice over: a
+   Retina DPR and a 120Hz ProMotion rAF. So the lite tier draws at CSS pixels
+   (a screen-blended bed at <=0.70 opacity survives that with no visible loss)
+   and at ~30fps — the phase keeps real time either way (see step()), so a
+   throttled bed turns at exactly the tempo the full one does, in coarser
+   steps. Both read LAZILY, per resize/frame, so the options toggle reaches a
+   bed already spinning. ----------------------------------------------------- */
+export const LITE_MAX_DPR = 1;
+export const LITE_FRAME_MS = 33;   // ~30fps draw cadence on the lite tier
 
 /* --- THE IN-LOOP WATCHDOG. Checked once per HEALTH_CHECK_MS, never per frame:
    gl.getError()/isContextLost() can force a sync round-trip to the driver, which
@@ -154,6 +165,7 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
   let onResize = null;
   let onVisibility = null;
   let lastCheck = 0;              // in-loop watchdog: last health poll (rAF timestamp ms)
+  let lastDraw = 0;               // lite-tier draw throttle: last frame actually rendered
   // A defence fired and this pane stays on raster until it is replaced. Cleared
   // only by teardown (a new pane earns a fresh try) or by a context RESTORE
   // inside the recovery budget — never by a repick, or a machine whose driver is
@@ -220,7 +232,8 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
   function backingSize() {
     const w = (paneEl && paneEl.clientWidth) || (typeof innerWidth === 'number' ? innerWidth : 0);
     const h = (paneEl && paneEl.clientHeight) || (typeof innerHeight === 'number' ? innerHeight : 0);
-    const dpr = Math.min(MAX_DPR, (typeof devicePixelRatio === 'number' && devicePixelRatio > 0) ? devicePixelRatio : 1);
+    const dpr = Math.min(perfLite() ? LITE_MAX_DPR : MAX_DPR,
+      (typeof devicePixelRatio === 'number' && devicePixelRatio > 0) ? devicePixelRatio : 1);
     let bw = Math.max(1, Math.round(w * dpr));
     let bh = Math.max(1, Math.round(h * dpr));
     const total = bw * bh;
@@ -386,7 +399,14 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
     if (!parked()) {
       const loop = Math.max(1, loopMsFor(params));
       if (lastTs) phase = (phase + (now - lastTs) / loop) % 1;
-      draw();
+      // THE LITE THROTTLE. The PHASE above advanced by real elapsed time on
+      // every callback, so skipping a draw skips pixels, never tempo — a
+      // 30fps bed and a 120fps bed show the same rotation at the same second.
+      // Full tier: no gate at all, byte-identical to the pre-tier loop.
+      if (!perfLite() || (now - lastDraw) >= LITE_FRAME_MS) {
+        lastDraw = now;
+        draw();
+      }
     }
     lastTs = now;
     if (hasRaf()) rafId = requestAnimationFrame((t) => step(t, gen));
@@ -402,7 +422,7 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
     const w = { cv: canvasEl, f: field, raf: rafId, lost: onLost, resize: onResize, vis: onVisibility };
     weaveGen++;                        // every queued frame for this weave is now stale
     canvasEl = null; field = null; params = null;
-    rafId = 0; lastTs = 0; lastCheck = 0; onLost = null; onResize = null; onVisibility = null;
+    rafId = 0; lastTs = 0; lastCheck = 0; lastDraw = 0; onLost = null; onResize = null; onVisibility = null;
     return () => {
       if (w.raf && typeof cancelAnimationFrame === 'function') {
         try { cancelAnimationFrame(w.raf); } catch (_e) { /* ignore */ }

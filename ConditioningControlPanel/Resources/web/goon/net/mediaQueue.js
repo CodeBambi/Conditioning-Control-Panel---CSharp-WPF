@@ -545,6 +545,17 @@ export function createMediaQueue({
     markConsumed,
     enabled,
 
+    /**
+     * How many local artifacts could be offered RIGHT NOW. The lobby's honesty
+     * line: every consent/connection gate can pass and the lane still starves
+     * when the library was never compressed (round-11's "sendable=0" — the last
+     * root cause of the 2026-08-05 saga), and only a number the UI can read
+     * turns that from archaeology into a sentence on the screen.
+     */
+    sendableCount() {
+      try { return eligible().length; } catch (_e) { return 0; }
+    },
+
     /** @returns {() => void} unsubscribe. {sha, kind, mime, bytes, url} for INBOUND landings. */
     onReceived(fn) {
       if (typeof fn !== 'function') return noop;

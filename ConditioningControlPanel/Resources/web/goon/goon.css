@@ -70,7 +70,13 @@ html, body {
 #gg-bg      { position: fixed; inset: 0; z-index: 0;  width: 100%; height: 100%; }
 #gg-screens { position: fixed; inset: 0; z-index: 10; }
 #gg-stage   { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; }
-#gg-fx      { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
+/* `contain: layout paint` is an ALL-TIER win with no visible cost: the layer is
+   exactly the viewport, so paint containment clips nothing a player could ever
+   see (anything past its edge is past the screen), and it lets the engine keep
+   a squall of flash/bubble invalidations from being anybody else's problem.
+   It does NOT create a new stacking context — #gg-fx already is one (fixed +
+   z-index) — so the spiral's screen blend composes exactly as before. */
+#gg-fx      { position: fixed; inset: 0; z-index: 30; pointer-events: none; contain: layout paint; }
 #gg-hud     { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
 #gg-toasts  { position: fixed; inset: 0; z-index: 50; pointer-events: none; }
 #gg-drawer  { position: fixed; inset: 0 0 0 auto; z-index: 70; width: min(24rem, 92vw); }
@@ -146,6 +152,13 @@ html, body {
    flips html[data-gg-fx]. */
 html[data-gg-fx="hot"] .gg-plate { background: rgba(10, 5, 17, 0.90); backdrop-filter: none; }
 html[data-gg-fx="hot"] { --gg-deco-play: paused; }
+/* THE LITE TIER wears the hot-plate armor ALL THE TIME (and takes the scrim's
+   blur too): backdrop-filter is the worst thing iOS Safari can be asked to
+   composite, and a phone does not get to wait for the stack to run hot before
+   it stops paying for it. html[data-gg-perf] is stamped by exec/perfTier.js
+   via boot.js; absent means full, so desktop never reaches these rules. */
+html[data-gg-perf="lite"] .gg-plate { background: rgba(10, 5, 17, 0.90); backdrop-filter: none; }
+html[data-gg-perf="lite"] .gg-scrim { backdrop-filter: none; }
 /* Decorative motion opts in by using the token; nothing functional may. */
 .gg-deco, .gg-loader-ring, .gg-eyebrow i { animation-play-state: var(--gg-deco-play); }
 

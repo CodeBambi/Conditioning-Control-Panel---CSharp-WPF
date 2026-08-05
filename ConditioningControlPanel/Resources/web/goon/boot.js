@@ -38,6 +38,10 @@ import * as layers from './exec/layers.js';
 // the only thing that resets it (see attachMatch). Import-safe: videos.js
 // touches no DOM at module scope.
 import { peerRenderLog, resetPeerRenderLog } from './exec/videos.js';
+// The device performance tier. The DETECTOR lives in exec/ (with the renderers
+// that obey it) and the PREF lives in ui/prefs.js (`perfMode`); this file is
+// where they meet, because boot imports both tiers by charter — see buildApp.
+import { applyPerfTier } from './exec/perfTier.js';
 
 import { GoonMatchService } from './core/match.js';
 import { GoonSuddenDeathRunner } from './core/suddenDeath.js';
@@ -1861,6 +1865,15 @@ async function startSolo() {
  * ==========================================================================*/
 function buildApp() {
   prefs = createPrefs(session.prefs);
+  /* STAMP THE PERFORMANCE TIER — <html data-gg-perf>, the attribute the lite
+   * CSS and every renderer cap key off. Before any renderer is built (the
+   * executor comes later in startup) so the first spawn already sees it, and
+   * re-stamped on every change of the pref so the options toggle reaches a
+   * match already running: the caps, the spiral throttle and the lite CSS all
+   * read it lazily. ui/prefs.js cannot mirror this one itself — resolving
+   * 'auto' needs the detector, which lives in exec/ (see the pref's banner). */
+  applyPerfTier(prefs.get('perfMode'));
+  prefs.subscribe((key, value) => { if (key === 'perfMode') applyPerfTier(value); });
   audio = createAudio({ prefs, logger });
   toasts = createToasts({ prefs });
   sheets = createSheets({ audio, logger });
