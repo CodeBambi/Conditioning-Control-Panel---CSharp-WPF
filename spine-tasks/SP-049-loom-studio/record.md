@@ -10,7 +10,7 @@
 | Step | Type | Result | Artifact |
 |------|------|--------|----------|
 | 1 | plan | **SKIPPED BY DESIGN** (nested reviewer spawn blocked in worker session; `skipped=true, spawnFailed=false` — engine runs reviews after `.DONE`, SP-195) | `.reviews/2-20260805T052612.md` (called at the Step-2 boundary, covering Steps 1-2) |
-| 3 | plan | SKIPPED BY DESIGN (same) | (called at the Step-3/4 boundary, covering Steps 3-4) |
+| 3 | plan | SKIPPED BY DESIGN (same) | `.reviews/3-20260805T074125.md` (called at the Step-3/4 boundary, covering Steps 3-4) |
 
 ---
 
