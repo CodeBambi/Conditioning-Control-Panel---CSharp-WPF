@@ -659,6 +659,14 @@ Do NOT include any other text before or after the question format. Just the ques
             // Trim conversation to last 30 messages + system prompt to stay under limits.
             var messagesToSend = TrimConversation();
 
+            // [AI-METER] — log-only sizing. The quiz bypasses IAiService entirely, so it has to
+            // emit its own line or a whole quiz (11-12+ requests) is invisible to the meter.
+            var meterStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var meterInputChars = messagesToSend.Sum(m => m.Content?.Length ?? 0);
+            void Meter(string outcome, int outputChars = 0) =>
+                AIService.AiMeter.Record(AIService.AiMeter.ProviderQuiz, AIService.AiMeter.PurposeQuiz,
+                    meterInputChars, outputChars, meterStopwatch.ElapsedMilliseconds, outcome);
+
             // Route to whichever provider the user has selected for the companion. The
             // quiz used to be cloud-only, so switching to local Ollama left it stuck on
             // "AI busy / daily limit" even though chat worked (BUG-XQRK4USW5X / #334).
@@ -668,7 +676,12 @@ Do NOT include any other text before or after the question format. Just the ques
                 : await CallCloudAiAsync(messagesToSend, maxTokens);
 
             if (string.IsNullOrEmpty(content))
+            {
+                // Both transports collapse "call failed" and "empty reply" into null and log
+                // the specific cause themselves, so the meter can only report `error` here.
+                Meter(AIService.AiMeter.OutcomeError);
                 return null;
+            }
 
             // OUTPUT MODERATION (Layer 1) — applies to BOTH providers. Discard
             // AI-generated questions / result archetype text that trips the guard.
@@ -687,6 +700,7 @@ Do NOT include any other text before or after the question format. Just the ques
                     // the user-facing Content Policy Notice. The batch is still
                     // discarded fail-closed (return null) so nothing prohibited leaks.
                     App.Logger?.Information("QuizService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
+                    Meter(AIService.AiMeter.OutcomeRefusedOutput, content.Length);
                     return OutputBlocked;
                 }
                 if (outputCheck.Allow && outputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
@@ -695,6 +709,7 @@ Do NOT include any other text before or after the question format. Just the ques
                 }
             }
 
+            Meter(AIService.AiMeter.OutcomeOk, content.Length);
             return content;
         }
 
