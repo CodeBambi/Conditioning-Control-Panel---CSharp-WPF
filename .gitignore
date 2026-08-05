@@ -165,8 +165,17 @@ tools/
 ConditioningControlPanel/tools/*
 !ConditioningControlPanel/tools/pack-indexer/
 
-# Redistributables (re-downloadable from Microsoft; do not bloat the repo)
+# Redistributables (re-downloadable from Microsoft; do not bloat the repo).
+# VC_redist.x64.exe is 25 MB and build-installer.bat fetches it on demand.
 redist/
+
+# ...except the WebView2 Evergreen bootstrapper, which IS committed: 1.6 MB, and
+# WebView2 is now load-bearing for FYP, Exclusives, DtRH, Goon Game and the default
+# video engine, so an installer build must never silently skip it because a download
+# failed. Official Microsoft fwlink: https://go.microsoft.com/fwlink/p/?LinkId=2124703
+!redist/
+redist/*
+!redist/MicrosoftEdgeWebview2Setup.exe
 
 # Node tooling for local automation scripts (puppeteer-core for /x-drafts + capture
 # work). Local-only; nothing in the shipped app uses node.

@@ -21,9 +21,9 @@ namespace ConditioningControlPanel.Services.GoonGame
         ///
         /// ADVISORY AND UNTRUSTED, which is why it is safe to take a peer's word for it: it never
         /// touches a filename, a size, a hash or a mime check, and the only thing that reads it is
-        /// the page's preference for real footage in the VIDEO lane. Persisted because a returning
-        /// session primes exec/media.js from this index — without it a gif loop received yesterday
-        /// comes back today looking like a clip.
+        /// the page's preference for real footage in the VIDEO lane. Still indexed so a mid-match
+        /// page reload keeps the distinction; the inbox itself no longer survives the session
+        /// (ephemeral policy — see the class doc).
         /// </summary>
         [JsonProperty("origin")] public string Origin { get; set; } = "";
         [JsonProperty("bytes")] public long Bytes { get; set; }
@@ -58,6 +58,15 @@ namespace ConditioningControlPanel.Services.GoonGame
     ///
     /// Thread-safety: every public method takes the instance lock. Commit hashes up to
     /// <see cref="MaxRecvBytes"/>, so callers should run it off the UI thread (the bridge does).
+    ///
+    /// THE INBOX IS EPHEMERAL (owner decision, 2026-08-05): a partner's media must never outlive
+    /// the match it arrived in. The page purges per-artifact at its teardown seam; this class
+    /// backstops every path the page cannot see by wiping ALL committed artifacts at the startup
+    /// sweep (a crash), at page boot (<see cref="PurgeCommittedSafe"/> from OnPageReady — a window
+    /// reopened within one app run), and at window close (DisposeAll). Before this policy the
+    /// inbox persisted for cross-session <c>decline:'have'</c> dedupe — and boot.js primed it into
+    /// the media pool, which let Practice's scripted peer replay past partners' media. Dedupe is
+    /// now within-match only; a rematch re-transfers. Do not "optimize" persistence back in.
     /// </summary>
     internal sealed class TransferInboxStore
     {
@@ -197,58 +206,15 @@ namespace ConditioningControlPanel.Services.GoonGame
         }
 
         /// <summary>
-        /// Startup sweep, caller holds the lock. Cheap paranoia against a tampered folder:
-        ///   - a file in recv/ whose NAME is not a sha (or whose magic disagrees with its extension)
-        ///     is deleted — it cannot have come from this code path;
-        ///   - an index row with no file is dropped;
-        ///   - a file with no index row is ADOPTED (an index write lost to a crash is recoverable —
-        ///     the bytes are the artifact and the name is already the verified hash);
-        ///   - every <c>recv-*.part</c> from a previous run is deleted. Resume survives a page
-        ///     RELOAD (the session dict is process-lived) but deliberately NOT an app restart:
-        ///     a half-file whose sender is long gone is pure cost.
+        /// Startup sweep, caller holds the lock. Under the ephemeral policy (class doc) anything in
+        /// recv/ at startup is a leftover from an unclean exit — the page's teardown purge and the
+        /// window-close purge already ran on every clean path — so the sweep deletes ALL of it, the
+        /// index with it, and every <c>recv-*.part</c> from a previous run. Resume across an app
+        /// restart was never supported; now the committed files do not cross a restart either.
         /// </summary>
         private void SweepLocked()
         {
-            var onDisk = new Dictionary<string, (string Ext, long Bytes)>(StringComparer.Ordinal);
-            try
-            {
-                Directory.CreateDirectory(RecvDir);
-                foreach (var f in Directory.EnumerateFiles(RecvDir))
-                {
-                    var sha = Path.GetFileNameWithoutExtension(f);
-                    var ext = Path.GetExtension(f).TrimStart('.').ToLowerInvariant();
-                    if (!ShaRe.IsMatch(sha)) { TryDelete(f, "bad name"); continue; }
-                    var fmt = SniffFile(f);
-                    if (fmt == null || !FormatToExt.TryGetValue(fmt, out var wantExt) || wantExt != ext)
-                    {
-                        TryDelete(f, "magic mismatch");
-                        continue;
-                    }
-                    try { onDisk[sha] = (ext, new FileInfo(f).Length); } catch { }
-                }
-            }
-            catch (Exception ex) { App.Logger?.Debug("TransferInboxStore.Sweep(recv): {E}", ex.Message); }
-
-            foreach (var sha in _index.Entries.Keys.ToList())
-                if (!onDisk.ContainsKey(sha)) _index.Entries.Remove(sha);
-
-            foreach (var (sha, info) in onDisk)
-            {
-                if (_index.Entries.TryGetValue(sha, out var e))
-                {
-                    e.Ext = info.Ext;
-                    e.Bytes = info.Bytes;
-                    continue;
-                }
-                _index.Entries[sha] = new InboxEntry
-                {
-                    Ext = info.Ext,
-                    Mime = MimeForExt(info.Ext),
-                    Bytes = info.Bytes,
-                    LastAccessUtc = DateTime.UtcNow,
-                };
-            }
-            RecountLocked();
+            PurgeCommittedLocked("startup sweep");
 
             try
             {
@@ -259,6 +225,44 @@ namespace ConditioningControlPanel.Services.GoonGame
             catch (Exception ex) { App.Logger?.Debug("TransferInboxStore.Sweep(tmp): {E}", ex.Message); }
 
             SaveLocked();
+        }
+
+        /// <summary>
+        /// Delete every committed artifact and its index row. Caller holds the lock. Never touches
+        /// TmpDir partials — a live session's .part is the one thing a purge may not race.
+        /// </summary>
+        private void PurgeCommittedLocked(string why)
+        {
+            var n = 0;
+            try
+            {
+                Directory.CreateDirectory(RecvDir);
+                foreach (var f in Directory.EnumerateFiles(RecvDir)) { TryDelete(f, why); n++; }
+            }
+            catch (Exception ex) { App.Logger?.Debug("TransferInboxStore.Purge(recv): {E}", ex.Message); }
+            _index.Entries.Clear();
+            RecountLocked();
+            if (n > 0)
+                App.Logger?.Information("TransferInboxStore: purged {N} received artifact(s) ({Why})", n, why);
+        }
+
+        /// <summary>
+        /// The ephemeral-inbox wipe (class doc). Callable ONLY from moments when nothing can be
+        /// mid-match — page boot (OnPageReady) and window close (DisposeAll) — because it deletes
+        /// files the page may otherwise still be rendering. Never throws.
+        /// </summary>
+        public void PurgeCommittedSafe(string why)
+        {
+            try
+            {
+                EnsureLoaded();
+                lock (_lock)
+                {
+                    PurgeCommittedLocked(why);
+                    SaveLocked();
+                }
+            }
+            catch (Exception ex) { App.Logger?.Warning("TransferInboxStore.PurgeCommittedSafe: {E}", ex.Message); }
         }
 
         private static void TryDelete(string path, string why)
@@ -593,7 +597,8 @@ namespace ConditioningControlPanel.Services.GoonGame
             return true;
         }
 
-        /// <summary>Mark an artifact used so the LRU keeps it. Called when the page renders one.</summary>
+        /// <summary>Refresh an artifact's last-access stamp. (The LRU prune that read it is gone -
+        /// ephemeral policy - but the stamp is still honest bookkeeping for the index row.)</summary>
         public void Touch(string? sha)
         {
             if (!IsSha(sha)) return;
@@ -601,54 +606,13 @@ namespace ConditioningControlPanel.Services.GoonGame
                 if (_index.Entries.TryGetValue(sha!, out var e)) e.LastAccessUtc = DateTime.UtcNow;
         }
 
-        // ---- LRU ------------------------------------------------------------------
+        // (The LRU prune that lived here died with cross-session persistence: the ephemeral wipes
+        //  at startup, page boot and window close are the only artifact-deletion entry points now,
+        //  and CapBytes is enforced at Begin. LastAccessUtc stays on the index rows — a mid-match
+        //  page reload still reads them.)
 
-        /// <summary>
-        /// Prune to <see cref="CapBytes"/>, least-recently-accessed first. THE ONLY PRUNE ENTRY
-        /// POINT, and the host calls it at exactly two moments — page ready and end-run — because
-        /// pruning between <see cref="Begin"/> and the end of a match could delete the artifact a
-        /// floating window is playing from. A live write session vetoes the whole pass.
-        /// </summary>
-        public void PruneSafe()
-        {
-            EnsureLoaded();
-            var doomed = new List<(string Sha, string Ext, long Bytes)>();
-            lock (_lock)
-            {
-                SweepStaleSessionsLocked();
-                if (_sessions.Count > 0)
-                {
-                    App.Logger?.Debug("TransferInboxStore: prune skipped ({N} writes in flight)", _sessions.Count);
-                    return;
-                }
-                long left = _usedBytes;
-                if (left <= CapBytes) return;
-                foreach (var kv in _index.Entries.OrderBy(x => x.Value.LastAccessUtc).ToList())
-                {
-                    if (left <= CapBytes) break;
-                    doomed.Add((kv.Key, kv.Value.Ext, kv.Value.Bytes));
-                    _index.Entries.Remove(kv.Key);
-                    left -= kv.Value.Bytes;
-                }
-                RecountLocked();
-                SaveLocked();
-            }
-            foreach (var (sha, ext, _) in doomed)
-            {
-                try
-                {
-                    var p = Path.Combine(RecvDir, sha + "." + ext);
-                    if (File.Exists(p)) File.Delete(p);
-                }
-                catch { }
-            }
-            if (doomed.Count > 0)
-                App.Logger?.Information("TransferInboxStore: pruned {N} received artifacts ({MB:F1} MB)",
-                    doomed.Count, doomed.Sum(d => d.Bytes) / 1048576.0);
-        }
-
-        /// <summary>Drop write sessions the page stopped feeding, so one dead transfer can't veto
-        /// every future prune. Caller holds the lock.</summary>
+        /// <summary>Drop write sessions the page stopped feeding, so one dead transfer can't hold
+        /// its .part (and its cap bytes) forever. Caller holds the lock.</summary>
         private void SweepStaleSessionsLocked()
         {
             if (_sessions.Count == 0) return;

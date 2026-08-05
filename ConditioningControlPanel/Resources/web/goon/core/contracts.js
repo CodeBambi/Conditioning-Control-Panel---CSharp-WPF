@@ -496,8 +496,12 @@ export function makeEmote(o = {}) {
 
 /**
  * ONE VOICE NOTE, in three sub-frames (2026-08-04). APPEND-ONLY, and it rides the CONTROL lane —
- * the same channel as every message above — never `goon-media`: the bulk channel does not exist on
- * the relay fallback, and voice has to work on the worst link a duel can end up on.
+ * the same channel as every message above — never `goon-media`: the bulk channel is a second,
+ * out-of-band binary stream, and chunked base64 in an ordinary frame is what a fire-and-forget
+ * family wants. It was ALSO chosen so a note would survive the relay fallback; that reason is
+ * dead as of 2026-08-05. Voice notes are now P2P-ONLY (core/match.js `linkIsP2P` gates both the
+ * send door and the receive door): on a relayed duel these frames are neither sent nor accepted,
+ * because a recording of somebody's voice may not cross a wire we can read.
  *
  *   {t:'voice', sub:'meta',  id, bytes, durMs, emote|null, parts}   announces one note
  *   {t:'voice', sub:'chunk', id, seq, data}                         base64, capped well under 16K

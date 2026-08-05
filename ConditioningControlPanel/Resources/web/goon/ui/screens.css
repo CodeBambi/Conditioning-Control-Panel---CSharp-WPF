@@ -136,6 +136,17 @@
   user-select: text;
 }
 
+/* The objective, over the six bullets (ui/screens/title.js). Brighter than the
+   list under it on purpose — it is the one line somebody who reads nothing else
+   should still come away with. */
+.gg-how-goal {
+  margin: 0.5rem 0 0;
+  color: var(--gg-text);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  text-align: left;
+}
+
 .gg-how-list {
   margin: 0.4rem 0 0;
   padding-left: 1.1rem;

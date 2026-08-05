@@ -163,6 +163,30 @@ export const PREF_DEFAULTS = Object.freeze({
   /** Local-only counter; the recap's "GG" title reads it. Never sent anywhere. */
   matchesPlayed: 0,
 
+  /* ---------------------------------------------------------------- coaching
+   * THE ONE-TIME EXPLAINERS (ui/coach.js). Two keys, and they are two keys
+   * rather than one for the same reason the voice pair is:
+   *
+   *   coachHints  the master switch. ON by default — a duel with nothing
+   *     explained is the bug this feature exists for — and OFF is a standing
+   *     answer that must survive a player who then meets a mechanic for the
+   *     first time. Read on every fire, so flipping it mid-match is immediate.
+   *   coachSeen   { [hintId]: true } — which lines have already been spent.
+   *     The SECOND non-scalar pref on the page (voiceEmoteMap was the first,
+   *     and it is the reason `coerce` already has an object branch). A map
+   *     rather than a boolean-per-hint because the set of hints is owned by
+   *     ui/coach.js and grows there; a new id must not need a schema edit here,
+   *     and an id retired from the module leaves a dead key that nothing reads
+   *     rather than a default nothing sets.
+   *
+   * ONCE-EVER MEANS ONCE EVER. A hint is marked the moment it is QUEUED, not
+   * when its toast is dismissed: a match that ends (or a page that closes) with
+   * a coached line still in the queue must not re-offer it on the next launch.
+   * The whole promise of this feature is that it goes away.
+   */
+  coachHints: true,
+  coachSeen: Object.freeze({}),
+
   /* ---------------------------------------------------------------- voice notes
    * FOUR keys, and the first two are the safety pair. Both default to the answer
    * that does nothing:

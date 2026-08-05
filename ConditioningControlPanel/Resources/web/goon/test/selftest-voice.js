@@ -4,9 +4,16 @@
 //   node Resources/web/goon/test/selftest-voice.js
 //
 // It exists because this is the first feature on the page that carries a PERSON
-// rather than a picture, and almost all of it is refusals. Four properties are
+// rather than a picture, and almost all of it is refusals. Five properties are
 // worth more than the rest of the file put together, and every one of them is
 // pinned below against the code that would quietly undo it:
+//
+//   0. IT NEVER CROSSES OUR SERVER. Voice notes are P2P-ONLY as of 2026-08-05,
+//      exactly like media: on a relayed duel the send door refuses ('relay'),
+//      an inbound frame is dropped where it lands, the mic is not on the desk,
+//      and the copy says so without a caveat. This is the one property that
+//      cannot be restored by an apology if it is broken, so it is pinned at the
+//      engine, at the service, at the copy and in both directions.
 //
 //   1. NOTHING CROSSES WITHOUT BOTH CONSENTS. `voice_notes` is a per-side
 //      declaration on the consent frame, cloned from `media_transfer` — which
@@ -19,9 +26,11 @@
 //   3. THE CEILINGS HOLD AGAINST A LYING PEER. The declared size and the
 //      accumulated size are two different checks on purpose, and the second one
 //      is the one that catches a meta claiming 40 KB in front of 4 MB.
-//   4. A FRAME ALWAYS FITS THE LANE. Voice rides the CONTROL channel (the relay
-//      has no bulk one), which clamps at 16 KB including the JSON envelope, so
-//      the worst-case chunk frame is serialized here and measured.
+//   4. A FRAME ALWAYS FITS THE LANE. Voice rides the CONTROL channel (there is
+//      no bulk one to ride), which clamps at 16 KB including the JSON envelope,
+//      so the worst-case chunk frame is serialized here and measured. The lane
+//      is unchanged by rule 0 — what changed is that the lane is only allowed
+//      to carry a note when the lane itself is a direct P2P channel.
 //
 // Everything runs under plain node: no DOM, no mic, no AudioContext. The one
 // place a graph is needed (the playback queue) gets a fake one.
@@ -29,7 +38,7 @@
 import { serialize, parse, wireByteLength, MAX_WIRE_BYTES } from '../core/wire.js';
 import {
   makeConsent, makeVoice, makeHello, makeCaps,
-  GoonMatchPhase, VOICE_SUBS, VOICE_CAP_VERSION, clampVoiceSub, peerSpeaksVoice,
+  GoonMatchPhase, GoonTransportState, VOICE_SUBS, VOICE_CAP_VERSION, clampVoiceSub, peerSpeaksVoice,
 } from '../core/contracts.js';
 import { local as localCaps } from '../core/caps.js';
 import { GoonMatchService } from '../core/match.js';
@@ -65,27 +74,38 @@ function bytes(count, seed = 7) {
  * have to be provable with the engine's answers pinned by hand, and the real
  * engine is exercised separately in section 2.
  */
-function fakeMatch({ agreed = true, phaseOpen = true } = {}) {
+function fakeMatch({ agreed = true, phaseOpen = true, p2p = true } = {}) {
   const frames = [];
   const voiceSubs = new Set();
+  const linkSubs = new Set();
   const m = {
     frames,
     get voiceNotesAgreed() { return agreed; },
     get voicePhaseOpen() { return phaseOpen; },
+    /** The engine's P2P-only bit. `deliver` below still fires on a relayed link,
+     *  ON PURPOSE: that is the modified-peer case the service must survive. */
+    get linkIsP2P() { return p2p; },
     setAgreed(v) { agreed = v; },
     setPhaseOpen(v) { phaseOpen = v; },
+    setLink(v) {
+      const next = !!v;
+      if (next === p2p) return;
+      p2p = next;
+      for (const fn of Array.from(linkSubs)) fn(next);
+    },
     onVoiceFrame(fn) { voiceSubs.add(fn); return () => voiceSubs.delete(fn); },
     onConsentChanged() { return () => {}; },
     onPhaseChanged() { return () => {}; },
+    onLinkChanged(fn) { linkSubs.add(fn); return () => linkSubs.delete(fn); },
     /** Push a frame at the service the way core/match.js would (parsed + clamped). */
     deliver(fields) {
       const f = parse(serialize(makeVoice(fields)));
       for (const fn of Array.from(voiceSubs)) fn(f);
       return f;
     },
-    sendVoiceMeta(o) { if (!agreed || !phaseOpen) return false; frames.push({ sub: 'meta', ...o }); return true; },
-    sendVoiceChunk(id, seq, data) { if (!agreed || !phaseOpen) return false; frames.push({ sub: 'chunk', id, seq, data }); return true; },
-    sendVoiceEnd(id) { if (!agreed || !phaseOpen) return false; frames.push({ sub: 'end', id }); return true; },
+    sendVoiceMeta(o) { if (!agreed || !phaseOpen || !p2p) return false; frames.push({ sub: 'meta', ...o }); return true; },
+    sendVoiceChunk(id, seq, data) { if (!agreed || !phaseOpen || !p2p) return false; frames.push({ sub: 'chunk', id, seq, data }); return true; },
+    sendVoiceEnd(id) { if (!agreed || !phaseOpen || !p2p) return false; frames.push({ sub: 'end', id }); return true; },
   };
   return m;
 }
@@ -180,7 +200,12 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 
 // ================================================= 2. the engine's send/receive gates
 {
-  const mk = (tag) => new GoonMatchService({
+  /* `state` IS NOT DECORATION ANY MORE. Voice notes are P2P-only, so the engine reads
+   * the transport's state at both doors — a stub without one is a relayed link as far
+   * as core/match.js is concerned, and every send below would refuse. The relay-shaped
+   * stub gets its own block at the end of this section. */
+  const mk = (tag, state = GoonTransportState.ConnectedP2P) => new GoonMatchService({
+    state,
     send() { return Promise.resolve(true); },
     onMessageReceived() { return () => {}; },
     onStateChanged() { return () => {}; },
@@ -300,6 +325,63 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
     ok(m.localVoiceNotes === true, 'and cloneSheet kept OUR value, not theirs');
     ok(m.remoteVoiceNotes === false && m.voiceNotesAgreed === false,
       'their opt-out is recorded as theirs and nothing is agreed');
+    m.dispose();
+  }
+
+  // --- THE LINK GATE, at the engine, in BOTH directions -----------------------------------
+  //
+  // The whole of the P2P-only rule, at the tier that owns the wire. A relayed duel is a
+  // fully legitimate duel in every other respect — connected, agreed, mid-phase — and the
+  // ONLY thing different about it is that our server can read the frames. That is enough.
+  {
+    for (const state of [GoonTransportState.ConnectedRelay, GoonTransportState.Reconnecting,
+      GoonTransportState.Signaling, GoonTransportState.Disconnected]) {
+      const m = mk('GG:vrelay', state);
+      const sent = [];
+      m._send = (msg) => { sent.push(msg); };
+      m._phase = GoonMatchPhase.Live;
+      m._localVoiceNotes = true;
+      m._remoteVoiceNotes = true;
+      m._peerSupportsVoice = true;
+
+      ok(m.linkIsP2P === false, `state ${state} is not a direct link`);
+      ok(m.sendVoiceMeta({ id: 1, bytes: 10, durMs: 100, parts: 1 }) === false
+        && m.sendVoiceChunk(1, 0, 'AAAA') === false && m.sendVoiceEnd(1) === false,
+      `state ${state}: every voice verb refuses — consent and phase cannot buy a relayed note`);
+      ok(sent.length === 0, `state ${state}: and NOTHING reached the transport`);
+
+      // ...and the receive door, which is the half a modified peer would attack.
+      const got = [];
+      m.onVoiceFrame((f) => got.push(f));
+      m._handleVoice(parse(serialize(makeVoice({ sub: 'meta', id: 1, bytes: 9, parts: 1 }))));
+      m._handleVoice(parse(serialize(makeVoice({ sub: 'chunk', id: 1, seq: 0, data: 'AAAA' }))));
+      ok(got.length === 0, `state ${state}: an inbound voice frame off the mailbox is dropped, not delivered`);
+      m.dispose();
+    }
+
+    // The same engine, once the link comes up direct: nothing about the gate is sticky.
+    const t = {
+      state: GoonTransportState.Signaling,
+      send() { return Promise.resolve(true); },
+      onMessageReceived() { return () => {}; },
+      onStateChanged(fn) { t._fire = () => fn(t.state); return () => {}; },
+    };
+    const m = new GoonMatchService(t, true, { logger: quiet, tag: 'GG:vlink' });
+    m._phase = GoonMatchPhase.Live;
+    m._localVoiceNotes = true; m._remoteVoiceNotes = true; m._peerSupportsVoice = true;
+    const edges = [];
+    m.onLinkChanged((v) => edges.push(v));
+    ok(m.sendVoiceEnd(1) === false, 'while ICE is still deciding, no note leaves');
+    t.state = GoonTransportState.ConnectedP2P;
+    t._fire();
+    ok(edges.length === 1 && edges[0] === true,
+      'the link edge fires ONCE when it settles direct — what the mic hangs its availability on',
+      JSON.stringify(edges));
+    ok(m.sendVoiceEnd(1) === true, 'and the same engine now sends');
+    t.state = GoonTransportState.ConnectedRelay;
+    t._fire();
+    ok(edges.length === 2 && edges[1] === false, 'a link that stops being direct raises the other edge');
+    ok(m.sendVoiceEnd(1) === false, 'and the door shuts again with it');
     m.dispose();
   }
 
@@ -671,6 +753,88 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
     svc.dispose();
   }
 
+  // --- THE RELAY REFUSAL, which is the whole privacy promise ---------------------------
+  //
+  // Everything else on this page degrades on a relayed link. This does not degrade: it is
+  // ABSENT. The reason is its own word ('relay', never the catch-all 'unavailable') because
+  // ui/voice/micHud.js says a different sentence for it and because a player who reads
+  // "you both have to switch it on" would go looking for a switch that would not help.
+  {
+    const match = fakeMatch({ p2p: false });
+    const svc = createVoiceService({ match, audio: fakeAudio(), prefs: fakePrefs(), logger: quiet, now: () => 1e6 });
+
+    const r = await svc.sendBlob(bytes(4000), { durMs: 3000 });
+    ok(!r.ok && r.reason === 'relay', 'a relayed link refuses the send with its OWN reason', JSON.stringify(r));
+    ok(match.frames.length === 0, 'and not one frame was handed to the engine — there is no fallback path');
+    ok(svc.available() === false, 'the service says the feature is not live');
+    ok(/relayed/.test(svc.whyUnavailable()) && /P2P|direct/i.test(svc.whyUnavailable()),
+      '...and says why in words a play-test log can read', svc.whyUnavailable());
+    ok(svc.stats().sendDropped === 1, 'the refusal is counted as a drop, like every other one',
+      JSON.stringify(svc.stats()));
+
+    // The store path leans on the same door rather than carrying its own copy of the rule.
+    const store = { get: async () => ({ blob: bytes(500), durMs: 2500, emote: '👀' }) };
+    const svc2 = createVoiceService({ match, audio: fakeAudio(), prefs: fakePrefs(), noteStore: store, logger: quiet, now: () => 1e6 });
+    ok((await svc2.sendNote('n1')).reason === 'relay', 'a pre-recorded note is refused on the same terms');
+    ok(match.frames.length === 0, 'still nothing on the wire');
+    svc2.dispose();
+
+    // ...and the link coming back is not sticky either way.
+    match.setLink(true);
+    const back = await svc.sendBlob(bytes(4000), { durMs: 3000 });
+    ok(back.ok, 'and a link that comes up direct sends normally', JSON.stringify(back));
+    svc.dispose();
+  }
+
+  // --- THE RECEIVE GUARD: an unpatched (or hostile) peer cannot push one through us ------
+  //
+  // core/match.js refuses to DELIVER a voice frame on a relayed link, so in the real page
+  // nothing reaches the service at all. This drives the service directly anyway — the
+  // stub's `deliver` ignores the link on purpose — because the tier that promises "never
+  // decoded, never played" is this one, and a promise that only holds while the layer
+  // below it is intact is not a promise.
+  {
+    const match = fakeMatch({ p2p: false });
+    const audio = fakeAudio();
+    const svc = createVoiceService({ match, audio, prefs: fakePrefs(), logger: quiet, now: () => 1e6 });
+
+    const b64 = bytesToVoiceB64(bytes(600));
+    match.deliver({ sub: 'meta', id: 1, bytes: 600, parts: 1, durMs: 2000 });
+    match.deliver({ sub: 'chunk', id: 1, seq: 0, data: b64 });
+    match.deliver({ sub: 'end', id: 1 });
+    await tick();
+    ok(audio.played.length === 0, 'a note that arrived over the relay is NEVER played');
+    ok(svc.stats().received === 0 && svc.stats().recvDropped === 3,
+      'every frame of it was dropped where it landed, unassembled', JSON.stringify(svc.stats()));
+
+    // The same frames on a direct link do play — this is a link gate, not a broken receiver.
+    match.setLink(true);
+    match.deliver({ sub: 'meta', id: 2, bytes: 600, parts: 1, durMs: 2000 });
+    match.deliver({ sub: 'chunk', id: 2, seq: 0, data: b64 });
+    match.deliver({ sub: 'end', id: 2 });
+    await tick();
+    ok(audio.played.length === 1, '...while the identical note on a direct link arrives normally');
+    svc.dispose();
+  }
+
+  // --- the mic presents as unavailable, and the edge that takes it off the desk ----------
+  {
+    const match = fakeMatch();
+    const svc = createVoiceService({ match, audio: fakeAudio(), prefs: fakePrefs(), logger: quiet, now: () => 1e6 });
+    const edges = [];
+    svc.onStateChanged((v) => edges.push(v));
+    ok(svc.available() === true, 'a direct, agreed, live duel has a mic');
+
+    match.setLink(false);
+    ok(edges.length === 1 && edges[0] === false,
+      'THE LINK EDGE TAKES IT AWAY — which is what ui/voice/micHud.js cancels a live hold on',
+      JSON.stringify(edges));
+    ok(svc.available() === false, 'and the predicate agrees');
+    match.setLink(true);
+    ok(edges.length === 2 && edges[1] === true, 'and puts it back if the link ever came good');
+    svc.dispose();
+  }
+
   // --- sendNote leans on the store, and degrades without one ---------------------------
   {
     const match = fakeMatch();
@@ -794,8 +958,8 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
       'linkLabel', 'linkNone', 'linkHelp',
       'hudLabel', 'holdHint', 'slideToCancel', 'sending', 'sent', 'cancelled', 'sendFailed',
       'incoming', 'incomingWithEmote',
-      'lobbyBoth', 'lobbyYours', 'lobbyTheirs', 'lobbyPeerOld',
-      'micDenied', 'micMissing', 'notActive', 'volumeHint',
+      'lobbyBoth', 'lobbyYours', 'lobbyTheirs', 'lobbyPeerOld', 'lobbyRelay',
+      'micDenied', 'micMissing', 'notActive', 'relayOff', 'volumeHint',
     ];
     let missing = '';
     for (const k of flat) if (typeof V[k] !== 'string' || V[k] === '') missing += k + ' ';
@@ -832,8 +996,56 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
       V.ack.headline + ' | ' + V.ack.line);
     ok(/hear/i.test(V.ack.lineTwo),
       'and the SECOND says you may hear THEM — the half a player can otherwise miss', V.ack.lineTwo);
-    ok(/server/i.test(V.ack.line) || /server/i.test(V.voice === undefined ? '' : V.lead),
-      'and somewhere on the way in it says no server is involved');
+    /* WHERE THE AUDIO GOES, PINNED HONEST — AND THE TRUTH IT PINS HAS CHANGED ONCE
+     * ALREADY (2026-08-05).
+     *
+     * Round one asserted only that the word "server" appeared "somewhere on the way
+     * in", against copy that said "no server ever hears them" — false the moment ICE
+     * gave up, because voice rode the CONTROL lane precisely so it would survive a
+     * relayed link, and on that link every frame was plain JSON through
+     * /v2/goon/relay. Round two made the copy ADMIT that hop, and pinned the
+     * admission here.
+     *
+     * ROUND THREE IS THE OWNER'S CALL AND IT IS THE ONE THESE ASSERTIONS NOW GUARD:
+     * the hop is GONE. Voice notes are P2P-only (core/match.js `linkIsP2P` at both
+     * doors, ui/voice/voiceService.js `available()` on the mic), so the unconditional
+     * sentence is true again and the copy is allowed to say it. Which means the test
+     * has to work in the OPPOSITE direction from round two:
+     *   · the sheet still names the recipient, because that is the consent;
+     *   · the sheet and the lead both claim the DIRECT link and "never through our
+     *     servers" — and if a future edit ever puts a voice frame back on the relay,
+     *     these two lines become a lie, so §2's link-gate block is the other half of
+     *     this test and neither may be relaxed alone;
+     *   · neither may describe a note travelling THROUGH us on any path;
+     *   · and the relayed case is still SAID, as a feature that is off rather than a
+     *     hop that is disclosed. */
+    const voiceCopy = V.ack.line + ' ' + V.ack.lineTwo + ' ' + V.lead;
+    ok(/duelling|opponent|them|their/i.test(V.ack.line),
+      'the ack sheet names WHO gets the recording — that is the consent being asked for', V.ack.line);
+    ok(/direct/i.test(V.ack.line) && /direct/i.test(V.lead),
+      'both the sheet and the screen lead say the note takes the DIRECT link', V.ack.line + ' | ' + V.lead);
+    ok(/never through our server/i.test(V.ack.line) && /never through our server/i.test(V.lead),
+      'and both make the unconditional promise the P2P-only rule now backs',
+      V.ack.line + ' | ' + V.lead);
+    ok(!/(passes|pass|travels|routed|goes|sent) (through|via) (our|the) (server|relay)/i.test(voiceCopy)
+      && !/through our server on the way/i.test(voiceCopy),
+    'and NOTHING in the voice copy describes a note travelling through us — there is no such path any more',
+    voiceCopy);
+    ok(/relay/i.test(V.ack.line) && /(switched off|off for that duel|not there|no voice)/i.test(V.ack.line + ' ' + V.lead),
+      'the relayed case is still said out loud — as the feature being OFF, not as a hop being disclosed',
+      V.ack.line + ' | ' + V.lead);
+    ok(typeof V.lobbyRelay === 'string' && V.lobbyRelay !== ''
+      && typeof V.relayOff === 'string' && V.relayOff !== '',
+    'and it has its own two lines: one for the lobby row, one for the mic strip',
+    V.lobbyRelay + ' | ' + V.relayOff);
+    ok(/relay|direct/i.test(V.lobbyRelay) && /direct|relay/i.test(V.relayOff),
+      'both of which name the LINK rather than blaming the player', V.lobbyRelay + ' | ' + V.relayOff);
+    ok(!/error|fail|sorry|cannot|denied/i.test(V.lobbyRelay + ' ' + V.relayOff),
+      'and neither is phrased as a failure — nothing broke, the note simply has nowhere private to go',
+      V.lobbyRelay + ' | ' + V.relayOff);
+    ok(/taken back|theirs/i.test(V.ack.lineTwo),
+      'the fact that survives every rewrite: once it lands it is theirs and cannot be taken back',
+      V.ack.lineTwo);
     ok(/hear|hears/i.test(V.toggleOn) && /drop/i.test(V.toggleOff),
       'the toggle hints name both directions on and the unread drop off',
       V.toggleOn + ' / ' + V.toggleOff);
@@ -1085,21 +1297,27 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 
     ok(/local pref off/.test(svc.whyUnavailable()), 'gate 1: our own opt-in, named first', svc.whyUnavailable());
     prefs.set('voiceNotesEnabled', true);
+    // GATE 2 IS THE LINK, and it is deliberately ahead of everything about the two
+    // players: it is the only gate that is about US, and it is terminal for the match.
+    m.setLink(false);
+    ok(/relayed/.test(svc.whyUnavailable()),
+      'gate 2: a relayed link, named as the link rather than as somebody\'s toggle', svc.whyUnavailable());
+    m.setLink(true);
     ok(/our declaration never rode/.test(svc.whyUnavailable()),
-      'gate 2: the pref is on but the declaration never went out — OUR bug, and it says so',
+      'gate 3: the pref is on but the declaration never went out — OUR bug, and it says so',
       svc.whyUnavailable());
     m.localVoiceNotes = true;
-    ok(/caps\.voice/.test(svc.whyUnavailable()), 'gate 3: their BUILD, named as a build problem', svc.whyUnavailable());
+    ok(/caps\.voice/.test(svc.whyUnavailable()), 'gate 4: their BUILD, named as a build problem', svc.whyUnavailable());
     m.peerSupportsVoice = true;
-    ok(/peer never declared/.test(svc.whyUnavailable()), 'gate 4: their side is switched off', svc.whyUnavailable());
+    ok(/peer never declared/.test(svc.whyUnavailable()), 'gate 5: their side is switched off', svc.whyUnavailable());
     m.remoteVoiceNotes = true;
-    ok(/phase is closed/.test(svc.whyUnavailable()), 'gate 5: the phase', svc.whyUnavailable());
+    ok(/phase is closed/.test(svc.whyUnavailable()), 'gate 6: the phase', svc.whyUnavailable());
     m.setPhaseOpen(true);
     ok(svc.whyUnavailable({ micSupported: false }).indexOf('getUserMedia') >= 0,
-      'gate 6: a host with no microphone API at all — reported, never a silent dead button');
-    ok(/zen-hidden/.test(svc.whyUnavailable({ hudHidden: true })), 'gate 7: the desk chrome is off');
+      'gate 7: a host with no microphone API at all — reported, never a silent dead button');
+    ok(/zen-hidden/.test(svc.whyUnavailable({ hudHidden: true })), 'gate 8: the desk chrome is off');
     ok(svc.whyUnavailable({ micSupported: true, hudHidden: false }) === '',
-      'and with all seven answered it says NOTHING — a quiet log is the good outcome');
+      'and with all eight answered it says NOTHING — a quiet log is the good outcome');
     // The two host facts are OPTIONAL: this module never touches navigator.
     ok(svc.whyUnavailable() === '', 'a caller that cannot answer them does not get them reported');
     svc.dispose();

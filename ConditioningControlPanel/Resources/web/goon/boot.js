@@ -62,6 +62,7 @@ import { createRouter } from './ui/router.js';
 import { createPrefs } from './ui/prefs.js';
 import { createAudio } from './ui/audio.js';
 import { createToasts } from './ui/toasts.js';
+import { createCoach, COACH } from './ui/coach.js';
 import { createSheets } from './ui/sheets.js';
 import { createOptions } from './ui/options.js';
 import { createSoloDriver } from './ui/soloDriver.js';
@@ -352,10 +353,13 @@ bridge.on('init', (m) => {
 bridge.on('manifest', (m) => {
   gotManifest = true;
   session.manifest = media.setManifest(m);
-  // WHAT A PARTNER SENT US IN AN EARLIER SESSION rides this same frame (spec §6.4)
-  // rather than a new boot milestone — settle() already gates on gotManifest, so the
-  // received set is primed before any screen mounts, which is what lets the very
-  // first offer of a match answer `decline:'have'` instead of re-transferring 20 MB.
+  // EPHEMERAL INBOX (owner decision, 2026-08-05): a partner's media never survives
+  // the match — the page purges at teardownEverything and the host wipes at page
+  // boot, so `received` is empty in production. The priming path is kept because
+  // the manifest frame still carries the field (shape compatibility, and the
+  // standalone/test harness feeds rows through it), not because anything should
+  // arrive here. If this ever logs a nonzero count on a fresh page, a purge seam
+  // regressed — that is the bug that put past partners' media into Practice.
   session.received = Array.isArray(m.received) ? m.received : [];
   primeReceived(session.received);
   bridge.log('manifest: ' + session.manifest.images + ' images, ' + session.manifest.videos + ' videos'
@@ -487,6 +491,11 @@ let audio = null;
 let toasts = null;
 let sheets = null;
 let options = null;
+/* ui/coach.js — the one-time explainers. A boot singleton rather than a per-match
+ * handle on purpose: "once ever" is a fact about the PLAYER, and a coach rebuilt
+ * on every attachMatch (the relay fallback rebuilds the whole graph) would keep
+ * its page-local ledger for a matter of seconds. */
+let coach = null;
 let router = null;
 let executor = null;
 let matchLog = null;
@@ -800,6 +809,32 @@ function primeReceived(list) {
     registerReceived(receivedStore.list());
   } catch (e) {
     logger.warn('priming the received inbox failed: ' + ((e && e.message) || e));
+  }
+}
+
+/**
+ * THE EPHEMERAL-INBOX SEAM (owner decision, 2026-08-05): nothing a partner sent
+ * survives the match. Dropping goes through the SAME two ledgers priming filled —
+ * exec/media.js (so a Practice peer-run's drawReceived can never see a dead row)
+ * and the received store (whose drop() also deletes the host's disk file) — in
+ * that order, so no window exists where media can hand out a view the store has
+ * already destroyed. Called from teardownEverything, which every road out of a
+ * match funnels through and a relay REBUILD never touches; the recap always
+ * mounts BEFORE its match is torn down, so its report card keeps its plates.
+ */
+function purgeReceived(why) {
+  if (!receivedStore) return;
+  try {
+    const rows = receivedStore.list();
+    if (!rows.length) return;
+    for (const e of rows) {
+      try { media.dropReceived(e.sha); } catch (_e) { /* one bad row never stops the sweep */ }
+      try { receivedStore.drop(e.sha); } catch (_e) { /* ignore */ }
+    }
+    session.received = [];
+    logger.info('received inbox purged (' + why + '): ' + rows.length + ' artifact(s)');
+  } catch (e) {
+    logger.warn('purging the received inbox failed: ' + ((e && e.message) || e));
   }
 }
 
@@ -1427,9 +1462,21 @@ function reportMicGate() {
     // whether this host has a microphone API at all. Both are read defensively —
     // a handle-shaped stub (no service = a no-op mic) answers neither.
     let hudHidden = false;
+    let deskWhy = '';
     let micSupported;
-    try { if (mic && typeof mic.shown === 'function' && typeof mic.available === 'function') hudHidden = mic.available() && !mic.shown(); }
-    catch (_e) { /* leave it false */ }
+    /* WHICH piece of chrome, not just "some chrome". Zen and the arsenal drawer
+     * both take the slot away and they are undone by opposite gestures — and the
+     * drawer is the DESKTOP failure this breadcrumb existed for and could not
+     * name: an in-app seat plays with the drawer shut (every payload is on the
+     * number row) and the mic is a flow child of the panel that shutting it
+     * removes. Read defensively: a handle-shaped stub answers none of this. */
+    try { if (mic && typeof mic.hiddenBy === 'function') deskWhy = String(mic.hiddenBy() || ''); }
+    catch (_e) { /* an older handle simply cannot say */ }
+    if (deskWhy) hudHidden = deskWhy === 'zen';
+    else {
+      try { if (mic && typeof mic.shown === 'function' && typeof mic.available === 'function') hudHidden = mic.available() && !mic.shown(); }
+      catch (_e) { /* leave it false */ }
+    }
     try { if (mic && mic.recorder && typeof mic.recorder.supported === 'function') micSupported = !!mic.recorder.supported(); }
     catch (_e) { /* leave it undefined — the gate is then not reported */ }
 
@@ -1438,8 +1485,48 @@ function reportMicGate() {
       : (voice.available() ? '' : 'unknown (this build has no whyUnavailable)');
     // Shown and working: say nothing. A quiet log is the good outcome.
     if (!why && mic && typeof mic.shown === 'function' && mic.shown()) return;
+    if (!why && deskWhy === 'drawer') {
+      logger.warn('voice mic hidden: the arsenal drawer is shut and the mic is inside it — hold V to record, or open the drawer');
+      return;
+    }
     if (!why) { logger.warn('voice mic hidden: the service says live but the desk has no strip (mount failure?)'); return; }
     logger.warn('voice mic hidden: ' + why);
+    micGateToast(deskWhy);
+  } catch (e) {
+    // A diagnostic that can break a match is worse than no diagnostic.
+    logger.warn('voice mic gate check threw: ' + ((e && e.message) || e));
+  }
+}
+
+/**
+ * THE PLAYER-FACING HALF of reportMicGate (owner, 2026-08-05, round two): the
+ * warn above ended the log archaeology, and then the owner sat in a PvP duel
+ * with the drawer open, no mic, and no way to know WHY without reading logs —
+ * the exact blindness the warn was built to end, one audience over. One toast,
+ * once per match (this runs inside reportMicGate's micGateSaid latch), and ONLY
+ * for a seat that opted in: a player who never switched voice notes on has not
+ * lost anything worth interrupting them over. Practice is exempt for the same
+ * reason the mic is off there at all — the bot never consents, and "your
+ * partner has voice off" about a bot is noise dressed as help.
+ *
+ * FACTS, NOT PROSE: the service's whyUnavailable sentences are pinned by
+ * selftest-voice, so matching on them would couple a toast to a test vector.
+ * The match object is re-read directly, in the same order available() applies
+ * its gates, and anything unreadable simply does not toast — a missing toast
+ * is a shrug, a wrong one is a lie.
+ */
+function micGateToast(deskWhy) {
+  try {
+    if (soloPair) return;
+    if (!prefs || !prefs.get || !prefs.get('voiceNotesEnabled')) return;
+    const m = currentMatch;
+    if (!m) return;
+    let msg = '';
+    if (deskWhy === 'zen') msg = S.voice.micZenToast;
+    else if (!m.linkIsP2P) msg = S.voice.micRelayToast;
+    else if (!m.peerSupportsVoice) msg = S.voice.micPeerOldToast;
+    else if (!m.remoteVoiceNotes) msg = S.voice.micPeerOffToast;
+    if (msg) toasts?.warn?.(msg);
   } catch (e) {
     // A diagnostic that can break a match is worse than no diagnostic.
     logger.warn('voice mic gate check threw: ' + ((e && e.message) || e));
@@ -1454,7 +1541,7 @@ function mountHudNow() {
       // from inside the HUD. mountHud takes a destructured options object, so an
       // extra key is inert — and handing it over here means the mic lands as one
       // line in ui/hud.js rather than as a second wiring pass through this file.
-      match: currentMatch, session, audio, prefs, media, matchLog, discord, voice,
+      match: currentMatch, session, audio, prefs, media, matchLog, discord, voice, coach,
     }) || null;
   } catch (e) { logger.error('mountHud threw: ' + ((e && e.stack) || e)); hudHandle = null; }
 }
@@ -1462,6 +1549,9 @@ function mountHudNow() {
 function unmountHud() {
   if (!hudHandle) return;
   try { hudHandle.unmount?.(); } catch (e) { logger.warn('hud.unmount threw: ' + ((e && e.message) || e)); }
+  // A coached line still waiting its turn is about a match that has just ended.
+  // The marks stay; only the queue goes. See coach.clearPending.
+  try { coach?.clearPending?.(); } catch (_e) { /* a hint is never load-bearing */ }
   hudHandle = null;
   const hud = el('gg-hud');
   if (hud) { hud.replaceChildren(); hud.hidden = true; }
@@ -1769,6 +1859,9 @@ async function teardownEverything() {
   }
   try { layers.stopAll(); } catch (_e) { /* ignore */ }
   try { executor?.stopAll?.(); } catch (_e) { /* ignore */ }
+  // LAST, after the executor is stopped: nothing can be mid-draw on a view the
+  // drop is about to destroy. See purgeReceived for why this seam is the one.
+  purgeReceived('teardown');
 }
 
 const actions = {
@@ -1958,6 +2051,18 @@ function seedPracticeArsenal() {
   }
   if (!armed) return;
   logger.info('practice: seeded ' + armed + ' arsenal slot(s)');
+  /* ...AND SAY SO. The seed is silent by design (`silent: true` above — a gift,
+   * not a reward), which solved the "nothing is happening" report and left a
+   * second one behind it: two stickers quietly light up in a drawer that is SHUT
+   * by default on a phone, and nothing anywhere says they are there or what to
+   * press. Practice is the one place coaching may be a little louder, so this is
+   * the one hint fired from outside the desk.
+   *
+   * Deferred a beat: mountHudNow() has only just run and the HUD's entrance is
+   * still animating, so a toast on this tick lands under a moving desk. */
+  setTimeout(() => {
+    try { coach?.fire?.(COACH.PRACTICE, S.coach.practice); } catch (_e) { /* never break practice */ }
+  }, 900);
 }
 
 /* ----------------------------------------------------------------------------
@@ -2030,6 +2135,10 @@ function buildApp() {
   prefs.subscribe((key, value) => { if (key === 'perfMode') applyPerfTier(value); });
   audio = createAudio({ prefs, logger });
   toasts = createToasts({ prefs });
+  /* AFTER the toasts, because that is its whole output tier, and BEFORE the
+   * options drawer, which offers its switch. Nothing coaches until a HUD is
+   * mounted — this only builds the ledger. */
+  coach = createCoach({ prefs, toasts, logger });
   sheets = createSheets({ audio, logger });
   matchLog = createMatchLog();
   // ONE store, built once, and the only thing on the page allowed to register a

@@ -10,12 +10,25 @@
  *   │ RECEIVE meta / chunk* / end -> assembled bytes -> audio.playVoiceNote() │
  *   └────────────────────────────────────────────────────────────────────────┘
  *
- * WHY THE CONTROL LANE AND NOT `goon-media`. The bulk channel does not exist on
- * the relay fallback (net/mediaQueue.js degrades to nothing there, by design) and
- * a voice note has to work on the worst link a duel can end up on. So it rides
- * the same ordered/reliable channel as every other message — which costs a 4/3
- * base64 inflation and a 16 KB per-frame ceiling, and both are paid for in the
- * chunk plan below. 256 KB of opus is about 35 frames; a tick is 400 bytes.
+ * P2P ONLY, LIKE MEDIA (owner call, 2026-08-05). A voice note is a recording of a
+ * person, and it may only exist on a wire we cannot read. So:
+ *
+ *   · a DIRECT duel (GoonTransportState.ConnectedP2P, TURN hop included — TURN
+ *     forwards ciphertext) carries voice, and our servers never see a byte of it;
+ *   · a RELAYED duel carries none. The mic is not on the desk, `sendBlob` refuses
+ *     with reason 'relay' before a microphone is even read, and an inbound frame
+ *     that came up the mailbox anyway is dropped (see onFrame). Nothing is
+ *     queued for later and nothing degrades quietly: voice is simply off.
+ *
+ * This is a REVERSAL, and the old reasoning is kept here because it reads so
+ * plausibly: voice rides the CONTROL lane (not `goon-media`) so that it would
+ * survive the relay fallback, on the theory that a feature should work on the
+ * worst link a duel can end up on. What that actually bought was a person's voice
+ * travelling through /v2/goon/relay as plain base64 JSON — TLS to us, readable by
+ * us — which is a promise no copy could honestly make. The lane is unchanged (the
+ * chunk plan below is still what makes a note fit a 16 KB control frame); what
+ * changed is that `match.linkIsP2P` now gates both doors. 256 KB of opus is about
+ * 35 frames; a tick is 400 bytes.
  *
  * IT IS THE `t:'emote'` FAMILY, NOT A PAYLOAD. No charges, no receipts, no ACKs,
  * no retries, nothing in the ledger, nothing in active_effects. A dropped frame
@@ -23,9 +36,12 @@
  * feature where somebody's voice can be OWED to them — queued, retried, delivered
  * three minutes later out of context — is a different and much worse feature.
  *
- * THE FIVE GATES, and every one of them is enforced on BOTH ends because the
+ * THE SIX GATES, and every one of them is enforced on BOTH ends because the
  * wire is untrusted and the other end is a stranger's build:
  *
+ *   0. THE LINK. `match.linkIsP2P` — see above. First, because it is the only one
+ *      that is about US rather than about the two players, and no agreement they
+ *      could reach would make a relayed voice note acceptable.
  *   1. CONSENT. Both sides declared `voice_notes` on the consent frame AND the
  *      peer's build advertises `caps.voice` (core/match.js voiceNotesAgreed).
  *   2. PHASE. Countdown, Live, SuddenDeath. Nothing before, nothing after —
@@ -273,8 +289,19 @@ export function createVoiceService({
   }
 
   /**
-   * The ONE predicate. Both consents, the peer's build, the phase, and our own
-   * opt-in — all five, ANDed, in one place, so the mic button and the send path
+   * IS THE LINK DIRECT? core/match.js owns the definition; this is the read, and it
+   * FAILS CLOSED for anything that cannot answer (a stub, an older engine). A voice
+   * note is the one payload on this page where "we could not tell, so we sent it"
+   * would be the wrong way round.
+   */
+  function linkDirect() {
+    if (!match) return false;
+    try { return !!match.linkIsP2P; } catch (_e) { return false; }
+  }
+
+  /**
+   * The ONE predicate. The link, both consents, the peer's build, the phase, and our
+   * own opt-in — all six, ANDed, in one place, so the mic button and the send path
    * can never disagree about whether this feature is live.
    *
    * Note that a SOLO match satisfies none of it in practice (the practice
@@ -284,6 +311,7 @@ export function createVoiceService({
   function available() {
     if (disposed || !match) return false;
     if (!localEnabled()) return false;
+    if (!linkDirect()) return false;
     try { return !!match.voiceNotesAgreed && !!match.voicePhaseOpen; } catch (_e) { return false; }
   }
 
@@ -316,6 +344,9 @@ export function createVoiceService({
     if (disposed) return 'the voice service is disposed';
     if (!match) return 'no match';
     if (!localEnabled()) return 'local pref off (voice notes are not switched on for this seat)';
+    // THE LINK, in available()'s own order. Terminal for the whole match: net/session.js
+    // never upgrades a relayed duel back to P2P, so this sentence means "not this duel".
+    if (!linkDirect()) return 'the link is relayed, not direct (voice notes are P2P-only — nothing crosses our server)';
     let peerBuild = false;
     let mine = false;
     let theirs = false;
@@ -363,12 +394,19 @@ export function createVoiceService({
    * @param {string} [o.emote]  the emote this note rides with, or null for a live one
    * @param {number} [o.durMs]  recorded length, for their chip. Cosmetic.
    * @returns {Promise<{ok:boolean, reason:string, id:number, parts:number}>}
-   *   reason is 'sent' | 'unavailable' | 'too-soon' | 'busy' | 'empty' | 'too-big' |
-   *   'unreadable' | 'aborted' | 'send-failed'.
+   *   reason is 'sent' | 'relay' | 'unavailable' | 'too-soon' | 'busy' | 'empty' |
+   *   'too-big' | 'unreadable' | 'aborted' | 'send-failed'.
    */
   async function sendBlob(blob, o = {}) {
     const fail = (reason) => { stats.sendDropped++; return { ok: false, reason, id: 0, parts: 0 }; };
     if (disposed) return fail('unavailable');
+    /* 'relay' IS ITS OWN REASON, and it is checked before the general predicate so it
+     * cannot be reported as the catch-all 'unavailable'. The two mean different things
+     * to a player — "you both have to switch it on" is something they can fix, "this
+     * duel came up relayed" is not — and ui/voice/micHud.js sendReasonLine has a
+     * separate sentence for it. It is also the reason a refusal here NEVER falls back
+     * to the mailbox: there is no fallback, by design. */
+    if (!linkDirect()) return fail('relay');
     if (!available()) return fail('unavailable');
 
     // ONE AT A TIME, OUT. Interleaving two transfers on one id space would need
@@ -388,8 +426,11 @@ export function createVoiceService({
     const plan = planVoiceChunks(bytes.length);
     if (!plan.ok) return fail(plan.reason);
 
-    // Re-checked AFTER the await: a match can end, or a phase turn, while a blob
-    // is being read off disk, and the gate that mattered is the one at send time.
+    // Re-checked AFTER the await: a match can end, a phase can turn, or a link can
+    // fall over, while a blob is being read off disk — and the gate that mattered is
+    // the one at send time. The link is asked for separately so a degrade mid-read is
+    // still reported as the relay refusal rather than as a generic one.
+    if (!linkDirect()) return fail('relay');
     if (!available()) return fail('unavailable');
 
     const b64 = bytesToVoiceB64(bytes);
@@ -602,6 +643,15 @@ export function createVoiceService({
   /** One inbound frame, already phase-gated and shape-clamped by core/match.js. */
   function onFrame(f) {
     if (disposed || !f) return;
+    /* THE RELAY DROP, DEFENCE IN DEPTH (2026-08-05). core/match.js `_handleVoice`
+     * already refuses to deliver a voice frame that arrived over the server mailbox,
+     * so nothing should reach here on a relayed duel — this is the second lock on the
+     * same door, for the same reason every other gate in this file is applied twice:
+     * the tier that can promise "never decoded, never queued, never played" is this
+     * one, and a promise that depends on the layer below having run is not a promise.
+     * A peer on an older build (or a modified one) can still PUT voice frames on the
+     * relay; what it cannot do is make them audible. */
+    if (!linkDirect()) { stats.recvDropped++; return; }
     try {
       if (f.sub === 'meta') onMeta(f);
       else if (f.sub === 'chunk') onChunk(f);
@@ -620,10 +670,13 @@ export function createVoiceService({
     try { unsubs.push(match.onVoiceFrame(onFrame) || (() => {})); }
     catch (e) { warn('onVoiceFrame subscribe threw: ' + ((e && e.message) || e)); }
   }
-  // The availability edge, from all three things that can move it. The mic HUD
+  // The availability edge, from all four things that can move it. The mic HUD
   // subscribes to the RESULT rather than to these, so it never has to know that
-  // "voice is live" is made of a consent frame, a phase and a checkbox.
-  for (const [name, hook] of [['onConsentChanged', 'consent'], ['onPhaseChanged', 'phase']]) {
+  // "voice is live" is made of a consent frame, a phase, a checkbox and a link.
+  // `onLinkChanged` is the newest of them and the reason the mic vanishes (ending
+  // any live recording on ui/voice/micHud.js's ordinary cancel path) the moment a
+  // duel stops being direct.
+  for (const [name, hook] of [['onConsentChanged', 'consent'], ['onPhaseChanged', 'phase'], ['onLinkChanged', 'link']]) {
     if (match && typeof match[name] === 'function') {
       try { unsubs.push(match[name](() => emitState()) || (() => {})); }
       catch (e) { warn(`${hook} subscribe threw: ` + ((e && e.message) || e)); }

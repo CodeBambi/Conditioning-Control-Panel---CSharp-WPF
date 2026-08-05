@@ -206,6 +206,23 @@ public class AchievementService : IDisposable
     }
 
     /// <summary>
+    /// Does an overlay effect (pink filter / spiral) count as active for progress + quest time?
+    /// True when the persistent feature is on during an overlay run — the original rule, kept
+    /// verbatim so existing sessions credit identically — OR when the effect is genuinely ON SCREEN
+    /// through one of the ad-hoc paths that never touch the setting: ShowOverlaySustained (voice
+    /// "turn on spiral" / "go pink", Deeper enhancement bands) and ShowOverlayTimed (dashboard
+    /// trigger bubbles).
+    ///
+    /// #719: the voice command shows a sustained overlay and deliberately does NOT flip
+    /// settings.SpiralEnabled (that setting is the user's saved preference — it drives the settings
+    /// UI checkbox, survives restarts, and is what the 500ms reconciler tears the overlay down
+    /// against). Crediting the visible state here fixes the quest without letting a transient voice
+    /// command rewrite persisted preferences.
+    /// </summary>
+    internal static bool IsOverlayEffectActive(bool featureEnabled, bool overlayRunning, bool effectVisible)
+        => (featureEnabled && overlayRunning) || effectVisible;
+
+    /// <summary>
     /// Track time-based progress (called every second)
     /// </summary>
     private void TrackTimeBasedProgress(object? sender, EventArgs e)
@@ -221,9 +238,12 @@ public class AchievementService : IDisposable
             App.SkillTree?.AddConditioningTime(1.0 / 60.0);
         }
 
-        // Track Pink Filter time - only when overlay is actually running
-        var isPinkFilterActive = settings.PinkFilterEnabled &&
-                                 App.Overlay?.IsRunning == true;
+        // Track Pink Filter time - the persistent feature during a run, OR the tint actually on
+        // screen through an ad-hoc path (voice command / Deeper band / trigger bubble). See
+        // IsOverlayEffectActive.
+        var isPinkFilterActive = IsOverlayEffectActive(settings.PinkFilterEnabled,
+                                                       App.Overlay?.IsRunning == true,
+                                                       App.Overlay?.IsPinkFilterVisible == true);
         if (isPinkFilterActive)
         {
             var elapsed = (now - _lastPinkFilterCheck).TotalMinutes;
@@ -249,9 +269,11 @@ public class AchievementService : IDisposable
             _lastPinkFilterCheck = now;
         }
 
-        // Track Spiral time - only when overlay is actually running
-        var isSpiralActive = settings.SpiralEnabled &&
-                             App.Overlay?.IsRunning == true;
+        // Track Spiral time - the persistent feature during a run, OR the spiral actually on screen
+        // through an ad-hoc path (voice "turn on spiral" / Deeper band / trigger bubble).
+        var isSpiralActive = IsOverlayEffectActive(settings.SpiralEnabled,
+                                                   App.Overlay?.IsRunning == true,
+                                                   App.Overlay?.IsSpiralVisible == true);
         if (isSpiralActive)
         {
             var elapsed = (now - _lastSpiralCheck).TotalMinutes;

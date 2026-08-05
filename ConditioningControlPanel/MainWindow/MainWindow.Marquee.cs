@@ -329,6 +329,27 @@ namespace ConditioningControlPanel
                 var currentVersion = Services.UpdateService.AppVersion;
                 var lastSeenVersion = App.Settings?.Current?.LastSeenVersion ?? "";
 
+                // Fresh install: there is no "what's new" — the whole app is new, and a wall of
+                // patch notes for a release they never ran is a confusing first impression. An empty
+                // LastSeenVersion is the direct signal, so stamp the version and say nothing.
+                //
+                // This used to be shielded only by the caller's structure (this method lives in the
+                // else branch of WelcomeDialog.ShowIfNeeded, and a fresh install takes the if). That
+                // made an unrelated refactor of the first-run branching enough to put patch notes in
+                // front of a brand-new user; guard it here, where the condition actually lives.
+                if (string.IsNullOrEmpty(lastSeenVersion))
+                {
+                    App.Logger?.Information(
+                        "Fresh install detected (no last-seen version) - stamping v{Version} without showing What's New",
+                        currentVersion);
+                    if (App.Settings?.Current != null)
+                    {
+                        App.Settings.Current.LastSeenVersion = currentVersion;
+                        App.Settings.Save();
+                    }
+                    return;
+                }
+
                 // If versions differ, show the patch notes
                 if (lastSeenVersion != currentVersion)
                 {

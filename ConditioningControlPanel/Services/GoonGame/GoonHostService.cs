@@ -360,10 +360,12 @@ namespace ConditioningControlPanel.Services.GoonGame
                 // builder verbatim (asset-tree deselection, size caps, sampling) — one enumerator
                 // for every web core.
                 var m = DtrhAssetManifest.Build();
-                // `received` rides the EXISTING manifest frame rather than a new boot milestone:
-                // boot.js already gates settle() on gotManifest, so the received-artifact set is
-                // primed before any screen mounts - which is what lets the very first offer of a
-                // match answer decline:'have' instead of re-transferring (spec 6.4).
+                // EPHEMERAL INBOX (owner decision, 2026-08-05): a fresh page means any committed
+                // artifact is a leftover from a session the page-side purge never saw (window
+                // closed from the recap, a reload). Wipe BEFORE listing, so the manifest's
+                // `received` rows - kept for frame-shape compatibility - are always empty and the
+                // page never re-primes a past partner's media into the pool (the Practice leak).
+                TransferInboxStore.Instance.PurgeCommittedSafe("page boot");
                 var received = SafeReceivedList();
                 _host?.Post(new
                 {
@@ -376,11 +378,9 @@ namespace ConditioningControlPanel.Services.GoonGame
                 });
 
                 // The compression cache's own feed. Attached AFTER the manifest so the page has its
-                // pool before the first cache-state lands, and pruned here because "page ready" is
-                // one of exactly two moments when nothing can be mid-transfer.
+                // pool before the first cache-state lands. (The inbox needs no prune here anymore -
+                // the ephemeral wipe above already emptied it.)
                 GoonCacheBridge.Attach(_host);
-                try { TransferInboxStore.Instance.PruneSafe(); }
-                catch (Exception ex) { App.Logger?.Debug("GoonHostService: inbox prune: {E}", ex.Message); }
 
                 // ...and tell the page which window it is actually painted in. Its affordances read
                 // the echoed state, never the requested one.
@@ -429,9 +429,48 @@ namespace ConditioningControlPanel.Services.GoonGame
                 if (ReferenceEquals(core, _micPermissionCore)) return;  // a reload's second "ready"
                 _micPermissionCore = core;
                 core.PermissionRequested += OnPermissionRequested;
+                ClearBankedMicDenial(core);
                 App.Logger?.Debug("GoonHostService: microphone permission handler attached");
             }
             catch (Exception ex) { App.Logger?.Warning("GoonHostService.HookMicPermission: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// A HANDLER IS NOT ENOUGH ON ITS OWN, and this is the desktop-only trap under it.
+        /// WebView2 remembers permission decisions PER PROFILE (our <c>browser_data_goon</c> folder
+        /// outlives every launch), and a remembered answer is served from the profile WITHOUT
+        /// raising <c>PermissionRequested</c> at all. So one Deny — banked by the runtime's own
+        /// prompt on a build that predates <see cref="HookMicPermission"/>, or by a player who hit
+        /// Escape on it once — mutes the in-app microphone permanently, and the handler above never
+        /// runs to undo it. The page cannot tell: <c>getUserMedia</c> simply rejects, the mic HUD
+        /// shows "no microphone" and no amount of opting in changes anything.
+        ///
+        /// So the state is written explicitly, for our own virtual host and nothing else. The real
+        /// gate is still the page's double-locked opt-in (see the handler's own remarks) — this
+        /// only makes sure the question reaches it.
+        ///
+        /// Fire-and-forget and best-effort by design: it is a repair for an install that may never
+        /// have been broken, it must not delay the init frame, and an SDK/runtime that does not
+        /// support the profile API leaves us exactly where we already were.
+        /// </summary>
+        private static void ClearBankedMicDenial(CoreWebView2 core)
+        {
+            try
+            {
+                var profile = core.Profile;
+                if (profile == null) return;
+                _ = profile.SetPermissionStateAsync(
+                        CoreWebView2PermissionKind.Microphone,
+                        "https://ccp.game",
+                        CoreWebView2PermissionState.Allow)
+                    .ContinueWith(t =>
+                    {
+                        if (t.IsFaulted)
+                            App.Logger?.Debug("GoonHostService: mic permission state write failed: {E}",
+                                t.Exception?.GetBaseException().Message);
+                    }, TaskScheduler.Default);
+            }
+            catch (Exception ex) { App.Logger?.Debug("GoonHostService.ClearBankedMicDenial: {E}", ex.Message); }
         }
 
         /// <summary>Allow the microphone; leave every other permission kind to WebView2's default.</summary>
@@ -452,6 +491,12 @@ namespace ConditioningControlPanel.Services.GoonGame
                 // sensible for it in a borderless duel window, and the in-page opt-in has already
                 // asked the same question in the player's own words.
                 e.Handled = true;
+                // ...and this answer is NOT banked in the profile. A saved decision is served
+                // straight out of browser_data_goon on every later launch without this handler ever
+                // running, which turns one bad answer into a permanently dead microphone and makes
+                // the grant depend on a file instead of on the code that owns the policy. Asked and
+                // answered every time is the only version of this we can reason about.
+                try { e.SavesInProfile = false; } catch { /* older runtime: the write is not fatal */ }
                 App.Logger?.Information("GoonHostService: microphone permission allowed (voice notes)");
             }
             catch (Exception ex) { App.Logger?.Warning("GoonHostService.OnPermissionRequested: {E}", ex.Message); }
@@ -1574,7 +1619,10 @@ namespace ConditioningControlPanel.Services.GoonGame
                 // mid-match would otherwise leave the queue paused for the rest of the app session.
                 try { GoonCacheBridge.Detach(); } catch { }
                 try { Transfer.TransferCompressionService.Instance.ResumeAfterMatch(); } catch { }
-                try { TransferInboxStore.Instance.PruneSafe(); } catch { }
+                // Ephemeral inbox: the window is the session, and the session is over. A file the
+                // renderer still holds open just fails the delete - the page-boot wipe and the
+                // startup sweep are the backstops for whatever this one cannot take.
+                try { TransferInboxStore.Instance.PurgeCommittedSafe("window closed"); } catch { }
                 // Last word to the page before the window goes: a live match should get a chance
                 // to post its own abandon rather than just vanishing from the opponent's side.
                 try { _host?.Post(new { type = "end-run", reason = "dispose" }); } catch { }

@@ -301,16 +301,30 @@ export function mount(container, ctx) {
 
     let started = null;
     try { started = await rec.start(); }
-    catch (e) { logger?.info?.('[GG voice] recorder.start threw: ' + ((e && e.message) || e)); started = { ok: false, reason: 'denied' }; }
-    if (started && started.ok === false) {
+    catch (e) { logger?.info?.('[GG voice] recorder.start threw: ' + ((e && e.message) || e)); started = { ok: false, reason: 'failed' }; }
+    /* ANYTHING BUT A YES IS A NO. This used to test `started.ok === false`, which
+     * let a recorder that resolved nothing at all (undefined, a bare null) walk
+     * through as a success — and then the button said Stop over a microphone
+     * that had never opened, which can only be got out of by pressing it again.
+     * The recorder is DISPOSED on the way out either way, so a refused attempt
+     * leaves nothing behind for the next press to trip over. */
+    if (!started || started.ok !== true) {
       try { rec.dispose?.(); } catch (_e) { /* ignore */ }
-      return { ok: false, reason: String(started.reason || 'denied') };
+      return { ok: false, reason: String((started && started.reason) || 'failed') };
     }
     return { ok: true, rec };
   }
 
   async function onRecordPress() {
-    if (recorder) { await finishRecording(false); return; }
+    /* THE STOP HALF. It is wrapped because a throw out of here would leave the
+     * press unfinished and the button in whatever state it was mid-stop — and
+     * finishRecording has already cleared `recorder` by the time anything in it
+     * can throw, so repainting is all that is left to rescue. */
+    if (recorder) {
+      try { await finishRecording(false); }
+      catch (e) { ledger._err('finishRecording', e); paintRecording(); }
+      return;
+    }
     if (busy) return;
     if (!store) { toast(S.voice.micMissing, 'warn'); return; }
     if (notes.length >= VN_MAX_NOTES) { toast(S.voice.full(VN_MAX_NOTES), 'warn'); return; }
@@ -323,10 +337,18 @@ export function mount(container, ctx) {
     busy = true;
     recBtn.disabled = true;
     let opened = null;
-    try { opened = await openRecorder(); } finally { busy = false; recBtn.disabled = false; }
+    try { opened = await openRecorder(); }
+    catch (e) { ledger._err('openRecorder', e); opened = { ok: false, reason: 'failed' }; }
+    finally { busy = false; recBtn.disabled = false; paintRecording(); }
     if (ledger.isDisposed) return;
-    if (!opened.ok) {
-      toast(opened.reason === 'denied' ? S.voice.micDenied : S.voice.micMissing, 'warn');
+    if (!opened || !opened.ok) {
+      /* THREE DIFFERENT REFUSALS, THREE DIFFERENT SENTENCES. 'failed' used to
+       * borrow micMissing ("no microphone found"), which sent people looking for
+       * a hardware problem after a getUserMedia that simply never answered. */
+      const reason = (opened && opened.reason) || 'failed';
+      toast(reason === 'denied' ? S.voice.micDenied
+        : (reason === 'missing' || reason === 'unsupported') ? S.voice.micMissing
+          : S.voice.micFailed, 'warn');
       return;
     }
 
@@ -369,7 +391,9 @@ export function mount(container, ctx) {
     recorder = null;
     clearTick();
 
-    let out = { ok: false, reason: 'empty', blob: null, durMs: 0 };
+    // 'failed', not 'empty': a stop() that THREW never got as far as producing
+    // nothing, and the two have different sentences on the other side.
+    let out = { ok: false, reason: 'failed', blob: null, durMs: 0 };
     try { out = normalizeRecording(await rec.stop()); }
     catch (e) { logger?.warn?.('[GG voice] recorder.stop threw: ' + ((e && e.message) || e)); }
     await completeRecording(rec, out, capped);
@@ -380,13 +404,17 @@ export function mount(container, ctx) {
     try { rec.dispose?.(); } catch (_e) { /* ignore */ }
     if (ledger.isDisposed) return;
     paintRecording();
-    if (!out.ok) { toast(S.voice.sendFailed, 'warn'); return; }
+    // 'empty' is a recording that produced nothing; anything else means there was
+    // no recording to produce it — see S.voice.micFailed.
+    if (!out.ok) { toast(out.reason === 'empty' ? S.voice.sendFailed : S.voice.micFailed, 'warn'); return; }
 
     const durMs = out.durMs > 0 ? Math.min(VN_MAX_MS, out.durMs) : Math.min(VN_MAX_MS, Date.now() - recordStartedAt);
-    const res = await store.add(out.blob, { durMs, name: nextName() });
+    let res = null;
+    try { res = await store.add(out.blob, { durMs, name: nextName() }); }
+    catch (e) { ledger._err('notes.add', e); res = { ok: false, reason: 'failed' }; }
     if (ledger.isDisposed) return;
-    if (!res.ok) {
-      toast(res.reason === 'full' ? S.voice.full(VN_MAX_NOTES) : S.voice.sendFailed, 'warn');
+    if (!res || !res.ok) {
+      toast((res && res.reason) === 'full' ? S.voice.full(VN_MAX_NOTES) : S.voice.sendFailed, 'warn');
       return;
     }
     if (capped) { recNote.textContent = S.voice.recordCapped; recNote.hidden = false; }

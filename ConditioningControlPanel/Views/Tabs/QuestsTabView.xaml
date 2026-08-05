@@ -24,9 +24,14 @@
                     <!-- Daily/Weekly Quests Panel -->
                     <StackPanel x:Name="DailyWeeklyPanel" x:FieldModifier="internal">
                         <!-- Season Title Banner -->
+                        <!-- The Text below is only ever the pre-first-paint placeholder: RefreshQuestUI
+                             overwrites it with QuestDefinitionService.SeasonTitle (server title, else the
+                             local month name). It must stay season-NEUTRAL - it used to hardcode
+                             "Airhead April", so any lost first-paint race showed a long-dead season.
+                             Mirrors the same neutral fallback LeaderboardTabView uses. -->
                         <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" Padding="20,14" Margin="0,0,0,18"
                                 BorderThickness="1" BorderBrush="#3D3D60">
-                            <TextBlock x:Name="TxtSeasonTitle" x:FieldModifier="internal" Text="{loc:Str label_airhead_april}"
+                            <TextBlock x:Name="TxtSeasonTitle" x:FieldModifier="internal" Text="{loc:Str section_seasons}"
                                        FontSize="28" FontWeight="ExtraBold" FontStyle="Italic"
                                        HorizontalAlignment="Center" TextAlignment="Center">
                                 <TextBlock.Foreground>

@@ -137,8 +137,16 @@ export function mount(container, ctx) {
     prefs?.set?.('seenHowItWorks', true);
     // Built as a sheet body rather than through sheets.open(), because six
     // bullets is a list, not a one-line notice.
+    /* THE GOAL, ABOVE THE BULLETS (2026-08-05). Six bullets described the LOOP
+     * accurately and never once said what winning is, so a first-time reader
+     * finished the card knowing how to throw a flash and not what for. It is a
+     * lead PARAGRAPH and deliberately not a seventh bullet — the list is pinned
+     * at six by its own note in ui/strings.js, and "the goal" is not a step in a
+     * sequence anyway. Same sentence the desk's own caption carries, one screen
+     * earlier (ui/hud.js THE OBJECTIVE LINE). */
     const body = el('div', { class: 'gg-how' }, [
       el('h2', { class: 'gg-sheet-headline', text: S.how.headline }),
+      el('p', { class: 'gg-how-goal', text: S.coach.howGoal }),
       el('ul', { class: 'gg-how-list' }, S.how.bullets.map((b) => el('li', { text: b }))),
     ]);
     sheets?.openNode?.(body, { label: S.how.headline, closeLabel: S.how.close });

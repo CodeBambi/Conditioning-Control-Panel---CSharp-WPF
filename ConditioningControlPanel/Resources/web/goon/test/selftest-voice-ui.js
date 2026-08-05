@@ -987,7 +987,8 @@ function mountSheet(provider) {
     return m;
   }
 
-  function mountLobby({ prefs, sheets, match }) {
+  /** `linkState` is a parameter because voice notes are P2P-only: the row says so. */
+  function mountLobby({ prefs, sheets, match, linkState = GoonTransportState.ConnectedP2P }) {
     const container = dom.byId.get('scr-lobby');
     container.replaceChildren();
     const handle = lobbyScreen.mount(container, {
@@ -995,7 +996,7 @@ function mountSheet(provider) {
       audio: null, prefs, sheets, discord: null, logger: quiet,
       session: { caps: {} },
       getMatch: () => match,
-      getTransport: () => ({ state: GoonTransportState.ConnectedP2P, onStateChanged() { return () => {}; } }),
+      getTransport: () => ({ state: linkState, onStateChanged() { return () => {}; } }),
     });
     return { container, handle };
   }
@@ -1113,6 +1114,44 @@ function mountSheet(provider) {
       ok(value && value.textContent === (state.remoteVoiceNotes ? S.voice.lobbyTheirsOn : S.voice.lobbyTheirsOff),
         'and the chip carries THEIR half, like the transfer row above it');
       handle.unmount();
+    }
+  }
+
+  /* ---- THE RELAYED LINK OUTRANKS ALL FOUR (2026-08-05) ----------------------
+   *
+   * Voice notes went P2P-only on the same day media did, so a duel that fell back
+   * to the server mailbox has no mic on either side. The row has to SAY that,
+   * ahead of every other sentence: "voice notes on for this match" over a relayed
+   * link would be a straight lie, and "they have not" would blame the opponent for
+   * a network. The checkbox stays live on purpose — it is the standing answer and
+   * the receive gate, not a per-link switch.
+   */
+  {
+    const prefs = createPrefs();
+    prefs.set('voiceAckSeen', true);
+    const match = fakeLobbyMatch({ localVoiceNotes: true, remoteVoiceNotes: true });
+    const { container, handle } = mountLobby({
+      prefs, sheets: fakeSheets(), match, linkState: GoonTransportState.ConnectedRelay,
+    });
+    const sub = findOne(container, 'gg-voice-lobbyline');
+    ok(sub && sub.textContent === S.voice.lobbyRelay,
+      'both sides opted in, but the link is relayed — the row says the link', sub && sub.textContent);
+    const input = findTag(findOne(container, 'gg-voice-lobbyrow'), 'input')[0];
+    ok(input.disabled === false,
+      'and the box stays live: it is the standing answer and the receive gate, not a per-link switch');
+    handle.unmount();
+
+    // ...and while ICE is still deciding, the verdict is NOT shown early — the exact
+    // bug the transfer row's own comment describes.
+    for (const st of [GoonTransportState.Signaling, GoonTransportState.ConnectingP2P, GoonTransportState.Disconnected]) {
+      const p2 = createPrefs();
+      p2.set('voiceAckSeen', true);
+      const m2 = fakeLobbyMatch({ localVoiceNotes: true, remoteVoiceNotes: true });
+      const r2 = mountLobby({ prefs: p2, sheets: fakeSheets(), match: m2, linkState: st });
+      const s2 = findOne(r2.container, 'gg-voice-lobbyline');
+      ok(s2 && s2.textContent === S.voice.lobbyBoth,
+        'state ' + st + ' has decided nothing, so the ordinary sentence stands', s2 && s2.textContent);
+      r2.handle.unmount();
     }
   }
 

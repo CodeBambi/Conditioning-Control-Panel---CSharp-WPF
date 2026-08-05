@@ -62,8 +62,11 @@ public sealed class ChaosGifCascadeOverlay : Window
                 List<string> files;
                 try
                 {
-                    files = flash?.GetChaosImagePaths(batch) ?? new List<string>();
-                    if (files.Count == 0) files = PickFiles();   // fallback: raw folder pool if Flash isn't up
+                    // #762/#798/#619: the raw-folder fallback is for a MISSING flash service only. Keying it
+                    // off an empty result meant "user unchecked every folder" looked identical to "service not
+                    // up", so deselecting everything rained the raw folder — precisely the content the user
+                    // just turned off. An empty enabled pool is a legitimate "rain nothing".
+                    files = flash != null ? flash.GetChaosImagePaths(batch) : PickFiles();
                 }
                 catch { files = new List<string>(); }
                 Application.Current?.Dispatcher.BeginInvoke(new Action(() =>

@@ -1094,8 +1094,10 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
         // relayed connection.
         tags: xferTags(payload),
         // PEER run: after `tags` is spent, showOne keeps drawing from the
-        // received store instead of the local library (null in solo, where
-        // nothing was ever received — the fallback is unchanged there).
+        // received store instead of the local library. Empty in solo BY THE
+        // PURGE SEAMS, not by accident: boot.js purges the inbox at every
+        // teardown and the host wipes it at page boot, so Practice's scripted
+        // peer can never replay what a past partner sent (the 2026-08-05 scare).
         peer: true,
       };
       // Tell the ambient renderers (spiral bed, drain wash) a squall is on:

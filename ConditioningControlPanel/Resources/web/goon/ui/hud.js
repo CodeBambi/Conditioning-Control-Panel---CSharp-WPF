@@ -50,6 +50,7 @@ import { mountEmotes } from './emotes.js';
 import { mountAnnouncer } from './announcer.js';
 import { mountMicHud } from './voice/micHud.js';
 import { createDropRoller } from './drops.js';
+import { COACH } from './coach.js';
 import { avatarNode, emitAva } from './avatar.js';
 import { setPreviewMedia } from './throwPreview.js';
 import { resolveArsenalOpen, ARSENAL_OPEN_ON, ARSENAL_OPEN_OFF } from './prefs.js';
@@ -101,7 +102,44 @@ export const ARSENAL_OPEN_CLASS = 'is-open';
 export const ARSENAL_NARROW_MQ = '(orientation: portrait), (max-width: 720px)';
 
 /** Keys 1..N, i.e. one per payload slot. ui/arsenal.js owns the binding. */
-const ARSENAL_KEY_COUNT = ARSENAL_ITEMS.filter((i) => i.kind !== null).length;
+const PAYLOAD_SLOTS = ARSENAL_ITEMS.filter((i) => i.kind !== null);
+const ARSENAL_KEY_COUNT = PAYLOAD_SLOTS.length;
+
+/**
+ * An arsenal id -> the number key that fires it, and the word on its sticker.
+ *
+ * DERIVED, never hand-listed: it is the same filter-and-index ui/arsenal.js's
+ * keydown handler uses (PAYLOAD_ITEMS[n - 1]), so a coached line that says
+ * "press 3" can never drift from the key that actually throws the thing. A slot
+ * hidden by our own caps leaves its number DEAD rather than renumbering the
+ * others, which is exactly why the index is taken off the unfiltered list.
+ */
+const SLOT_KEYS = Object.freeze(PAYLOAD_SLOTS.reduce((map, item, i) => {
+  map[item.id] = { key: i + 1, label: item.label };
+  return map;
+}, Object.create(null)));
+
+/**
+ * THE MIC'S KEY — push to talk, and the desktop half of voice notes.
+ *
+ * The mic lives in the arsenal drawer, under the emote tile, because that is
+ * where a hand looks for it. A DESKTOP seat does not use that drawer: every
+ * payload is on the number row (ui/arsenal.js binds 1..7 to `window` precisely
+ * so the drawer can stay shut and the stage stay clear), and a shut drawer is
+ * `display:none` over the whole panel — mic included. So the one control in
+ * there without a key of its own was simply not on an in-app player's desk,
+ * however loudly both seats had opted in. That is the bug this constant fixes.
+ *
+ * WHY IT IS BOUND HERE AND NOT IN THE MIC. ui/voice/micHud.js has no key
+ * handler of any kind, deliberately and pinned by the suite: Escape during Live
+ * is Mercy, and the way to guarantee a voice note can never add a rung to that
+ * ladder is for the module holding the microphone to own no keys at all. The
+ * desk owns this one and drives the gesture through `mic.hold()`.
+ *
+ * WHY `v`. It is not a payload digit, not the Mercy key, not a browser
+ * accelerator on its own, and it is the first letter of the thing it does.
+ */
+const MIC_KEY = 'v';
 
 /** Is this a phone-shaped screen? Absent matchMedia (node, old hosts) = no. */
 function isNarrowViewport() {
@@ -143,6 +181,31 @@ const PAYLOAD_META = Object.freeze({
  * seconds-to-minutes long and it closes on the receipt either way.
  */
 const PAYLOAD_LEAD_MS = Math.max(GoonConsts.MinScheduleBufferMs, 1500);
+
+/**
+ * THE OBJECTIVE CAPTION's two limits (see THE OBJECTIVE LINE in the bottom bar).
+ * Matches, not duels won: ui/prefs.js `matchesPlayed` counts every recap, which
+ * is the number of times this player has been through the loop at all.
+ */
+const GOAL_MAX_MATCHES = 3;
+/** How long it stays up once Live starts. Long enough to read twice. */
+const GOAL_DWELL_MS = 60000;
+
+/**
+ * ui/drops.js `onPop` verdicts where NO HEAT WAS BANKED.
+ *
+ * The roller's three early returns, in its own words: `clutter` (worth below
+ * MIN_WORTH — a bubble an opponent's BubbleSwarm minted, stamped 0), `phase`
+ * (a pop that arrived outside Live/SuddenDeath, which the recap window can
+ * still deliver before the HUD comes down) and `no-arsenal`. Every other
+ * verdict — miss, refused, no-candidate, drop — banked its gain first.
+ *
+ * It exists so the coached "popping fills your gauge" line can only ever ride a
+ * pop that actually filled it. Spelled here rather than imported because
+ * ui/drops.js publishes the strings on its return value and not as a constant;
+ * if it ever does, delete this.
+ */
+const NO_HEAT_REASONS = Object.freeze(['clutter', 'phase', 'no-arsenal']);
 
 /** Score count-up window. */
 const SCORE_LERP_MS = 250;
@@ -282,10 +345,14 @@ function logTo(sink, entry) {
  * @param {object} [o.voice]    ui/voice/voiceService.js handle — the mic + the
  *                              incoming chip. null (or a build with the feature
  *                              off) simply means there is no mic on the desk.
+ * @param {object} [o.coach]    ui/coach.js handle — the one-time explainers.
+ *                              null means an uncoached desk and nothing else:
+ *                              every call below is `coach?.fire(...)` and the
+ *                              hint is the only thing that does not happen.
  * @returns {{unmount:Function}}
  */
 export function mountHud({ match, session = null, audio = null, prefs = null, media = null,
-  matchLog = null, discord = null, voice = null } = {}) {
+  matchLog = null, discord = null, voice = null, coach = null } = {}) {
   const led = createLedger();
   const fx = createFx();
   const d = doc();
@@ -673,6 +740,13 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
         sideTab.title = sideOpen ? label : S.arsenal.sidebarTitle;
       } catch (_e) { /* stub DOM */ }
     }
+    /* THE MIC IS INSIDE THIS DRAWER, and a shut drawer is display:none over the
+     * whole panel (sidebar rule 3 in ui/hud.css). CSS alone is not enough for
+     * the same reason it was not enough for zen: pointer capture bypasses hit
+     * testing, so shutting the drawer on a live hold would leave a microphone
+     * open behind a panel nobody can see. The bit is pushed, exactly like zen's,
+     * and micHud ends the gesture on its ordinary cancel path. */
+    try { micRef?.setDeskShut(!sideOpen); } catch (_e) { /* a no-op handle has no bit */ }
   }
 
   function setSide(on, remember) {
@@ -715,7 +789,46 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   // ---------------------------------------------------------------- bottom
   const bottom = add(root, el('div', 'gg-hud-bottom'));
   const fxRail = add(bottom, el('div', 'gg-fxrail'));
-  const dialHost = add(bottom, el('div', 'gg-dial-host'));
+
+  /* ---- THE OBJECTIVE LINE ------------------------------------------------
+   * "the whole game feels kinda random atm with no direction" (owner,
+   * 2026-08-05). The desk tells a new player what every readout on it is DOING
+   * and never once what any of it is FOR — so one quiet caption sits over the
+   * closeness dial and says the goal out loud.
+   *
+   * IT IS A COLUMN, NOT A NEW EDGE. `.gg-dial-col` wraps the caption and the
+   * dial host that was already the bottom bar's right-hand child, so the flex
+   * row is still two children and the dial is still bottom-right at every
+   * breakpoint. Nothing is absolutely placed and no keep-out band is involved:
+   * MERCY's strip is `.gg-hud-bottom`'s own padding, below all of this.
+   *
+   * IT LEAVES ON ITS OWN, twice over. It is only built for the first
+   * GOAL_MAX_MATCHES matches (ui/prefs.js `matchesPlayed`, which the recap
+   * increments) and it fades after GOAL_DWELL_MS of Live — a permanent caption
+   * on a desk this dense is furniture, and furniture is what the eye stops
+   * reading. The hints toggle silences it like everything else.
+   * -------------------------------------------------------------------- */
+  const dialCol = add(bottom, el('div', 'gg-dial-col'));
+  const goalLine = add(dialCol, el('div', 'gg-coach-goal', S.coach.goal));
+  const dialHost = add(dialCol, el('div', 'gg-dial-host'));
+
+  function goalWanted() {
+    if (!goalLine) return false;
+    try {
+      if (coach && coach.enabled === false) return false;
+      if (!prefs || typeof prefs.get !== 'function') return true;
+      return ((prefs.get('matchesPlayed') | 0) < GOAL_MAX_MATCHES);
+    } catch (_e) { return false; }
+  }
+  if (goalLine) {
+    goalLine.hidden = !goalWanted();
+    if (!goalLine.hidden) {
+      const t = setTimeout(() => {
+        try { cls(goalLine, 'is-gone', true); } catch (_e) { /* stub DOM */ }
+      }, GOAL_DWELL_MS);
+      led.add(() => { try { clearTimeout(t); } catch (_e) { /* gone */ } });
+    }
+  }
 
   // ------------------------------------------------------------ sub-mounts
   /* The media pool reaches the THROW PREVIEW here and nowhere else. It is a
@@ -750,6 +863,11 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
       // The FX beat first and unconditionally: it is about the ACT of firing,
       // which happened whether or not the monitor can draw the flight.
       emitAva('fire', 'you', shot && shot.kind !== undefined ? { kind: shot.kind } : null);
+      /* THE COOLDOWN, ONCE, ON THE FIRST THROW. It is the next thing that will
+       * surprise this player — the second throw is free (PayloadBurst = 2) and
+       * the third is thirty seconds away — and there is nowhere on the desk that
+       * says so until a tile is already greyed out and sweeping. */
+      try { coach?.fire?.(COACH.FIRED, S.coach.fired); } catch (_e) { /* never break a throw */ }
       if (!shot || typeof opponent.markPayloadFired !== 'function') return;
       opponent.markPayloadFired({
         id: shot.id,
@@ -773,15 +891,33 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
       // it to four a second), `drop` is the rare one that armed a slot.
       emitAva('pop', 'you');
       if (res && res.dropped) emitAva('drop', 'you', res.id ? { item: res.id } : null);
+      /* THE TWO COACHED BEATS OF THE ECONOMY, and they hang off the SAME two
+       * facts rather than off the event, so neither can fire for a pop that
+       * banked nothing. NO_HEAT_REASONS is ui/drops.js's three early returns —
+       * a swarm bubble worth zero (exec/bubbles.js POP_WORTH_PAYLOAD), a pop
+       * outside Live, and a desk with no arsenal — and coaching "this fills
+       * your gauge" off any of them would be a lie the gauge disproves in the
+       * same glance.
+       *
+       * `drop` names the item AND its number key, off SLOT_KEYS, which is
+       * derived from the same list the keydown handler indexes. */
+      if (res && NO_HEAT_REASONS.indexOf(res.reason) < 0) {
+        try { coach?.fire?.(COACH.POP, S.coach.pop); } catch (_e) { /* ignore */ }
+      }
+      if (res && res.dropped) {
+        const slot = SLOT_KEYS[res.id];
+        if (slot) { try { coach?.fire?.(COACH.DROP, S.coach.drop(slot.label, slot.key)); } catch (_e) { /* ignore */ } }
+      }
     } catch (_e) { /* a drop must never break the desk */ }
   });
 
-  const dial = mountCloseness({ host: dialHost, match, audio, onLog });
+  const dial = mountCloseness({ host: dialHost, match, audio, onLog, coach });
   const attention = mountAttention({
     host: attSlot,
     tokenHost: root,
     match,
     audio,
+    coach,
     /* `sideBox` rather than the two rails: it is the whole sidebar including the
      * handle, and it is the only one of the three whose rect is HONEST in both
      * states — a collapsed panel is display:none, so a rail measures 0x0 and an
@@ -795,17 +931,87 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   const announcer = mountAnnouncer({ host: root, match, audio, onLog });
 
   /* The mic. Mounted unconditionally and hidden by itself: whether a duel has
-   * voice in it is five facts wide (both consents, the peer's build, the phase,
-   * your own opt-in) and ui/voice/voiceService.js is the one place that knows —
+   * voice in it is six facts wide (the LINK being direct — voice notes are
+   * P2P-only, like media — both consents, the peer's build, the phase, your own
+   * opt-in) and ui/voice/voiceService.js is the one place that knows —
    * the desk subscribes to the answer instead of re-deriving any of it. With no
    * service at all this is a no-op handle and no DOM. */
-  const mic = mountMicHud({ host: voiceHost, chipHost: voiceChipHost, voice, audio, onLog });
+  /* WHAT THE DRAWER OWES BACK. `null` = we have not opened it for the mic;
+   * `false` = it was shut when a keyed hold asked for it, so it goes back to
+   * shut the moment the strip folds. A player who opens the drawer themselves
+   * mid-note keeps it open — the debt is only ever the one WE took on. */
+  let micDrawerRestore = null;
+  const mic = mountMicHud({
+    host: voiceHost, chipHost: voiceChipHost, voice, audio, onLog,
+    /* The key binding below can fire while the drawer this slot lives in is
+     * display:none. Rather than move a node (micHud must never re-append one:
+     * that releases pointer capture) the desk simply opens the drawer for the
+     * length of the note and puts it back. Not remembered — a hold is not a
+     * decision about where the player likes their arsenal. */
+    onReveal: (on) => {
+      if (on) {
+        micDrawerRestore = sideOpen ? null : false;
+        if (!sideOpen) setSide(true, false);
+        return;
+      }
+      const owed = micDrawerRestore;
+      micDrawerRestore = null;
+      if (owed === false) setSide(false, false);
+    },
+  });
   /* Zen is restored from prefs BEFORE this mount, so the handle is told the bit
    * it was not there to hear. setZen's own early-return means it would never be
    * re-sent, and a remembered zen with a visible mic under it is the one state
    * that would make the toggle look broken on the first click. */
   micRef = mic;
   try { mic.setHudHidden(zenOn); } catch (_e) { /* a no-op handle has no bit */ }
+  /* ...and the drawer bit, for the same reason and on the same terms: paintSide
+   * ran before this mount existed, so the starting state has to be handed over
+   * once by hand or a HUD that came up with a shut drawer would think its mic
+   * was on screen. */
+  try { mic.setDeskShut(!sideOpen); } catch (_e) { /* a no-op handle has no bit */ }
+
+  /* ---- PUSH TO TALK (see MIC_KEY at the top of this file) -----------------
+   *
+   * The desktop half of voice notes: hold V to record, release to send. It is
+   * the SAME gesture the button runs — micHud.hold() drives the one machine, so
+   * the 250ms threshold, the ten-second cap, the "sending…/sent" strip and the
+   * 4s floor are all shared rather than re-implemented for a keyboard.
+   *
+   * ESCAPE IS NOT TOUCHED HERE EITHER. This handler looks at one key and returns
+   * for every other, so Escape during Live still walks boot.js's ladder to
+   * Mercy. A held recording is released by the key that is holding it, or by the
+   * window losing focus (below), which is the keyboard's `lostpointercapture`:
+   * without it, alt-tabbing mid-hold would strand an open microphone, because a
+   * key-up delivered to another window never arrives here.
+   */
+  function micKeyMatch(e) {
+    return !!e && String(e.key || '').toLowerCase() === MIC_KEY;
+  }
+  function typingInto() {
+    const active = d && d.activeElement;
+    const tag = active && active.tagName ? String(active.tagName).toLowerCase() : '';
+    return tag === 'input' || tag === 'textarea' || !!(active && active.isContentEditable);
+  }
+  const winRef = typeof window !== 'undefined' ? window : null;
+  led.listen(winRef, 'keydown', (e) => {
+    if (!micKeyMatch(e) || e.repeat || e.ctrlKey || e.altKey || e.metaKey) return;
+    if (typingInto()) return;
+    let took = false;
+    try { took = !!micRef?.hold(true); } catch (_e) { /* never let a key break the desk */ }
+    if (took && typeof e.preventDefault === 'function') e.preventDefault();
+  });
+  led.listen(winRef, 'keyup', (e) => {
+    // NO guards on the way OUT beyond the key itself. Whatever happened in
+    // between — a modifier pressed mid-hold, focus landing in a field, the
+    // drawer moving — the microphone that was opened has to close, and it closes
+    // on the path that SENDS, because the player let go on purpose.
+    if (!micKeyMatch(e)) return;
+    try { micRef?.hold(false, 'up'); } catch (_e) { /* ignore */ }
+  });
+  led.listen(winRef, 'blur', () => {
+    try { micRef?.hold(false, 'lost'); } catch (_e) { /* ignore */ }
+  });
 
   led.add(() => { try { mic.unmount(); } catch (_e) { /* gone */ } });
   led.add(() => { try { announcer.unmount(); } catch (_e) { /* gone */ } });
@@ -1093,6 +1299,11 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
       // schedules ahead (PAYLOAD_LEAD_MS) and a bubble that recoiled a second
       // and a half early would read as a glitch, not a hit.
       emitAva('land', 'you', { kind: p.kind });
+      /* ...and so does the EXPLANATION, for exactly the same reason: a line
+       * saying "that is them" a second and a half before anything appears is
+       * about nothing. It rides the landing timer, naming the family off the
+       * same PAYLOAD_META the fx chip beside it uses. */
+      try { coach?.fire?.(COACH.INCOMING, S.coach.incoming(meta.label)); } catch (_e) { /* ignore */ }
     }, Math.min(wait, 30000));
     led.add(() => { try { clearTimeout(t); } catch (_e) { /* gone */ } });
     onLog({ t: 'payload-in', kind: meta.label, id: p.id });
@@ -1116,6 +1327,10 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
   // rather than on avatarFx's 2600ms fallback.
   sub('onEmoteReceived', (e) => {
     emitAva('emote', 'opp', { emote: (e && (e.text || e.icon)) || '', ms: EMOTE_MINI_MS });
+    /* A bubble appearing over a stranger's face with no warning is the one beat
+     * on this desk that reads as the game doing something TO you when it is the
+     * only thing on it that does nothing at all. The hint says both halves. */
+    try { coach?.fire?.(COACH.EMOTE, S.coach.emote); } catch (_e) { /* ignore */ }
   });
 
   // The hello carries their display name; the mini is built before it lands.

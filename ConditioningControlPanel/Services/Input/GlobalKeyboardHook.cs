@@ -123,9 +123,14 @@ public class GlobalKeyboardHook : IDisposable
                     (vkCode == 0x09 || vkCode == 0x73 || vkCode == 0x1B))
                     suppress = true;
 
-                // Escape
-                if (vkCode == 0x1B)
-                    suppress = true;
+                // BARE Esc is deliberately NOT suppressed (#680). It used to be, which ate
+                // every plain Escape press system-wide, in every foreground app, for the whole
+                // lockdown window — closing dialogs, cancelling dropdowns, leaving fullscreen,
+                // aborting anything in any other program. Lockdown's job is to block task
+                // switching and app exit, and the modified-Esc branches below (Ctrl+Esc,
+                // Alt+Esc above, Ctrl+Shift+Esc) already cover every task-switch route Esc
+                // takes. Note this early-out sits ABOVE the KeyPressed dispatch, so suppressing
+                // bare Esc also starved CCP's own handlers of it.
 
                 // Ctrl+Shift+Esc (direct Task Manager shortcut)
                 if (vkCode == 0x1B && GetAsyncKeyState(0x11) < 0 && GetAsyncKeyState(0x10) < 0)

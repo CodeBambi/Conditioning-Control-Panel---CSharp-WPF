@@ -11,6 +11,9 @@
  * Node-import-safe: no DOM at import, only inside mountCloseness().
  * ==========================================================================*/
 
+import { COACH } from './coach.js';
+import { S } from './strings.js';
+
 /** 0-3 -> the word. Colour never travels alone. */
 export const CLOSENESS_STOPS = Object.freeze(['steady', 'warm', 'close', 'edge']);
 
@@ -67,9 +70,10 @@ function nowMs() {
  * @param {object}  o.match
  * @param {object}  [o.audio]
  * @param {Function} [o.onLog]
+ * @param {object}  [o.coach] ui/coach.js — the once-ever "this is a claim" line
  * @returns {{unmount:Function, set:Function, value:Function}}
  */
-export function mountCloseness({ host, match, audio = null, onLog = null } = {}) {
+export function mountCloseness({ host, match, audio = null, onLog = null, coach = null } = {}) {
   const led = createLedger();
   const root = el('div', 'gg-dial gg-plate');
   if (!root || !host) return { unmount() { led.run(); }, set() {}, value() { return null; } };
@@ -112,6 +116,13 @@ export function mountCloseness({ host, match, audio = null, onLog = null } = {})
     current = next;
     try { if (match && typeof match.setCloseness === 'function') match.setCloseness(next); } catch (_e) { /* engine said no */ }
     sfx(audio, 'gg-taunt-up');
+    /* THE FIRST MOVE, EXPLAINED. The dial's own fineprint says what they SEE
+     * ("they can only see what you say"); this says what nobody sees — there is
+     * no sensor behind it, the value is not checked anywhere, and bluffing with
+     * it is the whole point (core/match.js: "Bluffable BY DESIGN"). Fired after
+     * the cooldown and the no-op checks above, so it can only ever ride a change
+     * the player actually made. */
+    try { coach?.fire?.(COACH.DIAL, S.coach.dial); } catch (_e) { /* a hint never breaks the dial */ }
     if (typeof onLog === 'function') { try { onLog({ t: 'closeness', value: next, word: CLOSENESS_STOPS[next] }); } catch (_e) { /* ignore */ } }
     paint();
   }
