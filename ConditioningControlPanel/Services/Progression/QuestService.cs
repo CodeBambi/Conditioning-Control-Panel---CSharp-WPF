@@ -978,10 +978,13 @@ public class QuestService : IDisposable
             // Play Windows notification sound
             SystemSounds.Exclamation.Play();
 
-            // Trigger haptic feedback (using achievement pattern - feels celebratory).
+            // Quest completion posts its OWN event kind, so the Haptics tab's "Quest complete"
+            // routing row (enable / intensity / pattern / target toy) is what decides how this
+            // feels. It used to call AchievementPatternAsync(), which reads the ACHIEVEMENT row —
+            // leaving the quest row on screen doing nothing at all.
             // ONE call only: this fired twice, which stacked two overlapping copies of the
             // same pattern on the toy rather than making it play any stronger.
-            _ = App.Haptics?.AchievementPatternAsync();
+            _ = App.Haptics?.PostEvent(Services.Haptics.Core.HapticEventKind.QuestComplete);
         }
         catch (Exception ex)
         {

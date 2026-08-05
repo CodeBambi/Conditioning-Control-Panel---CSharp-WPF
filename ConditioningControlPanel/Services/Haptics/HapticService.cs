@@ -79,7 +79,8 @@ namespace ConditioningControlPanel.Services
 
         public bool IsConnected => _deviceManager.IsConnected;
         public string ProviderName => _deviceManager.ProviderNames;
-        public bool IsButtplugProvider => Settings.Provider == HapticProviderType.Buttplug;
+        public bool IsButtplugProvider => Settings.Provider == HapticProviderType.Buttplug
+            || Settings.V2.Provider("buttplug").Enabled;
 
         /// <summary>
         /// Buttplug.io has ~1.3s latency, so we need to trigger haptics earlier
@@ -148,6 +149,32 @@ namespace ConditioningControlPanel.Services
                 case nameof(HapticSettings.BlinkEnabled) when !Settings.BlinkEnabled: CancelKind(HapticEventKind.BlinkPulse); break;
                 case nameof(HapticSettings.VideoEnabled) when !Settings.VideoEnabled: _mixer.SetLayer(HapticLayer.Video, 0); break;
             }
+        }
+
+        /// <summary>
+        /// The v2 routing rows are plain POCOs and raise no PropertyChanged, so
+        /// <see cref="OnSettingsChanged"/> only ever sees the LEGACY properties. The routing UI must
+        /// call this after it edits a row: turning a row off has to cancel anything of that kind
+        /// still playing, exactly like flipping the old toggle did.
+        /// Safe to call from the UI thread; never throws.
+        /// </summary>
+        public void NotifyRuleChanged(HapticEventKind kind)
+        {
+            try
+            {
+                if (_disposed) return;
+                if (Settings.V2.Rule(kind).Enabled) return;
+
+                CancelKind(kind);
+                // The avatar easter egg rides the Achievement row (it has no row of its own),
+                // so silencing that row must silence it too. Quests now post QuestComplete and
+                // have their own row, so they cancel via their own kind.
+                if (kind == HapticEventKind.Achievement)
+                {
+                    CancelKind(HapticEventKind.AvatarEasterEgg);
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("NotifyRuleChanged({Kind}) failed: {E}", kind, ex.Message); }
         }
 
         // ================================================================== connection
@@ -348,7 +375,12 @@ namespace ConditioningControlPanel.Services
             var rule = Settings.V2.Rule(kind);
             if (!rule.Enabled) return HapticSequence.Completed();
 
-            var intensity = Math.Clamp(intensityOverride ?? rule.Intensity, MinPerceptibleIntensity, 1.0);
+            // A slider at 0 means SILENCE for this event. Clamping up to the perceptible floor
+            // turned a zeroed routing row (or a zeroed per-action config) into a 6% pulse.
+            var requested = intensityOverride ?? rule.Intensity;
+            if (requested <= 0.01) return HapticSequence.Completed();
+
+            var intensity = Math.Clamp(requested, MinPerceptibleIntensity, 1.0);
             var mode = modeOverride ?? rule.Mode;
             var duration = durationOverride ?? DefaultDurationMs(kind);
 
@@ -402,8 +434,10 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private const double MinPerceptibleIntensity = HapticMixer.MinPerceptibleIntensity;
 
+        /// <summary>Slider value -> intensity. A slider at 0 means SILENCE (the user asked for
+        /// none); only a genuinely non-zero request is lifted to the perceptible floor.</summary>
         private static double GetSliderIntensity(double sliderValue)
-            => Math.Clamp(sliderValue, MinPerceptibleIntensity, 1.0);
+            => sliderValue <= 0.01 ? 0 : Math.Clamp(sliderValue, MinPerceptibleIntensity, 1.0);
 
         /// <summary>
         /// Legacy entry point: renders <paramref name="mode"/> as a mixer envelope sequence and
@@ -524,6 +558,11 @@ namespace ConditioningControlPanel.Services
             {
                 try { await SendDeviceLevelAsync(device, 0, CancellationToken.None).ConfigureAwait(false); }
                 catch { }
+                // This test drove the provider AROUND the mixer, so the mixer's idea of what the toy
+                // is doing is now fiction — and a single zero can be dropped (Lovense discards a
+                // command while an earlier POST is in flight). Invalidating makes the loop re-stamp
+                // the real target, which is the only thing that catches a lost final zero.
+                try { _mixer.InvalidateDeviceCache(); } catch { }
             }
 
             Announce("Test " + (string.IsNullOrWhiteSpace(device.Nickname) ? device.Name : device.Nickname), intensity);
@@ -707,6 +746,8 @@ namespace ConditioningControlPanel.Services
             CancelKind(HapticEventKind.FlashClick);
 
             var start = GetSliderIntensity(rule.Intensity);
+            if (start <= 0) return Task.CompletedTask;   // slider at 0 = silence, not a floor buzz
+
             var steps = new List<HapticPulseStep>();
             for (int i = 0; i < 8; i++)
             {
@@ -812,14 +853,17 @@ namespace ConditioningControlPanel.Services
         // === AWARENESS KEYWORD PATTERN ===
 
         /// <summary>
-        /// Pulse for an Awareness keyword hit. Intensity comes from the trigger's own action config
-        /// (the per-action slider in the preset editor), NOT a global slider, and it must not depend
-        /// on the Subliminal feature's toggle.
+        /// Pulse for an Awareness keyword hit. Intensity is the trigger's own action config (the
+        /// per-action slider in the preset editor) SCALED BY the Keyword routing row — the row's
+        /// slider used to be dead because the override always won outright. It must not depend on
+        /// the Subliminal feature's toggle.
         /// </summary>
         public Task TriggerKeywordPatternAsync(string triggerText, double intensity)
         {
             var duration = TriggerDurationMs(triggerText);
-            return PostEvent(HapticEventKind.KeywordTrigger, GetSliderIntensity(intensity), duration, null, 1).Completion;
+            var rule = Settings.V2.Rule(HapticEventKind.KeywordTrigger);
+            var scaled = Math.Clamp(intensity, 0, 1) * Math.Clamp(rule.Intensity, 0, 1);
+            return PostEvent(HapticEventKind.KeywordTrigger, GetSliderIntensity(scaled), duration, null, 1).Completion;
         }
 
         private int TriggerDurationMs(string triggerText)
@@ -840,9 +884,14 @@ namespace ConditioningControlPanel.Services
         public Task AvatarEasterEggPatternAsync()
         {
             var rule = Settings.V2.Rule(HapticEventKind.AvatarEasterEgg);
-            if (!rule.Enabled) return Task.CompletedTask;
+            // The egg has no UI row of its own: v6.6.3 checked Settings.AchievementEnabled live on
+            // every call, while the v2 row was seeded once at migration and then froze, so turning
+            // Achievements off stopped silencing it. Gate on the Achievement row's LIVE state too.
+            if (!rule.Enabled || !Settings.V2.Rule(HapticEventKind.Achievement).Enabled) return Task.CompletedTask;
 
             var intensity = GetSliderIntensity(rule.Intensity);
+            if (intensity <= 0) return Task.CompletedTask;
+
             var steps = new List<HapticPulseStep>();
             for (int i = 0; i < 16; i++)
                 steps.Add(new HapticPulseStep(i * 500, new HapticPulse(intensity, 20, 430, 50, 2, rule.Target)));
@@ -855,6 +904,18 @@ namespace ConditioningControlPanel.Services
             return seq.Completion;
         }
 
+        /// <summary>
+        /// Zero every toy NOW, synchronously, with a hard ~2s cap. Call this on the deterministic
+        /// shutdown path (App.OnExit) BEFORE anything is disposed: a Lovense level has no
+        /// server-side watchdog, so a toy we never countermand keeps running after the app is gone,
+        /// and OnExit ends in TerminateProcess, which skips the ProcessExit watchdog by design.
+        /// One-shot and never throws, so calling it again from <see cref="Dispose"/> is free.
+        /// </summary>
+        public void ShutdownStop()
+        {
+            try { _mixer.ShutdownStopBlocking(); } catch { }
+        }
+
         public void Dispose()
         {
             if (_disposed) return;
@@ -863,8 +924,11 @@ namespace ConditioningControlPanel.Services
             try { FunScript.Dispose(); } catch { }
             try { ToyInput.Dispose(); } catch { }
             StopPingTimer();
-            // Never blocks: the mixer zeroes state synchronously and flushes the all-stop on a
-            // background task with a hard 2s cap (plus a ProcessExit watchdog).
+            // The all-stop must REACH the toys before the providers (and their HttpClients) are
+            // torn down two lines below — the old code only scheduled it on a background task and
+            // disposal won that race every time. Bounded (~2s) and one-shot, so when App.OnExit
+            // already flushed on the deterministic path this returns immediately.
+            ShutdownStop();
             _mixer.Dispose();
             _deviceManager.Dispose();
         }

@@ -1263,10 +1263,13 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
 
         private static void FireVibration(string tag)
         {
-            // TriggerSubliminalPatternAsync no-ops when the haptic service is
-            // disabled or no device is connected — safe to fire-and-forget.
-            try { _ = App.Haptics?.TriggerSubliminalPatternAsync(tag); }
-            catch (Exception ex) { App.Logger?.Warning(ex, "GazeMinigame: vibration trigger threw"); }
+            // Posts the GAZE event kind, so the Haptics tab's "Gaze reward" routing row
+            // (enable / intensity / pattern / target toy) is what decides how this feels. It used
+            // to borrow TriggerSubliminalPatternAsync, which reads the SUBLIMINAL row and left the
+            // gaze row inert. Still a no-op when haptics are off or nothing is connected, so it
+            // stays safe to fire-and-forget.
+            try { _ = App.Haptics?.PostEvent(Services.Haptics.Core.HapticEventKind.GazeReward); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "GazeMinigame: vibration trigger threw ({Tag})", tag); }
         }
 
         private static void PlayRewardAudio(string fileName)

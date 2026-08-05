@@ -35,7 +35,11 @@ namespace ConditioningControlPanel.Services.Haptics
 
         private readonly object _gate = new();
         private readonly List<TaskCompletionSource<bool>> _waiters = new();
-        private long _lastPressAt;
+        /// <summary>Last accepted press per device key. PER TOY on purpose: a single global stamp
+        /// swallowed the second toy's press whenever two toys were squeezed within
+        /// <see cref="DebounceMs"/> of each other, which is exactly what a two-toy user does.</summary>
+        private readonly Dictionary<string, long> _lastPressAtByDevice =
+            new(StringComparer.OrdinalIgnoreCase);
         private long _lastStrengthAt;
         private bool _disposed;
 
@@ -104,12 +108,15 @@ namespace ConditioningControlPanel.Services.Haptics
         private void HandlePress(HapticToyEvent e)
         {
             var now = Environment.TickCount64;
+            var deviceKey = e.DeviceKey ?? "";
             List<TaskCompletionSource<bool>>? waiters = null;
             lock (_gate)
             {
-                // ButtonDown + ButtonPressed for one squeeze must not count twice.
-                if (now - _lastPressAt < DebounceMs) return;
-                _lastPressAt = now;
+                // ButtonDown + ButtonPressed for ONE squeeze on ONE toy must not count twice -
+                // but two toys squeezed together are two presses, so the window is per device.
+                if (_lastPressAtByDevice.TryGetValue(deviceKey, out var last) && now - last < DebounceMs) return;
+                _lastPressAtByDevice[deviceKey] = now;
+                PruneDebounceStampsLocked(now);
                 if (_waiters.Count > 0)
                 {
                     waiters = new List<TaskCompletionSource<bool>>(_waiters);
@@ -124,6 +131,19 @@ namespace ConditioningControlPanel.Services.Haptics
                 foreach (var w in waiters) { try { w.TrySetResult(true); } catch { } }
 
             RaiseOnDispatcher(ButtonPressed, e);
+        }
+
+        /// <summary>Keep the per-toy stamp table from growing if device keys ever churn (a provider
+        /// that renames a toy, a long session of connect/disconnect). Anything older than the
+        /// debounce window can no longer suppress anything. Caller holds <see cref="_gate"/>.</summary>
+        private void PruneDebounceStampsLocked(long now)
+        {
+            if (_lastPressAtByDevice.Count <= 16) return;
+            List<string>? dead = null;
+            foreach (var kv in _lastPressAtByDevice)
+                if (now - kv.Value >= DebounceMs) (dead ??= new List<string>()).Add(kv.Key);
+            if (dead == null) return;
+            foreach (var key in dead) _lastPressAtByDevice.Remove(key);
         }
 
         private void HandleStrengthChanged(HapticToyEvent e)

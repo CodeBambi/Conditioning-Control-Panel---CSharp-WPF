@@ -199,9 +199,11 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
 
-        <!-- One provider status chip (Lovense / Intiface / Mock). -->
+        <!-- One provider status chip (Lovense / Intiface / Mock).
+             A provider that is not enabled for connecting is ghosted rather than hidden: the strip
+             stays the same shape, and "off" reads as off instead of as "connected: no". -->
         <DataTemplate x:Key="HapticProviderChipTemplate">
-            <Border CornerRadius="9999" Padding="10,4" Margin="0,0,8,0"
+            <Border x:Name="ChipShell" CornerRadius="9999" Padding="10,4" Margin="0,0,8,0"
                     Background="{DynamicResource PanelBgBrush}" BorderThickness="1"
                     BorderBrush="{Binding IsConnected, Converter={StaticResource StatusBrush}}">
                 <StackPanel Orientation="Horizontal">
@@ -210,6 +212,11 @@
                     <TextBlock Text="{Binding Label}" Foreground="White" FontSize="12" VerticalAlignment="Center"/>
                 </StackPanel>
             </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsEnabledForConnect}" Value="False">
+                    <Setter TargetName="ChipShell" Property="Opacity" Value="0.4"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
         </DataTemplate>
 
         <!-- Capability chip (VIBE x2 / THRUST / DEPTH ...). -->
@@ -610,6 +617,10 @@
                                                 <ColumnDefinition Width="Auto"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
                                             <CheckBox x:Name="ChkHapticProviderLovense" x:FieldModifier="internal"
                                                       Grid.Column="0" Content="{loc:Str btn_lovense_connect}" Foreground="White"
                                                       FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"
@@ -632,6 +643,26 @@
                                                       FontSize="12" VerticalAlignment="Center"
                                                       Checked="ChkHapticProvider_Changed" Unchecked="ChkHapticProvider_Changed"
                                                       Tag="mock" ToolTip="{loc:Str haptics_provider_mock_tip}"/>
+
+                                            <!-- Intiface's address IS editable (ButtplugProviderV2 reads
+                                                 Haptics.ButtplugUrl), it is just rarely touched — so the field
+                                                 only appears while that provider is enabled, and it is its own
+                                                 box: one box shared between two providers is how a typed value
+                                                 used to land on the wrong setting. -->
+                                            <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,8,10,0"
+                                                       Text="{loc:Str haptics_intiface_url_label}"
+                                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                                       VerticalAlignment="Center"
+                                                       Visibility="{Binding IsChecked, ElementName=ChkHapticProviderIntiface, Converter={StaticResource BoolToVis}}"/>
+                                            <TextBox x:Name="TxtHapticIntifaceUrl" x:FieldModifier="internal"
+                                                     Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,8,0,0"
+                                                     Background="{DynamicResource DarkerBgBrush}" Foreground="White"
+                                                     BorderThickness="1" BorderBrush="{DynamicResource PanelAccentBrush}"
+                                                     CaretBrush="{DynamicResource PinkBrush}" Padding="8,6" FontSize="13"
+                                                     VerticalContentAlignment="Center"
+                                                     TextChanged="TxtHapticIntifaceUrl_TextChanged"
+                                                     ToolTip="{loc:Str haptics_intiface_url_tip}"
+                                                     Visibility="{Binding IsChecked, ElementName=ChkHapticProviderIntiface, Converter={StaticResource BoolToVis}}"/>
                                         </Grid>
 
                                         <TextBlock x:Name="TxtHapticUrlHint" x:FieldModifier="internal"

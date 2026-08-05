@@ -18,10 +18,12 @@ namespace ConditioningControlPanel.Services.Haptics
     ///
     /// Design notes:
     ///  * Older Lovense Remote builds have no /v1 endpoint at all. A definitive "this is not a
-    ///    WebSocket endpoint" answer (404/400/501) permanently disables the client after ONE
-    ///    informational log line - the feature simply does not exist for that user and must never
-    ///    surface as an error. Transient failures (Remote closed, network blip) keep retrying with
-    ///    capped exponential backoff.
+    ///    WebSocket endpoint" answer (404/400/501) retires THAT CANDIDATE - never the whole client,
+    ///    because the .lovense.club alias 404ing says nothing about ws://ip:20010. Only once every
+    ///    candidate has answered that way is the feature declared absent, with ONE informational
+    ///    log line - it must never surface as an error. Transient failures (Remote closed, network
+    ///    blip) keep retrying with capped exponential backoff, and a socket must survive 10 s
+    ///    before it earns a backoff reset.
     ///  * The exact handshake frame is NOT published in the Standard API docs. We send two
     ///    plausible access-request shapes; Remote ignores frames it does not understand, so the
     ///    cost is one extra 60-byte send per session. The first few received frames are logged at
@@ -34,14 +36,24 @@ namespace ConditioningControlPanel.Services.Haptics
         private const int MinBackoffMs = 2000;
         private const int MaxBackoffMs = 60000;
         private const int MaxLoggedFrames = 5;
+        /// <summary>A socket must survive this long before it counts as a real session and earns a
+        /// backoff reset. Without it, a listener that accepts and immediately drops (rejected
+        /// handshake) churns every 2 s forever - each cycle paying a 5 s failed TLS probe.</summary>
+        private static readonly TimeSpan MinStableSession = TimeSpan.FromSeconds(10);
+        /// <summary>Hard cap on one reassembled message. Lovense event frames are tiny; anything
+        /// past this is a broken/hostile stream, so drop it and resync on the next frame.</summary>
+        private const int MaxFrameBytes = 1024 * 1024;
 
         private readonly SemaphoreSlim _sendGate = new(1, 1);
         private readonly object _lock = new();
+        /// <summary>Candidate URLs whose listener told us the /v1 endpoint does not exist. PER
+        /// CANDIDATE: a 404 on the wss://...lovense.club:30010 alias says nothing about whether
+        /// ws://ip:20010 works, and one global flag killed toy-button input for the session.</summary>
+        private readonly HashSet<string> _unsupported = new(StringComparer.OrdinalIgnoreCase);
 
         private CancellationTokenSource? _cts;
         private Task? _runTask;
         private volatile bool _connected;
-        private volatile bool _unsupported;
         private volatile bool _disposed;
         private int _loggedFrames;
         private string[] _candidates = Array.Empty<string>();
@@ -54,8 +66,11 @@ namespace ConditioningControlPanel.Services.Haptics
 
         public bool IsConnected => _connected;
 
-        /// <summary>False once the Remote build has told us the /v1 endpoint does not exist.</summary>
-        public bool IsSupported => !_unsupported;
+        /// <summary>False only once EVERY candidate endpoint has told us /v1 does not exist.</summary>
+        public bool IsSupported
+        {
+            get { lock (_lock) return _candidates.Length == 0 || _unsupported.Count < _candidates.Length; }
+        }
 
         /// <summary>The endpoint we are currently talking to (diagnostics only).</summary>
         public string? ActiveEndpoint { get; private set; }
@@ -77,7 +92,7 @@ namespace ConditioningControlPanel.Services.Haptics
             {
                 if (_runTask is { IsCompleted: false }) return;   // already running
                 _candidates = candidates;
-                _unsupported = false;
+                _unsupported.Clear();
                 _loggedFrames = 0;
                 _cts = new CancellationTokenSource();
                 var ct = _cts.Token;
@@ -166,13 +181,15 @@ namespace ConditioningControlPanel.Services.Haptics
         {
             var attempt = 0;
 
-            while (!ct.IsCancellationRequested && !_unsupported && !_disposed)
+            while (!ct.IsCancellationRequested && !AllCandidatesUnsupported() && !_disposed)
             {
                 var opened = false;
+                var stable = false;
 
                 foreach (var candidate in _candidates)
                 {
-                    if (ct.IsCancellationRequested || _unsupported) break;
+                    if (ct.IsCancellationRequested) break;
+                    if (IsUnsupported(candidate)) continue;   // this listener has no /v1; others may
 
                     ClientWebSocket? ws = null;
                     try
@@ -187,12 +204,20 @@ namespace ConditioningControlPanel.Services.Haptics
                         await ws.ConnectAsync(new Uri(candidate), connectCts.Token).ConfigureAwait(false);
 
                         opened = true;
-                        attempt = 0;
+                        var openedAt = DateTime.UtcNow;
                         ActiveEndpoint = candidate;
                         App.Logger?.Information("Lovense Toy Events: connected to {Endpoint}", candidate);
                         SetConnected(true);
 
                         await SessionAsync(ws, ct).ConfigureAwait(false);
+
+                        // Only a session that actually LASTED earns a backoff reset - a socket that
+                        // opens and instantly drops must keep backing off, not churn every 2 s.
+                        if (DateTime.UtcNow - openedAt >= MinStableSession)
+                        {
+                            stable = true;
+                            attempt = 0;
+                        }
                     }
                     catch (OperationCanceledException) when (ct.IsCancellationRequested)
                     {
@@ -202,11 +227,20 @@ namespace ConditioningControlPanel.Services.Haptics
                     {
                         if (IsEndpointMissing(ex))
                         {
-                            _unsupported = true;
-                            App.Logger?.Information(
-                                "Lovense Toy Events API not available at {Endpoint} ({Reason}) - toy-button input " +
-                                "is disabled for this Lovense Remote version. Command output is unaffected.",
-                                candidate, ex.Message);
+                            MarkUnsupported(candidate);
+                            if (AllCandidatesUnsupported())
+                            {
+                                App.Logger?.Information(
+                                    "Lovense Toy Events API not available at any endpoint (last: {Endpoint}, {Reason}) - " +
+                                    "toy-button input is disabled for this Lovense Remote version. " +
+                                    "Command output is unaffected.", candidate, ex.Message);
+                            }
+                            else
+                            {
+                                App.Logger?.Debug(
+                                    "Lovense Toy Events: {Endpoint} has no /v1 listener ({Reason}) - trying the others.",
+                                    candidate, ex.Message);
+                            }
                         }
                         else
                         {
@@ -223,10 +257,10 @@ namespace ConditioningControlPanel.Services.Haptics
                     if (opened) break;   // this candidate worked; retry the same list from the top later
                 }
 
-                if (ct.IsCancellationRequested || _unsupported || _disposed) break;
+                if (ct.IsCancellationRequested || AllCandidatesUnsupported() || _disposed) break;
 
                 attempt = Math.Min(attempt + 1, 10);
-                var delay = opened
+                var delay = stable
                     ? MinBackoffMs
                     : Math.Min(MaxBackoffMs, MinBackoffMs * (int)Math.Pow(2, Math.Min(attempt - 1, 5)));
                 try { await Task.Delay(delay, ct).ConfigureAwait(false); }
@@ -234,6 +268,23 @@ namespace ConditioningControlPanel.Services.Haptics
             }
 
             SetConnected(false);
+        }
+
+        private bool IsUnsupported(string candidate)
+        {
+            lock (_lock) return _unsupported.Contains(candidate);
+        }
+
+        private void MarkUnsupported(string candidate)
+        {
+            lock (_lock) _unsupported.Add(candidate);
+        }
+
+        /// <summary>True only when every candidate has answered "no /v1 here" - the point at which
+        /// the feature genuinely does not exist for this Remote build.</summary>
+        private bool AllCandidatesUnsupported()
+        {
+            lock (_lock) return _candidates.Length > 0 && _unsupported.Count >= _candidates.Length;
         }
 
         private static bool IsEndpointMissing(Exception ex)
@@ -347,6 +398,7 @@ namespace ConditioningControlPanel.Services.Haptics
         {
             var buffer = new byte[8192];
             using var frame = new MemoryStream();
+            var dropping = false;   // resync state after an oversized message
 
             while (!ct.IsCancellationRequested && ws.State == WebSocketState.Open)
             {
@@ -363,6 +415,22 @@ namespace ConditioningControlPanel.Services.Haptics
                 }
 
                 if (result.MessageType == WebSocketMessageType.Close) break;
+
+                // Discard the rest of an oversized message, then pick up at the next frame.
+                if (dropping)
+                {
+                    if (result.EndOfMessage) { dropping = false; frame.SetLength(0); }
+                    continue;
+                }
+
+                if (frame.Length + result.Count > MaxFrameBytes)
+                {
+                    App.Logger?.Debug("Lovense Toy Events: message exceeded {Cap} bytes - dropped and resyncing.",
+                                      MaxFrameBytes);
+                    frame.SetLength(0);
+                    dropping = !result.EndOfMessage;
+                    continue;
+                }
 
                 frame.Write(buffer, 0, result.Count);
                 if (!result.EndOfMessage) continue;

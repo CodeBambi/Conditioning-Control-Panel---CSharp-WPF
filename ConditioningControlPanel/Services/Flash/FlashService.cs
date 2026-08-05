@@ -1513,6 +1513,11 @@ namespace ConditioningControlPanel.Services
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, double> _luminanceCache =
             new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>Cap on <see cref="_luminanceCache"/>. A big library would otherwise leave one
+        /// entry per distinct path alive for the whole process; past this we drop the lot, which
+        /// costs one 8x8 re-sample per image afterwards and needs no LRU bookkeeping.</summary>
+        private const int LuminanceCacheMax = 500;
+
         /// <summary>Downscale target for the luminance sample. 8x8 is enough for an average and
         /// small enough that the WIC scaler's work is dominated by the (already decoded, already
         /// display-sized) source read.</summary>
@@ -1546,7 +1551,11 @@ namespace ConditioningControlPanel.Services
                 else if (!_luminanceCache.TryGetValue(key!, out luminance))
                 {
                     luminance = SampleLuminance(imageData.Frames[0]);
-                    if (luminance >= 0) _luminanceCache[key!] = luminance;
+                    if (luminance >= 0)
+                    {
+                        if (_luminanceCache.Count >= LuminanceCacheMax) _luminanceCache.Clear();
+                        _luminanceCache[key!] = luminance;
+                    }
                 }
 
                 if (luminance < 0) return;      // sampling failed — stay silent rather than guess
