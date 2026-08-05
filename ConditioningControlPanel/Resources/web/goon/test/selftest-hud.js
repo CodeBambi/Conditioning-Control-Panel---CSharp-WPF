@@ -4953,7 +4953,167 @@ const audioMod = await import('../ui/audio.js');
     hud20b.unmount();
   }
 
-  /* --- 20f. the CSS half --------------------------------------------------
+  /* --- 20f. THE DRAWER, AND THE DESK'S OWN KEY ----------------------------
+   *
+   * THE DESKTOP BUG (owner, 2026-08-05, in-app seat): both players opted in,
+   * the phone's mic appeared, the desktop's never did. The mic is the last flow
+   * child of `.gg-arsenal-panel` — and a shut drawer is display:none over that
+   * whole panel (sidebar rule 3). A desktop seat plays with it shut, because
+   * every payload it throws is on the number row, so the one control in the
+   * drawer with no key of its own was simply not on the desk.
+   *
+   * Two halves, and both are pinned here: the drawer is a THIRD hiding bit that
+   * must close the microphone the way zen does, and the desk owns a push-to-talk
+   * key that drives the same gesture — asking for the drawer first, and giving
+   * it back after. */
+  {
+    const m = mountMic();
+    m.v._set(true);
+    ok(typeof m.mic.setDeskShut === 'function' && typeof m.mic.hold === 'function'
+      && typeof m.mic.hiddenBy === 'function',
+    'the mic takes the drawer bit, a driven hold, and says which chrome is on it');
+    ok(m.mic.hiddenBy() === '', 'live and on the desk: nothing is sitting on it');
+    m.mic.setDeskShut(true);
+    ok(m.host.hidden === true, 'a shut drawer takes the slot away, exactly as zen does');
+    ok(m.mic.available() === true && m.mic.shown() === false,
+      '...without pretending the FEATURE went away — the drawer is chrome, not consent');
+    ok(m.mic.hiddenBy() === 'drawer', 'and it names the drawer, not zen');
+    ok(m.mic.hold(true) === false && m.r.st.starts === 0,
+      'a hold is REFUSED while there is no strip to draw it on: no microphone opens behind a shut panel');
+    m.mic.setDeskShut(false);
+    ok(m.host.hidden === false && m.mic.hiddenBy() === '', 'and it comes back with the drawer');
+    m.mic.unmount();
+  }
+
+  {
+    // the drawer closing UNDER a live hold. The zen hole, in its second form:
+    // display:none does not end a gesture, so the bit has to be pushed.
+    const m = mountMic();
+    m.v._set(true);
+    ptr(m.btn, 'pointerdown', 200);
+    await sleep(320);
+    ok(m.mic.isRecording() === true, 'a hold is running');
+    m.mic.setDeskShut(true);
+    await sleep(30);
+    ok(m.r.st.cancels === 1 && m.v._sends.length === 0,
+      'shutting the drawer CANCELS it — never a hot mic behind a panel nobody can see');
+    ok(m.mic.isRecording() === false, 'and the gesture is over');
+    m.mic.unmount();
+  }
+
+  {
+    // hold(true)/hold(false) is the SAME machine the button drives.
+    const m = mountMic();
+    m.v._set(true);
+    ok(m.mic.hold(true) === true, 'the desk can begin a hold without a pointer');
+    ok(m.r.st.starts === 1, 'and the microphone opens on the same first instruction');
+    await sleep(320);
+    ok(m.mic.isRecording() === true, 'the 250ms threshold is the one threshold');
+    ok(m.mic.hold(false, 'up') === true, 'releasing ends it');
+    await sleep(30);
+    ok(m.r.st.stops === 1 && m.v._sends.length === 1, 'and the note goes out exactly once');
+    ok(m.mic.hold(false, 'up') === false, 'a release with nothing held does nothing');
+    m.mic.unmount();
+  }
+
+  {
+    // a KEYED tap names the key, not a button they may not have on screen.
+    const m = mountMic();
+    m.v._set(true);
+    m.mic.hold(true);
+    await sleep(60);
+    m.mic.hold(false, 'up');
+    await sleep(20);
+    ok(m.v._sends.length === 0 && m.r.st.cancels === 1, 'a tapped key is a tap: nothing is sent');
+    ok(m.mic.parts.hint.textContent === S20.voice.holdKeyHint,
+      'and the hint tells them to HOLD THE KEY, not to hold a mic they cannot see',
+      m.mic.parts.hint.textContent);
+    m.mic.unmount();
+  }
+
+  {
+    // the reveal handshake: asked for BEFORE the microphone opens, and given
+    // back only when the strip folds — "sending…" and "sent" need it too.
+    const host = document.createElement('div');
+    const chipHost = document.createElement('div');
+    const v = fakeVoice();
+    const r = fakeRec();
+    const seen = [];
+    let mic = null;
+    mic = micMod.mountMicHud({
+      host, chipHost, voice: v, recorder: r.api,
+      onReveal: (on) => { seen.push(on); try { mic.setDeskShut(!on); } catch (_e) { /* pre-assign */ } },
+    });
+    v._set(true);
+    mic.setDeskShut(true);
+    ok(mic.hold(true) === true, 'a desk that CAN show the slot gets its recording');
+    ok(seen[0] === true && r.st.starts === 1, 'and it was asked before the microphone opened',
+      JSON.stringify(seen));
+    await sleep(320);
+    mic.hold(false, 'up');
+    await sleep(30);
+    ok(seen.length === 1, 'the drawer is NOT snatched back on the release');
+    await sleep(micMod.MIC_FLASH_MS + 150);
+    ok(seen[seen.length - 1] === false, 'it goes back when the strip folds', JSON.stringify(seen));
+    ok(mic.shown() === false, 'and the desk is exactly how the player left it');
+    mic.unmount();
+  }
+
+  {
+    // ...and end to end through the real desk: the key, the drawer, the note.
+    const match20k = makeFakeMatch();
+    const voice20k = fakeVoice();
+    const prefs20k = { get: (k) => (k === 'arsenalOpen' ? 'shut' : undefined), set() {} };
+    const hud20k = hudMod.mountHud({
+      match: match20k, audio: { sfx() {} }, voice: voice20k, prefs: prefs20k,
+    });
+    const frame20k = dom.byId.get('gg-hud');
+    const micHost20k = findOne(frame20k, 'gg-voice-host');
+    voice20k._set(true);
+    ok(micHost20k.hidden === true,
+      'a remembered SHUT drawer starts with no mic on the desk — the desktop bug, reproduced');
+    ok(hud20k.parts.mic.hiddenBy() === 'drawer', 'and the desk knows exactly why');
+    dom.win.dispatchEvent({ type: 'keydown', key: 'v', repeat: false, preventDefault() {} });
+    ok(micHost20k.hidden === false, 'the key opens the drawer for the note it is about to record');
+    /* This desk is running the REAL ui/voice/recorder.js against a node stub
+     * with no getUserMedia, so the microphone is refused a tick later — which
+     * is the other thing worth pinning: a refusal hands the drawer straight back
+     * instead of leaving the player looking at an arsenal they did not open. The
+     * recording itself is exercised above, against the injectable recorder. */
+    await sleep(60);
+    ok(hud20k.parts.mic.isRecording() === false, 'a host with no microphone records nothing');
+    ok(micHost20k.hidden === true, 'and the drawer goes back to shut, because we only borrowed it');
+    ok(voice20k._sends.length === 0, 'with nothing whatsoever on the wire');
+
+    // A key that is not the mic's must not reach it. Escape especially: during
+    // Live that is Mercy, and a voice note may never add a rung to that ladder.
+    dom.win.dispatchEvent({ type: 'keydown', key: 'Escape', repeat: false, preventDefault() {} });
+    dom.win.dispatchEvent({ type: 'keydown', key: '1', repeat: false, preventDefault() {} });
+    await sleep(20);
+    ok(hud20k.parts.mic.isRecording() === false && micHost20k.hidden === true,
+      'Escape and the payload digits do not touch the mic');
+    // ...and focus leaving is the keyboard's lostpointercapture: a key-up
+    // delivered to another window never arrives, so a hold would otherwise
+    // strand an open microphone. It must be safe to fire with nothing held.
+    dom.win.dispatchEvent({ type: 'blur' });
+    await sleep(20);
+    ok(hud20k.parts.mic.isRecording() === false, 'and a stray blur is a no-op, not a throw');
+    hud20k.unmount();
+  }
+
+  {
+    // The binding lives on the DESK, and the module that holds the microphone
+    // still owns no keys at all (20d scans micHud.js for exactly this).
+    const fs20k = await import('node:fs/promises');
+    const url20k = await import('node:url');
+    const hudSrc20k = await fs20k.readFile(url20k.fileURLToPath(new URL('../ui/hud.js', import.meta.url)), 'utf8');
+    const bare20k = hudSrc20k.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    ok(/MIC_KEY\s*=\s*'v'/.test(bare20k), 'ui/hud.js spells the mic key ONCE, and it is v');
+    ok(/setDeskShut\(!sideOpen\)/.test(bare20k),
+      'and pushes the drawer bit into the mic the way it pushes zen');
+  }
+
+  /* --- 20g. the CSS half --------------------------------------------------
    * micHud.js only toggles classes. Placement, the click-through, the animation
    * budget and zen are all stylesheet facts, and a mic with no rules would pass
    * every check above while lying across the stage eating clicks. */

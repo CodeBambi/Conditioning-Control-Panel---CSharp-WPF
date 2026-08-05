@@ -103,6 +103,28 @@ export const ARSENAL_NARROW_MQ = '(orientation: portrait), (max-width: 720px)';
 /** Keys 1..N, i.e. one per payload slot. ui/arsenal.js owns the binding. */
 const ARSENAL_KEY_COUNT = ARSENAL_ITEMS.filter((i) => i.kind !== null).length;
 
+/**
+ * THE MIC'S KEY — push to talk, and the desktop half of voice notes.
+ *
+ * The mic lives in the arsenal drawer, under the emote tile, because that is
+ * where a hand looks for it. A DESKTOP seat does not use that drawer: every
+ * payload is on the number row (ui/arsenal.js binds 1..7 to `window` precisely
+ * so the drawer can stay shut and the stage stay clear), and a shut drawer is
+ * `display:none` over the whole panel — mic included. So the one control in
+ * there without a key of its own was simply not on an in-app player's desk,
+ * however loudly both seats had opted in. That is the bug this constant fixes.
+ *
+ * WHY IT IS BOUND HERE AND NOT IN THE MIC. ui/voice/micHud.js has no key
+ * handler of any kind, deliberately and pinned by the suite: Escape during Live
+ * is Mercy, and the way to guarantee a voice note can never add a rung to that
+ * ladder is for the module holding the microphone to own no keys at all. The
+ * desk owns this one and drives the gesture through `mic.hold()`.
+ *
+ * WHY `v`. It is not a payload digit, not the Mercy key, not a browser
+ * accelerator on its own, and it is the first letter of the thing it does.
+ */
+const MIC_KEY = 'v';
+
 /** Is this a phone-shaped screen? Absent matchMedia (node, old hosts) = no. */
 function isNarrowViewport() {
   try {
@@ -673,6 +695,13 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
         sideTab.title = sideOpen ? label : S.arsenal.sidebarTitle;
       } catch (_e) { /* stub DOM */ }
     }
+    /* THE MIC IS INSIDE THIS DRAWER, and a shut drawer is display:none over the
+     * whole panel (sidebar rule 3 in ui/hud.css). CSS alone is not enough for
+     * the same reason it was not enough for zen: pointer capture bypasses hit
+     * testing, so shutting the drawer on a live hold would leave a microphone
+     * open behind a panel nobody can see. The bit is pushed, exactly like zen's,
+     * and micHud ends the gesture on its ordinary cancel path. */
+    try { micRef?.setDeskShut(!sideOpen); } catch (_e) { /* a no-op handle has no bit */ }
   }
 
   function setSide(on, remember) {
@@ -799,13 +828,82 @@ export function mountHud({ match, session = null, audio = null, prefs = null, me
    * your own opt-in) and ui/voice/voiceService.js is the one place that knows —
    * the desk subscribes to the answer instead of re-deriving any of it. With no
    * service at all this is a no-op handle and no DOM. */
-  const mic = mountMicHud({ host: voiceHost, chipHost: voiceChipHost, voice, audio, onLog });
+  /* WHAT THE DRAWER OWES BACK. `null` = we have not opened it for the mic;
+   * `false` = it was shut when a keyed hold asked for it, so it goes back to
+   * shut the moment the strip folds. A player who opens the drawer themselves
+   * mid-note keeps it open — the debt is only ever the one WE took on. */
+  let micDrawerRestore = null;
+  const mic = mountMicHud({
+    host: voiceHost, chipHost: voiceChipHost, voice, audio, onLog,
+    /* The key binding below can fire while the drawer this slot lives in is
+     * display:none. Rather than move a node (micHud must never re-append one:
+     * that releases pointer capture) the desk simply opens the drawer for the
+     * length of the note and puts it back. Not remembered — a hold is not a
+     * decision about where the player likes their arsenal. */
+    onReveal: (on) => {
+      if (on) {
+        micDrawerRestore = sideOpen ? null : false;
+        if (!sideOpen) setSide(true, false);
+        return;
+      }
+      const owed = micDrawerRestore;
+      micDrawerRestore = null;
+      if (owed === false) setSide(false, false);
+    },
+  });
   /* Zen is restored from prefs BEFORE this mount, so the handle is told the bit
    * it was not there to hear. setZen's own early-return means it would never be
    * re-sent, and a remembered zen with a visible mic under it is the one state
    * that would make the toggle look broken on the first click. */
   micRef = mic;
   try { mic.setHudHidden(zenOn); } catch (_e) { /* a no-op handle has no bit */ }
+  /* ...and the drawer bit, for the same reason and on the same terms: paintSide
+   * ran before this mount existed, so the starting state has to be handed over
+   * once by hand or a HUD that came up with a shut drawer would think its mic
+   * was on screen. */
+  try { mic.setDeskShut(!sideOpen); } catch (_e) { /* a no-op handle has no bit */ }
+
+  /* ---- PUSH TO TALK (see MIC_KEY at the top of this file) -----------------
+   *
+   * The desktop half of voice notes: hold V to record, release to send. It is
+   * the SAME gesture the button runs — micHud.hold() drives the one machine, so
+   * the 250ms threshold, the ten-second cap, the "sending…/sent" strip and the
+   * 4s floor are all shared rather than re-implemented for a keyboard.
+   *
+   * ESCAPE IS NOT TOUCHED HERE EITHER. This handler looks at one key and returns
+   * for every other, so Escape during Live still walks boot.js's ladder to
+   * Mercy. A held recording is released by the key that is holding it, or by the
+   * window losing focus (below), which is the keyboard's `lostpointercapture`:
+   * without it, alt-tabbing mid-hold would strand an open microphone, because a
+   * key-up delivered to another window never arrives here.
+   */
+  function micKeyMatch(e) {
+    return !!e && String(e.key || '').toLowerCase() === MIC_KEY;
+  }
+  function typingInto() {
+    const active = d && d.activeElement;
+    const tag = active && active.tagName ? String(active.tagName).toLowerCase() : '';
+    return tag === 'input' || tag === 'textarea' || !!(active && active.isContentEditable);
+  }
+  const winRef = typeof window !== 'undefined' ? window : null;
+  led.listen(winRef, 'keydown', (e) => {
+    if (!micKeyMatch(e) || e.repeat || e.ctrlKey || e.altKey || e.metaKey) return;
+    if (typingInto()) return;
+    let took = false;
+    try { took = !!micRef?.hold(true); } catch (_e) { /* never let a key break the desk */ }
+    if (took && typeof e.preventDefault === 'function') e.preventDefault();
+  });
+  led.listen(winRef, 'keyup', (e) => {
+    // NO guards on the way OUT beyond the key itself. Whatever happened in
+    // between — a modifier pressed mid-hold, focus landing in a field, the
+    // drawer moving — the microphone that was opened has to close, and it closes
+    // on the path that SENDS, because the player let go on purpose.
+    if (!micKeyMatch(e)) return;
+    try { micRef?.hold(false, 'up'); } catch (_e) { /* ignore */ }
+  });
+  led.listen(winRef, 'blur', () => {
+    try { micRef?.hold(false, 'lost'); } catch (_e) { /* ignore */ }
+  });
 
   led.add(() => { try { mic.unmount(); } catch (_e) { /* gone */ } });
   led.add(() => { try { announcer.unmount(); } catch (_e) { /* gone */ } });

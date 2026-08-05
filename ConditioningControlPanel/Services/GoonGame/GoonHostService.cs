@@ -429,9 +429,48 @@ namespace ConditioningControlPanel.Services.GoonGame
                 if (ReferenceEquals(core, _micPermissionCore)) return;  // a reload's second "ready"
                 _micPermissionCore = core;
                 core.PermissionRequested += OnPermissionRequested;
+                ClearBankedMicDenial(core);
                 App.Logger?.Debug("GoonHostService: microphone permission handler attached");
             }
             catch (Exception ex) { App.Logger?.Warning("GoonHostService.HookMicPermission: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// A HANDLER IS NOT ENOUGH ON ITS OWN, and this is the desktop-only trap under it.
+        /// WebView2 remembers permission decisions PER PROFILE (our <c>browser_data_goon</c> folder
+        /// outlives every launch), and a remembered answer is served from the profile WITHOUT
+        /// raising <c>PermissionRequested</c> at all. So one Deny — banked by the runtime's own
+        /// prompt on a build that predates <see cref="HookMicPermission"/>, or by a player who hit
+        /// Escape on it once — mutes the in-app microphone permanently, and the handler above never
+        /// runs to undo it. The page cannot tell: <c>getUserMedia</c> simply rejects, the mic HUD
+        /// shows "no microphone" and no amount of opting in changes anything.
+        ///
+        /// So the state is written explicitly, for our own virtual host and nothing else. The real
+        /// gate is still the page's double-locked opt-in (see the handler's own remarks) — this
+        /// only makes sure the question reaches it.
+        ///
+        /// Fire-and-forget and best-effort by design: it is a repair for an install that may never
+        /// have been broken, it must not delay the init frame, and an SDK/runtime that does not
+        /// support the profile API leaves us exactly where we already were.
+        /// </summary>
+        private static void ClearBankedMicDenial(CoreWebView2 core)
+        {
+            try
+            {
+                var profile = core.Profile;
+                if (profile == null) return;
+                _ = profile.SetPermissionStateAsync(
+                        CoreWebView2PermissionKind.Microphone,
+                        "https://ccp.game",
+                        CoreWebView2PermissionState.Allow)
+                    .ContinueWith(t =>
+                    {
+                        if (t.IsFaulted)
+                            App.Logger?.Debug("GoonHostService: mic permission state write failed: {E}",
+                                t.Exception?.GetBaseException().Message);
+                    }, TaskScheduler.Default);
+            }
+            catch (Exception ex) { App.Logger?.Debug("GoonHostService.ClearBankedMicDenial: {E}", ex.Message); }
         }
 
         /// <summary>Allow the microphone; leave every other permission kind to WebView2's default.</summary>
@@ -452,6 +491,12 @@ namespace ConditioningControlPanel.Services.GoonGame
                 // sensible for it in a borderless duel window, and the in-page opt-in has already
                 // asked the same question in the player's own words.
                 e.Handled = true;
+                // ...and this answer is NOT banked in the profile. A saved decision is served
+                // straight out of browser_data_goon on every later launch without this handler ever
+                // running, which turns one bad answer into a permanently dead microphone and makes
+                // the grant depend on a file instead of on the code that owns the policy. Asked and
+                // answered every time is the only version of this we can reason about.
+                try { e.SavesInProfile = false; } catch { /* older runtime: the write is not fatal */ }
                 App.Logger?.Information("GoonHostService: microphone permission allowed (voice notes)");
             }
             catch (Exception ex) { App.Logger?.Warning("GoonHostService.OnPermissionRequested: {E}", ex.Message); }

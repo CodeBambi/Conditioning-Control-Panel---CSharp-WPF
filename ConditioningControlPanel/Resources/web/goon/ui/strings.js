@@ -527,6 +527,14 @@ export const S = Object.freeze({
     hudLabel: 'voice note',
     /** A tap that was too short to be a recording. A hint, never an error. */
     holdHint: 'hold the mic to record',
+    /** THE DESK'S KEY. A desktop seat fires its whole arsenal off the number row
+       (ui/arsenal.js binds 1..7 on `window` precisely so the drawer can stay
+       shut), and the mic is the one control in that drawer with no key of its
+       own — which is how an in-app player ends up with no way to record at all.
+       ui/hud.js owns the binding; ui/voice/micHud.js still has no key handler,
+       so the Escape-is-Mercy ladder is untouched. Said on the button's tooltip,
+       and shown as the hint when the key is TAPPED rather than held. */
+    holdKeyHint: 'hold V to record',
     /** While held. The gesture out is a slide, and it has to be said, not guessed. */
     slideToCancel: 'slide left to cancel',
     /** The last three seconds (micHud.MIC_COUNTDOWN_MS). The question stops being
