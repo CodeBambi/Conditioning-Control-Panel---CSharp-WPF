@@ -28,6 +28,18 @@
  *   · the raster bake (below) is the expensive half, and a fixed set of five
  *     can be baked lazily and cached instead of re-encoded per cue.
  *
+ * …AND WARMED, NOT BAKED ON A CUE (2026-08-05). "Lazily" above used to mean
+ * "on the main thread, in the middle of the cue that needs it", and on an
+ * iPhone that is a VISIBLE FREEZE: a 1280px bake is ~1600 antialiased path
+ * fills plus a PNG encode of a 6.5MB backing store, and the owner's play-test
+ * found a spiral that mounted and then sat perfectly still for a second or two
+ * before it started turning. warmSpiralStills() walks the pool during IDLE time
+ * instead — it is armed from exec/spiral.js at executor build, which on this
+ * page is app build, so the whole title/lobby/countdown stretch is available
+ * and every bake is already cached long before a cue can ask for one. The
+ * laziness is still there underneath (a host that never idles still bakes on
+ * first ask); what changed is that nothing normal ever reaches it.
+ *
  * EVERY VARIANT IS BOTH BEDS AT ONCE. `params` drives exec/spiralField.js's
  * WebGL field; `image()` bakes the SAME parameters to a still PNG for the
  * no-WebGL raster path and for the bubble-pop flick. That is new: the shader
@@ -102,6 +114,22 @@ export const SESSION_SIZE = 5;
  * Going higher is not free: the PNG data URL is held in an inline style.
  */
 export const RASTER_PX = 1280;
+
+/**
+ * …and what the LITE tier bakes at (exec/perfTier.js — phones).
+ *
+ * BOTH HALVES OF THE COST ARE QUADRATIC IN THIS NUMBER: the wedge fills cover
+ * area, and the PNG encode chews the whole backing store (1280² RGBA is 6.5MB,
+ * 640² is 1.6MB). Quartering it is the difference between a bake a phone can
+ * absorb in an idle slice and one it cannot.
+ *
+ * AND IT COSTS THE LITE TIER NOTHING VISIBLE, because the still is the FALLBACK
+ * bed there and the fallback's competition is a shader that already draws at
+ * LITE_MAX_DPR = 1 — a 428pt-wide iPhone weaves at 428 backing pixels, so a
+ * 640px bake is MORE detail than the live path on the same device, under a
+ * screen blend at <=0.70 with a 1.1px blur over it.
+ */
+export const LITE_RASTER_PX = 640;
 
 /* ---------------------------------------------------------------------------
  * ROLLING ONE
@@ -368,17 +396,30 @@ export function drawSpiralRaster(ctx, size, params, phase = 0) {
  * ONE scratch canvas for every bake in the page. A 1280-square backing store is
  * ~6.5MB; minting a fresh one per variant would hold five of them alive for as
  * long as the session, for no reason — the PNG is the only thing worth keeping.
+ *
+ * NOTHING IS CACHED UNTIL A REAL 2D CONTEXT COMES BACK. The canvas and its
+ * context are taken together and remembered together, because a host that
+ * answers getContext('2d') with null (a WebView under memory pressure, a
+ * locked-down embedder, a self-test fake that only serves WebGL) would
+ * otherwise have its dud canvas remembered as THE scratch canvas for the life
+ * of the page — and every bake after the condition cleared would still fail
+ * against it. Refusing to cache a failure is what makes the next ask a retry.
+ *
+ * @returns {{cv: object, ctx: object, size: number}|null}
  */
 let scratch = null;
-function scratchCanvas(size) {
-  if (scratch && scratch.width === size) return scratch;
+function scratchTarget(size) {
+  if (scratch && scratch.size === size) return scratch;
   if (typeof document === 'undefined' || typeof document.createElement !== 'function') return null;
   let cv = null;
   try { cv = document.createElement('canvas'); } catch (_e) { return null; }
   if (!cv || typeof cv.getContext !== 'function') return null;
   try { cv.width = size; cv.height = size; } catch (_e) { return null; }
-  scratch = cv;
-  return cv;
+  let ctx = null;
+  try { ctx = cv.getContext('2d'); } catch (_e) { return null; }
+  if (!ctx) return null;
+  scratch = { cv, ctx, size };
+  return scratch;
 }
 
 /**
@@ -388,12 +429,10 @@ function scratchCanvas(size) {
  * alone, and a pane with no picture is invisible rather than wrong.
  */
 export function bakeSpiralImage(params, size = RASTER_PX) {
-  const cv = scratchCanvas(size);
-  if (!cv) return '';
-  let ctx = null;
-  try { ctx = cv.getContext('2d'); } catch (_e) { return ''; }
-  if (!ctx) return '';
-  if (!drawSpiralRaster(ctx, size, params, 0)) return '';
+  const target = scratchTarget(size);
+  if (!target) return '';
+  const cv = target.cv;
+  if (!drawSpiralRaster(target.ctx, size, params, 0)) return '';
   if (typeof cv.toDataURL !== 'function') return '';
   try {
     const url = cv.toDataURL('image/png');
@@ -438,12 +477,17 @@ export function createSpiralSession(opts = {}) {
         if (baked === null) baked = bakeSpiralImage(rolled.params, size);
         return baked;
       },
+      /** Has this variant's still been baked yet? ('' counts — a host that
+       *  cannot bake has ANSWERED, and asking it again would answer the same.)
+       *  warmSpiralStills' progress, and the self-test's pin on it. */
+      isBaked: () => baked !== null,
     });
   }
 
   let order = shuffled(variants.map((_v, i) => i), r);
   let at = 0;
   let last = -1;
+  let picks = 0;
 
   function next() {
     if (at >= order.length) {
@@ -453,6 +497,7 @@ export function createSpiralSession(opts = {}) {
       at = 0;
     }
     last = order[at++];
+    picks++;
     return variants[last];
   }
 
@@ -463,7 +508,89 @@ export function createSpiralSession(opts = {}) {
     next,
     /** Any variant, no rotation state touched — the bubble-pop flick's pick. */
     any: () => variants[Math.min(variants.length - 1, (r() * variants.length) | 0)],
+    /** How many variants have a resolved bake — warmSpiralStills' progress. */
+    bakedCount: () => variants.reduce((n2, v) => n2 + (v.isBaked() ? 1 : 0), 0),
+    /** How many times next() has handed one out. This is a COUNTER, not
+     *  bookkeeping the rotation needs: exec/spiral.js used to roll TWICE for one
+     *  fresh pane (ensurePane repicks, then the cue repicked again on top), and
+     *  test/selftest-exec.js pins that it now rolls once. A repick is not free
+     *  — it is a variant swap, a redraw and, before the warm, a raster bake. */
+    picked: () => picks,
   };
+}
+
+/* ---------------------------------------------------------------------------
+ * THE WARM — every bake, off the hot path.
+ *
+ * THE BUG THIS EXISTS FOR (iPhone 13 Pro Max, r8-20260805): a spiral payload
+ * mounted its pane and then FROZE for a second or two before it started
+ * turning. Nothing was loading and nothing was awaiting — the main thread was
+ * baking, inside the cue, with the pane's own rAF loop queued behind it.
+ * exec/spiral.js scheduled that bake one tick after the cue landed (see the
+ * repick() banner there), which moves it out of the cue's call stack and into
+ * the cue's first FRAMES, which is worse: the pane is already on screen and
+ * visibly not moving.
+ *
+ * So the pool warms itself instead, ONE VARIANT PER IDLE SLICE. One per slice
+ * matters as much as the idleness does: five bakes back to back is one long
+ * task however idle the moment was, and a long task during a countdown is the
+ * countdown skipping.
+ *
+ * `requestIdleCallback` WITH A TIMEOUT, and a plain timer under it. The timeout
+ * is because a page that never goes idle would otherwise never warm at all, and
+ * a still that arrives late is still ahead of the cue that needs it. The
+ * fallback is not decoration either: WebKit was the last engine to ship
+ * requestIdleCallback, so "the phone in the bug report" is exactly the host most
+ * likely to be missing it. (node has neither, and every bake there is a no-op ''
+ * anyway.) `schedule` is injectable so the self-test can drive the walk step by
+ * step instead of racing timers.
+ * ------------------------------------------------------------------------ */
+
+/** How long an idle callback may be starved before it runs anyway. */
+export const WARM_IDLE_TIMEOUT_MS = 3000;
+/** Spacing on the no-requestIdleCallback fallback path. */
+export const WARM_GAP_MS = 150;
+
+function defaultWarmSchedule(fn) {
+  try {
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(fn, { timeout: WARM_IDLE_TIMEOUT_MS });
+      return;
+    }
+  } catch (_e) { /* fall through to the timer */ }
+  try {
+    const t = setTimeout(fn, WARM_GAP_MS);
+    // unref'd: a warm walking its five must never be the reason node's loop
+    // (the self-tests') stays open.
+    if (t && typeof t.unref === 'function') t.unref();
+  } catch (_e) { /* a host with no timers simply never warms — every bake stays lazy */ }
+}
+
+/**
+ * Bake a pool's stills during idle time. Returns a CANCEL — a session that has
+ * been replaced must stop warming, or a page that opens two duels pays for the
+ * dead pool's pictures.
+ *
+ * @param {{session?: object, schedule?: (fn: () => void) => void}} [opts]
+ * @returns {() => void} cancel
+ */
+export function warmSpiralStills(opts = {}) {
+  const sess = (opts && opts.session) || spiralSession();
+  const schedule = (opts && typeof opts.schedule === 'function') ? opts.schedule : defaultWarmSchedule;
+  const list = sess.all();
+  let stopped = false;
+  let i = 0;
+  const stepOne = () => {
+    if (stopped || i >= list.length) return;
+    const v = list[i++];
+    // image() caches, including the '' a host that cannot bake answers with, so
+    // a second pass over an already-warm pool is free and a warm that overlaps
+    // a fallback's own ask cannot double-bake.
+    try { v.image(); } catch (_e) { /* an unbakeable variant is still a warmed one */ }
+    if (i < list.length) schedule(stepOne);
+  };
+  schedule(stepOne);
+  return () => { stopped = true; };
 }
 
 /* --- THE SHARED SESSION. exec/spiral.js (the bed) and exec/bubbles.js (the
@@ -472,6 +599,7 @@ export function createSpiralSession(opts = {}) {
    sweep costs nothing, and re-rolled by beginSpiralSession() when a new duel
    builds its executor. ----------------------------------------------------- */
 let session = null;
+let cancelWarm = null;
 
 /** The session pool, built on first ask. */
 export function spiralSession() {
@@ -479,10 +607,24 @@ export function spiralSession() {
   return session;
 }
 
-/** Roll a fresh set for a new match. Called once, from createSpiral(). */
+/**
+ * Roll a fresh set for a new match. Called once, from createSpiral().
+ *
+ * Any warm still walking the OLD pool is cancelled here: those five stills are
+ * about to be unreachable, and paying for a picture nobody can ask for again is
+ * exactly the main-thread time this whole path was built to stop spending.
+ */
 export function beginSpiralSession(opts) {
+  if (cancelWarm) { try { cancelWarm(); } catch (_e) { /* ignore */ } cancelWarm = null; }
   session = createSpiralSession(opts || {});
   return session;
+}
+
+/** Arm the idle warm for the shared pool. exec/spiral.js calls this at build. */
+export function warmSharedSpirals(opts) {
+  if (cancelWarm) { try { cancelWarm(); } catch (_e) { /* ignore */ } }
+  cancelWarm = warmSpiralStills(Object.assign({ session: spiralSession() }, opts || {}));
+  return cancelWarm;
 }
 
 /** The next spiral in the session's rotation. */
