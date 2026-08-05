@@ -1,5 +1,5 @@
 ## STATUS: SP-048 — DTRH published-artifact payload location
-**Current Step:** Step 3 — published boot proof + evidence + pre-completion consult (in progress)
+**Current Step:** Step 4 — Testing & Verification (in progress)
 **Last Updated:** 2026-08-05 (worker run 1)
 **Blockers:** none
 
@@ -15,11 +15,11 @@
 - [x] Tests (resolution per mode; SP-010 publish gates non-regression)
 
 ### Step 3: published boot proof + evidence + pre-completion consult
-- [ ] Published win-x64 boots the DTRH host (engine live, §4 green)
-- [ ] --verify-assets exit 0 on the published artifact
-- [ ] record.md (inventory, decision, consults, review presence, transcripts)
-- [ ] Pre-completion solo consult (verdict + actual model in record.md)
-- [ ] STATUS.md accurate before .DONE
+- [x] Published win-x64 boots the DTRH host (engine live, §4 green)
+- [x] --verify-assets exit 0 on the published artifact
+- [x] record.md (inventory, decision, consults, review presence, transcripts)
+- [x] Pre-completion solo consult (verdict + actual model in record.md)
+- [x] STATUS.md accurate before .DONE
 
 ### Step 4: Testing & Verification
 - [ ] Contract testCommand passes (verify.mjs + build 0W/0E + ≥601/33 floor)

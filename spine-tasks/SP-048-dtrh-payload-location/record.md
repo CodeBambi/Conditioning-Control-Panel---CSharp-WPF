@@ -15,7 +15,7 @@ Artifact: `client/artifacts/publish/CcpClient.Desktop-0.1.0-win-x64/` (899 MB to
 | `payload/dtrh/` beside the exe | 1542 files, 380 MB — present via `CopyToPublishDirectory PreserveNewest` |
 | `payload-overlay/` beside the exe | 2 files (bridge.js derivative + 1) |
 | File-set vs source tree `ConditioningControlPanel/Resources/web/dtrh` | SET-IDENTICAL (`diff` of sorted relative paths, zero lines) |
-| Byte-identity (sha256, all files) | payload 1542/1542 match, overlay 2/2 match, 0 mismatches |
+| Byte-identity (sha256, all files) | payload 1542/1542 + overlay 2/2 match the IN-REPO source tree at HEAD (`ConditioningControlPanel/Resources/web/dtrh`) — zero transformation in the publish step |
 | Native sidecars | libvlc/, miniaudio.dll, libSkiaSharp/libHarfBuzzSharp/av_libglesv2 (SP-010 floor intact) |
 
 **Does the single-file bundle see the beside-exe payload? YES — empirically:**
@@ -85,9 +85,12 @@ failure modes and a writable second copy that weakens the read-only anchor).
 2. **Artifact assertion:** `--verify-assets` copied direction (presence + case-exact +
    completeness sweep) rooted at `AppContext.BaseDirectory` — exit 0 on the published
    artifact TODAY (transcript above).
-3. **Byte-verifiability:** beside-exe bytes are DIRECTLY hashable against the anchor —
-   proven end-to-end today (1542/1542 sha256 match source tree; 2/2 overlay). No
-   repackaging/transformation exists between anchor and served bytes.
+3. **Byte-verifiability:** beside-exe bytes are DIRECTLY hashable against the source —
+   proven end-to-end today: 1542/1542 sha256 match the IN-REPO source tree at HEAD
+   (the anchor tree `40be29df` covers the 1536 pre-v6.6.3 files; the v6.6.3 delta rides
+   SP-037's per-entry commit provenance — the claim is faithful-copy-from-source-at-HEAD,
+   never identity-to-anchor). No repackaging/transformation exists between source and
+   served bytes.
 4. **Runtime read-only:** GET-only server, traversal-refused, never writes to the payload
    root (§4 contract unchanged).
 
@@ -116,10 +119,10 @@ delta, so zero per-change justification owed).
 **Resolution per mode (empirical):**
 - Debug: `bin/Debug/net10.0/payload/dtrh` — 1542 payload + 2 overlay files after the
   contract Debug build (CopyToOutputDirectory arm of the glob).
-- Release: same glob arm (mechanism identical to Debug; the win-x64 publish output was
-  measured directly in Step 1).
-- Published: beside the exe via CopyToPublishDirectory — set-identical, byte-identical,
-  `--verify-assets` exit 0 (Step 1 transcripts).
+- Release: `bin/Release/net10.0/` — EMPIRICAL: matrix GATE2 release PASS (`--verify-assets`
+  exit 0 on the Release binary — copied entries present beside it, sweep clean).
+- Published: beside the exe via CopyToPublishDirectory — set-identical, byte-identical
+  to the in-repo source tree at HEAD, `--verify-assets` exit 0 (Step 1 transcripts).
 
 **Tests:** `DtrhPayloadRootTests.cs` (5): probe Missing/Incomplete/Present shapes with
 temp trees; the one-code-path root shape (`PayloadRoot`/`OverlayRoot`/`MediaRoot` vs
@@ -179,7 +182,10 @@ correction: proves the server does NOT read the repo tree) and booted:
 - WebView2 embedded surface AdapterCreated (Blink 151.0.4129.59) — the real engine.
 - `dtrh: ready received — flushing init+manifest` — **engine live** on the published binary.
 - **105 payload GETs → 200 `(page:payload)` + 1 `(page:overlay)`** (bridge.js shadow —
-  overlay-first provenance visible in the route-class logs). §4 contract green.
+  overlay-first provenance visible in the route-class logs). §4 serving exercised on the
+  published binary: GET-only 200s + overlay-first + route 404 discipline (favicon).
+  Range/MIME-415/traversal/CORS arms are covered by `DtrhLoopbackContractTests` (green)
+  — honestly NOT re-proven against the published binary.
 - `dtrh: exit-done received — closing (graceful fast path)` + process exit 0.
 - Noise honestly named: favicon.ico 404 (route discipline), the post-exit WebView2
   `Chrome_WidgetWin_0` unregister stderr line (runtime teardown noise after exit-done,
@@ -205,4 +211,62 @@ bytes preserved), 6 (data-path identity across modes, published from MOVED dir),
 
 ### 3.4 Pre-completion solo consult
 
-(pending — verdict + actual answering model recorded here before the checkbox)
+**Route:** `consult` mode solo (per the 2026-08-04 rewire; council forbidden by the packet).
+Verdict received (FULL, untruncated). **Actual answering model: unknown to the worker**
+(the consult tool does not surface the model name; recorded honestly, never invented).
+**Sufficient to discharge WITH the following corrections — all applied:**
+
+1. **FIX-FIRST — sweep-class check (SP-023's 3rd-engine-incident class):** verified
+   `git check-ignore`: `client/artifacts/publish/` (899MB) and the TestResults trx are
+   BOTH gitignored (.gitignore:94, :89) — the engine auto-commit at .DONE cannot sweep
+   them. Clean.
+2. **Flake hunt:** 2 further full unit runs post-consult → 606/606 each (flake now
+   unreproduced across 5 consecutive full runs). Hypothesis recorded honestly per the
+   consult: the failure appeared on the first run WITH the new tests, so the suspect
+   class is the new `ParticipantStart_*` test's real loopback bind under xunit parallel
+   collection — mitigated by construction (finally-StopAsync, ephemeral-port retry loop
+   in LoopbackServer). If it ever recurs it gets named and fixed.
+3. **§4 claim narrowed (overclaim caught):** the published boot exercises GET-only 200s,
+   overlay-first provenance, and route-404 discipline; Range/MIME-415/traversal/CORS are
+   covered by the green `DtrhLoopbackContractTests`, NOT re-proven on the published
+   binary — record wording corrected (§3.1).
+4. **Byte-identity framing corrected:** the hash proof is faithful-copy-from-IN-REPO-
+   SOURCE-AT-HEAD (1542 files); the anchor `40be29df` covers the 1536 pre-v6.6.3 files
+   and the v6.6.3 delta rides SP-037's per-entry commit provenance — never
+   "byte-identical to the anchor" (§1.1, §1.4 corrected).
+5. **Release resolution now empirical:** matrix GATE2 release PASS cited (was
+   mechanism-identical phrasing).
+6. **SP-018 sensitive-logging disposition:** no code-level log-site registry tripwire
+   exists (grep-verified); the discipline is per-site tests (token ban etc., all green).
+   The new log line records an install PATH — an allowed class (route-class logs and the
+   matrix already print paths; never token/settings/media contents).
+7. **Cleanup:** `%TEMP%\ccp-sp048-portable` scratch copy removed; `client/artifacts/` is
+   gitignored working output (left in place, standard).
+
+### 3.5 Discharge statement + enabler 2
+
+**The b1 land condition "published-artifact payload location UNDECIDED" is DISCHARGED:**
+the location is DECIDED (beside the exe via the existing linked glob — ratified with
+empirical evidence, alternatives measured and rejected), PROVEN on the real published
+win-x64 artifact (engine live from a MOVED directory, served root named in the
+transcript, `--verify-assets` exit 0, full SP-010 matrix PASS). Per enabler 2 the worker
+does NOT edit `client/docs/task-board.md` or `client/docs/port-lessons.md` —
+`git status --short` shows neither touched; the orchestrator reconciles the DTRH host
+row at land. Linux publish evidence = named limit (WSL zero distros — owner-gated,
+never faked). No Wayland claims.
+
+### 3.6 Budgets + durable-lesson candidates
+
+- **Budget:** 4h exported at launch; consumed ~35 min wall (inventory → decision →
+  guard → tests → publish/matrix/boot evidence → 2 consults). Well inside.
+- **Lesson candidate 1 (tool-quirk):** `PublishSingleFile=true` does NOT bundle
+  `Content` items — `CopyToPublishDirectory` content lands beside the exe and
+  `AppContext.BaseDirectory` resolves to the exe dir, so beside-exe payload roots are
+  single-file-safe by construction (now empirically pinned for this repo).
+- **Lesson candidate 2 (insight):** an evidence set whose artifact sits at a stable
+  repo-adjacent path can be consistent with the WRONG serving root — boot from a MOVED
+  copy and have the product NAME its resolved root at startup (the guard pattern:
+  non-fatal typed probe + one diagnostic line) so transcripts are self-evidencing.
+- **Lesson candidate 3 (convention):** "byte-identical" claims must name the exact
+  comparand (in-repo source at HEAD vs git-tree anchor) — anchor coverage and live-tree
+  coverage diverge after a content delta lands (SP-037 class).
