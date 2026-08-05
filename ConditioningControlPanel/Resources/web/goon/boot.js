@@ -993,17 +993,28 @@ function attachMatch(match, transport) {
    * remount to notice. core/match.js refuses the call outside Lobby/Consent, so
    * a mid-match re-attach is a no-op rather than a signature-clearing surprise. */
   try {
-    if (prefs.get('voiceNotesEnabled')) match.setLocalVoiceNotes(true);
+    if (prefs.get('voiceNotesEnabled') && !match.setLocalVoiceNotes(true)) {
+      // The engine refused the seed. That was the SILENT killer of the whole
+      // transfer lane until 2026-08-05 (attachMatch runs while the match is
+      // still Idle; the setter used to be Lobby/Consent-only), so a refusal is
+      // never allowed to be quiet again.
+      logger.warn('voice-note seed REFUSED by the engine (phase ' + match.phase + ') — declaration will not ride the consent frames');
+    }
   } catch (e) { logger.warn('setLocalVoiceNotes threw: ' + ((e && e.message) || e)); }
   /* SENDING DEFAULTS ON (owner call, 2026-08-05). Sending is free for every
    * seat now and "my attacks carry MY media" is the product, so the standing
    * answer is yes unless this player has explicitly unticked the lobby box
    * before (prefs 'mediaTransferEnabled' === false — the checkbox writes it).
    * Same seam as the voice seeding above, for the same rebuild reason; the
-   * engine still refuses the call outside Lobby/Consent, and the peer still
-   * has to be opted in too before a single byte moves. */
+   * engine accepts the seed in Idle too (core/match.js _seedDeclaration —
+   * attachMatch runs BEFORE createInvite/join flips the phase, and the old
+   * Lobby/Consent-only gate ate this exact call on every fresh P2P match),
+   * still refuses it mid-match, and the peer still has to be opted in too
+   * before a single byte moves. */
   try {
-    if (prefs.get('mediaTransferEnabled') !== false) match.setMediaTransfer(true);
+    if (prefs.get('mediaTransferEnabled') !== false && !match.setMediaTransfer(true)) {
+      logger.warn('media-transfer seed REFUSED by the engine (phase ' + match.phase + ') — attacks will fall back to the receiver\'s local pool');
+    }
   } catch (e) { logger.warn('setMediaTransfer threw: ' + ((e && e.message) || e)); }
   /* KEEP THE SCREEN ON for the duration. A phone that dims and locks mid-Live is
    * an unintended mercy; the lock is match-scoped (start here, stop in
@@ -2257,7 +2268,10 @@ if (hasDom()) {
   startHeartbeat();
   armDeadline();
   bridge.announceReady();
-  bridge.log('boot: ready posted, waiting for init + manifest');
+  // The build stamp is the FIRST diagnostic of every cross-device session:
+  // "which build is that phone actually running" must be answerable from the
+  // C# log / ?debug=1 overlay alone (see GOON_BUILD in bridge.js).
+  bridge.log('boot: ready posted, build ' + bridge.GOON_BUILD + ' (' + (bridge.isHosted ? 'hosted' : 'standalone') + '), waiting for init + manifest');
 }
 
 /* Handy for the play-test driver and for anything that needs the shell's guts

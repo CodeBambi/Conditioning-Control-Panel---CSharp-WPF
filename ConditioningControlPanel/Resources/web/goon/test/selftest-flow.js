@@ -722,6 +722,86 @@ function mountRecap(result) {
     q.detach();
     a.dispose(); b.dispose(); pair.dispose();
   }
+
+  // ------------------- 6c. BOOT'S SEEDING ORDER — the 2026-08-05 field bug
+  // boot.js seeds the standing declarations inside attachMatch, and
+  // net/session.js raises onCurrentMatchChanged from _beginSession — BEFORE
+  // createInvite/join has moved the phase off Idle. Until 2026-08-05 the
+  // setters were Lobby/Consent-only and SILENTLY refused that call on both
+  // seats of every fresh P2P match: the opt-in never rode a consent frame and
+  // every attack fell back to the receiver's local pool, while this suite
+  // stayed green because every test seeded AFTER adoptLobby(). This section
+  // seeds in boot's order and would have caught it.
+  {
+    const caps = localCaps({ transfer: true });
+    const pair = createLoopbackPair(loopbackOptions({
+      latencyMs: 0, jitterMs: 0, guestClockSkewMs: 0, bulk: true, logger: quiet,
+    }));
+    const a = new GoonMatchService(pair.host, true, { logger: quiet, caps, displayName: 'A', tag: 'GG:A6c' });
+    const b = new GoonMatchService(pair.guest, false, { logger: quiet, caps, displayName: 'B', tag: 'GG:B6c' });
+
+    // attachMatch runs NOW — the phase is still Idle on both seats.
+    ok(a.phase === GoonMatchPhase.Idle && b.phase === GoonMatchPhase.Idle,
+      '6c: both matches are Idle when boot would seed them', `${a.phase}/${b.phase}`);
+    ok(a.setMediaTransfer(true) === true, '6c: the Idle-phase media seed is TAKEN, not silently refused');
+    ok(b.setMediaTransfer(true) === true, '6c: ...on the guest seat too');
+    ok(a.setLocalVoiceNotes(true) === true, '6c: and the voice-note twin takes the Idle seed the same way');
+
+    // ...then createInvite/join flips the phase and the lobby walk happens.
+    a.adoptLobby(); b.adoptLobby();
+    await pair.connect();
+    await tick(60);
+    a.proposeConsent(600, 0, 30000);
+    await tick(40);
+    a.confirmConsent();
+    b.confirmConsent();
+    await tick(60);
+
+    ok(a.phase === GoonMatchPhase.Draft && b.phase === GoonMatchPhase.Draft,
+      '6c: the pair consented and drafted with no extra frames', `${a.phase}/${b.phase}`);
+    ok(a.localMediaTransfer === true && a.remoteMediaTransfer === true,
+      '6c: the host reads BOTH opt-ins true', `${a.localMediaTransfer}/${a.remoteMediaTransfer}`);
+    ok(b.localMediaTransfer === true && b.remoteMediaTransfer === true,
+      '6c: and so does the guest', `${b.localMediaTransfer}/${b.remoteMediaTransfer}`);
+    ok(a.mediaTransferAgreed === true && b.mediaTransferAgreed === true,
+      '6c: mediaTransferAgreed on both seats — the queue\'s consent legs pass');
+    ok(b.remoteVoiceNotes === true, '6c: the guest heard the host\'s voice declaration too');
+
+    a.dispose(); b.dispose(); pair.dispose();
+  }
+
+  // ---------- 6d. the asymmetric seat: one side never opts in (stale page)
+  // The exact field verdict from the 08-05 hunt: the desktop's tracer said
+  // "their lobby send toggle is off". A peer that never seeds (an old cached
+  // build, or a player who unticked the box) must gate BOTH directions, and
+  // the opted-in side's remoteMediaTransfer is the leg that says why.
+  {
+    const caps = localCaps({ transfer: true });
+    const pair = createLoopbackPair(loopbackOptions({
+      latencyMs: 0, jitterMs: 0, guestClockSkewMs: 0, bulk: true, logger: quiet,
+    }));
+    const a = new GoonMatchService(pair.host, true, { logger: quiet, caps, displayName: 'A', tag: 'GG:A6d' });
+    const b = new GoonMatchService(pair.guest, false, { logger: quiet, caps, displayName: 'B', tag: 'GG:B6d' });
+    ok(a.setMediaTransfer(true) === true, '6d: host opted in at Idle');
+    // The guest NEVER calls setMediaTransfer — the stale-page seat.
+    a.adoptLobby(); b.adoptLobby();
+    await pair.connect();
+    await tick(60);
+    a.proposeConsent(600, 0, 30000);
+    await tick(40);
+    a.confirmConsent();
+    b.confirmConsent();
+    await tick(60);
+
+    ok(a.localMediaTransfer === true && a.remoteMediaTransfer === false,
+      '6d: the host reads local ON, remote OFF — mediaQueue names "their lobby send toggle is off"');
+    ok(b.localMediaTransfer === false && b.remoteMediaTransfer === true,
+      '6d: the guest reads the mirror image');
+    ok(a.mediaTransferAgreed === false && b.mediaTransferAgreed === false,
+      '6d: nobody transfers until BOTH declare — one stale seat gates both directions');
+
+    a.dispose(); b.dispose(); pair.dispose();
+  }
 }
 
 /* ===========================================================================
