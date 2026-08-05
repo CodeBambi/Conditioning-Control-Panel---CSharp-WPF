@@ -90,24 +90,148 @@ public sealed class DtrhNativeEffectsTests : IDisposable
     }
 
     [Fact]
-    public void Sfx_SpecialCases_AndGenericResolution()
+    public void Sfx_AuditedChains_ResolvePerChain_AndGenericResolution()
     {
+        // SP-051: boon_reveal chains resolve per the WPF chain (ChaosSfx.cs:25-30) — the
+        // dedicated drops (dling/thud) live in the WPF sound library, so the chain lands
+        // on the fallback members that ARE in the payload pool, at the WPF fixed scales.
         var chime = TouchSfx("chime1.mp3");
         var pop2 = TouchSfx("Pop2.mp3");
         var pop = TouchSfx("Pop.mp3");
         var (fx, audio, _) = Make();
 
-        fx.PlaySfx("wave_clear", 0.3);   // chain wave_clear.mp3 → chime1.mp3 @0.8 (scale ignored)
-        fx.PlaySfx("ripple_cast", 0.3);  // chain ripple_cast.mp3 → Pop2.mp3 @0.6
-        fx.PlaySfx("pop", 0.5);          // generic, case-insensitive file match (Linux honest)
+        fx.PlaySfx("boon_reveal_rare", 0.3);   // chain dling.mp3 → chime1.mp3 @0.6 (scale ignored)
+        fx.PlaySfx("boon_reveal_common", 0.3); // chain thud.mp3 → Pop2.mp3 @0.65 (scale ignored)
+        fx.PlaySfx("pop", 0.5);                // generic, case-insensitive file match (Linux honest)
 
         Assert.Equal(chime, audio.Players[0].Path, StringComparer.OrdinalIgnoreCase);
         Assert.Equal(pop2, audio.Players[1].Path, StringComparer.OrdinalIgnoreCase);
         Assert.Equal(pop, audio.Players[2].Path, StringComparer.OrdinalIgnoreCase);
         // volume = master(0.80) × scale clamped (ChaosSfx.cs:96-103)
+        Assert.Equal(0.80f * 0.6f, audio.Players[0].Gain, 3);
+        Assert.Equal(0.80f * 0.65f, audio.Players[1].Gain, 3);
+        Assert.Equal(0.80f * 0.5f, audio.Players[2].Gain, 3);
+    }
+
+    [Fact]
+    public void Sfx_FixedChainGaps_TypedAndRecorded()
+    {
+        // SP-051: wave_clear/ripple_cast chains (ChaosSfx.cs:22, :41) have NO member in the
+        // payload pool — typed named content gaps with the WPF chain cited, never an
+        // off-chain substitution. ticktock's page path rides the generic chain
+        // (DtrhHostService.cs:262 → ChaosSfx.cs:47); also absent from the pool.
+        var (fx, audio, _) = Make();
+
+        fx.PlaySfx("wave_clear", 0.5);
+        fx.PlaySfx("ripple_cast", 0.5);
+        fx.PlaySfx("ticktock", 0.5);
+
+        Assert.Empty(audio.Players);
+        Assert.Contains(_log, l => l.Contains("wave_clear") && l.Contains("named content gap")
+            && l.Contains("chaos/wave_clear.mp3 → lvup.mp3") && l.Contains("ChaosSfx.cs:22"));
+        Assert.Contains(_log, l => l.Contains("ripple_cast") && l.Contains("named content gap")
+            && l.Contains("chaos/ripple_cast.mp3 → chaos/snap.mp3") && l.Contains("ChaosSfx.cs:41"));
+        Assert.Contains(_log, l => l.Contains("ticktock") && l.Contains("named content gap")
+            && l.Contains("chaos/ticktock.mp3") && l.Contains("ChaosSfx.cs:47"));
+    }
+
+    /// <summary>SP-051: every page-sent cue riding the generic chain (record.md Tier B —
+    /// grep of sfx('&lt;name&gt;') over the dtrh page JS + warren.js:246's unlock_card default)
+    /// is a named content gap while the WPF chaos sound library is unported. detonate_thud
+    /// and dive are silent in WPF too (absent from the WPF library) — the gap is still
+    /// named, never an unrecorded drop.</summary>
+    [Theory]
+    [InlineData("collar_save")]
+    [InlineData("countdown_tick")]
+    [InlineData("defuse_hiss")]
+    [InlineData("depth_change")]
+    [InlineData("detonate_thud")]
+    [InlineData("dive")]
+    [InlineData("dvd_launch")]
+    [InlineData("estim_zap")]
+    [InlineData("fall_in")]
+    [InlineData("focus_empty")]
+    [InlineData("freeze_catch")]
+    [InlineData("freeze_shatter")]
+    [InlineData("freeze_trigger")]
+    [InlineData("fx_drain")]
+    [InlineData("glass_shatter")]
+    [InlineData("golden_pop")]
+    [InlineData("heartbeat")]
+    [InlineData("rabbit_spawn")]
+    [InlineData("resist_absorb")]
+    [InlineData("reveal_chime")]
+    [InlineData("sin_accept")]
+    [InlineData("sink")]
+    [InlineData("streak_milestone")]
+    [InlineData("surface")]
+    [InlineData("time_slow_in")]
+    [InlineData("time_slow_out")]
+    [InlineData("toy_denied")]
+    [InlineData("toy_ready")]
+    [InlineData("trigger")]
+    [InlineData("tunnel_zone")]
+    [InlineData("ui_click")]
+    [InlineData("ui_deepen")]
+    [InlineData("ui_denied")]
+    [InlineData("ui_unlock")]
+    [InlineData("unlock_card")]
+    [InlineData("vibe_buzz")]
+    public void Sfx_GenericPageCues_NamedGaps(string cue)
+    {
+        var (fx, audio, _) = Make();
+
+        fx.PlaySfx(cue, 0.5);
+
+        Assert.Empty(audio.Players);
+        Assert.Contains(_log, l => l.Contains($"sfx '{cue}'") && l.Contains("named content gap")
+            && l.Contains($"chaos/{cue}.mp3") && l.Contains("ChaosSfx.cs:47"));
+    }
+
+    [Fact]
+    public void Sfx_ChainFallback_ResolvesWhenDedicatedAbsent()
+    {
+        // SP-051: when a chain's fallback member IS in the pool, the chain resolves to it.
+        var lvup = TouchSfx("lvup.mp3");
+        var chime = TouchSfx("chime1.mp3");
+        var (fx, audio, _) = Make();
+
+        fx.PlaySfx("wave_clear", 0.3);        // wave_clear.mp3 absent → lvup.mp3 @0.8 fixed
+        fx.PlaySfx("boon_reveal_rare", 0.3);  // dling.mp3 absent → chime1.mp3 @0.6 fixed
+
+        Assert.Equal(lvup, audio.Players[0].Path, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(chime, audio.Players[1].Path, StringComparer.OrdinalIgnoreCase);
         Assert.Equal(0.80f * 0.8f, audio.Players[0].Gain, 3);
         Assert.Equal(0.80f * 0.6f, audio.Players[1].Gain, 3);
-        Assert.Equal(0.80f * 0.5f, audio.Players[2].Gain, 3);
+    }
+
+    [Fact]
+    public void Sfx_ResolveSfxCue_TypedOutcomes()
+    {
+        // SP-051: the resolution entry point future sfx consumers use — typed Resolved vs
+        // NamedGap, boon_reveal tokens included (table rows, no page wire today).
+        TouchSfx("Pop2.mp3");
+        var (fx, _, _) = Make();
+
+        var resolved = fx.ResolveSfxCue("boon_reveal_common", 0.3);
+        Assert.True(resolved.IsResolved);
+        Assert.EndsWith("Pop2.mp3", resolved.Path);
+        Assert.Equal(0.65, resolved.Scale);   // WPF fixed scale, page scale ignored
+        Assert.Null(resolved.GapNote);
+
+        var gap = fx.ResolveSfxCue("wave_clear", 0.3);
+        Assert.False(gap.IsResolved);
+        Assert.Contains("chaos/wave_clear.mp3 → lvup.mp3", gap.GapNote);
+        Assert.Contains("ChaosSfx.cs:22", gap.GapNote);
+
+        var genericGap = fx.ResolveSfxCue("golden_pop", 0.45);
+        Assert.False(genericGap.IsResolved);
+        Assert.Contains("chaos/golden_pop.mp3", genericGap.GapNote);
+        Assert.Contains("ChaosSfx.cs:47", genericGap.GapNote);
+
+        var empty = fx.ResolveSfxCue(null, 0.6);
+        Assert.False(empty.IsResolved);
+        Assert.Null(empty.GapNote);   // unlisted/empty cue — plain silent no-op, not a named gap
     }
 
     [Fact]
@@ -130,11 +254,28 @@ public sealed class DtrhNativeEffectsTests : IDisposable
     public void Sfx_DedicatedFile_WinsOverFallback()
     {
         var dedicated = TouchSfx("wave_clear.mp3");
-        TouchSfx("chime1.mp3");
+        TouchSfx("lvup.mp3");
         var (fx, audio, _) = Make();
 
         fx.PlaySfx("wave_clear", 0.6);
         Assert.Equal(dedicated, audio.Players[0].Path);
+    }
+
+    [Fact]
+    public void Sfx_BoonReveal_DedicatedFile_WinsOverFallback()
+    {
+        // SP-051: a dedicated drop always wins its chain (ChaosSfx.cs:62-79 first-exists order).
+        var dling = TouchSfx("dling.mp3");
+        TouchSfx("chime1.mp3");
+        var thud = TouchSfx("thud.mp3");
+        TouchSfx("Pop2.mp3");
+        var (fx, audio, _) = Make();
+
+        fx.PlaySfx("boon_reveal_rare", 0.3);
+        fx.PlaySfx("boon_reveal_common", 0.3);
+
+        Assert.Equal(dling, audio.Players[0].Path);
+        Assert.Equal(thud, audio.Players[1].Path);
     }
 
     [Fact]

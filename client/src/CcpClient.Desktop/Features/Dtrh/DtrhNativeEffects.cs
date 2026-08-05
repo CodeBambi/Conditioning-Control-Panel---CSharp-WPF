@@ -74,8 +74,9 @@ public sealed class DtrhNativeEffects : IDisposable
     // ============================ SFX ============================
 
     /// <summary>sfx {name, scale} (DtrhHostService.cs:222-234): VN gate first (`:223` —
-    /// stingers stay silent while she speaks), then the wave_clear/ripple_cast special-cases
-    /// (`:227-229`), then the generic cue. scale default 0.6 (`:226`).</summary>
+    /// stingers stay silent while she speaks), then resolution through the SP-051 audited
+    /// chain table (<see cref="AuditedChains"/>) or the generic chain — see
+    /// <see cref="ResolveSfxCue"/>. scale default 0.6 (`:226`).</summary>
     public void PlaySfx(string? name, double scale)
     {
         if (_vnSpeaking)
@@ -84,31 +85,19 @@ public sealed class DtrhNativeEffects : IDisposable
             return;
         }
 
-        // WPF special-case chains (ChaosSfx.cs:24-25 wave_clear→lvup @0.8, :46-47
-        // ripple_cast→snap @0.6). The WPF fallback files (lvup/snap) live in the WPF sound
-        // library; the greenfield resolves against the payload sfx pool — chime1 is the
-        // rewarding-chime outcome (ChaosSfx.cs:30-35 boon-rare fallback), Pop2 the
-        // dull-thud outcome (:35). Named candidates first: a dedicated drop always wins.
-        var (candidates, effectiveScale) = name switch
-        {
-            "wave_clear" => (new[] { "wave_clear.mp3", "chime1.mp3" }, 0.8),
-            "ripple_cast" => (new[] { "ripple_cast.mp3", "Pop2.mp3" }, 0.6),
-            // SP-049: boon_pick's WPF chain (ChaosSfx.cs:33 — chaos/boon_pick.mp3, falling
-            // back to chime2.mp3). The dedicated drop lives in the WPF sound library (not
-            // the DTRH payload pool), so the greenfield lands on chime2 — the same
-            // rewarding-chime outcome WPF serves when the library file is absent.
-            "boon_pick" => (new[] { "boon_pick.mp3", "chime2.mp3" }, scale),
-            _ => (new[] { name is { Length: > 0 } n ? n + ".mp3" : "" }, scale),
-        };
-
-        var path = ResolveSfx(candidates);
-        if (path is null)
+        var resolution = ResolveSfxCue(name, scale);
+        if (resolution.Path is not { } path)
         {
             // Silent no-op parity (ChaosSfx.cs:75-93: absent asset = silence, logged).
-            _log($"dtrh-fx: sfx '{name ?? "(null)"}' unresolved — silent no-op (no candidate on disk)");
+            // SP-051: an audited cue whose chain misses the pool is a NAMED content gap —
+            // typed + logged with its WPF chain cited, never an unrecorded drop.
+            _log(resolution.GapNote is { } gap
+                ? $"dtrh-fx: sfx '{name}' — {gap}; silent no-op"
+                : $"dtrh-fx: sfx '{name ?? "(null)"}' unresolved — silent no-op (no candidate on disk)");
             return;
         }
 
+        var effectiveScale = resolution.Scale;
         IDtrhAudioPlayer player;
         lock (_gate)
         {
@@ -143,6 +132,91 @@ public sealed class DtrhNativeEffects : IDisposable
             try { player.Dispose(); } catch { /* best-effort */ }
             _log($"dtrh-fx: sfx '{name}' play failed ({ex.GetType().Name})");
         }
+    }
+
+    // ============================ SP-051 audited chain resolution ============================
+
+    /// <summary>The complete audited WPF ChaosSfx cue→fallback-chain table (SP-051 map,
+    /// spine-tasks/SP-051-chaossfx-chain-audit/record.md). Candidates are the chain member
+    /// BASENAMES in override→fallback order (the greenfield pool is flat; WPF keeps them
+    /// under Resources/sounds/ with chaos/ and bubbles/ prefixes — <see cref="ChaosSfxChain.WpfChain"/>
+    /// keeps the WPF-relative spelling). Keyed by wire cue token, ordinal-exact
+    /// (DtrhHostService.cs:260-261 parity). boon_reveal_rare/boon_reveal_common have no page
+    /// wire today (WPF fires them overlay-side, ChaosOverlayWindow.xaml.cs:282-283,324) —
+    /// they are table rows for future sfx consumers, resolvable through
+    /// <see cref="ResolveSfxCue"/>, never invented page tokens. Every chain whose members
+    /// are all absent from the pool is a NAMED CONTENT GAP (WPF sound-library content —
+    /// a future content row), never an off-chain substitution.</summary>
+    public static IReadOnlyDictionary<string, ChaosSfxChain> AuditedChains { get; } =
+        new Dictionary<string, ChaosSfxChain>(StringComparer.Ordinal)
+        {
+            // ChaosSfx.cs:22 — helper ignores the page scale (DtrhHostService.cs:260).
+            ["wave_clear"] = new(["wave_clear.mp3", "lvup.mp3"], 0.8,
+                "chaos/wave_clear.mp3 → lvup.mp3", "ChaosSfx.cs:22"),
+            // ChaosSfx.cs:25-30 — PlayBoonReveal(isRare: true).
+            ["boon_reveal_rare"] = new(["dling.mp3", "chime1.mp3"], 0.6,
+                "chaos/dling.mp3 → chime1.mp3", "ChaosSfx.cs:25-30"),
+            // ChaosSfx.cs:25-30 — PlayBoonReveal(isRare: false).
+            ["boon_reveal_common"] = new(["thud.mp3", "Pop2.mp3"], 0.65,
+                "chaos/thud.mp3 → bubbles/Pop2.mp3", "ChaosSfx.cs:25-30"),
+            // ChaosSfx.cs:33 helper is @0.7, but the DTRH page path rides the generic chain
+            // at the PAGE scale (DtrhHostService.cs:262 → ChaosSfx.cs:47) — the SP-049
+            // precedent: chain → chime2.mp3, page-supplied scale kept, test-pinned.
+            ["boon_pick"] = new(["boon_pick.mp3", "chime2.mp3"], null,
+                "chaos/boon_pick.mp3 → chime2.mp3", "ChaosSfx.cs:33 (+ page path DtrhHostService.cs:262)"),
+            // ChaosSfx.cs:41 — helper ignores the page scale (DtrhHostService.cs:261).
+            ["ripple_cast"] = new(["ripple_cast.mp3", "snap.mp3"], 0.6,
+                "chaos/ripple_cast.mp3 → chaos/snap.mp3", "ChaosSfx.cs:41"),
+            // ChaosSfx.cs:37 helper is @0.45, but the page path rides the generic chain at
+            // the PAGE scale (DtrhHostService.cs:262 → ChaosSfx.cs:47) — a table row (not
+            // the generic arm) so the gap log self-cites the named helper chain.
+            ["ticktock"] = new(["ticktock.mp3"], null,
+                "chaos/ticktock.mp3", "ChaosSfx.cs:37; page path ChaosSfx.cs:47"),
+        };
+
+    /// <summary>Resolve one cue against the sfx pool through the audited chains (SP-051):
+    /// the table row when the token is listed, else the generic chain
+    /// (<c>chaos/{name}.mp3</c> → flat {name}.mp3, page scale — ChaosSfx.cs:47). First
+    /// candidate on disk wins (ChaosSfx.cs:62-79). Unresolved non-empty cue = typed
+    /// <see cref="ChaosSfxResolution.GapNote"/> with its WPF chain cited.</summary>
+    public ChaosSfxResolution ResolveSfxCue(string? name, double pageScale)
+    {
+        string[] candidates;
+        double scale;
+        string? chain;
+        string? cite;
+        ChaosSfxChain? audited = null;
+        if (name is { Length: > 0 })
+        {
+            AuditedChains.TryGetValue(name, out audited);
+        }
+
+        if (audited is not null)
+        {
+            candidates = audited.Candidates;
+            scale = audited.FixedScale ?? pageScale;
+            chain = audited.WpfChain;
+            cite = audited.Cite;
+        }
+        else
+        {
+            candidates = [name is { Length: > 0 } n ? n + ".mp3" : ""];
+            scale = pageScale;
+            chain = name is { Length: > 0 } gn ? $"chaos/{gn}.mp3" : null;
+            cite = chain is null ? null : "ChaosSfx.cs:47";
+        }
+
+        var path = ResolveSfx(candidates);
+        if (path is not null) return new ChaosSfxResolution(path, scale, null);
+        // Two honest gap phrasings (SP-051 pre-completion consult): an AUDITED table row's
+        // members are verified WPF sound-library content (a future content row); a GENERIC
+        // cue's file may not exist even in the WPF library (page-sent detonate_thud/dive
+        // don't) — claim only what was verified.
+        return new ChaosSfxResolution(null, scale,
+            chain is null ? null
+                : audited is not null
+                    ? $"named content gap (WPF chain {chain}, {cite} — WPF sound-library content, future content row)"
+                    : $"named content gap (WPF chain {chain}, {cite} — no chain member in the payload sfx pool)");
     }
 
     /// <summary>Resolve the first candidate that exists in the sfx pool (payload
@@ -524,6 +598,21 @@ public sealed class DtrhNativeEffects : IDisposable
     /// settings.masterVolume, 0..100).</summary>
     private float Volume(double scale) =>
         (float)Math.Clamp(_options.MasterVolume / 100.0 * scale, 0.0, 1.0);
+}
+
+/// <summary>One audited WPF ChaosSfx fallback chain (SP-051). <see cref="Candidates"/> are
+/// flat basenames in override→fallback order; <see cref="WpfChain"/> keeps the WPF-relative
+/// spelling for gap logs. <see cref="FixedScale"/> null = the page-supplied scale passes
+/// through (WPF generic path, ChaosSfx.cs:47); a value = the WPF helper's fixed scale.</summary>
+public sealed record ChaosSfxChain(string[] Candidates, double? FixedScale, string WpfChain, string Cite);
+
+/// <summary>The typed outcome of resolving one sfx cue (SP-051): either a pool
+/// <see cref="Path"/> + effective <see cref="Scale"/>, or an unplayed cue whose
+/// <see cref="GapNote"/> names the content gap with its WPF chain cited (null note = an
+/// unlisted/empty cue — the plain silent no-op).</summary>
+public readonly record struct ChaosSfxResolution(string? Path, double Scale, string? GapNote)
+{
+    public bool IsResolved => Path is not null;
 }
 
 /// <summary>Knobs + media roots for <see cref="DtrhNativeEffects"/>.</summary>
