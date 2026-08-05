@@ -1,0 +1,177 @@
+# SP-051 — ChaosSfx cue→fallback-chain audit + typed resolution
+
+Board row: `client/docs/task-board.md` P1 "Audit the WPF ChaosSfx cue→fallback-chain map against greenfield sfx resolution" (OPEN, filed 2026-08-05). Invariant: user-observable hearing parity (owner decree 2026-08-04). Precedent: SP-049 `boon_pick` → `chime2.mp3`, page-supplied scale kept, test-pinned.
+
+WPF sources are READ-ONLY behavioral evidence. Greenfield sfx content = the DTRH payload pool
+`ConditioningControlPanel/Resources/web/dtrh/assets/bubbles/sfx/` (8 files: Burst.mp3, GG.mp3,
+Pop.mp3, Pop2.mp3, Pop3.mp3, chime1.mp3, chime2.mp3, chime3.mp3). The WPF chaos sound library
+(`ConditioningControlPanel/Resources/sounds/`, incl. `chaos/` with 66 files) is WPF-tree content —
+a future content row, never copied ad hoc into this slice.
+
+## Step 1 — the complete cue→chain map
+
+### Tier A — fixed fallback chains (`Services/Chaos/ChaosSfx.cs`)
+
+| # | Cue | WPF chain (override → fallback) | Scale | Cite | WPF library outcome (no mod) | Greenfield pool | Classification |
+|---|-----|--------------------------------|-------|------|------------------------------|-----------------|----------------|
+| A1 | `wave_clear` | `chaos/wave_clear.mp3` → `lvup.mp3` | 0.8 fixed (helper ignores page scale, `DtrhHostService.cs:260`) | `ChaosSfx.cs:22` | `chaos/wave_clear.mp3` ABSENT → **`lvup.mp3` HEARD** | neither member present | **NAMED GAP** |
+| A2 | `boon_reveal` (rare) | `chaos/dling.mp3` → `chime1.mp3` | 0.6 fixed | `ChaosSfx.cs:25-30` | `dling.mp3` present → HEARD | `chime1.mp3` present | **RESOLVES → `chime1.mp3` @0.6** |
+| A3 | `boon_reveal` (common) | `chaos/thud.mp3` → `bubbles/Pop2.mp3` | 0.65 fixed | `ChaosSfx.cs:25-30` | `thud.mp3` present → HEARD | `Pop2.mp3` present | **RESOLVES → `Pop2.mp3` @0.65** |
+| A4 | `boon_pick` | `chaos/boon_pick.mp3` → `chime2.mp3` | 0.7 helper (`ChaosSfx.cs:33`); DTRH page path rides the generic chain @ page scale (`DtrhHostService.cs:262` → `ChaosSfx.cs:47`) | `ChaosSfx.cs:33` | `boon_pick.mp3` present → HEARD | `chime2.mp3` present | **RESOLVES → `chime2.mp3`, page scale kept (SP-049)** |
+| A5 | `ticktock` | `chaos/ticktock.mp3` (single member) | 0.45 helper (`ChaosSfx.cs:37`); page path generic @ page scale | `ChaosSfx.cs:37` | `ticktock.mp3` present → HEARD | absent | **NAMED GAP** |
+| A6 | `ripple_cast` | `chaos/ripple_cast.mp3` → `chaos/snap.mp3` | 0.6 fixed (helper ignores page scale, `DtrhHostService.cs:261`) | `ChaosSfx.cs:41` | `ripple_cast.mp3` present → HEARD | neither member present | **NAMED GAP** |
+
+Resolution mechanics (all chains): first candidate that exists on disk wins
+(`ChaosSfx.cs:62-79` `PlayFirstAvailable`); absent-everything = silent no-op, logged
+(`ChaosSfx.cs:75-77`); volume = `master × scale` clamped 0..1 (`ChaosSfx.cs:96-103`).
+
+### Tier B — page-sent cues riding the generic chain
+
+Generic chain: `chaos/{name}.mp3`, single member, page-supplied scale (default 0.6) —
+`ChaosSfx.cs:47` (`Play(name, scale)`). Wire: `DtrhHostService.cs:262` (DTRH page),
+`LoomHostService.cs:124` (Loom page). Greenfield wire: `DtrhFxRouter.cs:28` →
+`DtrhNativeEffects.PlaySfx`.
+
+39 literal page-sent names (grep of `sfx('<name>'` over `Resources/web/dtrh/**/*.js`) +
+`unlock_card` (`warren.js:246` dynamic `data.cue || 'unlock_card'`):
+
+`boon_pick`(A4), `collar_save`, `countdown_tick`, `defuse_hiss`, `depth_change`,
+`detonate_thud`†, `dive`†, `dvd_launch`, `estim_zap`, `fall_in`, `focus_empty`,
+`freeze_catch`, `freeze_shatter`, `freeze_trigger`, `fx_drain`, `glass_shatter`,
+`golden_pop`, `heartbeat`, `rabbit_spawn`, `resist_absorb`, `reveal_chime`,
+`ripple_cast`(A6), `sin_accept`, `sink`, `streak_milestone`, `surface`, `ticktock`(A5),
+`time_slow_in`, `time_slow_out`, `toy_denied`, `toy_ready`, `trigger`, `tunnel_zone`,
+`ui_click`, `ui_deepen`, `ui_denied`, `ui_unlock`, `vibe_buzz`, `wave_clear`(A1)
+
+(† `detonate_thud`, `dive`: absent even from the WPF chaos library — **silent in WPF too**;
+greenfield matches WPF by silence, still recorded as named gaps.)
+
+**Classification: every Tier B cue is a NAMED GAP in the greenfield** — none of the names
+exist in the payload pool (flat `{name}.mp3` lookup against the 8 pool files). WPF hears
+all of them from `Resources/sounds/chaos/{name}.mp3` except the two † WPF-silent cues.
+
+### Tier C — WPF-native-only riders of the generic chain (no greenfield wire path today)
+
+Literal call sites (WPF tree, `CCP.*` first-attempt excluded): `cards_in`
+(`ChaosOverlayWindow.xaml.cs:219,960`), `chip_pop` (`:797`), `count_tick`
+(`ChaosHubWindow.xaml.cs:321`, `ChaosOverlayWindow.xaml.cs:761`), `dvd_bounce`
+(`ChaosDvdOverlay.cs:317,331,367`), `dvd_launch` (`ChaosDvdOverlay.cs:383`,
+`ChaosModeService.cs:2654`), `ui_click` (`ChaosHubWindow.xaml.cs:40`,
+`ChaosOverlayWindow.xaml.cs:1008`), `ui_deepen` (`ChaosHubWindow.xaml.cs:859`),
+`ui_denied` (`ChaosHubWindow.Bench.cs:277`, `ChaosHubWindow.xaml.cs:520,842,861`),
+`ui_equip`/`ui_unequip` (`ChaosHubWindow.xaml.cs:528,827,1027,1072,1104,1136`),
+`ui_unlock` (`ChaosHubWindow.Bench.cs:289`, `ChaosModeService.cs:1613`), `reveal_chime`
+(`ChaosHubWindow.Reveals.cs:211,215`), `fall_in` (`ChaosModeService.cs:342`),
+`toy_ready` (`:987,2681,2694,2939`), `sin_accept` (`:1086,1569`),
+`resist_absorb`/`resist_crumble` (`:1348,1381,1787,2100` — ternary),
+`trigger` (`:1355,2134`; `glass_shatter`-or-`trigger` ternary `:1374`),
+`toy_denied` (`:1401,2522,2613,2617,2638`), `golden_pop` (`:1799,1814`),
+`rabbit_spawn` (`:1893,2836`), `focus_empty` (`:1951`),
+`time_slow_in`/`time_slow_out` (`:2343,2390`), `vibe_buzz` (`:2631`),
+`freeze_trigger` (`:2640,2669`), `freeze_shatter` (`:2987`),
+`streak_milestone` (`:3007`), `depth_change` (`:3037`),
+`surface` (`ChaosOverlayWindow.xaml.cs:580`), `pb_fanfare` (`:584`),
+`rank_settle` (`:717`), `sin_reveal` (`:282`),
+`sink`/`countdown_tick` (`:176` — ternary),
+`collar_save` (`ChaosModeService.cs:2113`), `estim_zap` (`:2714`),
+`tunnel_ambient` (`ChaosTunnelService.cs:357` via `ResolvePath`),
+`defuse_hiss` (`BubbleService.cs:1349` via `ResolvePath`),
+`shield_thunk`→`toy_denied` (`BubbleService.cs:4108-4109` via `ResolvePath`).
+
+Dynamic call sites: payload stingers `fx_drain`/`fx_freeze`/`fx_rain_start`
+(`ChaosModeService.cs:2255-2263` `PlayPayloadStinger`), tunnel page cues
+(`ChaosTunnelService.cs:290` page-driven name), unlock-card cues
+(`ChaosUnlockCardOverlay.cs:248` `CueFor(d)`), chaos bubble-outcome cues
+(`BubbleService.cs:1829` `PlayChaosCue` → `ResolvePath(name)`).
+
+**Classification: no greenfield consumer exists for these call sites (future chaos feature
+rows). All are named content gaps on the same generic chain; the typed generic-gap
+mechanism covers any of them the moment a consumer sends the name.**
+
+### Tier D — WPF library content with no identifiable call site (content ahead of code)
+
+`capstone_reached`, `chain_pop`, `fx_text`, `menu_theme`, `pocket_sewn`, `rabbit_catch`,
+`rank_up`, `tally_tick`, `tunnel_exit`, `tunnel_fall`, `tunnel_powerup_collect`,
+`tunnel_powerup_spawn` (likely tunnel-page dynamic names, `ChaosTunnelService.cs:290` — no
+static C# reference). Recorded for the future content row; no chain beyond the generic one.
+
+### `ResolvePath(name)` (`ChaosSfx.cs:51-59`)
+
+Same single-member chain (`chaos/{name}.mp3`), returns a path for the POOLED bubble player
+or `""` (absent). Consumers: `BubbleService.cs:1349,1829,4108-4109`,
+`ChaosTunnelService.cs:357`. Greenfield: no pooled-bubble consumer yet — recorded; the
+audit covers its content rule (same named-gap classification).
+
+## Step 1 — gap classification summary
+
+- **RESOLVES per the chain (3):** `boon_reveal` rare → `chime1.mp3` @0.6 fixed;
+  `boon_reveal` common → `Pop2.mp3` @0.65 fixed; `boon_pick` → `chime2.mp3` @ page scale.
+- **NAMED GAPS (fixed chains, 3):** `wave_clear` (WPF hears `lvup.mp3`), `ripple_cast`
+  (WPF hears `ripple_cast.mp3`), `ticktock` (WPF hears `ticktock.mp3`). All three are
+  WPF-sound-library content — a future content row.
+- **NAMED GAPS (generic page cues, 36):** every Tier B name except the three folded into
+  Tier A specials. `detonate_thud`/`dive` are silent in WPF too.
+- **Pre-audit drift removed:** the greenfield previously substituted `chime1.mp3` for the
+  `wave_clear` chain and `Pop2.mp3` for the `ripple_cast` chain — neither file is a member
+  of those WPF chains. Per the audit framing (resolve per the chain OR named gap, never an
+  off-chain substitution), both substitutions are removed and reclassified as typed named
+  gaps. The `boon_pick` chain (SP-049) is untouched.
+
+## Step 1 — resolution design (post-consult, advisor-adjusted)
+
+`DtrhNativeEffects` gains a static audited-chain table (cue token → candidate
+basenames, fixed-scale-or-page-scale, WPF chain string, `File.cs:line` cite) covering
+A1-A6 — including `boon_reveal_rare`/`boon_reveal_common` rows (WPF fires them
+overlay-side at `ChaosOverlayWindow.xaml.cs:282-283,324`; no page wire today, so they
+are table rows resolvable through the shared resolution entry point, NOT invented
+wire-token special-cases). The page's own reveal cue `reveal_chime` stays its own
+generic-chain cue (named gap) — never mapped onto the boon_reveal chain (off-chain
+substitution). `PlaySfx` is a thin wrapper over the shared resolve: table lookup,
+then the generic chain (`{name}.mp3`, page scale). Token matching is ordinal-exact
+(WPF `DtrhHostService.cs:260-261` parity); FILE matching against the pool stays
+case-insensitive (Linux honest). Resolution outcome typed:
+`Resolved(path, effectiveScale)` or `NamedGap(cue, wpfChain, cite)` — a gap logs
+"named content gap (WPF chain …, cite — WPF sound-library content, future content row)"
+and never touches the pool; an unknown unlisted cue keeps the existing silent-no-op log.
+Presence+shape logging discipline unchanged (cue names are stable tokens; no user paths).
+
+## Consults
+
+### Pre-approach solo consult (Step 1)
+
+- Route: solo. Configured solo model on this laptop: `anthropic/claude-fable-5`
+  (`~/.pi/agent/bpx-consult.json`) — the Fable 5 fallback per the pause protocol (the
+  Opus 5 main route is not registered here).
+- Actual answering model: **anthropic/claude-fable-5** (verified via bpx-consult.json).
+- Verdict (response truncated mid-sentence at the Q3 scale-semantics coda; the
+  substantive rulings were complete):
+  1. **Remove the off-chain substitutions (wave_clear→chime1, ripple_cast→Pop2).** The
+     packet's binary framing (resolve per the chain OR typed named gap, "never an
+     unrecorded drop") forces it; an audible off-chain stand-in masks exactly the gap
+     class the board row was filed to expose. Surface the removal as a user-observable
+     behavior change in record + STATUS so the owner can prioritize the content row;
+     preserve the prior stand-in knowledge in the record.
+  2. **boon_reveal_rare/common: table rows, not invented wire tokens.** Put them in the
+     audited table resolvable through the same resolution entry point tests call
+     directly; do NOT special-case them in PlaySfx's live switch as if the page sends
+     them. Note: page-sent `reveal_chime` is the page's reveal cue and stays a generic
+     named gap — mapping it onto the boon_reveal chain would be another off-chain
+     substitution.
+  3. **Design approved in shape:** one table + one resolve function, PlaySfx a thin
+     wrapper, ordinal-exact token matching (WPF `DtrhHostService.cs:260` parity), simple
+     record outcome — no ceremony types.
+- Applied: design section rewritten post-consult; behavior-change note added to STATUS.
+
+### Pre-completion solo consult (Step 3)
+
+- PENDING
+
+## Engine-review presence (T-2)
+
+- Step 1 plan review: PENDING
+- Step 2 plan review: PENDING
+- Step 3 plan review: PENDING
+
+## Durable-lesson candidates
+
+- PENDING
