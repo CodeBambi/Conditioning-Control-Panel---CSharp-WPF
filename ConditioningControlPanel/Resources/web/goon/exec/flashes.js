@@ -92,6 +92,8 @@ import {
   viewportCap, pxToVmin, safeInsets,
 } from './pinch.js';
 import { perfLite } from './perfTier.js';
+import { isAnimatedMedia } from './media.js';
+import { governorHold } from './loadGovernor.js';
 
 export const MAX_LIVE = 20;          // concurrent <img> nodes, hydra children included
 /* The LITE tier's cap (exec/perfTier.js — phones). Half the field: each flash is
@@ -100,6 +102,25 @@ export const MAX_LIVE = 20;          // concurrent <img> nodes, hydra children i
  * build, so the options toggle reaches a burst already in flight — a tightened
  * cap simply stops admitting nodes and the live ones age out on their own. */
 export const MAX_LIVE_LITE = 10;
+/* THE ANIMATION BUDGET (lite only — 2026-08-05, second mobile pass). The node
+ * cap above treats a static JPEG and an animated GIF as the same spend, and
+ * they are not even close: an <img> playing a GIF is a CPU decode loop that
+ * runs for the flash's whole life, and a burst of peer media is USUALLY GIFs —
+ * ten at once is exactly the "everything overloads" moment the owner
+ * play-tested. So on lite at most this many flashes may be PLAYING an animated
+ * file at once (isAnimatedMedia decides what counts, generously). Overflow
+ * flashes still land — frozen on their first frame via a one-frame canvas bake
+ * (`animation-play-state` cannot pause a GIF; only not-being-a-GIF can) — so a
+ * burst keeps its density while paying for three decode loops, not ten. A host
+ * that cannot bake (no Image, no 2d context) SKIPS the overflow flash instead:
+ * a skipped beat is the cap's own precedent, and rendering the animation
+ * anyway would be the budget lying. */
+export const ANIM_LIVE_LITE = 3;
+/* The frozen frame's longest side, in backing pixels. A flash tops out at
+ * ~44vmin (<=430px CSS on any phone this tier targets), so 512 is already
+ * oversampled — decoding a 4K GIF's first frame into a 4K canvas would spend
+ * the very memory the freeze is here to save. */
+export const FROZEN_MAX_PX = 512;
 export const HYDRA_CHILDREN = 2;     // what one click hatches (clamped to the cap)
 export const BASE_HOLD_MS = 5000;    // on-screen time a flash is centred on
 const HOLD_SPREAD_MS = 400;          // ± this across the intensity range (4600..5400)
@@ -110,6 +131,17 @@ const HATCH_MS = [70, 210];          // children hatch staggered, never on one f
  * MIRRORS net/mediaChannel.js XFER_TAGS_MAX and is kept local on purpose — exec/
  * never imports net/, so the render tier stays independent of the wire tier. */
 export const XFER_TAGS_MAX = 3;
+
+/* BURST DENSITY, PER TIER (renderPayload). The full tier's burst halves the
+ * beat gap AND adds a flash per beat — density by tempo and by node count at
+ * once. On LITE only the tempo survives: the gap tightens less (0.72 vs 0.5)
+ * and the per-beat count stays the bed's own, because on a phone every extra
+ * node is another decode landing inside the squall's own frames. The burst
+ * still reads as a burst — beats arrive ~40% faster than the bed's — but the
+ * standing population climbs at roughly half the full-tier rate, which is the
+ * churn the play-test was drowning in. */
+export const BURST_GAP_SCALE = 0.5;
+export const BURST_GAP_SCALE_LITE = 0.72;
 
 /** The `xfer:` tags off a payload, cleaned and capped. [] for every other payload. */
 function xferTags(payload) {
@@ -729,6 +761,62 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
     try { rec.node.style.setProperty('--gg-flash-size', `${next.toFixed(1)}vmin`); } catch (_e) { /* ignore */ }
   }
 
+  /* =========================================================================
+   * THE ANIMATION BUDGET's moving parts (lite only — see ANIM_LIVE_LITE).
+   * ======================================================================= */
+
+  /** Live flashes currently PLAYING an animated file. Counted off the live
+   *  set, not tracked as a counter, so a node the layer tore out from under us
+   *  (prune) can never leave a phantom charge against the budget. */
+  function countAnimPlaying() {
+    let k = 0;
+    for (const rec of live) { if (rec.animPlaying) k++; }
+    return k;
+  }
+
+  /** A canvas ready to wear frame 0, or null when this host cannot freeze one
+   *  (no 2d context, no Image constructor) — the caller then SKIPS the flash. */
+  function frozenCanvas() {
+    if (typeof Image !== 'function') return null;
+    let cv = null;
+    try { cv = document.createElement('canvas'); } catch (_e) { return null; }
+    if (!cv || typeof cv.getContext !== 'function') return null;
+    let ctx = null;
+    try { ctx = cv.getContext('2d'); } catch (_e) { return null; }
+    if (!ctx || typeof ctx.drawImage !== 'function') return null;
+    return cv;
+  }
+
+  /**
+   * Decode ONE frame of `url` into the canvas. The probe <img> never enters
+   * the DOM, so the browser decodes the first frame for the draw and nothing
+   * ever asks it to advance — that asymmetry is the entire saving. Drawing a
+   * cross-origin frame TAINTS the canvas, which is fine: nothing here reads
+   * pixels back, it only shows them. Every failure lands on rec.kill(), the
+   * same road a dud <img> src takes (a skipped flash, never a throw).
+   */
+  function paintFrameZero(cv, url, rec) {
+    let probe = null;
+    try { probe = new Image(); } catch (_e) { rec.kill(); return; }
+    probe.onload = () => {
+      if (rec.popped || !cv.isConnected) return;   // it died while decoding
+      const w = (probe.naturalWidth | 0) || (probe.width | 0);
+      const h = (probe.naturalHeight | 0) || (probe.height | 0);
+      if (!w || !h) { rec.kill(); return; }
+      const k = Math.min(1, FROZEN_MAX_PX / Math.max(w, h));
+      try {
+        cv.width = Math.max(1, Math.round(w * k));
+        cv.height = Math.max(1, Math.round(h * k));
+        cv.getContext('2d').drawImage(probe, 0, 0, cv.width, cv.height);
+      } catch (_e) { rec.kill(); return; }
+      // Let the decoder drop the animation it was holding for the probe.
+      try { probe.src = ''; } catch (_e) { /* ignore */ }
+    };
+    probe.onerror = () => rec.kill();
+    try { probe.decoding = 'async'; } catch (_e) { /* ignore */ }
+    try { probe.src = url; } catch (_e) { rec.kill(); }
+  }
+
   /** Where a flash lands. `near` (a parent's vw/vh) makes it a hydra child:
    *  pushed radially off the parent so the split reads as a split, then boxed
    *  back into the scatter area so nothing hatches off-screen. */
@@ -783,12 +871,29 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
     const sizeVmin = (opts && num(opts.size, 0) > 0) ? opts.size : BASE_SIZE_VMIN;
     const rot = (Math.random() * 16 - 8).toFixed(1);
 
-    const img = document.createElement('img');
+    // THE ANIMATION BUDGET (lite only — see ANIM_LIVE_LITE at the top). The
+    // sniff runs only under lite, so the full tier does not even classify:
+    // its spawn path is byte-identical to the pre-budget one. Over budget, the
+    // flash lands FROZEN (a frame-0 canvas instead of an <img>); a host that
+    // cannot freeze skips it, which is what the cap already does when full.
+    const animated = perfLite() && isAnimatedMedia(entry);
+    const mustFreeze = animated && countAnimPlaying() >= ANIM_LIVE_LITE;
+
+    let img;
+    if (mustFreeze) {
+      img = frozenCanvas();
+      if (!img) {
+        try { if (handle.release) handle.release(); } catch (_e) { /* ignore */ }
+        return;                                    // a skipped beat, never a flood
+      }
+    } else {
+      img = document.createElement('img');
+      img.decoding = 'async';
+      img.alt = '';
+    }
     // --hydra is the pointer opt-in (fx.css). bubbles.js's pop flashes are plain
     // .gg-flash on purpose and stay click-through.
     img.className = gen > 0 ? 'gg-flash gg-flash--hydra gg-flash--hatch' : 'gg-flash gg-flash--hydra';
-    img.decoding = 'async';
-    img.alt = '';
     img.style.setProperty('--gg-flash-dur', `${tune.holdMs}ms`);
     img.style.setProperty('--gg-flash-op', String(tune.opacity));
     // scatter across the window like the WPF floating flashes (never dead-centre)
@@ -811,6 +916,9 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
       held: false, fly: null,                 // in hand / gliding on a fling
       bornAt: nowMs(), holdMs: tune.holdMs, remainMs: tune.holdMs,
       safety: 0, expTimer: 0,
+      // Charged against ANIM_LIVE_LITE while this rec is live. A frozen flash
+      // is animated MEDIA but not an animated NODE, so it charges nothing.
+      animPlaying: animated && !mustFreeze,
     };
     live.add(rec);
 
@@ -833,11 +941,18 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
     // Fires for whichever animation is running — the timed fade, or the pop-out
     // that replaces it on a click.
     img.addEventListener('animationend', kill, { once: true });
-    img.onerror = kill;                       // a dud entry is a skipped beat, never a throw
     // The press: a click (hydra, on pointerUP) or a grab, decided by the slop.
     img.addEventListener('pointerdown', (e) => onPointerDown(rec, e));
-    img.src = handle.url;
-    host.appendChild(img);
+    if (mustFreeze) {
+      // The canvas cannot error and carries no src; the PROBE inside
+      // paintFrameZero owns both, and its failures land on the same kill.
+      host.appendChild(img);
+      paintFrameZero(img, handle.url, rec);
+    } else {
+      img.onerror = kill;                     // a dud entry is a skipped beat, never a throw
+      img.src = handle.url;
+      host.appendChild(img);
+    }
     // Safety net: a throttled/hidden tab (and prefers-reduced-motion, which has no
     // animation at all) may never deliver animationend, and a leaked node is a
     // leak for the rest of the match. The FIRST grab cancels this and hands the
@@ -983,11 +1098,17 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
         // nothing was ever received — the fallback is unchanged there).
         peer: true,
       };
+      // Tell the ambient renderers (spiral bed, drain wash) a squall is on:
+      // on lite they volunteer frames for its duration. Held unconditionally,
+      // read behind perfLite() — see exec/loadGovernor.js for why both.
+      const releaseGovernor = governorHold(runMs);
+
       let finished = false;
       const settle = (endured) => {
         if (finished) return;
         finished = true;
         run.alive = false;
+        try { releaseGovernor(); } catch (_e) { /* ignore */ }
         try { clearTimeout(run.timer); } catch (_e) { /* ignore */ }
         try { clearTimeout(run.endTimer); } catch (_e) { /* ignore */ }
         if (typeof done === 'function') { try { done(endured); } catch (e) { warn(`done() threw: ${e && e.message}`); } }
@@ -996,8 +1117,14 @@ export function createFlashes({ layers, media, audio, logger } = {}) {
       const burstLoop = () => {
         if (!run.alive) return;
         const tune = flashTuning(run.intensity, calm);
-        tune.gapMs = Math.round(tune.gapMs * 0.5);
-        tune.count = Math.min(3, tune.count + 1);
+        // Tier split — see BURST_GAP_SCALE/_LITE: on lite the burst is a burst
+        // by TEMPO only. Read per beat, so the mid-match toggle bites.
+        if (perfLite()) {
+          tune.gapMs = Math.round(tune.gapMs * BURST_GAP_SCALE_LITE);
+        } else {
+          tune.gapMs = Math.round(tune.gapMs * BURST_GAP_SCALE);
+          tune.count = Math.min(3, tune.count + 1);
+        }
         beat(tune, run);
         run.timer = soon(burstLoop, rand(tune.gapMs * 0.7, tune.gapMs * 1.3));
       };

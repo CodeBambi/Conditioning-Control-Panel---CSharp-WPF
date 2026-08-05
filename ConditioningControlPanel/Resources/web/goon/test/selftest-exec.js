@@ -4783,6 +4783,147 @@ async function main() {
     documentElement.removeAttribute(PT.PERF_ATTR);
   }
 
+  /* --------- SUSTAINED MOBILE LOAD, PASS 2 (2026-08-05)
+   * The tier's caps counted NODES; the second play-test showed the real cost is
+   * what a node DOES per frame — an animated GIF is a decode loop where a PNG
+   * is a texture, and a flash burst of peer GIFs buried the phone the caps had
+   * just saved. What is pinned here: the ANIMATION BUDGET (ANIM_LIVE_LITE and
+   * the sniff it trusts), the still-preferred draw the washes lean on, the
+   * lite burst's tempo-not-count dials, and the cross-effect load governor
+   * (lite-gated, deadline-expiring, self-healing).
+   * ------------------------------------------------------------------------ */
+  {
+    const PT = await import('../exec/perfTier.js');
+    const F = await import('../exec/flashes.js');
+    const SP = await import('../exec/spiral.js');
+    const M = await import('../exec/media.js');
+    const G = await import('../exec/loadGovernor.js');
+
+    // ---- the new dials, pinned
+    ok(F.ANIM_LIVE_LITE === 3 && F.ANIM_LIVE_LITE < F.MAX_LIVE_LITE,
+      'the animation budget is 3 concurrent PLAYING gifs, strictly inside the lite node cap',
+      `${F.ANIM_LIVE_LITE}/${F.MAX_LIVE_LITE}`);
+    ok(F.BURST_GAP_SCALE === 0.5 && F.BURST_GAP_SCALE_LITE === 0.72,
+      'the burst dials are the shipped pair (full halves the gap, lite tightens it to 0.72)',
+      `${F.BURST_GAP_SCALE}/${F.BURST_GAP_SCALE_LITE}`);
+    ok(F.BURST_GAP_SCALE_LITE > F.BURST_GAP_SCALE,
+      'and the lite burst is strictly SLOWER-spawning than the full one — density by tempo, not node count');
+    ok(SP.LITE_BURST_FRAME_MS > SP.LITE_FRAME_MS,
+      'the spiral steps down further while a burst is on than it does at lite idle',
+      `${SP.LITE_BURST_FRAME_MS} vs ${SP.LITE_FRAME_MS}`);
+    ok(G.GOVERNOR_HOLD_MAX_MS >= 8000,
+      'the governor cap covers the longest burst (8s) — a hold can never expire under its own payload',
+      String(G.GOVERNOR_HOLD_MAX_MS));
+
+    // ---- the animated-media sniff, pure. Generous by design: ambiguity votes
+    // ANIMATED, because freezing a still is invisible and playing a GIF is not.
+    ok(M.isAnimatedMedia({ mime: 'image/gif' }) === true, 'gif by mime is animated (peer artifacts always carry one)');
+    ok(M.isAnimatedMedia({ name: 'loop.WEBP', url: 'blob:x' }) === true,
+      'webp by NAME extension is animated — a local pick keeps its filename when its blob: URL has none');
+    ok(M.isAnimatedMedia({ url: 'https://ccp.assets/images/a.gif?v=1' }) === true,
+      'gif by URL extension is animated, query string and all (the host manifest path)');
+    ok(M.isAnimatedMedia({ mime: 'image/png', name: 'still.png', url: 'https://ccp.assets/images/still.png' }) === false,
+      'png/jpeg stay still — the budget must never charge a texture');
+    ok(M.isAnimatedMedia(null) === false && M.isAnimatedMedia({}) === false,
+      'null and fieldless entries read still: an unreadable signal must never spend the budget');
+
+    // ---- drawStillImage: a preference, never a filter
+    {
+      const deal = (seq) => {
+        let at = 0;
+        return { drawKind: () => ({ kind: 'image', name: seq[Math.min(at, seq.length - 1)], url: 'blob:' + (at++) }) };
+      };
+      const mixed = deal(['a.gif', 'b.gif', 'c.png', 'd.gif']);
+      const still = M.drawStillImage(mixed);
+      ok(still && still.name === 'c.png',
+        'drawStillImage redraws past the loops and settles on the still', still && still.name);
+      const loops = deal(['a.gif', 'b.gif', 'c.gif', 'd.gif', 'e.gif']);
+      const gif = M.drawStillImage(loops);
+      ok(!!gif && /\.gif$/.test(gif.name),
+        'an all-GIF library still gets its GIF — the preference is not allowed to become a missing wash',
+        gif && gif.name);
+      ok(M.drawStillImage(null) === null && M.drawStillImage({}) === null,
+        'and a poolless caller gets null, exactly like drawKind would');
+    }
+
+    // ---- the load governor: lite-gated at the READ, expiring, self-healing
+    ok(G.governorBusy() === false, 'the governor is idle until somebody holds it');
+    const rel = G.governorHold(5000);
+    ok(G.governorBusy() === false,
+      'a hold on the FULL tier is inert — the desktop renders everything at once on purpose');
+    documentElement.setAttribute(PT.PERF_ATTR, PT.PERF_LITE);
+    ok(G.governorBusy() === true, 'the same hold reads busy the moment the lite tier is in force');
+    rel();
+    ok(G.governorBusy() === false, 'released = idle again');
+    rel();
+    ok(G.governorBusy() === false, 'and the release is idempotent (settle + cancel double-call is normal)');
+    const rel2 = G.governorHold(30);
+    ok(G.governorBusy() === true, 'a short hold is live…');
+    await sleep(60);
+    ok(G.governorBusy() === false,
+      '…and reads idle past its own deadline even if never released — the degradation cannot stick');
+    rel2();
+
+    // ---- BEHAVIOUR: an all-animated pool on lite caps at the budget. The stub
+    // has no Image and its canvases have no 2d context, so the freeze path
+    // reports "cannot freeze" and over-budget spawns are SKIPPED — the
+    // budget-respecting fallback, and the one this harness can observe.
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const flashHost = byId.get('gg-fx-flash');
+    const gifMedia = {
+      drawKind: (kind) => ({ kind, name: `${kind}-1.gif`, url: `https://ccp.assets/${kind}/1.gif` }),
+      acquire: (e) => (e ? { url: e.url, release() {} } : null),
+      hasMedia: () => true,
+    };
+    const liveShots = () => flashHost.findAll('gg-flash').filter((el) => !el._cls.has('is-popped'));
+    const fl = F.createFlashes({ layers, media: gifMedia, logger: quiet });
+    fl.start({ intensity: 1 });
+    await sleep(1400);                       // two beats' worth of spawn attempts at i=1
+    ok(liveShots().length > 0 && liveShots().length <= F.ANIM_LIVE_LITE,
+      'a lite bed drawing only GIFs never exceeds the animation budget', String(liveShots().length));
+    fl.stop();
+    // The hydra spends the same budget: hammer the splits and it still holds.
+    for (let round = 0; round < 4; round++) {
+      for (const el of liveShots()) tap(el);
+      await sleep(280);
+    }
+    ok(liveShots().length <= F.ANIM_LIVE_LITE,
+      'and the hydra cannot split past it either', String(liveShots().length));
+
+    // ---- while a STILL pool on lite still fills to the full lite node cap —
+    // the budget bites animated media only, never the field.
+    for (const id of LAYER_IDS) byId.get(id).replaceChildren();
+    const fl2 = F.createFlashes({ layers, media: fakeMedia(), logger: quiet });
+    fl2.start({ intensity: 1 });
+    await sleep(320);
+    fl2.stop();
+    for (let round = 0; round < 6 && liveShots().length < F.MAX_LIVE_LITE; round++) {
+      for (const el of liveShots()) tap(el);
+      await sleep(280);
+    }
+    await sleep(300);
+    ok(liveShots().length === F.MAX_LIVE_LITE,
+      'a still-image pool on lite fills to MAX_LIVE_LITE — the animation budget charged nothing',
+      String(liveShots().length));
+    documentElement.removeAttribute(PT.PERF_ATTR);
+
+    // ---- the lite CSS half of pass 2 (fx.css)
+    {
+      const fs = await import('node:fs/promises');
+      const url = await import('node:url');
+      const raw = await fs.readFile(url.fileURLToPath(new URL('../exec/fx.css', import.meta.url)), 'utf8');
+      const css = raw.replace(/\/\*[\s\S]*?\*\//g, '');
+      ok(/html\[data-gg-perf="lite"\]\s*\.gg-drain\.is-glitching\s*\{\s*animation-name:\s*ggDrainGlitchLite/.test(css),
+        'lite swaps the glitch shudder onto its transform-only twin');
+      const liteBody = /@keyframes\s+ggDrainGlitchLite([\s\S]*?)(?=@keyframes|html\[|$)/.exec(css);
+      ok(!!liteBody && !/filter/.test(liteBody[1]),
+        'and the twin animates NO filter — the fullscreen recolour raster is the whole cost being shed',
+        liteBody ? liteBody[1].trim().slice(0, 60) : '(missing)');
+      ok(/html\[data-gg-perf="lite"\]\s*\.gg-bounce-word\.is-hit\s*\{\s*animation:\s*none/.test(css),
+        'lite drops the bounce-word hit flash (a filter pass per wall hit, for a garnish)');
+    }
+  }
+
   console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);
   process.exit(failures === 0 ? 0 : 1);
 }

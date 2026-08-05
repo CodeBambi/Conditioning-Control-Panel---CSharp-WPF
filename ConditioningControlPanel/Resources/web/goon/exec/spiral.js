@@ -87,6 +87,7 @@ import {
   beginSpiralSession, nextSpiral, warmSharedSpirals, RASTER_PX, LITE_RASTER_PX,
 } from './spiralGen.js';
 import { perfLite } from './perfTier.js';
+import { governorBusy } from './loadGovernor.js';
 
 /* --- THE SHADER KILL SWITCH. The pref is ui/prefs.js's (`shaderSpirals`,
    default TRUE); it reaches this tier as a ROOT ATTRIBUTE, because exec/ does not
@@ -116,6 +117,12 @@ export const MAX_BACKING_PX = 3840 * 2160;
    bed already spinning. ----------------------------------------------------- */
 export const LITE_MAX_DPR = 1;
 export const LITE_FRAME_MS = 33;   // ~30fps draw cadence on the lite tier
+/* …and the deeper step the bed volunteers WHILE A BURST IS ON (2026-08-05,
+   exec/loadGovernor.js): ~15fps for the squall's few seconds, because the
+   burst's decodes and the shader's fill land in the same frames and the phase
+   maths already makes a skipped draw cost pixels, never tempo. Self-restoring
+   by the governor's own deadline; the full tier never consults it. */
+export const LITE_BURST_FRAME_MS = 67;
 
 /**
  * Is this frame owed a DRAW? Pure, so the startup edge is pinnable in node.
@@ -130,10 +137,12 @@ export const LITE_FRAME_MS = 33;   // ~30fps draw cadence on the lite tier
  *     SKIPPING — a fresh spiral's first visible act being a dropped frame is
  *     the one moment a throttle must not be silently right.
  */
-export function dueForDraw(now, lastDraw, lite) {
+export function dueForDraw(now, lastDraw, lite, frameMs) {
   if (!lite) return true;
   if (!(lastDraw > 0)) return true;
-  return (now - lastDraw) >= LITE_FRAME_MS;
+  // `frameMs` is the governor's deeper step while a burst squall is on
+  // (LITE_BURST_FRAME_MS); absent/0 means the plain lite cadence.
+  return (now - lastDraw) >= (frameMs > 0 ? frameMs : LITE_FRAME_MS);
 }
 
 /* --- THE IN-LOOP WATCHDOG. Checked once per HEALTH_CHECK_MS, never per frame:
@@ -468,8 +477,10 @@ export function createSpiral({ layers, media, audio, logger } = {}) {
       // THE LITE THROTTLE. The PHASE above advanced by real elapsed time on
       // every callback, so skipping a draw skips pixels, never tempo — a
       // 30fps bed and a 120fps bed show the same rotation at the same second.
+      // While the load governor says a payload squall is on, the bed steps
+      // down further still (LITE_BURST_FRAME_MS) and climbs back by itself.
       // Full tier: no gate at all, byte-identical to the pre-tier loop.
-      if (dueForDraw(now, lastDraw, perfLite())) {
+      if (dueForDraw(now, lastDraw, perfLite(), governorBusy() ? LITE_BURST_FRAME_MS : 0)) {
         lastDraw = now;
         draw();
       }

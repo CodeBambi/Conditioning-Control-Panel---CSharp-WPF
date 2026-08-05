@@ -60,6 +60,59 @@ const NO_ECHO = 8; // a reshuffled deck avoids repeating the last N draws
 /** The one namespace `tags` carries for this feature. `tags` stays open for others. */
 export const XFER_TAG_PREFIX = 'xfer:';
 
+/* ---------------------------------------------------------------------------
+ * ANIMATED-OR-STILL, the classification the LITE tier budgets on (2026-08-05,
+ * second mobile pass). Ten static PNGs are ten textures; ten animated GIFs are
+ * ten CPU decode loops that never stop, and on an iPhone the difference IS the
+ * flash-burst lag. The sniff is deliberately GENEROUS — mime first (peer
+ * artifacts always carry one), then the extension of the name (a local pick
+ * keeps its filename even when its blob: URL has none), then of the URL (the
+ * host manifest's virtual-host paths). webp/apng may be still in truth, but a
+ * false positive costs one frame-0 freeze of an image that was not moving
+ * anyway — invisible — while a false negative is an unbudgeted animation, so
+ * ambiguity votes ANIMATED. Pure, exported for exec/flashes.js and the drain
+ * washes; the FULL tier never calls it.
+ * ------------------------------------------------------------------------- */
+const ANIMATED_MIME_RE = /^image\/(gif|webp|apng)\b/i;
+const ANIMATED_EXT_RE = /\.(gif|webp|apng)(?:[?#]|$)/i;
+
+/** Does this entry LOOK like an animated image? (see the banner above) */
+export function isAnimatedMedia(entry) {
+  if (!entry || typeof entry !== 'object') return false;
+  try {
+    if (ANIMATED_MIME_RE.test(String(entry.mime || ''))) return true;
+    if (ANIMATED_EXT_RE.test(String(entry.name || ''))) return true;
+    if (ANIMATED_EXT_RE.test(String(entry.url || ''))) return true;
+  } catch (_e) { return false; }
+  return false;
+}
+
+/** Redraws spent hunting a still before settling for what the deck holds. */
+export const STILL_DRAW_TRIES = 4;
+
+/**
+ * An image draw that PREFERS a still — the lite tier's version of "one more
+ * fullscreen animation is the last thing this phone needs". A PREFERENCE,
+ * never a filter (the footageFirst promise, again): an all-GIF library still
+ * gets its GIF, because a drain veil with no wash is a missing feature and a
+ * budget is not allowed to become one. Each retry is a real deck draw, so the
+ * echo guard keeps doing its job; STILL_DRAW_TRIES bounds the churn on a
+ * library that is mostly loops.
+ *
+ * Takes the POOL as an argument (not `this`) so any renderer holding an
+ * injected media object can call it without widening the pool interface.
+ */
+export function drawStillImage(pool) {
+  if (!pool || typeof pool.drawKind !== 'function') return null;
+  let entry = pool.drawKind('image');
+  for (let tries = 1; tries < STILL_DRAW_TRIES && entry && isAnimatedMedia(entry); tries++) {
+    const next = pool.drawKind('image');
+    if (!next) break;
+    entry = next;
+  }
+  return entry;
+}
+
 const SHA_RE = /^[0-9a-f]{64}$/;
 
 export function createGoonMediaPool() {

@@ -19,8 +19,23 @@
  * the running one and puts it back afterwards — and the element and the payload
  * share it through a small dial stack.
  *
+ * THE LITE TIER'S SHARE (2026-08-05, second mobile pass). PR #129 already took
+ * the backdrop-filter away on phones (fx.css); what was LEFT per-frame here was
+ * the WASH ITSELF whenever the pool dealt an animated GIF — a fullscreen,
+ * cover-sized animation repainting behind a two-layer blend stack for 7-11s at
+ * a time, which on an iPhone is a spiral-sized cost hiding in a "static" veil.
+ * So on lite the wash PREFERS A STILL (media.js drawStillImage — a preference,
+ * never a filter: an all-GIF library still gets its GIF), and the slow re-pick
+ * holds its current image while the load governor says a payload squall is on
+ * (exec/loadGovernor.js) — a burst is the worst possible moment to hand the
+ * compositor a fresh fullscreen decode. The full tier calls neither.
+ *
  * Uniform renderer shape — see the banner in exec/flashes.js.
  * ==========================================================================*/
+
+import { perfLite } from './perfTier.js';
+import { drawStillImage } from './media.js';
+import { governorBusy } from './loadGovernor.js';
 
 const WASH_MIN_MS = 7000;    // how long one washed image holds before a re-pick
 const WASH_MAX_MS = 11000;
@@ -68,7 +83,10 @@ export function createBrainDrain({ layers, media, audio, logger } = {}) {
   /** Wash one image from the player's pool over the veil (no pool = plain dim). */
   function repickWash() {
     if (!veilEl || !media || typeof media.drawKind !== 'function') return;
-    const entry = media.drawKind('image');
+    // LITE: prefer a still — a fullscreen animated wash is the one per-frame
+    // cost this veil has left on a phone (see the banner). Full tier: the
+    // exact draw it has always made.
+    const entry = perfLite() ? drawStillImage(media) : media.drawKind('image');
     if (!entry) return;
     const handle = (typeof media.acquire === 'function') ? media.acquire(entry) : null;
     if (!handle || !handle.url) return;
@@ -85,7 +103,12 @@ export function createBrainDrain({ layers, media, audio, logger } = {}) {
     try { clearTimeout(washTimer); } catch (_e) { /* ignore */ }
     washTimer = soon(() => {
       if (!veilEl) return;
-      repickWash();
+      // A lite-tier payload squall holds the CURRENT wash: skipping one slow
+      // re-pick is invisible (the image was going to sit for 7-11s anyway),
+      // and a fresh fullscreen decode mid-burst is not. governorBusy() is
+      // false everywhere but a lite tier inside a hold, so the full tier's
+      // cadence is untouched. The next tick re-picks as normal.
+      if (!governorBusy()) repickWash();
       scheduleWash();
     }, Math.round(rand(WASH_MIN_MS, WASH_MAX_MS)));
   }
