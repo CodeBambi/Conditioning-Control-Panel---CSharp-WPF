@@ -14,7 +14,7 @@ namespace ConditioningControlPanel
     /// </summary>
     public partial class WebcamConsentDialog : Window
     {
-        private const string SourceUrl = "https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/blob/main/ConditioningControlPanel/Services/WebcamTrackingService.cs";
+        private const string SourceUrl = "https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/blob/main/ConditioningControlPanel/Services/Webcam/WebcamTrackingService.cs";
 
         private enum Step { Intro = 1, Privacy = 2, Consent = 3, Calibrate = 4 }
         private Step _step = Step.Intro;
