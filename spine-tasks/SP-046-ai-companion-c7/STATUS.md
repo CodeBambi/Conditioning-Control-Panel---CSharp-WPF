@@ -1,6 +1,6 @@
 ## STATUS: SP-046 — AI companion slice c7: companion UI surface
-**Current Step:** Step 4 — evidence consolidation + pre-completion consult (IN PROGRESS)
-**Last Updated:** 2026-08-05 (worker, Step 3 complete)
+**Current Step:** Step 5 — Testing & Verification (IN PROGRESS)
+**Last Updated:** 2026-08-05 (worker, Step 4 complete)
 **Blockers:** none
 **Discoveries (scope notes):** the composition wiring forced mechanical expectation updates in 3 pre-existing test files NOT named in File Scope — `CapabilityTests.cs` (capability name list + 2 AI state arms), `CompositionRootValidationTests.cs` + `IntegrationProofTests.cs` (participant count 6→7 + companion arm). No behavior assertion weakened; all three changes are additive enumerations of the new composition. Documented per the file-scope amendment rule; justification also in record.md §5.
 **Environment change (2026-08-05):** a REAL Ollama (0.32.5) now listens on 127.0.0.1:11434 on this box (SP-019 limit 1 said absent at spike time). Assertions that assumed absence were written environment-honest (typed state either way); the headed lab stays the deterministic instrument via `--ai-ollama-host` (never the real model).
@@ -24,10 +24,10 @@
 - [x] Captures = screenshot + semantic tree in evidence/; zero binding errors
 - [x] A-013 advisory ValidateXaml dispositions recorded
 
-### Step 4: evidence consolidation + pre-completion consult
-- [ ] record.md (archaeology, design, research citations, consults, review presence, evidence index)
-- [ ] Pre-completion solo consult (verdict + actual model in record.md)
-- [ ] STATUS.md accurate before .DONE
+### Step 4 (COMPLETE): evidence consolidation + pre-completion consult
+- [x] record.md (archaeology, design, research citations, consults, review presence, evidence index)
+- [x] Pre-completion solo consult (verdict + actual model in record.md)
+- [x] STATUS.md accurate before .DONE
 
 ### Step 5: Testing & Verification
 - [ ] Contract testCommand passes (verify.mjs + build 0W/0E + ≥581/29 floor)

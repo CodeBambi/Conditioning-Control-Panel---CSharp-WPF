@@ -296,7 +296,7 @@ public class CompanionViewModelTests
     {
         using var h = new Harness();
         await h.StartMemoryAsync();
-        SeedMemory(h, "kept turn");
+        await SeedMemoryAsync(h, "kept turn");
 
         h.Vm.RequestClearCommand.Execute(null);
         Assert.True(h.Vm.ConfirmVisible);
@@ -313,7 +313,7 @@ public class CompanionViewModelTests
     {
         using var h = new Harness();
         await h.StartMemoryAsync();
-        SeedMemory(h, "doomed turn");
+        await SeedMemoryAsync(h, "doomed turn");
         Assert.True(File.Exists(h.MemoryFile));
 
         h.Vm.Bubbles.Add(CompanionBubbleModel.User("on-screen log entry"));
@@ -333,7 +333,7 @@ public class CompanionViewModelTests
     {
         using var h = new Harness();
         await h.StartMemoryAsync();
-        SeedMemory(h, "locked turn");
+        await SeedMemoryAsync(h, "locked turn");
 
         // Hold the document open exclusively so the delete fails (AV-scanner/lock class).
         using (var lockStream = new FileStream(h.MemoryFile, FileMode.Open, FileAccess.Read, FileShare.None))
@@ -347,11 +347,11 @@ public class CompanionViewModelTests
         Assert.True(File.Exists(h.MemoryFile)); // the document survived — the text told the truth
     }
 
-    private static void SeedMemory(Harness h, string text)
+    private static async Task SeedMemoryAsync(Harness h, string text)
     {
         h.Participant.MemoryConsent = AiMemoryConsent.Granted;
         h.Participant.Memory.Append(new AiMemoryTurn(AiMemoryRole.User, text));
-        var outcome = h.Participant.Memory.LastWriteCompletion!.GetAwaiter().GetResult();
+        var outcome = await h.Participant.Memory.LastWriteCompletion!;
         Assert.IsType<OperationOutcome.Completed>(outcome);
     }
 
@@ -376,7 +376,7 @@ public class CompanionViewModelTests
         h.Vm.InputText = "remember this";
         h.Vm.SendCommand.Execute(null);
         h.PumpEventually();
-        var outcome = h.Participant.Memory.LastWriteCompletion!.GetAwaiter().GetResult();
+        var outcome = await h.Participant.Memory.LastWriteCompletion!;
         Assert.IsType<OperationOutcome.Completed>(outcome);
         Assert.Equal(AiMemoryWriteAdmission.Admitted, h.Participant.Memory.LastWriteAdmission);
         Assert.Contains(h.Participant.Memory.ReadRecent(10), t => t.Text == "remember this");

@@ -113,20 +113,94 @@ Re-grep (2026-08-05, this worktree): `RunAwarenessAsync(request, awarenessConsen
 
 The avalonia-docs MCP search tool returned oversized/empty payloads on this box (recorded); the official docs were fetched directly and indexed — the URLs above are the citations. A-013 advisory (`ValidateXaml`) runs in Step 3 AFTER hand-authoring, per the advisory chain.
 
+### 3.3 Pre-completion (Step 4)
+
+**Mode:** solo (council forbidden — T-7; route per the 2026-08-04 rewire). **Actual answering model: NOT exposed by the consult tool output** (same T-2 tooling limit; session env `PI_MODEL=k3`/`PI_PROVIDER=kimi-coding`; never guessed).
+
+**Verdict: SHIP-WITH-FIXES — four fix-first items (ALL addressed before .DONE), plus answered questions:**
+1. **Unavailable pixel overstatement (FIXED):** the record's first draft claimed Unavailable pixel-proof that was only headless. A dead-port headed run captured it (`evidence/10-unavailable-unbadged.png`: status "unavailable (host-unreachable)" + unbadged subdued bubble). The badge discharge is now: Generated/Refused/Unavailable pixel-proven, Fallback type-level.
+2. **`--ai-ollama-host` remote boundary was inspection-only (FIXED):** new test `HostOverride_RemoteHost_RejectedPreSocket_ZeroSendAttempts` — a remote override classifies RemoteHostOllama, the probe rejects pre-socket (typed Unavailable endpoint-not-admitted), the pipeline's admission policy rejects the class, ZERO SendAttempts. The privacy claim is now tested, not argued.
+3. **Capture validation + manifest (FIXED):** `evidence/manifest.json` written; every PNG validated (480x620 right window, nonzero, non-blank). This validation is what EXPOSED the misaddressed first pass (windowId silently ignored; all pixels re-taken with `target`).
+4. **Wording (FIXED):** §5.2 now separates the three pixel-proven classes from the type-level Fallback non-claim.
+
+Consult answers: (a) no dishonest discharge found beyond the four items; (b) the default-select + startup loopback probe disclosure is adequate (loopback-only, bounded, SP-006 mechanism — NOT an offline-violation); (c) the Fallback type-level non-claim is acceptable — c7 must NOT invent a Fallback path; (d) the 3 out-of-scope test edits are mechanical (the ollama-state arm is a NEW assertion, not a weakened pre-existing one); (e) the modal-within-window claim rests on overlay hit-testing + the VM CanSend guard (both present); a note that ClearOutcomeText lingers is cosmetic, not a defect.
+
 ## 4. Engine review presence (T-2)
 
 - Step 1 plan review (`spine_review_step step=1 type=plan`): **SKIPPED by runtime** — SP-195 nested-spawn block; artifact `.reviews/1-20260805T001731.md`; `spawnFailed=false` → proceed (engine-owned reviews run post-.DONE).
 - Step 2 plan review (`spine_review_step step=2 type=plan`): **SKIPPED by runtime** — same SP-195 block; artifact `.reviews/2-20260805T005252.md`; `spawnFailed=false` → proceed.
+- Step 3 plan review (`spine_review_step step=3 type=plan`): **SKIPPED by runtime** — same SP-195 block; artifact `.reviews/3-20260805T011003.md`; `spawnFailed=false` → proceed.
 
-## 5. Evidence summary (Step 3/5)
+## 5. Evidence summary
 
-(filled at consolidation)
+### 5.1 Contract testCommand (verbatim, 2026-08-05, this worktree)
+
+1. `node .spine/patches/verify.mjs` → **exit 0** ("all patches applied on all roots").
+2. `dotnet build client/CcpClient.sln -c Debug -t:Rebuild --nologo` → **0 Warning(s) 0 Error(s)** (warnings measured on `-t:Rebuild` per the packet clause; one xUnit1031 in the new VM tests was found and FIXED — SeedMemory made async — before this run).
+3. `dotnet test client/tests/CcpClient.Tests` → **601 passed / 0 failed** (floor 581).
+4. `dotnet test client/tests/CcpClient.HeadlessTests` → **33 passed / 0 failed** (floor 29).
+5. `git diff --check` → clean.
+
+Linux contract run: covered by the WSL2 zero-distro named limit (owner-gated, never faked — same disposition as SP-035/038/040/044).
+
+### 5.2 Headed evidence (WH-class via the avalonia-live 27-tool seat; `CCP_MCP=1 --ai-ollama-host http://127.0.0.1:11734/` + task-local `tools/lab-ollama.mjs` — loopback only, zero external network)
+
+| File | Proves |
+|------|--------|
+| `evidence/01-window-open.png` + `01b-describe-marks.png`/`01b-describe-legend.json` | Dashboard button opens the owned modeless CompanionWindow (26 semantic marks: every control automation-named) |
+| `evidence/02-badge-generated.png` + `02-semantic-tree.json` | **Badge accuracy pixels:** the Generated reply bubble carries the "AI · Loopback" badge pill + neon ring; status line reads "Companion provider: available (loopback)" (capability-state-derived) |
+| `evidence/03-refusal-bubble.png` + `03-semantic-tree.json` | **Refusal bubble** on the interactive class ("The AI declined to respond under the content policy." — output-side refusal from the lab's refusal shape), NEVER badged; the refused turn never persisted (file held exactly the prior pair — verified via file read) |
+| `evidence/04-clear-confirm-default-no.png` | **Clear confirm:** modal-within-window overlay, "can't be undone", and `get_focused_element` = **ConfirmNoButton** (the default-NO proof the headless seat could not make) |
+| `evidence/05-clear-outcome.png` + `05-semantic-tree.json` | Post-clear state: chat log emptied, "Companion memory cleared." outcome text; **file-content proof:** `%APPDATA%/CcpClient/ai_memory.json` DELETED (shell-verified in the window before the next send re-persisted — WPF point-in-time clear, memory re-fills) |
+| `evidence/06-consent-cooldowns.png` | Consent/cooldown surfaces: awareness consent toggle ON (`IsChecked true` round-trip), global cooldown 10→42 through the VM into the typed `AiCooldownValues` |
+| `evidence/07-inflight-before-panic.png` | REAL in-flight operation against the lab (SLOW_ME 8s slow stream): thinking bubble live, Stop enabled |
+| `evidence/08-panic-quiet-calm.png` + `08-semantic-tree.json` | **Panic-quiet:** after Stop — thinking bubble GONE, zero partial text, Stop disabled, calm surface (typed Cancelled underneath; nothing partial surfaced) |
+| `evidence/09-rearm-post-panic.png` | **Re-arm:** a post-panic send succeeds with a badged reply (the calm state is a WORKING state — consult #7) |
+| `evidence/10-unavailable-unbadged.png` + `10-semantic-tree.json` | **Unavailable pixel proof (dead-port run):** status "unavailable (host-unreachable)" (capability-derived); send surfaces the unbadged subdued Unavailable bubble (provider-unproven) |
+| `evidence/manifest.json` | Capture manifest (app-visual-verification skill artifact rule): tree state, platform, scaling, provider modes, per-capture states, pixel validation |
+| `evidence/app.log`, `app2.log`, `lab.log` | Sensitive-logging discipline: content scan for every synthetic chat string → ZERO hits (chat/memory content never logged) |
+
+**Binding errors:** `get_binding_errors` at every checkpoint AND at session end → **count 0** throughout (both runs).
+**Pixel validation (skill artifact rule):** every PNG verified 480x620 (the companion window — correctly targeted), nonzero, non-blank (distinct-byte sample); results in manifest.json.
+**Synthetic content only:** every capture carries lab strings ("lab synthetic reply", "REFUSE_ME", "SLOW_ME", "ECHO") — no user data.
+**Badge-accuracy discharge (pre-completion consult correction):** Generated = pixel-proven badged; Refused = pixel-proven unbadged; Unavailable = pixel-proven unbadged (dead-port run); **Fallback = TYPE-level only** (the falsifiable identical-text pair in `CompanionViewModelTests`) — no product path emits interactive `AiReply.Fallback` today (Fallback is app-authored awareness canned text); c7 does not invent a Fallback path (consult (c): recorded non-claim, not a gap).
+**Teardown note:** the headed runs were closed via taskkill (not the window path); teardown flush is integration-covered (`CompanionCompositionTests.ProductComposition_MemoryPersistsUnderUserDataRoot_FlushedAtTeardown`).
+**Capture-pass honesty:** the FIRST headed pass captured the WRONG WINDOW throughout (the `windowId` param is silently ignored by the seat — screenshots defaulted to the MainWindow). Every pixel capture was discarded and re-taken with the correct `target` param; the semantic/property evidence (selector-addressed) was unaffected. Recorded per the honesty framings; the seat's guide names `target`/`handle` only.
+
+### 5.3 A-013 advisory dispositions (`ValidateXaml`, advisory only — PASS is never API-validity proof; the proof is 0W/0E + headed interaction)
+
+- **PASS** (XML/namespace/x:Name/Window-shape heuristics) — recorded as heuristic; the MCP pins Avalonia 11.3.1 (its "enhanced spacing (11.3+)" note confirms the stale baseline the avalonia-research skill warns about).
+- **Finding: "25 inline style properties — consider styles"** → **REJECTED:** repeated semantics (chat bubbles, badge pill, buttons, status) ARE class-styled; inline properties remain on one-off elements exactly per the landed grammar lineage (`MainWindow.axaml`, `FeaturePopupWindow.axaml`). No change.
+- **Compiler-learned v12 fact (recorded):** `TextBox.Watermark` is OBSOLETE in 12.1.1 → `PlaceholderText` (AVLN5001, fixed during Step 2); `TextBlock` has no `CornerRadius` (the pill is a Border) — both caught by the real compiler, not the advisory.
+
+### 5.4 File-scope audit (`git diff --stat eff91b32..HEAD -- ':!spine-tasks'`)
+
+23 files, +1681/-24. `fileScopeMustChange` `Features/Companion/` present (7 files). **Out-of-scope-named test files touched (documented in STATUS Discoveries):** `CapabilityTests.cs`, `CompositionRootValidationTests.cs`, `IntegrationProofTests.cs` — mechanical enumeration updates forced by the composition (participant count 6→7 + companion arm; capability list + 2 AI state arms). No behavior assertion weakened. No `fileScopeMustNotChange` path touched (`ConditioningControlPanel/**`, `client/CcpClient.sln`, `client/spikes/**`, `.spine/**`, task-board, port-lessons all untouched).
+
+### 5.5 Bool-door retirement (assigned obligation — COMPLETE, no hard stop)
+
+Re-grep found 10 call sites in exactly the 6 PROMPT-named files; all migrated to the typed `AiAwarenessConsent` overload (`Given`/`NotGiven`); the bool overload DELETED from `AiOperationPipeline.cs` (the shared gate survives as private `RunAwarenessCoreAsync`); the typed overload's doc updated (the "residual bool door" note retired). Full suite green — migration is behavior-identical.
 
 ## 6. Budgets, surprises, durable-lesson candidates
 
-(filled at consolidation)
+**Budget:** single session, inside the 4h export; no context-limit exits.
+
+**Surprises:**
+1. **A REAL Ollama (0.32.5) now runs on this box** (127.0.0.1:11434; SP-019 limit 1 said absent at spike time). First full-suite run failed 6 tests on environment assumptions (mine asserted Unavailable; pre-existing lab test flaked under parallel load — passed isolated and in the final run). Assertions rewritten environment-honest (typed state either way); the deterministic lab stays the headed instrument via `--ai-ollama-host` (never the live model).
+2. **avalonia-live silent-param drops bite twice:** (a) `windowId` on click_at/get_text — clicks need `handle`/`selector` + top-level-relative coords; `automation_action invoke` did not fire Button.Click (click_at works); (b) **`windowId` on screenshot_window** — the ENTIRE first pixel pass captured the MainWindow, caught only by the dimension check (520x680 vs 480x620). Every pixel capture re-taken with `target`. The skill's "confirm the PNG exists with nonzero dimensions" rule is what caught it — dimensions MEAN the right window.
+3. **Focus needs layout:** focusing a just-visible control is a no-op until a layout pass — the default-No focus posts at `DispatcherPriority.Loaded`; the headless seat still couldn't prove focus (moved to the headed `get_focused_element` proof, which DID prove it).
+4. **The memory-persist "defect" was my own inspection bug:** the file-JSON field is camelCase `turns`; my node one-liner read `j.Turns` and reported EMPTY — I nearly root-caused a nonexistent store defect. A real repro test (`AiMemoryPanicRearmTests`) proved the live behavior correct (clear → panic → re-arm → re-persist works) and stayed as the regression guard. **Verify the inspection before the machinery.**
+
+**Durable-lesson candidates (orchestrator reconciles — enabler 2):**
+1. **Environment facts rot:** "no Ollama on the evidence box" was a spike-time fact that became false; capability assertions must be written typed-state-honest, never environment-assumed. (Class: evidence honesty.)
+2. **A panic path that leaves the owner cancelled needs an explicit re-arm** — panic-quiet is not "surface calm", it's "surface calm AND working"; the proof must include a post-panic success. (Class: lifecycle discipline.)
+3. **MCP tool params fail silently** — validate a drive primitive end-to-end on a cheap target AND validate capture dimensions against the intended window before building an evidence pass on it. (Class: tool-quirk — bit twice in one task.)
+4. **Inspection scripts are code too** — a wrong-case JSON field read manufactured a defect hunt; read the raw bytes before theorizing. (Class: debugging discipline.)
 
 ## 7. Orchestrator follow-ups (land-time)
 
 1. **Memory→prompt context:** SP-040's record forward-referenced "prompt assembly lands in c7"; SP-046's packet scope does not include it (verified against PROMPT steps/criteria). NOT built; the surface carries the honest non-claim line. Owner/orchestrator schedules prompt-context assembly explicitly (WPF shape: full dialogue history sent per request, `LocalAiService.cs:374-390`).
-2. Board/lessons reconciliation (enabler 2): `task-board.md` / `port-lessons.md` untouched by the worker.
+2. **Awareness title capability not composed:** `AiWindowTitleCapability.Register` was NOT wired into the product composition — no consumer exists in c7 (no awareness reaction loop; observation without a driver would be an unused probe). The seam stays declared (SP-006 honesty); its consumer slice owns the wiring.
+3. **K3 visual review** (orchestrator at land, per packet): the badge/refusal/confirm/panic captures in `evidence/` are the review set.
+4. **Real-Ollama environment change:** a live Ollama 0.32.5 now runs on the evidence box (STATUS Discoveries) — future AI slices can opt into real-model LAB evidence; the deterministic lab stays the contract instrument.
+5. Board/lessons reconciliation (enabler 2): `task-board.md` / `port-lessons.md` untouched by the worker.

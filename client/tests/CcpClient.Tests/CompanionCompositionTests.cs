@@ -79,6 +79,49 @@ public class CompanionCompositionTests
     }
 
     [Fact]
+    public async Task HostOverride_RemoteHost_RejectedPreSocket_ZeroSendAttempts()
+    {
+        // The --ai-ollama-host boundary claim is security-critical (pre-completion
+        // consult): a REMOTE override must classify RemoteHostOllama and be rejected
+        // BEFORE any socket opens — admission policy + provider defense in depth. The
+        // flag can NEVER widen the network boundary; this test is the proof, not inspection.
+        var dir = Path.Combine(Path.GetTempPath(), "ccp-sp046-remote-" + Guid.NewGuid().ToString("N"));
+        var registry = new OperationRegistry();
+        var capabilities = new CapabilityRegistry();
+        var participant = new CompanionParticipant(
+            new ParticipantInfrastructure(registry, new UiDispatchBoundary(), new DebugLogSink()),
+            capabilities, dir,
+            ollamaHostOverride: "http://example.com:11434/");
+
+        try
+        {
+            // Classification is config-pure: the remote host is RemoteHostOllama (contract §6).
+            // The probe itself rejects pre-socket (probing a remote host would itself be
+            // undeclared remote traffic).
+            var runner = new CapabilityProbeRunner(registry.OwnerFor("probes"), capabilities);
+            await runner.RunAllAsync(CancellationToken.None);
+            var state = capabilities.GetState(AiOperationPipeline.CapabilityName(AiProviderId.LocalOllama));
+            var unavailable = Assert.IsType<CapabilityState.Unavailable>(state);
+            Assert.Equal(AiReplyCodes.EndpointNotAdmitted, unavailable.Reason.Code);
+
+            // Even with the probe forced Available, the admission policy rejects the class
+            // pre-socket: the operation is typed Unavailable and ZERO sends occurred.
+            var result = await participant.Pipeline.RunInteractiveAsync(new AiRequest("never leaves the machine"));
+            var reply = Assert.IsType<AiReply.Unavailable>(result.Reply);
+            Assert.Equal(AiReplyCodes.ProviderUnproven, reply.Code); // probe never ran Available
+            Assert.Equal(0, participant.Pipeline.SendAttempts);
+        }
+        finally
+        {
+            await participant.StopAsync();
+            if (Directory.Exists(dir))
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task ProductComposition_MemoryPersistsUnderUserDataRoot_FlushedAtTeardown()
     {
         var (host, dir) = await BootAsync();
