@@ -28,7 +28,8 @@ public static class DtrhProtocol
 
     // ============================ page → host ============================
 
-    /// <summary>The 21 page→host message types (payload send sites; SP-024 record Step 1 table).</summary>
+    /// <summary>The 22 page→host message types (payload send sites; SP-024 record Step 1 table
+    /// + SP-049's loom-reveal from the v6.6.3 loomStudio.js rack).</summary>
     public abstract record DtrhPageMessage
     {
         private DtrhPageMessage() { }
@@ -73,6 +74,10 @@ public static class DtrhProtocol
         public sealed record LoomSave(string? Name, bool Overwrite, JsonElement Raw) : DtrhPageMessage;
 
         public sealed record LoomDelete(string? Slug) : DtrhPageMessage;
+
+        /// <summary>SP-049: the rack tile's 📂 — show the saved GIF in the OS file manager
+        /// (loomStudio.js:749; WPF LoomHostService.cs:108-117 + DtrhHostService.cs:336).</summary>
+        public sealed record LoomReveal(string? Slug) : DtrhPageMessage;
 
         public sealed record ReportBug : DtrhPageMessage;
     }
@@ -138,6 +143,7 @@ public static class DtrhProtocol
         ["loom-save"] = r => new DtrhPageMessage.LoomSave(
             GetString(r, "name"), GetBool(r, "overwrite") ?? false, r.Clone()),
         ["loom-delete"] = r => new DtrhPageMessage.LoomDelete(GetString(r, "slug")),
+        ["loom-reveal"] = r => new DtrhPageMessage.LoomReveal(GetString(r, "slug")),
         ["report-bug"] = _ => new DtrhPageMessage.ReportBug(),
     };
 
@@ -195,10 +201,12 @@ public static class DtrhProtocol
         // wired in the host window's dispatch. m2Test skips routing (WPF _testMode parity).
         DtrhPageMessage.Bark => DtrhDispatchClass.Handled.Instance,
         // b4 (SP-026): progression/payout + Loom + media stats — REAL effects via
-        // DtrhMeta / DtrhLoom, wired in the host window.
+        // DtrhMeta / DtrhLoom, wired in the host window. SP-049: LoomReveal joins — the
+        // v6.6.3 studio rack's 📂 (shared loomStudio.js emits it from BOTH homes).
         DtrhPageMessage.MetaCommand or DtrhPageMessage.RequestRun or DtrhPageMessage.RunStarted
             or DtrhPageMessage.RunEnded or DtrhPageMessage.AssetStats
-            or DtrhPageMessage.LoomSave or DtrhPageMessage.LoomDelete => DtrhDispatchClass.Handled.Instance,
+            or DtrhPageMessage.LoomSave or DtrhPageMessage.LoomDelete
+            or DtrhPageMessage.LoomReveal => DtrhDispatchClass.Handled.Instance,
         // b5 (SP-027): bounded exit-done wait + pong heartbeat stamp — REAL handlers
         // wired in the host window (exit flow) and the watchdog.
         DtrhPageMessage.ExitDone or DtrhPageMessage.Pong => DtrhDispatchClass.Handled.Instance,

@@ -45,6 +45,9 @@ public partial class DtrhHostWindow : Window
     private DtrhMeta? _meta;
     private DtrhAssetStats? _assetStats;
     private DtrhLoom? _loom;
+    // SP-049: the shared loom bridge subset (save/delete/reveal + list) — one write path
+    // for this window and the standalone studio window (DtrhLoomWindow).
+    private DtrhLoomDispatch? _loomDispatch;
     // SP-027 slice b5: the session watchdog (coordinator-owned — survives relaunch),
     // the native ProcessFailed subscription (Windows embedded only — W17 immediate
     // route), the 5s heartbeat watch, and the run-active gate for the 10s/20s limits.
@@ -163,6 +166,7 @@ public partial class DtrhHostWindow : Window
             slots.SlotFilePath(_slot));
         // b4: the Loom store (<dataDir>/Spirals — DtrhLoomStore.cs:28 parity).
         _loom = new DtrhLoom(_dtrh.SpiralsRoot, _host.LogDiagnostic);
+        _loomDispatch = new DtrhLoomDispatch(_loom, () => _dtrh.Server.MediaOrigin, SendToPage, _host.LogDiagnostic);
         _host.LogDiagnostic($"dtrh: meta engine bound to slot {_slot}{(_m2Test ? " (TEST clone)" : "")}");
     }
 
@@ -266,8 +270,8 @@ public partial class DtrhHostWindow : Window
             Surface = "unsupported";
             UnsupportedPanel.IsVisible = true;
             UnsupportedDetail.Text =
-                $"capability {DtrhCapabilityProbes.EmbeddedCapability}: {Describe(embedded)}\n"
-                + $"capability {DtrhCapabilityProbes.DialogCapability}: {Describe(dialog)}";
+                $"capability {DtrhCapabilityProbes.EmbeddedCapability}: {DescribeState(embedded)}\n"
+                + $"capability {DtrhCapabilityProbes.DialogCapability}: {DescribeState(dialog)}";
             SetStatus("dtrh: honest unsupported (no classic fallback)");
             _host.LogDiagnostic("dtrh: no admitted web surface available — unsupported surface shown");
             _host.LogDiagnostic("dtrh: " + UnsupportedDetail.Text.Replace("\n", " | "));
@@ -1052,39 +1056,17 @@ public partial class DtrhHostWindow : Window
             case DtrhProtocol.DtrhPageMessage.AssetStats assetStats:
                 _meta?.OnAssetStats(assetStats.Raw);
                 return;
-            case DtrhProtocol.DtrhPageMessage.LoomSave loomSave:
+            case DtrhProtocol.DtrhPageMessage.LoomSave:
+            case DtrhProtocol.DtrhPageMessage.LoomDelete:
+            case DtrhProtocol.DtrhPageMessage.LoomReveal:
             {
-                if (_loom is null)
+                if (_loomDispatch is null)
                 {
-                    _host.LogDiagnostic("dtrh: 'LoomSave' arrived before loom init — logged, not acted on");
+                    _host.LogDiagnostic($"dtrh: '{message.GetType().Name}' arrived before loom init — logged, not acted on");
                     return;
                 }
 
-                // loom-save {name, gifBase64, params, overwrite} (loomStudio.js:84-91) →
-                // store validates + writes, page gets the verdict + a fresh list
-                // (DtrhHostService.cs:285-293).
-                string? gifBase64 = loomSave.Raw.TryGetProperty("gifBase64", out var b64) && b64.ValueKind == JsonValueKind.String
-                    ? b64.GetString()
-                    : null;
-                JsonElement? loomParams = loomSave.Raw.TryGetProperty("params", out var lp) && lp.ValueKind == JsonValueKind.Object
-                    ? lp.Clone()
-                    : null;
-                var saveResult = _loom.Save(loomSave.Name, gifBase64, loomParams, loomSave.Overwrite);
-                SendToPage(DtrhProtocol.BuildLoomResult("save", saveResult.Ok, saveResult.Slug, saveResult.Error));
-                if (saveResult.Ok) PostLoomList();
-                return;
-            }
-            case DtrhProtocol.DtrhPageMessage.LoomDelete loomDelete:
-            {
-                if (_loom is null)
-                {
-                    _host.LogDiagnostic("dtrh: 'LoomDelete' arrived before loom init — logged, not acted on");
-                    return;
-                }
-
-                var deleteResult = _loom.Delete(loomDelete.Slug);
-                SendToPage(DtrhProtocol.BuildLoomResult("delete", deleteResult.Ok, deleteResult.Slug, deleteResult.Error));
-                if (deleteResult.Ok) PostLoomList();
+                _loomDispatch.TryHandle(message);
                 return;
             }
         }
@@ -1096,34 +1078,7 @@ public partial class DtrhHostWindow : Window
     /// can re-edit a kept spiral; unparseable sidecars post null (WPF TryParseJson).</summary>
     private void PostLoomList()
     {
-        if (_loom is null)
-        {
-            return;
-        }
-
-        try
-        {
-            var spirals = _loom.List().Select(s =>
-            {
-                JsonElement? parsed = null;
-                if (s.ParamsJson is { Length: > 0 } json)
-                {
-                    try { parsed = JsonDocument.Parse(json).RootElement.Clone(); }
-                    catch { /* unparseable sidecar → null params (WPF TryParseJson parity) */ }
-                }
-
-                return new DtrhProtocol.DtrhLoomSpiral(
-                    s.Slug,
-                    $"{_dtrh.Server.MediaOrigin}/spirals/loom_{s.Slug}.gif",
-                    parsed);
-            }).ToList();
-            SendToPage(DtrhProtocol.BuildLoomList(spirals));
-            _host.LogDiagnostic($"dtrh: loom-list posted ({spirals.Count} spiral(s))"); // presence+shape only
-        }
-        catch (Exception ex)
-        {
-            _host.LogDiagnostic($"dtrh: loom-list failed ({ex.GetType().Name})");
-        }
+        _loomDispatch?.PostList();
     }
 
     /// <summary>The serialize options for wrapping engine payloads into protocol messages
@@ -1226,7 +1181,9 @@ public partial class DtrhHostWindow : Window
 
     private void SetStatus(string s) => Dispatcher.UIThread.Post(() => Status.Text = s);
 
-    private static string Describe(CapabilityState? state) => state switch
+    /// <summary>Shared capability-state description (SP-049: the studio window's honest
+    /// unsupported surface renders the same text — one formatter, never two).</summary>
+    internal static string DescribeState(CapabilityState? state) => state switch
     {
         null => "no capability registry",
         CapabilityState.Available available => $"Available — {available.Detail}",

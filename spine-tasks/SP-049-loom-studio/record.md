@@ -1,0 +1,93 @@
+# SP-049 record — Loom studio promotion (v6.6.3 behavior delta — drive the studio surface)
+
+**Task:** spine-tasks/SP-049-loom-studio · **Review Level:** 2 · **Target:** the b4 named limit "Loom rack pane render not driven (pane + 3D gate; display proof = served URL in-engine)"
+**Engine-review presence (T-2):** recorded per `spine_review_step` call below.
+
+---
+
+## Engine-review log (T-2)
+
+| Step | Type | Result | Artifact |
+|------|------|--------|----------|
+| 1 | plan | (pending) | — |
+
+---
+
+## Step 1 — dual archaeology + delta list + drive design
+
+### v6.6.3 payload archaeology (READ-ONLY; `ConditioningControlPanel/Resources/web/dtrh/`)
+
+**The studio's homes and the promotion.** The studio module `game/loomStudio.js` (schema v2, 833 lines) mounts in TWO homes (loomStudio.js:14-27 header): (a) the Warren's Boudoir pane inside the game (crafting-gated behind `the_loom` + 3D station navigation — the b4 limit's gate), and (b) **the standalone main-app window `loom.html`** ("outside the rabbit hole… always available" — loom.html:2-5). v6.6.3 (main commits `f0c093f4` + `d64860d4` per the assets.manifest origin notes) promoted the studio OUT of the game gate into a main-app window hosted by WPF `LoomHostService` (Services/Chaos/LoomHostService.cs). **No three.js, no crafting gate** in the standalone home: "the loom is 2D canvas + one WebGL quad" (loom.html:6).
+
+**What the studio page needs from the host** (loomBoot.js + loomStudio.js + bridge.js, all verified):
+
+| Direction | Message | Shape / semantics |
+|---|---|---|
+| page→host | `ready` | `{type:'ready', protocol:1}` — host flushes its queued loom-list on receipt (loomBoot.js:22, bridge.js:44) |
+| page→host | `loom-save` | `{name, overwrite, params, gifBase64}` (loomStudio.js:251-259) — the gifenc-encoded GIF rides base64 |
+| page→host | `loom-delete` | `{slug}` (loomStudio.js:769) — two-click armed page-side |
+| page→host | **`loom-reveal`** | `{slug}` (loomStudio.js:749) — the rack tile 📂 button. **NEW vs b4's vocabulary** — not in `DtrhProtocol.cs` |
+| page→host | `sfx` | `{name, scale=0.45}` (loomBoot.js:11; save-success `boon_pick` 0.4 at loomStudio.js:209) |
+| page→host | `log` | diagnostic (bridge.js:41) |
+| host→page | `loom-list` | `{spirals:[{slug, url, params|null}]}` — at ready AND after each successful mutation (loomBoot.js:17-18); `url` renders as rack `<img>` (loomStudio.js:729-733) |
+| host→page | `loom-result` | `{op:'save'|'delete', ok, slug, error}` — error vocabulary bad-name/too-big/exists/cap-reached/bad-gif (loomStudio.js:204-224; arms overwrite on `exists`) |
+
+**The "3D gate" resolved.** b4's named limit named "pane + 3D gate" because the ONLY in-game home of the rack sits behind the Warren's 3D station navigation + the `the_loom` crafting unlock. The v6.6.3 standalone window **removes both gates**: no three.js importmap (loom.html:6), no unlock ("always available"). The **WebGL field renderer** (`shared/loomField.js` — WebGL field + 2D centerpiece composite, ONE pipeline shared by preview and encoder) still has an honest no-WebGL fallback (the v1 wedge renderer, loomStudio.js:8-10) — a page-side concern, never a host gate.
+
+**The rack pane's composition** (loomStudio.js:714-786): a filmstrip of tiles — served-GIF thumbnail (`s.url`), slug, ✎ re-edit (loads `s.params` into the dials), 📂 reveal (emits `loom-reveal`), 🗑 two-click delete (emits `loom-delete`). Empty state note when the library is empty. Cap display `n/12`.
+
+**The GIF export path (gifenc).** Fully page-side: SAVE → `engine/loomWorker.js` (module Worker at the ABSOLUTE path `/dtrh/engine/loomWorker.js`, loomStudio.js:155 — the page origin must serve it, already true via the §4 `/dtrh/*` route) → renders frames through the same `shared/loomField.js` pipeline → encodes with vendored `vendor/gifenc/gifenc.esm.js` (quantizer + ordered Bayer dither, loomWorker.js:5-22) → `{id, gif:ArrayBuffer}` → base64 → `loom-save`. Host authority is only the store (validate + write + serve back). **The serving contract proof IS the round trip:** the saved GIF's rack thumbnail renders from the media-origin `/spirals/loom_<slug>.gif` URL.
+
+**Publishing status (SP-037/SP-048 — already landed, verified):** `payload/dtrh/loom.html`, `loomBoot.js`, `shared/loomField.js`, `game/loomStudio.js`, `engine/loomWorker.js`, `vendor/gifenc/gifenc.esm.js` are all in `assets.manifest.json` and copy to output via the linked glob; the loopback page origin already serves `/dtrh/*` overlay-first (LoopbackServer.cs:205-211) and the media origin serves `/spirals/*` with the full §4 discipline (LoopbackServer.cs:346-366). **Nothing in the serving layer needs to change.**
+
+### b4 archaeology (the landed base — never re-ported)
+
+`DtrhLoom` (client, 217 lines): the WPF DtrhLoomStore discipline — `loom_<slug>.gif` + `.json` sidecar in `<dataDir>/Spirals`, temp-then-move writes, slug whitelist `^[a-z0-9_-]{1,24}$`, 12-cap, 8MB ceilings, GIF87a/89a magic+trailer validation, error-code vocabulary verbatim, presence+shape-only logging (slug never logged). `DtrhHostWindow` handles `LoomSave`/`LoomDelete` (Handled, real dispatch, :1055-1095), posts loom-list at ready (WPF :209 order) + after mutations (:1097-1130). loom-list URLs = `{MediaOrigin}/spirals/loom_<slug>.gif`. **b4's named limit (record.md Surprise 0, verbatim target):** the rack PANE was never driven in-engine — the display proof was the probe page rendering the served URL, because the in-game pane sits behind the crafting + 3D gates.
+
+### The delta list (what v6.6.3 adds ON TOP of b4; what is user-observable)
+
+1. **A standalone, always-available Loom studio window** (user-observable: THE LOOM opens from the main app without entering the game or crafting anything). WPF host shape: `LoomHostService` — a STRIPPED sibling of the game host (one windowed web host on `loom.html`, own browser profile, plain-titled window closed by X — NO exit protocol, NO meta/slots/bark/watchdog; LoomHostService.cs:22-96).
+2. **The `loom-reveal` bridge message** (user-observable: 📂 shows the saved GIF in the OS file manager). New typed protocol message; WPF handler = `explorer.exe /select,"<path>"` with the path from the slug-whitelisted store, never from the page (LoomHostService.cs:108-117 + DtrhLoomStore.GifPathFor :114-123).
+3. **The v2 studio surface itself** (six weaves, presets, undo, hotkeys, fullscreen preview, format shapes, the filmstrip rack) — **entirely payload-self-driven**; the host's only new obligation is the window + the message subset above.
+4. **gifenc GIF export** (user-observable: SAVE produces a real animated GIF in the Spirals library). Page-side encoder; host side already landed in b4 (store + serving). What remains unproven until this slice: the encoder actually runs IN the greenfield engine (module-worker + ESM + OffscreenCanvas-class APIs on the embedded WebView2) and the file round-trips to the rack.
+
+**Explicitly NOT re-ported (dual-archaeology guard):** the store, the serving routes, loom-save/loom-delete handling, loom-list/loom-result builders, the probe-page display proof — all b4-landed and reused as-is.
+
+### Drive design (pre-consult)
+
+1. **`DtrhLoomWindow`** (new, `Features/Dtrh/`, slim sibling of `DtrhHostWindow` — the WPF LoomHostService shape): an Avalonia `Window` titled "The Loom" embedding `NativeWebView` on Windows (embedded capability) / `NativeWebDialog` on Linux (dialog capability), navigating to `_dtrh.PageUrl("loom.html")` (bridge token in the query, §3.3). Dispatch surface: `ready` → focus claim + PostLoomList ONLY (no init/manifest/meta — loomBoot.js consumes nothing else; unknown host→page messages would just preBuffer page-side, but WPF parity is the stripped subset); `log` → diagnostics; `loom-save`/`loom-delete` → the SAME `DtrhLoom` store + `BuildLoomResult`/loom-list (shared static helper so the game host and the loom window never drift); `loom-reveal` → OS reveal; `sfx` → the b3 native sfx path; unknown/forward-version/malformed → b2's typed tolerance. Plain X close (WPF: "the user closes it with X, not a page exit protocol" — LoomHostService.cs:78-83). Idempotent single-instance: refocus if already open (WPF `IsActive`/`FocusWeb` parity) — owned by the launcher.
+2. **Protocol:** add `LoomReveal(string? Slug)` to `DtrhProtocol` (parser + `Classify` → Handled — the game pane's rack emits it too, shared loomStudio.js:749, so the game host window handles it as well). No version bump (v1 tolerance absorbs it: older pages never send it; a newer page sending it to THIS host parses typed).
+3. **`DtrhLoom.GifPathFor(slug)`** (DtrhLoomStore.cs:114-123 parity: regex-validated slug → existing file path or null) + **`DtrhLoomReveal`** static (typed outcome; injectable opener so tests never spawn a shell): Windows `explorer.exe /select,"<path>"` (WPF verbatim); Linux `xdg-open <folder>` (WPF is Windows-only — the greenfield's honest Linux equivalent; Linux evidence stays the WSL zero-distros named limit). Refused/missing → typed log, never a crash, presence-only logging (never the slug/path in logs — path-class content).
+4. **sfx in the loom window:** reuse `DtrhNativeEffects` with the SAME sfx roots as the game host (payload bubbles/sfx, overlay-first) but WITHOUT the LibVlc video backend if the ctor admits a null/disabled video (checked at implementation; if not, a minimal `IDtrhVideoBackend` no-op — the loom page never fires video/freeze/whisper; `boon_pick` + UI blips are the whole surface). VN-gate/pool discipline inherited, never duplicated.
+5. **Open path (user reachability):** `--loom-demo` CLI demonstrator flag, mirroring the `--dtrh-demo` precedent (Program.cs + App.axaml.cs wiring amendment per the SP-023 norm — those files are outside File Scope's `Dtrh/**` but NOT in `fileScopeMustNotChange`; per-file necessity documented here + STATUS). **WPF parity note:** v6.6.3 reaches the studio from the Spiral Overlay feature card (`SpiralFeatureControl.BtnOpenLoom_Click` :422-431); the greenfield dashboard has NO Spiral Overlay card yet (that card is a future dashboard row — recorded, never invented here). The CLI demonstrator is the honest current seam, same class as every DTRH slice before it.
+6. **Evidence plan (Step 3, headed Windows, `CCP_MCP=1`, avalonia-live):** launch `--loom-demo` with a HARNESS `--loom-drive` step that drives the REAL page through the engine's own `InvokeScript` (the SP-011 W14 focus-check precedent — script sets the name input + clicks SAVE; the gifenc worker, the loom-save message, the store, the serving, and the rack re-render are ALL real; only the pointer is scripted — WSLg no-input class, honestly labeled). Captures: studio opened + rendered (screenshot + semantic tree, dimension-validated per the windowId quirk rule — `target`/`handle` params, PNG dimensions checked BEFORE the pass), rack tile visible after save, save→list→delete round-trip with FILE-CONTENT proof (GIF on disk: magic + trailer + size; served 200 through `/spirals/*`), GIF validity through the serving contract (the rack `<img>` renders the served URL — pixel proof). sfx fires on save-success (`boon_pick`) through the real audio path (log line evidence). Delete through the real page (two-click 🗑 via the same scripted drive) → file gone.
+7. **Tests (Step 2, unit + headless where honest):** loom-reveal parse round-trip + classification Handled; unknown/forward-version/malformed tolerance unchanged; `GifPathFor` (valid+exists → path; valid+missing → null; traversal-shaped/bad slug → null); `DtrhLoomReveal` typed outcomes (opener injected — records the invocation, never spawns a process); the shared loom-dispatch helper (save→result+list, delete→result+list, reveal, sfx routing) against a recording send/log. Floor: ≥614/33.
+
+---
+
+## Step 2 — studio driving + protocol + tests (committed; Windows build 0W/0E, 628/628 + 33/33 green ≥ 614/33 floor)
+
+- **`DtrhProtocol.cs`:** `LoomReveal(string? Slug)` added — parser + `Classify` → Handled (22-type vocabulary; the shared loomStudio.js emits it from BOTH homes — consult binding 4). No version bump: v1 tolerance absorbs it.
+- **`DtrhLoom.cs`:** `GifPathFor(slug)` (DtrhLoomStore.cs:114-123 parity) — the ONLY path source for reveal.
+- **`DtrhLoomReveal.cs` (new):** typed outcome (Revealed/Refused/LaunchFailed), never throws; Windows `explorer.exe /select,"<path>"` (WPF verbatim), Linux `xdg-open <folder>` (no /select equivalent — recorded divergence); injectable OS seam (tests never spawn a process); presence-only logging (path-class content never logged).
+- **`DtrhLoomDispatch.cs` (new):** the shared loom subset (save/delete/reveal in, result/list out) — ONE write path for both hosts (consult binding 1a). `DtrhHostWindow` refactored to delegate (its inline loom handling + PostLoomList replaced; LoomReveal arm added — the game pane's rack emits it too). `Describe` → internal `DescribeState` shared.
+- **`DtrhLoomWindow.axaml(.cs)` (new):** the WPF LoomHostService sibling shape — plain titled window "The Loom", 1200x800 (the studio-split grid needs ≥980px — consult 5d), capability-driven surface (embedded NativeWebView / NativeWebDialog / honest unsupported — same discipline, no OS guess). Stripped boot: ready → focus claim + loom-list ONLY (LoomHostService.cs:66 OnReady parity — no init/manifest/meta). sfx via the b3 DtrhNativeEffects path with a `NullDtrhVideo` seam (the studio has no video surface; TryPlay refuses honestly). OWN WebView2 profile `wv2-profile-loom` (LoomHostService.cs:64 parity + the b5 stale-profile-lock class stays single-surface; the game host's profile dir untouched — `WebView2ProfileDir()` legacy path preserved). Plain X close — no exit protocol. Store folder created BEFORE navigate (LoomHostService.cs:37-39).
+- **Open path:** `--loom-demo` demonstrator (+ HARNESS `--loom-drive` `save:<name>@t;delete-first@t;reveal-first@t` — ONE atomic InvokeScript per step, scripted pointer / real everything else, the SP-023 timed-drive labeling class; `--loom-auto-close` for no-input exit). **Wiring amendment (SP-023 norm, 2 files — per-file necessity):** `Program.cs` (flag parse + thread — the only CLI entry) + `App.axaml.cs` (the demonstrator block — the only lifetime UI seam). `fileScopeMustNotChange` untouched. **Typed named limit (recorded):** WPF parity reachability = the Spiral Overlay feature card (`SpiralFeatureControl.BtnOpenLoom_Click`); the greenfield dashboard has no such card yet (future dashboard row) — the CLI demonstrator is the current seam, never claimed as UI parity.
+- **Tests (14 new):** `DtrhLoomStudioTests.cs` (loom-reveal parse/classify/tolerance, GifPathFor matrix, reveal outcomes via injected seam incl. OS-shaped args, dispatch save→result+list with file-content proof, bad-gif no-list, delete round-trip, reveal fire-and-forget, non-subset false, slug-never-logged) + the vocabulary theory row (21→22). **628/628 unit + 33/33 headless green; sln 0W/0E.**
+
+### Budgets
+
+Step 1 archaeology ≈ 45 min (payload files, WPF LoomHostService/DtrhLoomStore, b4 record + client Dtrh tree read directly). Step 2 implementation + tests ≈ 50 min (build clean first pass; 628/628 + 33/33).
+
+### Consults
+
+#### Pre-approach consult (Step 1)
+
+**Mode:** solo (T-7: council unproven on this laptop). **Requested route:** Opus 5 main (2026-08-04 rewire). **Actual answering model:** NOT surfaced by the consult tool response (no model identity header — recorded honestly, same provenance discipline as SP-022…026).
+
+**Verdict: the design stands; five bindings folded in.**
+1. **DtrhLoomWindow (new window) APPROVED** over a loom-mode branch — DtrhHostWindow's ctor binds slots/meta/bark/watchdog, all wrong for the studio. TWO traps: (a) don't copy-paste the embedding/SendToPage/environment code blindly — share where clean; (b) **own WebView2 profile parity** — WPF uses `browser_data_loom` so the game's WebView2 state stays untouched (LoomHostService.cs:64); give the loom window its own loom-suffixed profile dir (the b5 stale-profile-lock class came from exactly this seam) — check DtrhProfileLock for a name seam or add one.
+2. **--loom-demo APPROVED** — the dashboard Spiral Overlay card is a future row; inventing it would creep Views/ outside the Dtrh/** scope. MUST be recorded as a typed named limit (WPF parity reachability = the SpiralFeatureControl card; greenfield seam = the demonstrator flag), never claimed as UI parity. Wiring amendment (Program.cs + App.axaml.cs) documented per the SP-023 norm.
+3. **InvokeScript page drive APPROVED — structured as TWO legs:** (a) **the rack pane renders in-engine at ready with a pre-existing saved spiral — NO scripting at all** (seed the store first, open the window, loom-list at ready, rack tile + served thumbnail render — this is the b4 limit's letter, unimpeachable); (b) the gifenc SAVE round trip via the scripted pointer (honestly labeled "scripted pointer, real everything else" — the SP-023 picker-timeout labeling class). Traps: the studio REBUILDS its DOM on every redraw (loomStudio.js render()) — one ATOMIC script that sets the name input, dispatches an `input` event (plain `.value=` never fires the handler), and clicks SAVE (element refs die across redraws); SAVE is disabled while encoding — poll for the result. Verify the module-worker fetch (`/dtrh/engine/loomWorker.js`, absolute, token-less) passes the loopback token discipline (subresources carry no `?bridge=` — confirm the token gates only the inbox, else the game's own subresources would already fail).
+4. **loom-reveal scope = BOTH windows** — WPF handles it in the game host too (DtrhHostService.cs:336), and the shared loomStudio.js emits it from the game pane's rack. Strict discipline: the path comes ONLY from GifPathFor (slug whitelist), never from page strings; typed failure logging; never log the path (path-class content); Linux = `xdg-open <folder>` (no /select equivalent — recorded divergence; Linux evidence stays the WSL named limit).
+5. **Delta-list corrections (all adopted):** (a) the loom page's fullscreen uses the DOM Fullscreen API INSIDE the webview with a page-side fixed-overlay fallback — NO `fullscreen-set` message, no host obligation (removed from the host-driven list); (b) sfx scale default mismatch (loomBoot 0.45 vs parser 0.6) is harmless — the page always sends scale explicitly; (c) the pre-ready queue discipline: loom-list posts ONLY at/after `ready` (design already does this); (d) **window size is evidence-relevant** — below 980px wide the page stacks to one column (loom.html media query); the evidence window must be ≥ ~1000x700 to show the studio-split grid + rack filmstrip; (e) check DtrhNativeEffects' ctor for a null-video seam rather than dragging LibVlc into the loom window.

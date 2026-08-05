@@ -36,6 +36,12 @@ public static class DtrhProfileLock
     /// parity — a dedicated profile per surface).</summary>
     public static string WebView2ProfileDir() => Path.Combine(DtrhDataRoot(), "wv2-profile");
 
+    /// <summary>SP-049: a NAMED per-surface profile (WPF parity: the game uses
+    /// browser_data_dtrh, the studio window browser_data_loom — LoomHostService.cs:64
+    /// "Own browser profile: the game's WebView2 state stays untouched"). Two surfaces on
+    /// ONE profile would also re-arm the b5 stale-profile-lock class.</summary>
+    public static string WebView2ProfileDir(string surface) => Path.Combine(DtrhDataRoot(), $"wv2-profile-{surface}");
+
     /// <summary>Typed recovery outcome — never silent.</summary>
     public abstract record DtrhProfileRecovery
     {

@@ -168,12 +168,24 @@ public static class Program
         // payout round-trip page-originated; the real save is never touched).
         var dtrhM2Test = args.Contains("--dtrh-m2test", StringComparer.Ordinal);
 
+        // SP-049 THE LOOM studio (--loom-demo): the v6.6.3 standalone studio window at
+        // startup (the --dtrh-demo demonstrator class — the greenfield dashboard has no
+        // Spiral Overlay card yet; typed named limit, record.md Step 1). --loom-drive
+        // "<steps>" is HARNESS-ONLY (scripted pointer through the engine's own
+        // InvokeScript — encoder/messages/store/serving all real). --loom-auto-close
+        // <seconds> closes the window on a timer (WSLg exit evidence without input).
+        var loomDemo = args.Contains("--loom-demo", StringComparer.Ordinal);
+        var loomDrive = ArgValue(args, "--loom-drive");
+        var loomAutoClose = int.TryParse(ArgValue(args, "--loom-auto-close"), out var loomCloseSeconds)
+            ? loomCloseSeconds
+            : 0;
+
         try
         {
             // Phase 4 (UserInterface): the Avalonia lifetime itself.
             return BuildAvaloniaApp(host!, popupDemo, avatarDemo, avatarCorrupt, avatarTrace, avatarAnimate,
                 dtrhDemo, dtrhPage, dtrhAutoClose, dtrhQuick, dtrhPickerTimeout, dtrhFxDrive, dtrhM2Test,
-                dtrhKillRenderers).StartWithClassicDesktopLifetime(args);
+                dtrhKillRenderers, loomDemo, loomDrive, loomAutoClose).StartWithClassicDesktopLifetime(args);
         }
         catch (Exception ex)
         {
@@ -242,12 +254,13 @@ public static class Program
         bool avatarDemo = false, bool avatarCorrupt = false, string? avatarTracePath = null,
         bool avatarAnimate = false, bool dtrhDemo = false, string dtrhPage = "index.html",
         int dtrhAutoCloseSeconds = 0, bool dtrhQuick = false, int dtrhPickerTimeoutSeconds = 0,
-        string? dtrhFxDrive = null, bool dtrhM2Test = false, bool dtrhKillRenderers = false)
+        string? dtrhFxDrive = null, bool dtrhM2Test = false, bool dtrhKillRenderers = false,
+        bool loomDemo = false, string? loomDrive = null, int loomAutoCloseSeconds = 0)
     {
         var builder = AppBuilder
             .Configure<App>(() => new App(host, popupDemo, avatarDemo, avatarCorrupt, avatarTracePath, avatarAnimate,
                 dtrhDemo, dtrhPage, dtrhAutoCloseSeconds, dtrhQuick, dtrhPickerTimeoutSeconds, dtrhFxDrive, dtrhM2Test,
-                dtrhKillRenderers))
+                dtrhKillRenderers, loomDemo, loomDrive, loomAutoCloseSeconds))
             .UsePlatformDetect();
         // Live-UI MCP seat (avalonia-live, Keincheck embedded server on http://127.0.0.1:3001).
         // Opt-in per run (CCP_MCP=1) so tests and normal runs never bind the port.

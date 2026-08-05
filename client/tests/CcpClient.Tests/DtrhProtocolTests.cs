@@ -13,7 +13,7 @@ namespace CcpClient.Tests;
 /// </summary>
 public class DtrhProtocolTests
 {
-    // ---------- page → host: the full 21-type vocabulary round-trips ----------
+    // ---------- page → host: the full 22-type vocabulary round-trips ----------
 
     public static IEnumerable<object?[]> PageVocabulary()
     {
@@ -40,6 +40,8 @@ public class DtrhProtocolTests
         yield return ["{\"type\":\"asset-stats\",\"deltas\":{\"img1.png\":{\"watch\":3.5}}}", typeof(DtrhProtocol.DtrhPageMessage.AssetStats), null];
         yield return ["{\"type\":\"loom-save\",\"name\":\"dream\",\"gifBase64\":\"R0lG\",\"params\":{\"rings\":4},\"overwrite\":false}", typeof(DtrhProtocol.DtrhPageMessage.LoomSave), null];
         yield return ["{\"type\":\"loom-delete\",\"slug\":\"dream\"}", typeof(DtrhProtocol.DtrhPageMessage.LoomDelete), null];
+        // SP-049: the v6.6.3 studio rack's 📂 (loomStudio.js:749 — emitted from BOTH homes).
+        yield return ["{\"type\":\"loom-reveal\",\"slug\":\"dream\"}", typeof(DtrhProtocol.DtrhPageMessage.LoomReveal), null];
         yield return ["{\"type\":\"report-bug\"}", typeof(DtrhProtocol.DtrhPageMessage.ReportBug), "unassigned/host-ui"];
     }
 
