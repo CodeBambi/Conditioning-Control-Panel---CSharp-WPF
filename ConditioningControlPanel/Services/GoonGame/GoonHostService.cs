@@ -140,6 +140,12 @@ namespace ConditioningControlPanel.Services.GoonGame
                 {
                     Transfer.TransferCacheStore.Instance.EnsureRoot();
                     Transfer.TransferCompressionService.Instance.Initialize();   // idempotent
+                    // Kick the plan refresh NOW instead of waiting for the page's cache hello:
+                    // after a cold app start the first match could reach Live with listSendable
+                    // still empty (the transfer lane then fires every payload untagged) because
+                    // nothing had asked the planner yet. RefreshAsync is one-pass-gated and
+                    // queues exempt-lane hashing (and auto-compress when enabled) off-thread.
+                    _ = Task.Run(() => Transfer.TransferCompressionService.Instance.RefreshAsync());
                 }
                 catch (Exception ex) { App.Logger?.Warning("GoonHostService: transfer cache init: {E}", ex.Message); }
 
