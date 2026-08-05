@@ -4564,6 +4564,147 @@ const audioMod = await import('../ui/audio.js');
     ok(f.tracks[0].stopped === true, 'dispose() mid-recording takes the microphone with it');
   }
 
+  /* --- 20b-bis. ONE FAILURE MAY NOT POISON THE NEXT PRESS ------------------
+   *
+   * THE REPORTED BUG (owner, 2026-08-05): "the mic can be triggered once, but if
+   * that first recording fails the button never resets — every press after it
+   * says that one did not record". Every check in this block is a way that used
+   * to happen, and all of them share one shape: something left the recorder OUT
+   * OF `idle` with nobody waiting on it, and `start()` answers everything that
+   * is not idle with 'busy' — which the strip rendered as a refusal, forever.
+   * ---------------------------------------------------------------------- */
+  {
+    // A microphone whose permission prompt is never ANSWERED (swiped away on
+    // iOS, where that promise then simply never settles).
+    const tracks = [{ kind: 'audio', stopped: false, stop() { this.stopped = true; } }];
+    let resolveGum = null;
+    const rec = recMod.createVoiceRecorder({
+      // A cap the block cannot reach (the disowned attempt below is waited out
+      // in real time) and a short start ceiling, so it is waited out quickly.
+      maxMs: 30_000,
+      startTimeoutMs: 150,
+      getUserMedia: () => new Promise((res) => { resolveGum = res; }),
+      recorderFactory: () => ({ start() {}, stop() { setTimeout(() => { try { this.onstop && this.onstop(); } catch (_e) { /* ignore */ } }, 0); } }),
+      isTypeSupported: () => true,
+    });
+
+    const first = rec.start();
+    await sleep(0);
+    ok(rec.state() === 'starting', 'a press with a prompt still up leaves the recorder starting');
+    // ...and the gesture goes away underneath it: a tap, or the prompt itself
+    // stealing the pointer and firing pointercancel.
+    const cancelled = await rec.cancel();
+    ok(cancelled.reason === 'cancelled', 'cancelling during the prompt answers at once, without waiting for it');
+
+    const second = rec.start();
+    await sleep(0);
+    ok(typeof resolveGum === 'function', 'the second press asked for a microphone of its own');
+    resolveGum({ getTracks: () => tracks });
+    const r2 = await second;
+    ok(r2.ok === true && r2.reason === 'recording',
+      'A PRESS AFTER A DISOWNED ONE IS A FRESH ATTEMPT — not the "busy" that used to stick for the session',
+      JSON.stringify(r2));
+    ok(rec.isRecording() === true, 'and it really is recording');
+    const r1 = await first;
+    /* AND IT ANSWERS 'cancelled', NOT A FAILURE. Its ceiling expires long after
+     * the gesture that asked for it is forgotten, and a caller that RECOVERS
+     * from failures (the mic HUD does, deliberately) would otherwise take the
+     * microphone off the recording that replaced it, half a minute later. */
+    ok(r1.ok === false && r1.reason === 'cancelled',
+      'a superseded attempt reports itself cancelled, not failed', JSON.stringify(r1));
+    ok(rec.isRecording() === true, '...and does not disturb the recording that replaced it');
+    rec.dispose();
+  }
+
+  {
+    // ...and where nothing supersedes it, the attempt gives up on its own.
+    const tracks = [{ kind: 'audio', stopped: false, stop() { this.stopped = true; } }];
+    let resolveGum = null;
+    const rec = recMod.createVoiceRecorder({
+      startTimeoutMs: 120,
+      getUserMedia: () => new Promise((res) => { resolveGum = res; }),
+      recorderFactory: () => ({ start() {}, stop() {} }),
+    });
+    const res = await rec.start();
+    ok(res.ok === false && res.reason === 'failed',
+      'a getUserMedia that never answers is written off, not waited on forever', JSON.stringify(res));
+    ok(rec.state() === 'idle', 'AND THE MACHINE IS LEFT PRESSABLE — this is the whole bug');
+    resolveGum({ getTracks: () => tracks });
+    await sleep(5);
+    ok(tracks[0].stopped === true,
+      'a stream that lands after the timeout is stopped where it arrives — rule 1 does not care that it was late');
+    rec.dispose();
+  }
+
+  {
+    // The recovery door the UI reaches for when it is refused and cannot say why.
+    const f = fakeMic();
+    await f.rec.start();
+    ok(f.rec.state() === 'recording', 'a recording is running');
+    f.rec.reset();
+    ok(f.rec.state() === 'idle', 'reset() puts it back to idle from anywhere');
+    ok(f.tracks[0].stopped === true, '...taking the microphone with it, like every other terminal path');
+    const again = await f.rec.start();
+    ok(again.ok === true, 'and the next press records rather than being told "busy"');
+    f.rec.dispose();
+  }
+
+  {
+    // THE TIMESLICE. Without it WebKit may hand over nothing at all for a short
+    // note, which arrives at the player as "that one did not record".
+    const tracks = [{ kind: 'audio', stopped: false, stop() { this.stopped = true; } }];
+    let sliceSeen = 'never started';
+    const rec = recMod.createVoiceRecorder({
+      getUserMedia: () => Promise.resolve({ getTracks: () => tracks }),
+      recorderFactory: () => ({ start(ms) { sliceSeen = ms; }, stop() {} }),
+    });
+    await rec.start();
+    ok(sliceSeen === recMod.VN_TIMESLICE_MS,
+      'MediaRecorder is started WITH a timeslice, so a note is assembled as it is spoken',
+      String(sliceSeen));
+    ok(recMod.VN_TIMESLICE_MS > 0 && recMod.VN_TIMESLICE_MS <= 1000,
+      'and it is short enough that the shortest keepable note still has a chunk in it');
+    rec.dispose();
+  }
+
+  {
+    // A recorder that dies MID-NOTE. Nobody asked it to stop, so nobody is
+    // awaiting an answer — it has to volunteer one.
+    const tracks = [{ kind: 'audio', stopped: false, stop() { this.stopped = true; } }];
+    let made = null;
+    const rec = recMod.createVoiceRecorder({
+      getUserMedia: () => Promise.resolve({ getTracks: () => tracks }),
+      recorderFactory: () => { made = { start() {}, stop() {} }; return made; },
+    });
+    await rec.start();
+    const seen = [];
+    rec.onFailed((p) => seen.push(p));
+    made.onerror({ error: new Error('the pipeline fell over') });
+    ok(seen.length === 1 && seen[0].reason === 'recorder-error',
+      'a recorder that dies mid-note SAYS so, instead of letting the strip count against nothing');
+    ok(tracks[0].stopped === true, 'and hands the microphone back on the way down');
+    ok(rec.state() === 'idle', 'and is pressable again without anybody having to ask');
+    rec.dispose();
+  }
+
+  {
+    // release() answering a stop that is still in flight. A recorder that never
+    // fires `stop` AND is reset under the caller must still settle the promise —
+    // an await that never returns is a strip stuck on "sending…".
+    const tracks = [{ kind: 'audio', stopped: false, stop() { this.stopped = true; } }];
+    const rec = recMod.createVoiceRecorder({
+      getUserMedia: () => Promise.resolve({ getTracks: () => tracks }),
+      recorderFactory: () => ({ start() {}, stop() { /* never fires onstop */ } }),
+    });
+    await rec.start();
+    const pending = rec.stop();
+    rec.reset();
+    const settled = await Promise.race([pending, sleep(50).then(() => 'NEVER SETTLED')]);
+    ok(settled !== 'NEVER SETTLED', 'a pending stop() is ANSWERED by the release under it, never dropped');
+    ok(rec.state() === 'idle', 'and the machine is idle behind it');
+    rec.dispose();
+  }
+
   /* --- 20c. the gesture --------------------------------------------------- */
   function fakeVoice() {
     const stateSubs = new Set();
@@ -4852,6 +4993,108 @@ const audioMod = await import('../ui/audio.js');
     ok(micMod.sendReasonLine('unavailable') === S20.voice.notActive, 'a dead feature explains itself');
     ok(micMod.sendReasonLine('nonsense-from-the-future') === S20.voice.sendFailed,
       'and an unknown reason still says something true');
+
+    /* TWO KINDS OF NO, AND THEY ARE NOT THE SAME SENTENCE. sendReasonLine is
+     * about a NOTE that failed to cross; micReasonLine is about a MICROPHONE
+     * that never opened. Telling somebody "that one did not record" when nothing
+     * ever started is how a mic problem gets mistaken for a recording problem. */
+    ok(typeof micMod.micReasonLine === 'function', 'ui/voice/micHud.js exports micReasonLine');
+    ok(micMod.micReasonLine('denied') === S20.voice.micDenied, 'a refused mic is a refusal, not a failure');
+    ok(micMod.micReasonLine('missing') === S20.voice.micMissing, 'no device says no device');
+    ok(micMod.micReasonLine('unsupported') === S20.voice.micMissing, '...and so does a host with no getUserMedia');
+    ok(micMod.micReasonLine('cancelled') === '', 'our own gesture ending it says NOTHING — there is nothing to report');
+    ok(micMod.micReasonLine('busy') === S20.voice.micFailed
+      && micMod.micReasonLine('failed') === S20.voice.micFailed
+      && micMod.micReasonLine('nonsense-from-the-future') === S20.voice.micFailed,
+    'and everything else blames the mic rather than the recording', micMod.micReasonLine('busy'));
+    ok(micMod.micReasonLine('failed') !== S20.voice.sendFailed,
+      'the two lines are actually DIFFERENT — this used to be one string doing both jobs');
+    ok(/try again/i.test(S20.voice.micFailed), 'and it says the thing that is now true: try again');
+  }
+
+  /* --- 20c-quater. A THROWN SEAM IS NOT A DEAD BUTTON ----------------------
+   *
+   * The other half of the reported stuck mic, on this side of the wire. Both
+   * awaits in stopAndSend are on INJECTABLE handles, and a rejection from either
+   * one used to walk out as an unhandled rejection with the strip still reading
+   * "sending…" — a phase onDown refuses. The mic was then dead for the match.
+   * ---------------------------------------------------------------------- */
+  function mountBrokenMic(broken) {
+    const host = document.createElement('div');
+    const chipHost = document.createElement('div');
+    const v = fakeVoice();
+    const st = { starts: 0, resets: 0 };
+    const api = {
+      start() { st.starts++; return Promise.resolve({ ok: true, reason: 'recording' }); },
+      stop() {
+        return broken === 'stop'
+          ? Promise.reject(new Error('the recorder fell over'))
+          : Promise.resolve({ ok: true, reason: 'stopped', blob: { size: 64 }, durMs: 900 });
+      },
+      cancel() { return Promise.resolve({ ok: false, reason: 'cancelled' }); },
+      state() { return 'idle'; },
+      isRecording() { return false; },
+      elapsedMs() { return 900; },
+      maxMs() { return 10000; },
+      mimeType() { return ''; },
+      onCapped() { return () => {}; },
+      reset() { st.resets++; },
+      dispose() {},
+    };
+    if (broken === 'send') v.sendBlob = () => Promise.reject(new Error('the wire died'));
+    const mic = micMod.mountMicHud({ host, chipHost, voice: v, recorder: api });
+    v._set(true);
+    return { mic, btn: mic.parts.button, st, v };
+  }
+
+  {
+    const m = mountBrokenMic('stop');
+    ptr(m.btn, 'pointerdown', 200);
+    await sleep(320);
+    ptr(m.btn, 'pointerup', 200);
+    await sleep(40);
+    ok(m.st.resets === 1, 'a stop() that REJECTS is recovered from, not left in flight');
+    ok(m.mic.parts.timeEl.textContent === S20.voice.micFailed,
+      'and the player is told the MIC failed, not that their note did',
+      m.mic.parts.timeEl.textContent);
+    ok(m.mic.phase() !== 'send', 'the strip is not left on "sending…"', m.mic.phase());
+    // ...and the very next press is a whole new recording, with no wait.
+    ptr(m.btn, 'pointerdown', 200);
+    ok(m.st.starts === 2, 'THE NEXT PRESS RECORDS — one failure does not poison the mic');
+    m.mic.unmount();
+  }
+
+  {
+    const m = mountBrokenMic('send');
+    ptr(m.btn, 'pointerdown', 200);
+    await sleep(320);
+    ptr(m.btn, 'pointerup', 200);
+    await sleep(40);
+    ok(m.mic.parts.timeEl.textContent === S20.voice.sendFailed,
+      'a sendBlob that REJECTS reports a failed note (the recording was fine — the wire was not)',
+      m.mic.parts.timeEl.textContent);
+    ptr(m.btn, 'pointerdown', 200);
+    ok(m.st.starts === 2, 'and the mic is pressable straight afterwards');
+    m.mic.unmount();
+  }
+
+  {
+    /* A FLASH IS NOT A LOCK. The terminal word sits on the strip for
+     * MIC_FLASH_MS, and a player who has just been told a note failed reaches
+     * STRAIGHT back for the button. A press that is ignored for over a second
+     * is indistinguishable from the stuck mic all of this is about. */
+    const m = mountMic();
+    m.v._set(true);
+    ptr(m.btn, 'pointerdown', 200);
+    await sleep(320);
+    ptr(m.btn, 'pointerup', 200);
+    await sleep(30);
+    ok(m.mic.phase() === 'flash', 'a finished note flashes its word');
+    ptr(m.btn, 'pointerdown', 200);
+    ok(m.r.st.starts === 2, 'pressing DURING the flash cuts it short and opens the mic again');
+    await sleep(320);
+    ok(m.mic.isRecording() === true, 'and that press becomes a real recording');
+    m.mic.unmount();
   }
 
   /* --- 20d. ESCAPE IS NOT TOUCHED ----------------------------------------- */
