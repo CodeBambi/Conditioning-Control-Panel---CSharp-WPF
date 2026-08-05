@@ -53,6 +53,28 @@
  * and stay in the match. A held recording is released by the pointer that is
  * holding it, or by that pointer being taken away.
  *
+ * ────────────────────────────────────── a failure is never the last failure ──
+ *
+ * ONE BAD RECORDING MAY NOT COST A PLAYER THE FEATURE. Reported 2026-08-05: the
+ * mic worked once, the first attempt failed, and every press after it answered
+ * "that one did not record" for the rest of the session. Two halves, and both
+ * are pinned in test/selftest-hud.js §20b-bis and §20c-quater:
+ *
+ *   THE RECORDER LATCHED. ui/voice/recorder.js refuses any start() that is not
+ *   from `idle`, so anything parking it in `starting` (a permission prompt
+ *   nobody answered) refused every later press. Fixed there — but this file
+ *   still calls recoverRecorder() on EVERY refusal, because a UI that cannot
+ *   explain a "no" should not be the thing that decides to live with it.
+ *
+ *   THE STRIP LATCHED. `phase` gates onDown, and both awaits in stopAndSend are
+ *   on injectable seams: a rejection used to leave the strip on 'send' with no
+ *   path back. Every await is now inside a try/catch inside a try/finally that
+ *   guarantees a pressable phase, MIC_SETTLE_MAX_MS is the timer under that, and
+ *   a press DURING a flash cuts the word short rather than being swallowed.
+ *
+ * And the copy tells the two apart: S.voice.sendFailed is a note that failed,
+ * S.voice.micFailed is a microphone that never opened. See micReasonLine.
+ *
  * ────────────────────────────────────────────────────────── the four traps ──
  *
  *   ONE ANIMATION SLOT. The pulse lives on `.gg-voice-dot` and the level bars on
@@ -113,6 +135,18 @@ export const MIC_FLASH_MS = 1200;
 export const MIC_COUNTDOWN_MS = 3000;
 /** The hint caption's dwell (a tap, a refusal). Long enough to read once. */
 export const MIC_HINT_MS = 2200;
+/**
+ * THE DEAD-MAN'S SWITCH ON THE STRIP.
+ *
+ * Everything this file awaits is documented to settle and every one of those
+ * awaits is now wrapped — but `recorder` and `voice` are both INJECTABLE seams,
+ * and a promise that never settles would leave the strip on 'send' with no way
+ * back. A mic button that is dead for the rest of the match is the exact bug
+ * this whole pass exists to make impossible, so there is a timer under it as
+ * well as a `finally`. Comfortably longer than a ten-second note plus a send,
+ * so it never fires on anything that is merely slow.
+ */
+export const MIC_SETTLE_MAX_MS = 20_000;
 /** Timer repaint cadence while recording. 10 fps is smooth for one decimal. */
 const TICK_MS = 100;
 
@@ -192,6 +226,28 @@ export function sendReasonLine(reason, waitSec = 1) {
     case 'aborted':
     case 'busy':        return S.voice.cancelled;
     default:            return S.voice.sendFailed;   // empty | too-big | unreadable | send-failed
+  }
+}
+
+/**
+ * A refusal from the RECORDER (ui/voice/recorder.js start/stop) -> the line the
+ * player sees. Separate from sendReasonLine on purpose: those reasons are about
+ * a note that failed to cross, these are about a microphone that never opened,
+ * and telling somebody "that one did not record" when nothing ever started is
+ * how a mic problem gets mistaken for a recording problem for three play-tests
+ * running. Exported so the suite pins the mapping.
+ *
+ * @param {string} reason  denied|missing|unsupported|cancelled|busy|failed|idle
+ */
+export function micReasonLine(reason) {
+  switch (reason) {
+    case 'denied':      return S.voice.micDenied;
+    case 'missing':
+    case 'unsupported': return S.voice.micMissing;
+    // The player's own gesture ended it. There is nothing to report.
+    case 'cancelled':   return '';
+    // busy | failed | idle | anything a newer recorder invents.
+    default:            return S.voice.micFailed;
   }
 }
 
@@ -295,6 +351,16 @@ export function mountMicHud({
   let flashTimer = 0;
   let hintTimer = 0;
   let chipTimer = 0;
+  let settleTimer = 0;
+  /* One number per press. rec.start() is awaited, and its answer can arrive long
+   * after the gesture that asked for it (a permission prompt is a human), so the
+   * answer carries the number it was asked under and is dropped if it is stale. */
+  let gestureSeq = 0;
+  /* An await is in flight inside stopAndSend / cancelRecording. The phase alone
+   * cannot say so — 'flash' is worn both while cancel() is being waited on and
+   * while a finished word is merely sitting on the strip — and the difference
+   * matters to onDown, which may interrupt the second but not the first. */
+  let settling = false;
   let willCancel = false;
   let ending = false;            // inside MIC_COUNTDOWN_MS of the cap
   let lastSentAt = -Infinity;
@@ -308,6 +374,64 @@ export function mountMicHud({
   }
 
   function clearTimer(id) { if (id) { try { clearTimeout(id); } catch (_e) { /* gone */ } } return 0; }
+
+  /**
+   * ONE FAILURE MAY NOT POISON THE NEXT PRESS.
+   *
+   * The recorder is asked to go back to idle whatever it thinks it is holding —
+   * a getUserMedia nobody answered, a MediaRecorder that would not construct, a
+   * note half assembled. This is the whole cure for the reported bug: before it,
+   * a first attempt that failed could leave the recorder parked in `starting` or
+   * `stopping`, and every later press was answered 'busy' and shown a refusal,
+   * for the rest of the session.
+   *
+   * `reset()` is the recorder's own door; `cancel()` is the fallback for an
+   * older/injected handle that has no such thing, and its promise is swallowed
+   * because nobody is waiting on a recovery.
+   */
+  function recoverRecorder() {
+    try {
+      if (typeof rec.reset === 'function') { rec.reset(); return; }
+      const p = rec.cancel?.();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch (_e) { /* a handle that throws at its own recovery is already gone */ }
+  }
+
+  /** rec.cancel() where nothing is waiting for the answer. Never unhandled. */
+  function safeCancel() {
+    try {
+      const p = rec.cancel?.();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch (_e) { /* ignore */ }
+  }
+
+  /** Put the strip back on the button, from anywhere. Never throws. */
+  function goIdle() {
+    holdTimer = clearTimer(holdTimer);
+    flashTimer = clearTimer(flashTimer);
+    releasePointer();
+    willCancel = false;
+    setPhase('idle');
+    text(timeEl, '');
+  }
+
+  /** See MIC_SETTLE_MAX_MS. Armed around every await, disarmed by the finally. */
+  function armSettleGuard() {
+    settleTimer = clearTimer(settleTimer);
+    try {
+      settleTimer = setTimeout(() => {
+        settleTimer = 0;
+        if (unmounted) return;
+        settling = false;
+        recoverRecorder();
+        goIdle();
+        showHint(S.voice.micFailed);
+        log({ t: 'voice-out', ok: false, reason: 'stuck' });
+      }, MIC_SETTLE_MAX_MS);
+    } catch (_e) { settleTimer = 0; }
+  }
+
+  function clearSettleGuard() { settleTimer = clearTimer(settleTimer); }
 
   function showHint(line) {
     if (!hint || !line) return;
@@ -383,11 +507,18 @@ export function mountMicHud({
     flashTimer = clearTimer(flashTimer);
     try {
       flashTimer = setTimeout(() => {
+        flashTimer = 0;
         if (unmounted) return;
         setPhase('idle');
         text(timeEl, '');
       }, MIC_FLASH_MS);
-    } catch (_e) { /* ignore */ }
+    } catch (_e) {
+      // No timer here (a host without setTimeout, a stub DOM). A word nobody can
+      // clear would be a button nobody can press: skip the dwell, keep the mic.
+      flashTimer = 0;
+      setPhase('idle');
+      text(timeEl, '');
+    }
   }
 
   /** Let go of the pointer, whatever happened to it. Never throws. */
@@ -403,45 +534,148 @@ export function mountMicHud({
 
   /* ---------------------------------------------------------------- sending */
 
+  /**
+   * Stop, and put the note on the wire.
+   *
+   * EVERY EXIT LEAVES A PRESSABLE BUTTON. Two awaits here, on two injectable
+   * seams, and before 2026-08-05 a throw from either one walked straight out of
+   * this function as an unhandled rejection with the strip still reading
+   * "sending…" — a phase onDown refuses, forever. Both are caught into a REASON
+   * now (a thrown recorder is a failed recording, which is a thing the copy deck
+   * has a sentence for), and the `finally` is the backstop for the paths a
+   * future edit adds.
+   */
   async function stopAndSend() {
+    settling = true;
+    armSettleGuard();
     setPhase('send');
     text(timeEl, S.voice.sending);
     text(slideEl, '');
-    const res = await rec.stop();
-    if (unmounted) return;
-    if (!res || !res.ok || !res.blob) {
-      // 'empty' is a mic that produced silence (a muted device, a track that
-      // never delivered a sample). It is not the player's mistake and the copy
-      // says so.
-      flash(S.voice.sendFailed);
-      log({ t: 'voice-out', ok: false, reason: (res && res.reason) || 'empty' });
-      return;
+    try {
+      let res = null;
+      let threw = '';
+      try { res = await rec.stop(); }
+      catch (e) { threw = 'stop-threw'; log({ t: 'voice-out', ok: false, reason: threw, err: (e && e.message) || String(e) }); res = null; }
+      if (unmounted) return;
+      if (!res || !res.ok || !res.blob) {
+        const reason = threw || (res && res.reason) || 'empty';
+        // ...and the recorder does not get to stay in whatever state produced
+        // that. The next press starts from scratch.
+        recoverRecorder();
+        /* WHICH SENTENCE. 'empty' is a mic that produced silence (a muted
+         * device, a track that never delivered a sample) — the recording
+         * failed, and sendFailed says exactly that. 'idle' / 'cancelled' mean
+         * there was no recording to fail: the recorder was already gone when we
+         * asked, which is a MIC failure and gets the mic's sentence. */
+        flash(reason === 'empty' ? S.voice.sendFailed : S.voice.micFailed);
+        log({ t: 'voice-out', ok: false, reason });
+        return;
+      }
+      // The two cues are AFTER the microphone is closed, never before or during:
+      // a sound played while recording is a sound that ends up in the note.
+      sfx(audio, 'ui-select');
+      let out = null;
+      try { out = await voice.sendBlob(res.blob, { durMs: res.durMs }); }
+      catch (e) { log({ t: 'voice-out', ok: false, reason: 'send-threw', err: (e && e.message) || String(e) }); out = null; }
+      if (unmounted) return;
+      const reason = (out && out.reason) || 'send-failed';
+      if (out && out.ok) lastSentAt = clock();
+      const waitSec = Math.max(1, Math.ceil((VN_SEND_MIN_GAP_MS - (clock() - lastSentAt)) / 1000));
+      flash(sendReasonLine(reason, waitSec));
+      log({ t: 'voice-out', ok: !!(out && out.ok), reason, durMs: res.durMs });
+    } finally {
+      settling = false;
+      clearSettleGuard();
+      /* THE GUARANTEE. However this exited — a resolved send, a thrown seam, an
+       * early return somebody adds next year — the strip may not be left on a
+       * phase that refuses the next press. 'flash' folds itself; anything else
+       * is put back by hand. */
+      if (!unmounted && phase !== 'flash' && phase !== 'idle') goIdle();
     }
-    // The two cues are AFTER the microphone is closed, never before or during:
-    // a sound played while recording is a sound that ends up in the note.
-    sfx(audio, 'ui-select');
-    const out = await voice.sendBlob(res.blob, { durMs: res.durMs });
-    if (unmounted) return;
-    const reason = (out && out.reason) || 'send-failed';
-    if (out && out.ok) lastSentAt = clock();
-    const waitSec = Math.max(1, Math.ceil((VN_SEND_MIN_GAP_MS - (clock() - lastSentAt)) / 1000));
-    flash(sendReasonLine(reason, waitSec));
-    log({ t: 'voice-out', ok: !!(out && out.ok), reason, durMs: res.durMs });
   }
 
   async function cancelRecording(why) {
+    settling = true;
+    armSettleGuard();
     setPhase('flash');
-    await rec.cancel();
-    if (unmounted) return;
-    sfx(audio, 'ui-back');
-    flash(S.voice.cancelled);
-    log({ t: 'voice-cancel', why: why || 'pointer' });
+    try {
+      try { await rec.cancel(); }
+      catch (e) { log({ t: 'voice-cancel', why: 'cancel-threw', err: (e && e.message) || String(e) }); recoverRecorder(); }
+      if (unmounted) return;
+      sfx(audio, 'ui-back');
+      flash(S.voice.cancelled);
+      log({ t: 'voice-cancel', why: why || 'pointer' });
+    } finally {
+      settling = false;
+      clearSettleGuard();
+      // A cancel that never reached flash() still owes the player their button.
+      if (!unmounted && phase !== 'flash' && phase !== 'idle') goIdle();
+    }
   }
 
   /* --------------------------------------------------------- the pointer -- */
 
+  /**
+   * Open the microphone for this gesture.
+   *
+   * A REFUSAL IS RECOVERED FROM, NOT JUST REPORTED. Whatever the recorder is
+   * holding onto when it says no, it is forced back to idle here — so the very
+   * next pointerdown is a fresh attempt instead of a second refusal. That one
+   * line is the reported bug: without it a first failure latched the recorder
+   * out of `idle` and every press afterwards was answered 'busy' and told "that
+   * one did not record", which was neither true nor recoverable.
+   */
+  async function startMic(mine) {
+    let res = null;
+    try { res = await rec.start(); }
+    catch (e) {
+      log({ t: 'voice-mic', ok: false, reason: 'start-threw', err: (e && e.message) || String(e) });
+      res = { ok: false, reason: 'failed' };
+    }
+    if (unmounted) return;
+    /* A LATER PRESS OWNS THE MIC NOW. An answer to a gesture that is over may
+     * not act on the one that replaced it — recovering "from" this refusal would
+     * take the microphone off a recording that is running perfectly well, and a
+     * getUserMedia ceiling means that answer can arrive half a minute late. */
+    if (mine !== gestureSeq) {
+      // ...and a stale attempt that somehow SUCCEEDED has opened a microphone no
+      // gesture owns. That is rule 1's problem, so it is given back here.
+      if (res && res.ok) recoverRecorder();
+      log({ t: 'voice-mic', ok: false, reason: 'stale', stale: true });
+      return;
+    }
+    if (res && res.ok) return;
+    const reason = (res && res.reason) || 'failed';
+    // 'cancelled' is our own gesture ending the attempt — there is nothing stuck
+    // and nothing to say. Everything else gets the machine put back.
+    if (reason !== 'cancelled') recoverRecorder();
+    /* THE ONE MOMENT A PLAYER CAN BE TOLD WHY. If the gesture has already moved
+     * on (a tap that finished, a release that is mid-send) the refusal is that
+     * path's to report, and saying it twice would be two words on one strip. */
+    if (phase === 'hold' || phase === 'rec') {
+      releasePointer();
+      holdTimer = clearTimer(holdTimer);
+      setPhase('idle');
+      showHint(micReasonLine(reason));
+    }
+    log({ t: 'voice-mic', ok: false, reason });
+  }
+
   function onDown(e) {
-    if (!live || phase !== 'idle') return;
+    if (!live || settling) return;
+    /* A FLASH IS NOT A LOCK. "sent" / "cancelled" / a refusal holds the strip for
+     * MIC_FLASH_MS, and a player who has just been told a note failed reaches
+     * straight back for the button — a mic that ignores that press is
+     * indistinguishable from the stuck one everything above exists to prevent.
+     * The word is cut short and the new hold starts from a clean idle. (The
+     * awaits behind those words are already finished; `settling` above is what
+     * guards the ones that are not.) */
+    if (phase === 'flash') {
+      flashTimer = clearTimer(flashTimer);
+      setPhase('idle');
+      text(timeEl, '');
+    }
+    if (phase !== 'idle') return;
     if (e && typeof e.preventDefault === 'function') e.preventDefault();
     pointerId = e && e.pointerId != null ? e.pointerId : null;
     downX = e && typeof e.clientX === 'number' ? e.clientX : 0;
@@ -454,22 +688,7 @@ export function mountMicHud({
     try { if (pointerId != null) btn.setPointerCapture?.(pointerId); } catch (_e) { /* ignore */ }
 
     // The microphone opens NOW (see the header); the STRIP waits for the hold.
-    void rec.start().then((res) => {
-      if (unmounted) return;
-      if (res && res.ok) return;
-      // A refusal ends the gesture then and there, with a sentence rather than
-      // a dead button: this is the one moment a player can be told why.
-      const reason = (res && res.reason) || 'failed';
-      if (phase === 'hold' || phase === 'rec') {
-        releasePointer();
-        holdTimer = clearTimer(holdTimer);
-        setPhase('idle');
-        showHint(reason === 'denied' ? S.voice.micDenied
-          : reason === 'missing' ? S.voice.micMissing
-            : reason === 'cancelled' ? '' : S.voice.sendFailed);
-      }
-      log({ t: 'voice-mic', ok: false, reason });
-    });
+    void startMic(++gestureSeq);
 
     holdTimer = clearTimer(holdTimer);
     try {
@@ -525,16 +744,18 @@ export function mountMicHud({
     if (how === 'up' && wasRec) { void stopAndSend(); return; }
     if (how === 'up' && !wasRec) {
       // A TAP. Nothing was wanted, so nothing is kept — and the mic that opened
-      // on pointerdown closes on the same call a real cancel makes.
+      // on pointerdown closes on the same call a real cancel makes. The strip is
+      // put back FIRST: a tap is the commonest press there is, and the recorder
+      // may still be sitting on a permission prompt when it lands.
       setPhase('idle');
-      void rec.cancel();
+      safeCancel();
       if (held < MIC_HOLD_MS) showHint(S.voice.holdHint);
       log({ t: 'voice-tap', heldMs: Math.round(held) });
       return;
     }
     if (wasRec) { void cancelRecording(how); return; }
     setPhase('idle');
-    void rec.cancel();
+    safeCancel();
   }
 
   if (btn) {
@@ -554,17 +775,59 @@ export function mountMicHud({
     holdTimer = clearTimer(holdTimer);
     setPhase('send');
     text(timeEl, S.voice.sending);
-    if (!res || !res.ok || !res.blob) { flash(S.voice.sendFailed); return; }
+    if (!res || !res.ok || !res.blob) {
+      recoverRecorder();
+      flash(res && res.reason === 'empty' ? S.voice.sendFailed : S.voice.micFailed);
+      log({ t: 'voice-out', ok: false, reason: (res && res.reason) || 'empty', capped: true });
+      return;
+    }
     sfx(audio, 'ui-select');
-    void voice.sendBlob(res.blob, { durMs: res.durMs }).then((out) => {
+    void sendCapped(res);
+  }));
+
+  /**
+   * The cap's own send. Split out of the subscriber so it can be a plain
+   * try/finally like stopAndSend's — a `.then()` with no `.catch()` on the same
+   * two seams was the other way the strip could be left reading "sending…" with
+   * no path back to the button.
+   */
+  async function sendCapped(res) {
+    settling = true;
+    armSettleGuard();
+    try {
+      let out = null;
+      try { out = await voice.sendBlob(res.blob, { durMs: res.durMs }); }
+      catch (e) { log({ t: 'voice-out', ok: false, reason: 'send-threw', err: (e && e.message) || String(e) }); out = null; }
       if (unmounted) return;
       const reason = (out && out.reason) || 'send-failed';
       if (out && out.ok) lastSentAt = clock();
       const waitSec = Math.max(1, Math.ceil((VN_SEND_MIN_GAP_MS - (clock() - lastSentAt)) / 1000));
       flash(sendReasonLine(reason, waitSec));
       log({ t: 'voice-out', ok: !!(out && out.ok), reason, durMs: res.durMs, capped: true });
-    });
-  }));
+    } finally {
+      settling = false;
+      clearSettleGuard();
+      if (!unmounted && phase !== 'flash' && phase !== 'idle') goIdle();
+    }
+  }
+
+  /* THE RECORDER DYING UNDER A LIVE HOLD. A MediaRecorder can fall over mid-note
+   * (a device unplugged, a pipeline that gave up); ui/voice/recorder.js releases
+   * the microphone itself and says so here. Without this the strip would go on
+   * counting seconds against a recorder that stopped recording, and the player
+   * would only find out when they let go of a note that no longer existed. */
+  if (typeof rec.onFailed === 'function') {
+    try {
+      led.add(rec.onFailed(() => {
+        if (unmounted || settling) return;
+        if (phase !== 'rec' && phase !== 'hold') return;
+        releasePointer();
+        holdTimer = clearTimer(holdTimer);
+        flash(S.voice.micFailed);
+        log({ t: 'voice-mic', ok: false, reason: 'recorder-error' });
+      }) || (() => {}));
+    } catch (_e) { /* a recorder without the hook simply never reports one */ }
+  }
 
   /* --------------------------------------------------------- availability -- */
 
@@ -677,6 +940,8 @@ export function mountMicHud({
       flashTimer = clearTimer(flashTimer);
       hintTimer = clearTimer(hintTimer);
       chipTimer = clearTimer(chipTimer);
+      settleTimer = clearTimer(settleTimer);
+      settling = false;
       releasePointer();
       led.run();
       // The microphone NEVER outlives the desk. dispose() stops the tracks

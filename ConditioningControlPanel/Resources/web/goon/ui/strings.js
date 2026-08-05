@@ -539,6 +539,15 @@ export const S = Object.freeze({
     cancelled: 'cancelled',
     /** The recorder came back with nothing usable (a mic that produced silence). */
     sendFailed: 'that one did not record — try again',
+    /**
+     * THE MIC NEVER OPENED, which is a different sentence from the one above and
+     * used to borrow it. `sendFailed` blames the recording ("that one did not
+     * record"); this is for the case where there was no recording to blame —
+     * getUserMedia timed out, MediaRecorder would not construct, the recorder
+     * fell over mid-note. Both end in "try again" because both are recoverable,
+     * and after 2026-08-05 both actually are.
+     */
+    micFailed: 'the mic did not open — try again',
     /** The 4 s floor between sends, phrased as a wait rather than a refusal. */
     tooSoon: (sec) => 'one more in ' + sec + 's',
 
