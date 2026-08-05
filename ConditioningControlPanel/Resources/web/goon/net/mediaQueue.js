@@ -61,6 +61,47 @@
 //      "one landing, one drop" and the untagged diagnostic below both survive intact, and the
 //      receiver's own rotation (exec/media.js drawReceived) stays the answer for "nothing new".
 //
+// AND A FOURTH RULE, THE PRELOAD ONE (2026-08-05, owner, final): "WE NEED TO PRELOAD 1 OR TWO
+// VIDEOS, SO THEY LAND IMMEDIATELY, THIS IS MISLEADING."
+//
+//  4. UNTIL TWO FOOTAGE VIDEOS HAVE LANDED, THE PUMP PICKS THE SMALLEST FOOTAGE VIDEO IT CAN
+//     AFFORD — AND THAT OUTRANKS THE RULE-3b SCORE. A video attack does not stream anything: it
+//     renders from an artifact that ALREADY LANDED, so what the opponent actually watches was
+//     decided minutes earlier, here, by which card this pump drew. Stills and gif-converted loops
+//     are small and land in seconds; real footage is tens of megabytes and lands late. Rules 1 and
+//     3b are both honest about the pool's SHAPE and neither of them has an opinion about this, so
+//     the queue produced exactly the outcome the owner named: you throw a Video, the opponent sees
+//     a two-second loop, every gate passed, nothing is broken, and the throw LIED. Rule 1 already
+//     conceded half of this — `tagsFor` prefers footage over a gif-origin clip — but a preference
+//     cannot conjure an artifact that is still on the wire, which is why the fix has to live in
+//     the SENDER'S PICK ORDER and not in the tagging.
+//
+//     SMALLEST, NOT THE DECK'S ORDER, because the unit here is WALL CLOCK and nothing else. A 4 MB
+//     clip that crosses in eight seconds and a 40 MB one that takes ninety fill the same slot with
+//     the same promise kept; the only difference is how many early throws lie while we wait. The
+//     shuffle is deliberately overruled for these two picks and gets the whole rest of the match.
+//
+//     THE QUOTA COUNTS LANDINGS, NOT OFFERS. `footageLanded` ticks in `pushLanded` — which is also
+//     where the `decline:'have'` path lands, correctly: an artifact the peer kept from a previous
+//     session is ON THE PEER, which is the only thing the quota is about. Because it counts
+//     landings and MAX_CONCURRENT_OUT is still 1, the pump re-evaluates after every landing rather
+//     than committing to a plan: two is a ceiling on what the rule may ASK FOR, never a countdown
+//     it has to finish.
+//
+//     EVERY GATE ABOVE STILL APPLIES, and this rule may never stall the lane waiting for one of
+//     them to relent. The candidates come out of `eligible()` untouched, so a footage video the
+//     link cannot afford inside MAX_XFER_MS or the peer cannot decode is simply NOT THERE — the
+//     rule then either takes the smallest one that IS affordable or, with none at all, finds
+//     nothing and falls straight through to the rule-3b score. A library with one footage video
+//     preloads one; a library with none behaves exactly as it did before this rule existed. The
+//     failure mode this rule must never have is an empty bulk lane holding out for a 60 MB file.
+//
+//     THE COST IS ACCEPTED, CONSCIOUSLY. One bulk lane means these two picks DELAY the stills that
+//     feed the early FlashBursts, so the first minute of a match is worse at flashes and honest
+//     about videos. That is the owner's call, and it is bounded: two artifacts, then rule 3b
+//     resumes with its scoring untouched — the balance score immediately reads the pool as
+//     video-heavy and spends the next picks on images, which is the trade-off unwinding itself.
+//
 // TWO tryFirePayload INSTANCE WRAPPERS NOW EXIST. boot.js applies the matchLog wrapper first
 // (attachMatch -> matchLog.attach), then this one, so the queue's wrapper is the OUTERMOST: a
 // payload gets its tags BEFORE the log sees it, and the log records exactly what went out. Order
@@ -103,6 +144,14 @@ export const QUEUE_AHEAD_MS = 45000;
  * library, and short enough that the SHUFFLE — not the score — still decides most hands.
  */
 export const PICK_SCAN = 12;
+/**
+ * How many footage-origin videos must LAND on the peer before the pump returns to the rule-3b
+ * score (rule 4). Two, not one: the first one is spent by the first Video throw and a match that
+ * opens with two video attacks would be back to lying by the second, so the quota is "a real clip
+ * for the opening throw, and a real clip behind it". It is a CEILING on what the preload may ask
+ * for — a library holding one footage video preloads one, a library holding none preloads none.
+ */
+export const PRELOAD_FOOTAGE = 2;
 /** The idle poll only bothers when fewer than this many have landed. */
 export const QUEUE_MIN = 2;
 /** How many landed artifacts are tracked per match, so a 12-minute run cannot grow unbounded. */
@@ -195,6 +244,15 @@ export function createMediaQueue({
    * same FILE never goes twice, so the only repetition left to break up is of a KIND of thing.
    */
   let lastOrigin = '';
+  /**
+   * How many FOOTAGE-ORIGIN VIDEOS have landed on the peer this attachment (rule 4). Monotonic,
+   * and deliberately NOT derived from `landed`: `markConsumed` empties that array as payloads
+   * spend it, but spending a tag does not un-send the file — exec/media.js `received` is a Map
+   * that only ever grows — so a quota read off `landed` would re-arm itself after the first Video
+   * throw and preload footage forever. `cancelAll` leaves it alone for the same reason it leaves
+   * the STORE alone; only `detach` (a new match, a new peer, a new store) resets it.
+   */
+  let footageLanded = 0;
   /**
    * sha -> {kind, seq} for every artifact a fired payload has already pointed the peer at.
    * `seq` is a monotonic counter, so "least recently shown" is a number comparison and nothing
@@ -397,6 +455,32 @@ export function createMediaQueue({
     return best;
   }
 
+  /**
+   * FOOTAGE-ORIGIN VIDEO, and the definition is one line because it has to be the same line
+   * everywhere: kind `video` AND an `origin` that is not 'gif'. `origin` is plumbed from the
+   * host's own flag through boot's listSendable (see 6h) and an ABSENT origin reads as footage on
+   * purpose — the same fail-open reading exec/media.js addReceived uses, so a host too old to send
+   * the field keeps every clip it has as eligible as it is today.
+   */
+  function isFootageVideo(a) { return !!a && a.kind === 'video' && a.origin !== 'gif'; }
+
+  /**
+   * RULE 4: the card the preload wants, or null when it wants nothing.
+   *
+   * `pool` is `eligible()` and NOTHING is re-checked here, which is the whole safety argument: the
+   * codec gate, the MAX_XFER_MS wire budget, the size caps, `seen` and `neverOffer` have all
+   * already had their say, so "the smallest footage video in the pool" is by construction the
+   * smallest one we can AFFORD and the peer can DECODE. A pool with none returns null and the
+   * caller scores as usual — the rule can skip, it can never wait.
+   */
+  function preloadPick(pool) {
+    if (footageLanded >= PRELOAD_FOOTAGE) return null;
+    let best = null;
+    // Strict `<`, so equal-sized candidates keep the source order rather than churning.
+    for (const e of pool) if (isFootageVideo(e) && (!best || e.bytes < best.bytes)) best = e;
+    return best;
+  }
+
   /** The next artifact worth offering, or null. */
   function nextPick() {
     const pool = eligible();
@@ -405,7 +489,19 @@ export function createMediaQueue({
     deck = deck.filter((e) => live.has(e.sha) && !seen.has(e.sha) && !neverOffer.has(e.sha));
     if (!deck.length) reshuffle(pool);
     if (!deck.length) return null;
-    const [pick] = deck.splice(pickIndex(hungriestKind(pool)), 1);
+    /* THE PRELOAD OUTRANKS THE SCORE (rule 4) — and takes its card OUT OF THE DECK rather than
+     * beside it, so the shuffle it overruled resumes on a deck that has not silently kept a
+     * duplicate. The `at < 0` arm is the honest fallback for a pool that has outgrown a stale deck
+     * (an artifact compressed mid-match is eligible before it is dealt): the rule still wins, and
+     * `seen` keeps the deck's copy, if one ever appears, from being drawn twice. */
+    const forced = preloadPick(pool);
+    let pick = null;
+    if (forced) {
+      const at = deck.findIndex((e) => e.sha === forced.sha);
+      pick = at >= 0 ? deck.splice(at, 1)[0] : forced;
+    } else {
+      pick = deck.splice(pickIndex(hungriestKind(pool)), 1)[0];
+    }
     if (!pick) return null;
     lastOrigin = pick.origin || '';
     recent.push(pick.sha);
@@ -508,6 +604,10 @@ export function createMediaQueue({
 
   function pushLanded(a) {
     landed.push(a);
+    // Rule 4's quota, ticked at the ONE place both landing paths meet (a completed transfer and a
+    // `decline:'have'` reuse) — and before the ring truncates, because LANDED_MAX evicting a row
+    // does not take the file back off the peer.
+    if (isFootageVideo(a)) footageLanded++;
     while (landed.length > LANDED_MAX) landed.shift();
   }
 
@@ -791,6 +891,7 @@ export function createMediaQueue({
     shown.clear();
     showSeq = 0;
     lastOrigin = '';
+    footageLanded = 0;               // a new peer holds none of our footage — preload again
     match = null;
     transport = null;
   }
@@ -881,6 +982,9 @@ export function createMediaQueue({
         depth: targetDepth(),
         kinds: kindCounts(),
         shown: shown.size,
+        // Rule 4's state, so a play-test can tell "the preload is still working" apart from
+        // "the library has no footage in it" without reading the log.
+        preload: { landed: footageLanded, quota: PRELOAD_FOOTAGE },
         estBps: estBps(),
         channel: channel ? channel.stats() : null,
       };

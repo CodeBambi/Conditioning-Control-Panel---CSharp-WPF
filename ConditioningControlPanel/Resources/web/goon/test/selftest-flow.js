@@ -825,9 +825,20 @@ function mountRecap(result) {
 
     const GIF_VID = SHA('c');
     const REAL_VID = SHA('d');
+    const PRE1 = SHA('1');
+    const PRE2 = SHA('2');
+    /* THE TWO TINY CLIPS ARE RULE 4's QUOTA, PAID UP FRONT (2026-08-05). This test needs a
+     * `landed` array whose FIRST row is the gif — the arrangement a queue that just took
+     * `landed[0]` gets wrong — and the footage preload now guarantees the first two landings are
+     * footage, so the arrangement has to be built AFTER the quota rather than instead of it. Two
+     * 4 KB clips satisfy it, get drained below, and leave exactly the pair rule 1 was written
+     * for. Keeping them makes this test prove BOTH rules at once: the preload owns the opening,
+     * and the preference owns everything after it. */
     const artifacts = fakeArtifacts([
-      // The gif is offered FIRST by construction (it is first in the list and
-      // smaller), so a queue that just took `landed[0]` would send the loop.
+      { sha: PRE1, bytes: 4000, mime: 'video/mp4', kind: 'video', exempt: false, codec: 'avc1' },
+      { sha: PRE2, bytes: 4000, mime: 'video/mp4', kind: 'video', exempt: false, codec: 'avc1' },
+      // The gif is offered before the big clip by the rule-3b score (a fresh `origin` is worth 1),
+      // so a queue that just took `landed[0]` would send the loop.
       { sha: GIF_VID, bytes: 8000, mime: 'video/mp4', kind: 'video', exempt: false, origin: 'gif', codec: 'avc1' },
       { sha: REAL_VID, bytes: 40000, mime: 'video/mp4', kind: 'video', exempt: false, codec: 'avc1' },
     ]);
@@ -845,21 +856,33 @@ function mountRecap(result) {
     /* THE DECK IS SHUFFLED WITH Math.random (deliberately — see the header of
      * net/mediaQueue.js), so without pinning it this test would only catch a
      * regression half the time. `() => 0` makes the Fisher-Yates deterministic
-     * and lands the GIF FIRST, which is precisely the arrangement a queue that
-     * just took `landed[0]` would get wrong. */
+     * and lands the GIF BEFORE THE BIG CLIP, which is precisely the arrangement
+     * a queue that just took `landed[0]` would get wrong. */
     const realRandom = Math.random;
     try {
       Math.random = () => 0;
       qA.attach(a, pair.host);
       qB.attach(b, pair.guest);
-      for (let i = 0; i < 120 && storeB.held.size < 2; i++) await tick(25);
+      for (let i = 0; i < 200 && storeB.held.size < 4; i++) await tick(25);
     } finally {
       Math.random = realRandom;
     }
-    ok(storeB.held.size === 2, '6e: both clips landed — one gif-origin, one real', String(storeB.held.size));
-    ok(landedOrder[0] === GIF_VID,
-      '6e: and the GIF landed first, so `landed[0]` is the wrong answer and the test can see it',
-      landedOrder.join(','));
+    ok(storeB.held.size === 4, '6e: all four clips landed', String(storeB.held.size));
+    ok(landedOrder[0] === PRE1 && landedOrder[1] === PRE2,
+      '6e: the two footage clips landed FIRST — rule 4 owns the opening of the match',
+      landedOrder.join(',').slice(0, 40));
+    ok(landedOrder[2] === GIF_VID,
+      '6e: …and with the quota paid the GIF lands before the big clip, so `landed[0]` is the wrong '
+      + 'answer and the test can see it', landedOrder.join(',').slice(0, 40));
+
+    // Drain the preload pair. `tagsFor` spends footage first, so these come off in order and
+    // leave the gif sitting at index 0 of `landed` — the shape the preference has to survive.
+    for (const pre of [PRE1, PRE2]) {
+      const t = qA.tagsFor(GoonPayloadKind.Video);
+      ok(t.length === 1 && t[0] === 'xfer:' + pre,
+        '6e: the preload clips are spent first, oldest footage first', t.join(','));
+      qA.markConsumed(t);
+    }
 
     const first = qA.tagsFor(GoonPayloadKind.Video);
     ok(first.length === 1 && first[0] === 'xfer:' + REAL_VID,
@@ -1055,9 +1078,18 @@ function mountRecap(result) {
       Math.random = realRandom;
     }
     ok(order.length >= 4, '6i: the queue primed several deep during the draft', order.join(','));
-    ok(order[0] !== order[1],
-      '6i: the FIRST TWO landings are one of each kind — the receiver has an image lane and a '
-      + 'video lane before the first payload fires', order.join(','));
+    /* THE PIN MOVED WHEN RULE 4 LANDED (2026-08-05), and it moved for the reason the owner asked
+     * for: this library's videos are all footage-origin, so the first two picks belong to the
+     * preload and the receiver gets its video lane before its image lane. What 3b still owns —
+     * and what this pin now guards — is EVERYTHING AFTER the quota: the score reads the pool as
+     * video-heavy the moment it regains control and spends the next picks on images, so the
+     * balance the old pin wanted arrives one slot later rather than never. */
+    ok(order[0] === 'video' && order[1] === 'video',
+      '6i: the FIRST TWO landings are the footage preload (rule 4) — a video throw in the opening '
+      + 'minute must not render a gif clip', order.join(','));
+    ok(order[2] === 'image',
+      '6i: …and the rule-3b score resumes UNCHANGED the moment the quota is paid, immediately '
+      + 'spending the shortage it was just handed', order.join(','));
     ok(order.slice(0, 4).filter((k) => k === 'image').length >= 1
       && order.slice(0, 4).filter((k) => k === 'video').length >= 1,
       '6i: …and the balance holds through the first four', order.join(','));
@@ -1115,6 +1147,234 @@ function mountRecap(result) {
 
     qA.detach(); qB.detach();
     a.dispose(); b.dispose(); pair.dispose();
+  }
+
+  /* ---------- 6k. THE FOOTAGE PRELOAD (rule 4, 2026-08-05, owner): "we need to
+   * preload 1 or two videos, so they land immediately, this is misleading."
+   *
+   * A video attack renders from an artifact that has ALREADY LANDED. Small
+   * gif-converted loops cross the wire in seconds and real footage does not, so
+   * the first minute of every match threw Videos that rendered two-second loops
+   * — every layer working, and the throw lying. The pump now owes the peer two
+   * footage videos before it is allowed to optimise anything else, and takes the
+   * SMALLEST it can afford because the unit is wall clock.
+   *
+   * Four things have to be true at once and each has cost a round of play-test
+   * somewhere in this file: the preload outranks the score, the quota is a
+   * CEILING (two, then never again), a library that cannot pay it degrades
+   * instead of stalling, and the moment it IS paid the PR#140 scoring is back
+   * with nothing changed.
+   */
+  {
+    /** Artifacts that allocate their bytes ON OPEN — a 50 MB row must not cost 50 MB to declare. */
+    const lazyArtifacts = (list) => ({
+      listSendable: () => list.map((a) => Object.assign({}, a)),
+      open(sha) {
+        const meta = list.find((x) => x.sha === sha);
+        if (!meta) return null;
+        const b = new Uint8Array(meta.bytes);
+        return {
+          bytes: b.length,
+          mime: meta.mime,
+          read: (o, l) => b.buffer.slice(o, Math.min(o + l, b.length)),
+        };
+      },
+    });
+
+    /** One pinned run: attach both ends, drain, hand back the landing order by sha and by kind. */
+    const runLibrary = async (list, wantLandings, latencyMs = 0) => {
+      const pair = createLoopbackPair(loopbackOptions({
+        latencyMs, jitterMs: 0, guestClockSkewMs: 0, bulk: true, logger: quiet,
+      }));
+      const { a, b } = await consentedPair(pair);
+      const storeB = fakeStore();
+      const shas = [];
+      const kinds = [];
+      const qA = createMediaQueue({
+        artifacts: lazyArtifacts(list), store: fakeStore(), logger: quiet,
+        canSend: () => true, idlePollMs: 40,
+      });
+      const qB = createMediaQueue({
+        artifacts: { listSendable: () => [], open: () => null },
+        store: storeB, logger: quiet, canSend: () => false, idlePollMs: 40,
+      });
+      qB.onReceived((e) => { shas.push(e.sha); kinds.push(e.kind); });
+      /* Math.random pinned exactly as 6e and 6i pin it: the deck is shuffled with it on purpose,
+       * so an unpinned run would only catch a regression in the pick order some of the time. */
+      const realRandom = Math.random;
+      try {
+        Math.random = () => 0;
+        qA.attach(a, pair.host);
+        qB.attach(b, pair.guest);
+        for (let i = 0; i < 240 && shas.length < wantLandings; i++) await tick(25);
+      } finally {
+        Math.random = realRandom;
+      }
+      const stats = qA.stats();
+      qA.detach(); qB.detach();
+      a.dispose(); b.dispose(); pair.dispose();
+      return { shas, kinds, stats, held: storeB.held };
+    };
+
+    const V_BIG = SHA('7');
+    const V_MID = SHA('8');
+    const V_SMALL = SHA('9');
+    const IMG = SHA('0');
+    const vid = (sha, bytes, extra) => Object.assign(
+      { sha, bytes, mime: 'video/mp4', kind: 'video', exempt: false, codec: 'avc1' }, extra || {},
+    );
+    const img = (sha, bytes) => ({ sha, bytes, mime: 'image/png', kind: 'image', exempt: false });
+
+    // --- SMALLEST FIRST, AND THE QUOTA IS A CEILING. The library is declared
+    //     biggest-first on purpose: source order, deck order and the rule-3b
+    //     score would each have picked something else.
+    {
+      const r = await runLibrary([
+        vid(V_BIG, 90000), vid(V_MID, 30000), vid(V_SMALL, 6000), img(IMG, 4000),
+      ], 4);
+      ok(r.shas[0] === V_SMALL,
+        '6k: the SMALLEST footage video goes first — the point is wall-clock time-to-first-real-'
+        + 'video, so a 6 KB clip beats a 90 KB one the deck happened to deal on top',
+        r.shas.map((s) => s[0]).join(','));
+      ok(r.shas[1] === V_MID,
+        '6k: …and the second preload slot is the next smallest, not the deck\'s choice either',
+        r.shas.map((s) => s[0]).join(','));
+      ok(r.shas[2] === IMG,
+        '6k: TWO IS A CEILING. The third footage video is NOT preloaded: the quota is paid, the '
+        + 'rule-3b score is back in charge, and it spends the slot on the kind the pool is short '
+        + 'of', r.shas.map((s) => s[0]).join(','));
+      ok(r.shas[3] === V_BIG, '6k: the big clip lands last, on its merits',
+        r.shas.map((s) => s[0]).join(','));
+      ok(r.stats.preload && r.stats.preload.quota === 2 && r.stats.preload.landed >= 2,
+        '6k: and stats() reports the quota, so a play-test can tell "still preloading" from '
+        + '"this library has no footage in it"', JSON.stringify(r.stats.preload));
+    }
+
+    // --- POST-QUOTA IS THE PR#140 SCORE, UNCHANGED. Two footage clips pay the
+    //     quota, then the pool is two images and two gif-origin videos: +2 for
+    //     the hungry kind must beat +1 for a fresh origin, twice, before the
+    //     variety score gets its turn. That ordering IS rule 3b's contract.
+    {
+      const F1 = SHA('a');
+      const F2 = SHA('b');
+      const I1 = SHA('c');
+      const I2 = SHA('d');
+      const G1 = SHA('e');
+      const G2 = SHA('f');
+      const r = await runLibrary([
+        vid(F1, 5000), vid(F2, 5000), img(I1, 5000), img(I2, 5000),
+        vid(G1, 5000, { origin: 'gif' }), vid(G2, 5000, { origin: 'gif' }),
+      ], 6);
+      ok(r.kinds.join(',') === 'video,video,image,image,video,video',
+        '6k: preload, preload, then the PR#140 score exactly — the two images while the pool reads '
+        + 'video-heavy (+2 kind shortage outranks the +1 fresh origin the gif clips were '
+        + 'offering), and the gif clips once the kinds are level', r.kinds.join(','));
+      ok(r.shas[0] === F1 && r.shas[1] === F2,
+        '6k: the preload took the footage pair and left the gif-origin clips to the score — '
+        + '"footage-origin" is kind video AND origin !== gif, nothing else',
+        r.shas.map((s) => s[0]).join(','));
+    }
+
+    // --- A LIBRARY WITH NO FOOTAGE AT ALL IS UNTOUCHED. Every video is a
+    //     converted loop, the rule finds nothing, and the pick order is the one
+    //     this file pinned before rule 4 existed: an image lane and a video lane
+    //     before the first payload fires.
+    {
+      const r = await runLibrary([
+        img(SHA('1'), 5000), img(SHA('2'), 5000), img(SHA('3'), 5000),
+        vid(SHA('4'), 5000, { origin: 'gif' }), vid(SHA('5'), 5000, { origin: 'gif' }),
+      ], 4);
+      ok(r.kinds[0] !== r.kinds[1],
+        '6k: zero footage videos — the preload is INERT and 3b\'s alternation is byte-for-byte '
+        + 'what it was', r.kinds.join(','));
+      ok(r.stats.preload.landed === 0,
+        '6k: …and the quota simply never fills, which is a state and not a stall',
+        JSON.stringify(r.stats.preload));
+    }
+
+    // --- ONE FOOTAGE VIDEO: "as many as exist". The quota can never fill, and
+    //     that is a STATE, not a wedge — the lane preloads the one it has and
+    //     then goes straight back to normal service.
+    {
+      const ONLY = SHA('4');
+      const STILL = SHA('5');
+      const r = await runLibrary([vid(ONLY, 20000), img(STILL, 5000)], 2);
+      ok(r.shas[0] === ONLY && r.shas[1] === STILL,
+        '6k: one footage video preloads one, then the still — an unfillable quota does not hold '
+        + 'the lane open waiting for a second', r.shas.map((s) => s[0]).join(','));
+      ok(r.stats.preload.landed === 1,
+        '6k: …and the counter honestly says one of two, forever, without ever blocking anything',
+        JSON.stringify(r.stats.preload));
+    }
+
+    // --- THE UNAFFORDABLE ONE PROVES THE WIRE BUDGET STILL OUTRANKS THE RULE.
+    //     50 MB cannot land inside MAX_XFER_MS at anything like a phone's uplink,
+    //     so `eligible()` never lists it and the preload never sees it. The link
+    //     is given 40 ms of latency for exactly that reason: `estBps()` is a
+    //     MEASURED rate after the first landing and a zero-latency loopback
+    //     measures hundreds of MB/s, which would (correctly!) make the clip
+    //     affordable and prove nothing. On a link that behaves like a link it
+    //     stays out of the pool for the whole match.
+    {
+      const HUGE = SHA('6');
+      const S1 = SHA('7');
+      const S2 = SHA('8');
+      const library = [vid(HUGE, 50 * 1000 * 1000), img(S1, 5000), img(S2, 5000)];
+
+      // The gate itself, with no transport at all: `sendableCount` is `eligible().length`,
+      // and before anything lands `estBps()` is EST_THROUGHPUT_BPS by definition.
+      const cold = createMediaQueue({
+        artifacts: lazyArtifacts(library), store: fakeStore(), logger: quiet, canSend: () => false,
+      });
+      ok(cold.sendableCount() === 2,
+        '6k: the 50 MB footage video is not SENDABLE in the first place — it cannot land inside '
+        + 'MAX_XFER_MS at the default estimate, so the preload never even sees it as a candidate',
+        String(cold.sendableCount()));
+
+      const r = await runLibrary(library, 2, 40);
+      ok((r.shas[0] === S1 || r.shas[0] === S2) && (r.shas[1] === S1 || r.shas[1] === S2),
+        '6k: with no AFFORDABLE footage video the preload finds nothing and falls straight through '
+        + 'to the rule-3b score — the stills land at once instead of the lane stalling',
+        r.shas.map((s) => s[0]).join(','));
+      ok(!r.held.has(HUGE),
+        '6k: …and the 50 MB clip was never offered, because a rule that could overrule the '
+        + 'MAX_XFER_MS budget would let one file own the bulk lane for the whole match');
+      ok(r.stats.preload.landed === 0,
+        '6k: the quota is still owed and still harmless', JSON.stringify(r.stats.preload));
+    }
+
+    // --- A CODEC THE PEER CANNOT DECODE IS NOT FOOTAGE THE PRELOAD MAY SEND.
+    //     Same argument as the budget, and the same failure if it were special-
+    //     cased: 6f's HEVC clip would be preloaded straight into a black window.
+    {
+      const pair = createLoopbackPair(loopbackOptions({
+        latencyMs: 0, jitterMs: 0, guestClockSkewMs: 0, bulk: true, logger: quiet,
+      }));
+      const { a, b } = await consentedPair(pair);
+      const HEVC = SHA('7');
+      const STILL = SHA('8');
+      const storeB = fakeStore();
+      const qA = createMediaQueue({
+        artifacts: lazyArtifacts([
+          vid(HEVC, 9000, { codec: 'hvc1.1.6.L93.B0' }), img(STILL, 5000),
+        ]),
+        store: fakeStore(), logger: quiet, canSend: () => true, idlePollMs: 40,
+      });
+      const qB = createMediaQueue({
+        artifacts: { listSendable: () => [], open: () => null },
+        store: storeB, logger: quiet, canSend: () => false, idlePollMs: 40,
+        acceptsCodecs: ['avc1'],
+      });
+      qA.attach(a, pair.host);
+      qB.attach(b, pair.guest);
+      for (let i = 0; i < 160 && storeB.held.size < 1; i++) await tick(25);
+      await tick(200);                    // …and every chance to send the other one anyway
+      ok(storeB.held.has(STILL) && !storeB.held.has(HEVC),
+        '6k: the preload never offers a codec the peer cannot decode — the still landed, the HEVC '
+        + 'clip did not, and the lane kept moving');
+      qA.detach(); qB.detach();
+      a.dispose(); b.dispose(); pair.dispose();
+    }
   }
 }
 
