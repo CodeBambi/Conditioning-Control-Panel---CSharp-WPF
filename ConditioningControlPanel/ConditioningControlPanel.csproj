@@ -193,6 +193,18 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- Profile cosmetics: the wardrobe registry + the 512x512 avatar-decoration and
+         charm PNGs (Resources\cosmetics\<mod>\<id>.png). Loaded OFF DISK from
+         AppContext.BaseDirectory like the Chaos art, NOT via pack:// - so a missing
+         file degrades to "no decoration" instead of failing a Resource URI at runtime.
+         Remove from the default None glob first so the no-copy None item doesn't
+         suppress this Content copy. -->
+    <None Remove="Resources\cosmetics\**\*.png;Resources\cosmetics\*.json" />
+    <Content Include="Resources\cosmetics\**\*.png;Resources\cosmetics\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
     <!-- Exclusives tab art (vault backdrop), loaded off disk by Views/Tabs/ExclusivesTabView -->
     <None Remove="assets\exclusives\*.png" />
     <Content Include="assets\exclusives\*.png">

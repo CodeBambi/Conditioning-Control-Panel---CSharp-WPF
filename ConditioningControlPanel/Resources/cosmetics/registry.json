@@ -1,0 +1,485 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "bambi_silk_bow",
+      "mod": "bambi",
+      "type": "deco",
+      "name": "Silk Bow",
+      "file": "bambi/bambi_silk_bow.png",
+      "unlock": "free"
+    },
+    {
+      "id": "bambi_trance_headset",
+      "mod": "bambi",
+      "type": "deco",
+      "name": "Trance Headset",
+      "file": "bambi/bambi_trance_headset.png",
+      "unlock": "free"
+    },
+    {
+      "id": "bambi_bubblegum_scarf",
+      "mod": "bambi",
+      "type": "deco",
+      "name": "Bubblegum Scarf",
+      "file": "bambi/bambi_bubblegum_scarf.png",
+      "unlock": "free"
+    },
+    {
+      "id": "bambi_plush_hood",
+      "mod": "bambi",
+      "type": "deco",
+      "name": "Plush Bunny Hood",
+      "file": "bambi/bambi_plush_hood.png",
+      "unlock": "free"
+    },
+    {
+      "id": "bambi_heart_visor",
+      "mod": "bambi",
+      "type": "deco",
+      "name": "Heart Visor",
+      "file": "bambi/bambi_heart_visor.png",
+      "unlock": "free"
+    },
+    {
+      "id": "bambi_candy_halo",
+      "mod": "bambi",
+      "type": "deco",
+      "name": "Candy Halo",
+      "file": "bambi/bambi_candy_halo.png",
+      "unlock": "free"
+    },
+    {
+      "id": "bambi_pacifier_strap",
+      "mod": "bambi",
+      "type": "deco",
+      "name": "Pacifier Strap",
+      "file": "bambi/bambi_pacifier_strap.png",
+      "unlock": "free"
+    },
+    {
+      "id": "bambi_neon_ears",
+      "mod": "bambi",
+      "type": "deco",
+      "name": "Neon Bunny Ears",
+      "file": "bambi/bambi_neon_ears.png",
+      "unlock": "free"
+    },
+    {
+      "id": "bambi_bubble_crown",
+      "mod": "bambi",
+      "type": "deco",
+      "name": "Bubble Crown",
+      "file": "bambi/bambi_bubble_crown.png",
+      "unlock": "free"
+    },
+    {
+      "id": "bambi_ribbon_choker",
+      "mod": "bambi",
+      "type": "deco",
+      "name": "Ribbon Choker",
+      "file": "bambi/bambi_ribbon_choker.png",
+      "unlock": "free"
+    },
+    {
+      "id": "bambi_starlight_clips",
+      "mod": "bambi",
+      "type": "deco",
+      "name": "Starlight Clips",
+      "file": "bambi/bambi_starlight_clips.png",
+      "unlock": "free"
+    },
+    {
+      "id": "bambi_lollipop_twirl",
+      "mod": "bambi",
+      "type": "deco",
+      "name": "Lollipop Twirl",
+      "file": "bambi/bambi_lollipop_twirl.png",
+      "unlock": "free"
+    },
+    {
+      "id": "bambi_glitter_veil",
+      "mod": "bambi",
+      "type": "deco",
+      "name": "Glitter Veil",
+      "file": "bambi/bambi_glitter_veil.png",
+      "unlock": "free"
+    },
+    {
+      "id": "bambi_sleepy_mask",
+      "mod": "bambi",
+      "type": "deco",
+      "name": "Sleepy Mask",
+      "file": "bambi/bambi_sleepy_mask.png",
+      "unlock": "free"
+    },
+    {
+      "id": "bambi_plush_bunny",
+      "mod": "bambi",
+      "type": "charm",
+      "name": "Plush Bunny",
+      "file": "bambi/bambi_plush_bunny.png",
+      "unlock": "free"
+    },
+    {
+      "id": "bambi_bubble_wand",
+      "mod": "bambi",
+      "type": "charm",
+      "name": "Bubble Wand",
+      "file": "bambi/bambi_bubble_wand.png",
+      "unlock": "free"
+    },
+    {
+      "id": "bambi_gumball_jar",
+      "mod": "bambi",
+      "type": "charm",
+      "name": "Gumball Jar",
+      "file": "bambi/bambi_gumball_jar.png",
+      "unlock": "free"
+    },
+    {
+      "id": "bambi_heart_locket",
+      "mod": "bambi",
+      "type": "charm",
+      "name": "Heart Locket",
+      "file": "bambi/bambi_heart_locket.png",
+      "unlock": "free"
+    },
+    {
+      "id": "bambi_glitter_phone",
+      "mod": "bambi",
+      "type": "charm",
+      "name": "Glitter Phone",
+      "file": "bambi/bambi_glitter_phone.png",
+      "unlock": "free"
+    },
+    {
+      "id": "bambi_cotton_candy",
+      "mod": "bambi",
+      "type": "charm",
+      "name": "Cotton Candy Cloud",
+      "file": "bambi/bambi_cotton_candy.png",
+      "unlock": "free"
+    },
+    {
+      "id": "sissy_lace_choker",
+      "mod": "sissy",
+      "type": "deco",
+      "name": "Lace Choker",
+      "file": "sissy/sissy_lace_choker.png",
+      "unlock": "free"
+    },
+    {
+      "id": "sissy_maid_headpiece",
+      "mod": "sissy",
+      "type": "deco",
+      "name": "Maid Headpiece",
+      "file": "sissy/sissy_maid_headpiece.png",
+      "unlock": "free"
+    },
+    {
+      "id": "sissy_pearl_strand",
+      "mod": "sissy",
+      "type": "deco",
+      "name": "Pearl Strand",
+      "file": "sissy/sissy_pearl_strand.png",
+      "unlock": "free"
+    },
+    {
+      "id": "sissy_satin_blindfold",
+      "mod": "sissy",
+      "type": "deco",
+      "name": "Satin Blindfold",
+      "file": "sissy/sissy_satin_blindfold.png",
+      "unlock": "free"
+    },
+    {
+      "id": "sissy_ribbon_crown",
+      "mod": "sissy",
+      "type": "deco",
+      "name": "Ribbon Crown",
+      "file": "sissy/sissy_ribbon_crown.png",
+      "unlock": "free"
+    },
+    {
+      "id": "sissy_lace_veil",
+      "mod": "sissy",
+      "type": "deco",
+      "name": "Lace Veil",
+      "file": "sissy/sissy_lace_veil.png",
+      "unlock": "free"
+    },
+    {
+      "id": "sissy_bow_barrette",
+      "mod": "sissy",
+      "type": "deco",
+      "name": "Bow Barrette",
+      "file": "sissy/sissy_bow_barrette.png",
+      "unlock": "free"
+    },
+    {
+      "id": "sissy_feather_fan",
+      "mod": "sissy",
+      "type": "deco",
+      "name": "Feather Fan",
+      "file": "sissy/sissy_feather_fan.png",
+      "unlock": "free"
+    },
+    {
+      "id": "sissy_corset_laces",
+      "mod": "sissy",
+      "type": "deco",
+      "name": "Corset Laces",
+      "file": "sissy/sissy_corset_laces.png",
+      "unlock": "free"
+    },
+    {
+      "id": "sissy_velvet_collar",
+      "mod": "sissy",
+      "type": "deco",
+      "name": "Velvet Collar",
+      "file": "sissy/sissy_velvet_collar.png",
+      "unlock": "free"
+    },
+    {
+      "id": "sissy_rose_pin",
+      "mod": "sissy",
+      "type": "deco",
+      "name": "Rose Pin",
+      "file": "sissy/sissy_rose_pin.png",
+      "unlock": "free"
+    },
+    {
+      "id": "sissy_silk_headband",
+      "mod": "sissy",
+      "type": "deco",
+      "name": "Silk Headband",
+      "file": "sissy/sissy_silk_headband.png",
+      "unlock": "free"
+    },
+    {
+      "id": "sissy_pearl_drop",
+      "mod": "sissy",
+      "type": "deco",
+      "name": "Pearl Drop Earring",
+      "file": "sissy/sissy_pearl_drop.png",
+      "unlock": "free"
+    },
+    {
+      "id": "sissy_lace_gloves",
+      "mod": "sissy",
+      "type": "deco",
+      "name": "Lace Gloves",
+      "file": "sissy/sissy_lace_gloves.png",
+      "unlock": "free"
+    },
+    {
+      "id": "sissy_stiletto_heel",
+      "mod": "sissy",
+      "type": "charm",
+      "name": "Stiletto Heel",
+      "file": "sissy/sissy_stiletto_heel.png",
+      "unlock": "free"
+    },
+    {
+      "id": "sissy_lipstick_tube",
+      "mod": "sissy",
+      "type": "charm",
+      "name": "Lipstick Tube",
+      "file": "sissy/sissy_lipstick_tube.png",
+      "unlock": "free"
+    },
+    {
+      "id": "sissy_perfume_bottle",
+      "mod": "sissy",
+      "type": "charm",
+      "name": "Perfume Bottle",
+      "file": "sissy/sissy_perfume_bottle.png",
+      "unlock": "free"
+    },
+    {
+      "id": "sissy_hand_mirror",
+      "mod": "sissy",
+      "type": "charm",
+      "name": "Hand Mirror",
+      "file": "sissy/sissy_hand_mirror.png",
+      "unlock": "free"
+    },
+    {
+      "id": "sissy_pearl_pouch",
+      "mod": "sissy",
+      "type": "charm",
+      "name": "Pearl Pouch",
+      "file": "sissy/sissy_pearl_pouch.png",
+      "unlock": "free"
+    },
+    {
+      "id": "sissy_ribbon_key",
+      "mod": "sissy",
+      "type": "charm",
+      "name": "Ribbon Key",
+      "file": "sissy/sissy_ribbon_key.png",
+      "unlock": "free"
+    },
+    {
+      "id": "circe_drone_visor",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Drone Visor",
+      "file": "circe/circe_drone_visor.png",
+      "unlock": "free"
+    },
+    {
+      "id": "circe_gas_mask",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Filter Mask",
+      "file": "circe/circe_gas_mask.png",
+      "unlock": "free"
+    },
+    {
+      "id": "circe_latex_hood",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Latex Hood",
+      "file": "circe/circe_latex_hood.png",
+      "unlock": "free"
+    },
+    {
+      "id": "circe_antennae",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Signal Antennae",
+      "file": "circe/circe_antennae.png",
+      "unlock": "free"
+    },
+    {
+      "id": "circe_ear_defenders",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Ear Defenders",
+      "file": "circe/circe_ear_defenders.png",
+      "unlock": "free"
+    },
+    {
+      "id": "circe_hud_monocle",
+      "mod": "circe",
+      "type": "deco",
+      "name": "HUD Monocle",
+      "file": "circe/circe_hud_monocle.png",
+      "unlock": "free"
+    },
+    {
+      "id": "circe_chrome_halo",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Chrome Halo",
+      "file": "circe/circe_chrome_halo.png",
+      "unlock": "free"
+    },
+    {
+      "id": "circe_data_collar",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Data Collar",
+      "file": "circe/circe_data_collar.png",
+      "unlock": "free"
+    },
+    {
+      "id": "circe_cable_scarf",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Cable Scarf",
+      "file": "circe/circe_cable_scarf.png",
+      "unlock": "free"
+    },
+    {
+      "id": "circe_optic_crown",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Optic Crown",
+      "file": "circe/circe_optic_crown.png",
+      "unlock": "free"
+    },
+    {
+      "id": "circe_port_clips",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Port Clips",
+      "file": "circe/circe_port_clips.png",
+      "unlock": "free"
+    },
+    {
+      "id": "circe_scan_lens",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Scan Lens",
+      "file": "circe/circe_scan_lens.png",
+      "unlock": "free"
+    },
+    {
+      "id": "circe_hex_veil",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Hex Veil",
+      "file": "circe/circe_hex_veil.png",
+      "unlock": "free"
+    },
+    {
+      "id": "circe_neural_band",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Neural Band",
+      "file": "circe/circe_neural_band.png",
+      "unlock": "free"
+    },
+    {
+      "id": "circe_hover_drone",
+      "mod": "circe",
+      "type": "charm",
+      "name": "Hover Drone",
+      "file": "circe/circe_hover_drone.png",
+      "unlock": "free"
+    },
+    {
+      "id": "circe_datapad",
+      "mod": "circe",
+      "type": "charm",
+      "name": "Datapad",
+      "file": "circe/circe_datapad.png",
+      "unlock": "free"
+    },
+    {
+      "id": "circe_coolant_flask",
+      "mod": "circe",
+      "type": "charm",
+      "name": "Coolant Flask",
+      "file": "circe/circe_coolant_flask.png",
+      "unlock": "free"
+    },
+    {
+      "id": "circe_obedience_chip",
+      "mod": "circe",
+      "type": "charm",
+      "name": "Obedience Chip",
+      "file": "circe/circe_obedience_chip.png",
+      "unlock": "free"
+    },
+    {
+      "id": "circe_signal_beacon",
+      "mod": "circe",
+      "type": "charm",
+      "name": "Signal Beacon",
+      "file": "circe/circe_signal_beacon.png",
+      "unlock": "free"
+    },
+    {
+      "id": "circe_chrome_orb",
+      "mod": "circe",
+      "type": "charm",
+      "name": "Chrome Orb",
+      "file": "circe/circe_chrome_orb.png",
+      "unlock": "free"
+    }
+  ]
+}
