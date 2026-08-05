@@ -291,20 +291,55 @@ export function createMediaQueue({
   /* -------------------------------------------------------------------- the tags */
 
   /**
+   * WHY is a media-kind payload about to fire untagged? One short sentence naming
+   * the FIRST failing gate, for the diagnostic below. The order mirrors enabled().
+   */
+  function whyNoTags() {
+    if (!sendGate()) return 'this side\'s send capability is off (caps.mediaTransfer)';
+    if (!match || !match.peerSupportsTransfer) return 'the peer\'s build does not advertise transfer (stale page?)';
+    if (!match.localMediaTransfer) return 'our lobby send toggle is off';
+    if (!match.remoteMediaTransfer) return 'their lobby send toggle is off';
+    if (!transport || !transport.supportsBulk) return 'no bulk lane on this link (relay fallback)';
+    if (!channel || !channel.helloSeen) return 'the peer never said xfer_hello';
+    let sendable = -1;
+    try { sendable = eligible().length + seen.size; } catch (_e) { /* leave -1 */ }
+    return 'no artifact landed yet (sendable=' + sendable + ', in flight=' + inFlightCount()
+      + ', landed=' + landed.length + ', consumed=' + consumed + ')';
+  }
+
+  /** Reasons already said this match — the diagnostic prints each ONCE, not per throw. */
+  const saidWhy = new Set();
+
+  /**
    * The tags for one payload, or [] when nothing has landed / the feature is off.
    * `[]` IS THE NORMAL PATH: the payload then fires exactly as it does today, and a drop can
    * never block on a transfer.
+   *
+   * THE WARN IS THE PLAY-TEST'S EYES (2026-08-05). "It defaults to local media" reached the
+   * owner three times with three different root causes upstream of here (relay link, the
+   * un-advertised transfer cap, a stale phone page) and every round was diagnosed by
+   * archaeology. A media-kind payload leaving untagged now SAYS WHY, once per distinct
+   * reason per match — warn level, because that is what reaches the C# log and the phone's
+   * ?debug=1 overlay.
    */
   function tagsFor(kind) {
-    if (!enabled()) return [];
     if (!XFER_KINDS.has(kind)) return [];
-    const want = KIND_TAGS[kind] || 1;
-    const mediaKind = KIND_MEDIA[kind];
     const out = [];
-    for (const a of landed) {
-      if (a.kind !== mediaKind) continue;
-      out.push('xfer:' + a.sha);
-      if (out.length >= want) break;
+    if (enabled()) {
+      const want = KIND_TAGS[kind] || 1;
+      const mediaKind = KIND_MEDIA[kind];
+      for (const a of landed) {
+        if (a.kind !== mediaKind) continue;
+        out.push('xfer:' + a.sha);
+        if (out.length >= want) break;
+      }
+    }
+    if (!out.length) {
+      const why = whyNoTags();
+      if (!saidWhy.has(why)) {
+        saidWhy.add(why);
+        warn('payload kind ' + kind + ' fired untagged — ' + why + ' (said once per reason)');
+      }
     }
     return out;
   }
@@ -436,6 +471,7 @@ export function createMediaQueue({
   /** Unbind everything. A NAMED function, so `attach` never depends on a `this` binding. */
   function detach() {
     attached = false;
+    saidWhy.clear();                 // a new match earns fresh diagnostics
     stopPoll();
     for (const off of unsubs) { try { off(); } catch (_e) { /* ignore */ } }
     unsubs = [];
@@ -485,7 +521,10 @@ export function createMediaQueue({
       origFire = match.tryFirePayload.bind(match);
       wrappedFire = (req) => {
         let out = req;
-        if (req && XFER_KINDS.has(req.kind) && !req.tags && enabled()) {
+        // No enabled() pre-check here: tagsFor answers [] when the lane is off
+        // AND says why (once per reason) — the pre-check was hiding exactly the
+        // failures the 2026-08-05 play-tests needed named.
+        if (req && XFER_KINDS.has(req.kind) && !req.tags) {
           const tags = tagsFor(req.kind);                  // [] when nothing has landed
           if (tags.length) out = Object.assign({}, req, { tags });
         }
