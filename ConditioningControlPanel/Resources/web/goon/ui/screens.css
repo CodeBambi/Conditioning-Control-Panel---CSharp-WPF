@@ -413,10 +413,14 @@
 .gg-elem-why { display: none; font-size: 0.66rem; color: var(--gg-text-4); line-height: 1.4; }
 
 /* The per-tile RISK PIPS (.gg-riskpips — three dots of the 0-3 tier) went the
-   same way on 2026-08-04. The warning they carried still applies to whatever
-   lands here next: do NOT name a draft-screen class .gg-pips — ui/hud.css owns
-   that for the charge meter and loads AFTER this file. Two owners, one name,
-   silent bug. */
+   same way on 2026-08-04, and on 2026-08-05 the HUD's own `.gg-pips` charge row
+   followed them (owner: the two shapes were indistinguishable in play). SO THE
+   NAME IS FREE NOW — and the warning it carried outlives it, because the reason
+   was never that one class: ui/hud.css loads AFTER this file, so ANY name the
+   two sheets share is silently the HUD's, and a draft-screen rule that looks
+   correct here will lose on the draft screen. Prefix draft classes `.gg-elem-`
+   the way everything above this comment does, `.gg-pips` included if it ever
+   comes back. */
 
 .gg-elem-badge {
   position: absolute;

@@ -458,12 +458,20 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
     };
   }
 
-  // ---- head: grip · connection dot · name · their score · charge pips -----
+  // ---- head: grip · connection dot · name · their score · their charges ----
   // The head row is ALSO the titlebar (MON_GRIP_CLASS, see THE GRIP above): on a
   // docked monitor it is the only strip hud.css lets the pointer reach, so it is
   // where the drag and the wheel both have to start. Nothing in it is
-  // interactive — a dot, two words and five pips — which is exactly why it is
+  // interactive — a dot and three little readouts — which is exactly why it is
   // safe to claim the whole row rather than a corner of it.
+  //
+  // THEIR CHARGES ARE A COUNT, NOT PIPS (2026-08-05). This row carried five
+  // `.gg-pip--sm` diamonds until the owner asked, for the second time, for "the
+  // little yellow squares" to go: the HUD's own charge row went in the same
+  // pass, and leaving these would have kept the exact shape being complained
+  // about on screen — two inches from where it was removed — while letting the
+  // dead CSS live on. See the long note in ui/hud.js for the full reasoning.
+  // Nothing about the mechanic changed; only the way it is drawn.
   const head = add(root, el('div', 'gg-mon-head ' + MON_GRIP_CLASS));
   if (head && head.setAttribute) head.setAttribute('title', S.monitor.dragHint);
   // …and the affordance, first in the row: nobody drags a thing that does not
@@ -472,9 +480,7 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
   const dot = add(head, el('i', 'gg-mon-dot'));
   const nameEl = add(head, el('span', 'gg-mon-name', 'opponent'));
   const scoreEl = add(head, el('span', 'gg-mon-score', '0'));
-  const pipRow = add(head, el('span', 'gg-mon-pips'));
-  const pips = [];
-  for (let i = 0; i < GoonConsts.ChargeCap; i++) pips.push(add(pipRow, el('i', 'gg-pip gg-pip--sm')));
+  const chargeEl = add(head, el('span', 'gg-mon-charges', S.monitor.charges(0)));
 
   // ---- the screen inside the bezel ---------------------------------------
   // THE STACKING ORDER HERE IS LOAD-BEARING. assets/monitor_frame.png (935x667
@@ -722,7 +728,11 @@ export function mountOpponent({ host, match, audio = null, fx = null, prefs = nu
 
     text(nameEl, op.displayName || 'opponent');
     text(scoreEl, p + String(op.score | 0));
-    for (let i = 0; i < pips.length; i++) cls(pips[i], 'is-on', i < (op.charges | 0));
+    // The stale prefix rides on the charge count too. It did NOT ride on the
+    // pips — a lit diamond had nowhere to put a "~" — and that was a small lie
+    // the shape forced: a frozen count is exactly as out of date as the frozen
+    // score sitting beside it, and the words have room to say so.
+    text(chargeEl, p + S.monitor.charges(op.charges | 0));
 
     const pct = Math.max(0, Math.min(100, Number(op.attentionPct) || 0));
     if (attFill && attFill.style) attFill.style.width = pct + '%';

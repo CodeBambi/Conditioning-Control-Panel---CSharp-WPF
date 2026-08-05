@@ -23,6 +23,10 @@
   --gg-mon-w: clamp(210px, 22vw, 280px);
   --gg-amber: #ffb454;
   --gg-hot: #ff1493;
+  /* The middle rung of the closeness dial — one real step along the pink ramp
+     between --gg-pink (#ff69b4) and --gg-hot (#ff1493), not a hue change. It
+     exists because that rung used to be --gg-gold; see THE DIAL HAS NO YELLOW. */
+  --gg-pink-deep: #ff479f;
   /* the ONLY green in the HUD: "they passed it", nothing else. */
   --gg-green: #5ef2a0;
   --gg-green-rgb: 94, 242, 160;
@@ -46,7 +50,7 @@
    * items — it is allowed to grow past the container. `.gg-hud-top` below is
    * `1fr auto 1fr` where `1fr` means `minmax(auto, 1fr)`, so each side track has
    * a min-content floor it can never go under, and `.gg-timer` adds an explicit
-   * `min-width`. On a 428px phone those floors (charge pips + timer + the
+   * `min-width`. On a 428px phone those floors (the score column + timer + the
    * attention plate and two 48px buttons) added up to ~442px, the implicit
    * column took that as its base size, and EVERY row inherited it — which is
    * how the opponent monitor, the "they claim" panel, the receipts and the
@@ -97,7 +101,7 @@
  *
  * WHAT GOES: the score + its +1 flourish, your name plate, the closeness dial,
  * the closeness THEY claim, the live-effect chips and MERCY.
- * WHAT STAYS: the monitor, the rails, the charge pips (they are the arsenal's
+ * WHAT STAYS: the monitor, the rails, the charge count (it is the arsenal's
  * currency, not a readout), the timer, the attention ring and the toggle itself.
  *
  * THE TWO ADDED 2026-08-04 (owner: "we need space to see the animations"):
@@ -157,25 +161,32 @@ html[data-gg-zen="on"] #gg-mercy .gg-mercy-wrap { display: none; }
    ui/hud.js builds no such node, so do not restyle one back into being. */
 .gg-me { font-size: 0.68rem; color: var(--gg-text-3); }
 
-.gg-pips { display: flex; gap: 6px; align-items: center; }
-.gg-pip {
-  width: 16px; height: 16px;
-  transform: rotate(45deg);
-  border: 1px solid rgba(var(--gg-pink-rgb), 0.55);
-  border-radius: 3px;
-  background: transparent;
-  transition: background .18s ease, box-shadow .18s ease, transform .18s ease;
+/* THE CHARGE PIPS ARE GONE (2026-08-05). `.gg-pips` / `.gg-pip` / `.gg-pip--sm`
+   and @keyframes ggPipPop drew five 16px squares rotated 45° — outline for the
+   cap, filled pink for what you held — under the score here and, at 12px, in the
+   opponent monitor's titlebar. The owner asked twice for "the little yellow
+   squares" to go: the risk pips went in the first pass and these read as the
+   same indicator to anyone not holding the source, which is everyone.
+   ui/hud.js and ui/opponent.js now print the count in words instead (.gg-charges
+   and .gg-mon-charges below), so THE DIAMOND IS NOT A SHAPE THIS UI USES ANY
+   MORE. Do not reintroduce one for a count — a rotated square in this app has a
+   history, and the next person to see it will read it as the risk meter.
+   (The arsenal's `.gg-cost-pip` is a different thing and stays: round, amber,
+   welded to the tile whose price it is, and never part of this complaint.) */
+.gg-charges {
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--gg-text-2);
 }
-.gg-pip.is-on { background: var(--gg-pink); box-shadow: 0 0 12px rgba(var(--gg-pink-rgb), 0.75); }
-.gg-pip.is-pop { animation: ggPipPop .4s ease-out 1; }
-.gg-pip--sm { width: 12px; height: 12px; }
-@keyframes ggPipPop {
-  0% { transform: rotate(45deg) scale(1); }
-  40% { transform: rotate(45deg) scale(1.55); }
-  100% { transform: rotate(45deg) scale(1); }
-}
+/* The charge-gain flourish, and the WHOLE flourish since the pips went — it used
+   to land at top:1.4rem, on the pip row, where covering an outline for 900ms
+   cost nothing. That row is a SENTENCE now and a chip parked on top of it is a
+   readout you cannot read, so the chip moved up beside the score instead: 3.2rem
+   clears five tabular digits at 1.35rem bold, and it floats away from the count
+   rather than across it. */
 .gg-plus1 {
-  position: absolute; left: 2.4rem; top: 1.4rem;
+  position: absolute; left: 3.2rem; top: 0.15rem;
   font-size: 0.8rem; font-weight: 700; color: var(--gg-pink);
   text-shadow: 0 0 12px rgba(var(--gg-pink-rgb), 0.7);
   animation: ggFloatUp .9s ease-out forwards;
@@ -993,10 +1004,15 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
 .gg-mon-dot.is-gone { background: #6d6d78; box-shadow: none; }
 /* `min-width: 0` is what lets the ellipsis actually happen: without it a
    nowrap name is a flex item that refuses to be narrower than its own text, and
-   it pushes the score and the charge pips off the end of the head row. */
+   it pushes the score and the charge count off the end of the head row. */
 .gg-mon-name { color: var(--gg-text-1); font-weight: 600; max-width: 9rem; min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gg-mon-score { margin-left: auto; padding-left: 0.3rem; font-variant-numeric: tabular-nums; color: var(--gg-text-2); flex: 0 0 auto; }
-.gg-mon-pips { display: flex; gap: 4px; flex: 0 0 auto; }
+/* Their charges, in words since 2026-08-05 (this was `.gg-mon-pips`, five 12px
+   diamonds — see the tombstone up at .gg-charges). `white-space: nowrap` because
+   this is the LAST item in the narrowest row in the layout: the name has the
+   ellipsis budget and this must never be the thing that wraps the titlebar into
+   two lines, which would move the grip out from under a finger mid-drag. */
+.gg-mon-charges { flex: 0 0 auto; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--gg-text-3); }
 
 /* THE MONITOR FRAME, AND THE FOUR NUMBERS EVERYTHING INSIDE IT IS MEASURED FROM.
  *
@@ -1816,10 +1832,44 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
   font-size: 0.62rem;
   padding: 0;
 }
-.gg-dial-bar { width: 100%; height: 10px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); transition: background .25s ease, height .25s ease; }
+/* THE DIAL HAS NO YELLOW (owner, 2026-08-05). At `close` the four lit bars used
+   to turn `--gg-gold`, and in a mid-match screenshot that row of short gold
+   blocks was the SECOND thing the owner pointed at as "the little yellow
+   squares" — the same complaint that took the risk pips and then the charge
+   pips off this HUD. Every other gold on this desk means a specific thing that
+   is about to bite — the timer running out, a flagged receipt, the last notch
+   of the sudden-death track — and none of them is "you are enjoying yourself",
+   so the dial had no business borrowing the hue: a warning colour spliced into
+   the middle of an otherwise monotone pink ramp is exactly what made a
+   self-report row read as an alarm.
+
+   THE RAMP IS PINK ALL THE WAY UP NOW, and it still has four distinguishable
+   rungs, by INTENSITY rather than hue:
+
+     none   the track's own white 12% — nothing claimed yet
+     0 / 1  flat --gg-pink, no glow      (steady, warm)
+     2      --gg-pink-deep + a soft glow (close)
+     3      --gg-hot + a hard glow       (edge)
+
+   COLOUR IS STILL NOT THE ONLY CHANNEL, which is what makes an intensity ramp
+   legal here: ui/closeness.js prints a WORD under every bar ("steady / warm /
+   close / edge") and marks the chosen one `.is-head`, which is 16px tall against
+   10px and brightens its label. Someone who cannot separate #ff479f from
+   #ff69b4 still reads the dial off the words and the tall bar, exactly as
+   before — the hue was never carrying the meaning, only the alarm.
+
+   This is a restyle and nothing else — the stops, the 48px targets, the
+   350ms write cooldown and the data-gg-close contract are all untouched. */
+.gg-dial-bar { width: 100%; height: 10px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); transition: background .25s ease, box-shadow .25s ease, height .25s ease; }
 .gg-dial-stop.is-on .gg-dial-bar { background: var(--gg-pink); }
-.gg-dial[data-gg-close="2"] .gg-dial-stop.is-on .gg-dial-bar { background: var(--gg-gold); }
-.gg-dial[data-gg-close="3"] .gg-dial-stop.is-on .gg-dial-bar { background: var(--gg-hot); }
+.gg-dial[data-gg-close="2"] .gg-dial-stop.is-on .gg-dial-bar {
+  background: var(--gg-pink-deep);
+  box-shadow: 0 0 9px rgba(var(--gg-pink-rgb), 0.6);
+}
+.gg-dial[data-gg-close="3"] .gg-dial-stop.is-on .gg-dial-bar {
+  background: var(--gg-hot);
+  box-shadow: 0 0 15px rgba(var(--gg-pink-rgb), 0.95);
+}
 .gg-dial-stop.is-head { color: var(--gg-text); }
 .gg-dial-stop.is-head .gg-dial-bar { height: 16px; }
 .gg-dial-fine { font-size: 0.54rem; line-height: 1.2; color: var(--gg-text-4); }
@@ -1927,7 +1977,7 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
   display: flex; flex-direction: column; align-items: center;
   gap: 0.5rem;
   /* clears the HUD top bar: the desk contracts on sudden death but the score,
-     charge pips and timer plate stay, and the ladder must not land on them. */
+     charge count and timer plate stay, and the ladder must not land on them. */
   padding-top: clamp(4.6rem, 11vh, 6.4rem);
   pointer-events: none;
 }
@@ -2170,8 +2220,9 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
 
   /* ---- top bar: it must not be able to overflow ------------------------
    * `1fr auto 1fr` gives both side tracks a min-content floor, and those floors
-   * (pips + timer min-width + the attention plate and two 48px buttons) came to
-   * ~442px on a 428px phone — 34px more than the frame has. The score column is
+   * (the score column + timer min-width + the attention plate and two 48px
+   * buttons) came to ~442px on a 428px phone — 34px more than the frame has.
+   * The score column is
    * the only compressible one of the three (its text can wrap or ellipsise), so
    * it is the one that gets minmax(0, …) and the other two are content-sized.
    * The pieces below are also just plain smaller, so the row FITS rather than
@@ -2181,8 +2232,12 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
   .gg-hud-top > * { min-width: 0; }
   .gg-scorebox { min-width: 0; }
   .gg-me { overflow-wrap: anywhere; }
-  .gg-pip { width: 13px; height: 13px; }
-  .gg-pips { gap: 5px; }
+  /* The charge line is a SENTENCE now, not a 104px row of diamonds (2026-08-05),
+     which is part of why the score column can be the compressible track: text
+     wraps where a flex row of fixed-size pips could only overflow. Both counts
+     shrink a notch on a phone and neither goes below legible. */
+  .gg-charges { font-size: 0.64rem; }
+  .gg-mon-charges { font-size: 0.64rem; }
   .gg-timer { min-width: 92px; padding: 0.35rem 0.6rem 0.45rem; }
   .gg-hud-topright { gap: 0.35rem; }
   .gg-att { gap: 0.4rem; padding: 0.3rem 0.45rem; }
@@ -2197,7 +2252,7 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
   .gg-rightcol { width: 100%; align-items: flex-end; order: -1; }
   .gg-well { display: none; }
   /* the head row of a 190px monitor: the name gives way, the score and the
-     charge pips never do */
+     charge count never do */
   .gg-mon-name { max-width: 100%; }
   /* …and the grip, which is that same row, has to survive the squeeze AND be a
      finger target: 26px is the whole drag surface on a phone, where there is no
@@ -2354,7 +2409,12 @@ html[data-gg-fx="hot"] .gg-arsenal-panel { background: rgba(10, 5, 17, 0.9); }
   .gg-mon-close.is-edge,
   .gg-sd-track.is-close .gg-sd-notch.is-end,
   .gg-timer.is-urgent .gg-timer-clock { animation: none !important; }
-  .gg-pip.is-pop, .gg-item.is-shake, .gg-sd-card.is-slip { animation: none !important; }
+  /* `.gg-pip.is-pop` used to head this list — the charge pips' 1.55x scale
+     bounce. It went with the pips themselves on 2026-08-05, and the flourish
+     that replaced nothing (the `.gg-plus1` chip) is unchanged: it was never in
+     this block, because a chip that floats 22px and deletes itself is the
+     feedback, not decoration on top of it. */
+  .gg-item.is-shake, .gg-sd-card.is-slip { animation: none !important; }
   /* the drawer still ARRIVES and the handle still lights — they just stop
      moving. Neither animation has a fill-mode, so removing it lands both nodes
      on their finished state rather than on the off-screen keyframe. */

@@ -1064,7 +1064,7 @@ function makeFakeMatch() {
  *
  * Batch 7 took the meters and the pips; what it left behind was the MULTIPLIER
  * — the same engine number (`scoring.riskMultiplier`, product of the 0-7 tier)
- * printed in three places: "×1.30 score" under the live HUD's charge pips,
+ * printed in three places: "×1.30 score" under the live HUD's charge row,
  * "you both score ×1.30" in gold in the draft footer, and "1 pt/s · score
  * ×1.30" in the recap's fine print. The owner's verdict covered the family:
  * not intuitive, and the heat gauge is the readout the desk actually needed.
@@ -1108,9 +1108,132 @@ function makeFakeMatch() {
   const hostRisk = dom.byId.get('gg-hud');
   ok(findAll(hostRisk, 'gg-mult').length === 0, 'the live HUD builds no .gg-mult readout');
   ok(findAll(hostRisk, 'gg-risk').length === 0, 'and nothing wearing the old .gg-risk name');
-  ok(findAll(hostRisk, 'gg-pips').length === 1,
-    'while the CHARGE pips — which are not risk and never were — are still there');
+  ok(findAll(hostRisk, 'gg-pips').length === 0,
+    'and the charge PIP ROW went with it in the second pass (see 2c-iii)');
   hudRisk.unmount();
+}
+
+/* ---- 2c-iii. AND THE CHARGE PIPS WENT TOO (2026-08-05, second pass) --------
+ *
+ * The first pass argued the charge pips were not the risk indicator and kept
+ * them: they are what you hold to throw, core/wire.js validates throws against
+ * them and the arsenal pays its costs out of them, so they carried real state.
+ * The owner saw them in play anyway — "the little yellow squares that we were
+ * supposed to have removed" — and that settles it: the objection was to the
+ * SHAPE, and a row of rotated squares under the score is not distinguishable,
+ * at arm's length on a phone, from the row of rotated squares that had just
+ * come off the draft tiles.
+ *
+ * So the data stayed and the diamond went, in BOTH places it was drawn: yours
+ * under the score (`.gg-pips`) and theirs in the monitor titlebar
+ * (`.gg-mon-pips`, the `.gg-pip--sm` variant). Leaving the second would have
+ * kept the complained-about shape on screen two inches from where it was
+ * deleted, and kept the CSS alive to grow a third user.
+ *
+ * WHAT THIS SECTION PINS, in order: the words are there and say the number; the
+ * cap is still readable on YOUR line; the gain juice (sfx + "+1" chip) survived
+ * the pips it used to be attached to; a SPEND is silent; and no `.gg-pip` node
+ * or rule exists anywhere on the desk. The last one is the regression guard —
+ * this comes back as somebody adding "just a little indicator". */
+{
+  const fsChg = await import('node:fs/promises');
+  const urlChg = await import('node:url');
+  const readUi = (rel) => fsChg.readFile(urlChg.fileURLToPath(new URL('../' + rel, import.meta.url)), 'utf8');
+
+  // ---- the strings themselves -------------------------------------------
+  ok(typeof S.hud.charges === 'function', 'strings.js carries hud.charges(n, cap)');
+  ok(typeof S.monitor.charges === 'function', 'and monitor.charges(n) for theirs');
+  ok(/\bcharges\b/.test(S.hud.charges(3, 5)), 'your line says the WORD charge, not a shape',
+    S.hud.charges(3, 5));
+  ok(S.hud.charges(3, 5).includes('3') && S.hud.charges(3, 5).includes('5'),
+    'and carries both the held count and the cap — the pips said the cap by being five',
+    S.hud.charges(3, 5));
+  ok(S.monitor.charges(1) === '1 charge' && S.monitor.charges(0) === '0 charges'
+    && S.monitor.charges(4) === '4 charges',
+    'their count pluralises, and never prints "1 charges" beside a live name',
+    [S.monitor.charges(1), S.monitor.charges(0), S.monitor.charges(4)].join(' | '));
+  ok(!/\//.test(S.monitor.charges(2)),
+    'their line omits the cap — their ceiling is not a number you can spend against',
+    S.monitor.charges(2));
+
+  // ---- the mounted desk --------------------------------------------------
+  const matchChg = makeFakeMatch();                 // scoring.charges starts at 3
+  const audioChg = { ids: [], sfx(id) { audioChg.ids.push(id); } };
+  const hudChg = hudMod.mountHud({ match: matchChg, audio: audioChg });
+  const hostChg = dom.byId.get('gg-hud');
+
+  ok(findAll(hostChg, 'gg-pip').length === 0, 'the mounted HUD contains no .gg-pip node at all');
+  ok(findAll(hostChg, 'gg-pips').length === 0, 'nor the row that held them');
+  ok(findAll(hostChg, 'gg-mon-pips').length === 0, 'nor the monitor titlebar copy of it');
+
+  const chargeLine = findOne(hostChg, 'gg-charges');
+  ok(!!chargeLine, 'the scorebox carries one .gg-charges line instead');
+  ok(String(chargeLine && chargeLine.textContent) === S.hud.charges(3, GoonConsts.ChargeCap),
+    'painted from the engine on the very first paint, cap and all',
+    String(chargeLine && chargeLine.textContent));
+
+  const monLine = findOne(hostChg, 'gg-mon-charges');
+  ok(!!monLine, 'and their titlebar carries .gg-mon-charges');
+  ok(String(monLine && monLine.textContent).indexOf(S.monitor.charges(2)) >= 0,
+    'showing the count off match.opponent.charges (2 in the stub)',
+    String(monLine && monLine.textContent));
+
+  // ---- a GAIN: the number moves, and the juice the pips wore survives -----
+  audioChg.ids.length = 0;
+  matchChg.scoring.charges = 4;
+  await sleep(260);                                  // paintAll polls at 200ms
+  ok(String(chargeLine && chargeLine.textContent) === S.hud.charges(4, GoonConsts.ChargeCap),
+    'a gain repaints the line', String(chargeLine && chargeLine.textContent));
+  ok(audioChg.ids.includes('gg-charge'),
+    'and still plays gg-charge — the cue was never the pip, it was the charge',
+    audioChg.ids.join(','));
+  ok(findAll(hostChg, 'gg-plus1').length === 1,
+    'and still throws the floating "+1" chip, which is now the WHOLE flourish');
+
+  // ---- a SPEND: the number moves back, in silence ------------------------
+  await sleep(950);                                  // let the chip retire itself
+  ok(findAll(hostChg, 'gg-plus1').length === 0, 'the chip removes itself after its 900ms');
+  audioChg.ids.length = 0;
+  matchChg.scoring.charges = 1;
+  await sleep(260);
+  ok(String(chargeLine && chargeLine.textContent) === S.hud.charges(1, GoonConsts.ChargeCap),
+    'spending three on an item repaints the line down',
+    String(chargeLine && chargeLine.textContent));
+  ok(!audioChg.ids.includes('gg-charge'), 'and is silent — you only hear the ones you earn',
+    audioChg.ids.join(','));
+  ok(findAll(hostChg, 'gg-plus1').length === 0, 'with no "+1" on the way down');
+
+  // ---- an unchanged poll must not rewrite anything -----------------------
+  audioChg.ids.length = 0;
+  await sleep(260);
+  ok(!audioChg.ids.includes('gg-charge'),
+    'and a poll that finds the same number does nothing at all — the memo still holds');
+
+  hudChg.unmount();
+  ok(findAll(hostChg, 'gg-charges').length === 0, 'and unmount takes the line with it');
+
+  // ---- the source, because that is where it regrows ----------------------
+  const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+  for (const rel of ['ui/hud.js', 'ui/opponent.js']) {
+    const code = strip(await readUi(rel));
+    ok(!/gg-pip/.test(code), `${rel} builds no gg-pip node (comments may name the dead class)`,
+      (code.match(/.*gg-pip.*/) || [''])[0].trim());
+  }
+
+  /* The CSS half. Comments are allowed to name the class — the tombstone at the
+   * top of the score block does, on purpose — so this strips them first and then
+   * looks for a live SELECTOR. `.gg-cost-pip` is deliberately not caught by the
+   * word boundary: it is the arsenal's round amber cost dot, a different thing
+   * that was never part of the complaint, and it stays. */
+  const cssChg = (await readUi('ui/hud.css')).replace(/\/\*[\s\S]*?\*\//g, '');
+  ok(!/(^|[\s,{}])\.gg-pips?\b/.test(cssChg), 'hud.css has no live .gg-pip / .gg-pips rule',
+    (cssChg.match(/.*\.gg-pips?\b.*/) || [''])[0].trim());
+  ok(!/\.gg-pip--sm\b/.test(cssChg), 'and the small variant went with its one caller');
+  ok(!/@keyframes\s+ggPipPop/.test(cssChg), 'and the pop keyframe has no pip left to bounce');
+  ok(/\.gg-cost-pip\s*\{/.test(cssChg),
+    'while the arsenal cost dots — round, amber, welded to their tile — are untouched');
+  ok(/\.gg-charges\s*\{/.test(cssChg) && /\.gg-mon-charges\s*\{/.test(cssChg),
+    'and both text readouts are styled');
 }
 
 // -------------------------------------------------------- 3. closeness + emotes
@@ -3378,6 +3501,58 @@ const audioMod = await import('../ui/audio.js');
   ok(dialMin < 15, 'the closeness dial is narrower than the 15rem it shipped at', String(dialMin));
   ok(/\.gg-dial-stop\s*\{[^}]*min-height:\s*48px/.test(hudCss13),
     'but its four stops keep their 48px touch target — the plate shrank, the targets did not');
+
+  /* ---- THE DIAL HAS NO YELLOW (owner, 2026-08-05) -----------------------
+   * Second half of the same "little yellow squares" complaint that took the
+   * charge pips: at `close`, every lit bar on this row turned --gg-gold, and in
+   * a mid-match screenshot four short gold blocks under the score read as
+   * exactly the indicator the owner had already had removed twice.
+   *
+   * PINNED AS A HUE BAN OVER THE WHOLE DIAL, not as one selector, because that
+   * is how it comes back — a `.is-warm` or a hover state picking gold up again
+   * because the rest of the app uses it freely. Gold is still legal EVERYWHERE
+   * ELSE on the desk and the last two checks say so out loud: this was a
+   * targeted restyle, and a blanket find-and-replace across hud.css would be a
+   * different (and wrong) change. Intensity carries the ramp instead, which is
+   * only legal because every stop is a word and the head stop is taller. */
+  {
+    const rules = [];
+    const reDial = /([^{}]+)\{([^{}]*)\}/g;
+    let mDial;
+    while ((mDial = reDial.exec(hudCss13.replace(/\/\*[\s\S]*?\*\//g, '')))) {
+      if (/\.gg-dial/.test(mDial[1])) rules.push(mDial[1].trim() + ' {' + mDial[2] + '}');
+    }
+    ok(rules.length >= 6, 'the dial still has its rules to check', String(rules.length));
+    for (const rule of rules) {
+      ok(!/--gg-gold|ffd45e|255,\s*212,\s*94/i.test(rule),
+        'no gold anywhere on the closeness dial', rule.slice(0, 120));
+      ok(!/--gg-amber|ffb454/i.test(rule),
+        'and no amber either — the neighbouring warm hue is the same mistake', rule.slice(0, 120));
+    }
+    ok(/--gg-pink-deep:\s*#[0-9a-f]{6}/i.test(hudCss13),
+      'the middle rung has a named colour of its own');
+    ok(/\.gg-dial\[data-gg-close="2"\][^{}]*\{[^}]*--gg-pink-deep/.test(hudCss13),
+      'and `close` uses it — one step along the pink ramp, not a hue change');
+    ok(/\.gg-dial\[data-gg-close="3"\][^{}]*\{[^}]*--gg-hot/.test(hudCss13),
+      'while `edge` still tops the ramp out at --gg-hot');
+    /* The two top rungs each carry a glow, and the higher one is the bigger
+     * blur: with the hue break gone that spread IS the ramp, so a future edit
+     * that flattens them back to the same number has quietly merged `close`
+     * into `edge` for anyone reading the bars rather than the words. */
+    const blurAt = (close) => {
+      const rule = (hudCss13.match(new RegExp('\\.gg-dial\\[data-gg-close="' + close + '"\\][^{}]*\\{[^}]*\\}')) || [''])[0];
+      return { rule, px: Number((rule.match(/box-shadow:\s*0 0 (\d+)px/) || [])[1] || 0) };
+    };
+    const glowClose = blurAt('2');
+    const glowEdge = blurAt('3');
+    ok(glowClose.px > 0, 'close carries its own glow — intensity is what separates the rungs now', glowClose.rule);
+    ok(glowEdge.px > glowClose.px, 'and edge glows harder than close', `${glowClose.px} -> ${glowEdge.px}`);
+    // …and the three places gold still belongs are untouched.
+    ok(/\.gg-timer\.is-urgent\s+\.gg-timer-fill\s*\{[^}]*--gg-gold/.test(hudCss13),
+      'the timer still goes gold when it is running out');
+    ok(/\.gg-receipt\.is-gold[^{}]*\{[^}]*--gg-gold/.test(hudCss13),
+      'and a flagged receipt is still gold — only the dial was asked to change');
+  }
 }
 
 /* ===========================================================================
@@ -3465,7 +3640,7 @@ const audioMod = await import('../ui/audio.js');
   ok(/max-width:\s*var\(--gg-mon-w\)/.test(ruleFor(css16, '.gg-mon')),
     'the monitor is capped by --gg-mon-w rather than hard-sized to it');
   ok(/\.gg-mon-name\s*\{[^}]*min-width:\s*0/.test(css16),
-    'and their name may ellipsise instead of shoving the score and pips off the end');
+    'and their name may ellipsise instead of shoving the score and the charge count off the end');
   const monW = num(phone, /--gg-mon-w:\s*min\([^,]+,\s*(\d+)px\)/, 999);
   ok(monW <= 200, 'on a phone the monitor is at most 200px wide — it was half off-screen at 220', String(monW));
 

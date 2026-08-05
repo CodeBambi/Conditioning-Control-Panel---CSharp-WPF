@@ -827,6 +827,23 @@ export const S = Object.freeze({
      * fixed at the draft, unchangeable mid-match and unexplained by anything on
      * the desk. Deleted rather than reworded — the score above it is the same
      * information, already counted. */
+    /* ---- the charge count (ui/hud.js) ----
+     * WHAT REPLACED THE PIP ROW on 2026-08-05. Five rotated squares under the
+     * score used to carry this: outlines for the cap, filled for what you hold.
+     * The owner read them as the risk pips they had just had removed ("the
+     * little yellow squares"), which is a fair reading — same shape, same
+     * neighbourhood — so the count is a sentence now.
+     *
+     * THE CAP IS IN THE STRING ON PURPOSE. The pips said it by being five, and
+     * a bare "3" would have quietly dropped it. It is actionable: at the cap the
+     * endurance you are grinding out stops banking, and the arsenal's costs are
+     * priced against the same ceiling. Their count (S.monitor.charges) omits it,
+     * because nothing you can do turns their ceiling into a decision.
+     *
+     * Spaces around the slash so "3 / 5" cannot be misread as a date or a score
+     * line at a glance, and the noun is always plural — "1 / 5 charge" reads
+     * like a typo, and the number this labels is the pair, not the 1. */
+    charges: (n, cap) => (n | 0) + ' / ' + (cap | 0) + ' charges',
     /* ---- the heat gauge (ui/drops.js) ----
      * ONE word, because it sits over the arsenal rail and the bar is the rest of
      * the sentence. `heatValue` is the aria-valuetext: colour never travels
@@ -841,6 +858,15 @@ export const S = Object.freeze({
     dropHint: 'drop it here',
     /** The green checkmark on their projection: they took the whole payload. */
     passed: 'they held it',
+    /* Their charge count in the monitor's titlebar — the same 2026-08-05 removal
+     * as S.hud.charges: five little `.gg-pip--sm` diamonds sat here beside their
+     * score and were the last diamonds on the desk once the HUD's own row went.
+     * NO CAP HERE, unlike yours: their ceiling is not a number you can spend
+     * against, and the head row is the narrowest strip in the whole layout (it
+     * shares 200px with a grip, a health dot, their name and their score on a
+     * phone). Singular is spelled out because "1 charges" beside a live opponent
+     * name looks like a bug in the app rather than a count. */
+    charges: (n) => (n | 0) + ((n | 0) === 1 ? ' charge' : ' charges'),
     /** The titlebar's tooltip. All three gestures, because not one of them is
      *  discoverable and the grip dots only ever promise the first. */
     dragHint: 'drag to move · wheel to resize · double-tap to put it back',
