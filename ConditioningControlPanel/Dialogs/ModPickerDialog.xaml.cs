@@ -337,6 +337,14 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// True when this showing ended in the offline state: the manifest could not be reached (or
+        /// the pack service was missing), so every card was dead and the user could not have chosen
+        /// anything. <see cref="ShowIfNeeded"/> uses it to hand the one-shot offer back instead of
+        /// burning it on a screen that could not download.
+        /// </summary>
+        public bool EndedOffline => _offline;
+
         private void SetOfflineState()
         {
             _offline = true;
@@ -551,6 +559,28 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Upper bound on offline showings before <see cref="ModPickerShown"/> is allowed to latch
+        /// anyway. Keeps "retry when the manifest comes back" from becoming an every-launch popup
+        /// for someone who is deliberately offline forever.
+        /// </summary>
+        public const int MaxOfflineOffers = 3;
+
+        /// <summary>
+        /// Guard 1 as a pure predicate: skip opening the picker (without spending the one-shot
+        /// offer) because this session cannot reach the manifest and we have not yet used up the
+        /// offline allowance.
+        /// </summary>
+        internal static bool ShouldDeferForOffline(bool offlineMode, bool manifestUnavailable, int offlineOffers)
+            => offlineOffers < MaxOfflineOffers && (offlineMode || manifestUnavailable);
+
+        /// <summary>
+        /// Guard 2 as a pure predicate: after a showing that ended offline (and whose count has
+        /// already been incremented), should the offer be handed back for a later launch?
+        /// </summary>
+        internal static bool ShouldReArmAfterOfflineShowing(int offlineOffersAfterShowing)
+            => offlineOffersAfterShowing < MaxOfflineOffers;
+
+        /// <summary>
         /// Shows the picker when this install has never seen it and its mod media has to come off the
         /// network. Returns false (and shows nothing) for full/dev layouts, when the pack service is
         /// unavailable, or once the <see cref="Models.AppSettings.ModPickerShown"/> flag is set.
@@ -559,6 +589,20 @@ namespace ConditioningControlPanel
         /// install upgrading into the modular build (plan §5), whose bundled mod audio the installer
         /// just deleted. The guards below are what make the second call site a no-op for everyone it
         /// should not reach, so neither caller needs conditions of its own.
+        ///
+        /// OFFLINE is not a showing. Without a manifest the dialog renders with every card dead —
+        /// nothing to select, nothing to download — so treating that as "offered" would permanently
+        /// cost an upgrader the only screen that hands their mod media back, for the crime of
+        /// launching once without network. Two guards implement that:
+        /// <list type="number">
+        /// <item>Do not open at all when we already know this session is offline (offline mode, or a
+        /// manifest fetch that already failed — usually startup's EnsureBaselineAsync). Silent, no
+        /// dead dialog, flag untouched.</item>
+        /// <item>If the fetch fails while the dialog IS up, hand the flag back afterwards so a later
+        /// launch can offer it properly — bounded by <see cref="MaxOfflineOffers"/>.</item>
+        /// </list>
+        /// A showing that reached the manifest latches permanently, exactly as before, whatever the
+        /// user chose (including skipping).
         /// </summary>
         /// <param name="preselectActiveMod">
         /// Tick the card for <c>ActiveModId</c> on open (upgraders: one press restores the mod they
@@ -576,6 +620,18 @@ namespace ConditioningControlPanel
                 if (svc == null) return false;      // no pack service this session — nothing to offer
                 if (svc.IsFullInstall) return false; // full/dev layout: the mod media is already on disk
 
+                // Guard 1: known-offline sessions never open a dead picker, and never spend the
+                // offer. Both signals are cheap and already settled by the time either MainWindow
+                // call site fires (EnsureBaselineAsync runs at startup).
+                var offerCount = settings.ModPickerOfflineOffers;
+                if (ShouldDeferForOffline(settings.OfflineMode, svc.ManifestUnavailable, offerCount))
+                {
+                    App.Logger?.Information(
+                        "[ModPicker] {Reason} - deferring the picker to a launch that can reach the manifest (offline offers so far: {Count})",
+                        settings.OfflineMode ? "Offline mode is on" : "Manifest unreachable this session", offerCount);
+                    return false;
+                }
+
                 var preselect = preselectActiveMod ? settings.ActiveModId : null;
                 if (!string.IsNullOrEmpty(preselect) && ModPackCatalog.PackIdForMod(preselect) == null)
                     preselect = null;   // CCP Default or a user mod — nothing on this screen to tick
@@ -590,6 +646,30 @@ namespace ConditioningControlPanel
                 var dialog = new ModPickerDialog(preselect);
                 if (owner != null && !ReferenceEquals(owner, dialog)) dialog.Owner = owner;
                 dialog.ShowDialog();
+
+                // Guard 2: the manifest died while the dialog was up, so the user was shown a screen
+                // they could not act on. Count it and re-arm — unless we've already burned the
+                // allowance, in which case the flag stays latched and the Mod Manager takes over.
+                if (dialog.EndedOffline)
+                {
+                    offerCount++;
+                    settings.ModPickerOfflineOffers = offerCount;
+                    if (ShouldReArmAfterOfflineShowing(offerCount))
+                    {
+                        settings.ModPickerShown = false;
+                        App.Logger?.Information(
+                            "[ModPicker] Ended in the offline state (offer {Count}/{Max}) - re-arming for a later launch",
+                            offerCount, MaxOfflineOffers);
+                    }
+                    else
+                    {
+                        App.Logger?.Information(
+                            "[ModPicker] Ended offline for the {Count}th time - latching; the Mod Manager owns downloads from here",
+                            offerCount);
+                    }
+                    App.Settings?.Save();
+                }
+
                 return true;
             }
             catch (Exception ex)

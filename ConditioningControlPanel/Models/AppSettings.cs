@@ -227,16 +227,35 @@ namespace ConditioningControlPanel.Models
 
         private bool _modPickerShown = false;
         /// <summary>
-        /// True once the first-run mod picker (<c>ModPickerDialog</c>) has been offered. One-way: the
+        /// True once the first-run mod picker (<c>ModPickerDialog</c>) has been offered FOR REAL. The
         /// picker is a first-launch courtesy, not a recurring prompt — after this, mods are downloaded
         /// from the Mod Manager. Set BEFORE the dialog is shown so a crash inside it cannot turn the
         /// picker into an every-launch popup. Defaults false, so existing installs upgrading into the
         /// modular build see it once too (docs/CONTENT_PACKS_PLAN.md §4/§5).
+        ///
+        /// Handed BACK (set false again) when that showing ended in the offline state: with no
+        /// manifest every card is dead, so latching would cost an upgrader the content picker
+        /// forever for the crime of launching without network. <see cref="ModPickerOfflineOffers"/>
+        /// bounds how many times that re-arm can happen.
         /// </summary>
         public bool ModPickerShown
         {
             get => _modPickerShown;
             set { _modPickerShown = value; OnPropertyChanged(); }
+        }
+
+        private int _modPickerOfflineOffers = 0;
+        /// <summary>
+        /// How many times the mod picker has opened only to land in its offline (no-manifest) state.
+        /// The re-arm above stops at <c>ModPickerDialog.MaxOfflineOffers</c>, so a user who is
+        /// deliberately offline forever sees the dead screen a handful of times, not every launch.
+        /// Never reset — a successful showing latches <see cref="ModPickerShown"/> and ends the
+        /// question either way.
+        /// </summary>
+        public int ModPickerOfflineOffers
+        {
+            get => _modPickerOfflineOffers;
+            set { _modPickerOfflineOffers = value; OnPropertyChanged(); }
         }
 
         private string _lastSeenVersion = "";
