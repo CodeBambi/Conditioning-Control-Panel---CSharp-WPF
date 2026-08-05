@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-21
 **Status:** CLOSED-OUT — no claimable board work remains (see below)
-**Next Task ID:** SP-049
+**Next Task ID:** SP-050
 
 ---
 
@@ -70,7 +70,13 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 
 **Next claimable work:** SP-049 = **Loom studio promotion (v6.6.3 behavior delta)** — the port's next parity work per the phase re-derivation order. **Authoring constraint (land consult):** archaeology reads BOTH the v6.6.3 payload changes (loom.html/loomBoot.js/loomField.js/gifenc — main-sync inventory `client/docs/main-sync-2026-08-04.md`) AND the landed b4 Loom implementation (`DtrhLoom`, save/delete/list, `/spirals/*` serving, sidecar discipline — the rack pane was "not driven" in b4) — frame = what v6.6.3 adds ON TOP of b4's landed Loom and what is genuinely user-observable. Lane partner TBD. Next unused task ID: SP-049.
 
-### Phase 5 — DTRH admit + host slices, quips/sound, AI companion, tail (ACTIVE — wave 10 in flight)
+### Wave 11 (staged 2026-08-05)
+
+| Task | Summary | Status | Deps |
+|------|---------|--------|------|
+| SP-049-loom-studio | Row: Loom studio promotion (v6.6.3 behavior delta — dual archaeology: v6.6.3 payload changes AND b4's landed DtrhLoom; drive the studio surface in-engine; discharge or honestly limit the b4 rack-pane limit; GIF export through the serving contract; avalonia-live evidence) | Authored 2026-08-05 | SP-048 |
+
+### Phase 5 — DTRH admit + host slices, quips/sound, AI companion, tail (ACTIVE — wave 11 in flight)
 
 **WAVE-4 PARK LIFTED 2026-08-04 (~15:30 local, same day):** the anthropic-400 park was a pi request-shape defect, not account exhaustion — fixed by the `__PI_BILLING_HEADER_FIX__` local pi-ai patch (`x-anthropic-billing-header` system[0] per hermes-agent #48176; `pi -p` 200 on opus-5 AND fable-5). SP-037 landed earlier that day (floor restored). SP-035+SP-036 launch per plan. (The ~13:10 UTC park state is retained in the board's 2026-08-04 gate-history entry for the SP-037 substitution-land provenance.)
 
