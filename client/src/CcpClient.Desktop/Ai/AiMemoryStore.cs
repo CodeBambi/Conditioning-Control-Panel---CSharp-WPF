@@ -100,14 +100,16 @@ public enum AiMemoryClearOutcome
 ///
 /// Consent is code-enforced at WRITE ADMISSION (contract §5 rule 2 — never a prompt
 /// convention): a denied <see cref="Append"/> is a typed no-op observable via
-/// <see cref="LastWriteAdmission"/>. Reads are NOT gated in c4 — WPF's
-/// load-skip-under-disabled (LocalAiService.cs:113) belongs to the dormant-semantics
-/// owner question (§9.2 #3); recorded, never silently extended (the SP-038
-/// escalation-scope lesson).
+/// <see cref="LastWriteAdmission"/>. The CONVERSATION-CONSUMPTION read is gated the same
+/// way (SP-047, <see cref="ReadPromptContext"/> — the WPF `:113` port: consent off ⇒
+/// history neither read into a prompt nor written); the inspection read
+/// (<see cref="ReadRecent"/>) stays ungated. Named divergence (SP-047 record §3.1): the
+/// phase-3 startup LOAD is consent-agnostic (clear/degraded/write machinery needs the
+/// document resident) — WPF never reads the file under disabled consent; the observable
+/// conversation behavior is identical.
 ///
-/// NOT claimed here: nothing consumes memory as conversation context yet — prompt
-/// assembly lands in c7 (pre-approach consult, record.md §3.1). c4's claim is exactly
-/// "memory persists and clears".
+/// Consumption as conversation context landed in SP-047 (pipeline assembly +
+/// <see cref="ReadPromptContext"/>). c4's claim was exactly "memory persists and clears".
 /// </summary>
 public sealed class AiMemoryStore : IAiMemoryStore, IBackgroundParticipant
 {
@@ -176,6 +178,28 @@ public sealed class AiMemoryStore : IAiMemoryStore, IBackgroundParticipant
             var turns = _store.Current.Turns;
             var start = Math.Max(0, turns.Count - Math.Max(0, maxTurns));
             return turns.Skip(start).ToList();
+        }
+    }
+
+    /// <summary>
+    /// The consent-gated conversation-consumption read (SP-047; the WPF `:113` port,
+    /// LocalAiService.cs:111-126): consent is checked FIRST — not Granted ⇒ an empty list,
+    /// the document's turns untouched (consent off ⇒ history is neither read into a prompt
+    /// nor written). Otherwise all current pairs, oldest first — the append-trim already
+    /// bounds them to the retention window (trimming rides the c4 mechanism; the single cap
+    /// reproduces WPF's twin assembly/persist 50-pair trims, LocalAiService.cs:180-227 +
+    /// :148-152). Snapshot copy under the store gate.
+    /// </summary>
+    public IReadOnlyList<AiMemoryTurn> ReadPromptContext()
+    {
+        lock (_gate)
+        {
+            if (_consent() != AiMemoryConsent.Granted)
+            {
+                return [];
+            }
+
+            return _store.Current.Turns.ToList();
         }
     }
 

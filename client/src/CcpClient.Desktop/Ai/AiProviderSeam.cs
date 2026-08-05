@@ -36,8 +36,15 @@ public sealed record AiProviderDescriptor(AiProviderId Id, AiEndpointClass Endpo
 /// <summary>
 /// One AI request. The prompt is user/model text: it NEVER enters diagnostics (contract §12)
 /// or logs; the pipeline carries it only to the selected provider.
+/// <see cref="History"/> is the assembled conversation context (SP-047): prior
+/// user/assistant pairs, OLDEST FIRST, provider-neutral (contract §5 rule 3). Null/empty =
+/// no context (the pre-SP-047 shape; payloads are byte-identical). Assembly is
+/// PIPELINE-OWNED: interactive operations carry the memory store's consent-gated pairs
+/// (WPF full-history shape, LocalAiService.cs:531-548); awareness operations NEVER carry
+/// history (WPF stateless ambient path, LocalAiService.cs:476-502) — the pipeline
+/// overwrites/strips this field, so a caller-supplied value never reaches a provider.
 /// </summary>
-public sealed record AiRequest(string Prompt);
+public sealed record AiRequest(string Prompt, IReadOnlyList<AiMemoryTurn>? History = null);
 
 /// <summary>
 /// A provider implementation (c1: test fakes only; c2 lands the first real one). The probe
