@@ -20,24 +20,44 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.6.3";
+        public const string AppVersion = "6.6.4";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.6.3 - Video Hotfix 💗
+        public const string CurrentPatchNotes = @"v6.6.4 - The Velvet Vault 💗
+
+A big one. New video engine, an installer a third the size, a new tab, and a mountain of fixes.
+
+🎬 NEW VIDEO ENGINE
+- Mandatory videos and Bubble Count now run on a new browser-based engine - on by default, opt out in Settings
+- Should resolve the video freeze and crash reports from 6.6.x; falls back to the old player automatically when unavailable
+
+📦 SMALLER INSTALLER
+- The installer is now ~640MB (was 1.6GB) - audio content downloads on demand, only for the mods you use
+
+💎 THE VELVET VAULT
+- New exclusives tab for supporter content
+
+📱 FYP DESKTOP FEED
+- An endless mosaic reel on your desktop, TikTok style
+
+🧸 HAPTICS OVERHAUL
+- Full multi-toy support (Lovense + Buttplug), role-based routing, temperament presets
+- New default intensity cap of 70%; keyword haptics now run at half strength by default (adjustable per row)
+
+🎮 GOON GAME (BETA)
+- 1v1 duels: media throws, heat gauge, voice notes, brain drain, and a dozen rounds of beta hardening
 
 🔧 BUG FIXES
-- A video that freezes mid-stop can no longer wedge the whole app. Stuck players are retired and rebuilt off-thread, and a frozen fullscreen video now releases the desktop instead of trapping you behind it
-- Fixed a crash where a video's frame buffer was freed while the decoder was still writing into it
-- Black screens no longer count toward video watch time, and video lengths are tracked correctly again after a player is replaced
-- The Bubble Count minigame got the same treatment: no more stale players, a memory leak fixed, and it now backs off for a minute instead of retrying into a broken state
-- Deeper haptics now work even when Video Haptic Sync is off (it was silently gating them)
-- The built-in browser recovers when it fails to load, actually falls back to your external browser, and the pop-out window comes to the front properly
-- Settings saves can no longer race each other or get corrupted by a badly timed shutdown, and restoring a backup no longer gets overwritten by profile sync
-- Unchecking an asset folder now immediately removes its images from the flash rotation
-- A stuck Lock Card or Pop Quiz can no longer jam interactions forever - the app now recovers and closes it cleanly
+- The 6.6.3 stability batch (video freezes, audio death) reaches you for the first time in this build
+- Panic ladder clarified: press once = pause, twice = panic, three times = exit
+- Esc is no longer swallowed system-wide during Lockdown
+- Unchecked asset folders are now respected everywhere (chaos overlays, Intake)
+- Oopsie 'already used' bug fixed server-side (heals on next sync)
+- Streak no longer flashes 0 after re-login
+- 5,271 new translations across all 8 languages
 
 Season: Airhead August";
 
