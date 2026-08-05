@@ -4286,18 +4286,21 @@ async function main() {
     await sleep(GHOST_WAIT);
     for (const id of LAYER_IDS) byId.get(id).replaceChildren();
 
-    // An untagged payload is byte-for-byte the old behaviour.
+    // An untagged payload is still PEER-FIRST (2026-08-05: "the attacks are a
+    // transfer, every time"): any clip the opponent already transferred this
+    // match beats the receiver's own library. Only an empty received store
+    // reads as the old behaviour — covered by the drawFor suite above.
     R.renderPayload({ id: 'pT2', duration_ms: 40000, intensity: 0.5 }, () => {});
     const plainVid = liveWins(host)[0].findAll('gg-vwin-vid')[0];
-    ok(plainVid.src.startsWith('https://ccp.assets/'),
-      'an untagged Video payload draws from the receiver\'s library exactly as before', plainVid.src);
+    ok(plainVid.src === 'https://ccp.cache/recv/b.mp4',
+      'an untagged Video payload still prefers a clip the opponent transferred this match', plainVid.src);
     ex.stopAll();
     ex.detach();
     await sleep(GHOST_WAIT);
     for (const id of LAYER_IDS) byId.get(id).replaceChildren();
   }
 
-  // ------------------------------- flashes: up to XFER_TAGS_MAX, each spent once
+  // ------------- flashes: exact tags first, then the received store, own last
   {
     for (const id of LAYER_IDS) byId.get(id).replaceChildren();
     const host = byId.get('gg-fx-flash');
@@ -4318,7 +4321,10 @@ async function main() {
     ex.attach(fakeMatch());
     const R = ex.rendererFor(GoonElement.Flashes);
 
-    // FOUR tags offered; the cap is three, and each of those is spent exactly once.
+    // FOUR tags offered; the cap is three EXACT spends, and past them the burst
+    // keeps drawing the sender's files from the received store — the receiver's
+    // own library is the last resort, not the rest of the squall (2026-08-05
+    // play-test: "one desktop gif then local-only" read as a broken transfer).
     const cancel = R.renderPayload({
       id: 'pF1', duration_ms: 4000, intensity: 0.8,
       tags: tagShas.map((s) => 'xfer:' + s),
@@ -4327,16 +4333,16 @@ async function main() {
     const srcs = host.findAll('gg-flash').map((el) => el.src || '');
     const peer = srcs.filter((s) => s.startsWith('https://ccp.cache/recv/'));
     const own = srcs.filter((s) => s.startsWith('https://ccp.assets/'));
-    ok(peer.length === 3,
-      'a burst shows at most XFER_TAGS_MAX of the sender\'s images — the rest is the receiver\'s '
-      + 'own library, which is what keeps a 30-flash squall from costing 30 transfers',
+    ok(peer.length > 3,
+      'the burst stays on the SENDER\'s images past the three exact tag spends — '
+      + 'the received store feeds the rest of the squall',
       `${peer.length} peer / ${own.length} own`);
-    ok(new Set(peer).size === peer.length,
-      'and each landed artifact is spent ONCE — a repeated file reads as a bug, not as emphasis',
-      peer.join(','));
-    ok(!peer.includes('https://ccp.cache/recv/t3.png'),
-      'the fourth tag was never used: the cap is a cap, not a suggestion');
-    ok(own.length > 0, 'the burst kept going on our own images after the tags ran out', String(own.length));
+    for (const i of [0, 1, 2]) {
+      ok(peer.includes('https://ccp.cache/recv/t' + i + '.png'),
+        `exact tag ${i} was spent on its own flash before the random received draws`, peer.join(','));
+    }
+    ok(own.length === 0,
+      'the receiver\'s own library never shows while received artifacts exist', String(own.length));
     cancel();
     ex.stopAll();
     ex.detach();

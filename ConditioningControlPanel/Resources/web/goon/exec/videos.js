@@ -1401,9 +1401,16 @@ export function createVideos({ layers, media, audio, logger, onWindowCountChange
     if (mayEvict === false && wins.length >= MAX_WINDOWS) return null;
     if (!media || typeof media.drawKind !== 'function') return null;
 
-    const entry = (typeof media.drawFor === 'function')
+    let entry = (typeof media.drawFor === 'function')
       ? media.drawFor('video', payload || null)
       : media.drawKind('video');
+    // A PAYLOAD window whose tag missed (not landed yet, blocklisted) or that
+    // carried no tag at all still prefers any clip the opponent already
+    // transferred this match over our own library — same peer-first rule as
+    // exec/flashes.js. Element runs and spawnLocal pass no payload: untouched.
+    if (payload && (!entry || entry.provenance !== 'peer') && typeof media.drawReceived === 'function') {
+      entry = media.drawReceived('video') || entry;
+    }
     if (!entry) return null;
     const handle = (typeof media.acquire === 'function') ? media.acquire(entry) : null;
     if (!handle || !handle.url) return null;
