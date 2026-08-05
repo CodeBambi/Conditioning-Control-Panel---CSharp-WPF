@@ -59,12 +59,16 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 
 **The c1–c7 slice cut is COMPLETE (2026-08-05); the AI row's acceptance is NOT (named limits on the row). Next: phase-scope re-derivation consult (land-consult condition) before further authoring — inventory: memory→prompt context row (new, OPEN), dashboard-surface question (owner 2026-07-22, unanswered), DTRH published-payload-location decision (b1 land condition), everything else owner-gated/excluded (camera, geometry, unified video, Wayland §5.1).**
 
-### Wave 10 (staged 2026-08-05)
+### Wave 10 (LANDED 2026-08-05, `10f087b9`)
 
 | Task | Summary | Status | Deps |
 |------|---------|--------|------|
-| SP-047-memory-prompt-context | Row: wire companion memory into prompt context (c4 store consumed per request; read-gating ported as behavior fact `LocalAiService.cs:113`; consent-default tension WPF-true vs placeholder-Denied recorded verbatim; ambient stateless; round-trip INTO prompt falsifiable) | Authored 2026-08-05 | SP-046 |
-| SP-048-dtrh-payload-location | Row: DTRH published-artifact payload location (b1 land condition, oldest open in the port — evidence-first decision; published win-x64 boots the host from the decided location; SP-010 gates non-regression; Linux publish = named limit) | Authored 2026-08-05 | SP-037 |
+| SP-047-memory-prompt-context | Row: wire companion memory into prompt context (c4 store consumed per request; read-gating ported as behavior fact `LocalAiService.cs:113`; consent-default tension WPF-true vs placeholder-Denied recorded verbatim; ambient stateless; round-trip INTO prompt falsifiable) | **Done 2026-08-05** (landed `10f087b9`; batch `20260805T030213` lane-1 — FULL review chain: code APPROVE + final PASS; read-gating at conversation-consumption level (startup-load divergence named); falsifiable wire proof; read-gating ≠ deletion; anti-overclaim line binding (recall owner-gated by Denied placeholder + session scope); 609/609 + 33/33; row WIP) | SP-046 |
+| SP-048-dtrh-payload-location | Row: DTRH published-artifact payload location (b1 land condition, oldest open in the port — evidence-first decision; published win-x64 boots the host from the decided location; SP-010 gates non-regression; Linux publish = named limit) | **Done 2026-08-05** (landed `10f087b9`; batch `20260805T030213` lane-2 — FULL review chain: code APPROVE + final PASS; ratified copy-beside-exe (measured 380MB/117.5MB, byte-identical); published boot from MOVED dir (guard names resolved root — repo-tree serving disproven); engine live; `--verify-assets` exit 0; SP-010 matrix 18/18 PASS; Linux publish named limit; 606/606 + 33/33; b1 condition DISCHARGED ON WINDOWS) | SP-037 |
+
+### Wave 11 (next)
+
+**Next claimable work:** SP-049 = **Loom studio promotion (v6.6.3 behavior delta)** — the port's next parity work per the phase re-derivation order. **Authoring constraint (land consult):** archaeology reads BOTH the v6.6.3 payload changes (loom.html/loomBoot.js/loomField.js/gifenc — main-sync inventory `client/docs/main-sync-2026-08-04.md`) AND the landed b4 Loom implementation (`DtrhLoom`, save/delete/list, `/spirals/*` serving, sidecar discipline — the rack pane was "not driven" in b4) — frame = what v6.6.3 adds ON TOP of b4's landed Loom and what is genuinely user-observable. Lane partner TBD. Next unused task ID: SP-049.
 
 ### Phase 5 — DTRH admit + host slices, quips/sound, AI companion, tail (ACTIVE — wave 10 in flight)
 

@@ -90,6 +90,13 @@
         "2.8.0",
         "2.10.0"
       ]
+    },
+    {
+      "id": "skill-trx-failure-names",
+      "target": "skills/create-spine-tasks/references/prompt-template.md",
+      "anchor": "- [ ] Run FULL test suite: `[test command from project config]`\n- [ ] Run coverage gate: `[testWithCoverage command, e.g. npm run coverage:check]`",
+      "replacement": "- [ ] Run FULL test suite: `[test command from project config]`\n- [ ] **Failure-name capture (CCP local amendment, wave-10 land consult):** full-suite dotnet runs MUST attach a TRX logger (`--logger \"trx;LogFileName=<task-evidence>.trx\"`) or equivalently lossless output so EVERY failure yields a test name. A transient red with an uncaptured name is not evidence (wave-4 T-3 + SP-048 occurrences: 'watched; unreproduced ×3' without a name). One red + a name = a class you can fix; one red without a name = folklore.\n- [ ] Run coverage gate: `[testWithCoverage command, e.g. npm run coverage:check]`",
+      "note": "Mandate lossless failure capture in the Testing & Verification template step (TRX logger). Wave-10 land consult recurrence-rule item (second uncaptured flake name)."
     }
   ]
 }

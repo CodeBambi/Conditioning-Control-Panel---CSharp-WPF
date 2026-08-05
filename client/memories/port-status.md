@@ -103,3 +103,11 @@ only with RATIFIED decree citation placed in evidence cells. Never flip without 
 - **New row: memory→prompt context (OPEN)** — the real functional gap (WPF: full dialogue history per request).
 - **Next: phase-scope re-derivation consult** before further authoring (claimable inventory: prompt-context, dashboard-surface question, DTRH payload-location decision; rest owner-gated/excluded).
 - Real Ollama 0.32.5 now runs on the laptop (SP-019 limit 1 stale).
+
+## Wave 10 (2026-08-05, integrate 10f087b9; floor now 614/614 + 33/33)
+
+- **SP-047 (memory->prompt context):** c4 store consumed (consent-gated read; wire-proven; read-gating ≠ deletion). ANTI-OVERCLAIM: recall stays owner-gated (Denied placeholder + session-only; WPF-true tension verbatim). Row WIP.
+- **SP-048 (DTRH payload location):** b1's oldest open condition DISCHARGED ON WINDOWS (ratified copy-beside-exe; published boot from a MOVED dir; matrix 18/18). Publish footprint owner fact: 899 MB publish dir / 380 MB payload / 117.5 MB exe. Linux publish named limit.
+- Consent-scope divergence is a board named limit now (startup load regardless of consent + ungated ReadRecent; retirement condition recorded).
+- Packet-template patch `skill-trx-failure-names` added (TRX logger mandated on full-suite runs).
+- Next: SP-049 = Loom studio promotion (v6.6.3 delta; dual archaeology — v6.6.3 payload changes AND b4's landed DtrhLoom).
