@@ -60,7 +60,7 @@
 | Step 1 | plan | NO — engine-deferred (SP-195 nested-spawn block, `spawnFailed:false`, artifact `1-20260805T033252.md`) | n/a |
 | Step 2 | plan | NO — engine-deferred (SP-195, `spawnFailed:false`, artifact `2-20260805T040117.md`) | n/a |
 | Step 3 | plan | NO — engine-deferred (SP-195, `spawnFailed:false`, artifact `3-20260805T041132.md`) | n/a |
-| Step 4 | plan | NO — engine-deferred (SP-195, `spawnFailed:false`, artifact recorded at call) | n/a |
+| Step 4 | plan | NO — engine-deferred (SP-195, `spawnFailed:false`, artifact `4-20260805T041506.md`) | n/a |
 
 ## 5. Evidence
 
