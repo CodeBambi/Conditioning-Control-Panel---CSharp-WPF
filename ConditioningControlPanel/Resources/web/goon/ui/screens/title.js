@@ -14,6 +14,7 @@
 import { createLedger, el, button } from '../router.js';
 import { S } from '../strings.js';
 import { formatBytes } from '../assetsStore.js';
+import { GOON_BUILD } from '../../bridge.js';
 
 export function mount(container, ctx) {
   const ledger = createLedger();
@@ -119,6 +120,12 @@ export function mount(container, ctx) {
   }
 
   card.appendChild(el('p', { class: 'gg-title-fineprint', text: S.title.fineprint }));
+
+  /* THE BUILD STAMP (bridge.js GOON_BUILD). One muted line so a play-tester can
+   * tell at a glance whether a device — the iPhone especially, whose Safari
+   * cache outlives deploys — is running the build that was just shipped. It is
+   * a diagnostic, not branding: it must never grow, animate, or move up. */
+  card.appendChild(el('p', { class: 'gg-title-buildstamp', text: 'build ' + GOON_BUILD }));
 
   // NOTE: #gg-boot-ok is owned by boot.js and lives on <body> — it has to stay
   // readable on every screen, not just this one, or the play-test driver loses

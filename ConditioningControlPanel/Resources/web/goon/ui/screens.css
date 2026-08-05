@@ -122,6 +122,20 @@
   line-height: 1.6;
 }
 
+/* The build stamp (ui/screens/title.js, bridge.js GOON_BUILD): the quiet
+ * "which build is this device on" answer for cross-device play-tests. Even
+ * more muted than the fineprint on purpose — readable when you look for it,
+ * invisible when you do not. */
+.gg-title-buildstamp {
+  margin: 0.5rem auto 0;
+  color: var(--gg-text-4);
+  opacity: 0.65;
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-align: center;
+  user-select: text;
+}
+
 .gg-how-list {
   margin: 0.4rem 0 0;
   padding-left: 1.1rem;

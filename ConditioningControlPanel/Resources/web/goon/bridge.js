@@ -29,6 +29,19 @@
 
 export const PROTOCOL = 1;
 
+/**
+ * THE BUILD STAMP — bump it in every PR that touches this folder.
+ *
+ * Two devices, one robocopy mirror, and iOS Safari's cache made "which build is
+ * that phone actually running?" an unanswerable question for three play-tests
+ * in a row (the 2026-08-05 transfer hunt spent its first sessions on exactly
+ * that). The stamp closes the hole from both ends: boot.js logs it through
+ * bridge.log (so the C# app log and the ?debug=1 overlay both carry it) and
+ * the title screen prints it under the fineprint, so ONE GLANCE at either
+ * device answers the question. Format: r<round>-<yyyymmdd>[letter].
+ */
+export const GOON_BUILD = 'r6-20260805';
+
 const win = (typeof window !== 'undefined') ? window : null;
 const webview = (win && win.chrome && win.chrome.webview) ? win.chrome.webview : null;
 
