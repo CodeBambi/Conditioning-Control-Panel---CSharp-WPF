@@ -1785,13 +1785,18 @@ namespace ConditioningControlPanel.Models
             set { _videoBlurredBackgroundEnabled = value; OnPropertyChanged(); }
         }
 
-        private bool _browserVideoEngineEnabled;
+        private bool _browserVideoEngineEnabled = true;
         /// <summary>
-        /// BETA opt-in: play mandatory videos in out-of-process WebView2 windows (the player page at
+        /// Play mandatory videos in out-of-process WebView2 windows (the player page at
         /// Resources/web/player) instead of in-process LibVLC. LibVLC stays the automatic fallback
         /// for anything the browser cannot decode, so turning this on never removes a playback path —
         /// it only changes which one is tried first. See docs/BROWSER_VIDEO_ENGINE_PLAN.md.
-        /// Default OFF.
+        ///
+        /// Default ON from 6.7 (owner call for the pre-release; the engine shipped OFF-by-default
+        /// after v6.6.3 and was never released, so no user has the key persisted and every install
+        /// — fresh or upgrading — lands on true). Turning it off is still a one-click revert in
+        /// Settings ▸ System, and <c>BrowserVideoGate</c> already routes to LibVLC on its own when
+        /// the WebView2 runtime is missing, so ON is safe on a machine without Evergreen.
         /// </summary>
         [JsonProperty]
         public bool BrowserVideoEngineEnabled
