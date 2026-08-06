@@ -79,6 +79,46 @@ namespace ConditioningControlPanel.Services
             return sanitized.Trim();
         }
 
+        // The CompanionBrain window renders bark lines to the model as
+        //   «Bambi said aloud: "the rabbit hole~"»
+        // (see CompanionTurn.FormatBarkEcho). Small models imitate the pattern and wrap their OWN
+        // replies in it - observed live on 2026-08-06, every reply arriving as «... said aloud: "..."».
+        // The speaker segment is capped so a reply that merely mentions the phrase mid-sentence
+        // ("she said aloud: yes" with no « prefix, or a « that opens a long clause) is left alone.
+        private static readonly Regex SpokenSigilWrapper = new(
+            "^\\s*«[^«»\r\n]{0,80}?\\bsaid aloud:\\s*(?<inner>.*?)\\s*»?\\s*$",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
+        /// <summary>
+        /// Unwraps a reply the model delivered inside the bark-echo sigil («X said aloud: "…"»),
+        /// returning the inner speech. Applied repeatedly (bounded) for the double-wrapped case.
+        /// Text that does not start with the sigil is returned unchanged; an all-shell reply unwraps
+        /// to empty and the caller decides what to say instead.
+        /// </summary>
+        internal static string UnwrapSpokenSigil(string? text)
+        {
+            if (string.IsNullOrEmpty(text)) return text ?? string.Empty;
+
+            var current = text.Trim();
+            for (int i = 0; i < 2; i++)
+            {
+                var m = SpokenSigilWrapper.Match(current);
+                if (!m.Success) break;
+
+                var inner = m.Groups["inner"].Value.Trim();
+                // The sigil quotes its payload; shed one symmetric (or truncation-orphaned) layer.
+                if (inner.StartsWith("\"", System.StringComparison.Ordinal))
+                    inner = inner.Substring(1);
+                if (inner.EndsWith("\"", System.StringComparison.Ordinal))
+                    inner = inner.Substring(0, inner.Length - 1);
+
+                current = inner.Trim();
+                if (current.Length == 0) break;
+            }
+
+            return current;
+        }
+
         /// <summary>
         /// Strip tokenizer artifacts and reasoning blocks. Whitespace is normalised but the text is
         /// otherwise left alone - callers layer their own product-specific sanitising on top.

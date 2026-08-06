@@ -231,6 +231,18 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     return result;
                 }
 
+                // Live 0806: small models imitate the bark-echo sigil and wrap their own replies in
+                // «X said aloud: "…"». Unwrap before the text reaches the bubble, history, or disk.
+                var chatText = AiTextHygiene.UnwrapSpokenSigil(result.Text);
+                if (chatText.Length == 0)
+                {
+                    // The reply was nothing but sigil shell. Same treatment as a canned fallback.
+                    Session.Remove(userTurn);
+                    return new AiReplyResult(GetFallbackPhrase(), IsAiGenerated: false, Refusal: null);
+                }
+                if (!string.Equals(chatText, result.Text, StringComparison.Ordinal))
+                    result = result with { Text = chatText };
+
                 Session.Append(TurnKind.AssistantChat, result.Text);
                 NoteRecommendedTitles(result.Text);
                 PersistAsync();
@@ -299,6 +311,15 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                         ? result
                         : new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
                 }
+
+                var reactionText = AiTextHygiene.UnwrapSpokenSigil(result.Text);
+                if (reactionText.Length == 0)
+                {
+                    Session.Remove(eventTurn);
+                    return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
+                }
+                if (!string.Equals(reactionText, result.Text, StringComparison.Ordinal))
+                    result = result with { Text = reactionText };
 
                 // AmbientReply, not AssistantChat: it shapes the live window but never reaches disk.
                 // See TurnKind.AmbientReply for why persisting the reply without its event is worse
