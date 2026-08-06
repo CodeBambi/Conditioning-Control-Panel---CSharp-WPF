@@ -33,6 +33,30 @@ category/name). It is **free for all users** (no Patreon gate) but requires an e
 flag. **Do not confuse it with the "Awareness Engine" tab (§1), which is the entirely separate
 premium keyword-trigger + Screen-OCR + preset system** that also wears the "Awareness" name.
 
+### 0a. Awareness v2 (Train 2, 2026-08-06) — what the rest of this doc no longer describes
+
+Everything below §2 describes System A **as it behaves with `UseAwarenessV2` off**. With that setting
+on (the shipped default) `Services/Awareness/AwarenessObserver.cs` (`App.Awareness`) owns the
+pipeline instead, and the differences that matter when reading the rest of this file are:
+
+- `WindowAwarenessService` **still polls** — its `CurrentServiceName` / `CurrentActivityDuration`
+  readouts are consumed elsewhere — but it **stops raising `ActivityChanged` / `StillOnActivity`**.
+  Every consumer described in §5b/§5c/§5d is therefore dormant under v2, by design: one pipeline at a
+  time, one mouth (the `ReactionArbiter`).
+- The `{1, 5, 10}`-minute still-on nag (§2b) is gone; cumulative-dwell milestones at 30m/1h/2h/3h
+  replace it, and a title flicker no longer resets the clock.
+- A candidate must hold the foreground for **20 seconds** before a frame is cut, so alt-tab
+  pass-throughs produce nothing and sustained churn produces exactly one `RapidCycling` event.
+- Idle is **real input idle** (`GetLastInputInfo`), not "the title stopped changing", and there is a
+  do-not-disturb layer (fullscreen with recent input, meeting app + live mic, typing burst, CCP's own
+  mandatory-video / lock-card / DtRH surfaces).
+- **The privacy posture inverts.** Private-browsing titles are a hard drop; a user deny list drops a
+  window before anything is written; page titles are withheld from the frame unless the user
+  allow-listed that app (the shipped allow list is empty); adult-cluster frames send only the cluster
+  id. All of it runs *before* the `ActivityLedger` write, not after.
+
+`UseAwarenessV2 = false` restores every line of the legacy behaviour documented below.
+
 ---
 
 ## 1. DISAMBIGUATION — "Awareness" is two unrelated systems (read this first)

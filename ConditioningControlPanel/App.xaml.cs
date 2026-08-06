@@ -368,6 +368,15 @@ namespace ConditioningControlPanel
         public static Services.Moderation.IPromptValidator PromptValidator { get; private set; } = null!;
         public static Services.Moderation.IModerationCounter ModerationCounter { get; private set; } = null!;
         public static WindowAwarenessService WindowAwareness { get; private set; } = null!;
+
+        /// <summary>
+        /// Awareness v2's observer (Train 2): the dwell gate, the <c>ActivityLedger</c>, the worthiness
+        /// scorer and the one reaction arbiter. Null only if construction failed — every caller
+        /// null-checks and the legacy <see cref="WindowAwareness"/> pipeline carries on, which is also
+        /// exactly what the <c>UseAwarenessV2</c> kill switch selects.
+        /// </summary>
+        public static Services.Awareness.AwarenessObserver? Awareness { get; private set; }
+
         public static PatreonService Patreon { get; private set; } = null!;
         public static SubscribeStarService SubscribeStar { get; private set; } = null!;
         public static UpdateService Update { get; private set; } = null!;
@@ -1611,6 +1620,30 @@ namespace ConditioningControlPanel
             }
 
             WindowAwareness = new WindowAwarenessService();
+
+            // Awareness v2 (Train 2). Built after Brain because the arbiter is the companion's one
+            // mouth and the memory seam is the brain's to fill later; started from
+            // WindowAwarenessService.Start(), which is the single on/off call site both the avatar tube
+            // and the Companion tab's awareness dial already use. Start() is also what loads and PRUNES
+            // the ledger, so retention is honoured whether or not any UI is ever opened.
+            try
+            {
+                Awareness = new Services.Awareness.AwarenessObserver(
+                    new Services.Awareness.ActivityLedger(),
+                    new Services.Awareness.WorthinessScorer(),
+                    new Services.Awareness.ReactionArbiter(),
+                    new Services.Awareness.StubCompanionMemory());
+                Logger?.Information("AwarenessObserver constructed (v2 enabled={Enabled})",
+                    Services.Awareness.AwarenessObserver.IsEnabled);
+            }
+            catch (Exception ex)
+            {
+                // An observer that will not build must not take the app down: the legacy awareness
+                // pipeline is still there and still works.
+                Awareness = null;
+                Logger?.Error(ex, "AwarenessObserver: initialization failed, falling back to legacy awareness");
+            }
+
             Patreon = new PatreonService();
             SubscribeStar = new SubscribeStarService();
             // The weekly intake pass is a free-tier amenity, so its state depends on entitlement -
@@ -3707,6 +3740,9 @@ Application State:
             MindWipe?.Dispose();
             BrainDrain?.Dispose();
             Achievements?.Dispose();
+            // Before WindowAwareness: its Dispose runs Stop(), which also stops the observer — and the
+            // observer's own Stop is what closes the open visit and flushes the ledger to disk.
+            Awareness?.Dispose();
             WindowAwareness?.Dispose();
             // Before Ai: Dispose flushes the conversation to companion/session.json and unhooks the
             // bark echo, and it must not race the transport being torn down underneath it.
