@@ -123,9 +123,16 @@
                              banner ImageBrush then filled the whole page. Charms now live on
                              ProfileCharmLayer (overlay, out of layout) so they can never add
                              height again. -->
+                        <!-- Band raised a quarter (220/290 -> 275/362) so the square banner art we
+                             already ship gives up less of itself to the crop: at ~1390 DIP wide the
+                             strip goes from ~6.1:1 to ~4.9:1, so a 1024x1024 banner shows ~20% of
+                             its height instead of ~16%. Still inside the 380px ceiling above. The
+                             banner keeps cropping from the TOP (AlignmentY.Top,
+                             MainWindow.ProfileCosmetics.cs), and the wardrobe stage follows
+                             automatically — WardrobeStageGeometry.ForCard reads the live card. -->
                         <Border x:Name="ProfileHeroCard" x:FieldModifier="internal" Margin="8"
                                 CornerRadius="14" ClipToBounds="True"
-                                MinHeight="220" MaxHeight="290"
+                                MinHeight="275" MaxHeight="362"
                                 Background="#EE1A1A2E" BorderBrush="#66FF69B4" BorderThickness="1">
                             <Grid>
                                 <!-- Banner: gradient default now, cosmetic art in Phase 2
