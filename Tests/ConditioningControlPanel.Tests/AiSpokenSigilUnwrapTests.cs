@@ -49,4 +49,18 @@ public class AiSpokenSigilUnwrapTests
     [Fact]
     public void AnAllShellReplyUnwrapsToEmpty()
         => Assert.Equal("", AiTextHygiene.UnwrapSpokenSigil("«Bambi said aloud: \"\"»"));
+
+    // ── trailing debris: the second live shape (orphan close + section-separator hashes) ────
+    [Theory]
+    [InlineData("I never forget about your adorable kitty, Waffles! She's the cutest, right?\"» ###",
+                "I never forget about your adorable kitty, Waffles! She's the cutest, right?")]
+    [InlineData("«Bambi said aloud: \"good girl~\"» ###", "good girl~")]
+    [InlineData("so deep now ###", "so deep now")]
+    [InlineData("she said \"hi\" to me»", "she said \"hi\" to me")]   // balanced quotes survive
+    public void TrailingSigilDebrisIsShed(string input, string expected)
+        => Assert.Equal(expected, AiTextHygiene.UnwrapSpokenSigil(input));
+
+    [Fact]
+    public void AHashtagInsideTheSentenceSurvives()
+        => Assert.Equal("you're my #1 fan", AiTextHygiene.UnwrapSpokenSigil("you're my #1 fan"));
 }

@@ -99,7 +99,7 @@ namespace ConditioningControlPanel.Services
         {
             if (string.IsNullOrEmpty(text)) return text ?? string.Empty;
 
-            var current = text.Trim();
+            var current = TrimSigilDebris(text.Trim());
             for (int i = 0; i < 2; i++)
             {
                 var m = SpokenSigilWrapper.Match(current);
@@ -112,8 +112,29 @@ namespace ConditioningControlPanel.Services
                 if (inner.EndsWith("\"", System.StringComparison.Ordinal))
                     inner = inner.Substring(0, inner.Length - 1);
 
-                current = inner.Trim();
+                current = TrimSigilDebris(inner.Trim());
                 if (current.Length == 0) break;
+            }
+
+            return current;
+        }
+
+        // Second live shape (0806): the model closed a sigil it never opened and tacked on the
+        // prompt's section separator - `...right?"» ###`. The end-anchored wrapper can't match that,
+        // so trailing debris is shed first: hash-runs, then an orphan » (only when the text has no
+        // opening «), then the quote the orphan close leaves unbalanced.
+        private static string TrimSigilDebris(string current)
+        {
+            current = Regex.Replace(current, @"(?:\s|#)+$", "");
+
+            if (current.EndsWith("»", System.StringComparison.Ordinal) && current.IndexOf('«') < 0)
+            {
+                current = current.Substring(0, current.Length - 1).TrimEnd();
+
+                int quotes = 0;
+                foreach (var ch in current) if (ch == '"') quotes++;
+                if ((quotes & 1) == 1 && current.EndsWith("\"", System.StringComparison.Ordinal))
+                    current = current.Substring(0, current.Length - 1).TrimEnd();
             }
 
             return current;
