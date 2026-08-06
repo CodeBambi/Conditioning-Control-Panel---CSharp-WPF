@@ -7,6 +7,7 @@ ConditioningControlPanel/docs/surveys/
 
 # Internal planning/docs (not for PRs)
 ConditioningControlPanel/docs/internal/
+planning/
 
 # Stray PowerShell PNG outputs that landed at the wrong path
 # (System.Drawing.Drawing2D.* etc., from failed Add-Type scratch scripts).
