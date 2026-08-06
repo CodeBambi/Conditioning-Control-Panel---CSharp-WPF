@@ -40,11 +40,14 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             set => Set(ref _provider, value);
         }
 
-        public string DrawerNote { get; init; } = "wiring lives here on purpose. she'd rather you didn't stare.";
+        public string DrawerNote { get; init; } =
+            CompanionLocStaging.Resolve("companion_engine_drawer_note");
 
         public bool IsLoggedIn { get; init; } = true;
-        public string LoginPrompt { get; init; } = "cloud needs a Lab login before she can think out there.";
-        public string LoginButtonLabel { get; init; } = "Log in";
+        public string LoginPrompt { get; init; } =
+            CompanionLocStaging.Resolve("companion_engine_login_prompt");
+        public string LoginButtonLabel { get; init; } =
+            CompanionLocStaging.Resolve("companion_engine_login_button");
         public string StatusLine { get; init; } =
             "● Connected — cloud proxy · logged in as GoodGirl#4127 · purpose tiers: chat / reaction / utility";
         public bool IsHealthy { get; init; } = true;
@@ -55,12 +58,13 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public string CustomApiKey { get => _customApiKey; set => Set(ref _customApiKey, value); }
         public string CustomModel { get => _customModel; set => Set(ref _customModel, value); }
 
-        public string DailyLimitLabel { get; init; } = "Daily limit: 200";
+        public string DailyLimitLabel { get; init; } =
+            string.Format(CompanionLocStaging.Resolve("companion_engine_daily_limit_fmt"), 200);
 
         public bool ShowLiveActions { get; init; }
         public IReadOnlyList<string> LiveActions { get; init; }
         public string LiveActionsPlaceholder { get; init; } =
-            "Live actions feed (local effects channel) docks here when Local is active.";
+            CompanionLocStaging.Resolve("companion_engine_live_actions_placeholder");
 
         public ICommand LoginCommand { get; }
         public ICommand TestConnectionCommand { get; }
@@ -79,7 +83,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             IsExpanded = true,
             IsLoggedIn = false,
             IsHealthy = false,
-            StatusLine = "○ Not connected — log in to use the cloud proxy"
+            StatusLine = CompanionLocStaging.Resolve("companion_engine_status_disconnected")
         };
 
         /// <summary>Local Ollama, with the live actions feed docked at the bottom.</summary>
@@ -117,7 +121,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             Provider = CompanionProviderMode.Off,
             IsHealthy = false,
-            StatusLine = "○ Off — she runs on her voice alone"
+            StatusLine = CompanionLocStaging.Resolve("companion_engine_status_off")
         };
 
         /// <summary>The resting state on the page: a closed, unglamorous gray drawer.</summary>

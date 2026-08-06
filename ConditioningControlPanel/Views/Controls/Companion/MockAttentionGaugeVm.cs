@@ -26,7 +26,9 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         public double Fraction { get; }
         public double BarFraction => AttentionCopy.BarFractionFor(Fraction);
+        public bool IsSpent => AttentionCopy.IsSpent(Fraction);
         public bool ShowUpsell => AttentionCopy.ShowUpsell(Fraction);
+        public bool ShowFloorNote => AttentionCopy.ShowFloorNote(Fraction);
 
         /// <summary>
         /// Resolved through the staged loc layer from the ladder key, so this mock exercises the
@@ -35,13 +37,19 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public string StateCopy => CompanionLocStaging.Resolve(AttentionCopy.CopyKeyFor(Fraction));
 
         /// <summary>
-        /// Numeric detail, on demand only. Note what it never says: "tokens". The trailing clause
-        /// is load-bearing — the floor is not mute, and the card has to promise that out loud.
+        /// Numeric detail, on demand only. Note what it never says: "tokens" — and note what it no
+        /// longer carries either: the floor promise, which moved to <see cref="FloorNote"/> because
+        /// hiding it behind hover left the drained card saying nothing but "tomorrow~".
         /// </summary>
         public string DetailLine { get; init; } =
-            "~63 chats · resets at midnight · her voice never runs out — only the thinking does";
+            CompanionLocStaging.Resolve("companion_attention_detail_line");
 
-        public string UpsellCopy { get; init; } = "“want me louder? you know where the lab is~”";
+        /// <summary>The barks-only floor promise, at rest, in her voice.</summary>
+        public string FloorNote { get; init; } =
+            CompanionLocStaging.Resolve("companion_attention_floor_note");
+
+        public string UpsellCopy { get; init; } =
+            CompanionLocStaging.Resolve("companion_attention_upsell");
 
         public bool IsDetailShown
         {
@@ -66,7 +74,13 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         /// <summary>Spent: the bar keeps a sliver, barks keep playing, tomorrow is promised.</summary>
         public static MockAttentionGaugeVm Drained() => new(0.0)
         {
-            DetailLine = "0 chats left · resets at midnight · barks keep playing — she never goes mute"
+            DetailLine = CompanionLocStaging.Resolve("companion_attention_detail_line_spent")
         };
+
+        /// <summary>
+        /// 4% left — a real four percent, not the spent sliver. Exists because the two used to be
+        /// indistinguishable to the view and this is the exhibit that proves they no longer are.
+        /// </summary>
+        public static MockAttentionGaugeVm AlmostSpent() => new(0.04);
     }
 }

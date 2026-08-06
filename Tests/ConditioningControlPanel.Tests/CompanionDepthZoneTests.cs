@@ -127,26 +127,32 @@ public class CompanionDepthZoneTests
     // =====================================================================================
 
     [Fact]
-    public void SpentSliver_IsExactlyTheValueTheAttentionGaugeTriggerMatches()
+    public void SpentSliver_IsADrawingMinimum_NotAStateFlag()
     {
-        // AttentionGaugeView.xaml drops the fill's glow with
+        // The view no longer matches this number: it used to style the empty bar with
         //     <DataTrigger Binding="{Binding BarFraction}" Value="0.04">
-        // A DataTrigger compares the *converted* literal, so if BarFractionFor(0) ever moves the
-        // spent meter would silently keep glowing like a full one.
+        // which cannot tell the sliver apart from a real 4% (they are the same double), so a user
+        // with 4 chats left got the "spent" treatment. The trigger asks IsSpent now, and this test
+        // pins the reason: the collision is real and unavoidable at the BarFraction level.
         double sliver = AttentionCopy.BarFractionFor(0.0);
-        Assert.Equal("0.04", sliver.ToString("R", CultureInfo.InvariantCulture));
-        Assert.Equal(sliver, double.Parse("0.04", CultureInfo.InvariantCulture));
+        Assert.Equal(AttentionCopy.SpentBarFraction, sliver, 10);
+        Assert.Equal(sliver, AttentionCopy.BarFractionFor(AttentionCopy.SpentBarFraction), 10);
 
-        // and nothing that is *not* spent may collide with the sentinel
+        Assert.True(AttentionCopy.IsSpent(0.0));
+        Assert.False(AttentionCopy.IsSpent(AttentionCopy.SpentBarFraction));
         Assert.NotEqual(sliver, AttentionCopy.BarFractionFor(0.05));
     }
 
     [Fact]
     public void DrainedMeter_StillPromisesHerVoiceKeepsWorking()
     {
-        // Doc 01 §5.4: the floor is not mute, and the card has to say so out loud.
+        // Doc 01 §5.4: the floor is not mute, and the card has to say so OUT LOUD — at rest, not
+        // behind hover. The promise lives in FloorNote for that reason; DetailLine is numbers only
+        // and is collapsed until the card is hovered or clicked.
         var drained = MockAttentionGaugeVm.Drained();
-        Assert.Contains("never goes mute", drained.DetailLine, StringComparison.OrdinalIgnoreCase);
+        Assert.True(drained.ShowFloorNote);
+        Assert.Contains("never runs out", drained.FloorNote, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("token", drained.FloorNote, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("token", drained.DetailLine, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("token", drained.StateCopy, StringComparison.OrdinalIgnoreCase);
     }

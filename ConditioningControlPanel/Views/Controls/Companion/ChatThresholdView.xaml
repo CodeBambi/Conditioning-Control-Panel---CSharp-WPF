@@ -61,6 +61,16 @@
                         <TextBlock x:Name="BubbleText" Text="{Binding Text}"
                                    Style="{StaticResource CmpBubbleTextStyle}"/>
                     </Border>
+
+                    <!-- her signature rail. The CSS is a faint outline PLUS a solid 3px pink
+                         left border; one BorderBrush cannot be both, so the rail is its own
+                         Rectangle (exactly as the fact wall paints its kind rail). -->
+                    <Rectangle x:Name="HerRail" Style="{StaticResource CmpBubbleHerRailStyle}"/>
+
+                    <!-- the echo's dashed outline: Border cannot dash. -->
+                    <Rectangle x:Name="EchoOutline" Style="{StaticResource CmpBubbleEchoOutlineStyle}"
+                               Visibility="Collapsed"/>
+
                     <!-- the AI badge floats on the bubble's top-right corner -->
                     <Border x:Name="Badge" Style="{StaticResource CmpAiBadgeStyle}" Visibility="Collapsed">
                         <TextBlock Text="{local:CmpStr companion_chat_ai_badge}" Style="{StaticResource CmpAiBadgeTextStyle}"/>
@@ -72,6 +82,7 @@
                         <Setter TargetName="Bubble" Property="Style" Value="{StaticResource CmpBubbleYouStyle}"/>
                         <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Stretch"/>
                         <Setter TargetName="BubbleText" Property="Foreground" Value="#FFDCD4F2"/>
+                        <Setter TargetName="HerRail" Property="Visibility" Value="Collapsed"/>
                     </DataTrigger>
                     <DataTrigger Binding="{Binding Kind}" Value="Echo">
                         <Setter TargetName="Row" Property="MaxWidth" Value="440"/>
@@ -79,6 +90,8 @@
                         <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Stretch"/>
                         <Setter TargetName="BubbleText" Property="Style"
                                 Value="{StaticResource CmpBubbleEchoTextStyle}"/>
+                        <Setter TargetName="HerRail" Property="Visibility" Value="Collapsed"/>
+                        <Setter TargetName="EchoOutline" Property="Visibility" Value="Visible"/>
                     </DataTrigger>
                     <DataTrigger Binding="{Binding IsAiGenerated}" Value="True">
                         <Setter TargetName="Badge" Property="Visibility" Value="Visible"/>

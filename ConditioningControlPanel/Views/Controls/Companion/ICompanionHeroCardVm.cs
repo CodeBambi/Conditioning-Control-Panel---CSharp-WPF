@@ -36,7 +36,20 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         bool IsAiLive { get; }
         /// <summary>Awareness on — drives the awareness pill's "eyes open / eyes closed".</summary>
         bool IsAwarenessOpen { get; }
-        /// <summary>"Cloud — she's listening" / "Off — she's asleep".</summary>
+
+        /// <summary>
+        /// She is not off — she is behind the Lab. Distinguishes the entitlement state from the two
+        /// other ways <see cref="IsAiLive"/> can be false (companion disabled, provider Off), which
+        /// used to render identically down to the copy.
+        ///
+        /// <para>It matters because this is the only one of the three the user can do something
+        /// about: the free-tier page is the design's flagship combination, and a pill that says
+        /// "she's asleep" flatly contradicts the teaser ribbon selling her voice beside it. The
+        /// locked pill is pink-dim rather than gray-off and reads as a lock, not a fault.</para>
+        /// </summary>
+        bool IsAiLocked { get; }
+
+        /// <summary>"Cloud — she's listening" / "Off — she's asleep" / "Locked — unlock her voice".</summary>
         string AiPillText { get; }
         /// <summary>"Eyes open — broad strokes" / "Eyes closed".</summary>
         string AwarenessPillText { get; }

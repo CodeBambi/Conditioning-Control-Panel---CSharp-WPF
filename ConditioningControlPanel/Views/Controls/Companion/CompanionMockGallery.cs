@@ -65,6 +65,9 @@ namespace ConditioningControlPanel.Views.Controls.Companion
                 ["attention.saving"] = () => MockAttentionGaugeVm.Saving(),
                 ["attention.whispering"] = () => MockAttentionGaugeVm.Whispering(),
                 ["attention.drained"] = () => MockAttentionGaugeVm.Drained(),
+                // 4% left is NOT the spent sliver, even though it draws the same bar. Its own
+                // exhibit because the two used to be indistinguishable to the view.
+                ["attention.almostSpent"] = () => MockAttentionGaugeVm.AlmostSpent(),
 
                 // Z7 engine room
                 ["engine.cloud"] = () => MockEngineRoomDrawerVm.Cloud(),

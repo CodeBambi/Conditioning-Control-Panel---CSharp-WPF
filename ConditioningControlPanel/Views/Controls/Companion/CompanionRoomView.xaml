@@ -52,8 +52,18 @@
 
          Conversely the page PARKS clocks that a hidden tab would otherwise
          keep burning: this app switches tabs by visibility, not by
-         unloading, so IsVisibleChanged stops the breathe and the wire
-         cursor. See the code-behind.
+         unloading, so IsVisibleChanged stops the breathe, the wire cursor
+         AND Z2's thinking dots (three Forever clones that would otherwise
+         keep running behind another tab while a reply is in flight). On
+         re-show each zone re-reads its own viewmodel rather than being
+         restored to its state at park time. See the code-behind.
+
+         COMPAT SEAM: the disposition table's "kept hidden" row lands on
+         CompanionHeroCard (TxtDetachStatusCompanion, TxtCompanionStatus,
+         HelpBtnQuickControls) and WorkshopAccordion
+         (HelpBtnCompanionSettings), re-exposed as internal passthroughs on
+         this page's code-behind. The MainWindow partials write to those
+         names; they must not be renamed or made visible.
 
          Nothing here binds to ActualWidth. The shelf's one-column collapse
          is a threshold flip with hysteresis in code-behind (a binding to

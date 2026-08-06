@@ -38,7 +38,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             set => Set(ref _isExpanded, value);
         }
 
-        public string DrawerNote { get; init; } = "nothing was deleted. it just stopped being the front door.";
+        public string DrawerNote { get; init; } =
+            CompanionLocStaging.Resolve("companion_workshop_drawer_note");
         public IReadOnlyList<IWorkshopCellVm> Cells { get; init; }
         public ICommand FocusCellCommand { get; }
 

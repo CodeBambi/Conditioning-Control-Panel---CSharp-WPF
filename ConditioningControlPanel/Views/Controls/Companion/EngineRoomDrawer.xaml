@@ -206,7 +206,9 @@
 
             <Border Style="{StaticResource CmpInsetPanelStyle}" Margin="0,12,0,0"
                     Visibility="{Binding ShowLiveActions, Converter={StaticResource CmpBoolToVis}}">
-                <ItemsControl ItemsSource="{Binding LiveActions}"
+                <!-- named so the code-behind can attach CompanionWheelRelay: this list is capped
+                     and scrolls internally, so its unusable wheel notches must reach PageScroll -->
+                <ItemsControl x:Name="LiveActionsFeed" ItemsSource="{Binding LiveActions}"
                               Style="{StaticResource CmpVirtualizedItemsControlStyle}" MaxHeight="140">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>

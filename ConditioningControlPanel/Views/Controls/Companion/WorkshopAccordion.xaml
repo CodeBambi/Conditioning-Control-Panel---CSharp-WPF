@@ -164,6 +164,13 @@
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
             </ItemsControl>
+
+            <!-- COMPAT SEAM (design §6 disposition table, last row; §7.10). MainWindow's partials
+                 look this button up by name to hang the settings help popup on it. The Workshop
+                 absorbed the settings shelf, so the Workshop carries it — hidden, exactly as
+                 CompanionTabView keeps it. See the fuller seam note in CompanionHeroCard.xaml. -->
+            <Button x:Name="HelpBtnCompanionSettings" x:FieldModifier="internal"
+                    Tag="CompanionSettings" Visibility="Collapsed" IsHitTestVisible="False"/>
         </StackPanel>
     </Expander>
 </UserControl>

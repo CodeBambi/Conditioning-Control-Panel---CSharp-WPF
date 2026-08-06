@@ -29,11 +29,30 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         /// </summary>
         double BarFraction { get; }
 
+        /// <summary>
+        /// True when the budget is actually spent, as opposed to the bar merely drawing its 4%
+        /// sliver. The view styles the empty bar off THIS, never off the sliver's value — 4 chats
+        /// left out of 100 is not the same thing as none, and the two produce the same double.
+        /// </summary>
+        bool IsSpent { get; }
+
         /// <summary>The headline copy for the current rung of the ladder.</summary>
         string StateCopy { get; }
 
-        /// <summary>"~63 chats · resets at midnight · her voice never runs out…".</summary>
+        /// <summary>"~63 chats left · resets at midnight". Numbers only — hover/click reveals it.</summary>
         string DetailLine { get; }
+
+        /// <summary>
+        /// The barks-only floor promise: "her voice never runs out — only the thinking does".
+        ///
+        /// <para>Its own property, and NOT part of <see cref="DetailLine"/>, because it is not
+        /// detail-on-demand. The numbers are optional; this sentence is the card's answer to
+        /// "am I being rationed?" and has to be readable at rest.</para>
+        /// </summary>
+        string FloorNote { get; }
+
+        /// <summary>Whether <see cref="FloorNote"/> is shown at all — see AttentionCopy.ShowFloorNote.</summary>
+        bool ShowFloorNote { get; }
 
         /// <summary>Two-way: the numeric detail is revealed on hover/click.</summary>
         bool IsDetailShown { get; set; }

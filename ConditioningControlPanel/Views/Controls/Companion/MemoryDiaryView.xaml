@@ -173,9 +173,28 @@
                         <!-- while editing, the hover row would fight the save/cancel pair -->
                         <Setter TargetName="Actions" Property="Visibility" Value="Collapsed"/>
                     </DataTrigger>
+                    <!-- Hover reveals the action row on every card. The BORDER, though, is split:
+                         a boundary card's steel rail is its identity ("consent hygiene made
+                         visible") and hover is exactly the moment you are aiming at edit/forget,
+                         so turning it pink there would lose the rail at the worst possible time.
+                         The mockup agrees — .fact.boundary is declared after .fact:hover. A
+                         boundary brightens its steel instead. -->
+                    <MultiDataTrigger>
+                        <MultiDataTrigger.Conditions>
+                            <Condition Binding="{Binding IsMouseOver, ElementName=Card}" Value="True"/>
+                            <Condition Binding="{Binding IsBoundary}" Value="False"/>
+                        </MultiDataTrigger.Conditions>
+                        <Setter TargetName="Card" Property="BorderBrush" Value="#66FF69B4"/>
+                    </MultiDataTrigger>
+                    <MultiDataTrigger>
+                        <MultiDataTrigger.Conditions>
+                            <Condition Binding="{Binding IsMouseOver, ElementName=Card}" Value="True"/>
+                            <Condition Binding="{Binding IsBoundary}" Value="True"/>
+                        </MultiDataTrigger.Conditions>
+                        <Setter TargetName="Card" Property="BorderBrush" Value="#FF9FCFEE"/>
+                    </MultiDataTrigger>
                     <Trigger SourceName="Card" Property="IsMouseOver" Value="True">
                         <Setter TargetName="Actions" Property="Opacity" Value="1"/>
-                        <Setter TargetName="Card" Property="BorderBrush" Value="#66FF69B4"/>
                     </Trigger>
                 </DataTemplate.Triggers>
             </DataTemplate>

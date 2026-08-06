@@ -72,13 +72,21 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         /// <summary>The command's own gate: the row can be enabled while a reply is still in flight.</summary>
         public bool CanSendNow => CanSend && !IsThinking && !string.IsNullOrWhiteSpace(Draft);
 
-        public string LastHeardCopy { get; init; } = "last heard from you 2h ago";
-        public string FooterCopy { get; init; } = "she remembers this conversation now.";
+        // Every string below resolves through the staged loc layer, the way MockCompanionHeaderVm
+        // already did: the mock then exercises the exact key path the shipped viewmodel will use,
+        // and a key missing from the staging table shows up as a raw key in the designer instead of
+        // quietly working today and being forgotten by the loc pass tomorrow.
+        public string LastHeardCopy { get; init; } =
+            string.Format(CompanionLocStaging.Resolve("companion_chat_last_heard_fmt"), "2h ago");
+        public string FooterCopy { get; init; } =
+            CompanionLocStaging.Resolve("companion_chat_footer_remembers");
         public string StateCopy { get; init; } = string.Empty;
         public string LockCopy { get; init; } =
-            "“Bambi knows what she wants to say to you, princess — unlock AI chat to hear it.”";
-        public string LockCtaLabel { get; init; } = "Unlock her voice";
-        public string InputPlaceholder { get; init; } = "say something to her…";
+            CompanionLocStaging.Resolve("companion_chat_lock_copy");
+        public string LockCtaLabel { get; init; } =
+            CompanionLocStaging.Resolve("companion_chat_lock_cta");
+        public string InputPlaceholder { get; init; } =
+            CompanionLocStaging.Resolve("companion_chat_input_placeholder");
 
         public ICommand SendCommand { get; }
         public ICommand OpenFullChatCommand { get; }
@@ -135,7 +143,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public static MockChatThresholdVm Dormant() => new MockChatThresholdVm
         {
             State = CompanionZoneState.Dormant,
-            StateCopy = "she forgets every conversation the moment it ends… that's about to change.",
+            StateCopy = CompanionLocStaging.Resolve("companion_chat_dormant_copy"),
             FooterCopy = string.Empty,
             LastHeardCopy = string.Empty
         }.WithTurns(new IChatBubbleVm[]
@@ -150,7 +158,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             State = CompanionZoneState.Disabled,
             CanSend = false,
-            StateCopy = "turn her brain on in the Engine Room below.",
+            StateCopy = CompanionLocStaging.Resolve("companion_chat_disabled_copy"),
             FooterCopy = string.Empty,
             LastHeardCopy = string.Empty
         }.WithTurns(Array.Empty<IChatBubbleVm>());
@@ -175,14 +183,14 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         /// </summary>
         public static MockChatThresholdVm Fresh() => new MockChatThresholdVm
         {
-            FooterCopy = "say the first thing. she keeps everything after that.",
+            FooterCopy = CompanionLocStaging.Resolve("companion_chat_footer_first"),
             LastHeardCopy = string.Empty
         }.WithTurns(Array.Empty<IChatBubbleVm>());
 
         /// <summary>Mid-send: the three-dot pulse is running.</summary>
         public static MockChatThresholdVm Thinking()
         {
-            var vm = new MockChatThresholdVm { FooterCopy = "she's picking her words…" };
+            var vm = new MockChatThresholdVm { FooterCopy = CompanionLocStaging.Resolve("companion_chat_footer_picking") };
             vm.Draft = "it still does a little";
             vm.Send();
             return vm;

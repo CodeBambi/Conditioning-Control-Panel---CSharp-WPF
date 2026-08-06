@@ -48,17 +48,26 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         public bool IsCompanionEnabled { get; init; } = true;
         public bool IsAiLive { get; init; } = true;
+
+        /// <summary>Behind the Lab, as opposed to merely off. See the interface for why it matters.</summary>
+        public bool IsAiLocked { get; init; }
+
         public bool IsAwarenessOpen { get; init; } = true;
-        public string AiPillText { get; init; } = "Cloud — she's listening";
-        public string AwarenessPillText { get; init; } = "Eyes open — broad strokes";
-        public string AsleepCopy { get; init; } = "she's asleep — wake her?";
+        public string AiPillText { get; init; } =
+            CompanionLocStaging.Resolve("companion_hero_pill_ai_cloud");
+        public string AwarenessPillText { get; init; } =
+            CompanionLocStaging.Resolve("companion_hero_pill_eyes_broad");
+        public string AsleepCopy { get; init; } =
+            CompanionLocStaging.Resolve("companion_hero_asleep_copy");
 
         public bool IsMoodLive { get; init; }
         /// <summary>The live mood glyph. Pre-Train-4 the view swaps in the sleeping moon itself.</summary>
         public string MoodGlyph { get; init; } = "✧";
         /// <summary>Dormant on purpose: claiming a mood she does not have yet would be a lie.</summary>
-        public string MoodWord { get; init; } = "asleep";
-        public string MoodCaption { get; init; } = "she wakes up with a mood of her own soon~";
+        public string MoodWord { get; init; } =
+            CompanionLocStaging.Resolve("companion_hero_mood_asleep");
+        public string MoodCaption { get; init; } =
+            CompanionLocStaging.Resolve("companion_hero_mood_caption_dormant");
 
         public int Level { get; init; } = 41;
         public double XpFraction { get; init; } = 0.62;
@@ -110,7 +119,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             IsMoodLive = true,
             MoodWord = "bratty",
-            MoodCaption = "today's mood",
+            MoodCaption = CompanionLocStaging.Resolve("companion_hero_mood_caption_live"),
             Constellation = MockRelationshipConstellationVm.Live()
         };
 
@@ -122,7 +131,12 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             Header = MockCompanionHeaderVm.FreeTier(),
             IsAiLive = false,
-            AiPillText = "Off — she's asleep"
+            // NOT the disabled state's copy. Three different situations used to share
+            // "Off — she's asleep": companion disabled, provider Off, and no entitlement. Only
+            // the last one is a thing the user can buy, and telling a paying-curious reader she
+            // is asleep contradicts the teaser ribbon two inches to the left.
+            AiPillText = CompanionLocStaging.Resolve("companion_hero_pill_ai_locked"),
+            IsAiLocked = true
         };
 
         /// <summary>Hosted by a page that draws its own header: the Z0 band collapses.</summary>
@@ -134,17 +148,17 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             IsCompanionEnabled = false,
             IsAiLive = false,
             IsAwarenessOpen = false,
-            AiPillText = "Off — she's asleep",
-            AwarenessPillText = "Eyes closed"
+            AiPillText = CompanionLocStaging.Resolve("companion_hero_pill_ai_off"),
+            AwarenessPillText = CompanionLocStaging.Resolve("companion_hero_pill_eyes_closed")
         };
 
         /// <summary>Provider Off but she is awake — barks still work, so the hero stays alive.</summary>
         public static MockCompanionHeroCardVm AiOff() => new()
         {
             IsAiLive = false,
-            AiPillText = "Off — she's asleep",
+            AiPillText = CompanionLocStaging.Resolve("companion_hero_pill_ai_off"),
             IsAwarenessOpen = false,
-            AwarenessPillText = "Eyes closed"
+            AwarenessPillText = CompanionLocStaging.Resolve("companion_hero_pill_eyes_closed")
         };
 
         /// <summary>A brand-new account: level 1, nothing earned, page still full of life.</summary>

@@ -28,9 +28,14 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         private INotifyCollectionChanged? _watchedTurns;
         private bool _shimmerPlayed;
 
+        private IChatThresholdVm? _observed;
+
         public ChatThresholdView()
         {
             InitializeComponent();
+            // The thread is height-capped and scrolls internally; without this a wheel notch over
+            // it never reaches the page — see CompanionWheelRelay.
+            CompanionWheelRelay.Attach(ThreadList);
             DataContextChanged += OnDataContextChanged;
             Loaded += OnLoaded;
             Unloaded += OnUnloaded;
@@ -49,6 +54,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
+            // A reload re-attaches what OnUnloaded let go of.
+            Observe(ViewModel);
             SyncThinking(ViewModel?.IsThinking ?? false);
             ScrollThreadToEnd();
             PlayDormantShimmer();
@@ -57,24 +64,51 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
             StopThinking();
+            // Let go of BOTH subscriptions, not just the collection. The wired-up viewmodel is
+            // backed by CompanionBrain — a service-lifetime object — so a handler left rooted in it
+            // keeps this whole dead visual subtree (and its cloned storyboards, and the merged
+            // theme scope) alive, and worse, keeps servicing notifications: every IsThinking or
+            // Turns change would still run ScrollThreadToEnd, which calls UpdateLayout() on a
+            // detached tree. CompanionHeroCard.Observe(null) exists for exactly this reason.
+            Observe(null);
             WatchTurns(null);
         }
 
         private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
-            if (e.OldValue is IChatThresholdVm old) old.PropertyChanged -= OnVmPropertyChanged;
             if (e.NewValue is IChatThresholdVm fresh)
             {
-                fresh.PropertyChanged += OnVmPropertyChanged;
+                Observe(fresh);
                 WatchTurns(fresh.Turns as INotifyCollectionChanged);
                 SyncThinking(fresh.IsThinking);
                 ScrollThreadToEnd();
             }
             else
             {
+                Observe(null);
                 WatchTurns(null);
             }
         }
+
+        /// <summary>
+        /// Points the property-changed handler at <paramref name="vm"/>, releasing whatever it was
+        /// pointed at before. Mirrors <see cref="CompanionHeroCard"/>'s Observe: null means "this
+        /// view is off screen — nothing of it may stay reachable from a live viewmodel".
+        /// </summary>
+        private void Observe(IChatThresholdVm? vm)
+        {
+            if (ReferenceEquals(_observed, vm)) return;
+            if (_observed != null) _observed.PropertyChanged -= OnVmPropertyChanged;
+            _observed = vm;
+            if (_observed != null) _observed.PropertyChanged += OnVmPropertyChanged;
+        }
+
+        /// <summary>
+        /// Re-reads <see cref="IChatThresholdVm.IsThinking"/> and starts or stops the dot pulse to
+        /// match. The room calls this when the tab becomes visible again, because this app hides
+        /// tabs rather than unloading them and the pulse is parked while it is hidden.
+        /// </summary>
+        public void SyncThinking() => SyncThinking(ViewModel?.IsThinking ?? false);
 
         private void OnVmPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         {

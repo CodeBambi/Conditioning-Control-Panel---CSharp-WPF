@@ -90,6 +90,35 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         }
 
         // =====================================================================================
+        //  compat seam (design §6 disposition table, last row; §7.10)
+        // =====================================================================================
+
+        /// <summary>
+        /// The hidden elements the MainWindow partials write to by name.
+        ///
+        /// <para>Every other row of the disposition table lands in a zone; this one had nowhere to
+        /// go, and the wiring pass would have hit ~100 <c>MainWindow.Patreon.cs</c> /
+        /// <c>MainWindow.CompanionTab.cs</c> references with nothing to bind. The elements
+        /// themselves live on the zone that owns the thing they describe (status texts and the
+        /// quick-controls help button on the hero, the settings help button on the Workshop), and
+        /// these passthroughs give the partials the single accessor path <c>CompanionTab</c> gave
+        /// them before — so the swap is a rename, not a rewrite.</para>
+        ///
+        /// <para>All of them are permanently collapsed. They exist to be written to, never seen:
+        /// the status they carry is drawn properly by the hero's pills.</para>
+        /// </summary>
+        internal TextBlock TxtDetachStatusCompanion => HeroZone.TxtDetachStatusCompanion;
+
+        /// <inheritdoc cref="TxtDetachStatusCompanion"/>
+        internal TextBlock TxtCompanionStatus => HeroZone.TxtCompanionStatus;
+
+        /// <inheritdoc cref="TxtDetachStatusCompanion"/>
+        internal Button HelpBtnQuickControls => HeroZone.HelpBtnQuickControls;
+
+        /// <inheritdoc cref="TxtDetachStatusCompanion"/>
+        internal Button HelpBtnCompanionSettings => WorkshopZone.HelpBtnCompanionSettings;
+
+        // =====================================================================================
         //  clock parking
         // =====================================================================================
 
@@ -110,7 +139,11 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             try
             {
                 HeroZone.RefreshAmbientState();
-                if (AwarenessZone.ViewModel?.IsWireLive ?? false) AwarenessZone.StartCursorBlink();
+                // Both zones re-read their own viewmodel rather than being told what to do: the
+                // state may well have changed while the tab was hidden (a reply landed, the dial
+                // moved), and a resume that restores the state at park time would be a lie.
+                AwarenessZone.SyncCursorBlink();
+                ChatZone.SyncThinking();
             }
             catch (InvalidOperationException)
             {
@@ -124,6 +157,10 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             {
                 HeroZone.StopAmbientLoop();
                 AwarenessZone.StopCursorBlink();
+                // Z2's thinking dots are three RepeatBehavior=Forever clones. Send a message and
+                // switch tabs while the reply is in flight (or stalled, or retrying) and they run
+                // behind whatever the user is looking at — precisely what this method exists for.
+                ChatZone.StopThinking();
             }
             catch (InvalidOperationException) { /* already torn down */ }
         }

@@ -16,8 +16,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             Traits = new ITraitGaugeVm[]
             {
-                new CompanionTraitGauge("Dominance", 40),
-                new CompanionTraitGauge("Tease", 50)
+                new CompanionTraitGauge(CompanionLocStaging.Resolve("companion_personality_trait_dominance"), 40),
+                new CompanionTraitGauge(CompanionLocStaging.Resolve("companion_personality_trait_tease"), 50)
             };
             TraitChips = new[] { "Frame: Bestie", "Quirk: sparkly ✨", "Spicy", "Chatty" };
             Presets = BuildPresets();
@@ -28,12 +28,21 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             ForkPromptCommand = CompanionRelayCommand.NoOp("personality.fork");
             CommunityPromptsCommand = CompanionRelayCommand.NoOp("personality.community");
 
-            // Preset chips behave as one radio group.
+            // Preset chips behave as one radio group — including the second click on the chip that
+            // is already active, which a ToggleButton would otherwise turn into "no preset
+            // selected" while the compiled personality behind it is unchanged.
             foreach (var p in Presets)
             {
                 p.PropertyChanged += (_, e) =>
                 {
-                    if (e.PropertyName != nameof(IPresetChipVm.IsSelected) || !p.IsSelected) return;
+                    if (e.PropertyName != nameof(IPresetChipVm.IsSelected)) return;
+                    if (!p.IsSelected)
+                    {
+                        bool anySelected = false;
+                        foreach (var other in Presets) if (other.IsSelected) { anySelected = true; break; }
+                        if (!anySelected) p.IsSelected = true;
+                        return;
+                    }
                     foreach (var other in Presets)
                         if (!ReferenceEquals(other, p)) other.IsSelected = false;
                 };
@@ -42,17 +51,27 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         public bool IsInterviewAvailable { get; init; }
         public bool IsInterviewed { get; init; }
-        public string InterviewTitle { get; init; } = "✨ Let her interview you";
+        public string InterviewTitle { get; init; } =
+            CompanionLocStaging.Resolve("companion_personality_interview_title");
+
+        /// <summary>
+        /// Two staged keys joined here rather than one key with an escaped newline: language
+        /// files in this repo may not carry literal line breaks, and two sentences handed to a
+        /// translator separately cannot be welded into one by accident.
+        /// </summary>
         public string InterviewBody { get; init; } =
-            "12 questions · 90 seconds · no typing.\nShe writes herself around your answers.";
-        public string InterviewCtaLabel { get; init; } = "Start~";
+            CompanionLocStaging.Resolve("companion_personality_interview_body_1") + "\n" +
+            CompanionLocStaging.Resolve("companion_personality_interview_body_2");
+        public string InterviewCtaLabel { get; init; } =
+            CompanionLocStaging.Resolve("companion_personality_interview_cta");
         /// <summary>
         /// The compressed chip. The two verbs from the design's chip row ("re-interview me~",
         /// "adjust her") are real buttons in the view, so this string carries the date only.
         /// </summary>
-        public string InterviewedLine { get; init; } = "Interviewed 2026-08-12";
+        public string InterviewedLine { get; init; } =
+            string.Format(CompanionLocStaging.Resolve("companion_personality_interviewed_fmt"), "2026-08-12");
         public string InterviewDormantCopy { get; init; } =
-            "she's been drafting questions for you… interviews start next update.";
+            CompanionLocStaging.Resolve("companion_personality_interview_dormant");
 
         public bool AreTraitsAvailable { get; init; }
         public IReadOnlyList<ITraitGaugeVm> Traits { get; init; }
@@ -69,11 +88,16 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             set => Set(ref _isSpiceOn, value);
         }
 
-        public string SpiceTitle { get; init; } = "Slut Mode";
-        public string SpiceSubtitle { get; init; } = "same girl, spicier right now";
-        public string ActivePersonalityLine { get; init; } = "Active: Sweet bestie preset";
+        public string SpiceTitle { get; init; } =
+            CompanionLocStaging.Resolve("companion_personality_spice_title");
+        public string SpiceSubtitle { get; init; } =
+            CompanionLocStaging.Resolve("companion_personality_spice_subtitle");
+        public string ActivePersonalityLine { get; init; } =
+            string.Format(CompanionLocStaging.Resolve("companion_personality_active_preset_fmt"),
+                          CompanionLocStaging.Resolve("companion_personality_preset_sweet_bestie"));
         public bool CanResetPersonality { get; init; }
-        public string ResetLabel { get; init; } = "reset";
+        public string ResetLabel { get; init; } =
+            CompanionLocStaging.Resolve("companion_personality_reset");
 
         public ICommand StartInterviewCommand { get; }
         public ICommand OpenTraitDashboardCommand { get; }
@@ -92,7 +116,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             IsInterviewAvailable = true,
             AreTraitsAvailable = true,
-            ActivePersonalityLine = "Active: Trait profile · compiled from your interview",
+            ActivePersonalityLine = CompanionLocStaging.Resolve("companion_personality_active_traits"),
             CanResetPersonality = true
         };
 
@@ -102,7 +126,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             IsInterviewAvailable = true,
             IsInterviewed = true,
             AreTraitsAvailable = true,
-            ActivePersonalityLine = "Active: Trait profile · compiled from your interview",
+            ActivePersonalityLine = CompanionLocStaging.Resolve("companion_personality_active_traits"),
             CanResetPersonality = true
         };
 
@@ -111,19 +135,32 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             IsInterviewAvailable = true,
             AreTraitsAvailable = false,
-            ActivePersonalityLine = "Custom: “My Domme v3” (hand-edited — sliders disconnected)",
+            ActivePersonalityLine = string.Format(
+                CompanionLocStaging.Resolve("companion_personality_active_custom_fmt"), "My Domme v3"),
             CanResetPersonality = true
         };
 
-        private static IReadOnlyList<CompanionPresetChip> BuildPresets() => new[]
+        /// <summary>
+        /// The preset chips. Ids are stable keys (they name the compiled personality); the
+        /// labels come back through the staged loc layer as companion_personality_preset_&lt;id&gt;.
+        /// </summary>
+        private static IReadOnlyList<CompanionPresetChip> BuildPresets()
         {
-            new CompanionPresetChip("sweet_bestie", "Sweet bestie", selected: true),
-            new CompanionPresetChip("playful_tease", "Playful tease"),
-            new CompanionPresetChip("strict_domme", "Strict domme"),
-            new CompanionPresetChip("hypno_guide", "Hypno guide"),
-            new CompanionPresetChip("bimbo_coach", "Bimbo coach"),
-            new CompanionPresetChip("drone_handler", "Drone handler"),
-            new CompanionPresetChip("bratty_rival", "Bratty rival")
-        };
+            string[] ids =
+            {
+                "sweet_bestie", "playful_tease", "strict_domme", "hypno_guide",
+                "bimbo_coach", "drone_handler", "bratty_rival"
+            };
+
+            var chips = new List<CompanionPresetChip>(ids.Length);
+            for (int i = 0; i < ids.Length; i++)
+            {
+                chips.Add(new CompanionPresetChip(
+                    ids[i],
+                    CompanionLocStaging.Resolve($"companion_personality_preset_{ids[i]}"),
+                    selected: i == 0));
+            }
+            return chips;
+        }
     }
 }

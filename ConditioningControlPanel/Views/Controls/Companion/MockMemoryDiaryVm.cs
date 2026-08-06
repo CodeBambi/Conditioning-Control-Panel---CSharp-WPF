@@ -42,17 +42,25 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             ForgetEverythingCommand = new CompanionRelayCommand(ForgetEverything);
 
             // The chips are radio-like: selecting one clears the rest and re-projects the wall.
+            //
+            // A ToggleButton also UNchecks on a second click, and that used to leave the group with
+            // nothing selected while SelectedFilterKey — and therefore the wall — stayed filtered:
+            // facts missing, no chip lit, no way to read why. The mockup's chips are strictly
+            // single-select, so clicking the active one is a no-op and we put it straight back.
             foreach (var f in Filters)
             {
                 f.PropertyChanged += (_, e) =>
                 {
-                    if (e.PropertyName != nameof(IFactFilterVm.IsSelected) || !f.IsSelected) return;
-                    SelectedFilterKey = f.Key;
+                    if (e.PropertyName != nameof(IFactFilterVm.IsSelected)) return;
+                    if (f.IsSelected) { SelectedFilterKey = f.Key; return; }
+                    if (string.Equals(f.Key, _selectedFilterKey, StringComparison.OrdinalIgnoreCase))
+                        f.IsSelected = true;
                 };
             }
         }
 
-        public string ProfileStripLabel { get; init; } = "SHE CAN SEE:";
+        public string ProfileStripLabel { get; init; } =
+            CompanionLocStaging.Resolve("companion_memory_profile_strip");
         public IReadOnlyList<IProfileStatVm> ProfileStats { get; init; }
 
         /// <summary>Typed as the concrete list so the ctor can subscribe; the interface sees IFactFilterVm.</summary>
@@ -87,10 +95,14 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             }
         }
 
-        public string EmptyCopy { get; init; } = "“tell me things and I'll keep them~”";
-        public string StorageNote { get; init; } = "her memory lives on this machine only";
-        public string StorageLinkLabel { get; init; } = "where?";
-        public string ForgetEverythingLabel { get; init; } = "Forget everything…";
+        public string EmptyCopy { get; init; } =
+            CompanionLocStaging.Resolve("companion_memory_empty_copy");
+        public string StorageNote { get; init; } =
+            CompanionLocStaging.Resolve("companion_memory_storage_note");
+        public string StorageLinkLabel { get; init; } =
+            CompanionLocStaging.Resolve("companion_memory_storage_link");
+        public string ForgetEverythingLabel { get; init; } =
+            CompanionLocStaging.Resolve("companion_memory_forget_everything");
 
         public ICommand OpenStorageFolderCommand { get; }
         public ICommand ForgetEverythingCommand { get; }
@@ -171,7 +183,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             {
                 new MemoryFactCard(
                     "First trance: 2026-03-02 — “the day we met.”",
-                    "moment", "moment",
+                    "moment", CompanionLocStaging.Resolve("companion_memory_kind_moment"),
                     "from the app · she brings this up on anniversaries",
                     isPinned: true),
                 DormantPromiseCard()
@@ -189,15 +201,23 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         // ------------------------------- sample data -------------------------------
 
-        private static IReadOnlyList<CompanionFactFilter> BuildFilters() => new[]
+        /// <summary>
+        /// The chip row, built from <see cref="FactOrdering.FilterKeys"/> so the display order and
+        /// the filter keys can never disagree, with every label resolved through the staged loc
+        /// layer (companion_memory_filter_&lt;key&gt;).
+        /// </summary>
+        private static IReadOnlyList<CompanionFactFilter> BuildFilters()
         {
-            new CompanionFactFilter("all", "all", selected: true),
-            new CompanionFactFilter("boundary", "boundaries"),
-            new CompanionFactFilter("joke", "jokes"),
-            new CompanionFactFilter("preference", "preferences"),
-            new CompanionFactFilter("goal", "goals"),
-            new CompanionFactFilter("moment", "moments")
-        };
+            var chips = new List<CompanionFactFilter>(FactOrdering.FilterKeys.Count);
+            foreach (var key in FactOrdering.FilterKeys)
+            {
+                chips.Add(new CompanionFactFilter(
+                    key,
+                    CompanionLocStaging.Resolve($"companion_memory_filter_{key}"),
+                    selected: string.Equals(key, "all", StringComparison.OrdinalIgnoreCase)));
+            }
+            return chips;
+        }
 
         private static IReadOnlyList<IProfileStatVm> ArtboardStats() => new IProfileStatVm[]
         {
@@ -212,7 +232,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             new MemoryFactCard(
                 "Never tease about chastity.",
-                "boundary", "boundary · always honored",
+                "boundary", CompanionLocStaging.Resolve("companion_memory_kind_boundary"),
                 "set by you · 2026-07-30",
                 isBoundary: true)
             {
@@ -220,7 +240,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             },
             new MemoryFactCard(
                 "First trance: 2026-03-02 — “the day we met.”",
-                "moment", "moment",
+                "moment", CompanionLocStaging.Resolve("companion_memory_kind_moment"),
                 "pinned · she brings this up on anniversaries",
                 isPinned: true)
             {
@@ -228,21 +248,21 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             },
             new MemoryFactCard(
                 "Calls his cat “Prime Minister Beans.”",
-                "joke", "running joke",
+                "joke", CompanionLocStaging.Resolve("companion_memory_kind_joke"),
                 "used 4× · last: yesterday")
             {
                 UserEditedMetaLabel = "edited by you · she'll use your wording"
             },
             new MemoryFactCard(
                 "Melts fastest to spiral + whisper combos.",
-                "preference", "preference",
+                "preference", CompanionLocStaging.Resolve("companion_memory_kind_preference"),
                 "from chat · salience high")
             {
                 UserEditedMetaLabel = "edited by you · she'll use your wording"
             },
             new MemoryFactCard(
                 "Wants to hit Level 50 before September.",
-                "goal", "goal · open thread",
+                "goal", CompanionLocStaging.Resolve("companion_memory_kind_goal"),
                 "she checks in on this")
             {
                 UserEditedMetaLabel = "edited by you · she checks in on this"
@@ -251,8 +271,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         };
 
         private static MemoryFactCard DormantPromiseCard() => new(
-            "“soon I'll remember what you say too… choose your words carefully~”",
-            "all", "soon · train 4",
+            CompanionLocStaging.Resolve("companion_memory_dormant_promise"),
+            "all", CompanionLocStaging.Resolve("companion_memory_kind_dormant"),
             string.Empty,
             isDormant: true);
     }

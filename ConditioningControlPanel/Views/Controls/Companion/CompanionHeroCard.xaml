@@ -107,10 +107,53 @@
                     </StackPanel>
                 </Button>
 
-                <!-- the AI entitlement plate: the tab-level "is she awake in the cloud?" glance -->
-                <Border Style="{StaticResource CmpHeroAiPlateStyle}">
-                    <TextBlock Text="{Binding AiPlateLabel}" Style="{StaticResource CmpHeroTierPlateTextStyle}"/>
-                </Border>
+                <!-- The AI entitlement plate: the tab-level "is she awake in the cloud?" glance.
+                     Design §3 Z0 — "the plate doubles as the glance and clicks through to the
+                     Patreon tab when dim". A user who reads the dimmed LAB·AI plate as the lock is
+                     reading it correctly, so it has to answer. It is a chrome-free Button whose
+                     hit-testing is off while entitled (nothing to sell) and on while dim; the
+                     teaser ribbon beside it stays as the explicit CTA. -->
+                <Button x:Name="AiPlateButton" Command="{Binding OpenPatreonCommand}">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <!-- entitled: inert. There is nothing to sell, and a plate that
+                                 responds to a click by doing nothing is worse than a plain one. -->
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Cursor" Value="Arrow"/>
+                            <Setter Property="Focusable" Value="False"/>
+                            <Setter Property="IsHitTestVisible" Value="False"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="PlateHost" Background="Transparent">
+                                            <ContentPresenter/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="PlateHost" Property="Opacity" Value="0.75"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <!-- dim = locked = the deep link into the Patreon tab -->
+                                <DataTrigger Binding="{Binding HasAiAccess}" Value="False">
+                                    <Setter Property="Cursor" Value="Hand"/>
+                                    <Setter Property="Focusable" Value="True"/>
+                                    <Setter Property="IsHitTestVisible" Value="True"/>
+                                    <Setter Property="ToolTip" Value="{Binding TeaserRibbonLabel}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                    <Border Style="{StaticResource CmpHeroAiPlateStyle}">
+                        <TextBlock Text="{Binding AiPlateLabel}" Style="{StaticResource CmpHeroTierPlateTextStyle}"/>
+                    </Border>
+                </Button>
 
                 <!-- the tier above is always dim: aspiration, not a lock -->
                 <Border Style="{StaticResource CmpTierPlateDimStyle}">
@@ -134,15 +177,19 @@
         <!-- ================================================================
              Z1 — THE COMPANION CARD
              ================================================================ -->
+        <!-- No Effect on this Border. It used to carry a BlurRadius=40 / ShadowDepth=6
+             DropShadowEffect over the full ~1460x300 card, inside PageScroll — the single most
+             expensive surface on the page, re-blurred on every wheel notch. The lift is a static
+             gradient (CmpHeroCardLiftBrush) below instead; the card's own border does the rest. -->
         <Border Grid.Row="1" CornerRadius="{StaticResource CmpRadiusCard}" ClipToBounds="True"
                 Background="{StaticResource CmpCardBrush}"
-                BorderBrush="{StaticResource CmpCardBorderBrush}" BorderThickness="1"
-                Effect="{StaticResource CmpHeroCardShadow}">
+                BorderBrush="{StaticResource CmpCardBorderBrush}" BorderThickness="1">
             <Grid>
                 <!-- ========== banner + scrim ========== -->
                 <Border Background="{StaticResource CmpHeroBannerBrush}" Opacity="0.9"/>
                 <Border Background="{StaticResource CmpRoomGlowPinkBrush}"/>
                 <Border Background="{StaticResource CmpHeroScrimBrush}"/>
+                <Border Background="{StaticResource CmpHeroCardLiftBrush}" IsHitTestVisible="False"/>
 
                 <Grid>
                     <Grid.RowDefinitions>
@@ -425,14 +472,25 @@
 
                             <!-- status pills: both are deep-links now -->
                             <WrapPanel Orientation="Horizontal" Margin="0,11,0,0">
-                                <Button Content="{Binding AiPillText}" Command="{Binding OpenEngineRoomCommand}">
+                                <!-- Three states, not two. Off (provider or companion) is gray and
+                                     goes to the Engine Room; LOCKED is pink-dim, reads as a lock,
+                                     and goes to the Lab — a free user's pill must agree with the
+                                     teaser ribbon rather than tell them she is asleep. -->
+                                <Button Content="{Binding AiPillText}">
                                     <Button.Style>
                                         <Style TargetType="Button" BasedOn="{StaticResource CmpAiPillStyle}">
+                                            <Setter Property="Command" Value="{Binding OpenEngineRoomCommand}"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsAiLive}" Value="False">
                                                     <Setter Property="Background" Value="#FF1B1B2C"/>
                                                     <Setter Property="BorderBrush" Value="#40FFFFFF"/>
                                                     <Setter Property="Foreground" Value="{StaticResource CmpMutedBrush}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsAiLocked}" Value="True">
+                                                    <Setter Property="Background" Value="#1FFF69B4"/>
+                                                    <Setter Property="BorderBrush" Value="#66FF69B4"/>
+                                                    <Setter Property="Foreground" Value="#FFFFC2E0"/>
+                                                    <Setter Property="Command" Value="{Binding Header.OpenPatreonCommand}"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
@@ -572,5 +630,24 @@
                 </Grid>
             </Grid>
         </Border>
+
+        <!-- ================================================================
+             COMPAT SEAM (design §6, last row of the disposition table; §7.10).
+             Not decoration and not dead code: MainWindow.CompanionTab.cs and
+             MainWindow.Patreon.cs WRITE to these by name (~100 references),
+             and CompanionTabView keeps them hidden for exactly that reason.
+             The hero owns them because the hero owns detach and status.
+
+             They must exist before the wiring pass, or the swap lands on a
+             page with nowhere to bind and gets discovered by a crash.
+             CompanionRoomView re-exposes them so the partials keep one
+             accessor path. Never make them visible: the status they carry
+             is drawn properly by the pills above.
+             ================================================================ -->
+        <StackPanel Grid.Row="1" Visibility="Collapsed" IsHitTestVisible="False">
+            <TextBlock x:Name="TxtDetachStatusCompanion" x:FieldModifier="internal" Text=""/>
+            <TextBlock x:Name="TxtCompanionStatus" x:FieldModifier="internal" Text=""/>
+            <Button x:Name="HelpBtnQuickControls" x:FieldModifier="internal" Tag="QuickControls"/>
+        </StackPanel>
     </Grid>
 </UserControl>

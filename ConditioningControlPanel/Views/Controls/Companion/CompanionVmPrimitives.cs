@@ -209,7 +209,34 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public static double BarFractionFor(double fraction)
         {
             double f = FractionToStarConverter.ToFraction(fraction);
-            return f <= 0.0 ? 0.04 : f;
+            return f <= 0.0 ? SpentBarFraction : f;
+        }
+
+        /// <summary>The sliver a spent meter keeps. Not a threshold — a drawing minimum.</summary>
+        public const double SpentBarFraction = 0.04;
+
+        /// <summary>
+        /// Whether the meter is actually spent, as opposed to merely drawing the spent sliver.
+        ///
+        /// <para>The card used to key its desaturated "empty" styling off
+        /// <c>BarFraction == 0.04</c>, which cannot tell the two apart: a user with 4 of 100 chats
+        /// left produces the same IEEE754 double as the sliver and got the glowless, greyed bar
+        /// while the copy beside it still said she had attention left. Ask for the intent, never
+        /// for the magic number.</para>
+        /// </summary>
+        public static bool IsSpent(double fraction) => MoodFor(fraction) == AttentionMood.Spent;
+
+        /// <summary>
+        /// Whether the barks-only floor promise is shown. It is not detail-on-demand: doc 01 §5.4
+        /// and design §3 Z6 both require the card to SAY, out loud, that her voice keeps working —
+        /// it is the whole answer to the budget-backlash reading. It appears once the meter is low
+        /// enough for the question to occur to anyone (whispering or spent); above that it would be
+        /// reassurance nobody asked for.
+        /// </summary>
+        public static bool ShowFloorNote(double fraction)
+        {
+            var mood = MoodFor(fraction);
+            return mood == AttentionMood.Whispering || mood == AttentionMood.Spent;
         }
     }
 

@@ -12,16 +12,17 @@
          Z6 — HER ATTENTION (the daily budget meter).
          Elegant, not scary. Copy rules, non-negotiable:
            · never the word "tokens" — the ladder is in chats, in her voice
-           · the floor is not mute: barks keep playing, and the card says so
+           · the floor is not mute: barks keep playing, and the card says
+             so OUT LOUD — FloorNote is a resting line, never hover-gated
            · the Patreon line appears below 40% only, once, quietly
            · the numeric detail is on demand (hover or click), never resting
 
          The bar is the Trainer Card recipe: a star-width fill column, no
          ActualWidth arithmetic. At zero it keeps a 4% sliver so a spent
-         meter reads as empty rather than broken — and at exactly that
-         sliver the fill drops its glow (the mockup's .att-empty), which
-         is the one place this XAML knows a number. AttentionCopy owns it
-         (BarFractionFor(0) == 0.04, pinned by CompanionZoneLogicTests).
+         meter reads as empty rather than broken. This XAML knows no
+         numbers at all: the spent styling asks IsSpent and the floor note
+         asks ShowFloorNote, both computed in AttentionCopy where the
+         thresholds live and are unit-tested.
 
          Thresholds live in AttentionCopy, not here, so they are
          unit-tested and exist in exactly one place.
@@ -33,12 +34,15 @@
                 <ResourceDictionary Source="pack://application:,,,/ConditioningControlPanel;component/Views/Controls/Companion/Themes/CompanionTheme.xaml"/>
             </ResourceDictionary.MergedDictionaries>
 
-            <!-- the spent bar: same geometry, no heat -->
+            <!-- the spent bar: same geometry, no heat. Keyed off IsSpent (intent), never off
+                 BarFraction == 0.04 — the sliver and a real 4% are the same double, and a user
+                 with 4 chats left was getting the "she'll be all yours tomorrow" treatment while
+                 the copy beside it said otherwise. -->
             <Style x:Key="CmpZ6AttentionFillStyle" TargetType="Border"
                    BasedOn="{StaticResource CmpGaugeFillAttentionStyle}">
                 <Style.Triggers>
-                    <DataTrigger Binding="{Binding BarFraction}" Value="0.04">
-                        <Setter Property="Effect" Value="{x:Null}"/>
+                    <DataTrigger Binding="{Binding IsSpent}" Value="True">
+                        <Setter Property="BorderThickness" Value="0"/>
                         <Setter Property="Opacity" Value="0.70"/>
                     </DataTrigger>
                 </Style.Triggers>
@@ -107,6 +111,14 @@
 
                     <TextBlock Text="{Binding StateCopy}" Margin="0,8,0,0" FontSize="12.5"
                                Foreground="#FFFFD9EC" TextWrapping="Wrap"/>
+
+                    <!-- the floor promise. ALWAYS visible once she is low — never behind hover.
+                         The numbers are detail-on-demand; "her voice never runs out" is the card
+                         answering the only question a shrinking meter actually raises, and a
+                         drained card that says nothing but "tomorrow~" reads as a ration. -->
+                    <TextBlock Text="{Binding FloorNote}" Margin="0,5,0,0" FontSize="11"
+                               FontStyle="Italic" Foreground="#FFCBA9C4" TextWrapping="Wrap"
+                               Visibility="{Binding ShowFloorNote, Converter={StaticResource CmpBoolToVis}}"/>
 
                     <!-- the numbers, for the curious only -->
                     <TextBlock Text="{Binding DetailLine}" Style="{StaticResource CmpZ6DetailLineStyle}"/>

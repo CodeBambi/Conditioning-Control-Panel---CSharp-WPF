@@ -112,6 +112,7 @@ public class CompanionZoneRenderSmokeTests
     [InlineData("attention.saving")]
     [InlineData("attention.whispering")]
     [InlineData("attention.drained")]
+    [InlineData("attention.almostSpent")]
     public void AttentionGauge_RealizesInEveryState(string exhibit)
         => OnStaThread(() => Realize(() => new AttentionGaugeView(), CompanionMockGallery.Get(exhibit)!, 430));
 

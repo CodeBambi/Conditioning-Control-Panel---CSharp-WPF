@@ -17,12 +17,14 @@ namespace ConditioningControlPanel.Views.Controls.Companion
     {
         private Storyboard? _blink;
         private bool _introPlayed;
+        private IAwarenessPrivacyVm? _observed;
 
         public AwarenessPrivacyView()
         {
             InitializeComponent();
             Loaded += OnLoaded;
-            Unloaded += (_, _) => StopCursorBlink();
+            DataContextChanged += (_, e) => Observe(e.NewValue as IAwarenessPrivacyVm);
+            Unloaded += (_, _) => { StopCursorBlink(); Observe(null); };
         }
 
         /// <summary>Convenience for hosts that hand in a viewmodel rather than setting DataContext.</summary>
@@ -35,12 +37,46 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
             if (!IsLoaded) return;
+            Observe(ViewModel);
             // Normal, never Loaded — DispatcherPriority.Loaded is starved in this app.
             Dispatcher.BeginInvoke(new Action(() =>
             {
-                if (ViewModel?.IsWireLive ?? false) StartCursorBlink();
+                SyncCursorBlink();
                 if (!_introPlayed) { _introPlayed = true; PlayIntro(); }
             }), DispatcherPriority.Normal);
+        }
+
+        /// <summary>
+        /// Follows <see cref="IAwarenessPrivacyVm.IsWireLive"/>. The dial is a live control: turning
+        /// her eyes on after the card has loaded has to start the cursor, and turning them off has
+        /// to stop it, or the blink is decided once at load and then lies. Nothing was watching this
+        /// before, which is also why a tab re-show could not resume it.
+        /// </summary>
+        private void Observe(IAwarenessPrivacyVm? vm)
+        {
+            if (ReferenceEquals(_observed, vm)) return;
+            if (_observed != null) _observed.PropertyChanged -= OnVmPropertyChanged;
+            _observed = vm;
+            if (_observed != null) _observed.PropertyChanged += OnVmPropertyChanged;
+        }
+
+        private void OnVmPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(IAwarenessPrivacyVm.IsWireLive)) return;
+
+            var dispatcher = Application.Current?.Dispatcher ?? Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted) { SyncCursorBlink(); return; }
+            dispatcher.BeginInvoke(new Action(SyncCursorBlink), DispatcherPriority.Normal);
+        }
+
+        /// <summary>
+        /// Starts or stops the blink to match the viewmodel. Public because the room calls it when
+        /// the tab becomes visible again — this app hides tabs rather than unloading them.
+        /// </summary>
+        public void SyncCursorBlink()
+        {
+            if (ViewModel?.IsWireLive ?? false) StartCursorBlink();
+            else StopCursorBlink();
         }
 
         /// <summary>Starts the wire cursor blink. Idempotent; a no-op when the frame is not live.</summary>

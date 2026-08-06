@@ -232,7 +232,15 @@
     <!-- ============================ 3. glows ============================
          House glow = DropShadowEffect with ShadowDepth 0. Budget (design §7.4): hero title,
          portrait ring, active constellation node, section titles. Never on a scrolling item
-         container — fact cards get their emphasis from BorderBrush instead. -->
+         container — fact cards get their emphasis from BorderBrush instead.
+
+         THE BUDGET IS ENFORCED, not aspirational. Everything below is either one of those four
+         surfaces or a HOVER/PRESS state, which is transient and single by construction. Chips,
+         pills, tier plates, gauge fills, AI badges, filled constellation nodes and checked
+         segments all carry their emphasis in a brush now: a resting DropShadowEffect inside
+         PageScroll is re-rendered on every wheel notch, and the page had ~30 of them.
+
+         If you are about to add a resting Effect, add a BorderBrush or a gradient instead. -->
     <DropShadowEffect x:Key="CmpTitleGlow" Color="{StaticResource CmpPinkColor}" BlurRadius="18"
                       ShadowDepth="0" Opacity="0.85"/>
     <DropShadowEffect x:Key="CmpSectionGlow" Color="{StaticResource CmpPinkColor}" BlurRadius="14"
@@ -241,12 +249,19 @@
                       ShadowDepth="0" Opacity="0.50"/>
     <DropShadowEffect x:Key="CmpRingGlow" Color="{StaticResource CmpPinkColor}" BlurRadius="26"
                       ShadowDepth="0" Opacity="0.35"/>
-    <DropShadowEffect x:Key="CmpGoldGlow" Color="{StaticResource CmpGoldColor}" BlurRadius="20"
-                      ShadowDepth="0" Opacity="0.65"/>
     <DropShadowEffect x:Key="CmpLockGlow" Color="{StaticResource CmpPinkColor}" BlurRadius="10"
                       ShadowDepth="0" Opacity="1"/>
-    <DropShadowEffect x:Key="CmpHeroCardShadow" Color="#FF000000" BlurRadius="40"
-                      ShadowDepth="6" Direction="270" Opacity="0.35"/>
+
+    <!-- The hero card used to carry a BlurRadius=40 / ShadowDepth=6 DropShadowEffect, which made
+         a ~1460x300 surface the single most expensive thing on the page: WPF re-renders an
+         Effect's subtree whenever its offset transform changes, so the whole hero was re-blurred
+         on every wheel notch. The card reads against the room on its own #66FF69B4 border, so the
+         lift is a static gradient overlay now — a Border, not a bitmap effect. -->
+    <LinearGradientBrush x:Key="CmpHeroCardLiftBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#00000000" Offset="0"/>
+        <GradientStop Color="#00000000" Offset="0.70"/>
+        <GradientStop Color="#3D000000" Offset="1"/>
+    </LinearGradientBrush>
 
     <!-- ============================ 4. text styles ============================ -->
     <Style x:Key="CmpPageTitleStyle" TargetType="TextBlock">
@@ -544,11 +559,7 @@
         <Setter Property="cmp:CompanionCapsule.IsCapsule" Value="True"/>
         <Setter Property="Padding" Value="11,4,11,4"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
-        <Setter Property="Effect">
-            <Setter.Value>
-                <DropShadowEffect Color="#FFFF69B4" BlurRadius="12" ShadowDepth="0" Opacity="0.30"/>
-            </Setter.Value>
-        </Setter>
+        <!-- No resting glow: the gradient IS the emphasis (glow budget, §3 header). -->
     </Style>
     <Style x:Key="CmpModChipTextStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="10.5"/>
@@ -679,15 +690,12 @@
                             <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource CmpPinkBrush}"/>
                             <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
                         </Trigger>
+                        <!-- checked = fill + pink hairline + bright text. No Effect: a chip row
+                             lives inside PageScroll and the checked state is not transient. -->
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="#1FFF69B4"/>
+                            <Setter TargetName="Bd" Property="Background" Value="#2BFF69B4"/>
                             <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource CmpPinkBrush}"/>
                             <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
-                            <Setter TargetName="Bd" Property="Effect">
-                                <Setter.Value>
-                                    <DropShadowEffect Color="#FFFF69B4" BlurRadius="10" ShadowDepth="0" Opacity="0.20"/>
-                                </Setter.Value>
-                            </Setter>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -716,7 +724,7 @@
         <Setter Property="Foreground" Value="{StaticResource CmpGoldBrush}"/>
         <Setter Property="HorizontalAlignment" Value="Center"/>
         <Setter Property="Margin" Value="0,1,0,0"/>
-        <Setter Property="Effect" Value="{StaticResource CmpGoldGlow}"/>
+        <!-- The gold reads on its own against #26FFD700; no resting glow (glow budget). -->
     </Style>
 
     <!-- .tierplate — the AI entitlement plate in the header band -->
@@ -728,16 +736,11 @@
         <Setter Property="Padding" Value="11,5,11,5"/>
         <Setter Property="Margin" Value="8,0,0,0"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
-        <Setter Property="Effect">
-            <Setter.Value>
-                <DropShadowEffect Color="#FFFF69B4" BlurRadius="16" ShadowDepth="0" Opacity="0.40"/>
-            </Setter.Value>
-        </Setter>
+        <!-- The diagonal gradient plus the #33FFFFFF hairline is the lit state (glow budget). -->
     </Style>
     <!-- .tierplate.dim — not entitled. Still clickable (it deep-links to the Patreon tab). -->
     <Style x:Key="CmpTierPlateDimStyle" TargetType="Border" BasedOn="{StaticResource CmpTierPlateStyle}">
         <Setter Property="Opacity" Value="0.28"/>
-        <Setter Property="Effect" Value="{x:Null}"/>
     </Style>
 
     <!-- ============================ 8. gauge primitives ============================
@@ -763,27 +766,23 @@
         <Setter Property="Background" Value="{StaticResource CmpTrackSoftBrush}"/>
     </Style>
 
+    <!-- The heat used to be a DropShadowEffect on every fill. Gauges live inside PageScroll and
+         there are a dozen of them once the Workshop is open, so the glow is a brush now: a
+         lighter top edge inside the fill reads as "lit" without a bitmap effect. -->
     <Style x:Key="CmpGaugeFillStyle" TargetType="Border">
         <Setter Property="CornerRadius" Value="5"/>
         <Setter Property="Background" Value="{StaticResource CmpPinkPurpleBrush}"/>
-        <Setter Property="Effect">
-            <Setter.Value>
-                <DropShadowEffect Color="#FFFF69B4" BlurRadius="12" ShadowDepth="0" Opacity="0.50"/>
-            </Setter.Value>
-        </Setter>
+        <Setter Property="BorderThickness" Value="0,1,0,0"/>
+        <Setter Property="BorderBrush" Value="#59FFB8DC"/>
     </Style>
     <Style x:Key="CmpGaugeFillThinStyle" TargetType="Border" BasedOn="{StaticResource CmpGaugeFillStyle}">
         <Setter Property="CornerRadius" Value="3"/>
-        <Setter Property="Effect" Value="{x:Null}"/>
+        <Setter Property="BorderThickness" Value="0"/>
     </Style>
     <Style x:Key="CmpGaugeFillAttentionStyle" TargetType="Border" BasedOn="{StaticResource CmpGaugeFillStyle}">
         <Setter Property="CornerRadius" Value="6"/>
         <Setter Property="Background" Value="{StaticResource CmpAttentionBrush}"/>
-        <Setter Property="Effect">
-            <Setter.Value>
-                <DropShadowEffect Color="#FFFF69B4" BlurRadius="14" ShadowDepth="0" Opacity="0.45"/>
-            </Setter.Value>
-        </Setter>
+        <Setter Property="BorderBrush" Value="#66FFD0E6"/>
     </Style>
     <Style x:Key="CmpGaugeLabelStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="10.5"/>
@@ -851,10 +850,15 @@
     </Style>
 
     <!-- ============================ 10. chat bubbles ============================ -->
+    <!-- .bub.her is TWO borders in CSS: a faint #FF69B440 outline plus a SOLID 3px pink rail on
+         the left. One WPF BorderBrush cannot be two colours, and painting the 3px edge in the
+         25%-alpha pink loses the strongest cue that her line is hers. So the outline lives here
+         and the rail is a separate Rectangle in the bubble template — the same trick the fact
+         wall uses for its kind rail. -->
     <Style x:Key="CmpBubbleHerStyle" TargetType="Border">
         <Setter Property="Background" Value="#FF2A1A3A"/>
         <Setter Property="BorderBrush" Value="#40FF69B4"/>
-        <Setter Property="BorderThickness" Value="3,1,1,1"/>
+        <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="CornerRadius" Value="4,14,14,14"/>
         <Setter Property="Padding" Value="14,9,14,9"/>
         <Setter Property="HorizontalAlignment" Value="Left"/>
@@ -871,10 +875,23 @@
         <Setter Property="MaxWidth" Value="420"/>
         <Setter Property="Margin" Value="0,0,0,9"/>
     </Style>
-    <!-- .bub.echo — what her voice said out loud. Visualises the one-mouth design. -->
+    <!-- her bubble's solid pink rail. A Rectangle, not the Border's own BorderBrush — see
+         CmpBubbleHerStyle. Bottom margin matches the bubble's so it stops at the same line. -->
+    <Style x:Key="CmpBubbleHerRailStyle" TargetType="Rectangle">
+        <Setter Property="Width" Value="3"/>
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="Fill" Value="{StaticResource CmpPinkBrush}"/>
+        <Setter Property="RadiusX" Value="1.5"/>
+        <Setter Property="RadiusY" Value="1.5"/>
+        <Setter Property="Margin" Value="0,0,0,9"/>
+        <Setter Property="IsHitTestVisible" Value="False"/>
+    </Style>
+
+    <!-- .bub.echo — what her voice said out loud. Visualises the one-mouth design.
+         Transparent: the DASHED outline is CmpBubbleEchoOutlineStyle, because Border cannot dash. -->
     <Style x:Key="CmpBubbleEchoStyle" TargetType="Border">
         <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="BorderBrush" Value="#1FFFFFFF"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="CornerRadius" Value="14"/>
         <Setter Property="Padding" Value="14,8,14,8"/>
@@ -882,6 +899,17 @@
         <Setter Property="MaxWidth" Value="440"/>
         <Setter Property="Margin" Value="0,0,0,9"/>
     </Style>
+    <!-- the echo's dashed white-1F outline (.bub.echo { border: 1px dashed #ffffff1f }) -->
+    <Style x:Key="CmpBubbleEchoOutlineStyle" TargetType="Rectangle">
+        <Setter Property="Stroke" Value="#1FFFFFFF"/>
+        <Setter Property="StrokeThickness" Value="1"/>
+        <Setter Property="StrokeDashArray" Value="4 3"/>
+        <Setter Property="RadiusX" Value="14"/>
+        <Setter Property="RadiusY" Value="14"/>
+        <Setter Property="Margin" Value="0,0,0,9"/>
+        <Setter Property="IsHitTestVisible" Value="False"/>
+    </Style>
+
     <Style x:Key="CmpBubbleTextStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="13"/>
         <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
@@ -903,11 +931,10 @@
         <Setter Property="HorizontalAlignment" Value="Right"/>
         <Setter Property="VerticalAlignment" Value="Top"/>
         <Setter Property="Margin" Value="0,-8,-6,0"/>
-        <Setter Property="Effect">
-            <Setter.Value>
-                <DropShadowEffect Color="#FFFF69B4" BlurRadius="10" ShadowDepth="0" Opacity="0.50"/>
-            </Setter.Value>
-        </Setter>
+        <!-- NO Effect. This badge rides one bubble each, inside the scrolling thread — a
+             per-item gaussian blur here is the expensive mistake the glow budget exists for. -->
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="BorderBrush" Value="#59FFC2E0"/>
     </Style>
     <Style x:Key="CmpAiBadgeTextStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="8.5"/>
@@ -963,11 +990,9 @@
             <Setter.Value>
                 <ControlTemplate TargetType="ButtonBase">
                     <Grid>
-                        <Ellipse x:Name="Disc" Fill="{StaticResource CmpPinkPurpleDiagonalBrush}">
-                            <Ellipse.Effect>
-                                <DropShadowEffect Color="#FFFF69B4" BlurRadius="14" ShadowDepth="0" Opacity="0.35"/>
-                            </Ellipse.Effect>
-                        </Ellipse>
+                        <!-- resting: no Effect (glow budget). The hover trigger below still glows,
+                             because a hover is transient and there is only ever one. -->
+                        <Ellipse x:Name="Disc" Fill="{StaticResource CmpPinkPurpleDiagonalBrush}"/>
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Grid>
                     <ControlTemplate.Triggers>
@@ -1112,11 +1137,7 @@
                                 </Setter.Value>
                             </Setter>
                             <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
-                            <Setter TargetName="Bd" Property="Effect">
-                                <Setter.Value>
-                                    <DropShadowEffect Color="#FF9370DB" BlurRadius="16" ShadowDepth="0" Opacity="0.50"/>
-                                </Setter.Value>
-                            </Setter>
+                            <!-- the violet→purple fill IS the checked state; no Effect (glow budget) -->
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="Bd" Property="Opacity" Value="0.35"/>
@@ -1231,10 +1252,13 @@
     <Style x:Key="CmpDrawerStyle" TargetType="Expander">
         <Setter Property="Foreground" Value="#FFA9A3C4"/>
         <Setter Property="Margin" Value="0,16,0,0"/>
+        <!-- The chrome is a TemplateBinding, not a hardcode, precisely so the Engine Room can be
+             a shade grayer than the Workshop (the mockup's .drawer vs .drawer.engine). -->
+        <Setter Property="BorderBrush" Value="{StaticResource CmpWorkshopBorderBrush}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Expander">
-                    <Border Background="#D916162B" BorderBrush="{StaticResource CmpWorkshopBorderBrush}"
+                    <Border Background="#D916162B" BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="1" CornerRadius="12" SnapsToDevicePixels="True">
                         <Grid>
                             <Grid.RowDefinitions>
@@ -1286,8 +1310,10 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- the Engine Room is a shade grayer still than the Workshop -->
-    <Style x:Key="CmpEngineDrawerStyle" TargetType="Expander" BasedOn="{StaticResource CmpDrawerStyle}"/>
+    <!-- the Engine Room is a shade grayer still than the Workshop (mockup: .drawer.engine) -->
+    <Style x:Key="CmpEngineDrawerStyle" TargetType="Expander" BasedOn="{StaticResource CmpDrawerStyle}">
+        <Setter Property="BorderBrush" Value="{StaticResource CmpDrawerBorderBrush}"/>
+    </Style>
 
     <Style x:Key="CmpDrawerHeaderTextStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="12"/>
@@ -1403,11 +1429,8 @@
                 </RadialGradientBrush>
             </Setter.Value>
         </Setter>
-        <Setter Property="Effect">
-            <Setter.Value>
-                <DropShadowEffect Color="#FFFF69B4" BlurRadius="14" ShadowDepth="0" Opacity="0.65"/>
-            </Setter.Value>
-        </Setter>
+        <!-- No glow on a FILLED node: there can be four of them and the budget names only the
+             ACTIVE one (§7.4). The radial fill already separates reached from unreached. -->
     </Style>
     <Style x:Key="CmpConstellationNodeCurrentStyle" TargetType="Border" BasedOn="{StaticResource CmpConstellationNodeStyle}">
         <Setter Property="BorderBrush" Value="{StaticResource CmpGoldBrush}"/>

@@ -51,6 +51,12 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         /// </summary>
         public static bool MaybeShow(string? variantKey = null)
         {
+#if !DEBUG
+            // A debug artboard must not be one environment variable away from a user's session.
+            // In a shipped build this entry point is inert no matter what the environment says;
+            // the harness is a Debug-only tool and IsRequested() stays honest for the tests.
+            return false;
+#else
             if (!IsRequested()) return false;
 
             try
@@ -70,6 +76,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
                 // A debug harness is never worth a crash on someone's machine.
                 return false;
             }
+#endif
         }
     }
 }

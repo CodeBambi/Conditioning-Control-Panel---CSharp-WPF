@@ -26,9 +26,12 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public IReadOnlyList<IConstellationNodeVm> Nodes { get; }
         public ICommand NodeCommand { get; }
 
-        public string FlavorLine { get; init; } = "she remembers small things now… ";
-        public string FlavorAccent { get; init; } = "running jokes unlocked.";
-        public string DormantCopy { get; init; } = "you two have history — soon she'll start counting it.";
+        public string FlavorLine { get; init; } =
+            CompanionLocStaging.Resolve("companion_constellation_flavor");
+        public string FlavorAccent { get; init; } =
+            CompanionLocStaging.Resolve("companion_constellation_flavor_accent");
+        public string DormantCopy { get; init; } =
+            CompanionLocStaging.Resolve("companion_constellation_dormant");
 
         /// <summary>Stage 2 of 5, live — the artboard state.</summary>
         public static MockRelationshipConstellationVm Live() => new(isLive: true, currentStage: 2);
@@ -39,15 +42,15 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         /// <summary>Freshly met — the very first node is current, nothing is filled.</summary>
         public static MockRelationshipConstellationVm FreshlyMet() => new(isLive: true, currentStage: 0)
         {
-            FlavorLine = "she's only just met you. ",
-            FlavorAccent = "give her something to remember."
+            FlavorLine = CompanionLocStaging.Resolve("companion_constellation_flavor_new"),
+            FlavorAccent = CompanionLocStaging.Resolve("companion_constellation_flavor_new_accent")
         };
 
         /// <summary>The end of the ratchet.</summary>
         public static MockRelationshipConstellationVm Inevitable() => new(isLive: true, currentStage: 4)
         {
-            FlavorLine = "there isn't a version of this where you leave. ",
-            FlavorAccent = "she counted."
+            FlavorLine = CompanionLocStaging.Resolve("companion_constellation_flavor_final"),
+            FlavorAccent = CompanionLocStaging.Resolve("companion_constellation_flavor_final_accent")
         };
 
         private static IReadOnlyList<IConstellationNodeVm> BuildNodes(bool isLive, int currentStage)
@@ -55,14 +58,6 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             // Stage names come from companion_stage_0..4 through the staged loc layer, so this
             // mock exercises the same key path the shipped viewmodel uses (mods reflavor via the
             // _<modId> sibling keys).
-            var blurbs = new[]
-            {
-                "she's still learning your name.",
-                "she's warming up to you… small things start sticking.",
-                "running jokes unlocked. she brings things up first now.",
-                "she notices when you're gone.",
-                "there isn't a version of this where you leave."
-            };
 
             var list = new List<IConstellationNodeVm>(ConstellationMath.StageCount);
             for (int i = 0; i < ConstellationMath.StageCount; i++)
@@ -74,7 +69,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
                     Name = CompanionLocStaging.Resolve(ConstellationMath.StageKey(i)),
                     // Mockup glyph ladder: reached ✦, here ★, still ahead ✧.
                     Glyph = GlyphFor(state),
-                    Description = blurbs[i],
+                    Description = CompanionLocStaging.Resolve($"companion_stage_{i}_blurb"),
                     State = state
                 });
             }

@@ -163,7 +163,9 @@ public class CompanionRoomCompositionTests
         Assert.Equal(0.0, vm.Attention.Fraction);
         Assert.Equal(0.04, vm.Attention.BarFraction);
         Assert.True(vm.Attention.ShowUpsell);
-        Assert.Contains("never goes mute", vm.Attention.DetailLine, StringComparison.OrdinalIgnoreCase);
+        // The floor promise is a resting line now, not something you have to hover to find.
+        Assert.True(vm.Attention.ShowFloorNote);
+        Assert.Contains("never runs out", vm.Attention.FloorNote, StringComparison.OrdinalIgnoreCase);
 
         // Spent thinking is not a spent page: the chat surface is still live.
         Assert.Equal(CompanionZoneState.Live, vm.Chat.State);

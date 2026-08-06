@@ -28,6 +28,9 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             InitializeComponent();
             ForgetConfirm = new MemoryForgetConfirm();
+            // The fact wall is height-capped and scrolls internally, so without this a wheel notch
+            // over it never reaches the page — see CompanionWheelRelay.
+            CompanionWheelRelay.Attach(FactWall);
             DataContextChanged += OnDataContextChanged;
             // Leaving the tab backs the question out; the binding itself survives so the button
             // still works when the user comes back.

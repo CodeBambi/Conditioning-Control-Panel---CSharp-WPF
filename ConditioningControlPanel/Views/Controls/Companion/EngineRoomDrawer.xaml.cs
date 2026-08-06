@@ -12,6 +12,9 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public EngineRoomDrawer()
         {
             InitializeComponent();
+            // The live-actions feed is height-capped and scrolls internally; without this a wheel
+            // notch over it never reaches the page — see CompanionWheelRelay.
+            CompanionWheelRelay.Attach(LiveActionsFeed);
         }
 
         /// <summary>Convenience for hosts that hand in a viewmodel rather than setting DataContext.</summary>

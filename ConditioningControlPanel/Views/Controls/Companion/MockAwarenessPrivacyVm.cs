@@ -16,9 +16,9 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             DenyList = new IDenyChipVm[]
             {
-                new CompanionDenyChip("password managers ✓"),
-                new CompanionDenyChip("banking ✓"),
-                new CompanionDenyChip("email ✓")
+                new CompanionDenyChip(CompanionLocStaging.Resolve("companion_awareness_deny_passwords")),
+                new CompanionDenyChip(CompanionLocStaging.Resolve("companion_awareness_deny_banking")),
+                new CompanionDenyChip(CompanionLocStaging.Resolve("companion_awareness_deny_email"))
             };
             AddDenyCommand = CompanionRelayCommand.NoOp("awareness.addDeny");
             AllowPerAppCommand = CompanionRelayCommand.NoOp("awareness.allowPerApp");
@@ -45,14 +45,14 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public string WireLine { get; init; } = "[ fun · Chrome · 22m ]";
         public bool IsWireLive { get; init; } = true;
         public string WireCaption { get; init; } =
-            "this exact line — nothing more — is what she gets. page titles stay hidden unless you allow them.";
+            CompanionLocStaging.Resolve("companion_awareness_wire_caption");
         public string DormantCopy { get; init; } =
-            "“she'll start noticing things — patterns, habits, your little routines — in an upcoming update. " +
-            "and you'll see everything she sees, right here, first.”";
+            CompanionLocStaging.Resolve("companion_awareness_dormant_copy");
         public bool IsDormant { get; init; }
 
         public IReadOnlyList<IDenyChipVm> DenyList { get; init; }
-        public string AddDenyLabel { get; init; } = "+ add app…";
+        public string AddDenyLabel { get; init; } =
+            CompanionLocStaging.Resolve("companion_awareness_add_deny");
 
         public bool AllowPageTitles
         {
@@ -60,7 +60,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             set => Set(ref _allowPageTitles, value);
         }
 
-        public string PageTitlesLabel { get; init; } = "page titles: hidden";
+        public string PageTitlesLabel { get; init; } =
+            CompanionLocStaging.Resolve("companion_awareness_page_titles_hidden");
 
         public ICommand AddDenyCommand { get; }
         public ICommand AllowPerAppCommand { get; }
@@ -91,7 +92,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             IsEverythingAvailable = true,
             IsWireLive = false,
-            WireLine = "[ her eyes are closed ]",
+            WireLine = CompanionLocStaging.Resolve("companion_awareness_wire_closed"),
             Intensity = AwarenessIntensity.Off
         };
     }
