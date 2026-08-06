@@ -36,12 +36,22 @@
  * feature where somebody's voice can be OWED to them — queued, retried, delivered
  * three minutes later out of context — is a different and much worse feature.
  *
- * THE SIX GATES, and every one of them is enforced on BOTH ends because the
+ * SENDING IS A PERK; HEARING IS NOT (owner call, 2026-08-06). Voice notes ride the
+ * SAME capability as media — `session.caps.mediaTransfer`, tier 1+, computed by the
+ * C# host's TransferAllowed() and by the server's `media_send` verdict — folded in
+ * here through the `sendAllowed` predicate. One send policy, not two. It sits on the
+ * SEND SIDE ONLY: `onMeta` / `onChunk` / `onEnd` never consult it, so an ungated seat
+ * hears everything its opponent sends, exactly as before. See `sendEntitled`.
+ *
+ * THE SEVEN GATES, and every one of them is enforced on BOTH ends because the
  * wire is untrusted and the other end is a stranger's build:
  *
  *   0. THE LINK. `match.linkIsP2P` — see above. First, because it is the only one
  *      that is about US rather than about the two players, and no agreement they
  *      could reach would make a relayed voice note acceptable.
+ *   0b. THE ENTITLEMENT (`sendAllowed`). Send-side only, and reported ahead of the
+ *      switches below because it is the one gate no switch on this page can move —
+ *      see `available()` for why the ORDER is the whole legibility argument.
  *   1. CONSENT. Both sides declared `voice_notes` on the consent frame AND the
  *      peer's build advertises `caps.voice` (core/match.js voiceNotesAgreed).
  *   2. PHASE. Countdown, Live, SuddenDeath. Nothing before, nothing after —
@@ -246,12 +256,15 @@ function nowMs() {
  * @param {object}   o.prefs          ui/prefs.js handle (`voiceNotesEnabled` is the receive gate)
  * @param {object}   [o.noteStore]    ui/voice/noteStore.js (wave 2). null = live notes only
  * @param {object}   [o.blocklist]    net/blocklist.js — see the consult below
+ * @param {Function} [o.sendAllowed]  () => boolean — the ENTITLEMENT, read live.
+ *                   boot.js passes `session.caps.mediaTransfer === true`. Omitted
+ *                   means "nobody is gating this build" — see sendEntitled().
  * @param {object}   [o.logger]       console-shaped
  * @param {Function} [o.now]          TEST AFFORDANCE — the clock the rate limits read
  */
 export function createVoiceService({
   match = null, audio = null, prefs = null, noteStore = null,
-  blocklist = null, logger = null, now = nowMs,
+  blocklist = null, sendAllowed = null, logger = null, now = nowMs,
 } = {}) {
   const clock = typeof now === 'function' ? now : nowMs;
   const log = logger;
@@ -300,9 +313,37 @@ export function createVoiceService({
   }
 
   /**
-   * The ONE predicate. The link, both consents, the peer's build, the phase, and our
-   * own opt-in — all six, ANDed, in one place, so the mic button and the send path
-   * can never disagree about whether this feature is live.
+   * MAY THIS SEAT SEND AT ALL? The tier gate, read LIVE rather than captured: the
+   * server's `media_send` verdict can land after this service was built (boot.js
+   * adoptServerSendVerdict runs on two roads and the first one is after attach),
+   * so a snapshot taken in the constructor would be null on every fresh duel.
+   *
+   * NO PREDICATE MEANS NOT GATED. Every self-test in test/selftest-voice*.js
+   * constructs this service without one, and so does any caller that predates the
+   * cap; answering `false` to them would turn "we added an option" into "voice is
+   * off everywhere". The production caller ALWAYS passes one (boot.js), so the
+   * permissive default is only ever reachable where there is no entitlement model
+   * to consult — the same shape as bridge.js's pure-local dev affordance.
+   *
+   * A PREDICATE THAT THROWS IS A NO, which is the other half: once somebody IS
+   * gating this build, an unreadable answer must not become a send.
+   */
+  function sendEntitled() {
+    if (typeof sendAllowed !== 'function') return true;
+    try { return sendAllowed() === true; } catch (_e) { return false; }
+  }
+
+  /**
+   * The ONE predicate. The entitlement, the link, both consents, the peer's build,
+   * the phase, and our own opt-in — all seven, ANDed, in one place, so the mic
+   * button and the send path can never disagree about whether this feature is live.
+   *
+   * THE ENTITLEMENT IS IN HERE, AND THAT IS DELIBERATE: `available()` is what puts
+   * the mic on the desk (ui/voice/micHud.js subscribes to it), so an ungated seat
+   * simply has no mic rather than a mic that refuses on release. Recording somebody's
+   * voice and then telling them it cannot go anywhere is a worse answer than never
+   * opening the microphone. RECEIVING does not read this function at all (see onMeta
+   * / onChunk / onEnd) — an ungated seat still hears every note its opponent sends.
    *
    * Note that a SOLO match satisfies none of it in practice (the practice
    * opponent never declares `voice_notes`), which is how the mic stays off
@@ -310,6 +351,7 @@ export function createVoiceService({
    */
   function available() {
     if (disposed || !match) return false;
+    if (!sendEntitled()) return false;
     if (!localEnabled()) return false;
     if (!linkDirect()) return false;
     try { return !!match.voiceNotesAgreed && !!match.voicePhaseOpen; } catch (_e) { return false; }
@@ -343,6 +385,14 @@ export function createVoiceService({
   function whyUnavailable(o = {}) {
     if (disposed) return 'the voice service is disposed';
     if (!match) return 'no match';
+    /* THE ENTITLEMENT, AHEAD OF EVERY SWITCH, and the order is the point rather
+     * than an accident. Reported after the opt-in it would read as "switch voice
+     * notes on" to a seat for which switching it on changes nothing — sending a
+     * player to a control that cannot help them is the 2026-08-05 blindness with
+     * an extra step. This gate is terminal for the seat: no checkbox on this page
+     * moves it, and the lobby row (S.voice.lobbyNoPerk) says so where the player
+     * can act on it. */
+    if (!sendEntitled()) return 'sending is not entitled for this seat (caps.mediaTransfer is not true — tier 1+ perk)';
     if (!localEnabled()) return 'local pref off (voice notes are not switched on for this seat)';
     // THE LINK, in available()'s own order. Terminal for the whole match: net/session.js
     // never upgrades a relayed duel back to P2P, so this sentence means "not this duel".
@@ -394,12 +444,21 @@ export function createVoiceService({
    * @param {string} [o.emote]  the emote this note rides with, or null for a live one
    * @param {number} [o.durMs]  recorded length, for their chip. Cosmetic.
    * @returns {Promise<{ok:boolean, reason:string, id:number, parts:number}>}
-   *   reason is 'sent' | 'relay' | 'unavailable' | 'too-soon' | 'busy' | 'empty' |
-   *   'too-big' | 'unreadable' | 'aborted' | 'send-failed'.
+   *   reason is 'sent' | 'not-entitled' | 'relay' | 'unavailable' | 'too-soon' |
+   *   'busy' | 'empty' | 'too-big' | 'unreadable' | 'aborted' | 'send-failed'.
    */
   async function sendBlob(blob, o = {}) {
     const fail = (reason) => { stats.sendDropped++; return { ok: false, reason, id: 0, parts: 0 }; };
     if (disposed) return fail('unavailable');
+    /* THE ONE CHOKE POINT (2026-08-06). Live mic and emote-attached both arrive
+     * here — sendNote() delegates — so this single line is the whole send gate,
+     * and `available()` below already ANDs the same fact in. It is stated TWICE
+     * on purpose: this one gives the refusal its OWN reason code, so the strip
+     * can say "supporter perk" (S.voice.noPerkSend) instead of the catch-all
+     * 'unavailable' -> "you both have to switch it on", which would be a lie
+     * pointing at the wrong control. Checked before the link for the same reason
+     * whyUnavailable reports it first. */
+    if (!sendEntitled()) return fail('not-entitled');
     /* 'relay' IS ITS OWN REASON, and it is checked before the general predicate so it
      * cannot be reported as the catch-all 'unavailable'. The two mean different things
      * to a player — "you both have to switch it on" is something they can fix, "this
@@ -429,7 +488,10 @@ export function createVoiceService({
     // Re-checked AFTER the await: a match can end, a phase can turn, or a link can
     // fall over, while a blob is being read off disk — and the gate that mattered is
     // the one at send time. The link is asked for separately so a degrade mid-read is
-    // still reported as the relay refusal rather than as a generic one.
+    // still reported as the relay refusal rather than as a generic one. The
+    // entitlement is asked for separately on the same terms: a verdict that landed
+    // while the blob was being read is a perk refusal, not a generic one.
+    if (!sendEntitled()) return fail('not-entitled');
     if (!linkDirect()) return fail('relay');
     if (!available()) return fail('unavailable');
 
@@ -693,6 +755,10 @@ export function createVoiceService({
     available,
     /** '' when the mic is live, else the FIRST failing gate. See the block above. */
     whyUnavailable,
+    /** May this seat send at all (the tier perk), regardless of consents, phase or
+     *  link? Exported so a screen can explain a hidden mic without re-deriving the
+     *  cap, and so the suite can pin the gate on its own. */
+    sendEntitled,
     sendBlob,
     sendNote,
 

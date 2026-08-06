@@ -308,12 +308,16 @@ export function mount(container, ctx) {
    * speak the protocol, or the link is relayed (media never touches the server,
    * so a relay physically cannot carry it).
    *
-   * THE FIRST REASON USED TO BE "not a supporter" AND IS NOT ANY MORE (owner call
-   * 2026-08-05). Sending is free for every seat — the paid perk is hosting — so
-   * caps.mediaTransfer is true on every current host and this arm is now reserved
-   * for a server that vetoes sending (`media_send:false`) or a frame too old to
-   * carry the flag. Kept as an arm rather than deleted so the row can never go
-   * dark in silence; see S.lobby.transferOff.
+   * THE FIRST REASON IS THE TIER PERK AGAIN (owner call 2026-08-06, after one
+   * day of free-for-every-seat). caps.mediaTransfer is true for tier 1+ and false
+   * for an anonymous seat, so this arm is the one a real player actually meets —
+   * the server veto (`media_send:false`) and the too-old frame still land here
+   * too, and S.lobby.transferOff is written to be true for all three.
+   *
+   * THIS ROW IS WHY THE RE-GATE IS SHIPPABLE. The first tier gate had no copy at
+   * all: attacks silently fell back to the receiver's pool and it read as
+   * breakage, not as a paywall. An arm that names the perk, every time, is the
+   * condition on the gate coming back.
    */
   function paintTransfer() {
     const caps = (ctx.session && ctx.session.caps) || {};
@@ -392,9 +396,21 @@ export function mount(container, ctx) {
      * is off for the match. */
     const t = getTransport ? getTransport() : null;
     const settledRelay = !!t && t.state === GoonTransportState.ConnectedRelay;
+    /* THE SEND PERK, shared with the transfer row above (2026-08-06): voice notes
+     * ride the SAME session.caps.mediaTransfer. Read here rather than off the
+     * voice service because there is no service yet in the lobby half of the time
+     * (it is built per match) and because this row must answer even then. */
+    const entitled = !!(ctx.session && ctx.session.caps && ctx.session.caps.mediaTransfer === true);
 
     let status = '';
+    /* RELAY FIRST, because it is the bigger truth when both are true: a relayed
+     * duel has no voice in EITHER direction, so promising "you can still hear
+     * theirs" over it would be the one thing this copy may not do. Below it the
+     * perk line outranks the consent statuses for the reason whyUnavailable puts
+     * it first — no checkbox on this screen can move it, and sending somebody to
+     * one that cannot help them is how a paywall gets reported as a bug. */
     if (settledRelay) status = S.voice.lobbyRelay;
+    else if (!entitled) status = S.voice.lobbyNoPerk;
     else if (mine && theirs && match.peerSupportsVoice) status = S.voice.lobbyBoth;
     else if ((mine || theirs) && !match.peerSupportsVoice) status = S.voice.lobbyPeerOld;
     else if (mine) status = S.voice.lobbyYours;

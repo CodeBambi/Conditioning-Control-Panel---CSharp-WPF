@@ -765,6 +765,78 @@ const fakeStore = (landed, held) => ({
 }
 
 /* ===========================================================================
+ * 7.25 THE EMAIL ROAD (owner ask, 2026-08-06).
+ *
+ * The card above reports ONE FILE: a fingerprint, a thumbnail and a note, filed
+ * against an artifact that landed. A great deal of what a person actually needs
+ * to report is not a file at all — being threatened, harassment across several
+ * duels, something said on a voice note — and none of it fits a picker of
+ * pictures. So the card also names a human road out, and asks for the two things
+ * that make a mail actionable: screenshots, and WHO.
+ *
+ * THE PART THAT IS EASY TO GET WRONG is WHEN it is visible. It is not a receipt.
+ * Somebody upset enough to need it must not have to file a file-report first to
+ * discover that email exists, so it is asserted on the UNTOUCHED card, and again
+ * on the collapsed one after a report has already gone.
+ * ========================================================================= */
+{
+  const box = new StubEl('section');
+  const h = recap.mount(box, fakeCtx(fakeStore([rowA], [rowA]), []));
+  const card = box.findAll('gg-recap-report')[0];
+  ok(!!card, 'the card is there to carry the line');
+  const line = card.findAll('gg-report-email')[0];
+  ok(!!line, 'the report card carries the email line BEFORE anything is picked or submitted');
+  ok(/support@cclabs\.app/.test(line.textContent), 'and it names the address', line.textContent);
+  ok(/screenshot/i.test(line.textContent), 'asks for screenshots');
+  ok(/name of the player/i.test(line.textContent), 'and for the name of the player they were with');
+  h.unmount();
+}
+
+{
+  // THE NAME, interpolated. It is the field a stranger cannot reconstruct an hour
+  // later and it is on this screen right now, so the recap fills it in.
+  const box = new StubEl('section');
+  const ctx = fakeCtx(fakeStore([rowA], [rowA]), []);
+  ctx.getMatch = () => ({
+    result: null,
+    localDisplayName: 'me',
+    opponent: { displayName: 'Kittenbot' },
+    onResultFinalized: () => () => {},
+    onMatchEnded: () => () => {},
+  });
+  const h = recap.mount(box, ctx);
+  const line = box.findAll('gg-report-email')[0];
+  ok(!!line && line.textContent.indexOf('Kittenbot') >= 0,
+    "the opponent's display name is in the line when the recap knows it", line && line.textContent);
+  ok(line.textContent === S.recap.reportEmail('Kittenbot'), 'straight from strings, never assembled in the component');
+  h.unmount();
+}
+
+{
+  // ...and a match that never learned a name gets the nameless variant rather than
+  // "the name of the player you were with (they)".
+  ok(typeof S.recap.reportEmail === 'function', 'S.recap.reportEmail is a function of the name');
+  ok(/support@cclabs\.app/.test(S.recap.reportEmail('')), 'the nameless variant still names the address');
+  ok(!/\(\)/.test(S.recap.reportEmail('')) && !/\(they\)/.test(S.recap.reportEmail('')),
+    'and carries no empty bracket where a name would have been', S.recap.reportEmail(''));
+  ok(S.recap.reportEmail('Zed').indexOf('Zed') >= 0, 'while a named one interpolates');
+  ok(S.recap.reportEmail('') === S.recap.reportEmail('').toLowerCase(),
+    'lowercase, like the rest of the card furniture');
+
+  // The collapsed card — after a report has been filed — keeps it. A filed
+  // file-report is not an answer to "he threatened me".
+  const rsrc = read('ui/screens/recap.js');
+  const cardFn = rsrc.slice(rsrc.indexOf('  function reportCard()'), rsrc.indexOf('  /* ------------------------------------------------------------- verdict'));
+  ok((cardFn.match(/emailLine\(\)/g) || []).length === 2,
+    'the line is appended on BOTH roads — the live card and the collapsed one');
+  ok(cardFn.indexOf('const emailLine') < cardFn.indexOf('reportPhase === \'done\''),
+    'built before the collapse branch returns, which is what lets it appear on both');
+  ok(/S\.recap\.reportEmail\(peerName\(\)\)/.test(cardFn), 'and the name comes from one helper, not from three call sites');
+  ok(/slice\(0, 64\)/.test(rsrc),
+    'peerName clamps: it is a peer-supplied string being read back to the player as an instruction');
+}
+
+/* ===========================================================================
  * 7.5 THE STANDALONE CTA — the only piece of marketing on the end card, and
  *     the only external link the page has. It is aimed at the phone joiner who
  *     followed an invite link and has never seen the app the payloads came out
@@ -888,6 +960,9 @@ const fakeStore = (landed, held) => ({
     'and moves it to the opposite corner from the ✕');
   for (const cls of ['gg-recap-report', 'gg-report-thumb', 'gg-report-reason', 'gg-report-note',
     'gg-report-actions', 'gg-report-status',
+    // the email road out (2026-08-06) — ruled off from the fine print it sits with,
+    // because it is the only line on the card that names a human to talk to
+    'gg-report-email',
     // the standalone CTA — an <a> wearing .gg-btn needs both of these or it
     // renders as underlined inline text in the middle of the card
     'gg-recap-cta', 'gg-recap-cta-lead', 'gg-recap-cta-link']) {

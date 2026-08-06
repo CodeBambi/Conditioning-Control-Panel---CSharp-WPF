@@ -879,18 +879,22 @@ namespace ConditioningControlPanel.Services.GoonGame
         /// <c>true</c> so the gate has one place to come back to if that ever changes.)</summary>
         private static bool BrainDrainAllowed() => true;
 
-        /// <summary>May the page send its OWN media to the opponent? YES — for everyone in a room.
+        /// <summary>May the page send its OWN media to the opponent? TIER 1+ (any paid tier or
+        /// whitelist), re-gated 2026-08-06.
         ///
-        /// This WAS a premium gate (tier >= 1). Owner call 2026-08-04: the supporter perk is
-        /// HOSTING (<see cref="HostingAllowed"/>, tier 2) — once a duel exists, BOTH players
-        /// sending their media is what makes the match feel like a duel, and an invited free
-        /// player throwing blanks read as broken in the very first real play-test. The server's
-        /// <c>media_send</c> verdict on /invite and /join flipped to unconditional the same day,
-        /// so the two verdicts still agree. Consent still gates it per-match (the lobby checkbox
-        /// both sides must tick), and receiving was never gated.</summary>
+        /// Sending was free-for-every-seat for one day (owner call 2026-08-04): the free model
+        /// fixed the "invited free player throws blanks" bug from the first play-test, but left
+        /// an un-gated seat able to push arbitrary media at an opponent, and abuse won over
+        /// generosity. The blank-attack lesson survives as UI instead: the lobby transfer row
+        /// names the perk (S.lobby.transferOff) rather than greying out in silence. The server's
+        /// <c>media_send</c> verdict on /invite and /join computes the same bar
+        /// (computeEffectiveTier &gt;= 1), so the two verdicts agree; voice notes ride this same
+        /// cap. Consent still gates the lane per-match (the lobby checkbox both sides must
+        /// tick), and receiving was never gated.</summary>
         private static bool TransferAllowed()
         {
-            return true;
+            try { return App.Patreon?.HasPremiumAccess == true; }
+            catch { return false; }
         }
 
         /// <summary>May the page MINT a room? TIER 2 ONLY.
