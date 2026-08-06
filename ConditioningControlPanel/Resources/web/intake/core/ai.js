@@ -145,12 +145,38 @@ function compact(req) {
   };
 }
 
+/* A usable accent/synthesis line is short PROSE — the engine hands it to the
+ * renderer verbatim (beats.js appends `(flavor)` to the question text). A line
+ * that reads as STRUCTURE is the model failing the server's JSON contract, most
+ * commonly by echoing the format spec back ({"beats":[{"flavor":"<line>"},...]}),
+ * and on 2026-08-06 exactly that string reached players' question cards through
+ * the server's raw-text fallback. The server now drops such lines at the source
+ * (proxy intake-ai.js pickLine/looksLikeStructure — keep the two regexes in
+ * sync); this is the belt-and-suspenders copy so a server regression cannot put
+ * garbage on a card again. Dropping is always safe: the engine only replaces
+ * its previous accent on a truthy line (kickAccent), so fewer beats just means
+ * the accent recolors later. */
+const STRUCTURE_RE = /[{}[\]]|<[^<>]{1,60}>|```|"?(?:beats|flavor|synthesis|profile)"?\s*:/i;
+function usableLine(v) {
+  if (typeof v !== 'string') return undefined;
+  const s = v.replace(/\s+/g, ' ').trim();
+  return s && !STRUCTURE_RE.test(s) ? s.slice(0, 160) : undefined;
+}
+
 /** Coerce a server payload to the AiResponse shape. */
 function normalize(data) {
   const out = {};
-  if (Array.isArray(data.beats)) out.beats = data.beats;
+  if (Array.isArray(data.beats)) {
+    out.beats = data.beats.map((b) => {
+      const flavor = usableLine(b && b.flavor);
+      const text = usableLine(b && b.text);
+      return (flavor || text) ? { beatId: b && b.beatId, flavor, text } : null;
+    }).filter(Boolean);
+  }
   if (data.profile && typeof data.profile === 'object') out.profile = data.profile;
-  if (typeof data.synthesis === 'string') out.synthesis = data.synthesis;
+  if (typeof data.synthesis === 'string' && !STRUCTURE_RE.test(data.synthesis)) {
+    out.synthesis = data.synthesis;
+  }
   if (data.moderated != null) out.moderated = !!data.moderated;
   return out;
 }
