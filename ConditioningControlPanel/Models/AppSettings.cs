@@ -3846,6 +3846,55 @@ namespace ConditioningControlPanel.Models
             set { _awarenessAdultRecordingEnabled = value; OnPropertyChanged(); }
         }
 
+        private bool _awarenessConsentShownV2 = false;
+        /// <summary>
+        /// Whether the plain-language awareness consent dialog has been shown and accepted at least once
+        /// (doc 02 §6.3). False means the next attempt to open her eyes raises the dialog instead of
+        /// switching silently; true means the toggle is one click, as it is for every other setting.
+        ///
+        /// <para>Separate from <see cref="AwarenessConsentGiven"/> on purpose:
+        /// <c>AwarenessConsentGiven</c> is the live "is she allowed to watch" flag and follows the
+        /// toggle, while this records that the explanation was actually read once. Upgraders who had the
+        /// feature on before v2 land here as false and get the dialog the first time they touch it,
+        /// which is the whole point — they never saw one.</para>
+        /// </summary>
+        [JsonProperty]
+        public bool AwarenessConsentShownV2
+        {
+            get => _awarenessConsentShownV2;
+            set { _awarenessConsentShownV2 = value; OnPropertyChanged(); }
+        }
+
+        private bool _awarenessDenySeeded = false;
+        /// <summary>
+        /// Whether the recommended deny groups (password managers, banking, email titles) have been
+        /// written into <see cref="AwarenessDenyList"/>. Set by
+        /// <c>AwarenessPrivacyRules.EnsureSeeded</c>, which runs once, from the consent flow.
+        ///
+        /// <para>Until it is true the privacy layer applies those groups anyway, so protection never
+        /// depends on start-up ordering. After it is true the user's list is authoritative: removing a
+        /// seeded chip removes the rule, and nothing puts it back.</para>
+        /// </summary>
+        [JsonProperty]
+        public bool AwarenessDenySeeded
+        {
+            get => _awarenessDenySeeded;
+            set { _awarenessDenySeeded = value; OnPropertyChanged(); }
+        }
+
+        private bool _awarenessIntensityMigrated = false;
+        /// <summary>
+        /// Whether <see cref="AwarenessReactionCooldownSeconds"/> has been mapped onto
+        /// <see cref="AwarenessIntensity"/> (<c>AwarenessIntensityMigration</c>). Once only — a second
+        /// run would overwrite whatever the user picked on the dial afterwards.
+        /// </summary>
+        [JsonProperty]
+        public bool AwarenessIntensityMigrated
+        {
+            get => _awarenessIntensityMigrated;
+            set { _awarenessIntensityMigrated = value; OnPropertyChanged(); }
+        }
+
         private Dictionary<string, bool> _companionSectionOpen = new();
         /// <summary>
         /// Remembered open/collapsed state of the Companion tab's accordion sections, keyed by

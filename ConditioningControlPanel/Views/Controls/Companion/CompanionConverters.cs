@@ -160,6 +160,31 @@ namespace ConditioningControlPanel.Views.Controls.Companion
     }
 
     /// <summary>
+    /// int ⇄ bool for a segmented strip of numbers — Z5's retention choice (7 / 30 days).
+    ///
+    /// <para><see cref="CompanionEnumEqualsConverter"/> almost works, but its
+    /// <c>ConvertBack</c> hands the raw parameter STRING back to an <c>int</c> property and leans on
+    /// WPF's default string→int coercion. That is a silent-failure shape on a privacy control: if the
+    /// coercion ever declined, the radio would light up and the retention would not change. This one
+    /// parses, and returns <see cref="Binding.DoNothing"/> when it cannot.</para>
+    /// </summary>
+    public sealed class CompanionIntEqualsConverter : IValueConverter
+    {
+        public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+            => value != null && TryParse(parameter, out var wanted) &&
+               value is int actual && actual == wanted;
+
+        public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        {
+            if (value is bool b && b && TryParse(parameter, out var wanted)) return wanted;
+            return Binding.DoNothing;
+        }
+
+        private static bool TryParse(object? parameter, out int value)
+            => int.TryParse(parameter?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
+    }
+
+    /// <summary>
     /// Same as <see cref="CompanionEnumEqualsConverter"/> but yields Visibility.
     ///
     /// <para>The parameter may name SEVERAL states, pipe-separated
