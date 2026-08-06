@@ -269,11 +269,9 @@ namespace ConditioningControlPanel.Services.AIService
             if (string.IsNullOrEmpty(response))
                 return response ?? string.Empty;
 
-            var sanitized = Regex.Replace(response, @"\[Category:[^\]]*\]", "", RegexOptions.IgnoreCase);
-            sanitized = Regex.Replace(sanitized, @"\[[A-Za-z]+/[A-Za-z]+\]", "", RegexOptions.IgnoreCase);
-            sanitized = Regex.Replace(sanitized, @"\[(?:Category|App|Title|Duration|Context):[^\]]*\]", "", RegexOptions.IgnoreCase);
-            sanitized = Regex.Replace(sanitized, @"\s{2,}", " ");
-            sanitized = sanitized.Trim();
+            // Closed metadata tags plus the unclosed ones the 100-token response cap truncates.
+            // Shared with AiService's cloud-path sanitizer so both strip the same set.
+            var sanitized = AiTextHygiene.StripMetadataTags(response);
 
             return string.IsNullOrWhiteSpace(sanitized) ? _fallbackProvider() : sanitized;
         }
