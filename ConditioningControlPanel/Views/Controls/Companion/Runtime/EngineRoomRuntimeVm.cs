@@ -1,9 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.Linq;
 using System.Windows.Input;
-using System.Windows.Threading;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 
@@ -28,7 +25,6 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
     internal sealed class EngineRoomRuntimeVm : CompanionObservable, IEngineRoomDrawerVm
     {
         private readonly CompanionRuntimeContext _ctx;
-        private readonly List<string> _liveActions = new();
 
         private bool _isExpanded;
         private CompanionProviderMode _provider = CompanionProviderMode.Cloud;
@@ -63,7 +59,6 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             ClearConversationCommand = new CompanionRelayCommand(
                 () => _ctx.WithWindow(w => { w.ClearCompanionConversation(); Sync(); }));
 
-            AttachLiveActions();
             Sync();
         }
 
@@ -120,9 +115,15 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
 
         /// <summary>
         /// Never round-trips the stored secret. The getter returns empty, so the key cannot be read
-        /// back out of a binding, off a screenshot or out of a UI-automation dump; the setter only
-        /// writes when the user actually typed something. The view backs this with a PasswordBox for
-        /// the same reason.
+        /// back out of a binding, off a screenshot or out of a UI-automation dump. The view backs
+        /// this with a PasswordBox for the same reason.
+        ///
+        /// <para><b>An empty box writes an empty key.</b> Emptying the field is how a stored BYO key
+        /// is revoked — the legacy <c>TxtOpenAiApiKey_PasswordChanged</c> wrote unconditionally, and
+        /// short-circuiting on a zero-length value left no path in the app to remove a leaked key or
+        /// to stop sending an <c>Authorization</c> header to a local endpoint that rejects one.
+        /// <see cref="_suppressWrite"/> is what guards the programmatic re-populate; the getter
+        /// returning empty means <see cref="Sync"/> can never write the box back over the setting.</para>
         /// </summary>
         public string CustomApiKey
         {
@@ -130,7 +131,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             set
             {
                 _customApiKey = value ?? string.Empty;
-                if (_suppressWrite || _customApiKey.Length == 0) return;
+                if (_suppressWrite) return;
                 _ctx.WithWindow(w => w.SetCustomApiKey(_customApiKey));
             }
         }
@@ -145,7 +146,25 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
 
         // ---- live actions ----
         public bool ShowLiveActions { get => _showLiveActions; private set => Set(ref _showLiveActions, value); }
-        public IReadOnlyList<string> LiveActions => _liveActions;
+
+        /// <summary>
+        /// <see cref="App.AiLiveActions"/> itself, not a copy.
+        ///
+        /// <para>This used to project into a private <c>List&lt;string&gt;</c> refilled in place, with
+        /// a <c>PropertyChanged</c> raise to push it. That never reached the screen: WPF suppresses
+        /// the <c>ItemsSource</c> change when the new value is reference-equal to the old one, so
+        /// <c>ItemsControl.OnItemsSourceChanged</c> never ran and the containers were never
+        /// regenerated — the feed rendered once at first layout and then froze. Handing the real
+        /// <see cref="System.Collections.ObjectModel.ObservableCollection{T}"/> over restores what
+        /// the legacy <c>LiveActionsList.ItemsSource = App.AiLiveActions</c> did, and takes the
+        /// never-unsubscribed CollectionChanged hook with it.</para>
+        ///
+        /// <para>Safe to bind directly: <c>AiCommandService.AppendLiveAction</c> already marshals
+        /// every mutation onto the dispatcher, and the two <c>Clear()</c> call sites are UI-thread
+        /// handlers.</para>
+        /// </summary>
+        public IReadOnlyList<string> LiveActions => App.AiLiveActions;
+
         public string LiveActionsPlaceholder => Loc.Get("companion_engine_live_actions_placeholder");
 
         public ICommand LoginCommand { get; }
@@ -201,7 +220,6 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
 
             IsLoggedIn = App.HasCloudIdentity;
             ShowLiveActions = _provider is CompanionProviderMode.LocalOllama or CompanionProviderMode.Custom;
-            RefreshLiveActions();
             RefreshStatus();
         }
 
@@ -228,6 +246,19 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             CompanionProviderMode.Custom => (true, AiProviderType.OpenAiCompatible),
             _ => (true, AiProviderType.Cloud)
         };
+
+        /// <summary>
+        /// Whether switching TO <paramref name="mode"/> drops the Live Actions feed.
+        ///
+        /// <para>Off and Cloud both do, which is what the four radio handlers did between them: with
+        /// AI off nothing populates the feed, and Cloud cannot trigger effects at all, so the
+        /// previous local session's entries would re-render as current the moment the user came back
+        /// to Local. Static and testable because <see cref="SettingsFor"/> maps Off → (false, Cloud)
+        /// — the enabled flag cannot tell the two cases apart, and the last version of this check
+        /// used it and lost the Cloud half.</para>
+        /// </summary>
+        internal static bool ClearsLiveActions(CompanionProviderMode mode) =>
+            mode is CompanionProviderMode.Off or CompanionProviderMode.Cloud;
 
         /// <summary>
         /// The live "is she thinking?" readout. Absorbs the old <c>TxtAiStatus</c> line and the two
@@ -286,29 +317,5 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             write(prompt);
             App.Settings?.Save();
         }, "engine field write");
-
-        // ---- live actions feed ----
-
-        private void AttachLiveActions() => CompanionRuntimeContext.Guarded(() =>
-        {
-            if (App.AiLiveActions is INotifyCollectionChanged notifier)
-                notifier.CollectionChanged += OnLiveActionsChanged;
-        }, "attach live actions");
-
-        private void OnLiveActionsChanged(object? sender, NotifyCollectionChangedEventArgs e)
-        {
-            // Fire-and-forget from a service thread: never touch UI state without a live dispatcher.
-            var dispatcher = System.Windows.Application.Current?.Dispatcher;
-            if (dispatcher == null || dispatcher.HasShutdownStarted) return;
-            dispatcher.BeginInvoke(new Action(RefreshLiveActions), DispatcherPriority.Normal);
-        }
-
-        private void RefreshLiveActions()
-        {
-            _liveActions.Clear();
-            var source = App.AiLiveActions;
-            if (source != null) _liveActions.AddRange(source.ToList());
-            Raise(nameof(LiveActions));
-        }
     }
 }

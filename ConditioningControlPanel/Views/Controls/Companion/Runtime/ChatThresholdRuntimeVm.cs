@@ -52,6 +52,17 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         private string _lastHeardCopy = string.Empty;
         private DateTime? _lastHeardUtc;
 
+        /// <summary>The session this zone is currently listening to, so it can stop listening.</summary>
+        private ChatSession? _session;
+
+        /// <summary>
+        /// The last projection this zone put on screen, as one string. Ambient turns land every ~10s
+        /// and never render here, so without this the feed would tear down and regenerate three
+        /// identical containers on a timer. The projected timestamp is part of the signature, so
+        /// "22m ago" → "1h ago" still repaints.
+        /// </summary>
+        private string _threadSignature = string.Empty;
+
         public ChatThresholdRuntimeVm(CompanionRuntimeContext ctx)
         {
             _ctx = ctx;
@@ -139,10 +150,54 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         {
             CompanionRuntimeContext.Guarded(() =>
             {
+                AttachSession(App.Brain?.Session);
                 State = ResolveState();
                 RebuildThread();
                 RefreshLastHeard();
             }, "chat sync");
+        }
+
+        /// <summary>
+        /// Stops listening to the brain's turn log. Called when the page lets go of its navigator —
+        /// the room's teardown signal — so a hidden or replaced tab cannot keep a live session
+        /// pinning a dead viewmodel.
+        /// </summary>
+        public void Detach() => AttachSession(null);
+
+        /// <summary>
+        /// Follows <c>App.Brain.Session</c>, which does not exist yet when the room is built during
+        /// startup and is re-read on every Sync for exactly that reason.
+        /// </summary>
+        private void AttachSession(ChatSession? session)
+        {
+            if (ReferenceEquals(_session, session)) return;
+            if (_session != null) _session.TurnsChanged -= OnTurnsChanged;
+            _session = session;
+            if (_session != null) _session.TurnsChanged += OnTurnsChanged;
+        }
+
+        /// <summary>
+        /// A turn landed (or was rolled back) while the page is open.
+        ///
+        /// <para>Without this the flagship surface went stale on the likeliest path there is: both
+        /// the hero's Chat chip and this card's own footer chip open the TUBE's input box, so a user
+        /// could have a whole exchange from a button this page gave them and watch Z2 keep showing
+        /// the three turns it had on tab entry. Bark echoes — the design's "one mouth, made
+        /// visible" — never appeared at all while the tab was visible.</para>
+        ///
+        /// <para>Fires on a bark thread or a reply continuation, so it marshals; Known Issues #6
+        /// (never touch UI state without a live dispatcher) and DispatcherPriority.Normal, never
+        /// Loaded, which is starved in this app.</para>
+        /// </summary>
+        private void OnTurnsChanged(object? sender, EventArgs e)
+        {
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+            dispatcher.BeginInvoke(new Action(() => CompanionRuntimeContext.Guarded(() =>
+            {
+                RebuildThread();
+                RefreshLastHeard();
+            }, "chat turn refresh")), DispatcherPriority.Normal);
         }
 
         /// <summary>
@@ -231,14 +286,37 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
 
         private void RebuildThread()
         {
-            _turns.Clear();
             var brain = App.Brain;
-            if (brain != null && CompanionBrain.ShouldRoute(brain))
-            {
-                foreach (var bubble in ProjectThread(brain.Session.Turns)) _turns.Add(bubble);
-            }
-            Raise(nameof(Turns));
+            var projected = brain != null && CompanionBrain.ShouldRoute(brain)
+                ? ProjectThread(brain.Session.Turns)
+                : Array.Empty<IChatBubbleVm>();
+
+            var signature = SignatureFor(projected);
+            if (_turns.Count == projected.Count &&
+                string.Equals(signature, _threadSignature, StringComparison.Ordinal)) return;
+            _threadSignature = signature;
+
+            _turns.Clear();
+            foreach (var bubble in projected) _turns.Add(bubble);
             Raise(nameof(FooterCopy));
+        }
+
+        /// <summary>
+        /// One string standing for "what the thread currently looks like". Static and internal so the
+        /// no-op guard is testable — a projection that changes must repaint, and one that does not
+        /// must not.
+        /// </summary>
+        internal static string SignatureFor(IReadOnlyList<IChatBubbleVm> bubbles)
+        {
+            if (bubbles == null || bubbles.Count == 0) return string.Empty;
+            const char sep = '\u001F';
+            var sb = new System.Text.StringBuilder();
+            foreach (var b in bubbles)
+                sb.Append(b.Kind).Append(sep)
+                  .Append(b.IsAiGenerated ? '1' : '0').Append(sep)
+                  .Append(b.Text).Append(sep)
+                  .Append(b.Timestamp).Append(sep);
+            return sb.ToString();
         }
 
         private void RefreshLastHeard()

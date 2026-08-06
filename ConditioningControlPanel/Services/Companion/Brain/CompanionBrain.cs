@@ -418,21 +418,44 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         }
 
         /// <summary>
-        /// Forgets the CONVERSATION only: the in-memory turn log, session.json, and the recommendation
-        /// ban list. Durable memory facts and the deterministic profile survive.
+        /// Drops the THREAD and nothing else: the in-memory turn log, session.json, the recommendation
+        /// ban list, and the legacy local-Ollama transcript. No memory fact is touched.
         ///
-        /// <para>This is what the chat-memory surfaces call — "Reset companion memory", "Forget
-        /// everything" on the Lab tab, and turning <c>ChatMemoryEnabled</c> off, which is a privacy
-        /// promise about dialogue and not about what level you are. Clearing the live
-        /// <see cref="Session"/> is the load-bearing half: deleting session.json alone would be undone
-        /// by the very next reply, which re-persists the whole in-RAM log.</para>
+        /// <para>This is the Engine Room's "clear conversation" — the scope the legacy Reset Memory
+        /// button had, for the user whose companion is stuck in an old pattern and who does not want
+        /// to lose that she is level 41. Its confirmation copy says in nine languages that "what she
+        /// knows about you is untouched", so it must not reach
+        /// <see cref="MemoryStore.ForgetChatDerived"/>, whose <c>RemoveAll</c> ignores
+        /// <c>IsProtected</c> and would take pinned and Boundary facts with it.</para>
+        ///
+        /// <para>Clearing the live <see cref="Session"/> is the load-bearing half: deleting
+        /// session.json alone would be undone by the very next reply, which re-persists the whole
+        /// in-RAM log.</para>
         /// </summary>
-        public void ForgetConversation()
+        public void ForgetThread()
         {
             Session.Clear();
             Recommendations.Clear();
             _store.Wipe();
             _memoryRecallSignaled = false;
+            ClearLegacyLocalHistory();
+            App.Logger?.Information("CompanionBrain: conversation thread dropped");
+        }
+
+        /// <summary>
+        /// Forgets the CONVERSATION and everything derived from it: <see cref="ForgetThread"/> plus
+        /// the per-mod relationship counters and chat-sourced facts. The deterministic profile
+        /// (level, streak, sessions, archetype) survives.
+        ///
+        /// <para>This is what the chat-memory surfaces call — "Forget everything" on the Lab tab and
+        /// turning <c>ChatMemoryEnabled</c> off, which is a privacy promise about dialogue and not
+        /// about what level you are. The Engine Room's narrower button calls
+        /// <see cref="ForgetThread"/> instead, because its copy promises durable memory is
+        /// untouched.</para>
+        /// </summary>
+        public void ForgetConversation()
+        {
+            ForgetThread();
 
             // Memory derived from the conversation goes too — the per-mod turn counters and any
             // chat-sourced facts. Level/streak/archetype are app state, not dialogue, and stay.
@@ -443,6 +466,21 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             }
 
             App.Logger?.Information("CompanionBrain: conversation wiped");
+        }
+
+        /// <summary>
+        /// Clears <c>LocalAiService</c>'s in-RAM <c>_messages</c> list as well as its file.
+        ///
+        /// <para><see cref="MemoryStore.Wipe"/> deletes <c>local_chat_history.json</c>, but a file
+        /// delete is only half the job while <c>UseCompanionBrain=false</c>: the legacy provider
+        /// still holds the whole conversation in memory and re-saves it on the very next reply, so a
+        /// "blank slate" that only removed the file was not one. Every wipe scope inherits this from
+        /// here so the narrow and the wide wipe cannot drift apart again.</para>
+        /// </summary>
+        private static void ClearLegacyLocalHistory()
+        {
+            try { (App.Ai as AiServiceStrategy)?.ClearLocalHistory(); }
+            catch (Exception ex) { App.Logger?.Debug("CompanionBrain: legacy local history clear failed: {Error}", ex.Message); }
         }
 
         /// <summary>

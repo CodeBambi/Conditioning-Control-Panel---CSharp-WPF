@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows.Input;
 using ConditioningControlPanel.Models;
@@ -28,7 +29,18 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
     internal sealed class MakeHerYoursRuntimeVm : CompanionObservable, IMakeHerYoursVm
     {
         private readonly CompanionRuntimeContext _ctx;
-        private readonly List<IPresetChipVm> _presets = new();
+
+        /// <summary>
+        /// Observable, not a plain list. <see cref="RebuildPresets"/> refills it in place, and WPF
+        /// suppresses an <c>ItemsSource</c> change whose new value is reference-equal to the old one,
+        /// so a PropertyChanged raise alone left the WrapPanel rendering the chip objects built in
+        /// the constructor for the lifetime of the tab. The chips are ungrouped ToggleButtons bound
+        /// TwoWay to <c>IsSelected</c>, so a stale row lights every preset the user ever clicked —
+        /// and a cancelled explicit-content acknowledgement reported a preset as active that
+        /// <c>App.Personality</c> never switched to, which is the one thing
+        /// <see cref="OnChipChanged"/>'s read-back exists to prevent.
+        /// </summary>
+        private readonly ObservableCollection<IPresetChipVm> _presets = new();
 
         private bool _isSpiceOn;
         private string _activeLine = string.Empty;
@@ -142,22 +154,69 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             CanResetPersonality = false;
         }
 
+        /// <summary>
+        /// Re-projects the preset row.
+        ///
+        /// <para>Chip objects are kept across a Sync whose preset SET is unchanged and only their
+        /// selection is rewritten. That is not a micro-optimisation: the common Sync is the one
+        /// <see cref="OnChipChanged"/> fires from inside the ToggleButton's own <c>IsChecked</c>
+        /// write, and tearing the container down under it is the sort of reentrancy that turns a
+        /// click into a crash. A genuinely different set — a community prompt installed, a mod
+        /// swapped — replaces the chips, unsubscribing the ones being discarded so the row cannot
+        /// accumulate dead handlers.</para>
+        /// </summary>
         private void RebuildPresets()
         {
             var all = App.Personality?.GetAllPresets() ?? new List<PersonalityPreset>();
             var activeId = App.Personality?.GetActivePreset()?.Id;
 
-            _presets.Clear();
+            var wanted = new List<(string Id, string Label, bool Selected)>();
             foreach (var preset in all)
             {
                 if (preset == null || string.IsNullOrEmpty(preset.Id)) continue;
                 var label = App.Mods?.GetPersonalityDisplayName(preset.Name) ?? preset.Name;
-                var chip = new CompanionPresetChip(preset.Id, label,
-                    string.Equals(preset.Id, activeId, StringComparison.Ordinal));
-                chip.PropertyChanged += OnChipChanged;
-                _presets.Add(chip);
+                wanted.Add((preset.Id, label,
+                    string.Equals(preset.Id, activeId, StringComparison.Ordinal)));
             }
-            Raise(nameof(Presets));
+
+            // Writing IsSelected here is us REPORTING what App.Personality did. Letting it round-trip
+            // back through OnChipChanged would re-enter ActivatePersonalityPreset and re-open the
+            // acknowledgement dialog the user may have just cancelled.
+            var previousEcho = _suppressChipEcho;
+            _suppressChipEcho = true;
+            try
+            {
+                if (SameChipSet(wanted))
+                {
+                    for (int i = 0; i < wanted.Count; i++) _presets[i].IsSelected = wanted[i].Selected;
+                    return;
+                }
+
+                foreach (var stale in _presets) stale.PropertyChanged -= OnChipChanged;
+                _presets.Clear();
+                foreach (var (id, label, selected) in wanted)
+                {
+                    var chip = new CompanionPresetChip(id, label, selected);
+                    chip.PropertyChanged += OnChipChanged;
+                    _presets.Add(chip);
+                }
+            }
+            finally
+            {
+                _suppressChipEcho = previousEcho;
+            }
+        }
+
+        /// <summary>True when the live chips already carry exactly these ids and labels, in order.</summary>
+        private bool SameChipSet(List<(string Id, string Label, bool Selected)> wanted)
+        {
+            if (wanted.Count != _presets.Count) return false;
+            for (int i = 0; i < wanted.Count; i++)
+            {
+                if (!string.Equals(_presets[i].Id, wanted[i].Id, StringComparison.Ordinal)) return false;
+                if (!string.Equals(_presets[i].Label, wanted[i].Label, StringComparison.Ordinal)) return false;
+            }
+            return true;
         }
 
         private void OnChipChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

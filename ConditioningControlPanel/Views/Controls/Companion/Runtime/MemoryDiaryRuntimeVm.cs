@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -124,7 +125,16 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
     {
         private readonly CompanionRuntimeContext _ctx;
         private readonly List<IMemoryFactVm> _all = new();
-        private readonly List<IProfileStatVm> _profile = new();
+
+        /// <summary>
+        /// Observable, not a plain list: <see cref="Rebuild"/> refills it in place, and WPF suppresses
+        /// an <c>ItemsSource</c> change whose new value is reference-equal to the old one — a
+        /// PropertyChanged raise alone left the strip rendered once at first layout and never again,
+        /// so a wipe redrew the fact wall while the profile strip kept showing the pre-wipe signals.
+        /// On the app's own "what do you have on me?" surface that is the worst place to go stale.
+        /// </summary>
+        private readonly ObservableCollection<IProfileStatVm> _profile = new();
+
         private readonly List<IFactFilterVm> _filters = new();
 
         private CompanionMemoryViewModel _inner;
@@ -219,7 +229,6 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             _profile.Clear();
             foreach (var signal in _inner.ProfileSignals)
                 _profile.Add(new CompanionProfileStat($"{signal.Label} {signal.Value}".Trim()));
-            Raise(nameof(ProfileStats));
 
             _all.Clear();
             var raw = _store?.GetFacts() ?? Array.Empty<MemoryFact>();

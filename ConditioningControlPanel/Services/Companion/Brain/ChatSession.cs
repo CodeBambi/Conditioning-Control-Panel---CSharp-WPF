@@ -106,6 +106,20 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         public int Count { get { lock (_lock) return _turns.Count; } }
 
         /// <summary>
+        /// Raised after the log changes — a turn appended, a turn rolled back (P2/H5), or the whole
+        /// thread cleared. Carries no payload: a subscriber that cares re-reads <see cref="Turns"/>,
+        /// which is the only snapshot that is safe to walk.
+        ///
+        /// <para><b>Fires on whatever thread mutated the log</b>, which is a bark thread for a
+        /// <see cref="TurnKind.BarkEcho"/> and a continuation thread for a reply. A UI subscriber
+        /// must marshal. Always raised OUTSIDE the lock so a handler cannot deadlock the session.</para>
+        ///
+        /// <para>Purely observational: nothing in the brain listens, and a throwing handler is
+        /// swallowed rather than allowed to abort an append that already happened.</para>
+        /// </summary>
+        public event EventHandler? TurnsChanged;
+
+        /// <summary>
         /// The brain's single token estimator: chars / 4. Deliberately crude and deliberately the
         /// SAME arithmetic <see cref="AiMeter"/> logs, so a budget decision and a meter line can be
         /// compared without conversion.
@@ -127,6 +141,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         {
             if (turn == null) return;
             lock (_lock) _turns.Add(turn);
+            RaiseTurnsChanged();
         }
 
         /// <summary>
@@ -152,6 +167,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         public bool Remove(CompanionTurn turn)
         {
             if (turn == null) return false;
+            bool removed = false;
             lock (_lock)
             {
                 for (int i = _turns.Count - 1; i >= 0; i--)
@@ -159,11 +175,13 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     if (ReferenceEquals(_turns[i], turn) || _turns[i].Id == turn.Id)
                     {
                         _turns.RemoveAt(i);
-                        return true;
+                        removed = true;
+                        break;
                     }
                 }
             }
-            return false;
+            if (removed) RaiseTurnsChanged();
+            return removed;
         }
 
         /// <summary>Drops everything, including the restored-turn marker. Backs "forget everything".</summary>
@@ -174,6 +192,15 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 _turns.Clear();
                 RestoredTurnCount = 0;
             }
+            RaiseTurnsChanged();
+        }
+
+        private void RaiseTurnsChanged()
+        {
+            var handler = TurnsChanged;
+            if (handler == null) return;
+            try { handler(this, EventArgs.Empty); }
+            catch (Exception ex) { App.Logger?.Debug("ChatSession: TurnsChanged handler threw: {Error}", ex.Message); }
         }
 
         /// <summary>The dialogue subset, in order — exactly what is allowed to reach disk.</summary>

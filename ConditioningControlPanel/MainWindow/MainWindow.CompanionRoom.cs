@@ -184,8 +184,9 @@ namespace ConditioningControlPanel
             if (enabled) s.CompanionPrompt.AiProvider = provider;
             App.Settings?.Save();
 
-            // Off drops any stale Live Actions — with the brain off nothing populates that feed.
-            if (!enabled) App.AiLiveActions?.Clear();
+            // Off and Cloud both drop any stale Live Actions — see ClearsLiveActions for why the
+            // `enabled` flag above cannot be used to decide this.
+            if (EngineRoomRuntimeVm.ClearsLiveActions(mode)) App.AiLiveActions?.Clear();
 
             App.Logger?.Information("Companion room: provider set to {Mode}", mode);
             OnCompanionProviderSelected(mode);
@@ -274,14 +275,19 @@ namespace ConditioningControlPanel
 
             try
             {
-                // The brain owns conversation state for every provider since Train 1 — clearing the
-                // live turn log is the load-bearing half, because deleting session.json alone is
-                // undone by the very next reply.
-                App.Brain?.ForgetConversation();
+                // ForgetThread, not ForgetConversation: the confirmation above promises in nine
+                // languages that "what she knows about you is untouched", and ForgetConversation
+                // also runs MemoryStore.ForgetChatDerived, whose RemoveAll ignores IsProtected and
+                // would take pinned and Boundary facts with it. The wider scope belongs to the
+                // diary's "Forget everything", which says so. ForgetThread clears the live turn log
+                // (the load-bearing half — deleting session.json alone is undone by the very next
+                // reply) plus the legacy local-Ollama transcript.
+                App.Brain?.ForgetThread();
 
-                // Legacy local-Ollama history file, still owned by LocalAiService whenever
-                // UseCompanionBrain=false.
-                (App.Ai as Services.AIService.AiServiceStrategy)?.ClearLocalHistory();
+                // Backstop for the no-brain case: with App.Brain null nothing above ran, and the
+                // legacy LocalAiService transcript would survive a button that says it won't.
+                if (App.Brain == null)
+                    (App.Ai as Services.AIService.AiServiceStrategy)?.ClearLocalHistory();
 
                 // And the on-screen bubble log, which is a separate store.
                 _avatarTubeWindow?.ChatHistory.Clear();

@@ -69,6 +69,13 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             {
                 if (!Set(ref _navigator, value)) return;
                 _ctx.Navigator = value;
+
+                // The page letting go of its navigator is this room's only teardown signal (the view
+                // does it from Unloaded and from a DataContext swap), and Z2 is the one zone that
+                // holds a subscription on a service — the brain's turn log — rather than only being
+                // pushed at. Nothing re-attaches it here: the next Sync does, which is also what
+                // picks the session up when the brain finishes constructing after startup.
+                if (value == null) ChatVm.Detach();
             }
         }
 

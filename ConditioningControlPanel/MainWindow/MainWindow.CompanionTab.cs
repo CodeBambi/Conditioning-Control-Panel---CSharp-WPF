@@ -176,31 +176,31 @@ namespace ConditioningControlPanel
             // visibility — are one viewmodel re-read. Z4 derives all three from the same settings.
             CompanionRoom?.PersonalityVm.Sync();
 
-            // Update installed prompts list
-            CompanionTab.InstalledPromptsPanel.Children.Clear();
-            if (installedIds.Count == 0)
+            // Update installed prompts list. The empty state is the Workshop cell's own localized
+            // TxtNoInstalledPrompts, shown and hidden rather than destroyed and re-created in
+            // hardcoded English: clearing the whole panel deleted the loc-bound child on the very
+            // first sync, so every non-English user read "No prompts installed" for the rest of the
+            // session next to otherwise fully localized siblings.
+            var panel = CompanionTab.InstalledPromptsPanel;
+            var placeholder = CompanionTab.TxtNoInstalledPrompts;
+            for (int i = panel.Children.Count - 1; i >= 0; i--)
             {
-                CompanionTab.InstalledPromptsPanel.Children.Add(new TextBlock
-                {
-                    Text = "No prompts installed",
-                    Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(80, 80, 80)),
-                    FontSize = 10,
-                    FontStyle = FontStyles.Italic,
-                    HorizontalAlignment = HorizontalAlignment.Center
-                });
+                if (!ReferenceEquals(panel.Children[i], placeholder)) panel.Children.RemoveAt(i);
             }
-            else
-            {
-                foreach (var id in installedIds)
-                {
-                    var prompt = App.CommunityPrompts?.GetInstalledPrompt(id);
-                    if (prompt == null) continue;
 
-                    var isActive = id == activePromptId;
-                    var row = CreatePromptRow(prompt, isActive);
-                    CompanionTab.InstalledPromptsPanel.Children.Add(row);
-                }
+            int shown = 0;
+            foreach (var id in installedIds)
+            {
+                var prompt = App.CommunityPrompts?.GetInstalledPrompt(id);
+                if (prompt == null) continue;
+
+                var isActive = id == activePromptId;
+                panel.Children.Add(CreatePromptRow(prompt, isActive));
+                shown++;
             }
+
+            if (placeholder != null)
+                placeholder.Visibility = shown == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private FrameworkElement CreatePromptRow(Models.CommunityPrompt prompt, bool isActive)
@@ -229,7 +229,9 @@ namespace ConditioningControlPanel
             });
             namePanel.Children.Add(new TextBlock
             {
-                Text = $" by {prompt.Author}",
+                // Loc keys that already ship in all nine files — these rows moved from a legacy
+                // accordion into the Workshop's Community pigeonhole, where every sibling is localized.
+                Text = " " + Loc.GetF("label_by_author", prompt.Author),
                 Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(96, 96, 96)),
                 FontSize = 9
             });
@@ -243,7 +245,7 @@ namespace ConditioningControlPanel
             {
                 var activateBtn = new Button
                 {
-                    Content = "Use",
+                    Content = Loc.Get("btn_activate"),
                     Background = System.Windows.Media.Brushes.Transparent,
                     Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(147, 112, 219)),
                     BorderThickness = new Thickness(0),
@@ -293,7 +295,7 @@ namespace ConditioningControlPanel
                 Padding = new Thickness(4, 0, 4, 0),
                 Cursor = System.Windows.Input.Cursors.Hand,
                 Tag = prompt.Id,
-                ToolTip = "Remove"
+                ToolTip = Loc.Get("btn_uninstall")
             };
             removeBtn.Click += (s, e) =>
             {

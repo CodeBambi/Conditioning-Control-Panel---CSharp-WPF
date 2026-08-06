@@ -120,6 +120,7 @@ namespace ConditioningControlPanel.Views.Tabs
         // ---- Z8 · COMMUNITY ----
         internal Button BtnRefreshPrompts => _vm.Shelf.Community.BtnRefreshPrompts;
         internal StackPanel InstalledPromptsPanel => _vm.Shelf.Community.InstalledPromptsPanel;
+        internal TextBlock TxtNoInstalledPrompts => _vm.Shelf.Community.TxtNoInstalledPrompts;
         internal Button HelpBtnPrompts => _vm.Shelf.Community.HelpBtnPrompts;
 
         // ---- Z8 · AWARENESS FINE-TUNING ----

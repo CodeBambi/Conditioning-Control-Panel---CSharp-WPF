@@ -56,7 +56,8 @@
                 BorderBrush="#22808080" BorderThickness="1" Background="#FF14121F">
             <ScrollViewer x:Name="InstalledPromptsScroll" VerticalScrollBarVisibility="Auto">
                 <StackPanel x:Name="InstalledPromptsPanel" x:FieldModifier="internal">
-                    <TextBlock x:Name="TxtNoInstalledPrompts" Text="{loc:Str label_no_prompts_installed_yet}"
+                    <TextBlock x:Name="TxtNoInstalledPrompts" x:FieldModifier="internal"
+                               Text="{loc:Str label_no_prompts_installed_yet}"
                                Foreground="#505050" FontSize="10.5" FontStyle="Italic"
                                HorizontalAlignment="Center" Margin="0,14,0,0"/>
                 </StackPanel>
