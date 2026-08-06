@@ -128,9 +128,15 @@ export function isCompleteCode(code) {
  * gets "no room with that code" on every launch forever after. replaceState (not
  * pushState) so the history entry is corrected rather than duplicated.
  *
- * Everything else on the querystring survives: `?server=`, `?token=`, `?uid=`,
- * `?debug=` are the phone client's credentials and bridge.js has already adopted
- * them, but a player who pinned the page still deserves them in the URL.
+ * SETTINGS survive: `?uid=`, `?name=`, `?debug=`, `?profile=`, `?mode=` are how a
+ * player who pinned this page gets the same launch back, and none of them is a
+ * secret. THE CREDENTIAL DOES NOT, and it is not this function's job: bridge.js
+ * takes `?token=` (and a `?server=` it refused) out of the address bar the moment
+ * it has read them, because a URL is screenshotted, pasted into a chat, kept in
+ * history and sent as a Referer — an account-wide auth token that survives there
+ * is a token handed to everyone who sees the link. That strip lives in bridge.js
+ * rather than here because it has to happen on EVERY launch, including the ones
+ * with no `?join=` at all.
  *
  * @param {Window} [win] defaults to the global window
  * @returns {boolean} true when a param was actually removed
