@@ -1,0 +1,140 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.Companion.RelationshipConstellation"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
+             mc:Ignorable="d"
+             d:DesignWidth="900" d:DesignHeight="120"
+             d:DataContext="{d:DesignInstance Type=local:MockRelationshipConstellationVm, IsDesignTimeCreatable=True}">
+
+    <!-- ================================================================
+         Z1 bottom band — THE RELATIONSHIP CONSTELLATION.
+         Five stage nodes on a gradient connector, sitting on the hero's
+         bottom edge. Ratchet design: names are visible, mechanics are not.
+
+         Live      → filled pink nodes behind you, a gold node where you
+                     are, faint outlines ahead, one vague flavor line.
+         Dormant   → every node an outline, names still readable, a
+                     one-shot shimmer sweep on load and the promise copy.
+                     No lock glyph: this is not a paywall.
+
+         Motion budget: the node pop is a ONE-SHOT fired on load and on
+         stage-up. The tab's single Forever loop belongs to the hero
+         portrait, not to this strip.
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/ConditioningControlPanel;component/Views/Controls/Companion/Themes/CompanionTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- One node: glyph disc over a name. The three visual states are picked by a
+                 DataTrigger on State so the item template stays code-free. -->
+            <DataTemplate x:Key="CmpConstellationNodeTemplate">
+                <Button Command="{Binding DataContext.NodeCommand,
+                                          RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        CommandParameter="{Binding}"
+                        Background="Transparent" BorderThickness="0" Cursor="Hand"
+                        ToolTip="{Binding Description}">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <StackPanel Background="Transparent">
+                                <Border x:Name="Node" Style="{StaticResource CmpConstellationNodeStyle}"
+                                        RenderTransformOrigin="0.5,0.5">
+                                    <Border.RenderTransform>
+                                        <ScaleTransform ScaleX="1" ScaleY="1"/>
+                                    </Border.RenderTransform>
+                                    <TextBlock x:Name="Glyph" Text="{Binding Glyph}" FontSize="13"
+                                               Foreground="#40FFFFFF"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <TextBlock x:Name="Label" Text="{Binding Name}"
+                                           Style="{StaticResource CmpConstellationLabelStyle}"/>
+                            </StackPanel>
+                            <ControlTemplate.Triggers>
+                                <DataTrigger Binding="{Binding State}" Value="Filled">
+                                    <Setter TargetName="Node" Property="Style"
+                                            Value="{StaticResource CmpConstellationNodeFilledStyle}"/>
+                                    <Setter TargetName="Glyph" Property="Foreground" Value="White"/>
+                                    <Setter TargetName="Label" Property="Style"
+                                            Value="{StaticResource CmpConstellationLabelReachedStyle}"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding State}" Value="Current">
+                                    <Setter TargetName="Node" Property="Style"
+                                            Value="{StaticResource CmpConstellationNodeCurrentStyle}"/>
+                                    <Setter TargetName="Glyph" Property="Foreground" Value="White"/>
+                                    <Setter TargetName="Label" Property="Style"
+                                            Value="{StaticResource CmpConstellationLabelCurrentStyle}"/>
+                                </DataTrigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </DataTemplate>
+
+            <!-- Five equal columns. UniformGrid keeps the nodes evenly spaced at any width and
+                 needs no ActualWidth arithmetic. -->
+            <ItemsPanelTemplate x:Key="CmpConstellationPanel">
+                <UniformGrid Rows="1"/>
+            </ItemsPanelTemplate>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Border BorderBrush="{StaticResource CmpHairlineBrush}" BorderThickness="0,1,0,0"
+            Background="{StaticResource CmpConstellationBandBrush}"
+            Padding="26,15,26,17" ClipToBounds="True">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- nodes + the connector running behind them -->
+            <Grid Grid.Row="0">
+                <!-- The connector sits at the vertical centre of the 28px discs (13px down) and is
+                     inset by half a node either side so it never pokes out past the first/last. -->
+                <Border Height="2" VerticalAlignment="Top" Margin="34,13,34,0" CornerRadius="1"
+                        Background="{StaticResource CmpConstellationConnectorBrush}"
+                        x:Name="ConnectorLine"/>
+                <ItemsControl ItemsSource="{Binding Nodes}"
+                              ItemsPanel="{StaticResource CmpConstellationPanel}"
+                              ItemTemplate="{StaticResource CmpConstellationNodeTemplate}"
+                              x:Name="NodeStrip"/>
+            </Grid>
+
+            <!-- live flavor: one vague line, no numbers -->
+            <TextBlock Grid.Row="1" Margin="0,11,0,0" TextAlignment="Center" TextWrapping="Wrap"
+                       Style="{StaticResource CmpFlavorTextStyle}"
+                       Visibility="{Binding IsLive, Converter={StaticResource CmpBoolToVis}}">
+                <Run Text="{Binding FlavorLine, Mode=OneWay}"/><Run Text="{Binding FlavorAccent, Mode=OneWay}"
+                     Foreground="#FFFFD9A8" FontStyle="Normal" FontWeight="SemiBold"/>
+            </TextBlock>
+
+            <!-- dormant promise: outlines above, this underneath, shimmer swept once on load -->
+            <Grid Grid.Row="2" Margin="0,11,0,0"
+                  Visibility="{Binding IsLive, Converter={StaticResource CmpBoolToVisInverse}}">
+                <Border x:Name="DormantHost" Style="{StaticResource CmpDormantBlockStyle}">
+                    <Grid>
+                        <TextBlock Text="{Binding DormantCopy}" TextAlignment="Center"
+                                   Style="{StaticResource CmpDormantCopyStyle}"/>
+                        <!-- the sweep band; its X is animated once by the code-behind -->
+                        <Border x:Name="DormantShimmer" Width="46" HorizontalAlignment="Left"
+                                Background="{StaticResource CmpShimmerSoftBrush}"
+                                IsHitTestVisible="False" Opacity="0">
+                            <Border.RenderTransform>
+                                <TransformGroup>
+                                    <SkewTransform AngleX="-18"/>
+                                    <TranslateTransform x:Name="DormantShimmerShift" X="-70"/>
+                                </TransformGroup>
+                            </Border.RenderTransform>
+                        </Border>
+                    </Grid>
+                </Border>
+                <Rectangle Style="{StaticResource CmpDashedOutlineStyle}"/>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

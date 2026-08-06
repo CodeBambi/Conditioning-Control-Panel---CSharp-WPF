@@ -1,0 +1,203 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.Companion.ChatThresholdView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
+             mc:Ignorable="d"
+             d:DesignWidth="660" d:DesignHeight="380"
+             d:DataContext="{d:DesignInstance Type=local:MockChatThresholdVm, IsDesignTimeCreatable=True}">
+
+    <!-- ================================================================
+         Z2 — TALK TO HER (the threshold surface).
+         Not a chat app on the tab: the last few turns, one input row, and
+         a hand-off to the tube chat.
+
+         States (mutually exclusive, all four ship copy):
+           Live      thread + enabled input
+           Dormant   pre-T1 honesty card ("she forgets every conversation…")
+           Disabled  provider Off — dimmed input + Engine Room jump link
+           Locked    free tier — the flagship teaser: a BLURRED STATIC mock
+                     thread under the Velvet-Vault veil. The blur runs on
+                     a handful of fake bubbles only, never over live or
+                     scrolling content, and the veil is IsHitTestVisible
+                     =False so the card never blocks tab navigation. The
+                     CTA chip is the one hit-testable thing in it.
+
+         The pink AI badge rides IsAiGenerated and nothing else — never a
+         bark, never a canned line, never a BarkEcho.
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/ConditioningControlPanel;component/Views/Controls/Companion/Themes/CompanionTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- One bubble. Her / you / echo are picked by DataTriggers so a single template
+                 serves the live thread and the staged teaser alike. -->
+            <DataTemplate x:Key="CmpChatBubbleTemplate">
+                <Grid x:Name="Row" HorizontalAlignment="Stretch">
+                    <Border x:Name="Bubble" Style="{StaticResource CmpBubbleHerStyle}">
+                        <TextBlock x:Name="BubbleText" Text="{Binding Text}"
+                                   Style="{StaticResource CmpBubbleTextStyle}"/>
+                    </Border>
+                    <!-- the AI badge floats on the bubble's top-right corner -->
+                    <Border x:Name="Badge" Style="{StaticResource CmpAiBadgeStyle}" Visibility="Collapsed">
+                        <TextBlock Text="{local:CmpStr companion_chat_ai_badge}" Style="{StaticResource CmpAiBadgeTextStyle}"/>
+                    </Border>
+                </Grid>
+                <DataTemplate.Triggers>
+                    <DataTrigger Binding="{Binding Kind}" Value="You">
+                        <Setter TargetName="Bubble" Property="Style" Value="{StaticResource CmpBubbleYouStyle}"/>
+                        <Setter TargetName="BubbleText" Property="Foreground" Value="#FFDCD4F2"/>
+                        <Setter TargetName="Badge" Property="HorizontalAlignment" Value="Left"/>
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding Kind}" Value="Echo">
+                        <Setter TargetName="Bubble" Property="Style" Value="{StaticResource CmpBubbleEchoStyle}"/>
+                        <Setter TargetName="BubbleText" Property="Style"
+                                Value="{StaticResource CmpBubbleEchoTextStyle}"/>
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding IsAiGenerated}" Value="True">
+                        <Setter TargetName="Badge" Property="Visibility" Value="Visible"/>
+                    </DataTrigger>
+                </DataTemplate.Triggers>
+            </DataTemplate>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Border Style="{StaticResource CmpCardStyle}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- ========== header ========== -->
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <Image Width="16" Height="16" Margin="0,0,9,0" VerticalAlignment="Center"
+                           Source="{Binding Source='💬', Converter={StaticResource CmpEmojiToImage}}"/>
+                    <TextBlock Text="{local:CmpStr companion_chat_title}" Style="{StaticResource CmpSectionTitleStyle}"/>
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="{Binding LastHeardCopy}"
+                           Style="{StaticResource CmpSectionHintStyle}"/>
+                <Border Grid.Column="2" Style="{StaticResource CmpTrainTagLiveStyle}">
+                    <TextBlock Text="{local:CmpStr companion_tag_train1}" Style="{StaticResource CmpTrainTagLiveTextStyle}"/>
+                </Border>
+            </Grid>
+
+            <!-- ========== thread / teaser ========== -->
+            <Grid Grid.Row="1" Margin="0,14,0,12" MinHeight="120">
+
+                <!-- live + dormant + disabled all render the real (possibly tiny) thread -->
+                <ItemsControl ItemsSource="{Binding Turns}"
+                              ItemTemplate="{StaticResource CmpChatBubbleTemplate}"
+                              Style="{StaticResource CmpVirtualizedItemsControlStyle}"
+                              MaxHeight="260"
+                              Visibility="{Binding State, Converter={StaticResource CmpEnumToVisInverse},
+                                                   ConverterParameter=Locked}"/>
+
+                <!-- the non-live states' in-character copy sits under the thread -->
+                <TextBlock Text="{Binding StateCopy}" Style="{StaticResource CmpFlavorTextStyle}"
+                           VerticalAlignment="Bottom" Margin="0,8,0,0"
+                           Visibility="{Binding StateCopy, Converter={StaticResource CmpHasContentToVis}}"/>
+
+                <!-- ===== the locked teaser ===== -->
+                <Grid Visibility="{Binding State, Converter={StaticResource CmpEnumToVis},
+                                           ConverterParameter=Locked}">
+                    <Border CornerRadius="{StaticResource CmpRadiusInner}" ClipToBounds="True"
+                            Background="{StaticResource CmpCardBrush}" Padding="10">
+                        <!-- static mock bubbles only. Small, non-scrolling, cheap to blur. -->
+                        <ItemsControl ItemsSource="{Binding TeaserTurns}"
+                                      ItemTemplate="{StaticResource CmpChatBubbleTemplate}"
+                                      IsHitTestVisible="False">
+                            <ItemsControl.Effect>
+                                <BlurEffect Radius="6"/>
+                            </ItemsControl.Effect>
+                        </ItemsControl>
+                    </Border>
+
+                    <!-- the veil: decoration, so it takes no clicks -->
+                    <Border Style="{StaticResource CmpVeilStyle}"/>
+
+                    <!-- …and the one thing in it that does -->
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <Image Style="{StaticResource CmpLockGlyphStyle}" HorizontalAlignment="Center"
+                               Source="{Binding Source='🔒', Converter={StaticResource CmpEmojiToImage}}"/>
+                        <TextBlock Text="{Binding LockCopy}" Style="{StaticResource CmpVeilCopyStyle}"/>
+                        <Button Content="{Binding LockCtaLabel}" Style="{StaticResource CmpCtaPillStyle}"
+                                HorizontalAlignment="Center" Command="{Binding UnlockCommand}"/>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+
+            <!-- ========== input row ========== -->
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0" Margin="0,0,9,0">
+                    <TextBox x:Name="DraftBox" Style="{StaticResource CmpChatInputStyle}"
+                             Text="{Binding Draft, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
+                             IsEnabled="{Binding CanSend}"
+                             KeyDown="DraftBox_KeyDown"/>
+                    <!-- placeholder: shown only while the box is empty -->
+                    <TextBlock Text="{Binding InputPlaceholder}" IsHitTestVisible="False"
+                               Foreground="{StaticResource CmpFaintBrush}" FontSize="13"
+                               Margin="19,0,0,0" VerticalAlignment="Center"
+                               Visibility="{Binding Draft, Converter={StaticResource CmpEmptyToVis}}"/>
+                </Grid>
+
+                <Button Grid.Column="1" Style="{StaticResource CmpSendButtonStyle}"
+                        Command="{Binding SendCommand}" IsEnabled="{Binding CanSend}">
+                    <TextBlock Text="♥" FontSize="16" Foreground="White"/>
+                </Button>
+            </Grid>
+
+            <!-- ========== footer ========== -->
+            <Grid Grid.Row="3" Margin="0,12,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" Content="{local:CmpStr companion_chat_open_full}" Style="{StaticResource CmpChipButtonStyle}"
+                        Command="{Binding OpenFullChatCommand}"/>
+                <Button Grid.Column="1" Content="{local:CmpStr companion_chat_history}" Style="{StaticResource CmpChipButtonStyle}"
+                        Command="{Binding HistoryCommand}"/>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right"
+                            VerticalAlignment="Center">
+                    <!-- "she's thinking" — a triggered pulse, never a Forever loop on the page -->
+                    <StackPanel x:Name="ThinkingDots" Orientation="Horizontal" Margin="0,0,10,0"
+                                VerticalAlignment="Center"
+                                Visibility="{Binding IsThinking, Converter={StaticResource CmpBoolToVis}}">
+                        <Ellipse x:Name="Dot1" Width="5" Height="5" Margin="2,0" Fill="{StaticResource CmpPinkBrush}"/>
+                        <Ellipse x:Name="Dot2" Width="5" Height="5" Margin="2,0" Fill="{StaticResource CmpPinkBrush}"/>
+                        <Ellipse x:Name="Dot3" Width="5" Height="5" Margin="2,0" Fill="{StaticResource CmpPinkBrush}"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding FooterCopy}" FontSize="10.5" FontStyle="Italic"
+                               Foreground="{StaticResource CmpFaintBrush}" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- provider-Off jump link, tucked under the footer -->
+            <Button Grid.Row="3" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="0,26,0,0"
+                    Content="{local:CmpStr companion_chat_open_engine}" Style="{StaticResource CmpLinkButtonStyle}"
+                    Command="{Binding OpenEngineRoomCommand}"
+                    Visibility="{Binding State, Converter={StaticResource CmpEnumToVis},
+                                         ConverterParameter=Disabled}"/>
+        </Grid>
+    </Border>
+</UserControl>
