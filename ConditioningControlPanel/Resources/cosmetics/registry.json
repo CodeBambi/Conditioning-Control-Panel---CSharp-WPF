@@ -98,14 +98,6 @@
       "unlock": "free"
     },
     {
-      "id": "bambi_glitter_veil",
-      "mod": "bambi",
-      "type": "deco",
-      "name": "Glitter Veil",
-      "file": "bambi/bambi_glitter_veil.png",
-      "unlock": "free"
-    },
-    {
       "id": "bambi_sleepy_mask",
       "mod": "bambi",
       "type": "deco",
@@ -479,6 +471,166 @@
       "type": "charm",
       "name": "Chrome Orb",
       "file": "circe/circe_chrome_orb.png",
+      "unlock": "free"
+    },
+    {
+      "id": "lock_padlock_collar",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Padlock Collar",
+      "file": "circe/lock_padlock_collar.png",
+      "unlock": "free"
+    },
+    {
+      "id": "lock_key_halo",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Key Halo",
+      "file": "circe/lock_key_halo.png",
+      "unlock": "free"
+    },
+    {
+      "id": "lock_keepers_tiara",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Keeper's Tiara",
+      "file": "circe/lock_keepers_tiara.png",
+      "unlock": "free"
+    },
+    {
+      "id": "lock_chain_circlet",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Chain Circlet",
+      "file": "circe/lock_chain_circlet.png",
+      "unlock": "free"
+    },
+    {
+      "id": "lock_heart_blinders",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Heart Blinders",
+      "file": "circe/lock_heart_blinders.png",
+      "unlock": "free"
+    },
+    {
+      "id": "lock_keyhole_mask",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Keyhole Mask",
+      "file": "circe/lock_keyhole_mask.png",
+      "unlock": "free"
+    },
+    {
+      "id": "lock_keyhole_monocle",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Keyhole Monocle",
+      "file": "circe/lock_keyhole_monocle.png",
+      "unlock": "free"
+    },
+    {
+      "id": "lock_key_earring",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Key Earring",
+      "file": "circe/lock_key_earring.png",
+      "unlock": "free"
+    },
+    {
+      "id": "lock_bell_collar",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Pet Bell Collar",
+      "file": "circe/lock_bell_collar.png",
+      "unlock": "free"
+    },
+    {
+      "id": "lock_leash_ribbon",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Leash Ribbon",
+      "file": "circe/lock_leash_ribbon.png",
+      "unlock": "free"
+    },
+    {
+      "id": "lock_wax_seal_pin",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Wax Seal Pin",
+      "file": "circe/lock_wax_seal_pin.png",
+      "unlock": "free"
+    },
+    {
+      "id": "lock_candle_crown",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Candle Crown",
+      "file": "circe/lock_candle_crown.png",
+      "unlock": "free"
+    },
+    {
+      "id": "lock_velvet_cuffs",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Velvet Cuffs",
+      "file": "circe/lock_velvet_cuffs.png",
+      "unlock": "free"
+    },
+    {
+      "id": "lock_chain_drape",
+      "mod": "circe",
+      "type": "deco",
+      "name": "Chain Drape",
+      "file": "circe/lock_chain_drape.png",
+      "unlock": "free"
+    },
+    {
+      "id": "lock_her_key",
+      "mod": "circe",
+      "type": "charm",
+      "name": "Her Key",
+      "file": "circe/lock_her_key.png",
+      "unlock": "free"
+    },
+    {
+      "id": "lock_heart_padlock",
+      "mod": "circe",
+      "type": "charm",
+      "name": "Heart Padlock",
+      "file": "circe/lock_heart_padlock.png",
+      "unlock": "free"
+    },
+    {
+      "id": "lock_gilded_cage",
+      "mod": "circe",
+      "type": "charm",
+      "name": "Gilded Cage",
+      "file": "circe/lock_gilded_cage.png",
+      "unlock": "free"
+    },
+    {
+      "id": "lock_dripping_candle",
+      "mod": "circe",
+      "type": "charm",
+      "name": "Dripping Candle",
+      "file": "circe/lock_dripping_candle.png",
+      "unlock": "free"
+    },
+    {
+      "id": "lock_sealed_contract",
+      "mod": "circe",
+      "type": "charm",
+      "name": "The Contract",
+      "file": "circe/lock_sealed_contract.png",
+      "unlock": "free"
+    },
+    {
+      "id": "lock_velvet_cushion",
+      "mod": "circe",
+      "type": "charm",
+      "name": "Key Cushion",
+      "file": "circe/lock_velvet_cushion.png",
       "unlock": "free"
     }
   ]
