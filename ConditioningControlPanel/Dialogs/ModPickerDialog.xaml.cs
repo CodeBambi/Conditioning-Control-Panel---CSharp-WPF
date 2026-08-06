@@ -461,6 +461,15 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // Choosing a mod here MEANS choosing to run it - the picker used to leave a first-run user
+            // on CCP Default after a 300 MB download. Pressing the button is the explicit choice, so
+            // this is the only place the intent is ever recorded, and with several ticked the first in
+            // catalogue order is the one they land on. The switch happens as soon as the content
+            // exists: right now if it is already on disk, otherwise when the pack lands - even after
+            // this dialog is gone, or in a later session.
+            PendingModActivation.Record(queue[0].ModId);
+            PendingModActivation.ApplyIfReady(PendingModActivation.Trigger.Immediate);
+
             _downloading = true;
             BtnDownload.IsEnabled = false;
             BtnDownload.Opacity = 0.45;

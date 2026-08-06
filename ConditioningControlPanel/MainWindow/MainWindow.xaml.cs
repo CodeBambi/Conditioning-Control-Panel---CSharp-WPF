@@ -1712,12 +1712,54 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Activates the mod the user chose in the first-run picker, now that its content is on disk.
+        /// Deliberately routed through the SAME two steps as the top-bar combo (ActivateMod +
+        /// <see cref="ApplyActiveModChange"/>) rather than a parallel switching path.
+        /// Called on the UI thread by <see cref="PendingModActivation"/>; never throws back into the
+        /// pack-install callback that triggered it.
+        /// </summary>
+        internal void ActivateChosenMod(string modId, PendingModActivation.Trigger trigger)
+        {
+            try
+            {
+                if (App.Mods == null || string.IsNullOrWhiteSpace(modId)) return;
+
+                App.Mods.ActivateMod(modId);
+                if (!string.Equals(App.Mods.ActiveModId, modId, StringComparison.OrdinalIgnoreCase))
+                {
+                    // ActivateMod refuses ids it doesn't know yet (registration can trail the pack).
+                    // Keep the choice pending so the next availability signal retries it.
+                    App.Logger?.Warning("[ModPicker] {ModId} could not be activated yet - keeping the choice pending", modId);
+                    return;
+                }
+
+                ApplyActiveModChange(fromPickerChoice: true);
+                PendingModActivation.Clear("activated");
+
+                App.Logger?.Information(
+                    "[ModPicker] Auto-activated the mod chosen in the first-run picker: {ModId} (trigger: {Trigger})",
+                    modId, trigger);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[ModPicker] Failed to activate the chosen mod {ModId}", modId);
+            }
+        }
+
+        /// <summary>
         /// Centralized refresh of mod-aware UI after the active mod changes.
         /// Called by both the top-bar ComboBox and the Manage Mods dialog return path.
         /// </summary>
-        private void ApplyActiveModChange()
+        /// <param name="fromPickerChoice">
+        /// True only for <see cref="ActivateChosenMod"/>. Every other caller is a MANUAL switch, which
+        /// outranks a first-run picker choice still waiting on its download - so the pending choice is
+        /// dropped rather than yanking the user off the mod they just picked by hand.
+        /// </param>
+        private void ApplyActiveModChange(bool fromPickerChoice = false)
         {
             if (App.Mods == null) return;
+
+            if (!fromPickerChoice) PendingModActivation.Clear("the user switched mods manually");
 
             App.Settings.Current.ActiveModId = App.Mods.ActiveModId;
             App.Settings.Current.ModChosen = true;
@@ -2098,6 +2140,11 @@ namespace ConditioningControlPanel
             // Wire the in-app notification surface. Anything App.Notifications.Show()'d
             // before this point is replayed on attach.
             App.Notifications?.AttachHost(NotificationHost);
+
+            // First-run picker: activate the mod the user chose there once its pack is on disk. Armed
+            // here rather than in the ctor because the switch repaints this window's tabs, and the
+            // resume case can fire the moment it is armed (download finished while the app was shut).
+            PendingModActivation.Attach(this);
 
             // Phase 1.6: legacy calibration prompt. Pre-multi-monitor-hotfix
             // saves have MonitorBounds without DeviceName, so the runtime
