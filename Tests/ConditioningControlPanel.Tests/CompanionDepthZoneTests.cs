@@ -24,7 +24,7 @@ namespace ConditioningControlPanel.Tests;
 /// proves none of that, so the checks live here:
 ///
 /// <list type="bullet">
-///   <item>Every <c>{local:CmpStr …}</c> key these five XAML files reference has an EN master.
+///   <item>Every <c>{loc:Str …}</c> key these five XAML files reference has an EN master.
 ///   A typo'd key renders as the raw key in the UI and nothing else catches it.</item>
 ///   <item>The one magic number in <c>AttentionGaugeView.xaml</c> (the 0.04 spent sliver its
 ///   DataTrigger matches) still comes back from <see cref="AttentionCopy"/>.</item>
@@ -69,8 +69,8 @@ public class CompanionDepthZoneTests
     public void EveryLocKeyTheDepthZonesReferenceHasAnEnMaster()
     {
         var folder = ZoneFolder();
-        // {local:CmpStr companion_xxx}  — the markup extension's positional-argument form.
-        var pattern = new Regex(@"\{local:CmpStr\s+([a-z0-9_]+)\s*\}", RegexOptions.Compiled);
+        // {loc:Str companion_xxx}  — the markup extension's positional-argument form.
+        var pattern = new Regex(@"\{loc:Str\s+([a-z0-9_]+)\s*\}", RegexOptions.Compiled);
 
         var missing = new List<string>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -83,14 +83,14 @@ public class CompanionDepthZoneTests
             {
                 var key = m.Groups[1].Value;
                 seen.Add(key);
-                if (!CompanionLocStaging.English.ContainsKey(key)) missing.Add($"{file}: {key}");
+                if (!CompanionLocMasters.Companion.ContainsKey(key)) missing.Add($"{file}: {key}");
             }
         }
 
         // Guard against the check going vacuous if the extension is ever renamed: these five
         // zones carry well over a dozen localized strings between them.
         Assert.True(seen.Count >= 15,
-            $"only {seen.Count} CmpStr keys found across the depth zones — the scan regex has rotted");
+            $"only {seen.Count} loc:Str keys found across the depth zones — the scan regex has rotted");
 
         Assert.True(missing.Count == 0,
             "loc keys referenced by the depth zones with no EN master: " + string.Join(", ", missing));
@@ -100,7 +100,7 @@ public class CompanionDepthZoneTests
     public void DepthZonesCarryNoBakedUserFacingText()
     {
         // Not an exhaustive lint — it catches the one mistake that is easy to make while filling a
-        // zone: typing a label straight into Text="…" instead of routing it through CmpStr or a
+        // zone: typing a label straight into Text="…" instead of routing it through {loc:Str} or a
         // viewmodel property. Bindings, markup extensions and pure glyphs are all fine.
         var folder = ZoneFolder();
         var literal = new Regex("Text=\"(?!\\{)([^\"]+)\"", RegexOptions.Compiled);
@@ -119,7 +119,7 @@ public class CompanionDepthZoneTests
         }
 
         Assert.True(offenders.Count == 0,
-            "baked user-facing text in the depth zones (use {local:CmpStr} or a VM property): " +
+            "baked user-facing text in the depth zones (use {loc:Str} or a VM property): " +
             string.Join(", ", offenders));
     }
 
@@ -165,7 +165,7 @@ public class CompanionDepthZoneTests
     [InlineData(0.0)]
     public void AttentionCopy_NeverSaysTokens_AtAnyRung(double fraction)
     {
-        var copy = CompanionLocStaging.English[AttentionCopy.CopyKeyFor(fraction)];
+        var copy = CompanionLocMasters.Companion[AttentionCopy.CopyKeyFor(fraction)];
         Assert.DoesNotContain("token", copy, StringComparison.OrdinalIgnoreCase);
     }
 

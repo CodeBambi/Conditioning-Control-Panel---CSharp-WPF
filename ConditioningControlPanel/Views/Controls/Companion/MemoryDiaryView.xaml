@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:local="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignWidth="660" d:DesignHeight="560"
              d:DataContext="{d:DesignInstance Type=local:MockMemoryDiaryVm, IsDesignTimeCreatable=True}">
@@ -78,7 +79,7 @@
                                 <!-- the gold pin, on pinned cards only -->
                                 <Image x:Name="Pin" Width="11" Height="11" HorizontalAlignment="Right"
                                        VerticalAlignment="Top" Visibility="Collapsed"
-                                       ToolTip="{local:CmpStr companion_memory_pin_tip}"
+                                       ToolTip="{loc:Str companion_memory_pin_tip}"
                                        Source="{Binding Source='📌', Converter={StaticResource CmpEmojiToImage}}"/>
                             </Grid>
 
@@ -101,12 +102,12 @@
                                         Foreground="{StaticResource CmpDimBrush}"
                                         Style="{StaticResource CmpFactActionStyle}"
                                         Command="{Binding CommitEditCommand}"
-                                        Content="{local:CmpStr companion_memory_edit_save}"/>
+                                        Content="{loc:Str companion_memory_edit_save}"/>
                                 <Button Grid.Column="2" FontSize="10.5"
                                         Foreground="{StaticResource CmpFaintBrush}"
                                         Style="{StaticResource CmpFactActionStyle}"
                                         Click="FactEditCancel_Click"
-                                        Content="{local:CmpStr companion_memory_edit_cancel}"/>
+                                        Content="{loc:Str companion_memory_edit_cancel}"/>
                             </Grid>
 
                             <Grid Grid.Row="2">
@@ -117,16 +118,16 @@
                                             HorizontalAlignment="Right" VerticalAlignment="Bottom">
                                     <Button x:Name="PinAction" Style="{StaticResource CmpFactActionStyle}"
                                             Command="{Binding PinCommand}"
-                                            ToolTip="{local:CmpStr companion_memory_pin_tip}">
+                                            ToolTip="{loc:Str companion_memory_pin_tip}">
                                         <Image Width="11" Height="11"
                                                Source="{Binding Source='📌', Converter={StaticResource CmpEmojiToImage}}"/>
                                     </Button>
                                     <Button Style="{StaticResource CmpFactActionStyle}" Command="{Binding EditCommand}"
-                                            ToolTip="{local:CmpStr companion_memory_edit_tip}">
+                                            ToolTip="{loc:Str companion_memory_edit_tip}">
                                         <TextBlock Text="✏" FontSize="11" Foreground="{StaticResource CmpDimBrush}"/>
                                     </Button>
                                     <Button Style="{StaticResource CmpFactActionStyle}" Command="{Binding ForgetCommand}"
-                                            ToolTip="{local:CmpStr companion_memory_forget_tip}">
+                                            ToolTip="{loc:Str companion_memory_forget_tip}">
                                         <Image Width="11" Height="11"
                                                Source="{Binding Source='🗑', Converter={StaticResource CmpEmojiToImage}}"/>
                                     </Button>
@@ -221,12 +222,12 @@
                 <StackPanel Grid.Column="0" Orientation="Horizontal">
                     <Image Width="16" Height="16" Margin="0,0,9,0" VerticalAlignment="Center"
                            Source="{Binding Source='📖', Converter={StaticResource CmpEmojiToImage}}"/>
-                    <TextBlock Text="{local:CmpStr companion_memory_title}" Style="{StaticResource CmpSectionTitleStyle}"/>
+                    <TextBlock Text="{loc:Str companion_memory_title}" Style="{StaticResource CmpSectionTitleStyle}"/>
                 </StackPanel>
-                <TextBlock Grid.Column="1" Text="{local:CmpStr companion_memory_hint}"
+                <TextBlock Grid.Column="1" Text="{loc:Str companion_memory_hint}"
                            Style="{StaticResource CmpSectionHintStyle}"/>
                 <Border Grid.Column="2" Style="{StaticResource CmpTrainTagLiveStyle}">
-                    <TextBlock Text="{local:CmpStr companion_tag_train1}" Style="{StaticResource CmpTrainTagLiveTextStyle}"/>
+                    <TextBlock Text="{loc:Str companion_tag_train1}" Style="{StaticResource CmpTrainTagLiveTextStyle}"/>
                 </Border>
             </Grid>
 
@@ -321,13 +322,13 @@
                         <TextBlock Grid.Column="0" VerticalAlignment="Center" TextWrapping="Wrap"
                                    Margin="0,0,10,0" FontSize="11.5" FontStyle="Italic"
                                    Foreground="#FFF2DEED"
-                                   Text="{local:CmpStr companion_memory_forget_confirm}"/>
+                                   Text="{loc:Str companion_memory_forget_confirm}"/>
                         <Button Grid.Column="1" Style="{StaticResource CmpDangerButtonStyle}"
-                                Content="{local:CmpStr companion_memory_forget_yes}"
+                                Content="{loc:Str companion_memory_forget_yes}"
                                 Command="{Binding ForgetConfirm.ConfirmCommand,
                                                   RelativeSource={RelativeSource AncestorType=UserControl}}"/>
                         <Button Grid.Column="2" Margin="8,0,0,0" Style="{StaticResource CmpGrayButtonStyle}"
-                                Content="{local:CmpStr companion_memory_forget_no}"
+                                Content="{loc:Str companion_memory_forget_no}"
                                 Command="{Binding ForgetConfirm.CancelCommand,
                                                   RelativeSource={RelativeSource AncestorType=UserControl}}"/>
                     </Grid>

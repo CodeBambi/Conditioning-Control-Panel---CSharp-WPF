@@ -1,4 +1,5 @@
 using System.Windows.Input;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Views.Controls.Companion
 {
@@ -34,7 +35,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         /// Resolved through the staged loc layer from the ladder key, so this mock exercises the
         /// exact same key selection the shipped viewmodel will use.
         /// </summary>
-        public string StateCopy => CompanionLocStaging.Resolve(AttentionCopy.CopyKeyFor(Fraction));
+        public string StateCopy => Loc.Get(AttentionCopy.CopyKeyFor(Fraction));
 
         /// <summary>
         /// Numeric detail, on demand only. Note what it never says: "tokens" — and note what it no
@@ -42,14 +43,14 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         /// hiding it behind hover left the drained card saying nothing but "tomorrow~".
         /// </summary>
         public string DetailLine { get; init; } =
-            CompanionLocStaging.Resolve("companion_attention_detail_line");
+            Loc.Get("companion_attention_detail_line");
 
         /// <summary>The barks-only floor promise, at rest, in her voice.</summary>
         public string FloorNote { get; init; } =
-            CompanionLocStaging.Resolve("companion_attention_floor_note");
+            Loc.Get("companion_attention_floor_note");
 
         public string UpsellCopy { get; init; } =
-            CompanionLocStaging.Resolve("companion_attention_upsell");
+            Loc.Get("companion_attention_upsell");
 
         public bool IsDetailShown
         {
@@ -74,7 +75,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         /// <summary>Spent: the bar keeps a sliver, barks keep playing, tomorrow is promised.</summary>
         public static MockAttentionGaugeVm Drained() => new(0.0)
         {
-            DetailLine = CompanionLocStaging.Resolve("companion_attention_detail_line_spent")
+            DetailLine = Loc.Get("companion_attention_detail_line_spent")
         };
 
         /// <summary>

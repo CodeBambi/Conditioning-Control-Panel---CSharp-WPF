@@ -66,7 +66,7 @@ public class CompanionZoneLogicTests
         Assert.Equal(keys.Length, keys.Distinct(StringComparer.Ordinal).Count());
         foreach (var key in keys)
         {
-            Assert.True(CompanionLocStaging.English.ContainsKey(key),
+            Assert.True(CompanionLocMasters.Companion.ContainsKey(key),
                 $"attention ladder key '{key}' has no EN master in the staging file");
         }
     }
@@ -95,11 +95,11 @@ public class CompanionZoneLogicTests
         var drained = MockAttentionGaugeVm.Drained();
         Assert.True(drained.ShowUpsell);
         Assert.Equal(0.04, drained.BarFraction, 6);
-        Assert.Equal(CompanionLocStaging.English["companion_attention_spent"], drained.StateCopy);
+        Assert.Equal(CompanionLocMasters.Companion["companion_attention_spent"], drained.StateCopy);
 
         var plenty = MockAttentionGaugeVm.Plenty();
         Assert.False(plenty.ShowUpsell);
-        Assert.Equal(CompanionLocStaging.English["companion_attention_plenty"], plenty.StateCopy);
+        Assert.Equal(CompanionLocMasters.Companion["companion_attention_plenty"], plenty.StateCopy);
     }
 
     // =====================================================================================
@@ -170,7 +170,7 @@ public class CompanionZoneLogicTests
     {
         for (int i = 0; i < ConstellationMath.StageCount; i++)
         {
-            Assert.True(CompanionLocStaging.English.ContainsKey(ConstellationMath.StageKey(i)),
+            Assert.True(CompanionLocMasters.Companion.ContainsKey(ConstellationMath.StageKey(i)),
                 $"stage {i} has no EN master");
         }
     }

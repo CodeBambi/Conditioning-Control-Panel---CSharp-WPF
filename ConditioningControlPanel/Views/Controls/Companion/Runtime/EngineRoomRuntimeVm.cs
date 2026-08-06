@@ -89,12 +89,12 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             }
         }
 
-        public string DrawerNote => CompanionLocStaging.Resolve("companion_engine_drawer_note");
+        public string DrawerNote => Loc.Get("companion_engine_drawer_note");
 
         // ---- cloud ----
         public bool IsLoggedIn { get => _isLoggedIn; private set => Set(ref _isLoggedIn, value); }
-        public string LoginPrompt => CompanionLocStaging.Resolve("companion_engine_login_prompt");
-        public string LoginButtonLabel => CompanionLocStaging.Resolve("companion_engine_login_button");
+        public string LoginPrompt => Loc.Get("companion_engine_login_prompt");
+        public string LoginButtonLabel => Loc.Get("companion_engine_login_button");
         public string StatusLine { get => _statusLine; private set => Set(ref _statusLine, value); }
         public bool IsHealthy { get => _isHealthy; private set => Set(ref _isHealthy, value); }
 
@@ -146,7 +146,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         // ---- live actions ----
         public bool ShowLiveActions { get => _showLiveActions; private set => Set(ref _showLiveActions, value); }
         public IReadOnlyList<string> LiveActions => _liveActions;
-        public string LiveActionsPlaceholder => CompanionLocStaging.Resolve("companion_engine_live_actions_placeholder");
+        public string LiveActionsPlaceholder => Loc.Get("companion_engine_live_actions_placeholder");
 
         public ICommand LoginCommand { get; }
         public ICommand TestConnectionCommand { get; }
@@ -161,10 +161,10 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         public ICommand ClearConversationCommand { get; }
 
         /// <summary>Label for <see cref="ClearConversationCommand"/>.</summary>
-        public string ClearConversationLabel => CompanionLocStaging.Resolve("companion_engine_clear_conversation");
+        public string ClearConversationLabel => Loc.Get("companion_engine_clear_conversation");
 
         /// <summary>The one-line explanation of what that button does and does not touch.</summary>
-        public string ClearConversationNote => CompanionLocStaging.Resolve("companion_engine_clear_conversation_note");
+        public string ClearConversationNote => Loc.Get("companion_engine_clear_conversation_note");
 
         // =====================================================================================
 
@@ -196,8 +196,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
 
             int limit = prompt?.DailyRequestLimit ?? 0;
             DailyLimitLabel = limit > 0
-                ? CompanionLocStaging.ResolveF("companion_engine_daily_limit_fmt", limit)
-                : CompanionLocStaging.Resolve("companion_engine_daily_limit_none");
+                ? Loc.GetF("companion_engine_daily_limit_fmt", limit)
+                : Loc.Get("companion_engine_daily_limit_none");
 
             IsLoggedIn = App.HasCloudIdentity;
             ShowLiveActions = _provider is CompanionProviderMode.LocalOllama or CompanionProviderMode.Custom;
@@ -243,13 +243,13 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         {
             if (_provider == CompanionProviderMode.Off)
             {
-                SetStatus(CompanionLocStaging.Resolve("companion_engine_status_off"), healthy: false);
+                SetStatus(Loc.Get("companion_engine_status_off"), healthy: false);
                 return;
             }
 
             if (_provider == CompanionProviderMode.Cloud && !App.HasCloudIdentity)
             {
-                SetStatus(CompanionLocStaging.Resolve("companion_engine_status_disconnected"), healthy: false);
+                SetStatus(Loc.Get("companion_engine_status_disconnected"), healthy: false);
                 return;
             }
 
@@ -258,8 +258,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             var text = !available
                 ? Loc.Get("label_ai_initializing")
                 : remaining >= 0
-                    ? CompanionLocStaging.ResolveF("companion_engine_status_ready_fmt", remaining)
-                    : CompanionLocStaging.Resolve("companion_engine_status_ready");
+                    ? Loc.GetF("companion_engine_status_ready_fmt", remaining)
+                    : Loc.Get("companion_engine_status_ready");
             SetStatus(text, healthy: available);
         }
 

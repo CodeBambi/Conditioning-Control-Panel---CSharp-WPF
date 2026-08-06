@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Windows.Input;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Views.Controls.Companion
 {
@@ -16,9 +17,9 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             DenyList = new IDenyChipVm[]
             {
-                new CompanionDenyChip(CompanionLocStaging.Resolve("companion_awareness_deny_passwords")),
-                new CompanionDenyChip(CompanionLocStaging.Resolve("companion_awareness_deny_banking")),
-                new CompanionDenyChip(CompanionLocStaging.Resolve("companion_awareness_deny_email"))
+                new CompanionDenyChip(Loc.Get("companion_awareness_deny_passwords")),
+                new CompanionDenyChip(Loc.Get("companion_awareness_deny_banking")),
+                new CompanionDenyChip(Loc.Get("companion_awareness_deny_email"))
             };
             AddDenyCommand = CompanionRelayCommand.NoOp("awareness.addDeny");
             AllowPerAppCommand = CompanionRelayCommand.NoOp("awareness.allowPerApp");
@@ -45,14 +46,14 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public string WireLine { get; init; } = "[ fun · Chrome · 22m ]";
         public bool IsWireLive { get; init; } = true;
         public string WireCaption { get; init; } =
-            CompanionLocStaging.Resolve("companion_awareness_wire_caption");
+            Loc.Get("companion_awareness_wire_caption");
         public string DormantCopy { get; init; } =
-            CompanionLocStaging.Resolve("companion_awareness_dormant_copy");
+            Loc.Get("companion_awareness_dormant_copy");
         public bool IsDormant { get; init; }
 
         public IReadOnlyList<IDenyChipVm> DenyList { get; init; }
         public string AddDenyLabel { get; init; } =
-            CompanionLocStaging.Resolve("companion_awareness_add_deny");
+            Loc.Get("companion_awareness_add_deny");
 
         public bool AllowPageTitles
         {
@@ -61,7 +62,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         }
 
         public string PageTitlesLabel { get; init; } =
-            CompanionLocStaging.Resolve("companion_awareness_page_titles_hidden");
+            Loc.Get("companion_awareness_page_titles_hidden");
 
         public ICommand AddDenyCommand { get; }
         public ICommand AllowPerAppCommand { get; }
@@ -92,7 +93,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             IsEverythingAvailable = true,
             IsWireLive = false,
-            WireLine = CompanionLocStaging.Resolve("companion_awareness_wire_closed"),
+            WireLine = Loc.Get("companion_awareness_wire_closed"),
             Intensity = AwarenessIntensity.Off
         };
     }

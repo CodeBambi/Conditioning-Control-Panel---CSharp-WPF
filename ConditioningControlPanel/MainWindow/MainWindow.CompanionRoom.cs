@@ -259,14 +259,14 @@ namespace ConditioningControlPanel
             // bans literal line breaks in language files, and a translated value carrying its own
             // paragraph breaks is the exact shape that broke eight of the nine files once already.
             var message = string.Join(Environment.NewLine + Environment.NewLine,
-                CompanionLocStaging.Resolve("companion_engine_clear_conversation_confirm"),
-                CompanionLocStaging.Resolve("companion_engine_clear_conversation_confirm_body"),
-                CompanionLocStaging.Resolve("companion_engine_clear_conversation_confirm_warn"));
+                Loc.Get("companion_engine_clear_conversation_confirm"),
+                Loc.Get("companion_engine_clear_conversation_confirm_body"),
+                Loc.Get("companion_engine_clear_conversation_confirm_warn"));
 
             var confirm = MessageBox.Show(
                 this,
                 message,
-                CompanionLocStaging.Resolve("companion_engine_clear_conversation"),
+                Loc.Get("companion_engine_clear_conversation"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question,
                 MessageBoxResult.No);

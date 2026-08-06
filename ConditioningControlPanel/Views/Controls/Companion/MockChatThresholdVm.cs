@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Windows.Input;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Views.Controls.Companion
 {
@@ -77,16 +78,16 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         // and a key missing from the staging table shows up as a raw key in the designer instead of
         // quietly working today and being forgotten by the loc pass tomorrow.
         public string LastHeardCopy { get; init; } =
-            string.Format(CompanionLocStaging.Resolve("companion_chat_last_heard_fmt"), "2h ago");
+            string.Format(Loc.Get("companion_chat_last_heard_fmt"), "2h ago");
         public string FooterCopy { get; init; } =
-            CompanionLocStaging.Resolve("companion_chat_footer_remembers");
+            Loc.Get("companion_chat_footer_remembers");
         public string StateCopy { get; init; } = string.Empty;
         public string LockCopy { get; init; } =
-            CompanionLocStaging.Resolve("companion_chat_lock_copy");
+            Loc.Get("companion_chat_lock_copy");
         public string LockCtaLabel { get; init; } =
-            CompanionLocStaging.Resolve("companion_chat_lock_cta");
+            Loc.Get("companion_chat_lock_cta");
         public string InputPlaceholder { get; init; } =
-            CompanionLocStaging.Resolve("companion_chat_input_placeholder");
+            Loc.Get("companion_chat_input_placeholder");
 
         public ICommand SendCommand { get; }
         public ICommand OpenFullChatCommand { get; }
@@ -143,7 +144,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public static MockChatThresholdVm Dormant() => new MockChatThresholdVm
         {
             State = CompanionZoneState.Dormant,
-            StateCopy = CompanionLocStaging.Resolve("companion_chat_dormant_copy"),
+            StateCopy = Loc.Get("companion_chat_dormant_copy"),
             FooterCopy = string.Empty,
             LastHeardCopy = string.Empty
         }.WithTurns(new IChatBubbleVm[]
@@ -158,7 +159,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             State = CompanionZoneState.Disabled,
             CanSend = false,
-            StateCopy = CompanionLocStaging.Resolve("companion_chat_disabled_copy"),
+            StateCopy = Loc.Get("companion_chat_disabled_copy"),
             FooterCopy = string.Empty,
             LastHeardCopy = string.Empty
         }.WithTurns(Array.Empty<IChatBubbleVm>());
@@ -183,14 +184,14 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         /// </summary>
         public static MockChatThresholdVm Fresh() => new MockChatThresholdVm
         {
-            FooterCopy = CompanionLocStaging.Resolve("companion_chat_footer_first"),
+            FooterCopy = Loc.Get("companion_chat_footer_first"),
             LastHeardCopy = string.Empty
         }.WithTurns(Array.Empty<IChatBubbleVm>());
 
         /// <summary>Mid-send: the three-dot pulse is running.</summary>
         public static MockChatThresholdVm Thinking()
         {
-            var vm = new MockChatThresholdVm { FooterCopy = CompanionLocStaging.Resolve("companion_chat_footer_picking") };
+            var vm = new MockChatThresholdVm { FooterCopy = Loc.Get("companion_chat_footer_picking") };
             vm.Draft = "it still does a little";
             vm.Send();
             return vm;

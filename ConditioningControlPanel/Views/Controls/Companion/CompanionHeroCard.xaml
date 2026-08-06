@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:local="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignWidth="1160" d:DesignHeight="360"
              d:DataContext="{d:DesignInstance Type=local:MockCompanionHeroCardVm, IsDesignTimeCreatable=True}">
@@ -466,7 +467,7 @@
                                        Visibility="{Binding IsCompanionEnabled, Converter={StaticResource CmpBoolToVisInverse}}">
                                 <TextBlock Text="{Binding AsleepCopy}" Style="{StaticResource CmpFlavorTextStyle}"
                                            FontSize="13" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                                <Button Content="{local:CmpStr companion_hero_wake}" Style="{StaticResource CmpCtaPillStyle}"
+                                <Button Content="{loc:Str companion_hero_wake}" Style="{StaticResource CmpCtaPillStyle}"
                                         Command="{Binding WakeCommand}" VerticalAlignment="Center"/>
                             </WrapPanel>
 
@@ -562,7 +563,7 @@
                                 <StackPanel Orientation="Horizontal">
                                     <Image Width="15" Height="15" Margin="0,0,8,0" VerticalAlignment="Center"
                                            Source="{Binding Source='💬', Converter={StaticResource CmpEmojiToImage}}"/>
-                                    <TextBlock Text="{local:CmpStr companion_hero_chat}" VerticalAlignment="Center" FontWeight="Bold"
+                                    <TextBlock Text="{loc:Str companion_hero_chat}" VerticalAlignment="Center" FontWeight="Bold"
                                                Foreground="White" FontSize="13"/>
                                     <!-- live shortcut only; its editor lives in the Workshop -->
                                     <Border Background="#30000000" CornerRadius="5" Padding="6,2,6,2" Margin="9,0,0,0"
@@ -575,9 +576,9 @@
                             </Button>
 
                             <WrapPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
-                                <Button Content="{local:CmpStr companion_hero_switch}" Style="{StaticResource CmpChipButtonStyle}"
+                                <Button Content="{loc:Str companion_hero_switch}" Style="{StaticResource CmpChipButtonStyle}"
                                         Command="{Binding SwitchCommand}"/>
-                                <Button Content="{local:CmpStr companion_hero_detach}" Style="{StaticResource CmpChipButtonStyle}"
+                                <Button Content="{loc:Str companion_hero_detach}" Style="{StaticResource CmpChipButtonStyle}"
                                         Command="{Binding DetachCommand}"/>
 
                                 <!-- OneWay + command: the interface exposes these as read-only, and a
@@ -585,7 +586,7 @@
                                 <ToggleButton Style="{StaticResource CmpChipButtonStyle}"
                                               IsChecked="{Binding IsCompanionShown, Mode=OneWay}"
                                               Command="{Binding ToggleShownCommand}"
-                                              ToolTip="{local:CmpStr companion_hero_show_tip}">
+                                              ToolTip="{loc:Str companion_hero_show_tip}">
                                     <Image Width="13" Height="13">
                                         <Image.Style>
                                             <Style TargetType="Image">
@@ -605,7 +606,7 @@
                                 <ToggleButton Style="{StaticResource CmpChipButtonStyle}" Margin="0"
                                               IsChecked="{Binding IsMuted, Mode=OneWay}"
                                               Command="{Binding ToggleMuteCommand}"
-                                              ToolTip="{local:CmpStr companion_hero_mute_tip}">
+                                              ToolTip="{loc:Str companion_hero_mute_tip}">
                                     <Image Width="13" Height="13">
                                         <Image.Style>
                                             <Style TargetType="Image">
@@ -626,7 +627,7 @@
                             <Border Style="{StaticResource CmpGoldPlateStyle}" HorizontalAlignment="Right"
                                     Margin="0,12,0,0">
                                 <StackPanel>
-                                    <TextBlock Text="{local:CmpStr companion_hero_level_plate}" Style="{StaticResource CmpGoldPlateKeyStyle}"/>
+                                    <TextBlock Text="{loc:Str companion_hero_level_plate}" Style="{StaticResource CmpGoldPlateKeyStyle}"/>
                                     <TextBlock Text="{Binding Level}" Style="{StaticResource CmpGoldPlateValueStyle}"/>
                                 </StackPanel>
                             </Border>

@@ -8,6 +8,7 @@ using System.Windows.Threading;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Companion.Brain;
 using ConditioningControlPanel.Services.Moderation;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
 {
@@ -104,21 +105,21 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         public string LastHeardCopy { get => _lastHeardCopy; private set => Set(ref _lastHeardCopy, value); }
 
         public string FooterCopy => IsThinking
-            ? CompanionLocStaging.Resolve("companion_chat_footer_picking")
+            ? Loc.Get("companion_chat_footer_picking")
             : _turns.Count == 0
-                ? CompanionLocStaging.Resolve("companion_chat_footer_first")
-                : CompanionLocStaging.Resolve("companion_chat_footer_remembers");
+                ? Loc.Get("companion_chat_footer_first")
+                : Loc.Get("companion_chat_footer_remembers");
 
         public string StateCopy => State switch
         {
-            CompanionZoneState.Dormant => CompanionLocStaging.Resolve("companion_chat_dormant_copy"),
-            CompanionZoneState.Disabled => CompanionLocStaging.Resolve("companion_chat_disabled_copy"),
+            CompanionZoneState.Dormant => Loc.Get("companion_chat_dormant_copy"),
+            CompanionZoneState.Disabled => Loc.Get("companion_chat_disabled_copy"),
             _ => string.Empty
         };
 
-        public string LockCopy => CompanionLocStaging.Resolve("companion_chat_lock_copy");
-        public string LockCtaLabel => CompanionLocStaging.Resolve("companion_chat_lock_cta");
-        public string InputPlaceholder => CompanionLocStaging.Resolve("companion_chat_input_placeholder");
+        public string LockCopy => Loc.Get("companion_chat_lock_copy");
+        public string LockCtaLabel => Loc.Get("companion_chat_lock_cta");
+        public string InputPlaceholder => Loc.Get("companion_chat_input_placeholder");
 
         public ICommand SendCommand { get; }
         public ICommand OpenFullChatCommand { get; }
@@ -247,7 +248,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             _lastHeardUtc = last?.Utc;
             LastHeardCopy = _lastHeardUtc == null
                 ? string.Empty
-                : CompanionLocStaging.ResolveF("companion_chat_last_heard_fmt", RelativeTime(_lastHeardUtc.Value));
+                : Loc.GetF("companion_chat_last_heard_fmt", RelativeTime(_lastHeardUtc.Value));
         }
 
         /// <summary>"just now" / "22m ago" / "2h ago" / "3d ago". Never a raw timestamp.</summary>
@@ -255,10 +256,10 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         {
             var delta = DateTime.UtcNow - utc;
             if (delta < TimeSpan.Zero) delta = TimeSpan.Zero;
-            if (delta.TotalMinutes < 1) return CompanionLocStaging.Resolve("companion_chat_time_now");
-            if (delta.TotalHours < 1) return CompanionLocStaging.ResolveF("companion_chat_time_minutes", (int)delta.TotalMinutes);
-            if (delta.TotalDays < 1) return CompanionLocStaging.ResolveF("companion_chat_time_hours", (int)delta.TotalHours);
-            return CompanionLocStaging.ResolveF("companion_chat_time_days", (int)delta.TotalDays);
+            if (delta.TotalMinutes < 1) return Loc.Get("companion_chat_time_now");
+            if (delta.TotalHours < 1) return Loc.GetF("companion_chat_time_minutes", (int)delta.TotalMinutes);
+            if (delta.TotalDays < 1) return Loc.GetF("companion_chat_time_hours", (int)delta.TotalHours);
+            return Loc.GetF("companion_chat_time_days", (int)delta.TotalDays);
         }
 
         // =====================================================================================
@@ -352,9 +353,9 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         private static IReadOnlyList<IChatBubbleVm> BuildTeaser() => new IChatBubbleVm[]
         {
             new CompanionChatBubble(CompanionBubbleKind.You,
-                CompanionLocStaging.Resolve("companion_chat_teaser_you")),
+                Loc.Get("companion_chat_teaser_you")),
             new CompanionChatBubble(CompanionBubbleKind.Her,
-                CompanionLocStaging.Resolve("companion_chat_teaser_her"), isAi: true)
+                Loc.Get("companion_chat_teaser_her"), isAi: true)
         };
     }
 }

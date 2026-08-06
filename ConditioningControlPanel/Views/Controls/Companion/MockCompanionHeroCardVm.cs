@@ -1,5 +1,6 @@
 using System.Windows.Input;
 using System.Windows.Media;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Views.Controls.Companion
 {
@@ -54,20 +55,20 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         public bool IsAwarenessOpen { get; init; } = true;
         public string AiPillText { get; init; } =
-            CompanionLocStaging.Resolve("companion_hero_pill_ai_cloud");
+            Loc.Get("companion_hero_pill_ai_cloud");
         public string AwarenessPillText { get; init; } =
-            CompanionLocStaging.Resolve("companion_hero_pill_eyes_broad");
+            Loc.Get("companion_hero_pill_eyes_broad");
         public string AsleepCopy { get; init; } =
-            CompanionLocStaging.Resolve("companion_hero_asleep_copy");
+            Loc.Get("companion_hero_asleep_copy");
 
         public bool IsMoodLive { get; init; }
         /// <summary>The live mood glyph. Pre-Train-4 the view swaps in the sleeping moon itself.</summary>
         public string MoodGlyph { get; init; } = "✧";
         /// <summary>Dormant on purpose: claiming a mood she does not have yet would be a lie.</summary>
         public string MoodWord { get; init; } =
-            CompanionLocStaging.Resolve("companion_hero_mood_asleep");
+            Loc.Get("companion_hero_mood_asleep");
         public string MoodCaption { get; init; } =
-            CompanionLocStaging.Resolve("companion_hero_mood_caption_dormant");
+            Loc.Get("companion_hero_mood_caption_dormant");
 
         public int Level { get; init; } = 41;
         public double XpFraction { get; init; } = 0.62;
@@ -119,7 +120,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             IsMoodLive = true,
             MoodWord = "bratty",
-            MoodCaption = CompanionLocStaging.Resolve("companion_hero_mood_caption_live"),
+            MoodCaption = Loc.Get("companion_hero_mood_caption_live"),
             Constellation = MockRelationshipConstellationVm.Live()
         };
 
@@ -135,7 +136,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             // "Off — she's asleep": companion disabled, provider Off, and no entitlement. Only
             // the last one is a thing the user can buy, and telling a paying-curious reader she
             // is asleep contradicts the teaser ribbon two inches to the left.
-            AiPillText = CompanionLocStaging.Resolve("companion_hero_pill_ai_locked"),
+            AiPillText = Loc.Get("companion_hero_pill_ai_locked"),
             IsAiLocked = true
         };
 
@@ -148,17 +149,17 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             IsCompanionEnabled = false,
             IsAiLive = false,
             IsAwarenessOpen = false,
-            AiPillText = CompanionLocStaging.Resolve("companion_hero_pill_ai_off"),
-            AwarenessPillText = CompanionLocStaging.Resolve("companion_hero_pill_eyes_closed")
+            AiPillText = Loc.Get("companion_hero_pill_ai_off"),
+            AwarenessPillText = Loc.Get("companion_hero_pill_eyes_closed")
         };
 
         /// <summary>Provider Off but she is awake — barks still work, so the hero stays alive.</summary>
         public static MockCompanionHeroCardVm AiOff() => new()
         {
             IsAiLive = false,
-            AiPillText = CompanionLocStaging.Resolve("companion_hero_pill_ai_off"),
+            AiPillText = Loc.Get("companion_hero_pill_ai_off"),
             IsAwarenessOpen = false,
-            AwarenessPillText = CompanionLocStaging.Resolve("companion_hero_pill_eyes_closed")
+            AwarenessPillText = Loc.Get("companion_hero_pill_eyes_closed")
         };
 
         /// <summary>A brand-new account: level 1, nothing earned, page still full of life.</summary>

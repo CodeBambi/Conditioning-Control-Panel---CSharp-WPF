@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:local="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignWidth="430" d:DesignHeight="560"
              d:DataContext="{d:DesignInstance Type=local:MockMakeHerYoursVm, IsDesignTimeCreatable=True}">
@@ -106,10 +107,10 @@
                 <StackPanel Grid.Column="0" Orientation="Horizontal">
                     <Image Width="16" Height="16" Margin="0,0,9,0" VerticalAlignment="Center"
                            Source="{Binding Source='🪞', Converter={StaticResource CmpEmojiToImage}}"/>
-                    <TextBlock Text="{local:CmpStr companion_personality_title}" Style="{StaticResource CmpSectionTitleStyle}"/>
+                    <TextBlock Text="{loc:Str companion_personality_title}" Style="{StaticResource CmpSectionTitleStyle}"/>
                 </StackPanel>
                 <Border Grid.Column="2" Style="{StaticResource CmpTrainTagStyle}">
-                    <TextBlock Text="{local:CmpStr companion_tag_train3}" Style="{StaticResource CmpTrainTagTextStyle}"/>
+                    <TextBlock Text="{loc:Str companion_tag_train3}" Style="{StaticResource CmpTrainTagTextStyle}"/>
                 </Border>
             </Grid>
 
@@ -190,16 +191,16 @@
                 <Border Style="{StaticResource CmpTraitChipStyle}">
                     <TextBlock Text="{Binding InterviewedLine}" Style="{StaticResource CmpTraitChipTextStyle}"/>
                 </Border>
-                <Button Content="{local:CmpStr companion_personality_reinterview}" VerticalAlignment="Center"
+                <Button Content="{loc:Str companion_personality_reinterview}" VerticalAlignment="Center"
                         Style="{StaticResource CmpLinkButtonStyle}" Command="{Binding StartInterviewCommand}"/>
-                <Button Content="{local:CmpStr companion_personality_adjust}" VerticalAlignment="Center"
+                <Button Content="{loc:Str companion_personality_adjust}" VerticalAlignment="Center"
                         Style="{StaticResource CmpLinkButtonStyle}" Command="{Binding OpenTraitDashboardCommand}"/>
             </WrapPanel>
 
             <!-- ========== trait glance (read-only; the dashboard is one click down) ========== -->
             <Button Style="{StaticResource CmpLinkButtonStyle}" Padding="0" HorizontalAlignment="Stretch"
                     Command="{Binding OpenTraitDashboardCommand}"
-                    ToolTip="{local:CmpStr companion_personality_traits_tip}"
+                    ToolTip="{loc:Str companion_personality_traits_tip}"
                     Visibility="{Binding AreTraitsAvailable, Converter={StaticResource CmpBoolToVis}}">
                 <Button.Template>
                     <ControlTemplate TargetType="Button">
@@ -264,11 +265,11 @@
             <!-- ========== expert door ========== -->
             <Border BorderBrush="#12FFFFFF" BorderThickness="0,1,0,0" Padding="0,10,0,0">
                 <WrapPanel Orientation="Horizontal">
-                    <Button Content="{local:CmpStr companion_personality_view_prompt}" Style="{StaticResource CmpLinkButtonStyle}"
+                    <Button Content="{loc:Str companion_personality_view_prompt}" Style="{StaticResource CmpLinkButtonStyle}"
                             Command="{Binding ViewCompiledPromptCommand}"/>
-                    <Button Content="{local:CmpStr companion_personality_fork}" Style="{StaticResource CmpLinkButtonStyle}"
+                    <Button Content="{loc:Str companion_personality_fork}" Style="{StaticResource CmpLinkButtonStyle}"
                             Command="{Binding ForkPromptCommand}"/>
-                    <Button Content="{local:CmpStr companion_personality_community}" Style="{StaticResource CmpLinkButtonStyle}"
+                    <Button Content="{loc:Str companion_personality_community}" Style="{StaticResource CmpLinkButtonStyle}"
                             Command="{Binding CommunityPromptsCommand}"/>
                 </WrapPanel>
             </Border>

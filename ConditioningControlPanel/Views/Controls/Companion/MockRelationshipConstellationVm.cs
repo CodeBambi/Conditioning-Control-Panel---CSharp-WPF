@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Windows.Input;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Views.Controls.Companion
 {
@@ -27,11 +28,11 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public ICommand NodeCommand { get; }
 
         public string FlavorLine { get; init; } =
-            CompanionLocStaging.Resolve("companion_constellation_flavor");
+            Loc.Get("companion_constellation_flavor");
         public string FlavorAccent { get; init; } =
-            CompanionLocStaging.Resolve("companion_constellation_flavor_accent");
+            Loc.Get("companion_constellation_flavor_accent");
         public string DormantCopy { get; init; } =
-            CompanionLocStaging.Resolve("companion_constellation_dormant");
+            Loc.Get("companion_constellation_dormant");
 
         /// <summary>Stage 2 of 5, live — the artboard state.</summary>
         public static MockRelationshipConstellationVm Live() => new(isLive: true, currentStage: 2);
@@ -42,15 +43,15 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         /// <summary>Freshly met — the very first node is current, nothing is filled.</summary>
         public static MockRelationshipConstellationVm FreshlyMet() => new(isLive: true, currentStage: 0)
         {
-            FlavorLine = CompanionLocStaging.Resolve("companion_constellation_flavor_new"),
-            FlavorAccent = CompanionLocStaging.Resolve("companion_constellation_flavor_new_accent")
+            FlavorLine = Loc.Get("companion_constellation_flavor_new"),
+            FlavorAccent = Loc.Get("companion_constellation_flavor_new_accent")
         };
 
         /// <summary>The end of the ratchet.</summary>
         public static MockRelationshipConstellationVm Inevitable() => new(isLive: true, currentStage: 4)
         {
-            FlavorLine = CompanionLocStaging.Resolve("companion_constellation_flavor_final"),
-            FlavorAccent = CompanionLocStaging.Resolve("companion_constellation_flavor_final_accent")
+            FlavorLine = Loc.Get("companion_constellation_flavor_final"),
+            FlavorAccent = Loc.Get("companion_constellation_flavor_final_accent")
         };
 
         private static IReadOnlyList<IConstellationNodeVm> BuildNodes(bool isLive, int currentStage)
@@ -66,10 +67,10 @@ namespace ConditioningControlPanel.Views.Controls.Companion
                 list.Add(new CompanionConstellationNode
                 {
                     Index = i,
-                    Name = CompanionLocStaging.Resolve(ConstellationMath.StageKey(i)),
+                    Name = Loc.Get(ConstellationMath.StageKey(i)),
                     // Mockup glyph ladder: reached ✦, here ★, still ahead ✧.
                     Glyph = GlyphFor(state),
-                    Description = CompanionLocStaging.Resolve($"companion_stage_{i}_blurb"),
+                    Description = Loc.Get($"companion_stage_{i}_blurb"),
                     State = state
                 });
             }

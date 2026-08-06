@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Windows.Input;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
 {
@@ -69,11 +70,11 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             set => Set(ref _isExpanded, value);
         }
 
-        public string DrawerNote => CompanionLocStaging.Resolve("companion_workshop_drawer_note");
+        public string DrawerNote => Loc.Get("companion_workshop_drawer_note");
         public IReadOnlyList<IWorkshopCellVm> Cells { get; }
         public ICommand FocusCellCommand { get; }
 
         private static CompanionWorkshopCell Cell(string key, string titleKey, object content) =>
-            new(CompanionLocStaging.Resolve(titleKey)) { Key = key, Content = content };
+            new(Loc.Get(titleKey)) { Key = key, Content = content };
     }
 }

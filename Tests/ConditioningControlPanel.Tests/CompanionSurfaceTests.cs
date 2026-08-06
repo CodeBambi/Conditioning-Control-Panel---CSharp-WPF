@@ -481,48 +481,16 @@ public class CompanionSurfaceTests
     }
 
     // =====================================================================================
-    //  staged localization for this package
+    //  localization for this package
     // =====================================================================================
 
     /// <summary>
-    /// This package staged its keys in loc-staging-surfaces.json while it was its own branch. The
-    /// composed page merged the three package files into one key-sorted hand-off, so the assertions
-    /// below now read the merged file — they still check the same thing: every key these two
-    /// surfaces draw is in the hand-off, strictly parseable, and agreeing with the EN masters.
+    /// This package staged its keys in loc-staging-surfaces.json while it was its own branch, and
+    /// the assertion below used to read that hand-off. The loc pass merged every staged key into
+    /// the nine shipping language files and deleted the vehicle, so it now reads <c>en.json</c>
+    /// itself — same question, better answer: a key that never reached the language files fails
+    /// here instead of resolving out of a private table nothing ships.
     /// </summary>
-    private static string PackageStagingFilePath()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null)
-        {
-            var candidate = Path.Combine(dir.FullName, "ConditioningControlPanel",
-                CompanionLocStaging.StagingFileRelativePath);
-            if (File.Exists(candidate)) return candidate;
-            dir = dir.Parent;
-        }
-        throw new FileNotFoundException(
-            $"Could not locate {CompanionLocStaging.StagingFileRelativePath} walking up from " +
-            AppContext.BaseDirectory);
-    }
-
-    [Fact]
-    public void ThePackageStagingFile_IsStrictJson_AndAgreesWithTheEnMasters()
-    {
-        var mine = JsonSerializer.Deserialize<Dictionary<string, string>>(
-            File.ReadAllText(PackageStagingFilePath()));
-        Assert.NotNull(mine);
-        Assert.NotEmpty(mine!);
-
-        foreach (var kv in mine!)
-        {
-            Assert.True(CompanionLocStaging.English.TryGetValue(kv.Key, out var master),
-                $"'{kv.Key}' is in this package's hand-off but has no EN master");
-            Assert.Equal(master, kv.Value);
-            Assert.DoesNotContain('\n', kv.Value);
-            Assert.DoesNotContain('\r', kv.Value);
-        }
-    }
-
     [Fact]
     public void EveryStringTheseTwoSurfacesDraw_HasAnEnMaster()
     {
@@ -540,8 +508,8 @@ public class CompanionSurfaceTests
 
         foreach (var key in keys)
         {
-            Assert.True(CompanionLocStaging.English.ContainsKey(key), $"'{key}' has no EN master");
-            Assert.NotEqual(key, CompanionLocStaging.Resolve(key));
+            Assert.True(CompanionLocMasters.Companion.ContainsKey(key), $"'{key}' has no EN master");
+            Assert.NotEqual(key, CompanionLocMasters.Get(key));
         }
     }
 

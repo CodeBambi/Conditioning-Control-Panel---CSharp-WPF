@@ -6,6 +6,7 @@ using System.Linq;
 using System.Windows.Input;
 using ConditioningControlPanel.Services.Companion.Brain;
 using ConditioningControlPanel.ViewModels;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
 {
@@ -55,7 +56,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         public string Id => _row.Id;
         public string Text => _row.Text;
         public string KindKey => KindKeyFor(_row.Kind);
-        public string KindLabel => CompanionLocStaging.Resolve("companion_memory_card_" + KindKey);
+        public string KindLabel => Loc.Get("companion_memory_card_" + KindKey);
         public string MetaLabel => BuildMeta(_fact.Uses, _fact.LastUsed, _row.IsUserEdited);
         public bool IsBoundary => _row.Kind == MemoryFactKind.Boundary;
         public bool IsPinned => _row.Pinned;
@@ -97,13 +98,13 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         internal static string BuildMeta(int uses, DateTime? lastUsed, bool userEdited)
         {
             var parts = new List<string>(3);
-            if (uses > 0) parts.Add(CompanionLocStaging.ResolveF("companion_memory_meta_uses", uses));
+            if (uses > 0) parts.Add(Loc.GetF("companion_memory_meta_uses", uses));
             if (lastUsed.HasValue)
-                parts.Add(CompanionLocStaging.ResolveF(
+                parts.Add(Loc.GetF(
                     "companion_memory_meta_last", ChatThresholdRuntimeVm.RelativeTime(lastUsed.Value)));
-            if (userEdited) parts.Add(CompanionLocStaging.Resolve("companion_memory_meta_edited"));
+            if (userEdited) parts.Add(Loc.Get("companion_memory_meta_edited"));
             return parts.Count == 0
-                ? CompanionLocStaging.Resolve("companion_memory_meta_new")
+                ? Loc.Get("companion_memory_meta_new")
                 : string.Join(" · ", parts);
         }
     }
@@ -140,7 +141,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             foreach (var key in FactOrdering.FilterKeys)
             {
                 var chip = new CompanionFactFilter(key,
-                    CompanionLocStaging.Resolve("companion_memory_filter_" + key),
+                    Loc.Get("companion_memory_filter_" + key),
                     selected: key == "all");
                 chip.PropertyChanged += (s, e) =>
                 {
@@ -156,7 +157,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             Sync();
         }
 
-        public string ProfileStripLabel => CompanionLocStaging.Resolve("companion_memory_profile_strip");
+        public string ProfileStripLabel => Loc.Get("companion_memory_profile_strip");
         public IReadOnlyList<IProfileStatVm> ProfileStats => _profile;
         public IReadOnlyList<IFactFilterVm> Filters => _filters;
         public IReadOnlyList<IMemoryFactVm> Facts => _facts;
@@ -177,10 +178,10 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         /// <summary>True when nothing but the dormant promise card is on the wall.</summary>
         public bool IsEmpty => _all.All(f => f.IsDormant);
 
-        public string EmptyCopy => CompanionLocStaging.Resolve("companion_memory_empty_copy");
-        public string StorageNote => CompanionLocStaging.Resolve("companion_memory_storage_note");
-        public string StorageLinkLabel => CompanionLocStaging.Resolve("companion_memory_storage_link");
-        public string ForgetEverythingLabel => CompanionLocStaging.Resolve("companion_memory_forget_everything");
+        public string EmptyCopy => Loc.Get("companion_memory_empty_copy");
+        public string StorageNote => Loc.Get("companion_memory_storage_note");
+        public string StorageLinkLabel => Loc.Get("companion_memory_storage_link");
+        public string ForgetEverythingLabel => Loc.Get("companion_memory_forget_everything");
 
         public ICommand OpenStorageFolderCommand { get; }
         public ICommand ForgetEverythingCommand { get; }
@@ -237,9 +238,9 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             // exempts it from the kind filter), so an empty diary is a promise, not a void.
             _all.Add(new CompanionMemoryFact
             {
-                Text = CompanionLocStaging.Resolve("companion_memory_dormant_promise"),
+                Text = Loc.Get("companion_memory_dormant_promise"),
                 KindKey = "dormant",
-                KindLabel = CompanionLocStaging.Resolve("companion_memory_card_dormant"),
+                KindLabel = Loc.Get("companion_memory_card_dormant"),
                 MetaLabel = string.Empty,
                 IsDormant = true
             });

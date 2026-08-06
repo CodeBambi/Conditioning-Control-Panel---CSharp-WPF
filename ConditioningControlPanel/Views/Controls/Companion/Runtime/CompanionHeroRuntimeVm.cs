@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Windows.Input;
 using System.Windows.Media;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
 {
@@ -28,12 +29,12 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             Sync();
         }
 
-        public string Title => CompanionLocStaging.Resolve("companion_header_title");
-        public string Subtitle => CompanionLocStaging.Resolve("companion_header_subtitle");
-        public string TutorialLabel => CompanionLocStaging.Resolve("companion_header_tutorial");
-        public string AiPlateLabel => CompanionLocStaging.Resolve("companion_header_plate_ai");
-        public string NextTierPlateLabel => CompanionLocStaging.Resolve("companion_header_plate_next");
-        public string TeaserRibbonLabel => CompanionLocStaging.Resolve("companion_header_teaser");
+        public string Title => Loc.Get("companion_header_title");
+        public string Subtitle => Loc.Get("companion_header_subtitle");
+        public string TutorialLabel => Loc.Get("companion_header_tutorial");
+        public string AiPlateLabel => Loc.Get("companion_header_plate_ai");
+        public string NextTierPlateLabel => Loc.Get("companion_header_plate_next");
+        public string TeaserRibbonLabel => Loc.Get("companion_header_teaser");
 
         public bool HasAiAccess
         {
@@ -125,13 +126,13 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         public bool IsAwarenessOpen { get => _isAwarenessOpen; private set => Set(ref _isAwarenessOpen, value); }
         public string AiPillText { get => _aiPillText; private set => Set(ref _aiPillText, value); }
         public string AwarenessPillText { get => _awarenessPillText; private set => Set(ref _awarenessPillText, value); }
-        public string AsleepCopy => CompanionLocStaging.Resolve("companion_hero_asleep_copy");
+        public string AsleepCopy => Loc.Get("companion_hero_asleep_copy");
 
         // ---- mood token: Train 4 ----
         public bool IsMoodLive => false;
         public string MoodGlyph => "✧";
-        public string MoodWord => CompanionLocStaging.Resolve("companion_hero_mood_asleep");
-        public string MoodCaption => CompanionLocStaging.Resolve("companion_hero_mood_caption_dormant");
+        public string MoodWord => Loc.Get("companion_hero_mood_asleep");
+        public string MoodCaption => Loc.Get("companion_hero_mood_caption_dormant");
 
         // ---- progression ----
         public int Level { get => _level; private set => Set(ref _level, value); }
@@ -192,11 +193,11 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
                 Level = progress.Level;
                 XpFraction = progress.IsMaxLevel ? 1.0 : Clamp01(progress.LevelProgress);
                 XpLabel = progress.IsMaxLevel
-                    ? CompanionLocStaging.Resolve("companion_hero_xp_complete")
+                    ? Loc.Get("companion_hero_xp_complete")
                     : $"{progress.CurrentXP:F0} / {progress.XPForNextLevel:F0} XP";
                 NextLevelLabel = progress.IsMaxLevel
-                    ? CompanionLocStaging.Resolve("companion_hero_max_level")
-                    : CompanionLocStaging.ResolveF("companion_hero_next_level_fmt", progress.Level + 1);
+                    ? Loc.Get("companion_hero_max_level")
+                    : Loc.GetF("companion_hero_next_level_fmt", progress.Level + 1);
             }
 
             // ---- her switches ----
@@ -218,20 +219,20 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             IsAiLive = aiOn && !IsAiLocked;
 
             AiPillText = !aiOn
-                ? CompanionLocStaging.Resolve("companion_hero_pill_ai_off")
+                ? Loc.Get("companion_hero_pill_ai_off")
                 : IsAiLocked
-                    ? CompanionLocStaging.Resolve("companion_hero_pill_ai_locked")
+                    ? Loc.Get("companion_hero_pill_ai_locked")
                     : provider switch
                     {
                         AiProviderType.Local => Localization.Loc.Get("label_ai_status_pill_local"),
                         AiProviderType.OpenAiCompatible => Localization.Loc.Get("label_ai_status_pill_custom"),
-                        _ => CompanionLocStaging.Resolve("companion_hero_pill_ai_cloud")
+                        _ => Loc.Get("companion_hero_pill_ai_cloud")
                     };
 
             IsAwarenessOpen = settings?.AwarenessModeEnabled == true;
             AwarenessPillText = IsAwarenessOpen
-                ? CompanionLocStaging.Resolve("companion_hero_pill_eyes_broad")
-                : CompanionLocStaging.Resolve("companion_hero_pill_eyes_closed");
+                ? Loc.Get("companion_hero_pill_eyes_broad")
+                : Loc.Get("companion_hero_pill_eyes_closed");
         }
 
         private static double Clamp01(double v) => v < 0 ? 0 : (v > 1 ? 1 : v);
@@ -296,7 +297,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
                     Index = i,
                     Name = ResolveStage(i, modId),
                     Glyph = "✧",
-                    Description = CompanionLocStaging.Resolve($"companion_stage_{i}_blurb"),
+                    Description = Loc.Get($"companion_stage_{i}_blurb"),
                     State = ConstellationMath.StateFor(i, 0, isLive: false)
                 });
             }
@@ -307,9 +308,9 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         public bool IsLive => false;
         public int CurrentStage => 0;
         public IReadOnlyList<IConstellationNodeVm> Nodes { get; }
-        public string FlavorLine => CompanionLocStaging.Resolve("companion_constellation_flavor_new");
-        public string FlavorAccent => CompanionLocStaging.Resolve("companion_constellation_flavor_new_accent");
-        public string DormantCopy => CompanionLocStaging.Resolve("companion_constellation_dormant");
+        public string FlavorLine => Loc.Get("companion_constellation_flavor_new");
+        public string FlavorAccent => Loc.Get("companion_constellation_flavor_new_accent");
+        public string DormantCopy => Loc.Get("companion_constellation_dormant");
         public ICommand NodeCommand { get; }
 
         /// <summary>A mod may reflavor a stage name; the base key is the fallback.</summary>
@@ -318,10 +319,10 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             if (!string.IsNullOrEmpty(modId))
             {
                 var modKey = ConstellationMath.StageKey(index, modId);
-                var modName = CompanionLocStaging.Resolve(modKey);
+                var modName = Loc.Get(modKey);
                 if (!string.Equals(modName, modKey, StringComparison.Ordinal)) return modName;
             }
-            return CompanionLocStaging.Resolve(ConstellationMath.StageKey(index));
+            return Loc.Get(ConstellationMath.StageKey(index));
         }
 
         private static string? SafeModId()

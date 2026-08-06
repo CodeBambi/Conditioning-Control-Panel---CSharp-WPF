@@ -13,6 +13,7 @@ namespace ConditioningControlPanel.Tests;
 /// column, and a wrong fraction is the kind of bug that renders as "slightly off" forever rather
 /// than as a crash.
 /// </summary>
+[Collection(CompanionWpfRenderCollection.Name)]
 public class CompanionHeroLogicTests
 {
     // ------------------------------------------------------------------ connector geometry
@@ -120,7 +121,7 @@ public class CompanionHeroLogicTests
         var vm = MockRelationshipConstellationVm.Live();
         for (int i = 0; i < vm.Nodes.Count; i++)
         {
-            Assert.Equal(CompanionLocStaging.Resolve($"companion_stage_{i}"), vm.Nodes[i].Name);
+            Assert.Equal(CompanionLocMasters.Get($"companion_stage_{i}"), vm.Nodes[i].Name);
         }
     }
 
@@ -207,9 +208,9 @@ public class CompanionHeroLogicTests
     {
         var header = MockCompanionHeaderVm.Entitled();
 
-        Assert.Equal(CompanionLocStaging.Resolve("companion_header_title"), header.Title);
-        Assert.Equal(CompanionLocStaging.Resolve("companion_header_subtitle"), header.Subtitle);
-        Assert.Equal(CompanionLocStaging.Resolve("companion_header_plate_ai"), header.AiPlateLabel);
+        Assert.Equal(CompanionLocMasters.Get("companion_header_title"), header.Title);
+        Assert.Equal(CompanionLocMasters.Get("companion_header_subtitle"), header.Subtitle);
+        Assert.Equal(CompanionLocMasters.Get("companion_header_plate_ai"), header.AiPlateLabel);
         Assert.NotEqual("companion_header_title", header.Title);   // i.e. the key really is staged
     }
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Windows.Input;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Views.Controls.Companion
 {
@@ -16,8 +17,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             Traits = new ITraitGaugeVm[]
             {
-                new CompanionTraitGauge(CompanionLocStaging.Resolve("companion_personality_trait_dominance"), 40),
-                new CompanionTraitGauge(CompanionLocStaging.Resolve("companion_personality_trait_tease"), 50)
+                new CompanionTraitGauge(Loc.Get("companion_personality_trait_dominance"), 40),
+                new CompanionTraitGauge(Loc.Get("companion_personality_trait_tease"), 50)
             };
             TraitChips = new[] { "Frame: Bestie", "Quirk: sparkly ✨", "Spicy", "Chatty" };
             Presets = BuildPresets();
@@ -52,7 +53,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public bool IsInterviewAvailable { get; init; }
         public bool IsInterviewed { get; init; }
         public string InterviewTitle { get; init; } =
-            CompanionLocStaging.Resolve("companion_personality_interview_title");
+            Loc.Get("companion_personality_interview_title");
 
         /// <summary>
         /// Two staged keys joined here rather than one key with an escaped newline: language
@@ -60,18 +61,18 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         /// translator separately cannot be welded into one by accident.
         /// </summary>
         public string InterviewBody { get; init; } =
-            CompanionLocStaging.Resolve("companion_personality_interview_body_1") + "\n" +
-            CompanionLocStaging.Resolve("companion_personality_interview_body_2");
+            Loc.Get("companion_personality_interview_body_1") + "\n" +
+            Loc.Get("companion_personality_interview_body_2");
         public string InterviewCtaLabel { get; init; } =
-            CompanionLocStaging.Resolve("companion_personality_interview_cta");
+            Loc.Get("companion_personality_interview_cta");
         /// <summary>
         /// The compressed chip. The two verbs from the design's chip row ("re-interview me~",
         /// "adjust her") are real buttons in the view, so this string carries the date only.
         /// </summary>
         public string InterviewedLine { get; init; } =
-            string.Format(CompanionLocStaging.Resolve("companion_personality_interviewed_fmt"), "2026-08-12");
+            string.Format(Loc.Get("companion_personality_interviewed_fmt"), "2026-08-12");
         public string InterviewDormantCopy { get; init; } =
-            CompanionLocStaging.Resolve("companion_personality_interview_dormant");
+            Loc.Get("companion_personality_interview_dormant");
 
         public bool AreTraitsAvailable { get; init; }
         public IReadOnlyList<ITraitGaugeVm> Traits { get; init; }
@@ -89,15 +90,15 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         }
 
         public string SpiceTitle { get; init; } =
-            CompanionLocStaging.Resolve("companion_personality_spice_title");
+            Loc.Get("companion_personality_spice_title");
         public string SpiceSubtitle { get; init; } =
-            CompanionLocStaging.Resolve("companion_personality_spice_subtitle");
+            Loc.Get("companion_personality_spice_subtitle");
         public string ActivePersonalityLine { get; init; } =
-            string.Format(CompanionLocStaging.Resolve("companion_personality_active_preset_fmt"),
-                          CompanionLocStaging.Resolve("companion_personality_preset_sweet_bestie"));
+            string.Format(Loc.Get("companion_personality_active_preset_fmt"),
+                          Loc.Get("companion_personality_preset_sweet_bestie"));
         public bool CanResetPersonality { get; init; }
         public string ResetLabel { get; init; } =
-            CompanionLocStaging.Resolve("companion_personality_reset");
+            Loc.Get("companion_personality_reset");
 
         public ICommand StartInterviewCommand { get; }
         public ICommand OpenTraitDashboardCommand { get; }
@@ -116,7 +117,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             IsInterviewAvailable = true,
             AreTraitsAvailable = true,
-            ActivePersonalityLine = CompanionLocStaging.Resolve("companion_personality_active_traits"),
+            ActivePersonalityLine = Loc.Get("companion_personality_active_traits"),
             CanResetPersonality = true
         };
 
@@ -126,7 +127,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             IsInterviewAvailable = true,
             IsInterviewed = true,
             AreTraitsAvailable = true,
-            ActivePersonalityLine = CompanionLocStaging.Resolve("companion_personality_active_traits"),
+            ActivePersonalityLine = Loc.Get("companion_personality_active_traits"),
             CanResetPersonality = true
         };
 
@@ -136,7 +137,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             IsInterviewAvailable = true,
             AreTraitsAvailable = false,
             ActivePersonalityLine = string.Format(
-                CompanionLocStaging.Resolve("companion_personality_active_custom_fmt"), "My Domme v3"),
+                Loc.Get("companion_personality_active_custom_fmt"), "My Domme v3"),
             CanResetPersonality = true
         };
 
@@ -157,7 +158,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             {
                 chips.Add(new CompanionPresetChip(
                     ids[i],
-                    CompanionLocStaging.Resolve($"companion_personality_preset_{ids[i]}"),
+                    Loc.Get($"companion_personality_preset_{ids[i]}"),
                     selected: i == 0));
             }
             return chips;

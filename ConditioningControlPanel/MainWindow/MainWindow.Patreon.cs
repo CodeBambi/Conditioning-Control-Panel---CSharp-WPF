@@ -198,8 +198,8 @@ namespace ConditioningControlPanel
                 {
                     var remaining = App.Ai.DailyRequestsRemaining;
                     engine.SetStatus(remaining < 0
-                        ? Views.Controls.Companion.CompanionLocStaging.Resolve("companion_engine_status_ready")
-                        : Views.Controls.Companion.CompanionLocStaging.ResolveF("companion_engine_status_ready_fmt", remaining),
+                        ? Loc.Get("companion_engine_status_ready")
+                        : Loc.GetF("companion_engine_status_ready_fmt", remaining),
                         healthy: true);
                 }
                 else if (provider == Models.AiProviderType.OpenAiCompatible)

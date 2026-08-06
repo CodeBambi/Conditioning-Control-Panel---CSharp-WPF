@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Windows.Input;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Views.Controls.Companion
 {
@@ -41,13 +42,13 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         }
 
         public string DrawerNote { get; init; } =
-            CompanionLocStaging.Resolve("companion_engine_drawer_note");
+            Loc.Get("companion_engine_drawer_note");
 
         public bool IsLoggedIn { get; init; } = true;
         public string LoginPrompt { get; init; } =
-            CompanionLocStaging.Resolve("companion_engine_login_prompt");
+            Loc.Get("companion_engine_login_prompt");
         public string LoginButtonLabel { get; init; } =
-            CompanionLocStaging.Resolve("companion_engine_login_button");
+            Loc.Get("companion_engine_login_button");
         public string StatusLine { get; init; } =
             "● Connected — cloud proxy · logged in as GoodGirl#4127 · purpose tiers: chat / reaction / utility";
         public bool IsHealthy { get; init; } = true;
@@ -59,12 +60,12 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public string CustomModel { get => _customModel; set => Set(ref _customModel, value); }
 
         public string DailyLimitLabel { get; init; } =
-            string.Format(CompanionLocStaging.Resolve("companion_engine_daily_limit_fmt"), 200);
+            string.Format(Loc.Get("companion_engine_daily_limit_fmt"), 200);
 
         public bool ShowLiveActions { get; init; }
         public IReadOnlyList<string> LiveActions { get; init; }
         public string LiveActionsPlaceholder { get; init; } =
-            CompanionLocStaging.Resolve("companion_engine_live_actions_placeholder");
+            Loc.Get("companion_engine_live_actions_placeholder");
 
         public ICommand LoginCommand { get; }
         public ICommand TestConnectionCommand { get; }
@@ -83,7 +84,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             IsExpanded = true,
             IsLoggedIn = false,
             IsHealthy = false,
-            StatusLine = CompanionLocStaging.Resolve("companion_engine_status_disconnected")
+            StatusLine = Loc.Get("companion_engine_status_disconnected")
         };
 
         /// <summary>Local Ollama, with the live actions feed docked at the bottom.</summary>
@@ -121,7 +122,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             Provider = CompanionProviderMode.Off,
             IsHealthy = false,
-            StatusLine = CompanionLocStaging.Resolve("companion_engine_status_off")
+            StatusLine = Loc.Get("companion_engine_status_off")
         };
 
         /// <summary>The resting state on the page: a closed, unglamorous gray drawer.</summary>

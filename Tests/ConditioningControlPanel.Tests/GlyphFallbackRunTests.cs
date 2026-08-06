@@ -19,6 +19,7 @@ namespace ConditioningControlPanel.Tests;
 /// codepoint-range guess), so they assert the invariant "whatever face a run got, it can draw that
 /// run" rather than naming families that differ across Windows builds.
 /// </summary>
+[Collection(CompanionWpfRenderCollection.Name)]
 public class GlyphFallbackRunTests
 {
     private static readonly SKTypeface Arial =

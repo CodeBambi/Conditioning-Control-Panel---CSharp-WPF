@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:local="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignWidth="430" d:DesignHeight="170"
              d:DataContext="{d:DesignInstance Type=local:MockAttentionGaugeVm, IsDesignTimeCreatable=True}">
@@ -80,16 +81,16 @@
                 <StackPanel Grid.Column="0" Orientation="Horizontal">
                     <Image Width="16" Height="16" Margin="0,0,9,0" VerticalAlignment="Center"
                            Source="{Binding Source='💗', Converter={StaticResource CmpEmojiToImage}}"/>
-                    <TextBlock Text="{local:CmpStr companion_attention_title}" Style="{StaticResource CmpSectionTitleStyle}"/>
+                    <TextBlock Text="{loc:Str companion_attention_title}" Style="{StaticResource CmpSectionTitleStyle}"/>
                 </StackPanel>
                 <Border Grid.Column="2" Style="{StaticResource CmpTrainTagLiveStyle}">
-                    <TextBlock Text="{local:CmpStr companion_tag_train1}" Style="{StaticResource CmpTrainTagLiveTextStyle}"/>
+                    <TextBlock Text="{loc:Str companion_tag_train1}" Style="{StaticResource CmpTrainTagLiveTextStyle}"/>
                 </Border>
             </Grid>
 
             <!-- ========== the gauge (the whole block hovers/clicks to reveal the numbers) ========== -->
             <Button Command="{Binding ToggleDetailCommand}" HorizontalContentAlignment="Stretch"
-                    ToolTip="{local:CmpStr companion_attention_detail_tip}" Margin="0,13,0,0">
+                    ToolTip="{loc:Str companion_attention_detail_tip}" Margin="0,13,0,0">
                 <Button.Template>
                     <ControlTemplate TargetType="Button">
                         <Border Background="Transparent" Cursor="Hand">

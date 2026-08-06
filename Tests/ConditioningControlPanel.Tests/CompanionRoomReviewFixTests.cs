@@ -101,7 +101,7 @@ public class CompanionRoomReviewFixTests
         var drained = MockAttentionGaugeVm.Drained();
 
         Assert.True(drained.ShowFloorNote);
-        Assert.Equal(CompanionLocStaging.English["companion_attention_floor_note"], drained.FloorNote);
+        Assert.Equal(CompanionLocMasters.Companion["companion_attention_floor_note"], drained.FloorNote);
         // The promise must NOT be hiding in the hover-only line any more.
         Assert.DoesNotContain("never runs out", drained.DetailLine, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("mute", drained.DetailLine, StringComparison.OrdinalIgnoreCase);
@@ -194,7 +194,7 @@ public class CompanionRoomReviewFixTests
         Assert.NotEqual(providerOff.AiPillText, free.AiPillText);
         Assert.Equal(asleep.AiPillText, providerOff.AiPillText);
 
-        Assert.Equal(CompanionLocStaging.English["companion_hero_pill_ai_locked"], free.AiPillText);
+        Assert.Equal(CompanionLocMasters.Companion["companion_hero_pill_ai_locked"], free.AiPillText);
         // and the header it sits in is the one that has something to sell
         Assert.False(free.Header!.HasAiAccess);
     }
@@ -216,7 +216,7 @@ public class CompanionRoomReviewFixTests
     [Fact]
     public void EveryZoneMockSuppliesStagedCopy_NotLiterals()
     {
-        var staged = new HashSet<string>(CompanionLocStaging.English.Values, StringComparer.Ordinal);
+        var staged = new HashSet<string>(CompanionLocMasters.Companion.Values, StringComparer.Ordinal);
 
         var chat = MockChatThresholdVm.Locked();
         var memory = MockMemoryDiaryVm.Populated();
@@ -297,7 +297,7 @@ public class CompanionRoomReviewFixTests
     [Fact]
     public void PerItemCopyIsStagedToo()
     {
-        var staged = new HashSet<string>(CompanionLocStaging.English.Values, StringComparer.Ordinal);
+        var staged = new HashSet<string>(CompanionLocMasters.Companion.Values, StringComparer.Ordinal);
 
         foreach (var chip in MockMemoryDiaryVm.Populated().Filters)
             Assert.True(staged.Contains(chip.Label), $"filter chip '{chip.Key}' has an unstaged label");
@@ -332,7 +332,7 @@ public class CompanionRoomReviewFixTests
 
         Assert.Equal(FactOrdering.FilterKeys, chips.Select(c => c.Key).ToArray());
         foreach (var key in FactOrdering.FilterKeys)
-            Assert.True(CompanionLocStaging.English.ContainsKey($"companion_memory_filter_{key}"),
+            Assert.True(CompanionLocMasters.Companion.ContainsKey($"companion_memory_filter_{key}"),
                 $"no staged label for filter chip '{key}'");
     }
 }

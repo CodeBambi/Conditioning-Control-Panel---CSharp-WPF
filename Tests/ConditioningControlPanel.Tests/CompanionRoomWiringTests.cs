@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Companion.Brain;
 using ConditioningControlPanel.Views.Controls.Companion;
@@ -19,6 +20,7 @@ namespace ConditioningControlPanel.Tests;
 /// provider round-trip, the attention arithmetic, the wire-view format, and the anchor/heading
 /// split that keeps every deep link on the page working in every language.</para>
 /// </summary>
+[Collection(CompanionWpfRenderCollection.Name)]
 public class CompanionRoomWiringTests
 {
     // =====================================================================================
@@ -198,7 +200,7 @@ public class CompanionRoomWiringTests
     public void AHandEditedFactAdvertisesItsProvenance()
     {
         var meta = MemoryFactRuntimeVm.BuildMeta(uses: 4, lastUsed: DateTime.UtcNow, userEdited: true);
-        Assert.Contains(CompanionLocStaging.Resolve("companion_memory_meta_edited"), meta, StringComparison.Ordinal);
+        Assert.Contains(CompanionLocMasters.Get("companion_memory_meta_edited"), meta, StringComparison.Ordinal);
         Assert.Contains("4", meta, StringComparison.Ordinal);
     }
 
@@ -333,7 +335,7 @@ public class CompanionRoomWiringTests
 
         foreach (var (key, anchor) in anchors)
         {
-            Assert.True(CompanionLocStaging.English.ContainsKey(key), "missing staged heading: " + key);
+            Assert.True(CompanionLocMasters.Companion.ContainsKey(key), "missing staged heading: " + key);
             Assert.False(string.IsNullOrWhiteSpace(anchor));
         }
     }
@@ -362,67 +364,52 @@ public class CompanionRoomWiringTests
     [InlineData("companion_engine_daily_limit_fmt")]
     public void EveryFormattedKeyActuallyCarriesItsPlaceholder(string key)
     {
-        // A translator dropping "{0}" turns a live number into silence; ResolveF cannot notice.
-        Assert.Contains("{0}", CompanionLocStaging.English[key], StringComparison.Ordinal);
+        // A translator dropping "{0}" turns a live number into silence; Loc.GetF cannot notice.
+        Assert.Contains("{0}", CompanionLocMasters.Companion[key], StringComparison.Ordinal);
     }
 
     [Fact]
-    public void ResolveF_SubstitutesTheStagedMaster_NotTheRawKey()
+    public void LocGetF_SubstitutesTheArgument_NotTheRawKey()
     {
-        // Loc.GetF formats whatever LocalizationManager returned, which for a key that has not
-        // reached the language files yet is the key itself. This is why ResolveF exists.
-        var line = CompanionLocStaging.ResolveF("companion_chat_time_minutes", 22);
-        Assert.Equal("22m ago", line);
+        Assert.Equal("22m ago", Loc.GetF("companion_chat_time_minutes", 22));
     }
 
     [Fact]
-    public void ResolveF_SurvivesAMalformedTemplate()
+    public void LocGetF_SurvivesAMalformedTemplate()
     {
         // A bad translation is cosmetic; it may never take a card down.
-        Assert.Equal("companion_not_a_real_key",
-            CompanionLocStaging.ResolveF("companion_not_a_real_key", 1, 2, 3));
+        Assert.Equal("companion_not_a_real_key", Loc.GetF("companion_not_a_real_key", 1, 2, 3));
     }
 
     [Fact]
-    public void NoStagedKeyCollidesWithOneTheLanguageFilesAlreadyShip()
+    public void ThePerCardCaptionsAreTheirOwnFamily_NotTrain1sGroupHeaders()
     {
-        // The failure this catches is nasty and quiet: CompanionLocStaging.Resolve prefers the live
-        // language file, so a staged key that ALREADY EXISTS there renders the other string — and
-        // only once LocalizationManager has loaded, which makes it look like a flake.
-        //
-        // It has happened once already. Train 1 shipped companion_memory_kind_* as the memory
-        // panel's GROUP HEADERS ("Boundaries she must respect"); this package had staged the same
-        // names as per-card captions ("boundary · always honored"). The staged family is
-        // companion_memory_card_* now. Nothing may re-collide.
-        var live = LoadEnglishLanguageFile();
-        if (live.Count == 0) return; // no language file next to the test binary — nothing to check
+        // The failure this catches is nasty and quiet, and it nearly happened once. Train 1 ships
+        // companion_memory_kind_* as the memory panel's GROUP HEADERS ("Boundaries she must
+        // respect"); this page wanted the same names for its per-card captions ("boundary · always
+        // honored"). Merged into one en.json the header would simply have won, in a chip-sized
+        // slot, and the caption copy would have been unreachable. The page's family is
+        // companion_memory_card_*, and both families have to exist side by side in all nine files.
+        string[] kinds = { "identity", "preference", "boundary", "joke", "goal" };
 
-        var collisions = CompanionLocStaging.English.Keys
-            .Where(live.ContainsKey)
-            .Where(k => !string.Equals(live[k], CompanionLocStaging.English[k], StringComparison.Ordinal))
-            .ToArray();
-
-        Assert.True(collisions.Length == 0,
-            "staged keys that already mean something else in en.json: " + string.Join(", ", collisions));
-    }
-
-    /// <summary>en.json as the app would load it, or empty when it is not deployed beside the tests.</summary>
-    private static IReadOnlyDictionary<string, string> LoadEnglishLanguageFile()
-    {
-        var dir = new System.IO.DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null)
+        foreach (var lang in CompanionLocMasters.Languages)
         {
-            var candidate = System.IO.Path.Combine(dir.FullName,
-                "ConditioningControlPanel", "Localization", "Languages", "en.json");
-            if (System.IO.File.Exists(candidate))
+            var file = CompanionLocMasters.For(lang);
+            foreach (var kind in kinds)
             {
-                var json = System.IO.File.ReadAllText(candidate);
-                return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json)
-                       ?? new Dictionary<string, string>();
+                Assert.True(file.ContainsKey($"companion_memory_card_{kind}"),
+                    $"{lang}.json has no 'companion_memory_card_{kind}'");
+                Assert.True(file.ContainsKey($"companion_memory_kind_{kind}"),
+                    $"{lang}.json has no 'companion_memory_kind_{kind}'");
             }
-            dir = dir.Parent;
         }
-        return new Dictionary<string, string>();
+
+        // The EN masters are what the collision would have destroyed, so they are what gets pinned.
+        // Translations may legitimately converge — Japanese, Korean and Chinese have no plural to
+        // separate the header "Running jokes" from the caption "running joke".
+        var english = CompanionLocMasters.For("en");
+        foreach (var kind in kinds)
+            Assert.NotEqual(english[$"companion_memory_kind_{kind}"], english[$"companion_memory_card_{kind}"]);
     }
 
     [Fact]
@@ -430,12 +417,12 @@ public class CompanionRoomWiringTests
     {
         // Doc 01 §2.4: the diary's wipe is THE wipe; the Engine Room's is conversation-only. If the
         // two ever read the same, a user reaching for one gets the other.
-        var diary = CompanionLocStaging.Resolve("companion_memory_forget_everything");
-        var engine = CompanionLocStaging.Resolve("companion_engine_clear_conversation");
+        var diary = CompanionLocMasters.Get("companion_memory_forget_everything");
+        var engine = CompanionLocMasters.Get("companion_engine_clear_conversation");
         Assert.NotEqual(diary, engine);
 
         // …and the narrower one says out loud what it does NOT touch.
-        var note = CompanionLocStaging.Resolve("companion_engine_clear_conversation_note");
+        var note = CompanionLocMasters.Get("companion_engine_clear_conversation_note");
         Assert.False(string.IsNullOrWhiteSpace(note));
         Assert.NotEqual("companion_engine_clear_conversation_note", note);
     }

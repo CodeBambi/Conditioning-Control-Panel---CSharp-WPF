@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using ConditioningControlPanel.Services.Companion.Brain;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
 {
@@ -25,7 +26,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
     {
         private CompanionTranscriptWindow(IReadOnlyList<CompanionTurn> turns)
         {
-            Title = CompanionLocStaging.Resolve("companion_chat_history_title");
+            Title = Loc.Get("companion_chat_history_title");
             Width = 560;
             Height = 620;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -39,7 +40,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
 
             var heading = new TextBlock
             {
-                Text = CompanionLocStaging.Resolve("companion_chat_history_title"),
+                Text = Loc.Get("companion_chat_history_title"),
                 FontSize = 17,
                 FontWeight = FontWeights.Bold,
                 Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x8F, 0xD0)),
@@ -53,7 +54,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             {
                 body.Children.Add(new TextBlock
                 {
-                    Text = CompanionLocStaging.Resolve("companion_chat_history_empty"),
+                    Text = Loc.Get("companion_chat_history_empty"),
                     Foreground = new SolidColorBrush(Color.FromRgb(0x8F, 0x88, 0xAD)),
                     FontStyle = FontStyles.Italic,
                     TextWrapping = TextWrapping.Wrap,
@@ -76,7 +77,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
 
             var note = new TextBlock
             {
-                Text = CompanionLocStaging.Resolve("companion_memory_storage_note"),
+                Text = Loc.Get("companion_memory_storage_note"),
                 Foreground = new SolidColorBrush(Color.FromRgb(0x6B, 0x64, 0x86)),
                 FontSize = 11,
                 TextWrapping = TextWrapping.Wrap
@@ -94,8 +95,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             panel.Children.Add(new TextBlock
             {
                 Text = mine
-                    ? CompanionLocStaging.Resolve("companion_chat_history_you")
-                    : CompanionLocStaging.Resolve("companion_chat_history_her"),
+                    ? Loc.Get("companion_chat_history_you")
+                    : Loc.Get("companion_chat_history_her"),
                 FontSize = 10,
                 FontWeight = FontWeights.Bold,
                 Foreground = new SolidColorBrush(mine

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Windows.Input;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Views.Controls.Companion
 {
@@ -39,7 +40,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         }
 
         public string DrawerNote { get; init; } =
-            CompanionLocStaging.Resolve("companion_workshop_drawer_note");
+            Loc.Get("companion_workshop_drawer_note");
         public IReadOnlyList<IWorkshopCellVm> Cells { get; init; }
         public ICommand FocusCellCommand { get; }
 

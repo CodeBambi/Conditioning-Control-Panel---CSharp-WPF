@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:local="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignWidth="660" d:DesignHeight="420"
              d:DataContext="{d:DesignInstance Type=local:MockChatThresholdVm, IsDesignTimeCreatable=True}">
@@ -73,7 +74,7 @@
 
                     <!-- the AI badge floats on the bubble's top-right corner -->
                     <Border x:Name="Badge" Style="{StaticResource CmpAiBadgeStyle}" Visibility="Collapsed">
-                        <TextBlock Text="{local:CmpStr companion_chat_ai_badge}" Style="{StaticResource CmpAiBadgeTextStyle}"/>
+                        <TextBlock Text="{loc:Str companion_chat_ai_badge}" Style="{StaticResource CmpAiBadgeTextStyle}"/>
                     </Border>
                 </Grid>
                 <DataTemplate.Triggers>
@@ -121,12 +122,12 @@
                 <StackPanel Grid.Column="0" Orientation="Horizontal">
                     <Image Width="16" Height="16" Margin="0,0,9,0" VerticalAlignment="Center"
                            Source="{Binding Source='💬', Converter={StaticResource CmpEmojiToImage}}"/>
-                    <TextBlock Text="{local:CmpStr companion_chat_title}" Style="{StaticResource CmpSectionTitleStyle}"/>
+                    <TextBlock Text="{loc:Str companion_chat_title}" Style="{StaticResource CmpSectionTitleStyle}"/>
                 </StackPanel>
                 <TextBlock Grid.Column="1" Text="{Binding LastHeardCopy}"
                            Style="{StaticResource CmpSectionHintStyle}"/>
                 <Border Grid.Column="2" Style="{StaticResource CmpTrainTagLiveStyle}">
-                    <TextBlock Text="{local:CmpStr companion_tag_train1}" Style="{StaticResource CmpTrainTagLiveTextStyle}"/>
+                    <TextBlock Text="{loc:Str companion_tag_train1}" Style="{StaticResource CmpTrainTagLiveTextStyle}"/>
                 </Border>
             </Grid>
 
@@ -200,7 +201,7 @@
                                                  ConverterParameter=Disabled}">
                     <TextBlock Text="{Binding StateCopy}" Style="{StaticResource CmpFlavorTextStyle}"/>
                     <Button HorizontalAlignment="Left" Margin="0,4,0,0"
-                            Content="{local:CmpStr companion_chat_open_engine}"
+                            Content="{loc:Str companion_chat_open_engine}"
                             Style="{StaticResource CmpLinkButtonStyle}"
                             Command="{Binding OpenEngineRoomCommand}"/>
                 </StackPanel>
@@ -239,7 +240,7 @@
 
                 <Button Grid.Column="1" Style="{StaticResource CmpSendButtonStyle}"
                         Command="{Binding SendCommand}" IsEnabled="{Binding CanSend}"
-                        ToolTip="{local:CmpStr companion_chat_send_tip}">
+                        ToolTip="{loc:Str companion_chat_send_tip}">
                     <TextBlock Text="♥" FontSize="16" Foreground="White"/>
                 </Button>
             </Grid>
@@ -256,11 +257,11 @@
                 <StackPanel Grid.Column="0" Orientation="Horizontal"
                             Visibility="{Binding State, Converter={StaticResource CmpEnumToVisInverse},
                                                  ConverterParameter=Locked}">
-                    <Button Content="{local:CmpStr companion_chat_open_full}"
+                    <Button Content="{loc:Str companion_chat_open_full}"
                             Style="{StaticResource CmpChipButtonStyle}"
                             Command="{Binding OpenFullChatCommand}"/>
                     <!-- History: the read-only transcript viewer over the persisted session.json -->
-                    <Button Content="{local:CmpStr companion_chat_history}"
+                    <Button Content="{loc:Str companion_chat_history}"
                             Style="{StaticResource CmpChipButtonStyle}"
                             Command="{Binding HistoryCommand}"/>
                 </StackPanel>
@@ -270,13 +271,13 @@
                     <!-- "she's thinking" — a triggered pulse, never a Forever loop on the page -->
                     <StackPanel x:Name="ThinkingDots" Orientation="Horizontal" Margin="0,0,8,0"
                                 VerticalAlignment="Center"
-                                ToolTip="{local:CmpStr companion_chat_thinking}"
+                                ToolTip="{loc:Str companion_chat_thinking}"
                                 Visibility="{Binding IsThinking, Converter={StaticResource CmpBoolToVis}}">
                         <Ellipse x:Name="Dot1" Width="5" Height="5" Margin="2,0" Fill="{StaticResource CmpPinkBrush}"/>
                         <Ellipse x:Name="Dot2" Width="5" Height="5" Margin="2,0" Fill="{StaticResource CmpPinkBrush}"/>
                         <Ellipse x:Name="Dot3" Width="5" Height="5" Margin="2,0" Fill="{StaticResource CmpPinkBrush}"/>
                     </StackPanel>
-                    <TextBlock Text="{local:CmpStr companion_chat_thinking}" FontSize="10.5" FontStyle="Italic"
+                    <TextBlock Text="{loc:Str companion_chat_thinking}" FontSize="10.5" FontStyle="Italic"
                                Foreground="{StaticResource CmpMutedBrush}" VerticalAlignment="Center"
                                Visibility="{Binding IsThinking, Converter={StaticResource CmpBoolToVis}}"/>
                     <TextBlock Text="{Binding FooterCopy}" FontSize="10.5" FontStyle="Italic"

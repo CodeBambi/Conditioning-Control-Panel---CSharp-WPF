@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows.Input;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.AIService;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
 {
@@ -57,11 +58,11 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         // ---- interview: Train 3 ----
         public bool IsInterviewAvailable => false;
         public bool IsInterviewed => false;
-        public string InterviewTitle => CompanionLocStaging.Resolve("companion_personality_interview_title");
-        public string InterviewBody => CompanionLocStaging.Resolve("companion_personality_interview_body_1");
-        public string InterviewCtaLabel => CompanionLocStaging.Resolve("companion_personality_interview_cta");
+        public string InterviewTitle => Loc.Get("companion_personality_interview_title");
+        public string InterviewBody => Loc.Get("companion_personality_interview_body_1");
+        public string InterviewCtaLabel => Loc.Get("companion_personality_interview_cta");
         public string InterviewedLine => string.Empty;
-        public string InterviewDormantCopy => CompanionLocStaging.Resolve("companion_personality_interview_dormant");
+        public string InterviewDormantCopy => Loc.Get("companion_personality_interview_dormant");
 
         // ---- trait glance: Train 3 ----
         public bool AreTraitsAvailable => false;
@@ -87,13 +88,13 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             }
         }
 
-        public string SpiceTitle => CompanionLocStaging.Resolve("companion_personality_spice_title");
-        public string SpiceSubtitle => CompanionLocStaging.Resolve("companion_personality_spice_subtitle");
+        public string SpiceTitle => Loc.Get("companion_personality_spice_title");
+        public string SpiceSubtitle => Loc.Get("companion_personality_spice_subtitle");
 
         // ---- readout ----
         public string ActivePersonalityLine { get => _activeLine; private set => Set(ref _activeLine, value); }
         public bool CanResetPersonality { get => _canReset; private set => Set(ref _canReset, value); }
-        public string ResetLabel => CompanionLocStaging.Resolve("companion_personality_reset");
+        public string ResetLabel => Loc.Get("companion_personality_reset");
 
         public ICommand StartInterviewCommand { get; }
         public ICommand OpenTraitDashboardCommand { get; }
@@ -118,7 +119,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             if (!string.IsNullOrEmpty(communityId))
             {
                 var prompt = App.CommunityPrompts?.GetInstalledPrompt(communityId);
-                ActivePersonalityLine = CompanionLocStaging.ResolveF(
+                ActivePersonalityLine = Loc.GetF(
                     "companion_personality_active_custom_fmt", prompt?.Name ?? communityId!);
                 CanResetPersonality = true;
                 return;
@@ -126,7 +127,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
 
             if (settings?.CompanionPrompt?.UseCustomPrompt == true)
             {
-                ActivePersonalityLine = CompanionLocStaging.ResolveF(
+                ActivePersonalityLine = Loc.GetF(
                     "companion_personality_active_custom_fmt",
                     Localization.Loc.Get("label_custom_edited"));
                 CanResetPersonality = false;
@@ -137,7 +138,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             var name = active == null
                 ? string.Empty
                 : App.Mods?.GetPersonalityDisplayName(active.Name) ?? active.Name;
-            ActivePersonalityLine = CompanionLocStaging.ResolveF("companion_personality_active_preset_fmt", name);
+            ActivePersonalityLine = Loc.GetF("companion_personality_active_preset_fmt", name);
             CanResetPersonality = false;
         }
 
@@ -265,14 +266,14 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             private set => Set(ref _isWireLive, value);
         }
 
-        public string WireCaption => CompanionLocStaging.Resolve("companion_awareness_wire_caption");
-        public string DormantCopy => CompanionLocStaging.Resolve("companion_awareness_dormant_copy");
+        public string WireCaption => Loc.Get("companion_awareness_wire_caption");
+        public string DormantCopy => Loc.Get("companion_awareness_dormant_copy");
 
         /// <summary>Train 2 has not landed, so the promise block speaks under the live wire.</summary>
         public bool IsDormant => true;
 
         public IReadOnlyList<IDenyChipVm> DenyList { get; } = Array.Empty<IDenyChipVm>();
-        public string AddDenyLabel => CompanionLocStaging.Resolve("companion_awareness_deny_dormant");
+        public string AddDenyLabel => Loc.Get("companion_awareness_deny_dormant");
 
         /// <summary>
         /// Today's frame carries the tab title (see <c>FrameFormatter.AwarenessFrame</c>), so this
@@ -290,7 +291,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             }
         }
 
-        public string PageTitlesLabel => CompanionLocStaging.Resolve("companion_awareness_page_titles_allowed");
+        public string PageTitlesLabel => Loc.Get("companion_awareness_page_titles_allowed");
 
         public ICommand AddDenyCommand { get; }
         public ICommand AllowPerAppCommand { get; }
@@ -306,7 +307,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             IsWireLive = on;
             WireLine = on
                 ? BuildWireLine()
-                : CompanionLocStaging.Resolve("companion_awareness_wire_closed");
+                : Loc.Get("companion_awareness_wire_closed");
         }, "awareness sync");
 
         /// <summary>
@@ -332,7 +333,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         {
             var awareness = App.WindowAwareness;
             if (awareness == null || !awareness.IsRunning)
-                return CompanionLocStaging.Resolve("companion_awareness_wire_idle");
+                return Loc.Get("companion_awareness_wire_idle");
 
             // Exactly the four values FrameFormatter.AwarenessFrame is handed at the call site
             // (AvatarTubeWindow.Reactions), read from the same service properties.
@@ -396,13 +397,13 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
 
         public double BarFraction => AttentionCopy.BarFractionFor(Fraction);
         public bool IsSpent => AttentionCopy.IsSpent(Fraction);
-        public string StateCopy => CompanionLocStaging.Resolve(AttentionCopy.CopyKeyFor(Fraction));
+        public string StateCopy => Loc.Get(AttentionCopy.CopyKeyFor(Fraction));
 
         public string DetailLine => _unlimited
-            ? CompanionLocStaging.Resolve("companion_attention_detail_unlimited")
-            : CompanionLocStaging.ResolveF("companion_attention_detail_fmt", _remaining);
+            ? Loc.Get("companion_attention_detail_unlimited")
+            : Loc.GetF("companion_attention_detail_fmt", _remaining);
 
-        public string FloorNote => CompanionLocStaging.Resolve("companion_attention_floor_note");
+        public string FloorNote => Loc.Get("companion_attention_floor_note");
         public bool ShowFloorNote => AttentionCopy.ShowFloorNote(Fraction);
 
         public bool IsDetailShown
@@ -414,7 +415,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         public bool ShowUpsell => !_unlimited && AttentionCopy.ShowUpsell(Fraction)
                                   && App.Patreon?.HasAiAccess != true;
 
-        public string UpsellCopy => CompanionLocStaging.Resolve("companion_attention_upsell");
+        public string UpsellCopy => Loc.Get("companion_attention_upsell");
 
         public ICommand UpsellCommand { get; }
         public ICommand ToggleDetailCommand { get; }
