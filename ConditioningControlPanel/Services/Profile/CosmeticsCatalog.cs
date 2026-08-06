@@ -55,6 +55,23 @@ namespace ConditioningControlPanel.Services
     {
         private static readonly object _gate = new();
         private static readonly Dictionary<string, ImageSource?> _imageCache = new(StringComparer.Ordinal);
+        private static readonly Dictionary<string, ImageSource?> _thumbCache = new(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Decode cap for the banner painted on the hero card. The card's banner strip is roughly
+        /// 1400x180 and every source is scaled to fill it, so decoding the originals at full size
+        /// only buys memory: the six program plates are 2800x113 (1.3MB each) and the mood/feature
+        /// art is 1376x768 / 1024x1024 (4MB each). 1024 keeps the strip crisp at 200% DPI and
+        /// caps the whole pool at roughly a third of what it cost before.
+        /// </summary>
+        private const int BannerDecodePixels = 1024;
+
+        /// <summary>
+        /// Decode cap for the Customize dialog's picker tiles, which render at 128x52. The dialog
+        /// builds ALL 19 tiles the moment it is constructed, so without a separate small cache one
+        /// visit to Customize pinned ~42MB of full-resolution bitmaps for the process lifetime.
+        /// </summary>
+        private const int BannerThumbnailPixels = 256;
 
         /// <summary>
         /// The banner pool. Seeded from art the installer already ships plus three generated
@@ -117,12 +134,32 @@ namespace ConditioningControlPanel.Services
         /// Results (including nulls) are cached: a broken asset is not retried on every render.
         /// </summary>
         public static ImageSource? GetBannerImage(string? id)
+            => GetBanner(id, _imageCache, BannerDecodePixels);
+
+        /// <summary>
+        /// The same art at picker-tile resolution. Kept in its own cache so browsing the Customize
+        /// dialog never pulls the card-sized decodes into memory (and vice versa).
+        /// </summary>
+        public static ImageSource? GetBannerThumbnail(string? id)
+            => GetBanner(id, _thumbCache, BannerThumbnailPixels);
+
+        /// <summary>Drops both banner caches. Exists for parity with WardrobeCatalog.Invalidate.</summary>
+        public static void Invalidate()
+        {
+            lock (_gate)
+            {
+                _imageCache.Clear();
+                _thumbCache.Clear();
+            }
+        }
+
+        private static ImageSource? GetBanner(string? id, Dictionary<string, ImageSource?> cache, int decodePixels)
         {
             if (string.IsNullOrWhiteSpace(id)) return null;
 
             lock (_gate)
             {
-                if (_imageCache.TryGetValue(id!, out var cached)) return cached;
+                if (cache.TryGetValue(id!, out var cached)) return cached;
 
                 ImageSource? built = null;
                 try
@@ -130,9 +167,10 @@ namespace ConditioningControlPanel.Services
                     var option = FindBanner(id);
                     if (option != null)
                     {
+                        // Gradients are vector DrawingImages - they cost nothing and do not decode.
                         built = option.Gradient.HasValue
                             ? BuildGradientImage(option.Gradient.Value)
-                            : BuildPackImage(option.PackPath!);
+                            : BuildPackImage(option.PackPath!, decodePixels);
                     }
                 }
                 catch (Exception ex)
@@ -141,7 +179,7 @@ namespace ConditioningControlPanel.Services
                     built = null;
                 }
 
-                _imageCache[id!] = built;
+                cache[id!] = built;
                 return built;
             }
         }
@@ -172,6 +210,12 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public static ISet<string>? WardrobeIds() => WardrobeCatalog.KnownIds();
 
+        /// <summary>Registry ids wearable in the decoration slot (null = cannot validate).</summary>
+        public static ISet<string>? DecoIds() => WardrobeCatalog.DecoIds();
+
+        /// <summary>Registry ids wearable in a charm slot (null = cannot validate).</summary>
+        public static ISet<string>? CharmIds() => WardrobeCatalog.CharmIds();
+
         /// <summary>
         /// Sanitize for the viewer's OWN card: every check available, including the unlock filter
         /// (a title or pin they have not earned is dropped rather than shown).
@@ -186,7 +230,7 @@ namespace ConditioningControlPanel.Services
             }
             catch { /* no achievement service yet (early boot / tests) - skip the unlock filter */ }
 
-            return ProfileCosmetics.Sanitize(raw, BannerIds, AchievementIds, unlocked, WardrobeIds());
+            return ProfileCosmetics.Sanitize(raw, BannerIds, AchievementIds, unlocked, DecoIds(), CharmIds());
         }
 
         /// <summary>
@@ -194,18 +238,26 @@ namespace ConditioningControlPanel.Services
         /// so the unlock filter is skipped - ids the app recognises still render.
         /// </summary>
         public static ProfileCosmetics SanitizeViewed(ProfileCosmetics? raw)
-            => ProfileCosmetics.Sanitize(raw, BannerIds, AchievementIds, null, WardrobeIds());
+            => ProfileCosmetics.Sanitize(raw, BannerIds, AchievementIds, null, DecoIds(), CharmIds());
 
         // ---------------------------------------------------------------------------------
 
-        private static ImageSource? BuildPackImage(string packRelativePath)
+        private static ImageSource? BuildPackImage(string packRelativePath, int decodePixels)
         {
             try
             {
+                var uri = new Uri($"pack://application:,,,/{packRelativePath}", UriKind.Absolute);
+
                 var bitmap = new BitmapImage();
                 bitmap.BeginInit();
-                bitmap.UriSource = new Uri($"pack://application:,,,/{packRelativePath}", UriKind.Absolute);
+                bitmap.UriSource = uri;
                 bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                // DecodePixelWidth is a target, not a maximum: setting it above the source width
+                // UPSCALES into memory (the 400x400 tier art would cost 4MB at a 1024 cap instead
+                // of 640KB). So peek the header first - metadata only, no pixels - and cap only
+                // the sources that are actually larger than we need.
+                var sourceWidth = ProbePixelWidth(uri);
+                if (decodePixels > 0 && sourceWidth > decodePixels) bitmap.DecodePixelWidth = decodePixels;
                 bitmap.EndInit();
                 if (bitmap.CanFreeze) bitmap.Freeze();
                 return bitmap;
@@ -214,6 +266,23 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Debug("CosmeticsCatalog: pack art {Path} missing: {E}", packRelativePath, ex.Message);
                 return null;
+            }
+        }
+
+        /// <summary>
+        /// The source's pixel width read from its header, or 0 when it cannot be determined (in
+        /// which case the caller decodes at full size - the safe direction).
+        /// </summary>
+        private static int ProbePixelWidth(Uri uri)
+        {
+            try
+            {
+                var frame = BitmapFrame.Create(uri, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
+                return frame.PixelWidth;
+            }
+            catch
+            {
+                return 0;
             }
         }
 

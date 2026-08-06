@@ -35,6 +35,14 @@ namespace ConditioningControlPanel.Services
         private readonly SemaphoreSlim _syncGate = new(1, 1);
 
         /// <summary>
+        /// Set by the Customize dialog when the user saves an EMPTY loadout, i.e. they deliberately
+        /// unequipped everything. See <see cref="BuildCosmeticsPayload"/>: without this flag an
+        /// empty loadout is sent as null ("no change") so a fresh machine cannot wipe the account's
+        /// cosmetics before it has ever read them. Cleared once a sync carrying the clear succeeds.
+        /// </summary>
+        public bool PendingCosmeticsClear { get; set; }
+
+        /// <summary>
         /// Whether using Patreon auth (vs Discord)
         /// </summary>
         private bool IsPatreonAuth => !string.IsNullOrEmpty(App.Patreon?.GetAccessToken());
@@ -713,8 +721,10 @@ namespace ConditioningControlPanel.Services
                         goon_share_dm = settings.GoonShareDiscordDm,
                         // Trainer Card customization (Profile redesign Phase 2). Sanitized on the
                         // way out so a hand-edited settings.json cannot push ids nothing renders,
-                        // and so the server's own validation has less to reject.
-                        cosmetics = CosmeticsCatalog.SanitizeOwn(settings.ProfileCosmetics),
+                        // and so the server's own validation has less to reject. NULL while the
+                        // local loadout is empty and unconfirmed - see BuildCosmeticsPayload, an
+                        // all-empty object means "unequip everything" to the server.
+                        cosmetics = BuildCosmeticsPayload(settings),
                         // Send false to clear server-side reset flags only when acknowledging
                         reset_weekly_quest = false,
                         reset_daily_quest = false,
@@ -748,6 +758,9 @@ namespace ConditioningControlPanel.Services
 
                     LastSyncTime = DateTime.Now;
                     LastSyncError = null;
+                    // The unequip-everything intent has now reached the server; further syncs from
+                    // an empty loadout go back to meaning "no change".
+                    PendingCosmeticsClear = false;
 
                     var v2Json = await v2Response.Content.ReadAsStringAsync();
                     App.Logger?.Information("V2 Profile synced successfully: {Response}", v2Json);
@@ -1192,9 +1205,10 @@ namespace ConditioningControlPanel.Services
                     // is local-only and never rides the body.
                     GoonShareAvatar = settings.GoonShareAvatar,
                     GoonShareDm = settings.GoonShareDiscordDm,
-                    // Trainer Card customization (Profile redesign Phase 2) — same object on both
-                    // sync paths so a V1 user's look survives a move to a V2 identity.
-                    Cosmetics = CosmeticsCatalog.SanitizeOwn(settings.ProfileCosmetics),
+                    // Trainer Card customization (Profile redesign Phase 2) — same object, and the
+                    // same never-wipe rule, on both sync paths so a V1 user's look survives a move
+                    // to a V2 identity.
+                    Cosmetics = BuildCosmeticsPayload(settings),
                     DiscordId = App.Discord?.UserId,  // Include Discord ID even when syncing via Patreon
                     AvatarUrl = App.Discord?.GetAvatarUrl(256),  // Include Discord avatar URL
                     SkillPoints = settings.SkillPoints,
@@ -1227,6 +1241,9 @@ namespace ConditioningControlPanel.Services
 
                 LastSyncTime = DateTime.Now;
                 LastSyncError = null;
+                // The unequip-everything intent has now reached the server (see
+                // BuildCosmeticsPayload); an empty loadout goes back to meaning "no change".
+                PendingCosmeticsClear = false;
 
                 App.Logger?.Information("Profile synced to cloud: Level {Level}, {Xp} XP (merged: {Merged})",
                     result?.Profile?.Level, result?.Profile?.Xp, result?.Merged);
@@ -1299,6 +1316,38 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Debug("AdoptCloudCosmetics skipped: {E}", ex.Message);
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// What to put in the sync payload's <c>cosmetics</c> field — the sanitized local loadout,
+        /// or <c>null</c>.
+        ///
+        /// Null matters: the server reads an absent/null object as "no change" and an object whose
+        /// every field is empty as "the user unequipped everything" (ccp-server proxy/cosmetics.js
+        /// <c>resolveCosmetics</c> → <c>delete user.cosmetics</c>). Because LoadProfileAsync's V2
+        /// branch SYNCS BEFORE it reads, always sending the object meant a fresh machine's very
+        /// first POST wiped the account's loadout server-side, the response then echoed
+        /// <c>cosmetics: null</c>, and <see cref="AdoptCloudCosmetics"/> could never fire — so
+        /// reinstalling, or simply logging in on a second PC, permanently stripped everyone's card.
+        ///
+        /// So: send the loadout while there is one; send an explicit empty object only when the
+        /// user actually unequipped everything in the Customize dialog
+        /// (<see cref="PendingCosmeticsClear"/>) or a round-trip has already confirmed we are in
+        /// sync with the server; otherwise send nothing and let the server keep what it has.
+        /// </summary>
+        private Models.ProfileCosmetics? BuildCosmeticsPayload(Models.AppSettings settings)
+        {
+            try
+            {
+                var clean = CosmeticsCatalog.SanitizeOwn(settings.ProfileCosmetics);
+                if (!clean.IsEmpty) return clean;
+                return PendingCosmeticsClear || _hasLoadedProfile ? clean : null;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("BuildCosmeticsPayload: {E}", ex.Message);
+                return null;   // the safe direction - "no change" never destroys anything
             }
         }
 

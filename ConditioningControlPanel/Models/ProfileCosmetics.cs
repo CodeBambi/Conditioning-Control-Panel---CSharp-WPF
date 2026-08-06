@@ -99,13 +99,15 @@ namespace ConditioningControlPanel.Models
         /// <param name="knownBannerIds">Banner ids this build ships art for, or null to skip.</param>
         /// <param name="knownAchievementIds">Every achievement id in the app, or null to skip.</param>
         /// <param name="unlockedAchievementIds">The card owner's unlocks, or null when unknowable.</param>
-        /// <param name="knownWardrobeIds">Phase 3 registry ids, or null to skip.</param>
+        /// <param name="knownDecoIds">Phase 3 registry ids of type <c>deco</c>, or null to skip.</param>
+        /// <param name="knownCharmIds">Phase 3 registry ids of type <c>charm</c>, or null to skip.</param>
         public static ProfileCosmetics Sanitize(
             ProfileCosmetics? raw,
             ISet<string>? knownBannerIds = null,
             ISet<string>? knownAchievementIds = null,
             ISet<string>? unlockedAchievementIds = null,
-            ISet<string>? knownWardrobeIds = null)
+            ISet<string>? knownDecoIds = null,
+            ISet<string>? knownCharmIds = null)
         {
             var clean = new ProfileCosmetics();
             if (raw == null) return clean;
@@ -147,8 +149,13 @@ namespace ConditioningControlPanel.Models
                 }
 
                 // ---- wardrobe (Phase 3 payload, carried through untouched but validated) ----
+                // Validated PER SLOT, not against the union of the registry: the server checks
+                // avatar_deco against its deco ids and charms against its charm ids (ccp-server
+                // proxy/cosmetics.js). A union check here would let a charm id equip into the
+                // decoration slot, render locally, and then be silently stripped on the way up -
+                // so the wearer would see it forever and no viewer ever would.
                 var deco = Trim(raw.AvatarDeco);
-                if (deco != null && (knownWardrobeIds == null || knownWardrobeIds.Contains(deco)))
+                if (deco != null && (knownDecoIds == null || knownDecoIds.Contains(deco)))
                     clean.AvatarDeco = deco;
 
                 if (raw.Charms != null)
@@ -159,7 +166,7 @@ namespace ConditioningControlPanel.Models
                         var charm = Trim(id);
                         if (charm == null) continue;
                         if (clean.Charms.Contains(charm)) continue;
-                        if (knownWardrobeIds != null && !knownWardrobeIds.Contains(charm)) continue;
+                        if (knownCharmIds != null && !knownCharmIds.Contains(charm)) continue;
                         clean.Charms.Add(charm);
                     }
                 }

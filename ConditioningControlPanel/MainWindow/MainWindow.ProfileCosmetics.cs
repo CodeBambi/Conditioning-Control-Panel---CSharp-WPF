@@ -69,17 +69,38 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Banner art behind the hero. A null id or an asset that failed to load clears the Image,
+        /// Banner art behind the hero. A null id or an asset that failed to load clears the layer,
         /// revealing the gradient Border the layout keeps painted underneath — so "no banner" and
         /// "broken banner" look identical and neither looks broken.
+        ///
+        /// Painted as an <see cref="ImageBrush"/> on a Border rather than assigned to an Image:
+        /// the hero lives in a StackPanel inside a ScrollViewer, where an unconstrained
+        /// UniformToFill Image reports its own aspect as DesiredSize and drives the card height
+        /// (13 of the 19 shipped banners stretched the card past a full screen). A brush paints
+        /// into the arranged bounds and contributes nothing to measure.
         /// </summary>
         private void ApplyProfileBanner(string? bannerId)
         {
             try
             {
-                var image = DiscordTab?.ProfileHeroBanner;
-                if (image == null) return;
-                image.Source = CosmeticsCatalog.GetBannerImage(bannerId);
+                var layer = DiscordTab?.ProfileHeroBanner;
+                if (layer == null) return;
+
+                var art = CosmeticsCatalog.GetBannerImage(bannerId);
+                if (art == null)
+                {
+                    layer.Background = null;
+                    return;
+                }
+
+                var brush = new ImageBrush(art)
+                {
+                    Stretch = Stretch.UniformToFill,
+                    AlignmentX = AlignmentX.Center,
+                    AlignmentY = AlignmentY.Center
+                };
+                if (brush.CanFreeze) brush.Freeze();
+                layer.Background = brush;
             }
             catch (Exception ex) { App.Logger?.Debug("ApplyProfileBanner: {E}", ex.Message); }
         }
@@ -204,8 +225,12 @@ namespace ConditioningControlPanel
 
                 if (DiscordTab?.ProfilePinnedPlaceholders != null)
                 {
+                    // Self-gated: the plates read "Pin your four proudest unlocks here from
+                    // Customize", which is nonsense over a stranger's card — and DisplayProfileEntry
+                    // renders every searched profile with an empty loadout first, before the
+                    // /user/lookup round-trip lands, so an ungated row would flash on every search.
                     DiscordTab.ProfilePinnedPlaceholders.Visibility =
-                        items.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
+                        PinPlaceholderVisibility(items.Count > 0);
                 }
             }
             catch (Exception ex) { App.Logger?.Debug("ApplyProfilePins: {E}", ex.Message); }
@@ -242,6 +267,11 @@ namespace ConditioningControlPanel
 
                 // Repaint immediately; the card on screen is the point of the dialog.
                 ApplyOwnProfileCosmetics();
+
+                // An empty loadout normally rides as null ("no change") so a fresh machine cannot
+                // wipe the account before it has read it — but saving an empty dialog IS the
+                // unequip-everything gesture, so flag this one push as an explicit clear.
+                if (chosen.IsEmpty && App.ProfileSync != null) App.ProfileSync.PendingCosmeticsClear = true;
 
                 // And push it, so other people see it. Fire-and-forget: a failed sync is not worth
                 // blocking the UI over — the next periodic sync carries the same payload.

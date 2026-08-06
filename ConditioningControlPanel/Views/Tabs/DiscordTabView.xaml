@@ -122,7 +122,17 @@
                                 Background="#EE1A1A2E" BorderBrush="#66FF69B4" BorderThickness="1">
                             <Grid>
                                 <!-- Banner: gradient default now, cosmetic art in Phase 2
-                                     (ProfileHeroBanner.Source is set by the customization kit). -->
+                                     (ProfileHeroBanner.Background is set to an ImageBrush by the
+                                     customization kit).
+
+                                     The art layer is a Border painted with an ImageBrush, NOT an
+                                     Image: this Grid sits in a vertical StackPanel inside a
+                                     ScrollViewer, so height is unconstrained at measure time and an
+                                     Image with Stretch=UniformToFill reports a DesiredSize of
+                                     sourceH * cardWidth / sourceW. The art — not the content —
+                                     would then drive the card height (a 1024x1024 banner blew the
+                                     hero to ~1383px at 1400px wide). A brush paints inside the
+                                     arranged bounds and contributes nothing to measure. -->
                                 <Border>
                                     <Border.Background>
                                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
@@ -132,9 +142,8 @@
                                         </LinearGradientBrush>
                                     </Border.Background>
                                 </Border>
-                                <Image x:Name="ProfileHeroBanner" x:FieldModifier="internal"
-                                       Stretch="UniformToFill" StretchDirection="Both"
-                                       Opacity="0.85" IsHitTestVisible="False"/>
+                                <Border x:Name="ProfileHeroBanner" x:FieldModifier="internal"
+                                        Opacity="0.85" IsHitTestVisible="False"/>
                                 <!-- left-dark scrim so identity copy always reads over the banner -->
                                 <Border IsHitTestVisible="False">
                                     <Border.Background>

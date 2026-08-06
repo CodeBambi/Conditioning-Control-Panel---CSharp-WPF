@@ -1819,9 +1819,9 @@ namespace ConditioningControlPanel
 
             // Trainer Card surfaces (redesign Phase 1): hero XP meter, Showcase progress and the
             // "back to me" chip. PlayerXP is progress inside the level; `xp` above is lifetime.
+            SetProfileViewingSelf(true);
             UpdateProfileXpMeter(level, localXp);
             UpdateProfileShowcase(unlockedCount, totalCount, progress?.UnlockedAchievements);
-            SetProfileViewingSelf(true);
             // Phase 2 cosmetics. Applied AFTER UpdateProfileShowcase because both touch the empty
             // pin placeholders and this one is the authority on whether anything is pinned.
             ApplyOwnProfileCosmetics();
@@ -2086,13 +2086,20 @@ namespace ConditioningControlPanel
 
             // Trainer Card surfaces (redesign Phase 1). The leaderboard hands out a count, not the
             // unlocked ids, so the Showcase's "next up" line stays hidden for other people's cards.
-            UpdateProfileXpMeter(entry.Level, entry.Xp);
+            //
+            // entry.Xp is LIFETIME xp — it is exactly what the client uploads via
+            // ProgressionService.GetTotalXP, and it is what the ledger's "XP" row shows. The hero
+            // meter wants progress INSIDE the current level, so run it back through the documented
+            // inverse; feeding it the lifetime value pins every searched card's bar at 100%.
+            SetProfileViewingSelf(isOwnProfile);
+            UpdateProfileXpMeter(
+                entry.Level,
+                App.Progression?.GetCurrentLevelXP(entry.Level, entry.Xp) ?? 0);
             UpdateProfileShowcase(
                 entry.AchievementsCount,
                 App.Achievements?.GetTotalCount(exclusive: false)
                     ?? System.Linq.Enumerable.Count(Models.Achievement.All.Values, a => !a.IsExclusive && !a.IsHidden),
                 isOwnProfile ? App.Achievements?.Progress?.UnlockedAchievements : null);
-            SetProfileViewingSelf(isOwnProfile);
 
             // Phase 2 cosmetics. The leaderboard entry carries none, so someone else's card starts
             // bare and is dressed by the /user/lookup round-trip already in flight above; your own

@@ -19,10 +19,13 @@ public class ProfileCosmeticsSanitizeTests
     private static readonly HashSet<string> Banners = new() { "gradient_velvet", "program_kept" };
     private static readonly HashSet<string> Achievements = new() { "a1", "a2", "a3", "a4", "a5", "a6" };
     private static readonly HashSet<string> Unlocked = new() { "a1", "a2", "a3", "a4", "a5" };
-    private static readonly HashSet<string> Wardrobe = new() { "bambi_silk_bow", "circe_visor" };
+    // Typed like the registry (and like the server): a decoration is worn over the avatar, a charm
+    // sits in a card corner, and the two sets are validated separately.
+    private static readonly HashSet<string> Decos = new() { "bambi_silk_bow", "circe_visor" };
+    private static readonly HashSet<string> Charms = new() { "bambi_lollipop", "sissy_heel" };
 
     private static ProfileCosmetics Clean(ProfileCosmetics? raw, HashSet<string>? unlocked = null)
-        => ProfileCosmetics.Sanitize(raw, Banners, Achievements, unlocked, Wardrobe);
+        => ProfileCosmetics.Sanitize(raw, Banners, Achievements, unlocked, Decos, Charms);
 
     [Fact]
     public void NullInputIsAnEmptyLoadout()
@@ -123,10 +126,27 @@ public class ProfileCosmeticsSanitizeTests
     {
         var clean = Clean(new ProfileCosmetics
         {
-            Charms = new List<string> { "circe_visor", "not_in_registry", "bambi_silk_bow", "circe_visor" }
+            Charms = new List<string> { "sissy_heel", "not_in_registry", "bambi_lollipop", "sissy_heel" }
         });
 
-        Assert.Equal(new[] { "circe_visor", "bambi_silk_bow" }, clean.Charms);
+        Assert.Equal(new[] { "sissy_heel", "bambi_lollipop" }, clean.Charms);
+    }
+
+    [Fact]
+    public void SlotsAreValidatedByTypeNotByTheUnionOfTheRegistry()
+    {
+        // The server checks avatar_deco against its deco ids and charms against its charm ids
+        // (ccp-server proxy/cosmetics.js). A union check here would let a charm equip into the
+        // decoration slot, render on the wearer's own card, and be silently stripped on upload —
+        // so nobody else would ever see it and the wearer would never know.
+        var clean = Clean(new ProfileCosmetics
+        {
+            AvatarDeco = "bambi_lollipop",                       // a charm in the deco slot
+            Charms = new List<string> { "circe_visor" }          // a deco in a charm slot
+        });
+
+        Assert.Null(clean.AvatarDeco);
+        Assert.Empty(clean.Charms);
     }
 
     [Fact]
@@ -139,7 +159,7 @@ public class ProfileCosmeticsSanitizeTests
                 AvatarDeco = "sissy_pearl_choker",
                 Charms = new List<string> { "bambi_lollipop" }
             },
-            Banners, Achievements, Unlocked, knownWardrobeIds: null);
+            Banners, Achievements, Unlocked, knownDecoIds: null, knownCharmIds: null);
 
         Assert.Equal("sissy_pearl_choker", clean.AvatarDeco);
         Assert.Equal(new[] { "bambi_lollipop" }, clean.Charms);

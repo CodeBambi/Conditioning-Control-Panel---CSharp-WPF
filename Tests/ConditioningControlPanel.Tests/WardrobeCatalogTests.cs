@@ -63,6 +63,34 @@ public class WardrobeCatalogTests
     }
 
     /// <summary>
+    /// The two slot sets partition the registry and never overlap. ProfileCosmetics.Sanitize
+    /// validates avatar_deco against one and charms against the other — exactly as the server does
+    /// (ccp-server proxy/cosmetics.js) — so a union here would re-open the mix-up those sets exist
+    /// to close: an id accepted into the wrong slot renders locally and is stripped on upload.
+    /// </summary>
+    [Fact]
+    public void DecoAndCharmIdsPartitionTheRegistry()
+    {
+        var decos = WardrobeCatalog.DecoIds();
+        var charms = WardrobeCatalog.CharmIds();
+
+        if (WardrobeCatalog.KnownIds() == null)
+        {
+            // No registry on disk: both must be null so Sanitize reads "cannot validate".
+            Assert.Null(decos);
+            Assert.Null(charms);
+            return;
+        }
+
+        Assert.NotNull(decos);
+        Assert.NotNull(charms);
+        Assert.Equal(WardrobeCatalog.Items.Count, decos!.Count + charms!.Count);
+        Assert.Empty(decos.Intersect(charms));
+        Assert.All(WardrobeCatalog.Items, item =>
+            Assert.Contains(item.Id, item.IsDecoration ? decos : charms));
+    }
+
+    /// <summary>
     /// Every item is one slot or the other; the renderer has no third branch. When the registry is
     /// on disk this also guards the mod/type split the picker's tabs are built from.
     /// </summary>

@@ -20,6 +20,21 @@ namespace ConditioningControlPanel
         /// <summary>The Profile tab opens on the logged-in user's own card exactly once per run.</summary>
         private bool _profileMeFirstDone;
 
+        /// <summary>
+        /// Whose card is on screen. Set by <see cref="SetProfileViewingSelf"/> and read by both
+        /// pin-placeholder toggles: the four empty ☆ plates carry second-person copy ("Pin your
+        /// four proudest unlocks here from Customize"), which must never appear over somebody
+        /// else's profile. Defaults to true because the tab opens on your own card.
+        /// </summary>
+        private bool _profileViewingSelf = true;
+
+        /// <summary>
+        /// Visibility for the empty-pin placeholder row: shown only on YOUR card, and only while
+        /// nothing is pinned. Both callers below go through here so the rule cannot drift.
+        /// </summary>
+        private Visibility PinPlaceholderVisibility(bool hasPins)
+            => !hasPins && _profileViewingSelf ? Visibility.Visible : Visibility.Collapsed;
+
         // ============================== me-first ==============================
 
         /// <summary>
@@ -61,6 +76,7 @@ namespace ConditioningControlPanel
         {
             try
             {
+                _profileViewingSelf = isSelf;
                 if (DiscordTab?.BtnProfileBackToMe == null) return;
                 DiscordTab.BtnProfileBackToMe.Visibility = isSelf ? Visibility.Collapsed : Visibility.Visible;
             }
@@ -115,6 +131,15 @@ namespace ConditioningControlPanel
             {
                 if (DiscordTab == null) return;
 
+                // The two counts can arrive from different universes. Your own card passes
+                // free-only unlocked / free-only total; a searched card passes the leaderboard's
+                // AchievementsCount, which is the raw length of the server's array (patron
+                // exclusives and hidden entries included) against the same free-only total. A
+                // heavy patron therefore arrives with unlocked > total. Clamp once, here, so the
+                // expander header, the bar and the summary can never disagree ("54 of 46 · 100%").
+                if (unlocked < 0) unlocked = 0;
+                if (total > 0 && unlocked > total) unlocked = total;
+
                 if (DiscordTab.TxtProfileAllAchievementsHeader != null)
                     DiscordTab.TxtProfileAllAchievementsHeader.Text = Loc.GetF("profile_showcase_all_count", unlocked);
 
@@ -147,12 +172,13 @@ namespace ConditioningControlPanel
                     }
                 }
 
-                // The four empty pin plates step aside as soon as Phase 2 pins something.
+                // The four empty pin plates step aside as soon as Phase 2 pins something — and
+                // never appear at all on someone else's card (their copy is addressed to you).
                 if (DiscordTab.ProfilePinnedPlaceholders != null)
                 {
                     var hasPins = DiscordTab.ProfilePinnedShowcase?.ItemsSource is System.Collections.IEnumerable src
                                   && src.Cast<object>().Any();
-                    DiscordTab.ProfilePinnedPlaceholders.Visibility = hasPins ? Visibility.Collapsed : Visibility.Visible;
+                    DiscordTab.ProfilePinnedPlaceholders.Visibility = PinPlaceholderVisibility(hasPins);
                 }
             }
             catch (Exception ex) { App.Logger?.Debug("UpdateProfileShowcase: {E}", ex.Message); }

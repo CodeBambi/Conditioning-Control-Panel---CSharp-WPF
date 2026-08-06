@@ -86,6 +86,8 @@ namespace ConditioningControlPanel.Services
         private static List<WardrobeItem>? _items;
         private static Dictionary<string, WardrobeItem>? _byId;
         private static HashSet<string>? _ids;
+        private static HashSet<string>? _decoIds;
+        private static HashSet<string>? _charmIds;
         private static List<string>? _mods;
         private static bool _loadAttempted;
 
@@ -116,6 +118,26 @@ namespace ConditioningControlPanel.Services
         {
             EnsureLoaded();
             return _ids;
+        }
+
+        /// <summary>
+        /// Ids wearable in the DECORATION slot, or null when there is no readable registry (read
+        /// by Sanitize as "cannot validate"). Split from <see cref="CharmIds"/> because the server
+        /// validates the two slots against separate sets - a union check on this side would let a
+        /// charm equip as a decoration locally and be stripped server-side, which is invisible to
+        /// the wearer and permanent.
+        /// </summary>
+        public static ISet<string>? DecoIds()
+        {
+            EnsureLoaded();
+            return _decoIds;
+        }
+
+        /// <summary>Ids wearable in a CHARM slot, or null when there is no readable registry.</summary>
+        public static ISet<string>? CharmIds()
+        {
+            EnsureLoaded();
+            return _charmIds;
         }
 
         public static WardrobeItem? Find(string? id)
@@ -228,6 +250,8 @@ namespace ConditioningControlPanel.Services
                 _items = null;
                 _byId = null;
                 _ids = null;
+                _decoIds = null;
+                _charmIds = null;
                 _mods = null;
                 _loadAttempted = false;
             }
@@ -281,6 +305,10 @@ namespace ConditioningControlPanel.Services
                     _byId = byId;
                     _mods = mods;
                     _ids = new HashSet<string>(byId.Keys, StringComparer.Ordinal);
+                    _decoIds = new HashSet<string>(
+                        items.Where(i => i.IsDecoration).Select(i => i.Id), StringComparer.Ordinal);
+                    _charmIds = new HashSet<string>(
+                        items.Where(i => i.IsCharm).Select(i => i.Id), StringComparer.Ordinal);
                 }
                 catch (Exception ex)
                 {
@@ -288,6 +316,8 @@ namespace ConditioningControlPanel.Services
                     _items = null;
                     _byId = null;
                     _ids = null;
+                    _decoIds = null;
+                    _charmIds = null;
                     _mods = null;
                 }
             }

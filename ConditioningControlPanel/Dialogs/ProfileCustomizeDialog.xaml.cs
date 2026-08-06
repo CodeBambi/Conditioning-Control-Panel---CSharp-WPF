@@ -81,8 +81,9 @@ namespace ConditioningControlPanel
             foreach (var banner in CosmeticsCatalog.Banners)
             {
                 // A banner whose art will not load is not offered at all — better than a tile that
-                // looks broken and equips to nothing.
-                var image = CosmeticsCatalog.GetBannerImage(banner.Id);
+                // looks broken and equips to nothing. Thumbnails, not the card-sized decodes: this
+                // loop runs for all 19 banners the moment the dialog is constructed.
+                var image = CosmeticsCatalog.GetBannerThumbnail(banner.Id);
                 if (image == null) continue;
                 BannerHost.Children.Add(BuildBannerTile(banner.Id, banner.Name, image));
             }
