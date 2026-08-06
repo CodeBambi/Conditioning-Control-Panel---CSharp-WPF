@@ -125,7 +125,7 @@
                              height again. -->
                         <Border x:Name="ProfileHeroCard" x:FieldModifier="internal" Margin="8"
                                 CornerRadius="14" ClipToBounds="True"
-                                MinHeight="200" MaxHeight="260"
+                                MinHeight="220" MaxHeight="290"
                                 Background="#EE1A1A2E" BorderBrush="#66FF69B4" BorderThickness="1">
                             <Grid>
                                 <!-- Banner: gradient default now, cosmetic art in Phase 2
@@ -232,7 +232,8 @@
                                                 </Border.BorderBrush>
                                                 <StackPanel Orientation="Horizontal">
                                                     <TextBlock Text="🛠" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                                    <TextBlock Text="{loc:Str label_badge_staff}" Foreground="#FFD9A0" FontSize="10"
+                                                    <TextBlock x:Name="StaffBadgeLabel" x:FieldModifier="internal"
+                                                               Text="{loc:Str label_badge_staff}" Foreground="#FFB3C2" FontSize="10"
                                                                FontWeight="ExtraBold" FontFamily="Segoe UI" VerticalAlignment="Center"/>
                                                 </StackPanel>
                                             </Border>

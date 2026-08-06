@@ -102,6 +102,14 @@ namespace ConditioningControlPanel.Models
         [JsonPropertyName("is_staff")]
         public bool IsStaff { get; set; }
 
+        /// <summary>
+        /// Highest staff tier held on our Discord server: "owner" | "admin" | "support",
+        /// or null. Drives the STAFF badge border color.
+        /// </summary>
+        [JsonProperty("staff_role")]
+        [JsonPropertyName("staff_role")]
+        public string? StaffRole { get; set; }
+
         [JsonProperty("verified")]
         [JsonPropertyName("verified")]
         public bool Verified { get; set; }
@@ -198,6 +206,10 @@ namespace ConditioningControlPanel.Models
         /// <summary>Cached staff flag (see <see cref="DiscordUserResponse.IsStaff"/>).</summary>
         [JsonProperty("is_staff")]
         public bool IsStaff { get; set; }
+
+        /// <summary>Cached staff tier (see <see cref="DiscordUserResponse.StaffRole"/>).</summary>
+        [JsonProperty("staff_role")]
+        public string? StaffRole { get; set; }
 
         [JsonProperty("custom_display_name")]
         public string? CustomDisplayName { get; set; }

@@ -75,6 +75,9 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public bool IsStaff { get; private set; }
 
+        /// <summary>Highest staff tier: "owner" | "admin" | "support", or null (badge border color).</summary>
+        public string? StaffRole { get; private set; }
+
         /// <summary>
         /// Whether the user is authenticated with Discord
         /// </summary>
@@ -496,6 +499,7 @@ namespace ConditioningControlPanel.Services
                 Avatar = user.Avatar;
                 GuildAvatar = user.GuildAvatar;
                 IsStaff = user.IsStaff;
+                StaffRole = user.StaffRole;
                 NeedsRegistration = user.NeedsRegistration;
 
                 // Apply server-side whitelist so whitelisted Discord-only users get
@@ -515,6 +519,7 @@ namespace ConditioningControlPanel.Services
                     Avatar = user.Avatar,
                     GuildAvatar = user.GuildAvatar,
                     IsStaff = user.IsStaff,
+                    StaffRole = user.StaffRole,
                     IsWhitelisted = user.IsWhitelisted,
                     LastVerified = DateTime.UtcNow,
                     CacheExpiresAt = DateTime.UtcNow.AddHours(CacheHours)
@@ -578,6 +583,7 @@ namespace ConditioningControlPanel.Services
             Avatar = cachedState.Avatar;
             GuildAvatar = cachedState.GuildAvatar;
             IsStaff = cachedState.IsStaff;
+            StaffRole = cachedState.StaffRole;
             CustomDisplayName = cachedState.CustomDisplayName;
 
             // Re-apply whitelist on a cache-hit so access survives across restarts
@@ -615,6 +621,7 @@ namespace ConditioningControlPanel.Services
             Avatar = null;
             GuildAvatar = null;
             IsStaff = false;
+            StaffRole = null;
             CustomDisplayName = null;
         }
 

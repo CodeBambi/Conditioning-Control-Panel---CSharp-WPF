@@ -735,6 +735,10 @@ public class UserLookupResult
     [JsonProperty("is_staff")]
     public bool IsStaff { get; set; }
 
+    /// <summary>Staff tier ("owner" | "admin" | "support") or null; badge border color.</summary>
+    [JsonProperty("staff_role")]
+    public string? StaffRole { get; set; }
+
     [JsonProperty("patreon_tier")]
     public int PatreonTier { get; set; }
 
