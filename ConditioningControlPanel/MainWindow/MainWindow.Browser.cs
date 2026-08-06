@@ -1687,6 +1687,10 @@ namespace ConditioningControlPanel
                 DiscordTab.OgBannerBadge.Visibility = isOg ? Visibility.Visible : Visibility.Collapsed;
             }
 
+            // Staff + whitelist badges for own profile. Whitelist aggregates on PatreonService
+            // (Discord-only and SubscribeStar whitelists both fold in via SetWhitelistStatus).
+            ApplyProfileIdentityBadges(App.Discord?.IsStaff == true, App.Discord?.StaffRole, App.Patreon?.IsWhitelisted == true);
+
             // Avatar - load from Discord only if ShareProfilePicture is enabled
             if (DiscordTab.ProfileViewerAvatar != null)
             {
@@ -1924,6 +1928,11 @@ namespace ConditioningControlPanel
                 DiscordTab.OgBannerBadge.Visibility = entry.IsSeason0Og ? Visibility.Visible : Visibility.Collapsed;
             }
 
+            // Staff/whitelist pills: the leaderboard entry doesn't carry these, so clear the
+            // previous card's pills now; the /user/lookup round-trip below repaints them
+            // (own card gets local values immediately in the isOwnProfile branch further down).
+            ApplyProfileIdentityBadges(false, null, false);
+
             // Avatar - clear previous, will be loaded async
             if (DiscordTab.ProfileViewerAvatar != null)
             {
@@ -2010,6 +2019,7 @@ namespace ConditioningControlPanel
                 // Use local Patreon data for own profile
                 tierToUse = App.Settings?.Current?.PatreonTier ?? (int)(App.Patreon?.CurrentTier ?? 0);
                 hasPatreonAccess = tierToUse >= 1 || App.Patreon?.IsWhitelisted == true;
+                ApplyProfileIdentityBadges(App.Discord?.IsStaff == true, App.Discord?.StaffRole, App.Patreon?.IsWhitelisted == true);
             }
             else
             {
@@ -2114,6 +2124,45 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Toggle the STAFF and WHITELISTED identity pills on the hero card. The staff pill's
+        /// border (and label tint) encodes the tier: owner = purple, admin = crimson,
+        /// support = blue. A server too old to send staff_role but flagging is_staff falls
+        /// back to the admin look.
+        /// </summary>
+        private void ApplyProfileIdentityBadges(bool isStaff, string? staffRole, bool isWhitelisted)
+        {
+            if (DiscordTab.StaffBadge != null)
+            {
+                var visible = isStaff || !string.IsNullOrEmpty(staffRole);
+                DiscordTab.StaffBadge.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+                if (visible)
+                {
+                    var (from, to, text) = (staffRole ?? "admin") switch
+                    {
+                        "owner" => ("#8A2BE2", "#C77DFF", "#D9B8FF"),
+                        "support" => ("#2F86FF", "#6FC3FF", "#B8D9FF"),
+                        _ => ("#DC143C", "#FF6B85", "#FFB3C2"),
+                    };
+                    var brush = new System.Windows.Media.LinearGradientBrush(
+                        (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(from),
+                        (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(to),
+                        new Point(0, 0), new Point(1, 1));
+                    brush.Freeze();
+                    DiscordTab.StaffBadge.BorderBrush = brush;
+                    if (DiscordTab.StaffBadgeLabel != null)
+                    {
+                        var fg = new System.Windows.Media.SolidColorBrush(
+                            (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(text));
+                        fg.Freeze();
+                        DiscordTab.StaffBadgeLabel.Foreground = fg;
+                    }
+                }
+            }
+            if (DiscordTab.WhitelistBadge != null)
+                DiscordTab.WhitelistBadge.Visibility = isWhitelisted ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>
         /// Refresh profile viewer with fresh data from server (online status, avatar)
         /// </summary>
         private async Task RefreshProfileViewerAsync(string displayName)
@@ -2198,10 +2247,12 @@ namespace ConditioningControlPanel
                         displayName.Equals(ownName, StringComparison.OrdinalIgnoreCase))
                     {
                         ApplyOwnProfileCosmetics();
+                        ApplyProfileIdentityBadges(App.Discord?.IsStaff == true, App.Discord?.StaffRole, App.Patreon?.IsWhitelisted == true);
                     }
                     else
                     {
                         ApplyViewedProfileCosmetics(lookup.Cosmetics);
+                        ApplyProfileIdentityBadges(lookup.IsStaff, lookup.StaffRole, lookup.IsWhitelisted);
                     }
 
                     // Load achievements from lookup result (for other users)

@@ -345,7 +345,8 @@ namespace ConditioningControlPanel.Services
             }
             catch { /* no achievement service yet (early boot / tests) - skip the unlock filter */ }
 
-            return ProfileCosmetics.Sanitize(raw, BannerIds, AchievementIds, unlocked, DecoIds(), CharmIds(), AvatarIds);
+            return ProfileCosmetics.Sanitize(raw, BannerIds, AchievementIds, unlocked, DecoIds(), CharmIds(), AvatarIds,
+                WardrobeCatalog.AchievementGates());
         }
 
         /// <summary>

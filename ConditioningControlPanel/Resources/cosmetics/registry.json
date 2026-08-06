@@ -15,7 +15,7 @@
       "type": "deco",
       "name": "Trance Headset",
       "file": "bambi/bambi_trance_headset.png",
-      "unlock": "free"
+      "unlock": "achievement:obedience_reflex"
     },
     {
       "id": "bambi_bubblegum_scarf",
@@ -23,7 +23,7 @@
       "type": "deco",
       "name": "Bubblegum Scarf",
       "file": "bambi/bambi_bubblegum_scarf.png",
-      "unlock": "free"
+      "unlock": "achievement:plastic_initiation"
     },
     {
       "id": "bambi_plush_hood",
@@ -31,7 +31,7 @@
       "type": "deco",
       "name": "Plush Bunny Hood",
       "file": "bambi/bambi_plush_hood.png",
-      "unlock": "free"
+      "unlock": "achievement:pillow_talk"
     },
     {
       "id": "bambi_heart_visor",
@@ -39,7 +39,7 @@
       "type": "deco",
       "name": "Heart Visor",
       "file": "bambi/bambi_heart_visor.png",
-      "unlock": "free"
+      "unlock": "achievement:dumb_bimbo"
     },
     {
       "id": "bambi_candy_halo",
@@ -47,7 +47,7 @@
       "type": "deco",
       "name": "Candy Halo",
       "file": "bambi/bambi_candy_halo.png",
-      "unlock": "free"
+      "unlock": "achievement:pavlov"
     },
     {
       "id": "bambi_pacifier_strap",
@@ -55,7 +55,7 @@
       "type": "deco",
       "name": "Pacifier Strap",
       "file": "bambi/bambi_pacifier_strap.png",
-      "unlock": "free"
+      "unlock": "achievement:mercy_beggar"
     },
     {
       "id": "bambi_neon_ears",
@@ -63,7 +63,7 @@
       "type": "deco",
       "name": "Neon Bunny Ears",
       "file": "bambi/bambi_neon_ears.png",
-      "unlock": "free"
+      "unlock": "achievement:neon_obsession"
     },
     {
       "id": "bambi_bubble_crown",
@@ -71,7 +71,7 @@
       "type": "deco",
       "name": "Bubble Crown",
       "file": "bambi/bambi_bubble_crown.png",
-      "unlock": "free"
+      "unlock": "achievement:best_friends"
     },
     {
       "id": "bambi_ribbon_choker",
@@ -95,7 +95,7 @@
       "type": "deco",
       "name": "Lollipop Twirl",
       "file": "bambi/bambi_lollipop_twirl.png",
-      "unlock": "free"
+      "unlock": "achievement:magic_word"
     },
     {
       "id": "bambi_sleepy_mask",
@@ -103,7 +103,7 @@
       "type": "deco",
       "name": "Sleepy Mask",
       "file": "bambi/bambi_sleepy_mask.png",
-      "unlock": "free"
+      "unlock": "achievement:clean_slate"
     },
     {
       "id": "bambi_plush_bunny",
@@ -119,7 +119,7 @@
       "type": "charm",
       "name": "Bubble Wand",
       "file": "bambi/bambi_bubble_wand.png",
-      "unlock": "free"
+      "unlock": "achievement:pop_the_thought"
     },
     {
       "id": "bambi_gumball_jar",
@@ -127,7 +127,7 @@
       "type": "charm",
       "name": "Gumball Jar",
       "file": "bambi/bambi_gumball_jar.png",
-      "unlock": "free"
+      "unlock": "achievement:mathematicians_nightmare"
     },
     {
       "id": "bambi_heart_locket",
@@ -135,7 +135,7 @@
       "type": "charm",
       "name": "Heart Locket",
       "file": "bambi/bambi_heart_locket.png",
-      "unlock": "free"
+      "unlock": "achievement:pleased_to_meet_you"
     },
     {
       "id": "bambi_glitter_phone",
@@ -143,7 +143,7 @@
       "type": "charm",
       "name": "Glitter Phone",
       "file": "bambi/bambi_glitter_phone.png",
-      "unlock": "free"
+      "unlock": "achievement:typing_tutor"
     },
     {
       "id": "bambi_cotton_candy",
@@ -151,7 +151,7 @@
       "type": "charm",
       "name": "Cotton Candy Cloud",
       "file": "bambi/bambi_cotton_candy.png",
-      "unlock": "free"
+      "unlock": "achievement:corner_hit"
     },
     {
       "id": "sissy_lace_choker",
@@ -167,7 +167,7 @@
       "type": "deco",
       "name": "Maid Headpiece",
       "file": "sissy/sissy_maid_headpiece.png",
-      "unlock": "free"
+      "unlock": "achievement:fully_synthetic"
     },
     {
       "id": "sissy_pearl_strand",
@@ -175,7 +175,7 @@
       "type": "deco",
       "name": "Pearl Strand",
       "file": "sissy/sissy_pearl_strand.png",
-      "unlock": "free"
+      "unlock": "achievement:daily_maintenance"
     },
     {
       "id": "sissy_satin_blindfold",
@@ -183,7 +183,7 @@
       "type": "deco",
       "name": "Satin Blindfold",
       "file": "sissy/sissy_satin_blindfold.png",
-      "unlock": "free"
+      "unlock": "achievement:deep_sleep"
     },
     {
       "id": "sissy_ribbon_crown",
@@ -191,7 +191,7 @@
       "type": "deco",
       "name": "Ribbon Crown",
       "file": "sissy/sissy_ribbon_crown.png",
-      "unlock": "free"
+      "unlock": "achievement:morning_glory"
     },
     {
       "id": "sissy_lace_veil",
@@ -199,7 +199,7 @@
       "type": "deco",
       "name": "Lace Veil",
       "file": "sissy/sissy_lace_veil.png",
-      "unlock": "free"
+      "unlock": "achievement:retinal_burn"
     },
     {
       "id": "sissy_bow_barrette",
@@ -215,7 +215,7 @@
       "type": "deco",
       "name": "Feather Fan",
       "file": "sissy/sissy_feather_fan.png",
-      "unlock": "free"
+      "unlock": "achievement:sofa_decor"
     },
     {
       "id": "sissy_corset_laces",
@@ -223,7 +223,7 @@
       "type": "deco",
       "name": "Corset Laces",
       "file": "sissy/sissy_corset_laces.png",
-      "unlock": "free"
+      "unlock": "achievement:look_but_dont_touch"
     },
     {
       "id": "sissy_velvet_collar",
@@ -231,7 +231,7 @@
       "type": "deco",
       "name": "Velvet Collar",
       "file": "sissy/sissy_velvet_collar.png",
-      "unlock": "free"
+      "unlock": "achievement:docile_cow"
     },
     {
       "id": "sissy_rose_pin",
@@ -239,7 +239,7 @@
       "type": "deco",
       "name": "Rose Pin",
       "file": "sissy/sissy_rose_pin.png",
-      "unlock": "free"
+      "unlock": "achievement:rose_tinted_reality"
     },
     {
       "id": "sissy_silk_headband",
@@ -255,7 +255,7 @@
       "type": "deco",
       "name": "Pearl Drop Earring",
       "file": "sissy/sissy_pearl_drop.png",
-      "unlock": "free"
+      "unlock": "achievement:spiral_eyes"
     },
     {
       "id": "sissy_lace_gloves",
@@ -263,7 +263,7 @@
       "type": "deco",
       "name": "Lace Gloves",
       "file": "sissy/sissy_lace_gloves.png",
-      "unlock": "free"
+      "unlock": "achievement:player_2_disconnected"
     },
     {
       "id": "sissy_stiletto_heel",
@@ -271,7 +271,7 @@
       "type": "charm",
       "name": "Stiletto Heel",
       "file": "sissy/sissy_stiletto_heel.png",
-      "unlock": "free"
+      "unlock": "achievement:teachers_pet"
     },
     {
       "id": "sissy_lipstick_tube",
@@ -287,7 +287,7 @@
       "type": "charm",
       "name": "Perfume Bottle",
       "file": "sissy/sissy_perfume_bottle.png",
-      "unlock": "free"
+      "unlock": "achievement:held_back"
     },
     {
       "id": "sissy_hand_mirror",
@@ -295,7 +295,7 @@
       "type": "charm",
       "name": "Hand Mirror",
       "file": "sissy/sissy_hand_mirror.png",
-      "unlock": "free"
+      "unlock": "achievement:top_of_the_class"
     },
     {
       "id": "sissy_pearl_pouch",
@@ -303,7 +303,7 @@
       "type": "charm",
       "name": "Pearl Pouch",
       "file": "sissy/sissy_pearl_pouch.png",
-      "unlock": "free"
+      "unlock": "achievement:first_week_graduate"
     },
     {
       "id": "sissy_ribbon_key",
@@ -311,7 +311,7 @@
       "type": "charm",
       "name": "Ribbon Key",
       "file": "sissy/sissy_ribbon_key.png",
-      "unlock": "free"
+      "unlock": "achievement:honor_roll"
     },
     {
       "id": "circe_drone_visor",
@@ -327,7 +327,7 @@
       "type": "deco",
       "name": "Filter Mask",
       "file": "circe/circe_gas_mask.png",
-      "unlock": "free"
+      "unlock": "achievement:screen_time"
     },
     {
       "id": "circe_latex_hood",
@@ -335,7 +335,7 @@
       "type": "deco",
       "name": "Latex Hood",
       "file": "circe/circe_latex_hood.png",
-      "unlock": "free"
+      "unlock": "achievement:down_the_rabbit_hole"
     },
     {
       "id": "circe_antennae",
@@ -343,7 +343,7 @@
       "type": "deco",
       "name": "Signal Antennae",
       "file": "circe/circe_antennae.png",
-      "unlock": "free"
+      "unlock": "achievement:mad_scientist"
     },
     {
       "id": "circe_ear_defenders",
@@ -351,7 +351,7 @@
       "type": "deco",
       "name": "Ear Defenders",
       "file": "circe/circe_ear_defenders.png",
-      "unlock": "free"
+      "unlock": "achievement:hands_free"
     },
     {
       "id": "circe_hud_monocle",
@@ -359,7 +359,7 @@
       "type": "deco",
       "name": "HUD Monocle",
       "file": "circe/circe_hud_monocle.png",
-      "unlock": "free"
+      "unlock": "achievement:dont_look_away"
     },
     {
       "id": "circe_chrome_halo",
@@ -367,7 +367,7 @@
       "type": "deco",
       "name": "Chrome Halo",
       "file": "circe/circe_chrome_halo.png",
-      "unlock": "free"
+      "unlock": "achievement:permanent_resident"
     },
     {
       "id": "circe_data_collar",
@@ -375,7 +375,7 @@
       "type": "deco",
       "name": "Data Collar",
       "file": "circe/circe_data_collar.png",
-      "unlock": "free"
+      "unlock": "achievement:on_the_shelf"
     },
     {
       "id": "circe_cable_scarf",
@@ -383,7 +383,7 @@
       "type": "deco",
       "name": "Cable Scarf",
       "file": "circe/circe_cable_scarf.png",
-      "unlock": "free"
+      "unlock": "achievement:going_deeper"
     },
     {
       "id": "circe_optic_crown",
@@ -391,7 +391,7 @@
       "type": "deco",
       "name": "Optic Crown",
       "file": "circe/circe_optic_crown.png",
-      "unlock": "free"
+      "unlock": "achievement:blink_and_youll_miss_it"
     },
     {
       "id": "circe_port_clips",
@@ -407,7 +407,7 @@
       "type": "deco",
       "name": "Scan Lens",
       "file": "circe/circe_scan_lens.png",
-      "unlock": "free"
+      "unlock": "achievement:wired_in"
     },
     {
       "id": "circe_hex_veil",
@@ -415,7 +415,7 @@
       "type": "deco",
       "name": "Hex Veil",
       "file": "circe/circe_hex_veil.png",
-      "unlock": "free"
+      "unlock": "achievement:eyes_front"
     },
     {
       "id": "circe_neural_band",
@@ -431,7 +431,7 @@
       "type": "charm",
       "name": "Hover Drone",
       "file": "circe/circe_hover_drone.png",
-      "unlock": "free"
+      "unlock": "achievement:community_supported"
     },
     {
       "id": "circe_datapad",
@@ -447,7 +447,7 @@
       "type": "charm",
       "name": "Coolant Flask",
       "file": "circe/circe_coolant_flask.png",
-      "unlock": "free"
+      "unlock": "achievement:not_a_video_editor"
     },
     {
       "id": "circe_obedience_chip",
@@ -455,7 +455,7 @@
       "type": "charm",
       "name": "Obedience Chip",
       "file": "circe/circe_obedience_chip.png",
-      "unlock": "free"
+      "unlock": "achievement:modder"
     },
     {
       "id": "circe_signal_beacon",
@@ -463,7 +463,7 @@
       "type": "charm",
       "name": "Signal Beacon",
       "file": "circe/circe_signal_beacon.png",
-      "unlock": "free"
+      "unlock": "achievement:on_rails"
     },
     {
       "id": "circe_chrome_orb",
@@ -471,7 +471,7 @@
       "type": "charm",
       "name": "Chrome Orb",
       "file": "circe/circe_chrome_orb.png",
-      "unlock": "free"
+      "unlock": "achievement:curator"
     },
     {
       "id": "lock_padlock_collar",
@@ -479,7 +479,7 @@
       "type": "deco",
       "name": "Padlock Collar",
       "file": "circe/lock_padlock_collar.png",
-      "unlock": "free"
+      "unlock": "achievement:total_lockdown"
     },
     {
       "id": "lock_key_halo",
@@ -487,7 +487,7 @@
       "type": "deco",
       "name": "Key Halo",
       "file": "circe/lock_key_halo.png",
-      "unlock": "free"
+      "unlock": "achievement:platinum_puppet"
     },
     {
       "id": "lock_keepers_tiara",
@@ -495,7 +495,7 @@
       "type": "deco",
       "name": "Keeper's Tiara",
       "file": "circe/lock_keepers_tiara.png",
-      "unlock": "free"
+      "unlock": "achievement:perfect_plastic_puppet"
     },
     {
       "id": "lock_chain_circlet",
@@ -511,7 +511,7 @@
       "type": "deco",
       "name": "Heart Blinders",
       "file": "circe/lock_heart_blinders.png",
-      "unlock": "free"
+      "unlock": "achievement:system_overload"
     },
     {
       "id": "lock_keyhole_mask",
@@ -519,7 +519,7 @@
       "type": "deco",
       "name": "Keyhole Mask",
       "file": "circe/lock_keyhole_mask.png",
-      "unlock": "free"
+      "unlock": "achievement:locked_in"
     },
     {
       "id": "lock_keyhole_monocle",
@@ -527,7 +527,7 @@
       "type": "deco",
       "name": "Keyhole Monocle",
       "file": "circe/lock_keyhole_monocle.png",
-      "unlock": "free"
+      "unlock": "achievement:threadbare"
     },
     {
       "id": "lock_key_earring",
@@ -543,7 +543,7 @@
       "type": "deco",
       "name": "Pet Bell Collar",
       "file": "circe/lock_bell_collar.png",
-      "unlock": "free"
+      "unlock": "achievement:puppet_strings"
     },
     {
       "id": "lock_leash_ribbon",
@@ -559,7 +559,7 @@
       "type": "deco",
       "name": "Wax Seal Pin",
       "file": "circe/lock_wax_seal_pin.png",
-      "unlock": "free"
+      "unlock": "achievement:word_perfect"
     },
     {
       "id": "lock_candle_crown",
@@ -567,7 +567,7 @@
       "type": "deco",
       "name": "Candle Crown",
       "file": "circe/lock_candle_crown.png",
-      "unlock": "free"
+      "unlock": "achievement:thirty_day_doll"
     },
     {
       "id": "lock_velvet_cuffs",
@@ -575,7 +575,7 @@
       "type": "deco",
       "name": "Velvet Cuffs",
       "file": "circe/lock_velvet_cuffs.png",
-      "unlock": "free"
+      "unlock": "achievement:what_panic_button"
     },
     {
       "id": "lock_chain_drape",
@@ -583,7 +583,7 @@
       "type": "deco",
       "name": "Chain Drape",
       "file": "circe/lock_chain_drape.png",
-      "unlock": "free"
+      "unlock": "achievement:brainwashed_slavedoll"
     },
     {
       "id": "lock_her_key",
@@ -591,7 +591,7 @@
       "type": "charm",
       "name": "Her Key",
       "file": "circe/lock_her_key.png",
-      "unlock": "free"
+      "unlock": "achievement:throw_away_the_key"
     },
     {
       "id": "lock_heart_padlock",
@@ -599,7 +599,7 @@
       "type": "charm",
       "name": "Heart Padlock",
       "file": "circe/lock_heart_padlock.png",
-      "unlock": "free"
+      "unlock": "achievement:relapse"
     },
     {
       "id": "lock_gilded_cage",
@@ -607,7 +607,7 @@
       "type": "charm",
       "name": "Gilded Cage",
       "file": "circe/lock_gilded_cage.png",
-      "unlock": "free"
+      "unlock": "achievement:window_shopping"
     },
     {
       "id": "lock_dripping_candle",
@@ -615,7 +615,7 @@
       "type": "charm",
       "name": "Dripping Candle",
       "file": "circe/lock_dripping_candle.png",
-      "unlock": "free"
+      "unlock": "achievement:she_remembers"
     },
     {
       "id": "lock_sealed_contract",
@@ -623,7 +623,7 @@
       "type": "charm",
       "name": "The Contract",
       "file": "circe/lock_sealed_contract.png",
-      "unlock": "free"
+      "unlock": "achievement:hand_over_control"
     },
     {
       "id": "lock_velvet_cushion",

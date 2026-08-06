@@ -29,9 +29,19 @@ namespace ConditioningControlPanel.Services
         /// <summary>Registry-relative art path, e.g. <c>bambi/bambi_silk_bow.png</c>.</summary>
         public string File { get; }
 
-        /// <summary><c>free | level:&lt;n&gt; | tier:&lt;n&gt; | event:&lt;slug&gt; | code</c>. All
-        /// launch items are <c>free</c>; gating is a later, data-only decision.</summary>
+        /// <summary><c>free | achievement:&lt;id&gt; | level:&lt;n&gt; | tier:&lt;n&gt; | event:&lt;slug&gt; | code</c>.
+        /// Only <c>free</c> and <c>achievement:</c> are enforced today; the other forms remain
+        /// reserved (an unrecognised value degrades to free so a registry typo never locks art).</summary>
         public string Unlock { get; }
+
+        /// <summary>
+        /// The achievement id gating this item (<c>"unlock": "achievement:&lt;id&gt;"</c>), or null
+        /// for an ungated item.
+        /// </summary>
+        public string? RequiredAchievementId =>
+            Unlock.StartsWith("achievement:", StringComparison.OrdinalIgnoreCase)
+                ? Unlock.Substring("achievement:".Length).Trim() is { Length: > 0 } id ? id : null
+                : null;
 
         public bool IsDecoration => string.Equals(Type, "deco", StringComparison.OrdinalIgnoreCase);
         public bool IsCharm => string.Equals(Type, "charm", StringComparison.OrdinalIgnoreCase);
@@ -99,6 +109,7 @@ namespace ConditioningControlPanel.Services
         private static HashSet<string>? _ids;
         private static HashSet<string>? _decoIds;
         private static HashSet<string>? _charmIds;
+        private static Dictionary<string, string>? _achievementGates;
         private static List<string>? _mods;
         private static bool _loadAttempted;
 
@@ -149,6 +160,37 @@ namespace ConditioningControlPanel.Services
         {
             EnsureLoaded();
             return _charmIds;
+        }
+
+        /// <summary>
+        /// Achievement gates declared by the registry: item id → required achievement id.
+        /// Null when there is no readable registry (read by Sanitize as "cannot validate");
+        /// empty when the registry exists but gates nothing.
+        /// </summary>
+        public static IReadOnlyDictionary<string, string>? AchievementGates()
+        {
+            EnsureLoaded();
+            return _achievementGates;
+        }
+
+        /// <summary>
+        /// Live unlock check for the CURRENT user: true for ungated items, and for gated items
+        /// whose achievement is earned. Defaults to UNLOCKED when achievement progress is not
+        /// loadable (early boot / tests) - gating must never brick the picker.
+        /// </summary>
+        public static bool IsUnlockedForCurrentUser(WardrobeItem? item)
+        {
+            var gate = item?.RequiredAchievementId;
+            if (gate == null) return true;
+            try
+            {
+                var progress = App.Achievements?.Progress;
+                return progress == null || progress.IsUnlocked(gate);
+            }
+            catch
+            {
+                return true;
+            }
         }
 
         public static WardrobeItem? Find(string? id)
@@ -263,9 +305,15 @@ namespace ConditioningControlPanel.Services
                 _ids = null;
                 _decoIds = null;
                 _charmIds = null;
+                _achievementGates = null;
                 _mods = null;
                 _loadAttempted = false;
             }
+
+            // The silhouette masks are frozen ImageBrushes built off this cache; a stale one would
+            // keep stencilling the OLD art after a mid-session asset drop.
+            try { Helpers.Silhouette.InvalidateCache(); }
+            catch (Exception ex) { App.Logger?.Debug("WardrobeCatalog: silhouette cache flush failed: {E}", ex.Message); }
         }
 
         // ---------------------------------------------------------------------------------
@@ -320,6 +368,9 @@ namespace ConditioningControlPanel.Services
                         items.Where(i => i.IsDecoration).Select(i => i.Id), StringComparer.Ordinal);
                     _charmIds = new HashSet<string>(
                         items.Where(i => i.IsCharm).Select(i => i.Id), StringComparer.Ordinal);
+                    _achievementGates = items
+                        .Where(i => i.RequiredAchievementId != null)
+                        .ToDictionary(i => i.Id, i => i.RequiredAchievementId!, StringComparer.Ordinal);
                 }
                 catch (Exception ex)
                 {
@@ -329,6 +380,7 @@ namespace ConditioningControlPanel.Services
                     _ids = null;
                     _decoIds = null;
                     _charmIds = null;
+                    _achievementGates = null;
                     _mods = null;
                 }
             }

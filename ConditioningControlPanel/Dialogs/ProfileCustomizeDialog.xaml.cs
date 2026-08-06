@@ -50,6 +50,7 @@ namespace ConditioningControlPanel
         private static readonly Brush SelectedBg = Frozen("#33FF69B4");
         private static readonly Brush SelectedCyan = Frozen("#5EC8F2");
         private static readonly Brush SelectedCyanBg = Frozen("#335EC8F2");
+        private static readonly Brush SilhouetteFill = Frozen("#E60D0A1A");
 
         /// <summary>The edited loadout. Only meaningful when ShowDialog() returned true.</summary>
         public ProfileCosmetics Result => _draft;
@@ -563,14 +564,42 @@ namespace ConditioningControlPanel
 
         private Border BuildWardrobeTile(WardrobeItem item, ImageSource art)
         {
+            var locked = !WardrobeCatalog.IsUnlockedForCurrentUser(item);
+
             var content = new Grid();
-            content.Children.Add(new Image
+            if (locked)
             {
-                Source = art,
-                Stretch = Stretch.Uniform,
-                Margin = new Thickness(4),
-                IsHitTestVisible = false
-            });
+                // Silhouette: the art's alpha as an opacity mask over a near-black fill, so the
+                // SHAPE of the reward shows but none of its detail (same tease as the
+                // achievements page). The art itself is not rendered at all.
+                content.Children.Add(new System.Windows.Shapes.Rectangle
+                {
+                    Fill = SilhouetteFill,
+                    OpacityMask = new ImageBrush(art) { Stretch = Stretch.Uniform },
+                    Margin = new Thickness(4),
+                    IsHitTestVisible = false
+                });
+                content.Children.Add(new TextBlock
+                {
+                    Text = "🔒",
+                    FontSize = 11,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    VerticalAlignment = VerticalAlignment.Bottom,
+                    Margin = new Thickness(0, 0, 3, 2),
+                    Opacity = 0.85,
+                    IsHitTestVisible = false
+                });
+            }
+            else
+            {
+                content.Children.Add(new Image
+                {
+                    Source = art,
+                    Stretch = Stretch.Uniform,
+                    Margin = new Thickness(4),
+                    IsHitTestVisible = false
+                });
+            }
             content.Children.Add(new TextBlock
             {
                 Text = "✓",
@@ -596,7 +625,8 @@ namespace ConditioningControlPanel
                 BorderThickness = new Thickness(2),
                 Cursor = Cursors.Hand,
                 // Item names are plain English proper nouns in the registry - not localized.
-                ToolTip = item.Name,
+                // A locked tile teases the gate instead of naming the item.
+                ToolTip = locked ? Loc.GetF("profile_customize_wardrobe_locked_tip", GateName(item)) : item.Name,
                 Child = content
             };
             tile.MouseLeftButtonUp += (_, _) => ToggleWardrobeItem(item);
@@ -605,12 +635,29 @@ namespace ConditioningControlPanel
             return tile;
         }
 
+        /// <summary>Localized name of the achievement gating an item, for lock copy.</summary>
+        private static string GateName(WardrobeItem item)
+        {
+            var gate = item.RequiredAchievementId;
+            if (gate != null && Achievement.All.TryGetValue(gate, out var ach))
+                return ach.LocalizedName;
+            return gate ?? string.Empty;
+        }
+
         /// <summary>
         /// Equip, or unequip when it is already worn - clicking the worn item is the only "take it
         /// off" gesture, so it is spelled out in the section's hint line.
         /// </summary>
         private void ToggleWardrobeItem(WardrobeItem item)
         {
+            if (!WardrobeCatalog.IsUnlockedForCurrentUser(item))
+            {
+                // Same treatment as the charm cap: a dead click reads as a broken tile.
+                TxtWardrobeSlots.Text = Loc.Get("profile_customize_wardrobe_locked_click");
+                TxtWardrobeSlots.Foreground = Frozen("#FF5C7A");
+                return;
+            }
+
             if (item.IsCharm)
             {
                 if (_draft.Charms.Contains(item.Id))
