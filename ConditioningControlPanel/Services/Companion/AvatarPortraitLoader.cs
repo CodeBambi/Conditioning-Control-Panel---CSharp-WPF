@@ -46,17 +46,44 @@ namespace ConditioningControlPanel.Services
         /// <summary>Resolve the active mod's manifest path (packaged first, then embedded). Null = no portrait system.</summary>
         public static string? ResolveManifestPath() => ActiveModManifestPath ?? EmbeddedModManifestPath;
 
-        /// <summary>True if the active mod ships a portrait manifest (cheap existence check, no parse).</summary>
-        public static bool HasManifestForActiveMod() => ResolveManifestPath() != null;
+        /// <summary>
+        /// True if the active mod ships a portrait manifest AND its portraits are actually on disk.
+        /// The manifest ships inside the app but the portrait PNGs arrive in a downloadable content
+        /// pack, so a failed/skipped pack download leaves a valid manifest with zero images — and the
+        /// avatar used to commit to portrait mode anyway, freezing on one undersized legacy pose.
+        /// The disk check is cached per manifest path: this gate is polled on every avatar-set switch.
+        /// </summary>
+        public static bool HasManifestForActiveMod()
+        {
+            var path = ResolveManifestPath();
+            return path != null && PortraitsPresent(path);
+        }
 
         /// <summary>
         /// Load + parse the active mod's manifest into an <see cref="AvatarPortraitSet"/>. Never throws —
-        /// a missing/garbled manifest returns null and the caller uses the legacy avatar path.
+        /// a missing/garbled manifest, or one whose portraits never landed, returns null and the caller
+        /// uses the legacy avatar path.
         /// </summary>
         public static AvatarPortraitSet? Load()
         {
             var path = ResolveManifestPath();
             if (path == null) return null;
+
+            var manifest = ReadManifest(path);
+            if (manifest == null) return null;
+
+            var baseDir = Path.GetDirectoryName(path) ?? "";
+            if (!PortraitsPresent(path, manifest)) return null;
+
+            App.Logger?.Information(
+                "AvatarPortraitLoader: loaded {Emotions} emotions, {Skins} skins, {Lines} lines from {Path}",
+                manifest.Emotions.Count, manifest.Skins.Count, manifest.Lines.Count, path);
+            return new AvatarPortraitSet(manifest, baseDir);
+        }
+
+        /// <summary>Read + validate a manifest file. Never throws; null = unusable.</summary>
+        private static AvatarPortraitManifest? ReadManifest(string path)
+        {
             try
             {
                 var json = File.ReadAllText(path);
@@ -67,17 +94,99 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Warning("AvatarPortraitLoader: manifest at {Path} is empty/invalid", path);
                     return null;
                 }
-                var baseDir = Path.GetDirectoryName(path) ?? "";
-                App.Logger?.Information(
-                    "AvatarPortraitLoader: loaded {Emotions} emotions, {Skins} skins, {Lines} lines from {Path}",
-                    manifest.Emotions.Count, manifest.Skins.Count, manifest.Lines.Count, path);
-                return new AvatarPortraitSet(manifest, baseDir);
+                return manifest;
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "AvatarPortraitLoader: failed to load manifest at {Path}", path);
                 return null;
             }
+        }
+
+        /// <summary>
+        /// A half-unpacked pack is as unusable as a missing one, so require a few files rather than
+        /// exactly one — plus the default/idle pose, which is what portrait mode shows first.
+        /// </summary>
+        private const int MinPortraitFiles = 4;
+
+        // Verified-once cache. Only the last-resolved manifest is remembered because exactly one mod
+        // is active at a time; a mod switch re-verifies. Invalidated when a content pack lands.
+        private static string? _verifiedManifestPath;
+        private static bool _verifiedHasPortraits;
+        private static readonly object _verifyLock = new();
+
+        /// <summary>
+        /// Drop the cached "are the portraits on disk?" answer so a pack that lands mid-session is
+        /// picked up. The avatar re-enters portrait mode on the next mod/avatar-set switch.
+        /// </summary>
+        public static void InvalidateAvailabilityCache()
+        {
+            lock (_verifyLock) { _verifiedManifestPath = null; }
+        }
+
+        private static bool PortraitsPresent(string manifestPath, AvatarPortraitManifest? preloaded = null)
+        {
+            lock (_verifyLock)
+            {
+                if (_verifiedManifestPath == manifestPath) return _verifiedHasPortraits;
+
+                var manifest = preloaded ?? ReadManifest(manifestPath);
+                bool present;
+                try
+                {
+                    present = manifest != null &&
+                              CountsAsPresent(manifest, Path.GetDirectoryName(manifestPath) ?? "", manifestPath);
+                }
+                catch (Exception ex)
+                {
+                    // This gate is polled from paths with no try/catch of their own; an odd manifest
+                    // must degrade to the legacy avatar, not take the tube down.
+                    App.Logger?.Warning(ex, "AvatarPortraitLoader: portrait availability check failed for {Path}", manifestPath);
+                    present = false;
+                }
+
+                _verifiedManifestPath = manifestPath;
+                _verifiedHasPortraits = present;
+                return present;
+            }
+        }
+
+        /// <summary>
+        /// Stat the manifest's portraits until enough are found (early exit) — a full sweep only ever
+        /// happens on the failure path, which is also the only path that needs an exact count to log.
+        /// </summary>
+        private static bool CountsAsPresent(AvatarPortraitManifest manifest, string baseDir, string manifestPath)
+        {
+            var basePose = string.IsNullOrEmpty(manifest.DefaultEmotion) ? manifest.IdleEmotion : manifest.DefaultEmotion;
+            // Only demand the base pose if the manifest actually declares it, so a manifest whose
+            // defaultEmotion is a typo still works off its other emotions (GetBucket already falls back).
+            bool needBasePose = manifest.Emotions.ContainsKey(basePose);
+            bool haveBasePose = !needBasePose;
+            int found = 0;
+
+            foreach (var skin in manifest.Skins)
+            {
+                var skinDir = Path.Combine(baseDir, (skin.Dir ?? "").Replace('/', Path.DirectorySeparatorChar));
+                foreach (var kv in manifest.Emotions)
+                {
+                    bool isBasePose = string.Equals(kv.Key, basePose, StringComparison.OrdinalIgnoreCase);
+                    foreach (var p in kv.Value.Portraits)
+                    {
+                        if (string.IsNullOrEmpty(p.File)) continue;
+                        var abs = Path.Combine(skinDir, p.File);
+                        // Same install-dir/content-pack split GetBucket handles.
+                        if (!File.Exists(abs) && ContentLocator.Mirror(abs) == null) continue;
+                        found++;
+                        if (isBasePose) haveBasePose = true;
+                        if (haveBasePose && found >= MinPortraitFiles) return true;
+                    }
+                }
+            }
+
+            App.Logger?.Information(
+                "AvatarPortraitLoader: portrait avatar skipped for {Path} - only {Count} portrait image file(s) found on disk " +
+                "(content pack missing?); using the animated avatar instead", manifestPath, found);
+            return false;
         }
     }
 

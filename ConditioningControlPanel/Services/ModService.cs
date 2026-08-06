@@ -2198,6 +2198,9 @@ namespace ConditioningControlPanel.Services
         /// <summary>Raises <see cref="ModAvailabilityChanged"/>; a throwing subscriber never escapes.</summary>
         private void RaiseModAvailabilityChanged(string modOrPackId)
         {
+            // A pack landing can be the moment the avatar portraits finally exist on disk; drop the
+            // cached "no portraits" answer so the next mod/avatar-set switch can enter portrait mode.
+            AvatarPortraitLoader.InvalidateAvailabilityCache();
             try { ModAvailabilityChanged?.Invoke(this, modOrPackId); }
             catch (Exception ex) { _log?.Debug("ModAvailabilityChanged subscriber error: {Error}", ex.Message); }
         }
