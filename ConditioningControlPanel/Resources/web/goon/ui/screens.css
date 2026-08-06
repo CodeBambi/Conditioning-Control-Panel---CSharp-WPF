@@ -697,6 +697,15 @@
 .gg-recap-report .gg-recap-fine { text-align: left; }
 .gg-report-lead { margin: 0 0 0.7rem; color: var(--gg-text-2); font-size: 0.82rem; line-height: 1.5; }
 .gg-report-note-line { margin: 0.6rem 0 0; color: var(--gg-text-4); font-size: 0.7rem; line-height: 1.5; }
+/* The email road out (S.recap.reportEmail, 2026-08-06). Same type as the fine
+   print it sits with, one step brighter and ruled off above: it is the last line
+   of the card and the only one that names a human being to talk to, so it must
+   not read as more small print about the form above it. */
+.gg-report-email {
+  color: var(--gg-text-3);
+  border-top: 1px solid rgba(255, 105, 180, 0.18);
+  padding-top: 0.6rem;
+}
 
 /* The shortlist. Fixed-height thumbs so a portrait clip and a wide still do not
    make the row jump; `object-fit: cover` is what keeps them the same shape. */
@@ -1370,6 +1379,16 @@ html[data-gg-motion="reduced"] .gg-vs-splash * { transition: none !important; }
  * ------------------------------------------------------------------------ */
 .gg-voicelib { min-width: min(38rem, 96vw); max-width: min(38rem, 96vw); text-align: left; }
 .gg-voice-head { text-align: center; }
+/* The supporter-perk line, under the lead it qualifies (S.voice.screenNoPerk,
+   2026-08-06). Quieter than the lead and warm rather than red: nothing is broken
+   and nothing failed — one half of this screen crosses to another person and that
+   half is paid for. Rendered only for a seat without the cap. */
+.gg-voice-perk {
+  margin-top: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--gg-gold);
+  opacity: 0.92;
+}
 
 .gg-voice-consent { margin-bottom: 0.9rem; }
 /* The opt-in row is CLICKABLE EVEN WHEN THE CHECKBOX IS NOT: the ack gate

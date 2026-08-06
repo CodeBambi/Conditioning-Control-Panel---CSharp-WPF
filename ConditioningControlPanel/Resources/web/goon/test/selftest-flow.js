@@ -690,27 +690,47 @@ function mountRecap(result) {
     a.dispose(); b.dispose(); pair.dispose();
   }
 
-  /* ---------------- 6a-free. THE FREE SEAT SENDS (owner call, 2026-08-05) ------
-   * Everything above drives `canSend` from a hand-written arrow. This one drives
-   * it from the SHAPE A FREE SEAT ACTUALLY HOLDS — bridge.js's standaloneInit
-   * caps, minus every paid marker — through the same predicate boot.js installs
-   * (`caps.mediaTransfer === true`). If someone re-introduces a tier default in
-   * bridge.js, this fails on the object rather than on a source regex.
+  /* ------------- 6a-tier. THE UNENTITLED SEAT DOES NOT SEND (re-gate 2026-08-06)
    *
-   * The two verdicts are asserted TOGETHER on the same caps object because the
-   * whole decision is that they diverge: sending free, hosting not.
+   * Everything above drives `canSend` from a hand-written arrow. This one drives
+   * it from the SHAPE A SEAT ACTUALLY HOLDS, through the same predicate boot.js
+   * installs (`caps.mediaTransfer === true`), for both answers.
+   *
+   * THE POLICY, and its whole history in four lines. Sending was tier 1+, went
+   * FREE for one day (2026-08-05, because a gated seat's attacks silently fell
+   * back to the receiver's own pool and read as a broken feature), and came back
+   * as a perk on 2026-08-06 with the copy it should have shipped with — abuse
+   * beat generosity, and the lobby row now names the perk (S.lobby.transferOff)
+   * rather than going dark in silence. The BLANK-ATTACK BEHAVIOUR IS UNCHANGED
+   * and is asserted below: an unentitled seat's payloads fire untagged and the
+   * receiver draws from its own pool. That is not a bug any more, it is the
+   * documented shape of the free tier — the fix was the sentence, not the lane.
+   *
+   * The two verdicts are asserted on the SAME caps object because the two bars
+   * are different: sending is tier 1, hosting is tier 2, and a supporter who may
+   * send still may not mint a room.
    * -------------------------------------------------------------------------- */
   {
-    // A guest that arrived on an invite link: no account, no tier, no host right.
+    // A guest that arrived on an invite link: no account, no tier, and — since the
+    // re-gate — no send. The server's `media_send` verdict answers false for an
+    // anonymous `g_` seat and boot.js folds it into the cap.
     const freeSeatCaps = {
       platform: 'web', video: true, camera: false, assetCache: false,
-      mediaTransfer: true,     // bridge.js standaloneInit — free for every seat
-      canHost: false,          // …and the server's tier-2 bar, unmoved
+      mediaTransfer: false,    // the adopted server verdict for an unentitled seat
+      canHost: false,          // …and the tier-2 bar above it, unmoved
     };
-    // boot.js's canSend closure, verbatim in shape.
+    // boot.js's canSend closure, verbatim in shape. The SAME expression now also
+    // gates voice notes (ui/voice/voiceService.js `sendAllowed`) — one send policy.
     const canSend = () => !!(freeSeatCaps && freeSeatCaps.mediaTransfer === true);
-    ok(canSend() === true, 'a free seat CAN send: caps.mediaTransfer is true with no account behind it');
-    ok(freeSeatCaps.canHost !== true, 'and still cannot host — the perk did not move');
+    ok(canSend() === false, 'an unentitled seat cannot send: caps.mediaTransfer is false');
+    ok(freeSeatCaps.canHost !== true, 'and still cannot host — two bars, not one');
+
+    // ...and the entitled shape, on the same predicate, so the gate is proved to be
+    // a gate rather than an off switch.
+    const paidSeatCaps = Object.assign({}, freeSeatCaps, { mediaTransfer: true });
+    ok(!!(paidSeatCaps && paidSeatCaps.mediaTransfer === true) === true,
+      'a tier-1+ seat may send on the very same predicate');
+    ok(paidSeatCaps.canHost !== true, 'while tier 1 still buys no room — sending is the lower bar');
 
     const pair = createLoopbackPair(loopbackOptions({
       latencyMs: 0, jitterMs: 0, guestClockSkewMs: 0, bulk: true, logger: quiet,
@@ -720,8 +740,8 @@ function mountRecap(result) {
       { sha: SHA_IMG, bytes: 40000, mime: 'image/png', kind: 'image', exempt: false },
     ]);
     const storeB = fakeStore();
-    // The FREE seat is the sender here — the exact inversion of 6a, where the
-    // gated side was the one holding nothing.
+    // The UNENTITLED seat is the sender here — everything else about it is perfect:
+    // a bulk-capable link, both consents, a modern peer and a compressed library.
     const qFree = createMediaQueue({ artifacts, store: fakeStore(), logger: quiet, canSend, idlePollMs: 40 });
     const qPeer = createMediaQueue({
       artifacts: { listSendable: () => [], open: () => null },
@@ -730,23 +750,25 @@ function mountRecap(result) {
     qFree.attach(a, pair.host);
     qPeer.attach(b, pair.guest);
 
-    // The hello is a round trip, so the ladder is only complete a few turns in —
-    // same wait 6a uses, and the same reason.
+    // The same wait 6a uses — long enough that a lane which WAS going to open has.
     for (let i = 0; i < 80 && storeB.held.size < 1; i++) await tick(25);
-    ok(qFree.enabled() === true,
-      'and the whole sendGate ladder passes for it — capability, both consents, peer support, bulk, hello');
-    ok(storeB.held.size >= 1, "the free seat's media actually crossed the wire", String(storeB.held.size));
+    ok(qFree.enabled() === false,
+      'the whole rest of the ladder passes and the lane is STILL shut — the capability is the one missing rung');
+    ok(storeB.held.size === 0, 'nothing crossed the wire', String(storeB.held.size));
+    ok(qFree.tagsFor(GoonPayloadKind.FlashBurst).length === 0,
+      'so its payloads fire UNTAGGED and the receiver draws from its own pool — the documented free-tier shape');
 
     qFree.detach(); qPeer.detach();
     a.dispose(); b.dispose(); pair.dispose();
   }
 
-  /* -------- 6a-consent. A FREE CAPABILITY IS NOT A FREE PASS --------------------
-   * The half of 6a-free that matters most for review: give the free seat the
-   * capability and take away the OTHER side's lobby tick, and the lane stays
-   * shut — with the queue naming consent, not entitlement, as the reason. The
-   * pair is built the 6d way (declarations set at Idle, one side silent) because
-   * the setter refuses past Consent and a withdrawal mid-Draft is a no-op.
+  /* -------- 6a-consent. THE CAPABILITY IS NOT A FREE PASS -----------------------
+   * The other half of 6a-tier: give the seat the capability and take away the
+   * OTHER side's lobby tick, and the lane stays shut — with the queue naming
+   * consent, not entitlement, as the reason. Entitlement and consent are two
+   * different gates and neither one substitutes for the other. The pair is built
+   * the 6d way (declarations set at Idle, one side silent) because the setter
+   * refuses past Consent and a withdrawal mid-Draft is a no-op.
    * -------------------------------------------------------------------------- */
   {
     const caps = localCaps({ transfer: true });
@@ -755,7 +777,7 @@ function mountRecap(result) {
     }));
     const a = new GoonMatchService(pair.host, true, { logger: quiet, caps, displayName: 'Free', tag: 'GG:AFREE' });
     const b = new GoonMatchService(pair.guest, false, { logger: quiet, caps, displayName: 'Peer', tag: 'GG:BFREE' });
-    ok(a.setMediaTransfer(true) === true, 'the free seat ticks its own lobby box');
+    ok(a.setMediaTransfer(true) === true, 'the entitled seat ticks its own lobby box');
     // The peer never does.
     a.adoptLobby(); b.adoptLobby();
     await pair.connect();
@@ -777,7 +799,7 @@ function mountRecap(result) {
     ok(Array.isArray(why) && why.length === 0,
       'so a media payload fires untagged, exactly as it does for a gated seat');
     ok(a.mediaTransferAgreed === false,
-      'and the engine agrees: free to send is not the same as cleared to send');
+      'and the engine agrees: entitled to send is not the same as cleared to send');
 
     q.detach(); a.dispose(); b.dispose(); pair.dispose();
   }

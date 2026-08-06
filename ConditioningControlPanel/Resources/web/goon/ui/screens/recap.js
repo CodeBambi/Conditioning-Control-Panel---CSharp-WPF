@@ -153,6 +153,27 @@ export function mount(container, ctx) {
   const getPeerRenders = typeof ctx.getPeerRenders === 'function' ? ctx.getPeerRenders : null;
   const mountedAt = Date.now();
 
+  /**
+   * THE OPPONENT'S DISPLAY NAME, or '' when this match never learned one.
+   *
+   * For the report card's email line (S.recap.reportEmail), which asks a player
+   * to tell support WHO they were with — the one field a mail an hour later
+   * cannot reconstruct, and the one this screen already knows. It falls back to
+   * the Discord card's name the way resultPlates() does, and to '' rather than to
+   * a placeholder: "the name of the player you were with (they)" would be worse
+   * than not naming anybody, so the string has a nameless variant instead.
+   * Trimmed and length-clamped because it is a peer-supplied string being read
+   * back to the player as an instruction.
+   */
+  function peerName() {
+    try {
+      const card = ctx.discord ? ctx.discord.peer : null;
+      const raw = (match && match.opponent && match.opponent.displayName)
+        || (card && card.name) || '';
+      return String(raw).trim().slice(0, 64);
+    } catch (_e) { return ''; }
+  }
+
   let reportPick = '';        // sha
   let reportReason = '';      // a WIRE code from REPORT_REASONS
   let reportNote = '';
@@ -267,6 +288,19 @@ export function mount(container, ctx) {
       el('h2', { class: 'gg-recap-h', text: S.recap.reportTitle }),
     ]);
 
+    /* THE EMAIL ROAD (owner ask, 2026-08-06), and it is built here — before the
+     * collapse branch below — so it appears in BOTH states. The card above files
+     * against ONE ARTIFACT; serious abuse is very often not a file at all, and a
+     * player who has just filed a picture-report may be exactly the one who still
+     * needs a human. The name is the opponent's DISPLAY NAME when the recap has
+     * one, because it is the field a stranger cannot reconstruct later and it is
+     * on this screen right now; the string has a nameless variant for a match
+     * that never learned one (an abandon before the hello). */
+    const emailLine = () => el('p', {
+      class: 'gg-report-note-line gg-report-email',
+      text: S.recap.reportEmail(peerName()),
+    });
+
     // COLLAPSED. A filed report is a closed subject: the shortlist, the picker
     // and the button all go, so the card cannot be used to file a second one by
     // accident and does not sit there looking unfinished.
@@ -275,6 +309,7 @@ export function mount(container, ctx) {
         class: 'gg-report-status is-done',
         text: reportPhase === 'deduped' ? S.report.deduped : S.report.done(reportId),
       }));
+      card.appendChild(emailLine());
       return card;
     }
 
@@ -360,6 +395,10 @@ export function mount(container, ctx) {
     }
 
     card.appendChild(el('p', { class: 'gg-report-note-line', text: S.recap.reportPrivacy }));
+    // LAST, and unconditional: it must be readable before anything is picked,
+    // before a reason is chosen and before anything is submitted. The one thing
+    // it may never be is a receipt that only exists after a successful file.
+    card.appendChild(emailLine());
     return card;
   }
 

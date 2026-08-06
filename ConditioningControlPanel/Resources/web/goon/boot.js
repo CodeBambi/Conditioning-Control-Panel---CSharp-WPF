@@ -594,10 +594,10 @@ function localCaps() {
    * `transfer` (its sibling in core/caps.js) is advertised on EXACTLY the same
    * terms: this build ships net/mediaChannel.js and will parse offers, full
    * stop. It says nothing about consent (the sheet's `media_transfer` term),
-   * nothing about entitlement (session.caps.mediaTransfer gates SENDING only,
-   * and as of 2026-08-05 that is free for every seat anyway — receiving never
-   * was), and nothing about the link (the lobby row checks supportsBulk
-   * separately). Until 2026-08-04 NOBODY set this flag —
+   * nothing about entitlement (session.caps.mediaTransfer gates SENDING only —
+   * a tier-1+ perk again as of 2026-08-06, and voice notes ride the same cap;
+   * receiving was never gated in any era), and nothing about the link (the
+   * lobby row checks supportsBulk separately). Until 2026-08-04 NOBODY set this flag —
    * caps.js documented that boot advertises it and boot never did — so every
    * hello said `transfer:false`, both lobbies greyed the checkbox out with
    * "their build doesn't transfer", and the entire media lane was unreachable
@@ -615,8 +615,9 @@ function localCaps() {
 /* ============================================================================
  * P2P MEDIA TRANSFER — the three singletons and the one adapter.
  *
- * The queue SENDS (session.caps.mediaTransfer — free for every seat since
- * 2026-08-05; the paid perk is HOSTING), the store RECEIVES (never gated at all,
+ * The queue SENDS (session.caps.mediaTransfer — a TIER 1+ PERK again as of
+ * 2026-08-06, after one day free; voice notes ride the same cap, and hosting is
+ * still a rung above at tier 2), the store RECEIVES (never gated at all,
  * in any era), and the blocklist is the render-time safety gate. All three are built in
  * buildApp() and the queue is attached/detached with the match, so the relay
  * rebuild re-binds it over the new transport and it simply goes dormant.
@@ -1019,12 +1020,19 @@ function buildMatch(transport, isHost, { withSuddenDeathUi = true, displayName =
 /**
  * THE SERVER'S SEND VERDICT -> session.caps.mediaTransfer. Standalone only.
  *
- * Sending is free for every seat now (bridge.js defaults the cap ON, and the C#
- * host's TransferAllowed() answers true), so this is no longer how a seat EARNS
- * the capability — it is how the server can still TAKE IT BACK. /invite and
- * /join answer `media_send`; net/signaling.js records it; this folds it in. A
- * `false` from a future policy turns sending off with no client release, and a
- * `null` (a server that predates the field) deliberately changes nothing.
+ * THIS IS THE TIER GATE OUT HERE, again, as of 2026-08-06. bridge.js still
+ * defaults the cap ON and the fold below is still literally "adopt whatever the
+ * server said" — NOTHING IN THIS FUNCTION CHANGED with the re-gate — but what the
+ * server says changed: `media_send` on /invite and /join now answers
+ * computeEffectiveTier >= 1, and an anonymous `g_` guest gets false. So on a
+ * standalone page the verdict is once again what decides whether this seat may
+ * send, rather than a veto a permissive server never exercises. (Hosted pages are
+ * the C# init frame's business — TransferAllowed(), the same tier-1 bar.)
+ *
+ * The mechanics are unchanged and still matter: net/signaling.js records the
+ * answer, this folds it in, and a `null` (a server that predates the field)
+ * deliberately changes nothing. Voice notes ride the same cap from here — the
+ * `sendAllowed` thunk in attachMatch reads exactly this value.
  *
  * WHY THIS IS A FUNCTION AND NOT A LINE IN attachMatch — it has to run TWICE,
  * on two different roads, and running it only in attachMatch is exactly the bug
@@ -1112,6 +1120,19 @@ function attachMatch(match, transport) {
       // The same content gate the media lane renders through. See the consult in
       // voiceService.onEnd: local map only, fails open, never waits on the net.
       blocklist,
+      /* THE SEND PERK, SHARED WITH MEDIA (owner call, 2026-08-06). The SAME
+       * expression the media queue's `canSend` uses, deliberately written out
+       * again rather than hoisted into a shared closure: these are two lanes with
+       * two lifetimes (the queue is a buildApp singleton, this is per-match) and
+       * the day one of them needs its own answer, the divergence should be an
+       * edit rather than a discovery. One send policy today, and the C# doc on
+       * TransferAllowed() says so from the other side.
+       *
+       * A THUNK, never a snapshot: `session.caps` is REPLACED (not mutated) by
+       * adoptServerSendVerdict, and on the first-connect road that happens AFTER
+       * this service is built. Capturing the boolean here would gate every fresh
+       * standalone duel on a verdict that had not arrived yet. */
+      sendAllowed: () => !!(session.caps && session.caps.mediaTransfer === true),
       logger,
     });
   } catch (e) { logger.error('createVoiceService threw: ' + ((e && e.stack) || e)); voice = null; }
@@ -1136,9 +1157,21 @@ function attachMatch(match, transport) {
       logger.warn('voice-note seed REFUSED by the engine (phase ' + match.phase + ') — declaration will not ride the consent frames');
     }
   } catch (e) { logger.warn('setLocalVoiceNotes threw: ' + ((e && e.message) || e)); }
-  /* SENDING DEFAULTS ON (owner call, 2026-08-05). Sending is free for every
-   * seat now and "my attacks carry MY media" is the product, so the standing
-   * answer is yes unless this player has explicitly unticked the lobby box
+  /* THE LOBBY BOX DEFAULTS ON, AND STAYS THAT WAY THROUGH THE RE-GATE.
+   *
+   * This seeds CONSENT, not entitlement, and the two are different questions:
+   * this box says "I am willing to use the media lane with this person", and the
+   * lane it opens carries traffic in BOTH directions — receiving is part of it
+   * and receiving has never been gated or paid for. Entitlement is
+   * session.caps.mediaTransfer alone (a tier-1+ perk again as of 2026-08-06),
+   * checked by net/mediaQueue.js `canSend` and by the voice service's
+   * `sendAllowed`. So an ungated seat still ticks this box, still receives
+   * everything, and simply sends nothing — with the lobby row saying why
+   * (S.lobby.transferOff). Defaulting it OFF for unpaid seats would take away the
+   * free half of the feature to enforce the paid half.
+   *
+   * "My attacks carry MY media" is the product for the seats that have it, so the
+   * standing answer is yes unless this player has explicitly unticked the lobby box
    * before (prefs 'mediaTransferEnabled' === false — the checkbox writes it).
    * Same seam as the voice seeding above, for the same rebuild reason; the
    * engine accepts the seed in Idle too (core/match.js _seedDeclaration —
@@ -1523,6 +1556,13 @@ function micGateToast(deskWhy) {
     if (!m) return;
     let msg = '';
     if (deskWhy === 'zen') msg = S.voice.micZenToast;
+    /* THE PERK, ahead of the three facts about the duel and in the order
+     * voiceService.available() applies its own gates (2026-08-06). Read off
+     * `session.caps` rather than off the match, because it is the only gate here
+     * that is about the SEAT: an ungated player can meet every other condition —
+     * direct link, modern peer, both boxes ticked — and still have no mic, which
+     * without this arm is a hidden control and total silence. */
+    else if (!(session.caps && session.caps.mediaTransfer === true)) msg = S.voice.micNoPerkToast;
     else if (!m.linkIsP2P) msg = S.voice.micRelayToast;
     else if (!m.peerSupportsVoice) msg = S.voice.micPeerOldToast;
     else if (!m.remoteVoiceNotes) msg = S.voice.micPeerOffToast;
@@ -2221,12 +2261,15 @@ function buildApp() {
     blocklist,
     logger,
     acceptsCodecs: decodeCodecs,
-    // === true, NOT !== false (the idiom brainDrain/spiral use above). Kept
-    // strict even though the capability is free now: a host that predates the
-    // flag entirely says nothing, and "said nothing" must not read as consent to
-    // start a lane. Every host that DOES speak the flag sets it true (C#
-    // TransferAllowed, bridge.js standalone default), so the strictness only
-    // ever catches a genuinely ancient frame. Receiving is never gated.
+    // === true, NOT !== false (the idiom brainDrain/spiral use above). The
+    // strictness carries the whole entitlement now that sending is a TIER 1+
+    // PERK again (2026-08-06): C# TransferAllowed() answers HasPremiumAccess,
+    // the server's `media_send` verdict answers computeEffectiveTier >= 1, and
+    // adoptServerSendVerdict folds that into the standalone cap. A host that
+    // predates the flag entirely says nothing, and "said nothing" must not read
+    // as a grant. Voice notes ride this same cap through the voice service's
+    // `sendAllowed` (attachMatch). RECEIVING IS NEVER GATED, in any era — this
+    // predicate is only ever asked about the send arm.
     canSend: () => !!(session.caps && session.caps.mediaTransfer === true),
   });
   mediaQueue.onReceived((a) => {

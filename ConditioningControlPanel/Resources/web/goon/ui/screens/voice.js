@@ -112,6 +112,17 @@ export function mount(container, ctx) {
 
   const acked = () => !!(prefs && prefs.get && prefs.get('voiceAckSeen'));
   const enabled = () => !!(prefs && prefs.get && prefs.get('voiceNotesEnabled'));
+  /* THE SEND PERK (owner call, 2026-08-06). Voice notes ride the SAME capability
+   * as media — session.caps.mediaTransfer, tier 1+ — and this screen is one of
+   * the three places that says so out loud (the lobby row and the in-match toast
+   * are the others). Read off the SESSION, not off the voice service: there is no
+   * service outside a match and this is a title-menu screen.
+   *
+   * IT GATES NOTHING ON THIS SCREEN. Recording, playback, deletion and the emote
+   * picker are all local and stay live — the perk is the CROSSING, and the copy
+   * says exactly that. A library screen that quietly stopped working would be the
+   * 2026-08-05 mistake wearing this wave's clothes. */
+  const canSend = () => !!(ctx && ctx.session && ctx.session.caps && ctx.session.caps.mediaTransfer === true);
   const toast = (text, kind) => { try { toasts?.show?.(text, { kind: kind || 'info' }); } catch (_e) { /* stub */ } };
 
   /* ---- head -------------------------------------------------------------- */
@@ -119,6 +130,14 @@ export function mount(container, ctx) {
     el('div', { class: 'gg-eyebrow' }, [el('i'), el('span', { text: S.voice.eyebrow })]),
     el('p', { class: 'gg-lead', text: S.voice.lead }),
   ]);
+  /* Directly under the lead, which promised these notes are "sent to whoever you
+   * are duelling" — an unqualified sentence this seat cannot act on. The
+   * correction belongs in the same eyeline as the claim, not at the bottom of the
+   * screen. Absent entirely for an entitled seat: nothing here sells anything to
+   * somebody who already has it. */
+  if (!canSend()) {
+    head.appendChild(el('p', { class: 'gg-lead gg-voice-perk', text: S.voice.screenNoPerk }));
+  }
 
   /* ---- the opt-in --------------------------------------------------------
    * A CHECKBOX with `disabled` until the ack has been read, and a click on the
