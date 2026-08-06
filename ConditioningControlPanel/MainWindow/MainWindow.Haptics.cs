@@ -121,6 +121,12 @@ namespace ConditioningControlPanel
                 // v2 rule, but DtrhEnabled/DtrhIntensity are still mirrored (see the enum's docs).
                 Ev(HapticEventKind.DtrhAccent, "🐇", "label_dtrh_haptics", "haptics_hint_dtrh",
                    HapticRowLegacyBinding.Dtrh),
+                // Deeper enhancements play authored keyframe envelopes through the Pattern LAYER
+                // (HapticService.SetSyncPatternAsync). Its rule has always been persisted and read;
+                // it just never had a row, so the enable/scale/role were unreachable. No legacy
+                // twin exists for this layer, so None is correct.
+                Ly(HapticLayer.Pattern, "🌊", "haptics_row_deeper", "haptics_hint_deeper",
+                   HapticRowLegacyBinding.None),
             }));
             HapticsTab.RoutingGroupsList.ItemsSource = _hapticRoutingGroups;
 

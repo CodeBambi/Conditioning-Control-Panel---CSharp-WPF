@@ -654,6 +654,13 @@ namespace ConditioningControlPanel.Services
         /// to a different feature and would drop every Deeper haptic.
         /// </summary>
         public Task SetSyncPatternAsync(float[] intensities, int totalDurationMs)
+            => SetSyncPatternAsync(intensities, totalDurationMs, null);
+
+        /// <summary>
+        /// As above, with <paramref name="target"/> routing this envelope by toy role for as long
+        /// as it plays. Null keeps the Pattern layer's configured routing.
+        /// </summary>
+        public Task SetSyncPatternAsync(float[] intensities, int totalDurationMs, ToyRole? target)
         {
             if (intensities == null || intensities.Length == 0 || totalDurationMs <= 0) return Task.CompletedTask;
 
@@ -663,8 +670,31 @@ namespace ConditioningControlPanel.Services
 
             // Authored intensities are used as-is: the audio-sync min/max sliders tune a different
             // feature and would distort the pattern.
-            _mixer.PlayLayerEnvelope(HapticLayer.Pattern, values, totalDurationMs);
+            _mixer.PlayLayerEnvelope(HapticLayer.Pattern, values, totalDurationMs, target);
             return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// The Deeper editor's Test button. Same contract as TestAsync/TestDeviceAsync: the master
+        /// toggle is waived for the length of the preview, premium is not. With the master toggle
+        /// off the preview is the ONLY continuous source that sounds — every held layer stays muted.
+        /// False means nothing played — an empty envelope, or no premium — and the caller owes the
+        /// user a message.
+        /// </summary>
+        public Task<bool> PreviewSyncPatternAsync(float[] intensities, int totalDurationMs, ToyRole? target = null)
+        {
+            if (_disposed || intensities == null || intensities.Length == 0 || totalDurationMs <= 0)
+                return Task.FromResult(false);
+
+            _mixer.AllowTestWindow(Math.Min(totalDurationMs + 2000, 10_000));
+            if (!_mixer.IsGateOpen) return Task.FromResult(false);
+
+            var values = new double[intensities.Length];
+            for (int i = 0; i < intensities.Length; i++)
+                values[i] = Math.Clamp(intensities[i], 0f, 1f);
+
+            _mixer.PlayLayerEnvelope(HapticLayer.Pattern, values, totalDurationMs, target);
+            return Task.FromResult(true);
         }
 
         // === SPECIAL PATTERNS ===
