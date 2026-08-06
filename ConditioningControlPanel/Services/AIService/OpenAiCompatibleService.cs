@@ -684,6 +684,44 @@ namespace ConditioningControlPanel.Services.AIService
             return new AiReplyResult(reply, IsAiGenerated: true, Refusal: null);
         }
 
+        /// <summary>
+        /// Train 1 transport seam — MINIMAL implementation. See <see cref="IAiService.SendAsync"/>.
+        ///
+        /// <para>Flattens the conversation onto the existing single-shot internal (system message +
+        /// newest user message) so the moderation spine — which this provider only gained in Train 0
+        /// and which must not be forked — plus the retry/backoff and [AI-METER] emission stay on one
+        /// code path. The transport agent replaces this body with a real multi-turn post on its own
+        /// branch; the SIGNATURE is final.</para>
+        /// </summary>
+        public async Task<AiReplyResult> SendAsync(IReadOnlyList<ChatMessage> messages, AiCallOptions options,
+            CancellationToken cancellationToken = default)
+        {
+            options ??= AiCallOptions.Chat;
+            var list = messages ?? (IReadOnlyList<ChatMessage>)Array.Empty<ChatMessage>();
+
+            if (App.Settings?.Current?.OfflineMode == true)
+                return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
+
+            var systemPrompt = list.FirstOrDefault(m => m.Role == ChatMessage.RoleSystem)?.Content
+                ?? _bambiSprite.GetSystemPrompt();
+            var userInput = list.LastOrDefault(m => m.Role == ChatMessage.RoleUser)?.Content ?? string.Empty;
+
+            var reply = await SendChatAsync(systemPrompt, userInput,
+                returnRefusalSentinel: options.Interactive, purpose: options.MeterPurpose).ConfigureAwait(false);
+
+            var refusalSource = ModerationRefusal.GetSource(reply);
+            if (refusalSource.HasValue)
+            {
+                return new AiReplyResult(string.Empty, IsAiGenerated: false,
+                    Refusal: new ModerationRefusalInfo(Category: null, Source: refusalSource.Value));
+            }
+
+            if (string.IsNullOrWhiteSpace(reply))
+                return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
+
+            return new AiReplyResult(reply, IsAiGenerated: true, Refusal: null);
+        }
+
         public async Task<string?> GetAwarenessReactionAsync(string detectedName, string category, string serviceName = "", string pageTitle = "", TimeSpan? duration = null)
         {
             var prompt = _bambiSprite.GetSystemPrompt();

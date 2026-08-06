@@ -26,6 +26,16 @@ namespace ConditioningControlPanel.Services.AIService
         public const string PurposeVideoDone = "video_done";
         public const string PurposeQuiz = "quiz";
 
+        // Train 1 purposes — the vocabulary CompanionBrain sends over the transport seam
+        // (IAiService.SendAsync) and the server maps to a model tier. The six legacy
+        // per-call-site values above stay put so a mixed build still greps cleanly.
+        /// <summary>Ambient moment routed through CompanionBrain.ReactAsync.</summary>
+        public const string PurposeReaction = "reaction";
+        /// <summary>Utility: memory extraction (Train 4).</summary>
+        public const string PurposeMemory = "memory";
+        /// <summary>Utility: transcript compaction (Train 4).</summary>
+        public const string PurposeSummary = "summary";
+
         /// <summary>A usable reply came back.</summary>
         public const string OutcomeOk = "ok";
         /// <summary>ModerationGuard blocked the input; no request was sent.</summary>

@@ -187,6 +187,15 @@ namespace ConditioningControlPanel.Models
 
         [JsonProperty("temperature")]
         public double Temperature { get; set; } = 0.9;
+
+        /// <summary>
+        /// Train 1 tier hint: <c>chat | reaction | memory | summary</c>. Null is omitted from the
+        /// body. The proxy ignores unknown fields today, so sending it is safe ahead of the deploy
+        /// that maps it to a model tier + max_tokens clamp (MASTER-SCOPE §6.1).
+        /// </summary>
+        [JsonProperty("purpose", NullValueHandling = NullValueHandling.Ignore)]
+        [System.Text.Json.Serialization.JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Purpose { get; set; }
     }
 
     /// <summary>
@@ -209,6 +218,16 @@ namespace ConditioningControlPanel.Models
         [JsonProperty("temperature")]
         [JsonPropertyName("temperature")]
         public double Temperature { get; set; } = 0.9;
+
+        /// <summary>
+        /// Train 1 tier hint: <c>chat | reaction | memory | summary</c>. Null is omitted from the
+        /// body (legacy single-shot call sites send nothing). Server-side this maps to a model tier
+        /// and a max_tokens clamp; unknown / absent is treated as <c>chat</c> (MASTER-SCOPE §6.1).
+        /// </summary>
+        [JsonProperty("purpose", NullValueHandling = NullValueHandling.Ignore)]
+        [JsonPropertyName("purpose")]
+        [System.Text.Json.Serialization.JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Purpose { get; set; }
     }
 
     /// <summary>

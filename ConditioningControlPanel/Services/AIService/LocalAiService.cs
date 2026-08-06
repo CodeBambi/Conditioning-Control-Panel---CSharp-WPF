@@ -10,6 +10,11 @@ using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.AIService.Enrichment;
 using ConditioningControlPanel.Services.Moderation;
+// This file's unqualified `ChatMessage` is the mutable NESTED buffer type (nested types win over
+// namespace types inside the class body). The Train 1 transport currency is the namespace-level
+// record, aliased here so IAiService.SendAsync can be implemented without touching the ~15 existing
+// nested-type references below.
+using TransportMessage = ConditioningControlPanel.Services.AIService.ChatMessage;
 
 namespace ConditioningControlPanel.Services.AIService
 {
@@ -380,6 +385,61 @@ namespace ConditioningControlPanel.Services.AIService
 
             return new AiReplyResult(result, IsAiGenerated: true, Refusal: null);
         }
+
+        /// <summary>
+        /// Train 1 transport seam — MINIMAL implementation. See <see cref="IAiService.SendAsync"/>.
+        ///
+        /// <para>Ollama's <c>/api/chat</c> is natively multi-turn, so the honest implementation is a
+        /// direct post of <paramref name="messages"/>. This shell instead flattens the conversation
+        /// onto the existing single-shot internal (system message + newest user message) so the
+        /// moderation spine, command parsing, single-flight discipline and [AI-METER] emission all
+        /// stay on exactly one code path while the brain lands. The transport agent replaces this
+        /// body with a real multi-turn post on its own branch; the SIGNATURE is final.</para>
+        ///
+        /// <para>Consequence while the shell is in place: a local-AI user chatting through
+        /// <c>CompanionBrain</c> gets the brain's window in the prompt only for the cloud provider.
+        /// The brain's own <c>ChatSession</c> still holds the thread, so nothing is lost — the
+        /// history simply isn't forwarded to Ollama yet.</para>
+        /// </summary>
+        public async Task<AiReplyResult> SendAsync(IReadOnlyList<TransportMessage> messages, AiCallOptions options,
+            CancellationToken cancellationToken = default)
+        {
+            options ??= AiCallOptions.Chat;
+            var list = messages ?? (IReadOnlyList<TransportMessage>)Array.Empty<TransportMessage>();
+            var systemPrompt = list.FirstOrDefault(m => m.Role == TransportMessage.RoleSystem)?.Content
+                ?? _bambiSprite.GetSystemPrompt();
+            var userInput = list.LastOrDefault(m => m.Role == TransportMessage.RoleUser)?.Content ?? string.Empty;
+
+            var text = await GetAiResponseAsync(userInput, systemPrompt,
+                isUser: options.Interactive, returnRefusalSentinel: options.Interactive,
+                purpose: options.MeterPurpose);
+
+            var refusalSource = ModerationRefusal.GetSource(text);
+            if (refusalSource.HasValue)
+            {
+                return new AiReplyResult(string.Empty, IsAiGenerated: false,
+                    Refusal: new ModerationRefusalInfo(Category: null, Source: refusalSource.Value));
+            }
+
+            if (string.IsNullOrEmpty(text))
+                return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
+
+            // Parenthetical diagnostics from DescribeOllamaError / DescribeChatException are not
+            // model output and must never wear the AI badge.
+            if (text.StartsWith("(", StringComparison.Ordinal) && text.EndsWith(")", StringComparison.Ordinal))
+                return new AiReplyResult(text, IsAiGenerated: false, Refusal: null);
+
+            return new AiReplyResult(text, IsAiGenerated: true, Refusal: null);
+        }
+
+        /// <summary>
+        /// Raises <see cref="PersistentMemoryRecalled"/> from outside this class. Exists so
+        /// <c>CompanionBrain</c> — which took over cross-session dialogue persistence in Train 1 —
+        /// can fire the same signal that drives the <c>she_remembers</c> achievement and the
+        /// matching bark trigger, now for cloud users too. The event stays declared here so its two
+        /// existing subscribers (GamificationBridge, BarkService) need no change.
+        /// </summary>
+        internal static void SignalPersistentMemoryRecalled() => RaisePersistentMemoryRecalled();
 
         private static readonly string[] StillThinkingPhrases =
         {

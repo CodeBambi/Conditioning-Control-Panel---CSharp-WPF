@@ -82,6 +82,29 @@ namespace ConditioningControlPanel.Services
         /// <summary>After rendering a bark, mute its line this long so it can't re-trigger awareness/OCR.</summary>
         private const int SelfEchoMuteMs = 8000;
 
+        /// <summary>
+        /// Raised immediately AFTER a bark line has been handed to the avatar (Giggle /
+        /// GigglePriority) with the final, substituted text. Fires for every bark that actually
+        /// spoke — including the silent mute-egg path — and never for one that a gate suppressed.
+        ///
+        /// <para>Exists so <c>CompanionBrain</c> can record a <c>BarkEcho</c> turn: the LLM needs to
+        /// know what her recorded voice just said, or it will cheerfully repeat it. Combined with the
+        /// existing self-echo mute (which stops OCR/keyword triggers hearing her own bubble) this
+        /// closes both directions between the two mouths.</para>
+        ///
+        /// <para>Purely observational — subscribers must not block or throw; the raiser swallows
+        /// exceptions so a bad subscriber can never mute a bark.</para>
+        /// </summary>
+        public event Action<BarkRule, string>? BarkSpoken;
+
+        private void RaiseBarkSpoken(BarkRule rule, string line)
+        {
+            var handler = BarkSpoken;
+            if (handler == null) return;
+            try { handler(rule, line); }
+            catch (Exception ex) { App.Logger?.Debug("[BARK] BarkSpoken subscriber error: {Error}", ex.Message); }
+        }
+
         /// <summary>How long a safety bark holds the floor (no non-safety bark may fire). Approximate — we have no speech-duration callback.</summary>
         private const int SafetyHoldMs = 6000;
 
@@ -1596,6 +1619,7 @@ namespace ConditioningControlPanel.Services
             {
                 avatar.Giggle(line, mood: rule.Mood);
                 App.KeywordTriggers?.MuteKeywordEcho(line, SelfEchoMuteMs);
+                RaiseBarkSpoken(rule, line);
                 return;
             }
 
@@ -1625,6 +1649,9 @@ namespace ConditioningControlPanel.Services
 
             // Self-echo guard so the bubble text can't trip awareness/OCR off its own output.
             App.KeywordTriggers?.MuteKeywordEcho(line, SelfEchoMuteMs);
+
+            // Post-fire hook: the LLM half of the character learns what the voiced half just said.
+            RaiseBarkSpoken(rule, line);
         }
 
         /// <summary>Substitute {0} (focused app) and {key} tokens (from the per-fire context).</summary>

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -315,12 +316,82 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
+            // Build messages array
+            var messages = new[]
+            {
+                new ProxyChatMessage { Role = "system", Content = systemPrompt },
+                new ProxyChatMessage { Role = "user", Content = userInput }
+            };
+
+            var post = await PostToProxyAsync(messages, MaxTokensHardCap, 0.7, purposeWire: null);
+            // Skipped = never reached the wire (no access / daily limit): not a request, stays
+            // silent in the meter, exactly as before the Train 1 extraction.
+            if (post.Outcome == ProxyOutcome.Skipped) return null;
+            if (post.Outcome != ProxyOutcome.Ok)
+            {
+                Meter(post.Outcome == ProxyOutcome.Empty ? AiMeter.OutcomeEmpty : AiMeter.OutcomeError);
+                return null;
+            }
+
+            var raw = post.Content!;
+
+            // Sanitize response to remove any leaked metadata tags FIRST (so context-tag
+            // echoes don't accidentally trip moderation regexes).
+            var sanitized = SanitizeResponse(raw);
+
+            // OUTPUT MODERATION (Layer 1). Discard prohibited model output before display.
+            if (guard != null)
+            {
+                var outputCheck = guard.CheckOutput(sanitized ?? string.Empty);
+                if (!outputCheck.Allow && outputCheck.Category.HasValue)
+                {
+                    App.ModerationLog?.Record(outputCheck.Category.Value, source: "output", modelHint: "cloud");
+                    // Model OUTPUT that trips the filter is never the user's doing, so
+                    // it does NOT escalate the Content Policy Notice (logged above for
+                    // compliance only). The warning is reserved for user-typed input.
+                    App.Logger?.Information("AiService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
+                    Meter(AiMeter.OutcomeRefusedOutput, raw.Length);
+                    return returnRefusalSentinel ? ModerationRefusal.OutputSentinel : null;
+                }
+                if (outputCheck.Allow && outputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
+                {
+                    App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "output", modelHint: "cloud");
+                }
+            }
+
+            Meter(AiMeter.OutcomeOk, raw.Length);
+            return sanitized;
+        }
+
+        // ===================== Train 1 transport seam =====================
+
+        /// <summary>
+        /// <see cref="Skipped"/> means the request never reached the wire (no entitlement, daily
+        /// limit) — those are not requests and must stay silent in the [AI-METER] stream.
+        /// </summary>
+        private enum ProxyOutcome { Ok, Error, Empty, Skipped }
+
+        private sealed record ProxyPostResult(ProxyOutcome Outcome, string? Content);
+
+        /// <summary>
+        /// The whole proxy round trip: entitlement gate, daily circuit breaker, V2 auth with the
+        /// legacy Patreon-Bearer fallback, error/empty classification and the server-authoritative
+        /// remaining-request reconciliation. Extracted in Train 1 so the single-shot legacy path and
+        /// the multi-turn <see cref="SendAsync"/> path cannot drift on any of it.
+        ///
+        /// <paramref name="purposeWire"/> rides along as a top-level <c>purpose</c> field. The proxy
+        /// ignores unknown fields today, so sending it is safe before the server deploy that maps it
+        /// to a model tier; null omits it entirely (legacy call sites).
+        /// </summary>
+        private async Task<ProxyPostResult> PostToProxyAsync(ProxyChatMessage[] messages, int maxTokens,
+            double temperature, string? purposeWire)
+        {
             // Check access (cloud identity or Patreon)
             if (!IsAvailable)
             {
                 App.Logger?.Debug("AiService: No AI access - HasCloudIdentity={Cloud}, HasAiAccess={HasAi}",
                     App.HasCloudIdentity, App.Patreon?.HasAiAccess);
-                return null;
+                return new ProxyPostResult(ProxyOutcome.Skipped, null);
             }
 
             // Reset daily count at midnight
@@ -335,21 +406,14 @@ namespace ConditioningControlPanel.Services
             if (_dailyRequestCount >= DailyLimit)
             {
                 App.Logger?.Debug("AiService: Daily limit reached ({Limit} requests)", DailyLimit);
-                return null;
+                return new ProxyPostResult(ProxyOutcome.Skipped, null);
             }
 
             try
             {
                 _dailyRequestCount++;
 
-                // Build messages array
-                var messages = new[]
-                {
-                    new ProxyChatMessage { Role = "system", Content = systemPrompt },
-                    new ProxyChatMessage { Role = "user", Content = userInput }
-                };
-
-                HttpResponseMessage response;
+                HttpResponseMessage? response;
 
                 // Try V2 auth first (unified_id + X-Auth-Token) — free for all cloud users
                 var unifiedId = App.UnifiedUserId;
@@ -360,8 +424,9 @@ namespace ConditioningControlPanel.Services
                     {
                         UnifiedId = unifiedId,
                         Messages = messages,
-                        MaxTokens = MaxTokensHardCap,
-                        Temperature = 0.7
+                        MaxTokens = maxTokens,
+                        Temperature = temperature,
+                        Purpose = purposeWire
                     };
 
                     using var v2Msg = new HttpRequestMessage(HttpMethod.Post, "/v2/ai/chat");
@@ -376,14 +441,14 @@ namespace ConditioningControlPanel.Services
                     {
                         App.Logger?.Debug("AiService: V2 endpoint not available, trying legacy auth");
                         response.Dispose();
-                        response = await SendLegacyRequestAsync(messages);
-                        if (response == null) { Meter(AiMeter.OutcomeError); return null; }
+                        response = await SendLegacyRequestAsync(messages, maxTokens, temperature, purposeWire);
+                        if (response == null) return new ProxyPostResult(ProxyOutcome.Error, null);
                     }
                 }
                 else
                 {
-                    response = await SendLegacyRequestAsync(messages);
-                    if (response == null) { Meter(AiMeter.OutcomeError); return null; }
+                    response = await SendLegacyRequestAsync(messages, maxTokens, temperature, purposeWire);
+                    if (response == null) return new ProxyPostResult(ProxyOutcome.Error, null);
                 }
 
                 if (!response.IsSuccessStatusCode)
@@ -391,8 +456,7 @@ namespace ConditioningControlPanel.Services
                     var errorText = await response.Content.ReadAsStringAsync();
                     App.Logger?.Warning("AiService: Proxy returned {Status}: {Error}",
                         response.StatusCode, errorText);
-                    Meter(AiMeter.OutcomeError);
-                    return null;
+                    return new ProxyPostResult(ProxyOutcome.Error, null);
                 }
 
                 var result = await response.Content.ReadFromJsonAsync<ProxyChatResponse>();
@@ -400,15 +464,13 @@ namespace ConditioningControlPanel.Services
                 if (result == null || !string.IsNullOrEmpty(result.Error))
                 {
                     App.Logger?.Warning("AiService: Proxy error: {Error}", result?.Error);
-                    Meter(AiMeter.OutcomeError);
-                    return null;
+                    return new ProxyPostResult(ProxyOutcome.Error, null);
                 }
 
                 if (string.IsNullOrEmpty(result.Content))
                 {
                     App.Logger?.Warning("AiService: Empty response from proxy");
-                    Meter(AiMeter.OutcomeEmpty);
-                    return null;
+                    return new ProxyPostResult(ProxyOutcome.Empty, null);
                 }
 
                 // Update remaining count if provided by server (server is authoritative)
@@ -431,51 +493,121 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("AiService: raw reply ({Length} chars): {Raw}",
                     result.Content?.Length ?? 0, result.Content ?? "(null)");
 
-                // Sanitize response to remove any leaked metadata tags FIRST (so context-tag
-                // echoes don't accidentally trip moderation regexes).
-                var sanitized = SanitizeResponse(result.Content);
-
-                // OUTPUT MODERATION (Layer 1). Discard prohibited model output before display.
-                if (guard != null)
-                {
-                    var outputCheck = guard.CheckOutput(sanitized ?? string.Empty);
-                    if (!outputCheck.Allow && outputCheck.Category.HasValue)
-                    {
-                        App.ModerationLog?.Record(outputCheck.Category.Value, source: "output", modelHint: "cloud");
-                        // Model OUTPUT that trips the filter is never the user's doing, so
-                        // it does NOT escalate the Content Policy Notice (logged above for
-                        // compliance only). The warning is reserved for user-typed input.
-                        App.Logger?.Information("AiService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
-                        Meter(AiMeter.OutcomeRefusedOutput, result.Content!.Length);
-                        return returnRefusalSentinel ? ModerationRefusal.OutputSentinel : null;
-                    }
-                    if (outputCheck.Allow && outputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
-                    {
-                        App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "output", modelHint: "cloud");
-                    }
-                }
-
-                Meter(AiMeter.OutcomeOk, result.Content!.Length);
-                return sanitized;
+                return new ProxyPostResult(ProxyOutcome.Ok, result.Content);
             }
             catch (TaskCanceledException)
             {
                 App.Logger?.Warning("AiService: Request timed out");
-                Meter(AiMeter.OutcomeError);
-                return null;
+                return new ProxyPostResult(ProxyOutcome.Error, null);
             }
             catch (HttpRequestException ex)
             {
                 App.Logger?.Warning(ex, "AiService: Network error");
-                Meter(AiMeter.OutcomeError);
-                return null;
+                return new ProxyPostResult(ProxyOutcome.Error, null);
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "AiService: Failed to get AI reply");
-                Meter(AiMeter.OutcomeError);
-                return null;
+                return new ProxyPostResult(ProxyOutcome.Error, null);
             }
+        }
+
+        /// <summary>
+        /// Multi-turn transport. See <see cref="IAiService.SendAsync"/> for the contract.
+        ///
+        /// The proxy already accepts up to 50 <c>messages[]</c> and trims the history to its own
+        /// ~14k-char budget server-side, forwarding the array as-is — so multi-turn cloud chat works
+        /// against today's deployment with zero server changes. The client still self-caps its window
+        /// (see <c>ChatSession</c>) so we never rely on that trim for correctness.
+        /// </summary>
+        public async Task<AiReplyResult> SendAsync(IReadOnlyList<ChatMessage> messages, AiCallOptions options,
+            System.Threading.CancellationToken cancellationToken = default)
+        {
+            options ??= AiCallOptions.Chat;
+            var wire = (messages ?? Array.Empty<ChatMessage>())
+                .Select(m => new ProxyChatMessage { Role = m.Role, Content = m.Content ?? string.Empty })
+                .ToArray();
+
+            var meterStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var meterInputChars = wire.Sum(m => m.Content?.Length ?? 0);
+            void Meter(string outcome, int outputChars = 0) =>
+                AiMeter.Record(AiMeter.ProviderCloud, options.MeterPurpose, meterInputChars, outputChars,
+                    meterStopwatch.ElapsedMilliseconds, outcome);
+
+            AiReplyResult Canned() => new(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
+
+            if (App.Settings?.Current?.OfflineMode == true)
+            {
+                App.Logger?.Debug("AiService.SendAsync: offline mode, skipping AI request");
+                return Canned();
+            }
+
+            // INPUT MODERATION (Layer 1). Only the newest user-role message is user-authored input
+            // we haven't seen before; earlier turns already passed the guard when they were sent,
+            // and re-checking them would double-log the compliance record.
+            var newestUser = wire.LastOrDefault(m => m.Role == ChatMessage.RoleUser)?.Content ?? string.Empty;
+            var guard = App.ModerationGuard;
+            if (guard != null)
+            {
+                var inputCheck = guard.CheckInput(newestUser);
+                if (!inputCheck.Allow && inputCheck.Category.HasValue)
+                {
+                    App.ModerationLog?.Record(inputCheck.Category.Value, source: "input", modelHint: "cloud");
+                    // Escalate the user-facing Content Policy Notice only for text the user typed.
+                    if (options.Interactive)
+                        App.ModerationCounter?.RecordHit(inputCheck.Category.Value, "input:cloud");
+                    App.Logger?.Information("AiService.SendAsync: input blocked by ModerationGuard (category={Cat})", inputCheck.Category);
+                    Meter(AiMeter.OutcomeRefusedInput);
+                    return new AiReplyResult(string.Empty, IsAiGenerated: false,
+                        Refusal: new ModerationRefusalInfo(inputCheck.Category, ModerationSource.Input));
+                }
+                if (inputCheck.Allow && inputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
+                {
+                    App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "input", modelHint: "cloud");
+                }
+            }
+
+            if (!IsAvailable)
+            {
+                App.Logger?.Debug("AiService.SendAsync: AI not available — user needs to log in for AI chat");
+                return new AiReplyResult(Loc.Get("ai_login_required_hint"), IsAiGenerated: false, Refusal: null);
+            }
+
+            // MaxTokensHardCap is the client's cost ceiling; the server clamps again per purpose.
+            var maxTokens = Math.Clamp(options.MaxTokens, 1, MaxTokensHardCap);
+            var post = await PostToProxyAsync(wire, maxTokens, options.Temperature, options.PurposeWire);
+            if (post.Outcome == ProxyOutcome.Skipped) return Canned();
+            if (post.Outcome != ProxyOutcome.Ok)
+            {
+                Meter(post.Outcome == ProxyOutcome.Empty ? AiMeter.OutcomeEmpty : AiMeter.OutcomeError);
+                return Canned();
+            }
+
+            var raw = post.Content!;
+            var sanitized = SanitizeResponse(raw);
+
+            // OUTPUT MODERATION (Layer 1). Prohibited model output is discarded before display;
+            // the caller (CompanionBrain) rolls the turn back so it never reaches disk (P2/H5).
+            if (guard != null)
+            {
+                var outputCheck = guard.CheckOutput(sanitized ?? string.Empty);
+                if (!outputCheck.Allow && outputCheck.Category.HasValue)
+                {
+                    App.ModerationLog?.Record(outputCheck.Category.Value, source: "output", modelHint: "cloud");
+                    // Model output tripping the filter is not the user's doing — no counter hit.
+                    App.Logger?.Information("AiService.SendAsync: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
+                    Meter(AiMeter.OutcomeRefusedOutput, raw.Length);
+                    return new AiReplyResult(string.Empty, IsAiGenerated: false,
+                        Refusal: new ModerationRefusalInfo(outputCheck.Category, ModerationSource.Output));
+                }
+                if (outputCheck.Allow && outputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
+                {
+                    App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "output", modelHint: "cloud");
+                }
+            }
+
+            Meter(AiMeter.OutcomeOk, raw.Length);
+            return new AiReplyResult(sanitized, IsAiGenerated: true, Refusal: null);
         }
 
         /// <summary>
@@ -509,7 +641,8 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Sends AI request via legacy Patreon Bearer auth. Returns null if no Patreon token available.
         /// </summary>
-        private async Task<HttpResponseMessage?> SendLegacyRequestAsync(ProxyChatMessage[] messages)
+        private async Task<HttpResponseMessage?> SendLegacyRequestAsync(ProxyChatMessage[] messages,
+            int maxTokens, double temperature, string? purposeWire)
         {
             var accessToken = App.Patreon?.GetAccessToken();
             if (string.IsNullOrEmpty(accessToken))
@@ -521,8 +654,9 @@ namespace ConditioningControlPanel.Services
             var legacyRequest = new ProxyChatRequest
             {
                 Messages = messages,
-                MaxTokens = MaxTokensHardCap,
-                Temperature = 0.7
+                MaxTokens = maxTokens,
+                Temperature = temperature,
+                Purpose = purposeWire
             };
 
             using var legacyMsg = new HttpRequestMessage(HttpMethod.Post, "/ai/chat");

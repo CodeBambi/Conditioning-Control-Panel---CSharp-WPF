@@ -65,6 +65,10 @@ namespace ConditioningControlPanel.Services.AIService
 
         public int DailyRequestsRemaining => Active.DailyRequestsRemaining;
 
+        public Task<AiReplyResult> SendAsync(System.Collections.Generic.IReadOnlyList<ChatMessage> messages,
+            AiCallOptions options, System.Threading.CancellationToken cancellationToken = default)
+            => Active.SendAsync(messages, options, cancellationToken);
+
         public Task<string> GetBambiReplyAsync(string userInput, bool isUserMessage = false)
             => Active.GetBambiReplyAsync(userInput, isUserMessage);
 

@@ -1,0 +1,409 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using ConditioningControlPanel.Services.AIService;
+using ConditioningControlPanel.Services.Bark;
+using ConditioningControlPanel.Services.Moderation;
+
+namespace ConditioningControlPanel.Services.Companion.Brain
+{
+    /// <summary>
+    /// A one-shot thing that happened, compressed into a line the companion can react to.
+    /// Doc 01 §1.2 (<see cref="TurnKind.AmbientEvent"/>).
+    /// </summary>
+    /// <param name="Descriptor">
+    /// Plain text, no sigil — "user has been on YouTube 22m", "finished mandatory video 'Bambi Bae'",
+    /// "level up → 41". <see cref="CompanionTurn.WireText"/> adds the «event: …» wrapper.
+    /// </param>
+    public sealed record CompanionEvent(string Descriptor)
+    {
+        /// <summary>Ambient descriptors are one line. Longer ones are truncated, not rejected.</summary>
+        public const int MaxTokens = 25;
+
+        /// <summary>chars/4, so 25 tokens ≈ 100 chars.</summary>
+        public const int MaxChars = MaxTokens * 4;
+
+        /// <summary>
+        /// The clamped, single-line descriptor actually stored on the turn. Whitespace runs
+        /// (including the newlines a caller might interpolate from a window title) collapse to one
+        /// space, so an event can never look like several messages on the wire.
+        /// </summary>
+        public string Normalized()
+        {
+            var text = System.Text.RegularExpressions.Regex
+                .Replace(Descriptor ?? string.Empty, @"\s+", " ").Trim();
+            if (text.Length <= MaxChars) return text;
+            return text[..MaxChars].TrimEnd() + "…";
+        }
+    }
+
+    /// <summary>
+    /// The companion's conversational spine (<c>App.Brain</c>). Owns the turn log, assembles every
+    /// request, and is the only thing that talks to <see cref="IAiService.SendAsync"/>. Providers
+    /// become dumb transports, so history no longer lives inside the local provider and switching
+    /// cloud ↔ Ollama mid-conversation keeps the thread.
+    ///
+    /// <para><b>Moderation.</b> The spine is untouched and lives where it always did — inside the
+    /// transport's <c>SendAsync</c>, which runs <c>CheckInput</c> on the newest user-role message and
+    /// <c>CheckOutput</c> on the reply, records to <c>ModerationLog</c>, and escalates
+    /// <c>ModerationCounter</c> only for interactive turns. The brain deliberately does NOT re-check
+    /// the same text: two checks would double the CCBill log and halve the number of hits needed to
+    /// trip the user-facing cooldown. What the brain owns is the P2/H5 half of the invariant —
+    /// <b>a refused turn is rolled back out of the log and never reaches disk.</b></para>
+    ///
+    /// <para><b>Kill switch.</b> <see cref="IsEnabled"/> reads <c>AppSettings.UseCompanionBrain</c>.
+    /// False routes every call site back to the legacy stateless path; the brain is still constructed
+    /// (so it can hold a session for diagnostics) but nothing calls it.</para>
+    ///
+    /// <para><b>Train 1 scope.</b> Simple truncation windowing. No LLM memory extraction, no
+    /// compaction/summaries, no relationship stages, no daily mood, no voice arbiter — those are
+    /// Trains 2 and 4.</para>
+    /// </summary>
+    public sealed class CompanionBrain : IDisposable
+    {
+        private readonly IAiService _transport;
+        private readonly IPromptAssembler _assembler;
+        private readonly ICompanionSessionStore _store;
+
+        // Single-flight (doc 01 §1.6, promoted from LocalAiService): exactly one LLM call in flight;
+        // a second USER send queues at depth 1; ambient requests are DROPPED when busy. Barks are
+        // unaffected — they never wait on the LLM.
+        private readonly SemaphoreSlim _gate = new(1, 1);
+        private volatile bool _isProcessing;
+        private volatile bool _isUserQueued;
+
+        private BarkService? _barks;
+        private Action<BarkRule, string>? _barkHandler;
+
+        private bool _memoryRecallSignaled;
+        private bool _disposed;
+
+        private static readonly Random _random = new();
+
+        public CompanionBrain(
+            IAiService transport,
+            IPromptAssembler? assembler = null,
+            IMemoryStore? memory = null,
+            ICompanionSessionStore? store = null,
+            RecentRecommendations? recommendations = null)
+        {
+            _transport = transport ?? throw new ArgumentNullException(nameof(transport));
+            Memory = memory ?? new MemoryStore();
+            Recommendations = recommendations ?? new RecentRecommendations();
+            _assembler = assembler ?? new PromptAssembler(Memory, Recommendations);
+            _store = store ?? new CompanionSessionStore();
+
+            Session = new ChatSession();
+
+            var snapshot = _store.Load();
+            if (snapshot.Turns.Count > 0)
+            {
+                Session.Restore(snapshot.Turns);
+                App.Logger?.Information(
+                    "CompanionBrain: session restored ({Count} turn(s), imported={Imported})",
+                    snapshot.Turns.Count, snapshot.ImportedFromLegacy);
+            }
+        }
+
+        /// <summary>
+        /// Master routing switch. False = today's legacy stateless behaviour on every call site.
+        /// Read at each call site rather than cached so flipping it takes effect immediately.
+        /// </summary>
+        public static bool IsEnabled => App.Settings?.Current?.UseCompanionBrain != false;
+
+        /// <summary>
+        /// The routing predicate EVERY call site should use, so the kill switch and the
+        /// "brain failed to construct" fallback can never drift apart across the call sites the
+        /// other Train 1 branches migrate. False means: take the legacy stateless
+        /// <see cref="IAiService"/> path, unchanged.
+        /// </summary>
+        public static bool ShouldRoute(CompanionBrain? brain) => ShouldRoute(brain, IsEnabled);
+
+        /// <summary>Testable core of <see cref="ShouldRoute(CompanionBrain?)"/>.</summary>
+        internal static bool ShouldRoute(CompanionBrain? brain, bool killSwitchOn) =>
+            brain != null && killSwitchOn;
+
+        /// <summary>The live turn log. Read-only for callers in Train 1.</summary>
+        public ChatSession Session { get; }
+
+        /// <summary>The durable user model. A shell in Train 1 — see <see cref="MemoryStore"/>.</summary>
+        public IMemoryStore Memory { get; }
+
+        /// <summary>Titles she suggested recently, injected as an exclusion line.</summary>
+        public RecentRecommendations Recommendations { get; }
+
+        /// <summary>Turns restored from a previous launch — non-zero means persistent memory is live.</summary>
+        public int RestoredTurnCount => Session.RestoredTurnCount;
+
+        // ===================== chat =====================
+
+        /// <summary>
+        /// The chat box. Appends the user's turn, sends the assembled window, and on success appends
+        /// the reply and persists the dialogue.
+        ///
+        /// <para>Returns the same <see cref="AiReplyResult"/> shape the legacy path returned, with the
+        /// same badge semantics: <c>IsAiGenerated</c> is true only for genuine model text, so the pink
+        /// AI badge still cannot appear over a canned fallback or a refusal.</para>
+        ///
+        /// <para>P2/H5: if the guard refuses (either direction), the user turn is removed from the log
+        /// and nothing is written to disk — the file stays at its prior known-clean state.</para>
+        /// </summary>
+        public async Task<AiReplyResult> ChatAsync(string userText, CancellationToken cancellationToken = default)
+        {
+            var input = (userText ?? string.Empty).Trim();
+            if (input.Length == 0)
+                return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
+
+            // Depth-1 user queue: a third concurrent send gets a "still thinking" phrase instead of
+            // piling up requests behind the semaphore.
+            if (_isUserQueued)
+            {
+                App.Logger?.Debug("CompanionBrain: user send dropped (one already queued)");
+                return new AiReplyResult(GetThinkingPhrase(), IsAiGenerated: false, Refusal: null);
+            }
+
+            _isUserQueued = true;
+            try
+            {
+                await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                _isUserQueued = false;
+                return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
+            }
+
+            _isUserQueued = false;
+            _isProcessing = true;
+
+            var userTurn = Session.Append(TurnKind.UserChat, input);
+            try
+            {
+                var request = _assembler.BuildRequest(AiPurpose.Chat, Session, input);
+                var result = await _transport
+                    .SendAsync(request.Messages, AiCallOptions.Chat, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (result.Refusal != null)
+                {
+                    // P2/H5 rollback: the prohibited turn leaves no trace in memory or on disk.
+                    Session.Remove(userTurn);
+                    return result;
+                }
+
+                if (!result.IsAiGenerated)
+                {
+                    // Canned fallback / login hint / transport failure. The user's turn was a genuine
+                    // send, so it stays in the transcript for coherence, but there is no assistant
+                    // turn to record and nothing new worth persisting.
+                    return result;
+                }
+
+                Session.Append(TurnKind.AssistantChat, result.Text);
+                PersistAsync();
+                SignalMemoryRecallIfDue();
+                return result;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "CompanionBrain: chat turn failed");
+                return new AiReplyResult(GetFallbackPhrase(), IsAiGenerated: false, Refusal: null);
+            }
+            finally
+            {
+                _isProcessing = false;
+                try { _gate.Release(); } catch (ObjectDisposedException) { }
+            }
+        }
+
+        // ===================== ambient =====================
+
+        /// <summary>
+        /// An ambient moment. Appends the event, sends it with the SMALL window (~300 tokens, last ~4
+        /// dialogue turns) plus the anti-repeat line, and appends the reply as AssistantChat — so if
+        /// the user then opens the chat box and asks "why'd you say that?", she knows.
+        ///
+        /// <para>Dropped silently when a call is already in flight: an ambient line is worth less than
+        /// the chat reply it would queue behind.</para>
+        ///
+        /// <para>Returns a non-AI empty result when there is nothing to say. Callers fall back to a
+        /// preset phrase exactly as they do today, and the badge stays off.</para>
+        /// </summary>
+        public async Task<AiReplyResult> ReactAsync(CompanionEvent evt, CancellationToken cancellationToken = default)
+        {
+            var descriptor = evt?.Normalized() ?? string.Empty;
+            if (descriptor.Length == 0)
+                return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
+
+            if (_isProcessing || _isUserQueued)
+            {
+                App.Logger?.Debug("CompanionBrain: ambient reaction dropped (busy)");
+                return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
+            }
+
+            if (!await _gate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
+            {
+                App.Logger?.Debug("CompanionBrain: ambient reaction dropped (gate held)");
+                return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
+            }
+
+            _isProcessing = true;
+            var eventTurn = Session.Append(TurnKind.AmbientEvent, descriptor);
+            try
+            {
+                var request = _assembler.BuildRequest(AiPurpose.Reaction, Session, descriptor);
+                var result = await _transport
+                    .SendAsync(request.Messages, AiCallOptions.Reaction, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (result.Refusal != null || !result.IsAiGenerated)
+                {
+                    // Nothing usable came back. Drop the event turn so a dead moment doesn't sit in
+                    // the window shaping the next reply (and, on a refusal, so it never persists).
+                    Session.Remove(eventTurn);
+                    return result.Refusal != null
+                        ? result
+                        : new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
+                }
+
+                Session.Append(TurnKind.AssistantChat, result.Text);
+                PersistAsync();
+                SignalMemoryRecallIfDue();
+                return result;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "CompanionBrain: ambient reaction failed");
+                Session.Remove(eventTurn);
+                return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
+            }
+            finally
+            {
+                _isProcessing = false;
+                try { _gate.Release(); } catch (ObjectDisposedException) { }
+            }
+        }
+
+        /// <summary>Convenience overload for call sites that only have a descriptor string.</summary>
+        public Task<AiReplyResult> ReactAsync(string descriptor, CancellationToken cancellationToken = default)
+            => ReactAsync(new CompanionEvent(descriptor), cancellationToken);
+
+        // ===================== barks =====================
+
+        /// <summary>
+        /// Subscribes to <see cref="BarkService.BarkSpoken"/> so the LLM knows what her recorded voice
+        /// just said. Called from <c>App.OnStartup</c> once both services exist. Idempotent.
+        /// </summary>
+        public void AttachBarkSource(BarkService? barks)
+        {
+            if (barks == null || ReferenceEquals(barks, _barks)) return;
+            DetachBarkSource();
+
+            _barks = barks;
+            _barkHandler = OnBarkSpoken;
+            barks.BarkSpoken += _barkHandler;
+        }
+
+        /// <summary>Unsubscribes from the bark source. Safe to call when never attached.</summary>
+        public void DetachBarkSource()
+        {
+            if (_barks != null && _barkHandler != null) _barks.BarkSpoken -= _barkHandler;
+            _barks = null;
+            _barkHandler = null;
+        }
+
+        private void OnBarkSpoken(BarkRule rule, string line)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(line)) return;
+                var speaker = App.Mods?.GetCompanionName() ?? "she";
+                // BarkEchoes are flavor: capped at 5 per window and never persisted (they replay from
+                // bark_rules.json anyway, and they say nothing about the user).
+                Session.Append(TurnKind.BarkEcho, CompanionTurn.FormatBarkEcho(speaker, line),
+                    mood: rule?.Mood, voiced: true);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("CompanionBrain: bark echo failed: {Error}", ex.Message);
+            }
+        }
+
+        // ===================== misc =====================
+
+        /// <summary>
+        /// Records a title she just suggested so it lands in the exclusion line for the next 24h.
+        /// </summary>
+        public void NoteRecommendation(string? title) => Recommendations.Note(title);
+
+        /// <summary>
+        /// Forgets the conversation: in-memory log, disk file, and the recommendation ban list.
+        /// Memory facts go with <see cref="IMemoryStore.Wipe"/>, which this also calls.
+        /// </summary>
+        public void Forget()
+        {
+            Session.Clear();
+            Recommendations.Clear();
+            Memory.Wipe();
+            _store.Wipe();
+            _memoryRecallSignaled = false;
+            App.Logger?.Information("CompanionBrain: conversation and memory wiped");
+        }
+
+        /// <summary>Writes the current dialogue synchronously — used on shutdown.</summary>
+        public void Flush() => _store.Save(Session.DialogueTurns());
+
+        /// <summary>
+        /// Fire-and-forget persistence so chat latency never pays for disk I/O. Only reached AFTER
+        /// output moderation passed (P2/H5), and only dialogue turns are handed over.
+        /// </summary>
+        private void PersistAsync()
+        {
+            var dialogue = Session.DialogueTurns();
+            _ = Task.Run(() =>
+            {
+                try { _store.Save(dialogue); }
+                catch (Exception ex) { App.Logger?.Debug("CompanionBrain: persist failed: {Error}", ex.Message); }
+            });
+        }
+
+        /// <summary>
+        /// she_remembers: a reply was produced while turns restored from a previous session are in
+        /// context — persistent memory surfacing across launches. Signalled once per session through
+        /// the existing <c>LocalAiService.PersistentMemoryRecalled</c> event so its two subscribers
+        /// (the achievement bridge and the bark trigger) need no change — and so the achievement now
+        /// fires for CLOUD users too, which it never could before.
+        /// </summary>
+        private void SignalMemoryRecallIfDue()
+        {
+            if (_memoryRecallSignaled || Session.RestoredTurnCount <= 0) return;
+            _memoryRecallSignaled = true;
+            LocalAiService.SignalPersistentMemoryRecalled();
+        }
+
+        private static string GetThinkingPhrase()
+        {
+            var pool = App.Mods?.GetPhrases("Thinking");
+            if (pool == null || pool.Length == 0) return "Hmm... still thinking.";
+            return pool[_random.Next(pool.Length)];
+        }
+
+        private static string GetFallbackPhrase()
+        {
+            var pool = App.Mods?.GetPhrases("Idle");
+            if (pool == null || pool.Length == 0) return "...";
+            return pool[_random.Next(pool.Length)];
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            DetachBarkSource();
+            try { Flush(); } catch { /* shutdown is best-effort */ }
+            _gate.Dispose();
+        }
+    }
+}

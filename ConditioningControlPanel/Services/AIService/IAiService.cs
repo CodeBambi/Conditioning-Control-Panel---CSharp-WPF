@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Services.Moderation;
 
@@ -14,6 +16,29 @@ namespace ConditioningControlPanel.Services.AIService
         bool IsAvailable { get; }
 
         int DailyRequestsRemaining { get; }
+
+        /// <summary>
+        /// Train 1 transport seam. Sends an already-assembled multi-turn conversation and returns
+        /// the typed result. This is the method <see cref="ConditioningControlPanel.Services.Companion.Brain.CompanionBrain"/>
+        /// uses; the six one-shot methods below are the legacy call sites and stay as-is until
+        /// their adapters land.
+        ///
+        /// <para><b>Contract.</b> <paramref name="messages"/> is sent verbatim, in order, including
+        /// its leading system message — implementations must not inject a system prompt of their
+        /// own or re-order turns. Implementations DO run the Layer-1 moderation spine
+        /// (<c>CheckInput</c> on the newest user-role message, <c>CheckOutput</c> on the reply,
+        /// <c>ModerationLog</c>, and <c>ModerationCounter</c> only when
+        /// <see cref="AiCallOptions.Interactive"/>), and DO emit one <c>[AI-METER]</c> line stamped
+        /// with <see cref="AiCallOptions.MeterPurpose"/>.</para>
+        ///
+        /// <para><b>Result.</b> A genuine model reply returns <c>IsAiGenerated=true</c>. Any path that
+        /// produced no usable model text (offline, no entitlement, transport failure, empty content,
+        /// daily limit) returns <c>IsAiGenerated=false</c> with a canned or empty
+        /// <c>Text</c> — never a badge-worthy reply. A moderation block returns a non-null
+        /// <c>Refusal</c> and empty <c>Text</c>.</para>
+        /// </summary>
+        Task<AiReplyResult> SendAsync(IReadOnlyList<ChatMessage> messages, AiCallOptions options,
+            CancellationToken cancellationToken = default);
 
         Task<string> GetBambiReplyAsync(string userInput, bool isUserMessage = false);
 

@@ -354,6 +354,13 @@ namespace ConditioningControlPanel
         public static IntakePunchCardService IntakePunchCard { get; private set; } = null!;
         public static TutorialService Tutorial { get; private set; } = null!;
         public static IAiService Ai { get; private set; } = null!;
+        /// <summary>
+        /// The companion's conversational spine (Train 1). Owns the turn log, prompt assembly and
+        /// the transport call, so every provider shares one thread. Null only if construction failed
+        /// — callers must null-check and fall back to <see cref="Ai"/>'s legacy one-shot methods,
+        /// which is also what the <c>UseCompanionBrain</c> kill switch selects.
+        /// </summary>
+        public static Services.Companion.Brain.CompanionBrain? Brain { get; private set; }
         public static IAiCommandService Commands { get; private set; } = null!;
         public static Services.Moderation.IModerationGuard ModerationGuard { get; private set; } = null!;
         public static Services.Moderation.ModerationLog ModerationLog { get; private set; } = null!;
@@ -1574,6 +1581,26 @@ namespace ConditioningControlPanel
 
             Ai = new AiServiceStrategy();
             Commands = new AiCommandService();
+
+            // CompanionBrain sits between every caller and the AI strategy: it owns conversation
+            // state so providers stay dumb transports. Constructed unconditionally (it reads the
+            // stored session and can report it for diagnostics); whether calls actually route
+            // through it is the per-call-site UseCompanionBrain check. Bark exists by now
+            // (constructed above), so the BarkEcho hook can be attached immediately.
+            try
+            {
+                Brain = new Services.Companion.Brain.CompanionBrain(Ai);
+                Brain.AttachBarkSource(Bark);
+                Logger?.Information("CompanionBrain initialized (enabled={Enabled}, restored={Restored} turns)",
+                    Services.Companion.Brain.CompanionBrain.IsEnabled, Brain.RestoredTurnCount);
+            }
+            catch (Exception ex)
+            {
+                // A brain that won't build must not take the app down — every call site falls back
+                // to the legacy stateless path when App.Brain is null.
+                Brain = null;
+                Logger?.Error(ex, "CompanionBrain: initialization failed, falling back to legacy AI path");
+            }
 
             // If local Ollama is the active provider, kick off a background warm-up so
             // the model is hot in memory by the time the user sends their first chat.
@@ -3585,6 +3612,9 @@ Application State:
             BrainDrain?.Dispose();
             Achievements?.Dispose();
             WindowAwareness?.Dispose();
+            // Before Ai: Dispose flushes the conversation to companion/session.json and unhooks the
+            // bark echo, and it must not race the transport being torn down underneath it.
+            Brain?.Dispose();
             Ai?.Dispose();
             Patreon?.Dispose();
             Update?.Dispose();
