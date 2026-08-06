@@ -993,10 +993,11 @@ namespace ConditioningControlPanel.Services
                 var parent = Path.GetDirectoryName(target);
                 if (!string.IsNullOrEmpty(parent)) CreateDirectoryTracked(parent, journal);
 
-                // Recorded BEFORE the rename: nothing else can own a tree that did not exist a
-                // moment ago, so on failure it comes out whole regardless of how far Move got.
-                journal.RecordTree(target);
                 Directory.Move(source, target);
+                // Recorded AFTER the rename: a failed same-volume rename leaves nothing at the
+                // target to undo, while recording first would let a concurrent pack populate
+                // the tree in the retry window and lose its files to the recursive rollback.
+                journal.RecordTree(target);
                 return;
             }
 
@@ -1046,6 +1047,12 @@ namespace ConditioningControlPanel.Services
                 if (journal.IsEmpty) return;
 
                 var removed = journal.Rollback();
+                // A failed UPDATE can roll back files the merge overwrote — i.e. a previously
+                // WORKING install. The old stamp would then keep IsInstalled answering true
+                // (and HasInstalledPayload sees a shared content root other packs populated),
+                // hiding the gutted pack from ResolveMissingActiveModPack's media probe. Drop
+                // the stamp so the rolled-back state reads as what it is: not installed.
+                DropInstallStamp(packId);
                 App.Logger?.Warning(
                     "ReleaseContentService: rolled back the failed {Pack} install — removed {Removed} merged file(s) so the next launch re-fetches",
                     packId, removed);
@@ -1053,6 +1060,46 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "ReleaseContentService: rollback of the failed {Pack} install did not complete", packId);
+            }
+        }
+
+        /// <summary>
+        /// Removes a pack's install stamp after a rollback. Same UI-thread marshalling contract
+        /// as <see cref="RecordInstalled"/> (plain Dictionary + UI-thread Save assumption).
+        /// On dispatcher shutdown the stamp survives — acceptable: rollback already removed the
+        /// files, so the next launch's media probe still triggers the re-fetch for the active
+        /// mod, and the Mod Manager path re-verifies via NeedsUpdate.
+        /// </summary>
+        private static void DropInstallStamp(string packId)
+        {
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings == null) return;
+
+                void Apply()
+                {
+                    try
+                    {
+                        if (settings.InstalledContentPacks.Remove(packId))
+                            App.Settings?.Save();
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "ReleaseContentService: could not drop install stamp for {Pack}", packId);
+                    }
+                }
+
+                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                if (dispatcher == null) { Apply(); return; }
+                if (dispatcher.HasShutdownStarted) return;
+
+                if (dispatcher.CheckAccess()) Apply();
+                else dispatcher.Invoke(Apply);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "ReleaseContentService: could not drop install stamp for {Pack}", packId);
             }
         }
 
@@ -1350,10 +1397,11 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// True when a built-in mod's media is present WITHOUT its pack being stamped — the surviving
-        /// state of an in-place upgrade. Both shapes the packs take feed ONE count: an extracted
-        /// <c>.ccpmod</c> tree (drone, locked) and loose companion audio (bambi, sissy, locked). A
-        /// half-merged install leaves debris in either, so neither shape may vote "present" on its
-        /// structure alone — see <see cref="MinModMediaFiles"/>.
+        /// state of an in-place upgrade. The packs take two shapes — an extracted <c>.ccpmod</c> tree
+        /// (drone, locked) and loose companion audio (bambi, sissy, locked) — and each shape must
+        /// clear <see cref="MinModMediaFiles"/> ON ITS OWN: summing them would let two half-merged
+        /// debris trees vote "present" together (healthy installs clear the floor 7-40× in whichever
+        /// shape they actually ship).
         ///
         /// A probe failure answers "missing": a needless re-download costs bandwidth once, a probe
         /// that answers "present" whenever it breaks wedges the user voiceless forever.
@@ -1366,18 +1414,19 @@ namespace ConditioningControlPanel.Services
                 // 1) Extracted .ccpmod payload, under the root ModService.PrepareBuiltInMod fills.
                 var extractDir = Path.Combine(App.UserDataPath, "builtin_mods", modId);
                 if (Directory.Exists(extractDir))
-                    count = CountMediaFiles(SafeEnumerateFiles(extractDir), MinModMediaFiles);
-
-                // 2) Loose companion audio. ContentLocator covers both roots.
-                if (count < MinModMediaFiles)
                 {
-                    var relAudio = Path.Combine("Resources", "sounds", "companion_audio", "mods", modId);
-                    count += CountMediaFiles(
-                        ContentLocator.EnumerateFiles(relAudio, "*", SearchOption.AllDirectories),
-                        MinModMediaFiles - count);
+                    count = CountMediaFiles(SafeEnumerateFiles(extractDir), MinModMediaFiles);
+                    if (count >= MinModMediaFiles) return true;
                 }
 
-                if (count >= MinModMediaFiles) return true;
+                // 2) Loose companion audio. ContentLocator covers both roots.
+                var relAudio = Path.Combine("Resources", "sounds", "companion_audio", "mods", modId);
+                var audioCount = CountMediaFiles(
+                    ContentLocator.EnumerateFiles(relAudio, "*", SearchOption.AllDirectories),
+                    MinModMediaFiles);
+                if (audioCount >= MinModMediaFiles) return true;
+
+                count = Math.Max(count, audioCount);   // for the log line below
             }
             catch (Exception ex)
             {

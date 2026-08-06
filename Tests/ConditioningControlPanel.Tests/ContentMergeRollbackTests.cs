@@ -183,8 +183,8 @@ public class ContentMergeRollbackTests
     [Fact]
     public void RollbackIsIdempotent()
     {
-        // The generic install catch can reach the cleanup twice; a second pass must be a no-op
-        // rather than an exception out of a path that is already handling a failure.
+        // RollbackMerge runs once today, but rollback executes inside a path that is already
+        // handling a failure — a second pass must stay a harmless no-op, never a new throw.
         var root = NewTempDir();
         try
         {
