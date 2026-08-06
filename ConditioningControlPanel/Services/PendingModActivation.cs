@@ -106,7 +106,9 @@ namespace ConditioningControlPanel.Services
                 }
 
                 settings.PendingModActivationId = modId;
-                App.Settings?.Save();
+                // SaveImmediate, not the 500ms-debounced Save: the user just committed to a
+                // 77-345MB download and may kill the app right after - the choice must survive.
+                App.Settings?.SaveImmediate();
                 App.Logger?.Information(
                     "[ModPicker] {ModId} chosen - it becomes the active mod as soon as its content is on disk", modId);
             }
@@ -228,7 +230,9 @@ namespace ConditioningControlPanel.Services
 
                 if (!ShouldActivate(pending, activeModId, IsContentAvailable(pending))) return;
 
-                var window = _window ?? App.MainWindowRef;
+                // Prefer the live window: _window is a static ref that survives a window
+                // re-creation, so a stale unloaded instance must lose to App.MainWindowRef.
+                var window = (_window is { IsLoaded: true }) ? _window : (App.MainWindowRef ?? _window);
                 if (window == null) return;   // pre-window pack install: the next signal (or launch) applies it
 
                 window.ActivateChosenMod(pending, trigger);

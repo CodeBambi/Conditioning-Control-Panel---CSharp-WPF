@@ -1,4 +1,4 @@
-using ConditioningControlPanel.Services;
+﻿using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.AIService;
 using Xunit;
 
@@ -51,10 +51,23 @@ public class AiMetadataTagStripTests
     [InlineData("wait for it [giggles")]                    // unclosed, but no colon = prose
     [InlineData("count to [3")]
     [InlineData("the [cat is out")]                         // shares a prefix with "Category" - still prose
+    [InlineData("[Apple pie is the best")]                  // "App" needs \b - "Apple" is prose
     [InlineData("good girl~")]
     [InlineData("look at the time: 3:00 already")]
     public void LegitimateBracketsAndProseAreUntouched(string input)
         => Assert.Equal(input, AiTextHygiene.StripMetadataTags(input));
+
+    [Fact]
+    public void AMidReplyBracketInAMultiLineAnswerDoesNotEatTheRest()
+        // The blank line collapses (pre-existing whitespace pass) but every word survives -
+        // the old [^\]]* patterns crossed the newline and deleted everything after "Rule".
+        => Assert.Equal("Rule [one: stay still Now breathe deep for me, good girl",
+            AiTextHygiene.StripMetadataTags("Rule [one: stay still\n\nNow breathe deep for me, good girl"));
+
+    [Fact]
+    public void ATruncatedTagOnTheLastLineOfAMultiLineAnswerIsStillStripped()
+        => Assert.Equal("So deep now~",
+            AiTextHygiene.StripMetadataTags("So deep now~\n[Category: Gam"));
 
     // ── whitespace + all-metadata ───────────────────────────────────────────────────────────
     [Fact]

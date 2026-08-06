@@ -2038,6 +2038,12 @@ namespace ConditioningControlPanel.Services
             try { ModResourceResolver.ClearCache(); }
             catch (Exception ex) { _log?.Debug("ModService: resolver cache clear failed: {Error}", ex.Message); }
 
+            // Before ModChanged fires: AvatarTubeWindow re-evaluates the portrait gate from that
+            // event, and the adopted package may have just delivered the portrait PNGs — a stale
+            // cached "absent" would park the avatar on the legacy poses for the whole session.
+            try { AvatarPortraitLoader.InvalidateAvailabilityCache(); }
+            catch (Exception ex) { _log?.Debug("ModService: portrait cache clear failed: {Error}", ex.Message); }
+
             // The extracted mod.json can declare a different companion set than the hardcoded
             // manifest we were running on.
             try

@@ -45,10 +45,12 @@ namespace ConditioningControlPanel.Services
 
         // Replies are hard-capped at 100 tokens, so a fabricated tag can be cut off before its closing
         // bracket - and every pass above needs that bracket, so the fragment rendered raw in the bubble.
+        // Both passes exclude newlines: truncation can only land on the LAST line, and letting [^\]]
+        // cross \n would delete everything after a mid-reply bracket in a multi-line answer.
         // Two end-of-string passes, because the cap can land anywhere:
-        //   1. a known metadata keyword, whether or not the colon survived the cut;
+        //   1. a known metadata keyword (\b so "[Apple pie" isn't eaten by "App"), colon optional;
         private static readonly Regex UnclosedKnownTag = new(
-            @"\[(?:Category|App|Title|Duration|Context)[^\]]*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            @"\[(?:Category|App|Title|Duration|Context)\b[^\]\r\n]*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         //   2. anything shaped like "[Word:" for tags we haven't seen yet - production also showed a
         //      fabricated "[Satisf: ...". The colon is what marks the fragment as metadata rather than
@@ -56,7 +58,7 @@ namespace ConditioningControlPanel.Services
         //      "[Mood: playful" does not. Matching bare keyword prefixes instead (e.g. "[Cat") would
         //      widen this to ordinary words, which is the one failure this must not have.
         private static readonly Regex UnclosedKeyedTag = new(
-            @"\[[A-Za-z][A-Za-z0-9 _-]*:[^\]]*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            @"\[[A-Za-z][A-Za-z0-9 _-]*:[^\]\r\n]*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         /// <summary>
         /// Strip leaked context-metadata tags, closed or truncated, then collapse the whitespace the

@@ -157,19 +157,31 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private static bool CountsAsPresent(AvatarPortraitManifest manifest, string baseDir, string manifestPath)
         {
-            var basePose = string.IsNullOrEmpty(manifest.DefaultEmotion) ? manifest.IdleEmotion : manifest.DefaultEmotion;
-            // Only demand the base pose if the manifest actually declares it, so a manifest whose
-            // defaultEmotion is a typo still works off its other emotions (GetBucket already falls back).
-            bool needBasePose = manifest.Emotions.ContainsKey(basePose);
-            bool haveBasePose = !needBasePose;
-            int found = 0;
+            // The floor scales down for small manifests - a creator mod declaring 3 portraits must
+            // still be able to enter portrait mode. A missing base pose is deliberately NOT a gate:
+            // GetBucket's skin-0 -> idle fallback chain resolves a pose from whatever portraits
+            // exist, which is exactly the case that chain was built for.
+            int totalDeclared = 0;
+            foreach (var skin in manifest.Skins)
+                foreach (var kv in manifest.Emotions)
+                    foreach (var p in kv.Value.Portraits)
+                        if (!string.IsNullOrEmpty(p.File)) totalDeclared++;
 
+            int floor = Math.Min(MinPortraitFiles, totalDeclared);
+            if (floor == 0)
+            {
+                App.Logger?.Information(
+                    "AvatarPortraitLoader: portrait avatar skipped for {Path} - the manifest declares no portrait files; using the animated avatar instead",
+                    manifestPath);
+                return false;
+            }
+
+            int found = 0;
             foreach (var skin in manifest.Skins)
             {
                 var skinDir = Path.Combine(baseDir, (skin.Dir ?? "").Replace('/', Path.DirectorySeparatorChar));
                 foreach (var kv in manifest.Emotions)
                 {
-                    bool isBasePose = string.Equals(kv.Key, basePose, StringComparison.OrdinalIgnoreCase);
                     foreach (var p in kv.Value.Portraits)
                     {
                         if (string.IsNullOrEmpty(p.File)) continue;
@@ -177,15 +189,14 @@ namespace ConditioningControlPanel.Services
                         // Same install-dir/content-pack split GetBucket handles.
                         if (!File.Exists(abs) && ContentLocator.Mirror(abs) == null) continue;
                         found++;
-                        if (isBasePose) haveBasePose = true;
-                        if (haveBasePose && found >= MinPortraitFiles) return true;
+                        if (found >= floor) return true;
                     }
                 }
             }
 
             App.Logger?.Information(
-                "AvatarPortraitLoader: portrait avatar skipped for {Path} - only {Count} portrait image file(s) found on disk " +
-                "(content pack missing?); using the animated avatar instead", manifestPath, found);
+                "AvatarPortraitLoader: portrait avatar skipped for {Path} - {Count} of {Declared} declared portrait image file(s) on disk " +
+                "(floor {Floor}; content pack missing?); using the animated avatar instead", manifestPath, found, totalDeclared, floor);
             return false;
         }
     }
