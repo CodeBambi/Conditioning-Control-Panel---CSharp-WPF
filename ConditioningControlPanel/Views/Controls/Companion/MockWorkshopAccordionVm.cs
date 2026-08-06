@@ -12,6 +12,16 @@ namespace ConditioningControlPanel.Views.Controls.Companion
     {
         private bool _isExpanded;
 
+        /// <summary>
+        /// The two cells other zones deep-link to by name: the hero's Switch chip asks for the
+        /// roster, Z5's "fine-tuning ↓" link asks for the awareness cell. Named constants so a
+        /// caller cannot mistype the anchor and silently get "the drawer opened, nothing scrolled".
+        /// </summary>
+        public const string RosterCellTitle = "ROSTER";
+
+        /// <inheritdoc cref="RosterCellTitle"/>
+        public const string AwarenessCellTitle = "AWARENESS FINE-TUNING";
+
         /// <summary>Parameterless ctor for <c>d:DesignInstance IsDesignTimeCreatable=True</c>.</summary>
         public MockWorkshopAccordionVm()
         {
@@ -37,43 +47,56 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         /// <summary>Opened — what the hero's Switch chip does before scrolling the roster in.</summary>
         public static MockWorkshopAccordionVm Expanded() => new() { IsExpanded = true };
 
+        /// <summary>
+        /// An actionable row. Every row that maps to a real dialog/editor in the disposition table
+        /// carries a command, because the view lights a row up on hover only when it has one —
+        /// an inert row that pretends to be clickable is worse than an honest static line.
+        /// </summary>
+        private static CompanionWorkshopRow Row(string label, string? value, string tag)
+            => new(label, value) { ActivateCommand = CompanionRelayCommand.NoOp(tag) };
+
         private static IReadOnlyList<IWorkshopCellVm> BuildCells() => new IWorkshopCellVm[]
         {
-            new CompanionWorkshopCell("ROSTER",
-                new CompanionWorkshopRow("Synthetic Blowdoll", "Lv 12"),
-                new CompanionWorkshopRow("Perfect Fuckpuppet", "[100]"),
-                new CompanionWorkshopRow("Brainwashed Slavedoll", "[125]"),
-                new CompanionWorkshopRow("Platinum Puppet", "[150]"),
-                new CompanionWorkshopRow("Bambi Cow", "[75]"),
-                CompanionWorkshopRow.Caption("🎭 assign personality")),
+            // BtnSwitchCompanion + CompanionCard0-4 + the 🎭 personality assignment
+            new CompanionWorkshopCell(RosterCellTitle,
+                Row("Synthetic Blowdoll", "Lv 12", "workshop.roster.0"),
+                Row("Perfect Fuckpuppet", "[100]", "workshop.roster.1"),
+                Row("Brainwashed Slavedoll", "[125]", "workshop.roster.2"),
+                Row("Platinum Puppet", "[150]", "workshop.roster.3"),
+                Row("Bambi Cow", "[75]", "workshop.roster.4"),
+                Row("🎭 assign personality", null, "workshop.roster.assign")),
 
+            // idle interval + bubble duration sliders, both shortcut editors, the two switches
             new CompanionWorkshopCell("BEHAVIOR",
                 CompanionWorkshopRow.Slider("Idle interval", "120s", 0.38),
                 CompanionWorkshopRow.Slider("Bubble time", "2s", 0.20),
-                new CompanionWorkshopRow("Chat shortcut", "Ctrl+T"),
-                new CompanionWorkshopRow("Camera shortcut", "Ctrl+Alt+K"),
-                new CompanionWorkshopRow("Mute whispers · Pause browser"),
+                Row("Chat shortcut", "Ctrl+T", "workshop.behavior.chatShortcut"),
+                Row("Camera shortcut", "Ctrl+Alt+K", "workshop.behavior.cameraShortcut"),
+                Row("Mute whispers", "on", "workshop.behavior.muteWhispers"),
+                Row("Pause in browser", "off", "workshop.behavior.pauseBrowser"),
                 CompanionWorkshopRow.Caption("idle interval is set by her Proactivity trait — override here")),
 
+            // System B keyword engine: trigger mode + interval + Edit Phrases, then the phrase shelf
             new CompanionWorkshopCell("TRIGGERS & PHRASES",
-                new CompanionWorkshopRow("Trigger mode · interval", "60s"),
-                new CompanionWorkshopRow("Edit phrases"),
-                new CompanionWorkshopRow("Manage phrases", "128 active"),
-                new CompanionWorkshopRow("Phrase presets · save / delete")),
+                Row("Trigger mode · interval", "60s", "workshop.triggers.mode"),
+                Row("Edit trigger phrases", null, "workshop.triggers.edit"),
+                Row("Manage phrases", "128 active", "workshop.phrases.manage"),
+                Row("Phrase presets · save / delete", null, "workshop.phrases.presets")),
 
             new CompanionWorkshopCell("HER LIBRARY",
-                new CompanionWorkshopRow("Hypnotube link pool", "Bambi Sleep scope"),
-                new CompanionWorkshopRow("14 links · + add link")),
+                Row("Hypnotube link pool", "Bambi Sleep scope", "workshop.library.pool"),
+                Row("+ add link", "14 links", "workshop.library.add")),
 
             new CompanionWorkshopCell("COMMUNITY",
-                new CompanionWorkshopRow("Browse shared companions"),
-                new CompanionWorkshopRow("Import / Export"),
-                new CompanionWorkshopRow("Installed", "2")),
+                Row("Browse shared companions", null, "workshop.community.browse"),
+                Row("Import / Export", null, "workshop.community.importExport"),
+                Row("Refresh installed", "2", "workshop.community.refresh")),
 
-            new CompanionWorkshopCell("AWARENESS FINE-TUNING",
+            // Z5's "fine-tuning ↓" link lands here
+            new CompanionWorkshopCell(AwarenessCellTitle,
                 CompanionWorkshopRow.Slider("Cooldown", "90s", 0.45),
                 CompanionWorkshopRow.Slider("Max cooldown", "off", 0.0),
-                new CompanionWorkshopRow("Privacy notice · full text"))
+                Row("Privacy notice · full text", null, "workshop.awareness.privacy"))
         };
     }
 }

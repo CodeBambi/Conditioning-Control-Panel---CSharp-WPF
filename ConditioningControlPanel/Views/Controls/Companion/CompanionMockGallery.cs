@@ -68,6 +68,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
                 ["engine.cloud"] = () => MockEngineRoomDrawerVm.Cloud(),
                 ["engine.loggedOut"] = () => MockEngineRoomDrawerVm.LoggedOut(),
                 ["engine.localOllama"] = () => MockEngineRoomDrawerVm.LocalOllama(),
+                ["engine.custom"] = () => MockEngineRoomDrawerVm.Custom(),
                 ["engine.off"] = () => MockEngineRoomDrawerVm.Off(),
                 ["engine.collapsed"] = () => MockEngineRoomDrawerVm.Collapsed(),
 

@@ -82,6 +82,9 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
                 // ---- Z4 personality ----
                 ["companion_personality_title"] = "Make her yours",
+                ["companion_personality_reinterview"] = "re-interview me~",
+                ["companion_personality_adjust"] = "adjust her",
+                ["companion_personality_traits_tip"] = "open her trait dashboard",
                 ["companion_personality_view_prompt"] = "View compiled prompt",
                 ["companion_personality_fork"] = "Fork & edit by hand",
                 ["companion_personality_community"] = "Community prompts",
@@ -91,13 +94,17 @@ namespace ConditioningControlPanel.Views.Controls.Companion
                 ["companion_awareness_dial_off"] = "─ Off",
                 ["companion_awareness_dial_broad"] = "◔ Broad strokes",
                 ["companion_awareness_dial_everything"] = "◉ Everything",
+                ["companion_awareness_everything_locked_tip"] =
+                    "she needs Train 2 eyes before she can see this much — soon~",
                 ["companion_awareness_wire_prefix"] = "she sees → ",
+                ["companion_awareness_deny_remove_tip"] = "stop hiding this from her",
                 ["companion_awareness_incognito"] = "incognito is always invisible.",
                 ["companion_awareness_allow_per_app"] = "allow per app…",
                 ["companion_awareness_fine_tuning"] = "fine-tuning ↓",
 
                 // ---- Z6 attention: the copy ladder AttentionCopy.CopyKeyFor() selects ----
                 ["companion_attention_title"] = "Her attention",
+                ["companion_attention_detail_tip"] = "hover for the numbers",
                 ["companion_attention_plenty"] = "Plenty of her attention left today.",
                 ["companion_attention_saving"] = "she's saving her best lines.",
                 ["companion_attention_whispering"] = "she's whispering to conserve energy.",
@@ -109,17 +116,23 @@ namespace ConditioningControlPanel.Views.Controls.Companion
                 ["companion_engine_provider_cloud"] = "Cloud",
                 ["companion_engine_provider_local"] = "Local (Ollama)",
                 ["companion_engine_provider_custom"] = "Custom (BYO)",
+                ["companion_engine_off_note"] = "she runs on her voice alone right now. barks still play — the thinking is what's off.",
+                ["companion_engine_group_cloud"] = "CLOUD",
+                ["companion_engine_group_local"] = "LOCAL (OLLAMA)",
+                ["companion_engine_group_custom"] = "CUSTOM (BYO)",
                 ["companion_engine_field_ollama_model"] = "Ollama model",
                 ["companion_engine_field_ollama_host"] = "Ollama host",
                 ["companion_engine_field_custom_endpoint"] = "Custom endpoint",
                 ["companion_engine_field_custom_model"] = "Custom model",
                 ["companion_engine_field_api_key"] = "API key",
+                ["companion_engine_api_key_note"] = "the key stays on this machine.",
                 ["companion_engine_btn_test"] = "Test connection",
                 ["companion_engine_btn_setup_local"] = "Setup local AI",
                 ["companion_engine_btn_sampler"] = "Sampler settings",
 
                 // ---- Z8 workshop ----
-                ["companion_workshop_header"] = "WORKSHOP — EVERY DIAL SHE HAS"
+                ["companion_workshop_header"] = "WORKSHOP — EVERY DIAL SHE HAS",
+                ["companion_workshop_focus_tip"] = "jump to this shelf"
             };
 
         /// <summary>

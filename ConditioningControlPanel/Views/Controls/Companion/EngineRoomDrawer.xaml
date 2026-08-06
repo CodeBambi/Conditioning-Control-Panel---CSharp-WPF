@@ -5,7 +5,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:local="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
              mc:Ignorable="d"
-             d:DesignWidth="1160" d:DesignHeight="360"
+             d:DesignWidth="1160" d:DesignHeight="380"
              d:DataContext="{d:DesignInstance Type=local:MockEngineRoomDrawerVm, IsDesignTimeCreatable=True}">
 
     <!-- ================================================================
@@ -18,6 +18,12 @@
          line, Ollama model/host + Setup + Test, the BYO endpoint/key/model
          + sampler + test, the daily request limit, and the live actions
          feed all live in this one drawer.
+
+         They are grouped by provider exactly as the legacy card grouped
+         them (LocalConfigPanel / OpenAiCompatibleConfigPanel): the
+         segment you picked is the panel you see, so the drawer is a page
+         of wiring rather than a wall of it. Off shows its own one-liner
+         so the drawer is never an empty box.
 
          The old full-card login veil is gone: logged-out is an inline row
          here, and Z2's teaser does the selling. The page never fully veils.
@@ -32,6 +38,13 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="pack://application:,,,/ConditioningControlPanel;component/Views/Controls/Companion/Themes/CompanionTheme.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- the little all-caps rule that names a provider panel -->
+            <Style x:Key="CmpZ7GroupTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource CmpFieldLabelStyle}">
+                <Setter Property="FontWeight" Value="Bold"/>
+                <Setter Property="Foreground" Value="#FF8F88AD"/>
+                <Setter Property="Margin" Value="2,0,0,8"/>
+            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
 
@@ -71,7 +84,7 @@
                 </StackPanel>
             </Border>
 
-            <!-- ========== status line ========== -->
+            <!-- ========== status line (always — it is the "is she thinking?" readout) ========== -->
             <TextBlock Text="{Binding StatusLine}" FontSize="11" Margin="2,0,0,12" TextWrapping="Wrap">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
@@ -85,73 +98,107 @@
                 </TextBlock.Style>
             </TextBlock>
 
-            <!-- ========== inline logged-out row (replaces the old page-wide lock veil) ========== -->
-            <Border Style="{StaticResource CmpInsetPanelStyle}" Margin="0,0,0,12"
-                    Visibility="{Binding IsLoggedIn, Converter={StaticResource CmpBoolToVisInverse}}">
-                <Grid>
+            <!-- ========== OFF ========== -->
+            <TextBlock Text="{local:CmpStr companion_engine_off_note}" Style="{StaticResource CmpDrawerNoteStyle}"
+                       Margin="2,0,0,4"
+                       Visibility="{Binding Provider, Converter={StaticResource CmpEnumToVis}, ConverterParameter=Off}"/>
+
+            <!-- ========== CLOUD ========== -->
+            <StackPanel Visibility="{Binding Provider, Converter={StaticResource CmpEnumToVis}, ConverterParameter=Cloud}">
+                <TextBlock Text="{local:CmpStr companion_engine_group_cloud}" Style="{StaticResource CmpZ7GroupTitleStyle}"/>
+
+                <!-- inline logged-out row — this replaces the old page-wide lock veil -->
+                <Border Style="{StaticResource CmpInsetPanelStyle}" Margin="0,0,0,12"
+                        Visibility="{Binding IsLoggedIn, Converter={StaticResource CmpBoolToVisInverse}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding LoginPrompt}" VerticalAlignment="Center"
+                                   Style="{StaticResource CmpDimTextStyle}"/>
+                        <Button Grid.Column="1" Content="{Binding LoginButtonLabel}"
+                                Style="{StaticResource CmpGrayButtonStyle}" Margin="10,0,0,0"
+                                Command="{Binding LoginCommand}"/>
+                    </Grid>
+                </Border>
+
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                    <Button Content="{local:CmpStr companion_engine_btn_test}" Style="{StaticResource CmpGrayButtonStyle}"
+                            Command="{Binding TestConnectionCommand}"/>
+                    <Button Content="{Binding DailyLimitLabel}" Style="{StaticResource CmpGrayButtonStyle}"
+                            Command="{Binding DailyLimitCommand}"/>
+                </WrapPanel>
+            </StackPanel>
+
+            <!-- ========== LOCAL (OLLAMA) ========== -->
+            <StackPanel Visibility="{Binding Provider, Converter={StaticResource CmpEnumToVis}, ConverterParameter=LocalOllama}">
+                <TextBlock Text="{local:CmpStr companion_engine_group_local}" Style="{StaticResource CmpZ7GroupTitleStyle}"/>
+                <Grid Margin="0,0,0,10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="{Binding LoginPrompt}" VerticalAlignment="Center"
-                               Style="{StaticResource CmpDimTextStyle}"/>
-                    <Button Grid.Column="1" Content="{Binding LoginButtonLabel}"
-                            Style="{StaticResource CmpGrayButtonStyle}" Margin="10,0,0,0"
-                            Command="{Binding LoginCommand}"/>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="{local:CmpStr companion_engine_field_ollama_model}" Style="{StaticResource CmpFieldLabelStyle}"/>
+                        <TextBox Style="{StaticResource CmpFieldBoxStyle}" Text="{Binding OllamaModel, Mode=TwoWay}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="{local:CmpStr companion_engine_field_ollama_host}" Style="{StaticResource CmpFieldLabelStyle}"/>
+                        <TextBox Style="{StaticResource CmpFieldBoxStyle}" Text="{Binding OllamaHost, Mode=TwoWay}"/>
+                    </StackPanel>
                 </Grid>
-            </Border>
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                    <Button Content="{local:CmpStr companion_engine_btn_setup_local}" Style="{StaticResource CmpGrayButtonStyle}"
+                            Command="{Binding SetupLocalCommand}"/>
+                    <Button Content="{local:CmpStr companion_engine_btn_test}" Style="{StaticResource CmpGrayButtonStyle}"
+                            Command="{Binding TestConnectionCommand}"/>
+                </WrapPanel>
+            </StackPanel>
 
-            <!-- ========== fields: local + custom ========== -->
-            <Grid Margin="0,0,0,10">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="10"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+            <!-- ========== CUSTOM (BYO) ========== -->
+            <StackPanel Visibility="{Binding Provider, Converter={StaticResource CmpEnumToVis}, ConverterParameter=Custom}">
+                <TextBlock Text="{local:CmpStr companion_engine_group_custom}" Style="{StaticResource CmpZ7GroupTitleStyle}"/>
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-                <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,0,10">
-                    <TextBlock Text="{local:CmpStr companion_engine_field_ollama_model}" Style="{StaticResource CmpFieldLabelStyle}"/>
-                    <TextBox Style="{StaticResource CmpFieldBoxStyle}" Text="{Binding OllamaModel, Mode=TwoWay}"/>
-                </StackPanel>
-                <StackPanel Grid.Row="0" Grid.Column="2" Margin="0,0,0,10">
-                    <TextBlock Text="{local:CmpStr companion_engine_field_ollama_host}" Style="{StaticResource CmpFieldLabelStyle}"/>
-                    <TextBox Style="{StaticResource CmpFieldBoxStyle}" Text="{Binding OllamaHost, Mode=TwoWay}"/>
-                </StackPanel>
+                    <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,0,10">
+                        <TextBlock Text="{local:CmpStr companion_engine_field_custom_endpoint}" Style="{StaticResource CmpFieldLabelStyle}"/>
+                        <TextBox Style="{StaticResource CmpFieldBoxStyle}" Text="{Binding CustomEndpoint, Mode=TwoWay}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Row="0" Grid.Column="2" Margin="0,0,0,10">
+                        <TextBlock Text="{local:CmpStr companion_engine_field_custom_model}" Style="{StaticResource CmpFieldLabelStyle}"/>
+                        <TextBox Style="{StaticResource CmpFieldBoxStyle}" Text="{Binding CustomModel, Mode=TwoWay}"/>
+                    </StackPanel>
 
-                <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,0,10">
-                    <TextBlock Text="{local:CmpStr companion_engine_field_custom_endpoint}" Style="{StaticResource CmpFieldLabelStyle}"/>
-                    <TextBox Style="{StaticResource CmpFieldBoxStyle}" Text="{Binding CustomEndpoint, Mode=TwoWay}"/>
-                </StackPanel>
-                <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,0,0,10">
-                    <TextBlock Text="{local:CmpStr companion_engine_field_custom_model}" Style="{StaticResource CmpFieldLabelStyle}"/>
-                    <TextBox Style="{StaticResource CmpFieldBoxStyle}" Text="{Binding CustomModel, Mode=TwoWay}"/>
-                </StackPanel>
-
-                <StackPanel Grid.Row="2" Grid.Column="0">
-                    <TextBlock Text="{local:CmpStr companion_engine_field_api_key}" Style="{StaticResource CmpFieldLabelStyle}"/>
-                    <!-- a real PasswordBox replaces this in the wiring pass; the key must never be
-                         round-tripped through a plain TextBox binding. -->
-                    <TextBox x:Name="CustomKeyBox" Style="{StaticResource CmpFieldBoxStyle}"
-                             Text="{Binding CustomApiKey, Mode=TwoWay}"/>
-                </StackPanel>
-            </Grid>
-
-            <!-- ========== actions ========== -->
-            <WrapPanel Orientation="Horizontal">
-                <Button Content="{local:CmpStr companion_engine_btn_test}" Style="{StaticResource CmpGrayButtonStyle}"
-                        Command="{Binding TestConnectionCommand}"/>
-                <Button Content="{local:CmpStr companion_engine_btn_setup_local}" Style="{StaticResource CmpGrayButtonStyle}"
-                        Command="{Binding SetupLocalCommand}"/>
-                <Button Content="{local:CmpStr companion_engine_btn_sampler}" Style="{StaticResource CmpGrayButtonStyle}"
-                        Command="{Binding SamplerSettingsCommand}"/>
-                <Button Content="{Binding DailyLimitLabel}" Style="{StaticResource CmpGrayButtonStyle}"
-                        Command="{Binding DailyLimitCommand}"/>
-            </WrapPanel>
+                    <StackPanel Grid.Row="1" Grid.Column="0">
+                        <TextBlock Text="{local:CmpStr companion_engine_field_api_key}" Style="{StaticResource CmpFieldLabelStyle}"/>
+                        <!-- A real PasswordBox replaces this in the wiring pass; a key must never be
+                             round-tripped through a plain TextBox binding once it is a real secret. -->
+                        <TextBox x:Name="CustomKeyBox" Style="{StaticResource CmpFieldBoxStyle}"
+                                 Text="{Binding CustomApiKey, Mode=TwoWay}"/>
+                        <TextBlock Text="{local:CmpStr companion_engine_api_key_note}"
+                                   Style="{StaticResource CmpFaintTextStyle}" Margin="2,4,0,0"/>
+                    </StackPanel>
+                </Grid>
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                    <Button Content="{local:CmpStr companion_engine_btn_test}" Style="{StaticResource CmpGrayButtonStyle}"
+                            Command="{Binding TestConnectionCommand}"/>
+                    <Button Content="{local:CmpStr companion_engine_btn_sampler}" Style="{StaticResource CmpGrayButtonStyle}"
+                            Command="{Binding SamplerSettingsCommand}"/>
+                    <Button Content="{Binding DailyLimitLabel}" Style="{StaticResource CmpGrayButtonStyle}"
+                            Command="{Binding DailyLimitCommand}"/>
+                </WrapPanel>
+            </StackPanel>
 
             <!-- ========== live actions feed (local effects channel) ========== -->
             <TextBlock Text="{Binding LiveActionsPlaceholder}" Style="{StaticResource CmpDrawerNoteStyle}"

@@ -5,7 +5,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:local="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
              mc:Ignorable="d"
-             d:DesignWidth="430" d:DesignHeight="340"
+             d:DesignWidth="430" d:DesignHeight="360"
              d:DataContext="{d:DesignInstance Type=local:MockAwarenessPrivacyVm, IsDesignTimeCreatable=True}">
 
     <!-- ================================================================
@@ -19,13 +19,18 @@
            · The wire view is the trust element: a monospace chip showing
              EXACTLY the projected ContextFrame. Off/free shows it grayed
              saying "[ her eyes are closed ]" rather than vanishing.
-           · Deny chips ship seeded (password managers, banking, email);
-             incognito is a hard drop and says so in fixed copy.
-           · Page titles default OFF — the inverted default made visible.
+           · Deny chips ship seeded (password managers, banking, email)
+             and each one can be lifted again — the ✕ is hover-revealed
+             and, until then, not hit-testable, because an invisible
+             control that removes a privacy guard is a trap.
+           · Incognito is a hard drop and says so in fixed copy.
+           · Page titles default OFF — the inverted default made visible,
+             and the label goes pink while they are hidden.
 
-         Pre-Train 2: the third stop is disabled (the first two bridge
-         today's single toggle) and the dormant promise block replaces the
-         live frame. Small TRAIN 2 microtag, never the word TODO.
+         Pre-Train 2: the third stop is present but not selectable (the
+         first two bridge today's single toggle) and the dormant promise
+         block replaces the live caption. Small TRAIN 2 microtag, never
+         the word TODO.
          ================================================================ -->
 
     <UserControl.Resources>
@@ -34,10 +39,51 @@
                 <ResourceDictionary Source="pack://application:,,,/ConditioningControlPanel;component/Views/Controls/Companion/Themes/CompanionTheme.xaml"/>
             </ResourceDictionary.MergedDictionaries>
 
+            <!-- the hover-revealed ✕ on a deny chip -->
+            <Style x:Key="CmpZ5ChipCloseStyle" TargetType="Button">
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="FontSize" Value="9"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+                <Setter Property="Foreground" Value="#FFFFB0BE"/>
+                <Setter Property="Margin" Value="7,0,0,0"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <!-- invisible AND inert until the chip is hovered -->
+                <Setter Property="Opacity" Value="0"/>
+                <Setter Property="IsHitTestVisible" Value="False"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="Transparent" Padding="2,0,2,0">
+                                <ContentPresenter VerticalAlignment="Center"
+                                                  TextBlock.Foreground="{TemplateBinding Foreground}"
+                                                  TextBlock.FontSize="{TemplateBinding FontSize}"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+
             <DataTemplate x:Key="CmpDenyChipTemplate">
-                <Border Style="{StaticResource CmpDenyChipStyle}">
-                    <TextBlock Text="{Binding Label}" Style="{StaticResource CmpDenyChipTextStyle}"/>
+                <Border x:Name="ChipBd" Style="{StaticResource CmpDenyChipStyle}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding Label}" Style="{StaticResource CmpDenyChipTextStyle}"
+                                   VerticalAlignment="Center"/>
+                        <Button x:Name="RemoveBtn" Content="✕" Style="{StaticResource CmpZ5ChipCloseStyle}"
+                                Command="{Binding RemoveCommand}"
+                                ToolTip="{local:CmpStr companion_awareness_deny_remove_tip}"/>
+                    </StackPanel>
                 </Border>
+                <DataTemplate.Triggers>
+                    <Trigger SourceName="ChipBd" Property="IsMouseOver" Value="True">
+                        <Setter TargetName="RemoveBtn" Property="Opacity" Value="1"/>
+                        <Setter TargetName="RemoveBtn" Property="IsHitTestVisible" Value="True"/>
+                    </Trigger>
+                </DataTemplate.Triggers>
             </DataTemplate>
         </ResourceDictionary>
     </UserControl.Resources>
@@ -78,12 +124,24 @@
                                  Style="{StaticResource CmpSegmentStyle}"
                                  IsChecked="{Binding Intensity, Mode=TwoWay,
                                              Converter={StaticResource CmpEnumEquals}, ConverterParameter=BroadStrokes}"/>
-                    <!-- pre-Train 2 the third stop is present but not selectable -->
+                    <!-- pre-Train 2 the third stop is present but not selectable, and says why -->
                     <RadioButton Grid.Column="2" GroupName="CmpAwarenessDial" Content="{local:CmpStr companion_awareness_dial_everything}"
-                                 Style="{StaticResource CmpSegmentStyle}"
                                  IsEnabled="{Binding IsEverythingAvailable}"
                                  IsChecked="{Binding Intensity, Mode=TwoWay,
-                                             Converter={StaticResource CmpEnumEquals}, ConverterParameter=Everything}"/>
+                                             Converter={StaticResource CmpEnumEquals}, ConverterParameter=Everything}">
+                        <RadioButton.Style>
+                            <Style TargetType="RadioButton" BasedOn="{StaticResource CmpSegmentStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsEverythingAvailable}" Value="False">
+                                        <Setter Property="ToolTip"
+                                                Value="{local:CmpStr companion_awareness_everything_locked_tip}"/>
+                                        <!-- a disabled control swallows ToolTip unless told otherwise -->
+                                        <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </RadioButton.Style>
+                    </RadioButton>
                 </Grid>
             </Border>
 
@@ -100,10 +158,13 @@
                                Visibility="{Binding IsWireLive, Converter={StaticResource CmpBoolToVis}}"/>
                 </StackPanel>
             </Border>
-            <TextBlock Text="{Binding WireCaption}" Style="{StaticResource CmpWireCaptionStyle}"/>
+
+            <!-- the caption belongs to a live frame; when dormant the promise block speaks instead -->
+            <TextBlock Text="{Binding WireCaption}" Style="{StaticResource CmpWireCaptionStyle}"
+                       Visibility="{Binding IsDormant, Converter={StaticResource CmpBoolToVisInverse}}"/>
 
             <!-- ========== dormant promise (pre-Train 2) ========== -->
-            <Grid Margin="0,0,0,12"
+            <Grid Margin="0,6,0,12"
                   Visibility="{Binding IsDormant, Converter={StaticResource CmpBoolToVis}}">
                 <Border x:Name="DormantHost" Style="{StaticResource CmpDormantBlockStyle}">
                     <Grid>
@@ -130,10 +191,37 @@
                     <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
             </ItemsControl>
-            <Button Content="{Binding AddDenyLabel}" Style="{StaticResource CmpChipButtonStyle}"
-                    HorizontalAlignment="Left" Margin="0,0,0,4" Command="{Binding AddDenyCommand}"/>
+
+            <!-- "+ add app…" — dashed, per the mockup's .d.add. A Border cannot dash, so the
+                 outline is a Rectangle laid under a chrome-free button. -->
+            <Grid HorizontalAlignment="Left" Margin="0,0,0,4">
+                <Rectangle Style="{StaticResource CmpDashedOutlineStyle}" Stroke="#2EFFFFFF"
+                           RadiusX="999" RadiusY="999"/>
+                <Button Content="{Binding AddDenyLabel}" Command="{Binding AddDenyCommand}"
+                        Cursor="Hand" Background="Transparent" BorderThickness="0"
+                        FontSize="10.5" FontWeight="Bold" Padding="11,4,11,4"
+                        Foreground="{StaticResource CmpMutedBrush}">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bd" Background="#08FFFFFF" CornerRadius="{StaticResource CmpRadiusPill}"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter VerticalAlignment="Center"
+                                                  TextBlock.Foreground="{TemplateBinding Foreground}"
+                                                  TextBlock.FontSize="{TemplateBinding FontSize}"
+                                                  TextBlock.FontWeight="Bold"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </Grid>
+
             <TextBlock Text="{local:CmpStr companion_awareness_incognito}" Style="{StaticResource CmpFaintTextStyle}"
-                       Margin="2,0,0,11"/>
+                       Margin="2,4,0,11"/>
 
             <!-- ========== page titles ========== -->
             <Grid>
@@ -144,9 +232,22 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <ToggleButton Style="{StaticResource CmpToggleSwitchStyle}" Margin="0,0,9,0"
+                                  ToolTip="{Binding PageTitlesLabel}"
                                   IsChecked="{Binding AllowPageTitles, Mode=TwoWay}"/>
-                    <TextBlock Text="{Binding PageTitlesLabel}" FontSize="11.5"
-                               Foreground="{StaticResource CmpDimBrush}" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding PageTitlesLabel}" FontSize="11.5" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <!-- hidden is the protective state, so it reads as the guard colour -->
+                                <Setter Property="Foreground" Value="#FFFFB0BE"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding AllowPageTitles}" Value="True">
+                                        <Setter Property="Foreground" Value="{StaticResource CmpDimBrush}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </StackPanel>
                 <Button Grid.Column="1" Content="{local:CmpStr companion_awareness_allow_per_app}" Style="{StaticResource CmpLinkButtonStyle}"
                         Margin="10,0,0,0" Command="{Binding AllowPerAppCommand}"/>

@@ -5,7 +5,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:local="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
              mc:Ignorable="d"
-             d:DesignWidth="1160" d:DesignHeight="360"
+             d:DesignWidth="1160" d:DesignHeight="400"
              d:DataContext="{d:DesignInstance Type=local:MockWorkshopAccordionVm, IsDesignTimeCreatable=True}">
 
     <!-- ================================================================
@@ -19,6 +19,15 @@
          the wiring pass swaps each row for the real control while
          preserving every x:Name the MainWindow partials write to.
 
+         A row with an ActivateCommand behaves like the mockup's <li>:
+         hand cursor, label goes white on hover, click opens the real
+         dialog. A row without one is inert and says so by not lighting
+         up — no dead-looking disabled chrome either way.
+
+         Cell titles are the deep-link anchors: the hero's Switch chip
+         asks for ROSTER, Z5's "fine-tuning ↓" asks for the awareness
+         cell, and ExpandAndReveal(title) scrolls it in.
+
          Cells wrap rather than sitting in a fixed 3-column grid so the
          drawer collapses to one column on a narrow window without a
          width trigger.
@@ -30,54 +39,102 @@
                 <ResourceDictionary Source="pack://application:,,,/ConditioningControlPanel;component/Views/Controls/Companion/Themes/CompanionTheme.xaml"/>
             </ResourceDictionary.MergedDictionaries>
 
+            <!-- a row is a chrome-free button so ActivateCommand is reachable by keyboard too -->
+            <Style x:Key="CmpZ8RowButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="Transparent"><ContentPresenter/></Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+                <Style.Triggers>
+                    <!-- no command = nothing to click; do not pretend otherwise -->
+                    <DataTrigger Binding="{Binding ActivateCommand}" Value="{x:Null}">
+                        <Setter Property="Cursor" Value="Arrow"/>
+                        <Setter Property="Focusable" Value="False"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+
+            <!-- the row label: white on hover, but only when the row actually does something -->
+            <Style x:Key="CmpZ8RowLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource CmpWorkshopRowStyle}">
+                <Setter Property="Margin" Value="0"/>
+                <Style.Triggers>
+                    <MultiDataTrigger>
+                        <MultiDataTrigger.Conditions>
+                            <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}"
+                                       Value="True"/>
+                            <Condition Binding="{Binding IsCaption}" Value="False"/>
+                        </MultiDataTrigger.Conditions>
+                        <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+                    </MultiDataTrigger>
+                    <DataTrigger Binding="{Binding IsCaption}" Value="True">
+                        <Setter Property="Foreground" Value="{StaticResource CmpFaintBrush}"/>
+                        <Setter Property="FontStyle" Value="Italic"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+
             <!-- one row: plain label/value, a mock slider, or a muted caption -->
             <DataTemplate x:Key="CmpWorkshopRowTemplate">
-                <Grid x:Name="RowHost" Margin="0,2.5,0,2.5">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
+                <Button Style="{StaticResource CmpZ8RowButtonStyle}" Command="{Binding ActivateCommand}"
+                        ToolTip="{Binding Label}">
+                    <Grid Margin="0,2.5,0,2.5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-                    <TextBlock x:Name="RowLabel" Grid.Column="0" Text="{Binding Label}"
-                               Style="{StaticResource CmpWorkshopRowStyle}" Margin="0"/>
+                        <TextBlock Grid.Column="0" Text="{Binding Label}"
+                                   Style="{StaticResource CmpZ8RowLabelStyle}"/>
 
-                    <!-- slider mock: a hairline track with a pink thumb at SliderFraction -->
-                    <Grid x:Name="Track" Grid.Column="1" Height="12" Margin="8,0,8,0"
-                          VerticalAlignment="Center" Visibility="Collapsed">
-                        <Border Height="4" CornerRadius="2" VerticalAlignment="Center"
-                                Background="{StaticResource CmpTrackSoftBrush}"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="{Binding SliderFraction, Converter={StaticResource CmpFractionToStar}}"/>
-                                <ColumnDefinition Width="{Binding SliderFraction, Converter={StaticResource CmpFractionToRemainderStar}}"/>
-                            </Grid.ColumnDefinitions>
-                            <Ellipse Grid.Column="1" Width="12" Height="12" HorizontalAlignment="Left"
-                                     Margin="-6,0,0,0" Fill="{StaticResource CmpPinkBrush}"/>
+                        <!-- slider mock: a hairline track with a pink thumb at SliderFraction -->
+                        <Grid x:Name="Track" Grid.Column="1" Height="12" Margin="8,0,8,0"
+                              VerticalAlignment="Center" Visibility="Collapsed">
+                            <Border Height="4" CornerRadius="2" VerticalAlignment="Center"
+                                    Background="{StaticResource CmpTrackSoftBrush}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="{Binding SliderFraction, Converter={StaticResource CmpFractionToStar}}"/>
+                                    <ColumnDefinition Width="{Binding SliderFraction, Converter={StaticResource CmpFractionToRemainderStar}}"/>
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Grid.Column="1" Width="12" Height="12" HorizontalAlignment="Left"
+                                         Margin="-6,0,0,0" Fill="{StaticResource CmpPinkBrush}"/>
+                            </Grid>
                         </Grid>
-                    </Grid>
 
-                    <TextBlock x:Name="RowValue" Grid.Column="2" Text="{Binding Value}"
-                               Style="{StaticResource CmpWorkshopRowStyle}" Margin="8,0,0,0"
-                               Foreground="{StaticResource CmpDimBrush}"
-                               Visibility="{Binding Value, Converter={StaticResource CmpHasContentToVis}}"/>
-                </Grid>
+                        <TextBlock Grid.Column="2" Text="{Binding Value}"
+                                   Style="{StaticResource CmpWorkshopRowStyle}" Margin="8,0,0,0"
+                                   Foreground="{StaticResource CmpDimBrush}"
+                                   Visibility="{Binding Value, Converter={StaticResource CmpHasContentToVis}}"/>
+                    </Grid>
+                </Button>
                 <DataTemplate.Triggers>
                     <DataTrigger Binding="{Binding IsSlider}" Value="True">
                         <Setter TargetName="Track" Property="Visibility" Value="Visible"/>
                     </DataTrigger>
-                    <DataTrigger Binding="{Binding IsCaption}" Value="True">
-                        <Setter TargetName="RowLabel" Property="Foreground" Value="{StaticResource CmpFaintBrush}"/>
-                        <Setter TargetName="RowLabel" Property="FontStyle" Value="Italic"/>
-                    </DataTrigger>
                 </DataTemplate.Triggers>
             </DataTemplate>
 
-            <!-- one pigeonhole -->
+            <!-- one pigeonhole. The title is the deep-link anchor, so it is a button. -->
             <DataTemplate x:Key="CmpWorkshopCellTemplate">
-                <Border Style="{StaticResource CmpWorkshopCellStyle}" Width="340">
+                <Border Style="{StaticResource CmpWorkshopCellStyle}" Width="340"
+                        Tag="{Binding Title}">
                     <StackPanel>
-                        <TextBlock Text="{Binding Title}" Style="{StaticResource CmpWorkshopCellTitleStyle}"/>
+                        <Button Style="{StaticResource CmpZ8RowButtonStyle}"
+                                ToolTip="{local:CmpStr companion_workshop_focus_tip}"
+                                Command="{Binding DataContext.FocusCellCommand,
+                                          RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                CommandParameter="{Binding Title}">
+                            <TextBlock Text="{Binding Title}" Style="{StaticResource CmpWorkshopCellTitleStyle}"/>
+                        </Button>
                         <ItemsControl ItemsSource="{Binding Rows}"
                                       ItemTemplate="{StaticResource CmpWorkshopRowTemplate}"/>
                     </StackPanel>
