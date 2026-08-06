@@ -153,6 +153,12 @@ namespace ConditioningControlPanel
                 // pools get saved and the message sets look wiped next launch).
                 EnsureSessionRestoredForExit();
 
+                // The Companion drawers are viewmodel state, written into CompanionSectionOpen on a
+                // tab-hide transition. Quitting while still sitting on the Companion tab is not one,
+                // so without this the open Engine Room / Workshop is lost — which is what the
+                // method's own doc comment already promised.
+                try { PersistCompanionDrawerStates(); } catch { }
+
                 // Actually closing - clean up
                 SaveSettings();
 

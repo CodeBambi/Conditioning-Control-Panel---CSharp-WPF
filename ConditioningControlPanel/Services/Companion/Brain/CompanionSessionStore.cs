@@ -175,7 +175,14 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 if (!Enum.TryParse<TurnKind>(t.Kind, ignoreCase: true, out var kind)) continue;
                 if (kind is not (TurnKind.UserChat or TurnKind.AssistantChat)) continue;
 
-                result.Add(CompanionTurn.Create(kind, t.Text, t.Mood,
+                // Replies persisted before the 0806 sigil fix carry «... said aloud: "..."» shells;
+                // heal them on the way in so old files stop re-teaching the model the pattern.
+                var text = kind == TurnKind.AssistantChat
+                    ? Services.AiTextHygiene.UnwrapSpokenSigil(t.Text)
+                    : t.Text;
+                if (text.Length == 0) continue;
+
+                result.Add(CompanionTurn.Create(kind, text, t.Mood,
                     utc: t.Utc == default ? DateTime.UtcNow : t.Utc));
             }
 

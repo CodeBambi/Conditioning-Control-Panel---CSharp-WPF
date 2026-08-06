@@ -96,9 +96,9 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Pulses pink overlays on every XP bar each time Brain Parasite drains.
         /// Hits both the always-visible header XPBar and the Companion-tab hero bar so the
-        /// player sees the alert wherever they are. Each overlay is sized to match only the
-        /// filled (acquired) portion of its bar so the flash sits on the colored fill, not
-        /// the empty track.
+        /// player sees the alert wherever they are. Each overlay covers only the filled
+        /// (acquired) portion of its bar so the flash sits on the colored fill, not the empty
+        /// track.
         /// </summary>
         private void FlashXpBarOnDrain()
         {
@@ -106,13 +106,9 @@ namespace ConditioningControlPanel
             // Header bar overlay width is data-bound to XPBar.Width in XAML, no sync needed.
             FlashOverlay(XPBarFlashOverlay);
 
-            // Companion bar is a templated ProgressBar — compute the filled width at flash time.
-            if (CompanionTab.PrgCompanion0FlashOverlay != null && CompanionTab.PrgCompanion0 != null && CompanionTab.PrgCompanion0.ActualWidth > 0)
-            {
-                var max = Math.Max(1.0, CompanionTab.PrgCompanion0.Maximum);
-                var pct = Math.Max(0.0, Math.Min(1.0, CompanionTab.PrgCompanion0.Value / max));
-                CompanionTab.PrgCompanion0FlashOverlay.Width = pct * CompanionTab.PrgCompanion0.ActualWidth;
-            }
+            // "Her Room" replaced the templated ProgressBar with a star-width gauge, and the
+            // overlay now sits in the same fill column as the bar — so it is already exactly as
+            // wide as the earned portion, and the ActualWidth arithmetic this used to do is gone.
             FlashOverlay(CompanionTab.PrgCompanion0FlashOverlay);
         }
 

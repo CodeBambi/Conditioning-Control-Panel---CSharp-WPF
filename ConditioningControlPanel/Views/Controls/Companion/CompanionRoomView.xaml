@@ -1,0 +1,174 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.Companion.CompanionRoomView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
+             mc:Ignorable="d"
+             d:DesignWidth="1240" d:DesignHeight="1400"
+             d:DataContext="{d:DesignInstance Type=local:MockCompanionRoomVm, IsDesignTimeCreatable=True}">
+
+    <!-- ================================================================
+         "HER ROOM" — the composed Companion tab.
+
+         Nine controls, one page. Arrangement only: every zone owns its own
+         card, its own states and its own copy, and nothing here reaches
+         inside one. What the page adds is the three things a zone cannot
+         have on its own — the room it sits in, the shelf that puts the
+         columns beside each other, and the navigator that lets a link in
+         one zone land in another.
+
+         Strata, outside in (the Vault's language, design §7.1):
+           1. THE ROOM   — CmpRoomShellStyle: the linear backdrop, clipped
+                           and cornered, with the mockup's three radial
+                           washes riding above it as sibling Borders. WPF
+                           has no multi-background, so each CSS layer of
+                           .room is one Border here. They are decoration:
+                           IsHitTestVisible=False, and none of them is in
+                           the scroll.
+           2. THE SCROLL — one column, the whole page, MaxWidth 1460 like
+                           the other redesigned tabs.
+           3. THE SHELF  — Z2/Z3 at 60% beside Z4/Z5/Z6 at 40%, stacking
+                           to one column on a narrow window.
+
+         ZONE ORDER (design §2's zone map, top to bottom):
+           Z0+Z1  CompanionHeroCard      header band + Companion Card + the
+                                         constellation along its bottom edge
+           Z2     ChatThresholdView      talk to her          (left column)
+           Z3     MemoryDiaryView        what she knows       (left column)
+           Z4     MakeHerYoursView       make her yours       (right column)
+           Z5     AwarenessPrivacyView   what she can see     (right column)
+           Z6     AttentionGaugeView     her attention        (right column)
+           Z7     EngineRoomDrawer       the Engine Room      (full width)
+           Z8     WorkshopAccordion      the Workshop         (full width)
+
+         MOTION BUDGET (design §7.3 — ONE ambient loop per tab). The page
+         adds none. The hero's portrait breathe is the tab's Forever clock
+         and this file does not spend a second one: the mockup's drifting
+         dust motes are deliberately NOT built. RoomAmbientHost is the seam
+         they would go in — drop an AmbientFxCanvas there if the owner ever
+         decides the room is worth the extra clock. Everything else on the
+         page is a one-shot fired by its own zone on load.
+
+         Conversely the page PARKS clocks that a hidden tab would otherwise
+         keep burning: this app switches tabs by visibility, not by
+         unloading, so IsVisibleChanged stops the breathe, the wire cursor
+         AND Z2's thinking dots (three Forever clones that would otherwise
+         keep running behind another tab while a reply is in flight). On
+         re-show each zone re-reads its own viewmodel rather than being
+         restored to its state at park time. See the code-behind.
+
+         COMPAT SEAM: the disposition table's "kept hidden" row lands on
+         CompanionHeroCard (TxtDetachStatusCompanion, TxtCompanionStatus,
+         HelpBtnQuickControls) and WorkshopAccordion
+         (HelpBtnCompanionSettings), re-exposed as internal passthroughs on
+         this page's code-behind. The MainWindow partials write to those
+         names; they must not be renamed or made visible.
+
+         Nothing here binds to ActualWidth. The shelf's one-column collapse
+         is a threshold flip with hysteresis in code-behind (a binding to
+         ActualWidth that feeds a width is the layout-thrash this page
+         forbids), and every gauge on the page is a star-width column.
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/ConditioningControlPanel;component/Views/Controls/Companion/Themes/CompanionTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Border Style="{StaticResource CmpRoomShellStyle}">
+        <Grid>
+            <!-- ========== 1. the room's washes ==========
+                 .room's four stacked CSS backgrounds: the linear base is the shell's own
+                 Background, these three are the radials. Order matters — purple top-left,
+                 pink top-right, then the cool pool the floor sits in. -->
+            <Border Style="{StaticResource CmpRoomWashStyle}"
+                    Background="{StaticResource CmpRoomGlowPurpleBrush}"/>
+            <Border Style="{StaticResource CmpRoomWashStyle}"
+                    Background="{StaticResource CmpRoomGlowPinkBrush}"/>
+            <Border Style="{StaticResource CmpRoomWashStyle}"
+                    Background="{StaticResource CmpRoomFloorGlowBrush}"/>
+
+            <!-- The seam for the room's ambient layer. Empty on purpose — see the motion
+                 budget note above. Named so a later pass has an obvious place to land. -->
+            <Grid x:Name="RoomAmbientHost" IsHitTestVisible="False"/>
+
+            <!-- ========== 2. the scroll ========== -->
+            <ScrollViewer x:Name="PageScroll" Focusable="False"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Padding="{StaticResource CmpRoomPadding}"
+                          AutomationProperties.AutomationId="CompanionRoomScroll">
+
+                <!-- The body is centred and capped, like the other redesigned tabs, so the
+                     cards do not stretch to absurd widths on an ultrawide. -->
+                <StackPanel MaxWidth="1460" HorizontalAlignment="Stretch">
+
+                    <!-- ========== Z0 + Z1 ==========
+                         The hero draws its own header band when the viewmodel supplies one,
+                         which is why the page has no title of its own: two would be one too
+                         many, and the band collapses on a host that draws its own. -->
+                    <local:CompanionHeroCard x:Name="HeroZone" Margin="0,0,0,16"
+                                             DataContext="{Binding Hero}"
+                                             AutomationProperties.AutomationId="CompanionRoomHero"/>
+
+                    <!-- ========== 3. the shelf ==========
+                         Three columns: 3* / 16px gutter / 2* — the mockup's 60/40 with the gap
+                         expressed as a real column rather than a margin, so the collapse can
+                         close it to zero without touching either card's own spacing.
+
+                         Stacked, the right panel moves to row 1 and both panels span all three
+                         columns. The flip lives in ApplyShelfLayout(); the widths and spans
+                         below are the WIDE state, which is also what the designer shows. -->
+                    <Grid x:Name="Shelf">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition x:Name="ShelfLeftColumn" Width="3*"/>
+                            <ColumnDefinition x:Name="ShelfGutterColumn" Width="16"/>
+                            <ColumnDefinition x:Name="ShelfRightColumn" Width="2*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <StackPanel x:Name="ShelfLeft" Grid.Row="0" Grid.Column="0">
+                            <local:ChatThresholdView x:Name="ChatZone"
+                                                     DataContext="{Binding Chat}"
+                                                     AutomationProperties.AutomationId="CompanionRoomChat"/>
+                            <local:MemoryDiaryView x:Name="MemoryZone"
+                                                   DataContext="{Binding Memory}"
+                                                   AutomationProperties.AutomationId="CompanionRoomMemory"/>
+                        </StackPanel>
+
+                        <StackPanel x:Name="ShelfRight" Grid.Row="0" Grid.Column="2">
+                            <local:MakeHerYoursView x:Name="PersonalityZone"
+                                                    DataContext="{Binding Personality}"
+                                                    AutomationProperties.AutomationId="CompanionRoomPersonality"/>
+                            <!-- Focusable so the hero's awareness pill has somewhere to put the
+                                 keyboard when it deep-links here; the card itself takes no input. -->
+                            <local:AwarenessPrivacyView x:Name="AwarenessZone" Focusable="True"
+                                                        DataContext="{Binding Awareness}"
+                                                        AutomationProperties.AutomationId="CompanionRoomAwareness"/>
+                            <local:AttentionGaugeView x:Name="AttentionZone"
+                                                      DataContext="{Binding Attention}"
+                                                      AutomationProperties.AutomationId="CompanionRoomAttention"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- ========== Z7 / Z8 ==========
+                         Both drawers carry their own top margin from CmpDrawerStyle, so the
+                         shelf needs no trailing gap of its own. -->
+                    <local:EngineRoomDrawer x:Name="EngineZone"
+                                            DataContext="{Binding Engine}"
+                                            AutomationProperties.AutomationId="CompanionRoomEngine"/>
+                    <local:WorkshopAccordion x:Name="WorkshopZone"
+                                             DataContext="{Binding Workshop}"
+                                             AutomationProperties.AutomationId="CompanionRoomWorkshop"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</UserControl>

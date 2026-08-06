@@ -1,0 +1,149 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.Companion.AttentionGaugeView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             mc:Ignorable="d"
+             d:DesignWidth="430" d:DesignHeight="170"
+             d:DataContext="{d:DesignInstance Type=local:MockAttentionGaugeVm, IsDesignTimeCreatable=True}">
+
+    <!-- ================================================================
+         Z6 — HER ATTENTION (the daily budget meter).
+         Elegant, not scary. Copy rules, non-negotiable:
+           · never the word "tokens" — the ladder is in chats, in her voice
+           · the floor is not mute: barks keep playing, and the card says
+             so OUT LOUD — FloorNote is a resting line, never hover-gated
+           · the Patreon line appears below 40% only, once, quietly
+           · the numeric detail is on demand (hover or click), never resting
+
+         The bar is the Trainer Card recipe: a star-width fill column, no
+         ActualWidth arithmetic. At zero it keeps a 4% sliver so a spent
+         meter reads as empty rather than broken. This XAML knows no
+         numbers at all: the spent styling asks IsSpent and the floor note
+         asks ShowFloorNote, both computed in AttentionCopy where the
+         thresholds live and are unit-tested.
+
+         Thresholds live in AttentionCopy, not here, so they are
+         unit-tested and exist in exactly one place.
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/ConditioningControlPanel;component/Views/Controls/Companion/Themes/CompanionTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- the spent bar: same geometry, no heat. Keyed off IsSpent (intent), never off
+                 BarFraction == 0.04 — the sliver and a real 4% are the same double, and a user
+                 with 4 chats left was getting the "she'll be all yours tomorrow" treatment while
+                 the copy beside it said otherwise. -->
+            <Style x:Key="CmpZ6AttentionFillStyle" TargetType="Border"
+                   BasedOn="{StaticResource CmpGaugeFillAttentionStyle}">
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsSpent}" Value="True">
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="Opacity" Value="0.70"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+
+            <!-- detail-on-demand: revealed by the toggle command OR by hovering the card -->
+            <Style x:Key="CmpZ6DetailLineStyle" TargetType="TextBlock"
+                   BasedOn="{StaticResource CmpFaintTextStyle}">
+                <Setter Property="FontSize" Value="10"/>
+                <Setter Property="Margin" Value="0,4,0,0"/>
+                <Setter Property="Visibility" Value="Collapsed"/>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsDetailShown}" Value="True">
+                        <Setter Property="Visibility" Value="Visible"/>
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding IsMouseOver,
+                                 RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
+                        <Setter Property="Visibility" Value="Visible"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Border Style="{StaticResource CmpCardStyle}">
+        <StackPanel>
+
+            <!-- ========== header ========== -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <Image Width="16" Height="16" Margin="0,0,9,0" VerticalAlignment="Center"
+                           Source="{Binding Source='💗', Converter={StaticResource CmpEmojiToImage}}"/>
+                    <TextBlock Text="{loc:Str companion_attention_title}" Style="{StaticResource CmpSectionTitleStyle}"/>
+                </StackPanel>
+                <Border Grid.Column="2" Style="{StaticResource CmpTrainTagLiveStyle}">
+                    <TextBlock Text="{loc:Str companion_tag_train1}" Style="{StaticResource CmpTrainTagLiveTextStyle}"/>
+                </Border>
+            </Grid>
+
+            <!-- ========== the gauge (the whole block hovers/clicks to reveal the numbers) ========== -->
+            <Button Command="{Binding ToggleDetailCommand}" HorizontalContentAlignment="Stretch"
+                    ToolTip="{loc:Str companion_attention_detail_tip}" Margin="0,13,0,0">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent" Cursor="Hand">
+                            <ContentPresenter/>
+                        </Border>
+                    </ControlTemplate>
+                </Button.Template>
+
+                <StackPanel>
+                    <Border Style="{StaticResource CmpGaugeTrackThickStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="{Binding BarFraction, Converter={StaticResource CmpFractionToStar}}"/>
+                                <ColumnDefinition Width="{Binding BarFraction, Converter={StaticResource CmpFractionToRemainderStar}}"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource CmpZ6AttentionFillStyle}"/>
+                        </Grid>
+                    </Border>
+
+                    <TextBlock Text="{Binding StateCopy}" Margin="0,8,0,0" FontSize="12.5"
+                               Foreground="#FFFFD9EC" TextWrapping="Wrap"/>
+
+                    <!-- the floor promise. ALWAYS visible once she is low — never behind hover.
+                         The numbers are detail-on-demand; "her voice never runs out" is the card
+                         answering the only question a shrinking meter actually raises, and a
+                         drained card that says nothing but "tomorrow~" reads as a ration. -->
+                    <TextBlock Text="{Binding FloorNote}" Margin="0,5,0,0" FontSize="11"
+                               FontStyle="Italic" Foreground="#FFCBA9C4" TextWrapping="Wrap"
+                               Visibility="{Binding ShowFloorNote, Converter={StaticResource CmpBoolToVis}}"/>
+
+                    <!-- the numbers, for the curious only -->
+                    <TextBlock Text="{Binding DetailLine}" Style="{StaticResource CmpZ6DetailLineStyle}"/>
+                </StackPanel>
+            </Button>
+
+            <!-- ========== the one quiet upsell, below 40% only ========== -->
+            <Button Style="{StaticResource CmpLinkButtonStyle}" Margin="0,8,0,0"
+                    Command="{Binding UpsellCommand}"
+                    Visibility="{Binding ShowUpsell, Converter={StaticResource CmpBoolToVis}}">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent" Cursor="Hand" Padding="0,2,0,2">
+                            <TextBlock x:Name="Txt" Text="{Binding UpsellCopy}"
+                                       Style="{StaticResource CmpFlavorTextStyle}" FontSize="11"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Txt" Property="Foreground" Value="#FFFF9CCE"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+        </StackPanel>
+    </Border>
+</UserControl>

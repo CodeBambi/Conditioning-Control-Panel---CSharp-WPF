@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -572,6 +573,49 @@ public class CompanionBrainTests
 
         brain.Forget();
         Assert.Equal(1, memory.WipeCalls);   // the panel's all-or-nothing wipe still does
+    }
+
+    /// <summary>
+    /// The Engine Room's "clear conversation" tells the user, in nine languages, that "what she
+    /// knows about you is untouched". It calls <see cref="CompanionBrain.ForgetThread"/> for exactly
+    /// that reason: <see cref="CompanionBrain.ForgetConversation"/> also runs
+    /// <c>MemoryStore.ForgetChatDerived</c>, whose <c>RemoveAll</c> ignores <c>IsProtected</c> and
+    /// takes pinned and Boundary facts with it — an irreversible action contradicting its own
+    /// confirmation, on the two surfaces whose whole job is trust.
+    /// </summary>
+    [Fact]
+    public async Task ForgetThread_DropsTheThreadOnly_WhileForgetConversationTakesChatDerivedMemory()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "ccp-forget-scope", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var store = new FakeStore();
+            using var memory = new MemoryStore(Path.Combine(dir, "memory.json"), () => DateTime.UtcNow, 1234);
+
+            // A chat-sourced joke the user pinned, and a chat-sourced Boundary — the two kinds
+            // MemoryStore treats as un-evictable everywhere else.
+            memory.AddFact("calls me kitten", MemoryFactKind.Joke, 0.6, MemoryFact.SourceChat);
+            memory.AddFact("no teasing about work", MemoryFactKind.Boundary, 0.9, MemoryFact.SourceChat);
+            foreach (var f in memory.GetFacts().ToList()) memory.UpdateFact(f.Id, pinned: true);
+
+            using var brain = new CompanionBrain(new FakeTransport(), new StubAssembler(), memory, store);
+            await brain.ChatAsync("hi");
+
+            brain.ForgetThread();
+
+            Assert.Empty(brain.Session.Turns);          // the thread is gone…
+            Assert.Equal(1, store.WipeCount);           // …in memory and on disk…
+            Assert.Equal(2, memory.GetFacts().Count);   // …and she still knows what she knew.
+
+            // The wider scope, which the diary's copy DOES announce, still takes them.
+            brain.ForgetConversation();
+            Assert.Empty(memory.GetFacts());
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { }
+        }
     }
 
     // ---------- kill switch ----------

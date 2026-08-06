@@ -1,0 +1,72 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ================================================================
+         Interior styling for the Z8 Workshop's re-parented legacy cells.
+
+         The controls inside a Workshop cell are the ones the old accordions
+         shipped (design §6: "a container move, not a rebuild"), so they keep
+         their own app-level styles — ToggleStyle, PinkSlider, the combo box,
+         the help buttons. What they did NOT keep is the old accordion's
+         typography: at 340px wide a cell has room for a 10.5px label and a
+         value, not a 16px settings row.
+
+         These three styles are that reconciliation, and nothing else. They
+         are deliberately here rather than in CompanionTheme.xaml: that
+         dictionary is the ZONE theme, shared with the design-time gallery,
+         and the gallery never renders one of these cells.
+         ================================================================ -->
+
+    <Style x:Key="CmpCellLabelStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Foreground" Value="#FFD8D2EA"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <Style x:Key="CmpCellHintStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="10"/>
+        <Setter Property="Foreground" Value="#FF8F88AD"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="Margin" Value="0,1,0,0"/>
+    </Style>
+
+    <Style x:Key="CmpCellValueStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="#FFFF8FD0"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="HorizontalAlignment" Value="Right"/>
+    </Style>
+
+    <!-- A quiet, full-width action button — the Workshop's own idiom for "this opens a dialog". -->
+    <Style x:Key="CmpCellButtonStyle" TargetType="Button">
+        <Setter Property="Background" Value="#FF1C1A2E"/>
+        <Setter Property="Foreground" Value="#FFD8D2EA"/>
+        <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="8,4"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Chrome" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="#FF2A2440"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>

@@ -1,20 +1,45 @@
-using System;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
+using ConditioningControlPanel.Views.Controls.Companion.Runtime;
 
 namespace ConditioningControlPanel.Views.Tabs
 {
+    /// <summary>
+    /// The Companion tab. See the XAML header for what this file stopped being.
+    ///
+    /// <para><b>The compat seam.</b> Roughly 110 named elements on the old tab were written to by
+    /// seven MainWindow partials, and the design doc (§6 last row, §7.10) is explicit that every one
+    /// of those x:Names has to survive the redesign. The properties below are that promise: each
+    /// resolves to the SAME control, now living in the zone or Workshop cell the disposition table
+    /// puts it in. The partials keep the accessor path they always had —
+    /// <c>CompanionTab.SliderIdleIntervalCompanion</c> still means the idle slider — so the swap is
+    /// a rename, not a rewrite.</para>
+    ///
+    /// <para>Controls the disposition table marks <b>superseded</b> are NOT here. They were removed,
+    /// not hidden, and their write sites in the partials now go through
+    /// <see cref="CompanionRoomRuntimeVm"/> instead. That asymmetry is the point: a passthrough for
+    /// a control the design deleted would have kept the old surface alive behind the new one.</para>
+    /// </summary>
     public partial class CompanionTabView : UserControl
     {
+        private readonly CompanionRoomRuntimeVm _vm;
+
         public CompanionTabView()
         {
             InitializeComponent();
-            // FX lifecycle (PR-4b). Hooked here rather than in ShowTab so the tab owns its own
-            // decoration: the hero breath starts when the tab appears and its clock is parked the
-            // moment it is collapsed again.
+
+            // The window is resolved lazily: this constructor runs while the tab is still being
+            // parsed into MainWindow's tree, where Window.GetWindow(this) is null.
+            _vm = new CompanionRoomRuntimeVm(() => Window.GetWindow(this) as MainWindow);
+            Room.ViewModel = _vm;
+
+            // FX lifecycle. Hooked here rather than in ShowTab so the tab owns its own decoration;
+            // the room parks its own clocks off the same visibility change.
             IsVisibleChanged += CompanionTabView_IsVisibleChanged;
         }
+
+        /// <summary>The page's runtime viewmodel — what the MainWindow partials now drive.</summary>
+        internal CompanionRoomRuntimeVm Vm => _vm;
 
         private void CompanionTabView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
@@ -22,245 +47,90 @@ namespace ConditioningControlPanel.Views.Tabs
                 mw.OnCompanionTabVisibilityChanged(IsVisible);
         }
 
-        private void BtnAddVideoLink_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnAddVideoLink_Click(sender, e);
-        }
-        private void BtnBrowsePrompts_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnBrowsePrompts_Click(sender, e);
-        }
-        private void BtnCameraShortcut_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnCameraShortcut_Click(sender, e);
-        }
-        private void BtnChatShortcut_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnChatShortcut_Click(sender, e);
-        }
-        private void BtnCompanionPersonality_Click(object sender, MouseButtonEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnCompanionPersonality_Click(sender, e);
-        }
-        private void BtnCompanionTutorial_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnCompanionTutorial_Click(sender, e);
-        }
-        private void BtnCustomizeCompanion_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnCustomizeCompanion_Click(sender, e);
-        }
-        private void BtnDeactivatePrompt_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnDeactivatePrompt_Click(sender, e);
-        }
-        private void BtnDeletePhrasePreset_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnDeletePhrasePreset_Click(sender, e);
-        }
-        private void BtnDetachCompanion_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnDetachCompanion_Click(sender, e);
-        }
-        private void BtnEditTriggers_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnEditTriggers_Click(sender, e);
-        }
-        private void BtnExportPrompt_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnExportPrompt_Click(sender, e);
-        }
-        private void BtnImportPrompt_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnImportPrompt_Click(sender, e);
-        }
-        private void BtnManagePhrases_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnManagePhrases_Click(sender, e);
-        }
-        private void BtnOpenAiSamplerSettings_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnOpenAiSamplerSettings_Click(sender, e);
-        }
-        private void BtnPrivacySpoiler_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnPrivacySpoiler_Click(sender, e);
-        }
-        private void BtnRefreshPrompts_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnRefreshPrompts_Click(sender, e);
-        }
-        private void BtnResetCompanionMemory_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnResetCompanionMemory_Click(sender, e);
-        }
-        private void BtnSavePhrasePreset_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnSavePhrasePreset_Click(sender, e);
-        }
-        private void BtnSetupLocalAi_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnSetupLocalAi_Click(sender, e);
-        }
-        private void BtnSwitchCompanion_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnSwitchCompanion_Click(sender, e);
-        }
-        private void BtnTestOllamaConnection_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnTestOllamaConnection_Click(sender, e);
-        }
-        private void BtnTestOpenAiConnection_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnTestOpenAiConnection_Click(sender, e);
-        }
-        private void ChkAvatarEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkAvatarEnabled_Changed(sender, e);
-        }
-        private void ChkAwarenessMode_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkAwarenessMode_Changed(sender, e);
-        }
-        private void ChkMuteAvatar_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkMuteAvatar_Changed(sender, e);
-        }
-        private void ChkMuteWhispers_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkMuteWhispers_Changed(sender, e);
-        }
-        private void ChkPauseBrowser_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkPauseBrowser_Changed(sender, e);
-        }
-        private void ChkSlutMode_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkSlutMode_Changed(sender, e);
-        }
-        private void ChkTriggerMode_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkTriggerMode_Changed(sender, e);
-        }
-        private void CmbPhrasePresets_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CmbPhrasePresets_SelectionChanged(sender, e);
-        }
-        private void CompanionCard_Click(object sender, MouseButtonEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CompanionCard_Click(sender, e);
-        }
-        private void CompanionSection_ExpandedChanged(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CompanionSection_ExpandedChanged(sender, e);
-        }
-        private void RadioAiCloud_Checked(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.RadioAiCloud_Checked(sender, e);
-        }
-        private void RadioAiLocal_Checked(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.RadioAiLocal_Checked(sender, e);
-        }
-        private void RadioAiOff_Checked(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.RadioAiOff_Checked(sender, e);
-        }
-        private void RadioAiOpenAiCompatible_Checked(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.RadioAiOpenAiCompatible_Checked(sender, e);
-        }
-        private void SliderAwarenessCooldown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderAwarenessCooldown_ValueChanged(sender, e);
-        }
-        private void SliderAwarenessCooldownMax_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderAwarenessCooldownMax_ValueChanged(sender, e);
-        }
-        private void SliderBubbleDuration_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderBubbleDuration_ValueChanged(sender, e);
-        }
-        private void SliderIdleInterval_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderIdleInterval_ValueChanged(sender, e);
-        }
-        private void SliderTriggerInterval_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderTriggerInterval_ValueChanged(sender, e);
-        }
-        private void TxtAiHost_LostFocus(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.TxtAiHost_LostFocus(sender, e);
-        }
-        private void TxtAiModel_LostFocus(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.TxtAiModel_LostFocus(sender, e);
-        }
-        private void TxtDailyLimit_LostFocus(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.TxtDailyLimit_LostFocus(sender, e);
-        }
-        private void TxtOpenAiApiKey_PasswordChanged(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.TxtOpenAiApiKey_PasswordChanged(sender, e);
-        }
-        private void TxtOpenAiEndpoint_LostFocus(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.TxtOpenAiEndpoint_LostFocus(sender, e);
-        }
-        private void TxtOpenAiModel_LostFocus(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.TxtOpenAiModel_LostFocus(sender, e);
-        }
+        // =====================================================================================
+        //  compat passthroughs — the kept controls, by their original names
+        // =====================================================================================
+
+        // ---- hidden status/help elements (design §6, last row) ----
+        internal TextBlock TxtDetachStatusCompanion => Room.TxtDetachStatusCompanion;
+        internal TextBlock TxtCompanionStatus => Room.TxtCompanionStatus;
+        internal Button HelpBtnQuickControls => Room.HelpBtnQuickControls;
+        internal Button HelpBtnCompanionSettings => Room.HelpBtnCompanionSettings;
+
+        /// <summary>The hero XP bar's drain flash overlay (MainWindow.Companion.cs).</summary>
+        internal Border PrgCompanion0FlashOverlay => Room.PrgCompanion0FlashOverlay;
+
+        // ---- Z8 · ROSTER ----
+        internal Border CompanionCard0 => _vm.Shelf.Roster.CompanionCard0;
+        internal Border CompanionCard1 => _vm.Shelf.Roster.CompanionCard1;
+        internal Border CompanionCard2 => _vm.Shelf.Roster.CompanionCard2;
+        internal Border CompanionCard3 => _vm.Shelf.Roster.CompanionCard3;
+        internal Border CompanionCard4 => _vm.Shelf.Roster.CompanionCard4;
+
+        internal TextBlock TxtCompanion0Name => _vm.Shelf.Roster.TxtCompanion0Name;
+        internal TextBlock TxtCompanion1Name => _vm.Shelf.Roster.TxtCompanion1Name;
+        internal TextBlock TxtCompanion2Name => _vm.Shelf.Roster.TxtCompanion2Name;
+        internal TextBlock TxtCompanion3Name => _vm.Shelf.Roster.TxtCompanion3Name;
+        internal TextBlock TxtCompanion4Name => _vm.Shelf.Roster.TxtCompanion4Name;
+
+        internal TextBlock TxtCompanion0Level => _vm.Shelf.Roster.TxtCompanion0Level;
+        internal TextBlock TxtCompanion1Level => _vm.Shelf.Roster.TxtCompanion1Level;
+        internal TextBlock TxtCompanion2Level => _vm.Shelf.Roster.TxtCompanion2Level;
+        internal TextBlock TxtCompanion3Level => _vm.Shelf.Roster.TxtCompanion3Level;
+        internal TextBlock TxtCompanion4Level => _vm.Shelf.Roster.TxtCompanion4Level;
+
+        internal TextBlock TxtCompanion0Lock => _vm.Shelf.Roster.TxtCompanion0Lock;
+        internal TextBlock TxtCompanion1Lock => _vm.Shelf.Roster.TxtCompanion1Lock;
+        internal TextBlock TxtCompanion2Lock => _vm.Shelf.Roster.TxtCompanion2Lock;
+        internal TextBlock TxtCompanion3Lock => _vm.Shelf.Roster.TxtCompanion3Lock;
+        internal TextBlock TxtCompanion4Lock => _vm.Shelf.Roster.TxtCompanion4Lock;
+
+        internal TextBlock TxtCompanion0Prompt => _vm.Shelf.Roster.TxtCompanion0Prompt;
+        internal TextBlock TxtCompanion1Prompt => _vm.Shelf.Roster.TxtCompanion1Prompt;
+        internal TextBlock TxtCompanion2Prompt => _vm.Shelf.Roster.TxtCompanion2Prompt;
+        internal TextBlock TxtCompanion3Prompt => _vm.Shelf.Roster.TxtCompanion3Prompt;
+        internal TextBlock TxtCompanion4Prompt => _vm.Shelf.Roster.TxtCompanion4Prompt;
+
+        internal Button HelpBtnCompanions => _vm.Shelf.Roster.HelpBtnCompanions;
+
+        // ---- Z8 · BEHAVIOR ----
+        internal TextBlock TxtIdleIntervalCompanion => _vm.Shelf.Behavior.TxtIdleIntervalCompanion;
+        internal Slider SliderIdleIntervalCompanion => _vm.Shelf.Behavior.SliderIdleIntervalCompanion;
+        internal TextBlock TxtBubbleDurationCompanion => _vm.Shelf.Behavior.TxtBubbleDurationCompanion;
+        internal Slider SliderBubbleDurationCompanion => _vm.Shelf.Behavior.SliderBubbleDurationCompanion;
+        internal TextBlock TxtChatShortcutLabel => _vm.Shelf.Behavior.TxtChatShortcutLabel;
+        internal TextBlock TxtCameraShortcutLabel => _vm.Shelf.Behavior.TxtCameraShortcutLabel;
+        internal CheckBox ChkMuteWhispersCompanion => _vm.Shelf.Behavior.ChkMuteWhispersCompanion;
+        internal CheckBox ChkPauseBrowserCompanion => _vm.Shelf.Behavior.ChkPauseBrowserCompanion;
+
+        // ---- Z8 · TRIGGERS & PHRASES ----
+        internal CheckBox ChkTriggerModeCompanion => _vm.Shelf.Triggers.ChkTriggerModeCompanion;
+        internal StackPanel TriggerSettingsPanelCompanion => _vm.Shelf.Triggers.TriggerSettingsPanelCompanion;
+        internal Slider SliderTriggerIntervalCompanion => _vm.Shelf.Triggers.SliderTriggerIntervalCompanion;
+        internal TextBlock TxtTriggerIntervalCompanion => _vm.Shelf.Triggers.TxtTriggerIntervalCompanion;
+        internal TextBlock TxtPhraseCount => _vm.Shelf.Triggers.TxtPhraseCount;
+        internal ComboBox CmbPhrasePresets => _vm.Shelf.Triggers.CmbPhrasePresets;
+
+        // ---- Z8 · HER LIBRARY ----
+        internal TextBlock TxtHypnotubeModeLabel => _vm.Shelf.Library.TxtHypnotubeModeLabel;
+        internal StackPanel VideoLinkPoolPanel => _vm.Shelf.Library.VideoLinkPoolPanel;
+        internal TextBlock TxtNoVideoLinks => _vm.Shelf.Library.TxtNoVideoLinks;
+        internal Button HelpBtnVideoLinks => _vm.Shelf.Library.HelpBtnVideoLinks;
+
+        // ---- Z8 · COMMUNITY ----
+        internal Button BtnRefreshPrompts => _vm.Shelf.Community.BtnRefreshPrompts;
+        internal StackPanel InstalledPromptsPanel => _vm.Shelf.Community.InstalledPromptsPanel;
+        internal TextBlock TxtNoInstalledPrompts => _vm.Shelf.Community.TxtNoInstalledPrompts;
+        internal Button HelpBtnPrompts => _vm.Shelf.Community.HelpBtnPrompts;
+
+        // ---- Z8 · AWARENESS FINE-TUNING ----
+        internal Border AwarenessSettingsPanel => _vm.Shelf.Awareness.AwarenessSettingsPanel;
+        internal Slider SliderAwarenessCooldown => _vm.Shelf.Awareness.SliderAwarenessCooldown;
+        internal TextBlock TxtAwarenessCooldown => _vm.Shelf.Awareness.TxtAwarenessCooldown;
+        internal Slider SliderAwarenessCooldownMax => _vm.Shelf.Awareness.SliderAwarenessCooldownMax;
+        internal TextBlock TxtAwarenessCooldownMax => _vm.Shelf.Awareness.TxtAwarenessCooldownMax;
+        internal Button BtnPrivacySpoiler => _vm.Shelf.Awareness.BtnPrivacySpoiler;
+        internal TextBlock TxtPrivacyDetails => _vm.Shelf.Awareness.TxtPrivacyDetails;
+        internal Button HelpBtnAwareness => _vm.Shelf.Awareness.HelpBtnAwareness;
     }
 }

@@ -125,7 +125,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// parroting it (doc 01 §3.3).
         /// </summary>
         public const string SpokenAloudRule =
-            "Lines marked \"said aloud\" are things you already said out loud a moment ago - never repeat them, never contradict them, build on them if natural.";
+            "Lines marked \"said aloud\" are things you already said out loud a moment ago - never repeat them, never contradict them, build on them if natural. " +
+            "Your own replies are always plain speech: never wrap them in «» marks, never write \"said aloud\" yourself, and never call the user by your own name.";
 
         /// <summary>~40 tokens each, and always the LAST thing the model reads.</summary>
         public const string ChatInstruction =

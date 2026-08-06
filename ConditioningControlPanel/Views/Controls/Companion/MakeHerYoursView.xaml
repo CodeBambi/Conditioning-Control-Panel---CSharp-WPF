@@ -1,0 +1,278 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.Companion.MakeHerYoursView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             mc:Ignorable="d"
+             d:DesignWidth="430" d:DesignHeight="560"
+             d:DataContext="{d:DesignInstance Type=local:MockMakeHerYoursVm, IsDesignTimeCreatable=True}">
+
+    <!-- ================================================================
+         Z4 — MAKE HER YOURS.
+         The personality front door: interview spotlight ▸ trait glance ▸
+         preset chips ▸ spice switch ▸ active readout ▸ expert door.
+
+         Never gated. The interview is the conversion surface, so a free
+         user gets every part of this card.
+
+         Pre-Train 3 the spotlight is present but *sleeping*: the shimmer
+         still sweeps once on load, the CTA is unfilled, the fill loses
+         its heat, and the copy says interviews start next update. That is
+         designed content, not a disabled control.
+
+         After the interview the spotlight compresses to a chip row
+         (design §3 Z4: "Interviewed <date> · re-interview me~ · adjust
+         her") — the two verbs are real buttons, not decoration.
+
+         The six prompt text-walls are exactly one click deeper than
+         today, behind the quiet link row at the bottom.
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/ConditioningControlPanel;component/Views/Controls/Companion/Themes/CompanionTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- The spotlight card. Every visual is a Setter so the dormant DataTrigger can
+                 actually win: a local attribute on the Border would outrank the style. -->
+            <Style x:Key="CmpZ4InterviewCardStyle" TargetType="Border">
+                <Setter Property="CornerRadius" Value="12"/>
+                <Setter Property="ClipToBounds" Value="True"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="BorderBrush" Value="{StaticResource CmpCardBorderBrush}"/>
+                <Setter Property="Background" Value="{StaticResource CmpInterviewBrush}"/>
+                <Setter Property="Padding" Value="16,15,16,15"/>
+                <Style.Triggers>
+                    <!-- pre-Train 3: sleeping, not disabled -->
+                    <DataTrigger Binding="{Binding IsInterviewAvailable}" Value="False">
+                        <Setter Property="Opacity" Value="0.88"/>
+                        <Setter Property="BorderBrush" Value="{StaticResource CmpVioletCardBorderBrush}"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+
+            <!-- one read-only trait gauge: label | thin bar | value -->
+            <DataTemplate x:Key="CmpTraitGaugeTemplate">
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="86"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="32"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="11"
+                               Foreground="{StaticResource CmpDimBrush}" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Label}"/>
+                    <Border Grid.Column="1" Style="{StaticResource CmpGaugeTrackThinStyle}"
+                            VerticalAlignment="Center" Margin="9,0,9,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="{Binding Fraction, Converter={StaticResource CmpFractionToStar}}"/>
+                                <ColumnDefinition Width="{Binding Fraction, Converter={StaticResource CmpFractionToRemainderStar}}"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource CmpGaugeFillThinStyle}"/>
+                        </Grid>
+                    </Border>
+                    <TextBlock Grid.Column="2" Text="{Binding Value}" FontSize="10.5" FontWeight="Bold"
+                               Foreground="White" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
+            </DataTemplate>
+
+            <DataTemplate x:Key="CmpTraitChipTemplate">
+                <Border Style="{StaticResource CmpTraitChipStyle}">
+                    <TextBlock Text="{Binding}" Style="{StaticResource CmpTraitChipTextStyle}"/>
+                </Border>
+            </DataTemplate>
+
+            <DataTemplate x:Key="CmpPresetChipTemplate">
+                <ToggleButton Content="{Binding Label}" Style="{StaticResource CmpToggleChipStyle}"
+                              ToolTip="{Binding Label}"
+                              IsChecked="{Binding IsSelected, Mode=TwoWay}"/>
+            </DataTemplate>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Border Style="{StaticResource CmpVioletCardStyle}">
+        <StackPanel>
+
+            <!-- ========== header ========== -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <Image Width="16" Height="16" Margin="0,0,9,0" VerticalAlignment="Center"
+                           Source="{Binding Source='🪞', Converter={StaticResource CmpEmojiToImage}}"/>
+                    <TextBlock Text="{loc:Str companion_personality_title}" Style="{StaticResource CmpSectionTitleStyle}"/>
+                </StackPanel>
+                <Border Grid.Column="2" Style="{StaticResource CmpTrainTagStyle}">
+                    <TextBlock Text="{loc:Str companion_tag_train3}" Style="{StaticResource CmpTrainTagTextStyle}"/>
+                </Border>
+            </Grid>
+
+            <!-- ========== interview spotlight ========== -->
+            <Grid Margin="0,13,0,14"
+                  Visibility="{Binding IsInterviewed, Converter={StaticResource CmpBoolToVisInverse}}">
+                <Border x:Name="InterviewCard" Style="{StaticResource CmpZ4InterviewCardStyle}">
+                    <Grid>
+                        <!-- warm corner wash -->
+                        <Border Background="{StaticResource CmpInterviewGlowBrush}"/>
+
+                        <!-- "her portrait peeking from the edge" (design §3 Z4). A vector bust,
+                             not an Image: the hero's banner trap applies to every art layer that
+                             lives inside a StackPanel/ScrollViewer. Fixed size + bottom-right
+                             alignment + the card's ClipToBounds is what makes it peek. -->
+                        <Grid x:Name="PeekBust" Width="98" Height="106" Opacity="0.22"
+                              HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                              Margin="0,0,-10,-22" IsHitTestVisible="False">
+                            <Border Width="98" Height="54" VerticalAlignment="Bottom" CornerRadius="49,49,0,0">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="{StaticResource CmpPurpleColor}" Offset="0"/>
+                                        <GradientStop Color="#FF7A4FC9" Offset="0.6"/>
+                                        <GradientStop Color="#FF4A2B85" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                            <Ellipse Width="52" Height="56" VerticalAlignment="Top" HorizontalAlignment="Center"
+                                     Margin="0,6,0,0">
+                                <Ellipse.Fill>
+                                    <RadialGradientBrush Center="0.38,0.30" GradientOrigin="0.38,0.30">
+                                        <GradientStop Color="#FFFFC4E4" Offset="0"/>
+                                        <GradientStop Color="{StaticResource CmpPinkLightColor}" Offset="0.45"/>
+                                        <GradientStop Color="#FFC86BD9" Offset="1"/>
+                                    </RadialGradientBrush>
+                                </Ellipse.Fill>
+                            </Ellipse>
+                        </Grid>
+
+                        <!-- the one-shot shimmer band (code-behind drives its X, once) -->
+                        <Border x:Name="InterviewShimmer" Width="56" HorizontalAlignment="Left"
+                                Background="{StaticResource CmpShimmerBrush}" IsHitTestVisible="False"
+                                Opacity="0">
+                            <Border.RenderTransform>
+                                <TransformGroup>
+                                    <SkewTransform AngleX="-18"/>
+                                    <TranslateTransform x:Name="InterviewShimmerShift" X="-80"/>
+                                </TransformGroup>
+                            </Border.RenderTransform>
+                        </Border>
+
+                        <StackPanel Margin="0,0,58,0">
+                            <TextBlock Text="{Binding InterviewTitle}" FontFamily="/Fonts/#Fredoka"
+                                       FontWeight="SemiBold" FontSize="16" Foreground="White"
+                                       TextWrapping="Wrap" Effect="{StaticResource CmpSectionGlow}"/>
+
+                            <!-- live copy -->
+                            <TextBlock Text="{Binding InterviewBody}" Margin="0,5,0,0" FontSize="11.5"
+                                       Foreground="#FFD9CFF0" TextWrapping="Wrap" LineHeight="17"
+                                       Visibility="{Binding IsInterviewAvailable, Converter={StaticResource CmpBoolToVis}}"/>
+                            <Button Content="{Binding InterviewCtaLabel}" Style="{StaticResource CmpCtaPillStyle}"
+                                    HorizontalAlignment="Left" Margin="0,10,0,0"
+                                    Command="{Binding StartInterviewCommand}"
+                                    Visibility="{Binding IsInterviewAvailable, Converter={StaticResource CmpBoolToVis}}"/>
+
+                            <!-- dormant copy: sleeping, not disabled -->
+                            <TextBlock Text="{Binding InterviewDormantCopy}" Margin="0,5,0,0"
+                                       Style="{StaticResource CmpDormantCopyStyle}"
+                                       Visibility="{Binding IsInterviewAvailable, Converter={StaticResource CmpBoolToVisInverse}}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- already interviewed: the spotlight compresses to a chip row -->
+            <WrapPanel Orientation="Horizontal" Margin="0,13,0,12"
+                       Visibility="{Binding IsInterviewed, Converter={StaticResource CmpBoolToVis}}">
+                <Border Style="{StaticResource CmpTraitChipStyle}">
+                    <TextBlock Text="{Binding InterviewedLine}" Style="{StaticResource CmpTraitChipTextStyle}"/>
+                </Border>
+                <Button Content="{loc:Str companion_personality_reinterview}" VerticalAlignment="Center"
+                        Style="{StaticResource CmpLinkButtonStyle}" Command="{Binding StartInterviewCommand}"/>
+                <Button Content="{loc:Str companion_personality_adjust}" VerticalAlignment="Center"
+                        Style="{StaticResource CmpLinkButtonStyle}" Command="{Binding OpenTraitDashboardCommand}"/>
+            </WrapPanel>
+
+            <!-- ========== trait glance (read-only; the dashboard is one click down) ========== -->
+            <Button Style="{StaticResource CmpLinkButtonStyle}" Padding="0" HorizontalAlignment="Stretch"
+                    Command="{Binding OpenTraitDashboardCommand}"
+                    ToolTip="{loc:Str companion_personality_traits_tip}"
+                    Visibility="{Binding AreTraitsAvailable, Converter={StaticResource CmpBoolToVis}}">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent" Cursor="Hand">
+                            <ContentPresenter/>
+                        </Border>
+                    </ControlTemplate>
+                </Button.Template>
+                <StackPanel>
+                    <ItemsControl ItemsSource="{Binding Traits}" ItemTemplate="{StaticResource CmpTraitGaugeTemplate}"/>
+                    <ItemsControl ItemsSource="{Binding TraitChips}" ItemTemplate="{StaticResource CmpTraitChipTemplate}"
+                                  Margin="0,4,0,10">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
+            </Button>
+
+            <!-- ========== preset chips (finally discoverable outside the right-click menu) ========== -->
+            <ItemsControl ItemsSource="{Binding Presets}" ItemTemplate="{StaticResource CmpPresetChipTemplate}"
+                          Margin="0,0,0,12">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+
+            <!-- ========== spice switch (Slut Mode, restyled) ========== -->
+            <Border Style="{StaticResource CmpInsetPanelStyle}" Margin="0,0,0,12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Image Grid.Column="0" Width="15" Height="15" Margin="0,0,10,0" VerticalAlignment="Center"
+                           Source="{Binding Source='🔥', Converter={StaticResource CmpEmojiToImage}}"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding SpiceTitle}" FontSize="12.5" Foreground="White"/>
+                        <TextBlock Text="{Binding SpiceSubtitle}" FontSize="10" Margin="0,1,0,0"
+                                   Foreground="{StaticResource CmpFaintBrush}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <ToggleButton Grid.Column="2" Style="{StaticResource CmpToggleSwitchStyle}"
+                                  VerticalAlignment="Center" ToolTip="{Binding SpiceSubtitle}"
+                                  IsChecked="{Binding IsSpiceOn, Mode=TwoWay}"/>
+                </Grid>
+            </Border>
+
+            <!-- ========== active personality readout ========== -->
+            <Grid Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding ActivePersonalityLine}" FontSize="11"
+                           Foreground="{StaticResource CmpMutedBrush}" TextWrapping="Wrap"/>
+                <Button Grid.Column="1" Content="{Binding ResetLabel}" Style="{StaticResource CmpLinkButtonStyle}"
+                        Command="{Binding ResetPersonalityCommand}" Padding="8,2,0,2"
+                        Visibility="{Binding CanResetPersonality, Converter={StaticResource CmpBoolToVis}}"/>
+            </Grid>
+
+            <!-- ========== expert door ========== -->
+            <Border BorderBrush="#12FFFFFF" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+                <WrapPanel Orientation="Horizontal">
+                    <Button Content="{loc:Str companion_personality_view_prompt}" Style="{StaticResource CmpLinkButtonStyle}"
+                            Command="{Binding ViewCompiledPromptCommand}"/>
+                    <Button Content="{loc:Str companion_personality_fork}" Style="{StaticResource CmpLinkButtonStyle}"
+                            Command="{Binding ForkPromptCommand}"/>
+                    <Button Content="{loc:Str companion_personality_community}" Style="{StaticResource CmpLinkButtonStyle}"
+                            Command="{Binding CommunityPromptsCommand}"/>
+                </WrapPanel>
+            </Border>
+        </StackPanel>
+    </Border>
+</UserControl>
