@@ -22,8 +22,18 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             };
             AddDenyCommand = CompanionRelayCommand.NoOp("awareness.addDeny");
             AllowPerAppCommand = CompanionRelayCommand.NoOp("awareness.allowPerApp");
-            FineTuningCommand = CompanionRelayCommand.NoOp("awareness.fineTuning");
+            FineTuningCommand = new CompanionRelayCommand(() =>
+            {
+                CompanionRelayCommand.Note("awareness.fineTuning");
+                Navigator?.RevealWorkshop(CompanionRoomAnchors.WorkshopAwarenessCell);
+            });
         }
+
+        /// <summary>
+        /// Set by <see cref="MockCompanionRoomVm"/> so "fine-tuning ↓" lands on the Workshop's
+        /// awareness pigeonhole, which is where the cooldown sliders live. Null standalone.
+        /// </summary>
+        public ICompanionRoomNavigator? Navigator { get; set; }
 
         public AwarenessIntensity Intensity
         {

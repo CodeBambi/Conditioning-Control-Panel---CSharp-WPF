@@ -63,8 +63,20 @@
     <CornerRadius x:Key="CmpRadiusCard">14</CornerRadius>
     <CornerRadius x:Key="CmpRadiusInner">10</CornerRadius>
     <CornerRadius x:Key="CmpRadiusSmall">7</CornerRadius>
-    <!-- WPF clamps a corner radius at half the smaller dimension, so 999 is the capsule. -->
-    <CornerRadius x:Key="CmpRadiusPill">999</CornerRadius>
+    <!-- NOT the capsule. Read this before reaching for it.
+
+         The mockup's chips are border-radius:999px. CSS clamps that to a stadium; WPF does NOT.
+         Border clamps the X and Y radii to half the width and half the height INDEPENDENTLY, so
+         an over-large radius renders a full ELLIPSE — measured at 78% fill on a 110x26 Border,
+         which is pi/4, against 94% for a correct stadium. An earlier revision of this file
+         asserted the opposite in a comment, and every chip, pill, tag, badge and switch on the
+         page was drawing as a lens because of it.
+
+         For a stadium use cmp:CompanionCapsule.IsCapsule="True": it pins the radius at half the
+         rendered height with no layout-thrash binding (CornerRadius is AffectsRender only, so
+         the write cannot feed back into the size that caused it). This token remains only as the
+         static fallback for fixed-height chrome, sized for the page's standard ~26px chip. -->
+    <CornerRadius x:Key="CmpRadiusPill">13</CornerRadius>
 
     <!-- ============================ 2. palette ============================
          :root of the mockup. Colours are exposed as both Color (for gradient stops and
@@ -323,6 +335,41 @@
         </Setter>
     </Style>
 
+    <!-- ============================ 4b. the room shell ============================
+         The outermost stratum, promoted here by the assembler so CompanionRoomView is the
+         only thing that needs it and nothing has to re-type the mockup's .room rule.
+
+         .room in the mockup is one element with four stacked backgrounds. WPF has no
+         multi-background, so the shell is the linear base and the two radial washes ride
+         above it as sibling Borders — CmpRoomGlowPurpleBrush / CmpRoomGlowPinkBrush, both
+         already defined in §2. The third wash (the cool pool at 55% 108%) is folded into
+         CmpRoomFloorGlowBrush below.
+
+         ClipToBounds is not optional: the washes overhang the corner radius and the
+         ambient dust canvas paints to the full bounds. -->
+    <SolidColorBrush x:Key="CmpRoomBorderBrush" Color="#33B478FF"/>
+
+    <RadialGradientBrush x:Key="CmpRoomFloorGlowBrush" Center="0.55,1.08" GradientOrigin="0.55,1.08"
+                         RadiusX="0.58" RadiusY="0.70">
+        <GradientStop Color="#CC1E1E3F" Offset="0"/>
+        <GradientStop Color="#001E1E3F" Offset="1"/>
+    </RadialGradientBrush>
+
+    <Style x:Key="CmpRoomShellStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource CmpRoomBackdropBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource CmpRoomBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusRoom}"/>
+        <Setter Property="ClipToBounds" Value="True"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+    </Style>
+
+    <!-- A wash layer: pure decoration, never in the hit-test path. -->
+    <Style x:Key="CmpRoomWashStyle" TargetType="Border">
+        <Setter Property="IsHitTestVisible" Value="False"/>
+        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusRoom}"/>
+    </Style>
+
     <!-- ============================ 5. cards ============================ -->
     <Style x:Key="CmpCardStyle" TargetType="Border">
         <Setter Property="Background" Value="{StaticResource CmpCardBrush}"/>
@@ -353,7 +400,7 @@
         <Setter Property="Background" Value="#14B478FF"/>
         <Setter Property="BorderBrush" Value="#55B478FF"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusPill}"/>
+        <Setter Property="cmp:CompanionCapsule.IsCapsule" Value="True"/>
         <Setter Property="Padding" Value="8,2,8,2"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
@@ -387,7 +434,7 @@
                 <ControlTemplate TargetType="ButtonBase">
                     <Border x:Name="Bd" Background="{StaticResource CmpChipFillBrush}"
                             BorderBrush="{StaticResource CmpChipBorderBrush}" BorderThickness="1"
-                            CornerRadius="{StaticResource CmpRadiusPill}"
+                            cmp:CompanionCapsule.IsCapsule="True"
                             Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
                         <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="Center"
@@ -468,7 +515,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="ButtonBase">
                     <Border x:Name="Bd" Background="{StaticResource CmpPinkPurpleBrush}"
-                            CornerRadius="{StaticResource CmpRadiusPill}" Padding="{TemplateBinding Padding}">
+                            cmp:CompanionCapsule.IsCapsule="True" Padding="{TemplateBinding Padding}">
                         <Border.Effect>
                             <DropShadowEffect Color="#FFFF69B4" BlurRadius="14" ShadowDepth="0" Opacity="0.40"/>
                         </Border.Effect>
@@ -494,7 +541,7 @@
     <!-- .modchip — non-interactive gradient identity pill -->
     <Style x:Key="CmpModChipStyle" TargetType="Border">
         <Setter Property="Background" Value="{StaticResource CmpPinkPurpleBrush}"/>
-        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusPill}"/>
+        <Setter Property="cmp:CompanionCapsule.IsCapsule" Value="True"/>
         <Setter Property="Padding" Value="11,4,11,4"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
         <Setter Property="Effect">
@@ -525,7 +572,7 @@
                 <ControlTemplate TargetType="ButtonBase">
                     <Border x:Name="Bd" Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
-                            CornerRadius="{StaticResource CmpRadiusPill}" Padding="{TemplateBinding Padding}">
+                            cmp:CompanionCapsule.IsCapsule="True" Padding="{TemplateBinding Padding}">
                         <StackPanel Orientation="Horizontal">
                             <!-- the little glowing state dot; it takes the pill's foreground -->
                             <Ellipse Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0"
@@ -567,7 +614,7 @@
         <Setter Property="Background" Value="#14FFD700"/>
         <Setter Property="BorderBrush" Value="#33FFD700"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusPill}"/>
+        <Setter Property="cmp:CompanionCapsule.IsCapsule" Value="True"/>
         <Setter Property="Padding" Value="11,4,11,4"/>
         <Setter Property="Margin" Value="0,3,7,3"/>
     </Style>
@@ -582,7 +629,7 @@
         <Setter Property="Background" Value="#1AB478FF"/>
         <Setter Property="BorderBrush" Value="#40B478FF"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusPill}"/>
+        <Setter Property="cmp:CompanionCapsule.IsCapsule" Value="True"/>
         <Setter Property="Padding" Value="11,4,11,4"/>
         <Setter Property="Margin" Value="0,3,6,3"/>
     </Style>
@@ -597,7 +644,7 @@
         <Setter Property="Background" Value="#12FF5C7A"/>
         <Setter Property="BorderBrush" Value="#40FF5C7A"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusPill}"/>
+        <Setter Property="cmp:CompanionCapsule.IsCapsule" Value="True"/>
         <Setter Property="Padding" Value="11,4,11,4"/>
         <Setter Property="Margin" Value="0,3,6,3"/>
     </Style>
@@ -621,7 +668,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="ToggleButton">
                     <Border x:Name="Bd" Background="#08FFFFFF" BorderBrush="#1FFFFFFF" BorderThickness="1"
-                            CornerRadius="{StaticResource CmpRadiusPill}" Padding="{TemplateBinding Padding}">
+                            cmp:CompanionCapsule.IsCapsule="True" Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
                                           TextBlock.Foreground="{TemplateBinding Foreground}"
                                           TextBlock.FontSize="{TemplateBinding FontSize}"
@@ -851,7 +898,7 @@
          appear on a bark, a canned line, or a BarkEcho. -->
     <Style x:Key="CmpAiBadgeStyle" TargetType="Border">
         <Setter Property="Background" Value="{StaticResource CmpPinkPurpleBrush}"/>
-        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusPill}"/>
+        <Setter Property="cmp:CompanionCapsule.IsCapsule" Value="True"/>
         <Setter Property="Padding" Value="7,2,7,2"/>
         <Setter Property="HorizontalAlignment" Value="Right"/>
         <Setter Property="VerticalAlignment" Value="Top"/>
@@ -884,7 +931,7 @@
                     <Border x:Name="Bd" Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{StaticResource CmpRadiusPill}">
+                            cmp:CompanionCapsule.IsCapsule="True">
                         <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
                                       VerticalAlignment="Center" Focusable="False"
                                       HorizontalScrollBarVisibility="Hidden"
@@ -1085,7 +1132,7 @@
         <Setter Property="Background" Value="{StaticResource CmpRoom2Brush}"/>
         <Setter Property="BorderBrush" Value="#1CFFFFFF"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusPill}"/>
+        <Setter Property="cmp:CompanionCapsule.IsCapsule" Value="True"/>
         <Setter Property="ClipToBounds" Value="True"/>
     </Style>
 
@@ -1131,7 +1178,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ToggleButton">
-                    <Border x:Name="Track" Background="#1FFFFFFF" CornerRadius="{StaticResource CmpRadiusPill}">
+                    <Border x:Name="Track" Background="#1FFFFFFF" cmp:CompanionCapsule.IsCapsule="True">
                         <Ellipse x:Name="Knob" Width="16" Height="16" Fill="#FF8F87AD"
                                  HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0"/>
                     </Border>

@@ -76,7 +76,16 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
                 // Z8 workshop
                 ["workshop.collapsed"] = () => MockWorkshopAccordionVm.Collapsed(),
-                ["workshop.expanded"] = () => MockWorkshopAccordionVm.Expanded()
+                ["workshop.expanded"] = () => MockWorkshopAccordionVm.Expanded(),
+
+                // The whole page. These are combinations, not zone settings — "free tier" is only
+                // meaningful when you can see the hero staying alive while Z2 locks.
+                ["room.default"] = () => MockCompanionRoomVm.Default(),
+                ["room.freeTier"] = () => MockCompanionRoomVm.FreeTier(),
+                ["room.dormant"] = () => MockCompanionRoomVm.Dormant(),
+                ["room.empty"] = () => MockCompanionRoomVm.Empty(),
+                ["room.drained"] = () => MockCompanionRoomVm.Drained(),
+                ["room.disabled"] = () => MockCompanionRoomVm.Disabled()
             };
 
         /// <summary>Builds the exhibit for <paramref name="key"/>, or null when there is no such key.</summary>

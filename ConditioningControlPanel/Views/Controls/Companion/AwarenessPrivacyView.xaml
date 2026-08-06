@@ -203,7 +203,7 @@
                         Foreground="{StaticResource CmpMutedBrush}">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
-                            <Border x:Name="Bd" Background="#08FFFFFF" CornerRadius="{StaticResource CmpRadiusPill}"
+                            <Border x:Name="Bd" Background="#08FFFFFF" local:CompanionCapsule.IsCapsule="True"
                                     Padding="{TemplateBinding Padding}">
                                 <ContentPresenter VerticalAlignment="Center"
                                                   TextBlock.Foreground="{TemplateBinding Foreground}"

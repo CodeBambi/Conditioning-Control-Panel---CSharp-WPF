@@ -483,18 +483,25 @@ public class CompanionSurfaceTests
     //  staged localization for this package
     // =====================================================================================
 
+    /// <summary>
+    /// This package staged its keys in loc-staging-surfaces.json while it was its own branch. The
+    /// composed page merged the three package files into one key-sorted hand-off, so the assertions
+    /// below now read the merged file — they still check the same thing: every key these two
+    /// surfaces draw is in the hand-off, strictly parseable, and agreeing with the EN masters.
+    /// </summary>
     private static string PackageStagingFilePath()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir != null)
         {
             var candidate = Path.Combine(dir.FullName, "ConditioningControlPanel",
-                "Views", "Controls", "Companion", "loc-staging-surfaces.json");
+                CompanionLocStaging.StagingFileRelativePath);
             if (File.Exists(candidate)) return candidate;
             dir = dir.Parent;
         }
         throw new FileNotFoundException(
-            "Could not locate loc-staging-surfaces.json walking up from " + AppContext.BaseDirectory);
+            $"Could not locate {CompanionLocStaging.StagingFileRelativePath} walking up from " +
+            AppContext.BaseDirectory);
     }
 
     [Fact]

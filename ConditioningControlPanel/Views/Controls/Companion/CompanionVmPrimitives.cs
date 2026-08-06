@@ -53,15 +53,17 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         /// <summary>A command that does nothing but remember it was asked to. Used by the mocks.</summary>
         public static CompanionRelayCommand NoOp(string tag = "")
+            => new(p => Note(tag, p));
+
+        /// <summary>
+        /// Records an invocation the way <see cref="NoOp"/> does, without owning the action. A mock
+        /// that has real work to do — the room's deep links, for instance — calls this first so the
+        /// gallery and the tests can still see which affordance was pressed.
+        /// </summary>
+        public static void Note(string tag, object? parameter = null)
         {
-            CompanionRelayCommand? cmd = null;
-            cmd = new CompanionRelayCommand(p =>
-            {
-                LastInvokedTag = tag;
-                LastInvokedParameter = p;
-                _ = cmd; // keep the closure honest for trimming
-            });
-            return cmd;
+            LastInvokedTag = tag;
+            LastInvokedParameter = parameter;
         }
 
         /// <summary>Diagnostics for the design-time gallery and unit tests.</summary>

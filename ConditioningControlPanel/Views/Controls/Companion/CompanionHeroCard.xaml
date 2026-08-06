@@ -312,7 +312,7 @@
                                 <!-- Daily mood token. Pre-Train 4 the view substitutes a sleeping
                                      moon on a cool orb at 40% and the tooltip makes the promise —
                                      present and dormant, never a hidden control. -->
-                                <Border x:Name="MoodToken" CornerRadius="{StaticResource CmpRadiusPill}"
+                                <Border x:Name="MoodToken" local:CompanionCapsule.IsCapsule="True"
                                         Background="#FF2A1A3A" BorderBrush="#55FF69B4" BorderThickness="1"
                                         Padding="6,4,12,4" VerticalAlignment="Center"
                                         ToolTip="{Binding MoodCaption}">

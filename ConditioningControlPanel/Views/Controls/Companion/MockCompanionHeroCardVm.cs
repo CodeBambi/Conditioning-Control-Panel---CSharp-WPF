@@ -16,12 +16,26 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public MockCompanionHeroCardVm()
         {
             ChatCommand = CompanionRelayCommand.NoOp("hero.chat");
-            SwitchCommand = CompanionRelayCommand.NoOp("hero.switch");
             DetachCommand = CompanionRelayCommand.NoOp("hero.detach");
             ToggleMuteCommand = new CompanionRelayCommand(() => IsMuted = !IsMuted);
             ToggleShownCommand = new CompanionRelayCommand(() => IsCompanionShown = !IsCompanionShown);
-            OpenEngineRoomCommand = CompanionRelayCommand.NoOp("hero.engineRoom");
-            FocusAwarenessCommand = CompanionRelayCommand.NoOp("hero.awareness");
+            // The three cross-zone links. They still record their tag like every other mock
+            // command; what they add is the page-level move, which only the room can make.
+            SwitchCommand = new CompanionRelayCommand(() =>
+            {
+                CompanionRelayCommand.Note("hero.switch");
+                Navigator?.RevealWorkshop(CompanionRoomAnchors.WorkshopRosterCell);
+            });
+            OpenEngineRoomCommand = new CompanionRelayCommand(() =>
+            {
+                CompanionRelayCommand.Note("hero.engineRoom");
+                Navigator?.RevealEngineRoom();
+            });
+            FocusAwarenessCommand = new CompanionRelayCommand(() =>
+            {
+                CompanionRelayCommand.Note("hero.awareness");
+                Navigator?.FocusAwareness();
+            });
             WakeCommand = CompanionRelayCommand.NoOp("hero.wake");
             Constellation = MockRelationshipConstellationVm.Dormant();
             Header = MockCompanionHeaderVm.Entitled();
@@ -78,6 +92,13 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         /// <summary>Z0 band. Set to null to prove the hero renders with the header collapsed.</summary>
         public ICompanionHeaderVm? Header { get; init; }
+
+        /// <summary>
+        /// Set by <see cref="MockCompanionRoomVm"/> when this card is composed into the page, so
+        /// the AI pill, the awareness pill and the Switch chip actually go somewhere. Left null the
+        /// hero still works standalone — the commands just record their tag and stop.
+        /// </summary>
+        public ICompanionRoomNavigator? Navigator { get; set; }
 
         // ------------------------------- state exhibits -------------------------------
 

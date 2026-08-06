@@ -35,8 +35,18 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             OpenFullChatCommand = CompanionRelayCommand.NoOp("chat.openFull");
             HistoryCommand = CompanionRelayCommand.NoOp("chat.history");
             UnlockCommand = CompanionRelayCommand.NoOp("chat.unlock");
-            OpenEngineRoomCommand = CompanionRelayCommand.NoOp("chat.engineRoom");
+            OpenEngineRoomCommand = new CompanionRelayCommand(() =>
+            {
+                CompanionRelayCommand.Note("chat.engineRoom");
+                Navigator?.RevealEngineRoom();
+            });
         }
+
+        /// <summary>
+        /// Set by <see cref="MockCompanionRoomVm"/> so the "turn her brain on in the Engine Room
+        /// below" link is a real jump once this card is composed into the page. Null standalone.
+        /// </summary>
+        public ICompanionRoomNavigator? Navigator { get; set; }
 
         public CompanionZoneState State { get; init; } = CompanionZoneState.Live;
 
@@ -154,6 +164,18 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             State = CompanionZoneState.Locked,
             CanSend = false,
             FooterCopy = string.Empty,
+            LastHeardCopy = string.Empty
+        }.WithTurns(Array.Empty<IChatBubbleVm>());
+
+        /// <summary>
+        /// Train 1 has landed and the account is brand new: the surface is fully live, there is
+        /// simply nothing in it yet. Added when the page was composed — the room's "fresh user"
+        /// variant needs a chat card that is empty without being dormant, locked or off, and the
+        /// three of those are the only ways to get an empty thread otherwise.
+        /// </summary>
+        public static MockChatThresholdVm Fresh() => new MockChatThresholdVm
+        {
+            FooterCopy = "say the first thing. she keeps everything after that.",
             LastHeardCopy = string.Empty
         }.WithTurns(Array.Empty<IChatBubbleVm>());
 

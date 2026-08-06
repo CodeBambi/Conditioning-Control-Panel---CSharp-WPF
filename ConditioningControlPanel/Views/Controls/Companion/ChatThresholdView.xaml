@@ -40,47 +40,11 @@
                 <ResourceDictionary Source="pack://application:,,,/ConditioningControlPanel;component/Views/Controls/Companion/Themes/CompanionTheme.xaml"/>
             </ResourceDictionary.MergedDictionaries>
 
-            <!-- The send box.
-
-                 CmpChatInputStyle is inherited wholesale EXCEPT its corner radius. The theme's
-                 pill token is 999, which CSS clamps to a stadium and WPF does not: a Border that
-                 wide with that radius draws elliptical corner arcs, so the input renders as a
-                 lens instead of a rounded bar. A numeric radius just over half the 41px height
-                 gives the mockup's stadium exactly. Everything else — the focus glow, the
-                 disabled dim, the caret colour — comes from the theme. -->
-            <Style x:Key="CmpSurfChatInputStyle" TargetType="TextBox"
-                   BasedOn="{StaticResource CmpChatInputStyle}">
-                <Setter Property="Template">
-                    <Setter.Value>
-                        <ControlTemplate TargetType="TextBox">
-                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                    CornerRadius="21">
-                                <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
-                                              VerticalAlignment="Center" Focusable="False"
-                                              HorizontalScrollBarVisibility="Hidden"
-                                              VerticalScrollBarVisibility="Hidden"/>
-                            </Border>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                    <Setter TargetName="Bd" Property="BorderBrush"
-                                            Value="{StaticResource CmpPinkBrush}"/>
-                                    <Setter TargetName="Bd" Property="Effect">
-                                        <Setter.Value>
-                                            <DropShadowEffect Color="#FFFF69B4" BlurRadius="12"
-                                                              ShadowDepth="0" Opacity="0.25"/>
-                                        </Setter.Value>
-                                    </Setter>
-                                </Trigger>
-                                <Trigger Property="IsEnabled" Value="False">
-                                    <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
-            </Style>
+            <!-- The send box used to live here as a 33-line copy of CmpChatInputStyle whose only
+                 change was a numeric corner radius, because the theme's pill token (999) drew the
+                 input as a lens. The diagnosis was right and the theme's comment claiming WPF
+                 clamps was wrong — see CompanionCapsule, which now fixes it at the source for
+                 every chip on the page. The override is gone; the theme style is used directly. -->
 
             <!-- One bubble. Her / you / echo are picked by DataTriggers so a single template
                  serves the live thread and the staged teaser alike.
@@ -241,7 +205,7 @@
                 </Grid.ColumnDefinitions>
 
                 <Grid Grid.Column="0" Margin="0,0,9,0">
-                    <TextBox x:Name="DraftBox" Style="{StaticResource CmpSurfChatInputStyle}" MinHeight="41"
+                    <TextBox x:Name="DraftBox" Style="{StaticResource CmpChatInputStyle}" MinHeight="41"
                              Text="{Binding Draft, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
                              IsEnabled="{Binding CanSend}"
                              KeyDown="DraftBox_KeyDown"/>

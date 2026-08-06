@@ -14,13 +14,16 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         /// <summary>
         /// The two cells other zones deep-link to by name: the hero's Switch chip asks for the
-        /// roster, Z5's "fine-tuning ↓" link asks for the awareness cell. Named constants so a
-        /// caller cannot mistype the anchor and silently get "the drawer opened, nothing scrolled".
+        /// roster, Z5's "fine-tuning ↓" link asks for the awareness cell.
+        ///
+        /// <para>The anchors themselves moved to <see cref="CompanionRoomAnchors"/> when the page
+        /// was composed — the real viewmodel needs them too, and they cannot come from a mock.
+        /// These aliases stay so callers written against the standalone zone keep working.</para>
         /// </summary>
-        public const string RosterCellTitle = "ROSTER";
+        public const string RosterCellTitle = CompanionRoomAnchors.WorkshopRosterCell;
 
         /// <inheritdoc cref="RosterCellTitle"/>
-        public const string AwarenessCellTitle = "AWARENESS FINE-TUNING";
+        public const string AwarenessCellTitle = CompanionRoomAnchors.WorkshopAwarenessCell;
 
         /// <summary>Parameterless ctor for <c>d:DesignInstance IsDesignTimeCreatable=True</c>.</summary>
         public MockWorkshopAccordionVm()

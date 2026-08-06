@@ -17,7 +17,10 @@ namespace ConditioningControlPanel.Views.Controls.Companion
     //    · every user-visible string in these controls is referenced by its real loc key
     //      through {cmp:CmpStr companion_xxx}, exactly like {loc:Str} elsewhere;
     //    · the EN masters live here, in CompanionLocStaging.English, and in the hand-off file
-    //      Views/Controls/Companion/loc-staging-companion-tab.json (same pairs, strict JSON);
+    //      Views/Controls/Companion/loc-staging.json (same pairs, strict JSON, key-sorted);
+    //      the three zone packages each staged their own file while they were separate branches —
+    //      those were merged into the single hand-off above when the page was composed, because a
+    //      loc pass wants one file to paste into en.json, not a scavenger hunt;
     //    · CmpStr resolves through LocalizationManager first and only falls back to the staged
     //      English when the key is not in the language files yet.
     //
@@ -32,14 +35,16 @@ namespace ConditioningControlPanel.Views.Controls.Companion
     /// <summary>The EN masters for the <c>companion_*</c> keys this package introduces.</summary>
     public static class CompanionLocStaging
     {
-        /// <summary>Path of the hand-off file, relative to the project root.</summary>
+        /// <summary>Path of the single merged hand-off file, relative to the project root.</summary>
         public const string StagingFileRelativePath =
-            @"Views\Controls\Companion\loc-staging-companion-tab.json";
+            @"Views\Controls\Companion\loc-staging.json";
 
         /// <summary>
-        /// key → EN master. Kept in the same order as the JSON hand-off file so a diff of the two
-        /// reads cleanly. No literal line breaks anywhere: newlines are "\n" escapes, per the
-        /// house rule that has bitten every strict JSON parser in this repo before.
+        /// key → EN master, grouped by zone for reading. The JSON hand-off is key-sorted instead
+        /// (<see cref="ToJson"/> does the sorting), because it is merged into en.json by hand and a
+        /// sorted file makes a duplicate key obvious at a glance. No literal line breaks anywhere:
+        /// newlines are "\n" escapes, per the house rule that has bitten every strict JSON parser
+        /// in this repo before.
         /// </summary>
         public static IReadOnlyDictionary<string, string> English { get; } =
             new Dictionary<string, string>(StringComparer.Ordinal)
@@ -178,18 +183,24 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         /// <summary>
         /// Serialises <see cref="English"/> in the exact shape of the hand-off file: a flat object,
-        /// two-space indent, UTF-8, LF, sorted by nothing (insertion order preserved).
-        /// The unit test compares this to the committed JSON so the two can never drift.
+        /// two-space indent, UTF-8, LF, keys sorted ordinally.
+        ///
+        /// <para>The sort is what makes the file regenerable after a merge: three packages staged
+        /// three files in three different orders, and a byte-for-byte test against insertion order
+        /// would have made combining them a hand-edit. The unit test compares this to the committed
+        /// JSON, so the code and the hand-off can never drift.</para>
         /// </summary>
         public static string ToJson()
         {
+            var keys = new List<string>(English.Keys);
+            keys.Sort(StringComparer.Ordinal);
+
             var sb = new StringBuilder();
             sb.Append("{\n");
-            int i = 0;
-            foreach (var kv in English)
+            for (int i = 0; i < keys.Count; i++)
             {
-                sb.Append("  ").Append(JsonQuote(kv.Key)).Append(": ").Append(JsonQuote(kv.Value));
-                sb.Append(++i < English.Count ? ",\n" : "\n");
+                sb.Append("  ").Append(JsonQuote(keys[i])).Append(": ").Append(JsonQuote(English[keys[i]]));
+                sb.Append(i + 1 < keys.Count ? ",\n" : "\n");
             }
             sb.Append("}\n");
             return sb.ToString();
