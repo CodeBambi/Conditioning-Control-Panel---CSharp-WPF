@@ -20,44 +20,60 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.6.4";
+        public const string AppVersion = "6.7.0";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.6.4 - The Velvet Vault 💗
+        public const string CurrentPatchNotes = @"v6.7 - ¯\_( ͡° ͜ʖ ͡°)_/¯
 
-A big one. New video engine, an installer a third the size, a new tab, and a mountain of fixes.
+📱 FOR YOU FEED - ON DESKTOP
+- The mobile mosaic reel arrives on desktop - an endless For You feed of conditioning clips, right in the app
+- Ghost mode: make the feed see-through AND click-through - it haunts your screen while you do other things
+- Eye control: hands-free scrolling with your webcam gaze
+- Park it anywhere: opacity control, any monitor, survives Show Desktop
 
-🎬 NEW VIDEO ENGINE
-- Mandatory videos and Bubble Count now run on a new browser-based engine - on by default, opt out in Settings
-- Should resolve the video freeze and crash reports from 6.6.x; falls back to the old player automatically when unavailable
+🎮 GOON GAME - 1v1 DUELS
+- Duel another player in real time: throw media payloads, build heat, survive sudden death
+- Send your own photos, videos and GIFs - P2P, free for every seat, up to 64MB per video
+- 10-second voice notes with opt-in consent and push-to-talk (V key on desktop)
+- Invite anyone with a share link - no account needed to join, Discord rich presence included
+- Privacy by design: received partner media is ephemeral and never outlives the match
+- Solo practice mode if you want to warm up first
 
-📦 SMALLER INSTALLER
-- The installer is now ~640MB (was 1.6GB) - audio content downloads on demand, only for the mods you use
+🎬 NEW VIDEO ENGINE (NOW DEFAULT)
+- Out-of-process browser video playback: crashes can't take the app down anymore
+- In-window attention targets, and grace pause - your first panic press pauses a mandatory video instead of ending it
 
 💎 THE VELVET VAULT
-- New exclusives tab for supporter content
+- The new Exclusives tab replaces the launcher popup - one home for FYP, Goon Game and everything premium
+- Spotlight shelf, dedicated backdrop, and a peek at what is coming next
 
-📱 FYP DESKTOP FEED
-- An endless mosaic reel on your desktop, TikTok style
+🪪 PROFILE REDESIGN
+- Your profile is now a Trainer Card - rebuilt from the ground up with per-mod scene banners
+- Wardrobe: 60 new adornments to dress your card, with a full editor and click-to-pin
+- 12 preset 'blank subject' avatars, 3 per mod, if you'd rather stay faceless
+- New privacy dialog: you decide exactly what the leaderboard sees
 
-🧸 HAPTICS OVERHAUL
-- Full multi-toy support (Lovense + Buttplug), role-based routing, temperament presets
-- New default intensity cap of 70%; keyword haptics now run at half strength by default (adjustable per row)
-
-🎮 GOON GAME (BETA)
-- 1v1 duels: media throws, heat gauge, voice notes, brain drain, and a dozen rounds of beta hardening
+✨ ALSO NEW
+- HAPTICS OVERHAUL: multi-toy support, rebuilt Lovense + Buttplug providers, FunScript playback, temperament dial - now with Deeper editor parity
+- Flash: avoid-the-center exclusion box for gaming
+- Spiral opacity cap raised from 50% to 100%
+- Modular installer: ~1.1 GB moved into downloadable content packs - way smaller download
 
 🔧 BUG FIXES
-- The 6.6.3 stability batch (video freezes, audio death) reaches you for the first time in this build
-- Panic ladder clarified: press once = pause, twice = panic, three times = exit
-- Esc is no longer swallowed system-wide during Lockdown
-- Unchecked asset folders are now respected everywhere (chaos overlays, Intake)
-- Oopsie 'already used' bug fixed server-side (heals on next sync)
-- Streak no longer flashes 0 after re-login
-- 5,271 new translations across all 8 languages
+- Programs: spoken mantras credit correctly, session bubble rate fixed, every task shows a how-to line
+- Assets: deselection honored everywhere, chaos overlays and Graded Intake included (#762 #798 #619)
+- Video: blurred background fits the true aspect ratio (#786)
+- Audio: fixed the playback runaway that killed the app when Windows audio died (#778 #779)
+- Freeze fixes across the board, Brain Drain captures off the UI thread (#777)
+- Lockdown no longer swallows bare Esc system-wide (#680)
+- Quests: voice-command spiral/pink time counts (#719), streaks stop flashing 0
+- Lock card: paste/undo cheats blocked, AltGr + IME input fixed (#734)
+
+🌍 LOCALIZATION
+- Massive backfill: 701 missing keys translated in 7 languages, plus 364 in Simplified Chinese
 
 Season: Airhead August";
 

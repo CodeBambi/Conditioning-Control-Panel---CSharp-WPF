@@ -1,0 +1,50 @@
+v6.7 - ¯\_( ͡° ͜ʖ ͡°)_/¯
+
+📱 FOR YOU FEED - ON DESKTOP
+• The mobile mosaic reel arrives on desktop - an endless For You feed of conditioning clips, right in the app
+• Ghost mode: make the feed see-through AND click-through - it haunts your screen while you do other things
+• Eye control: hands-free scrolling with your webcam gaze
+• Park it anywhere: opacity control, any monitor, survives Show Desktop
+
+🎮 GOON GAME - 1v1 DUELS
+• Duel another player in real time: throw media payloads, build heat, survive sudden death
+• Send your own photos, videos and GIFs - P2P, free for every seat, up to 64MB per video
+• 10-second voice notes with opt-in consent and push-to-talk (V key on desktop)
+• Invite anyone with a share link - no account needed to join, Discord rich presence included
+• Privacy by design: received partner media is ephemeral and never outlives the match
+• Solo practice mode if you want to warm up first
+
+🎬 NEW VIDEO ENGINE (NOW DEFAULT)
+• Out-of-process browser video playback: crashes can't take the app down anymore
+• In-window attention targets, and grace pause - your first panic press pauses a mandatory video instead of ending it
+
+💎 THE VELVET VAULT
+• The new Exclusives tab replaces the launcher popup - one home for FYP, Goon Game and everything premium
+• Spotlight shelf, dedicated backdrop, and a peek at what is coming next
+
+🪪 PROFILE REDESIGN
+• Your profile is now a Trainer Card - rebuilt from the ground up with per-mod scene banners
+• Wardrobe: 60 new adornments to dress your card, with a full editor and click-to-pin
+• 12 preset 'blank subject' avatars, 3 per mod, if you'd rather stay faceless
+• New privacy dialog: you decide exactly what the leaderboard sees
+
+✨ ALSO NEW
+• HAPTICS OVERHAUL: multi-toy support, rebuilt Lovense + Buttplug providers, FunScript playback, temperament dial - now with Deeper editor parity
+• Flash: avoid-the-center exclusion box for gaming
+• Spiral opacity cap raised from 50% to 100%
+• Modular installer: ~1.1 GB moved into downloadable content packs - way smaller download
+
+🔧 BUG FIXES
+• Programs: spoken mantras credit correctly, session bubble rate fixed, every task shows a how-to line
+• Assets: deselection honored everywhere, chaos overlays and Graded Intake included (#762 #798 #619)
+• Video: blurred background fits the true aspect ratio (#786)
+• Audio: fixed the playback runaway that killed the app when Windows audio died (#778 #779)
+• Freeze fixes across the board, Brain Drain captures off the UI thread (#777)
+• Lockdown no longer swallows bare Esc system-wide (#680)
+• Quests: voice-command spiral/pink time counts (#719), streaks stop flashing 0
+• Lock card: paste/undo cheats blocked, AltGr + IME input fixed (#734)
+
+🌍 LOCALIZATION
+• Massive backfill: 701 missing keys translated in 7 languages, plus 364 in Simplified Chinese
+
+Season: Airhead August
