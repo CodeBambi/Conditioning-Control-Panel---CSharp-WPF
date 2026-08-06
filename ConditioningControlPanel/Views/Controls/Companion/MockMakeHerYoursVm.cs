@@ -46,7 +46,11 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public string InterviewBody { get; init; } =
             "12 questions · 90 seconds · no typing.\nShe writes herself around your answers.";
         public string InterviewCtaLabel { get; init; } = "Start~";
-        public string InterviewedLine { get; init; } = "Interviewed 2026-08-12 · re-interview me~ · adjust her";
+        /// <summary>
+        /// The compressed chip. The two verbs from the design's chip row ("re-interview me~",
+        /// "adjust her") are real buttons in the view, so this string carries the date only.
+        /// </summary>
+        public string InterviewedLine { get; init; } = "Interviewed 2026-08-12";
         public string InterviewDormantCopy { get; init; } =
             "she's been drafting questions for you… interviews start next update.";
 

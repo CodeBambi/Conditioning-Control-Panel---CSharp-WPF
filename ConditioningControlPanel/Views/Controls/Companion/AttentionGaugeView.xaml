@@ -5,7 +5,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:local="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
              mc:Ignorable="d"
-             d:DesignWidth="430" d:DesignHeight="150"
+             d:DesignWidth="430" d:DesignHeight="170"
              d:DataContext="{d:DesignInstance Type=local:MockAttentionGaugeVm, IsDesignTimeCreatable=True}">
 
     <!-- ================================================================
@@ -14,13 +14,16 @@
            · never the word "tokens" — the ladder is in chats, in her voice
            · the floor is not mute: barks keep playing, and the card says so
            · the Patreon line appears below 40% only, once, quietly
-           · the numeric detail is on demand (hover/click), never resting
+           · the numeric detail is on demand (hover or click), never resting
 
          The bar is the Trainer Card recipe: a star-width fill column, no
          ActualWidth arithmetic. At zero it keeps a 4% sliver so a spent
-         meter reads as empty rather than broken.
+         meter reads as empty rather than broken — and at exactly that
+         sliver the fill drops its glow (the mockup's .att-empty), which
+         is the one place this XAML knows a number. AttentionCopy owns it
+         (BarFractionFor(0) == 0.04, pinned by CompanionZoneLogicTests).
 
-         Thresholds live in AttentionCopy, not in this XAML, so they are
+         Thresholds live in AttentionCopy, not here, so they are
          unit-tested and exist in exactly one place.
          ================================================================ -->
 
@@ -29,6 +32,34 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="pack://application:,,,/ConditioningControlPanel;component/Views/Controls/Companion/Themes/CompanionTheme.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- the spent bar: same geometry, no heat -->
+            <Style x:Key="CmpZ6AttentionFillStyle" TargetType="Border"
+                   BasedOn="{StaticResource CmpGaugeFillAttentionStyle}">
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding BarFraction}" Value="0.04">
+                        <Setter Property="Effect" Value="{x:Null}"/>
+                        <Setter Property="Opacity" Value="0.70"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+
+            <!-- detail-on-demand: revealed by the toggle command OR by hovering the card -->
+            <Style x:Key="CmpZ6DetailLineStyle" TargetType="TextBlock"
+                   BasedOn="{StaticResource CmpFaintTextStyle}">
+                <Setter Property="FontSize" Value="10"/>
+                <Setter Property="Margin" Value="0,4,0,0"/>
+                <Setter Property="Visibility" Value="Collapsed"/>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsDetailShown}" Value="True">
+                        <Setter Property="Visibility" Value="Visible"/>
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding IsMouseOver,
+                                 RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
+                        <Setter Property="Visibility" Value="Visible"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
 
@@ -52,20 +83,14 @@
                 </Border>
             </Grid>
 
-            <!-- ========== the gauge (whole card toggles the numeric detail) ========== -->
+            <!-- ========== the gauge (the whole block hovers/clicks to reveal the numbers) ========== -->
             <Button Command="{Binding ToggleDetailCommand}" HorizontalContentAlignment="Stretch"
-                    Margin="0,13,0,0">
+                    ToolTip="{local:CmpStr companion_attention_detail_tip}" Margin="0,13,0,0">
                 <Button.Template>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Host" Background="Transparent" Cursor="Hand">
+                        <Border Background="Transparent" Cursor="Hand">
                             <ContentPresenter/>
                         </Border>
-                        <ControlTemplate.Triggers>
-                            <!-- detail-on-demand also reveals on hover, per the design -->
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Host" Property="Tag" Value="hover"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Button.Template>
 
@@ -76,7 +101,7 @@
                                 <ColumnDefinition Width="{Binding BarFraction, Converter={StaticResource CmpFractionToStar}}"/>
                                 <ColumnDefinition Width="{Binding BarFraction, Converter={StaticResource CmpFractionToRemainderStar}}"/>
                             </Grid.ColumnDefinitions>
-                            <Border Grid.Column="0" Style="{StaticResource CmpGaugeFillAttentionStyle}"/>
+                            <Border Grid.Column="0" Style="{StaticResource CmpZ6AttentionFillStyle}"/>
                         </Grid>
                     </Border>
 
@@ -84,9 +109,7 @@
                                Foreground="#FFFFD9EC" TextWrapping="Wrap"/>
 
                     <!-- the numbers, for the curious only -->
-                    <TextBlock Text="{Binding DetailLine}" Margin="0,4,0,0"
-                               Style="{StaticResource CmpFaintTextStyle}" FontSize="10"
-                               Visibility="{Binding IsDetailShown, Converter={StaticResource CmpBoolToVis}}"/>
+                    <TextBlock Text="{Binding DetailLine}" Style="{StaticResource CmpZ6DetailLineStyle}"/>
                 </StackPanel>
             </Button>
 

@@ -97,6 +97,21 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             }
         };
 
+        /// <summary>
+        /// Custom (BYO): the endpoint / key / model panel, its sampler + daily-limit buttons, and
+        /// nothing else. Without this exhibit the BYO panel would never be rendered by the gallery
+        /// or the smoke test — the provider grouping hides it under every other exhibit.
+        /// </summary>
+        public static MockEngineRoomDrawerVm Custom() => new()
+        {
+            IsExpanded = true,
+            Provider = CompanionProviderMode.Custom,
+            StatusLine = "● Custom — your endpoint, your key, your bill",
+            CustomEndpoint = "https://api.example.com/v1",
+            CustomApiKey = "••••••••••",
+            CustomModel = "your-model-here"
+        };
+
         /// <summary>Provider Off: everything is present but nothing is thinking.</summary>
         public static MockEngineRoomDrawerVm Off() => new()
         {
