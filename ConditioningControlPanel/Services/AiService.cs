@@ -84,9 +84,12 @@ namespace ConditioningControlPanel.Services
         /// AI replies from canned fallbacks (P2/C4 — pink "AI" badge must not
         /// appear over fallback strings).
         /// </summary>
+        [Obsolete(AiLegacyApi.OneShotObsolete)]
         public async Task<string> GetBambiReplyAsync(string userInput, bool isUserMessage = false)
         {
+#pragma warning disable CS0618 // legacy internals: the adapter layer is one level up, in AiServiceStrategy
             var result = await GetBambiReplyExAsync(userInput, isUserMessage);
+#pragma warning restore CS0618
             // Preserve the legacy sentinel-string contract so any caller still
             // routing through the string API can detect refusals.
             if (result.Refusal != null)
@@ -101,6 +104,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Typed variant. See <see cref="IAiService.GetBambiReplyExAsync"/>.
         /// </summary>
+        [Obsolete(AiLegacyApi.OneShotObsolete)]
         public async Task<AiReplyResult> GetBambiReplyExAsync(string userInput, bool isUserMessage = false)
         {
             // isUserMessage is honored by the local provider for queue/drop logic;
@@ -148,28 +152,15 @@ namespace ConditioningControlPanel.Services
         /// Used by Awareness Mode. Passes raw website and tab name for AI to interpret.
         /// Returns null if AI unavailable (caller should use preset phrase).
         /// </summary>
+        [Obsolete(AiLegacyApi.OneShotObsolete)]
         public async Task<string?> GetAwarenessReactionAsync(string detectedName, string category, string serviceName = "", string pageTitle = "", TimeSpan? duration = null)
         {
             // Get prompt from active personality preset
             var prompt = _bambiSprite.GetSystemPrompt();
 
-            // Get website/service name and tab title
-            var website = string.IsNullOrEmpty(serviceName) ? detectedName : serviceName;
-            var tabName = string.IsNullOrEmpty(pageTitle) ? detectedName : pageTitle;
-
-            // Format duration nicely (same bucketing as the still-on path)
-            var elapsed = duration ?? TimeSpan.Zero;
-            string durationText;
-            if (elapsed.TotalMinutes < 1)
-                durationText = $"{(int)elapsed.TotalSeconds}s";
-            else if (elapsed.TotalMinutes < 60)
-                durationText = $"{(int)elapsed.TotalMinutes}m";
-            else
-                durationText = $"{(int)elapsed.TotalHours}h";
-
-            // Format context with category for accurate reactions
-            // Format: [Category: X | App: Y | Title: Z | Duration: Nm]
-            var userInput = $"[Category: {category} | App: {website} | Title: {tabName} | Duration: {durationText}]";
+            // Context tag: [Category: X | App: Y | Title: Z | Duration: Nm]. Shared with the other
+            // two providers via FrameFormatter — this used to be three hand-copied f-strings.
+            var userInput = FrameFormatter.AwarenessFrame(detectedName, category, serviceName, pageTitle, duration);
 
             return await GetAiResponseAsync(userInput, prompt, purpose: AiMeter.PurposeAwareness);
         }
@@ -178,23 +169,12 @@ namespace ConditioningControlPanel.Services
         /// Gets an AI-generated "still on" reaction when user has been on the same activity for a while.
         /// Includes time context for the AI to reference.
         /// </summary>
+        [Obsolete(AiLegacyApi.OneShotObsolete)]
         public async Task<string?> GetStillOnReactionAsync(string displayName, string category, TimeSpan duration)
         {
             // Get prompt from active personality preset
             var prompt = _bambiSprite.GetSystemPrompt();
-
-            // Format duration nicely
-            string durationText;
-            if (duration.TotalMinutes < 1)
-                durationText = $"{(int)duration.TotalSeconds}s";
-            else if (duration.TotalMinutes < 60)
-                durationText = $"{(int)duration.TotalMinutes}m";
-            else
-                durationText = $"{(int)duration.TotalHours}h";
-
-            // Format context with category for accurate reactions
-            // Format: [Category: X | App: Y | Title: Z | Duration: Nm]
-            var userInput = $"[Category: {category} | App: {displayName} | Title: {displayName} | Duration: {durationText}]";
+            var userInput = FrameFormatter.StillOnFrame(displayName, category, duration);
 
             return await GetAiResponseAsync(userInput, prompt, purpose: AiMeter.PurposeStillOn);
         }
@@ -204,14 +184,13 @@ namespace ConditioningControlPanel.Services
         /// Used by <see cref="KeywordTriggerService"/>'s AvatarCommentAction dispatch.
         /// Returns null if AI is unavailable (caller is expected to use a canned phrase).
         /// </summary>
+        [Obsolete(AiLegacyApi.OneShotObsolete)]
         public async Task<string?> GetKeywordCommentAsync(string keyword, string? promptTemplate = null)
         {
             if (!IsAvailable) return null;
 
             var systemPrompt = _bambiSprite.GetSystemPrompt();
-            var userInput = string.IsNullOrEmpty(promptTemplate)
-                ? $"You just caught the user on the word '{keyword}'. React in character, one short line."
-                : promptTemplate.Replace("{keyword}", keyword);
+            var userInput = FrameFormatter.KeywordFrame(keyword, promptTemplate);
 
             return await GetAiResponseAsync(userInput, systemPrompt, purpose: AiMeter.PurposeKeyword);
         }
@@ -220,22 +199,13 @@ namespace ConditioningControlPanel.Services
         /// Gets an AI-generated reaction after the user finishes a lock-screen mantra.
         /// Returns null if AI unavailable.
         /// </summary>
+        [Obsolete(AiLegacyApi.OneShotObsolete)]
         public async Task<string?> GetLockScreenReaction(string sentance, int mistakes, int amount, string? promptTemplate = null)
         {
             if (!IsAvailable) return null;
 
             var systemPrompt = _bambiSprite.GetSystemPrompt();
-            string userInput;
-            if (string.IsNullOrEmpty(promptTemplate))
-            {
-                userInput = $"The user made {mistakes} mistakes in '{sentance}' for the lock screen. They had to type it {amount} of time. React in character, one short line.";
-            }
-            else
-            {
-                userInput = promptTemplate.Replace("{sentance}", sentance);
-                userInput = userInput.Replace("{mistakes}", mistakes.ToString());
-                userInput = userInput.Replace("{amount}", amount.ToString());
-            }
+            var userInput = FrameFormatter.LockScreenFrame(sentance, mistakes, amount, promptTemplate);
 
             return await GetAiResponseAsync(userInput, systemPrompt, purpose: AiMeter.PurposeLockScreen);
         }
@@ -244,14 +214,13 @@ namespace ConditioningControlPanel.Services
         /// Gets an AI-generated reaction after a mandatory video finishes.
         /// Returns null if AI unavailable.
         /// </summary>
+        [Obsolete(AiLegacyApi.OneShotObsolete)]
         public async Task<string?> GetVideoDoneReaction(string title, string? promptTemplate = null)
         {
             if (!IsAvailable) return null;
 
             var systemPrompt = _bambiSprite.GetSystemPrompt();
-            var userInput = string.IsNullOrEmpty(promptTemplate)
-                ? $"The user has just finished the mandatory video {title}. React in character, one short line."
-                : promptTemplate.Replace("{title}", title);
+            var userInput = FrameFormatter.VideoDoneFrame(title, promptTemplate);
 
             return await GetAiResponseAsync(userInput, systemPrompt, purpose: AiMeter.PurposeVideoDone);
         }
