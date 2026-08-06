@@ -813,6 +813,14 @@ namespace ConditioningControlPanel.Services
             // Clear resource cache
             ModResourceResolver.ClearCache();
 
+            // Drop the companion's cached system-prompt prefix. Its fingerprint hashes ActiveModId,
+            // so a plain switch is already covered — but everything ELSE the mod contributes
+            // (GetCompanionName, GetUserTerm, MakeModAware's replacements) is read at build time and
+            // hashed by nothing, so a mod whose content changed under the same id would keep serving
+            // the stale prefix for the rest of the launch with no log line saying why.
+            try { BambiSprite.InvalidateStablePrompt(); }
+            catch (Exception ex) { _log?.Debug("ActivateMod: prompt cache invalidation failed: {E}", ex.Message); }
+
             // If the active companion isn't supported by the new mod, fall back to first supported companion
             if (App.Companion != null && !IsCompanionSupported(App.Companion.ActiveCompanion))
             {

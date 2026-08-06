@@ -3608,6 +3608,27 @@ namespace ConditioningControlPanel.Models
             set { _aiChatEnabled = value; OnPropertyChanged(); }
         }
 
+        private bool _useCompanionBrain = true;
+        /// <summary>
+        /// Train 1 kill switch. True routes companion conversation through <c>CompanionBrain</c>
+        /// (<c>App.Brain</c>) — one turn log shared by every provider, so cloud chat finally has
+        /// memory of the current conversation and of previous launches.
+        ///
+        /// <para>False restores the pre-Train-1 behaviour exactly: each call site goes straight to
+        /// <c>IAiService</c>'s stateless one-shot methods. Nothing else differs — the moderation
+        /// spine, the pink AI badge semantics and the ChatMemoryEnabled toggle apply on both paths —
+        /// so this is a safe switch to flip if the brain misbehaves in the field.</para>
+        ///
+        /// <para>Not a privacy control: conversation persistence is gated by
+        /// <c>CompanionPrompt.ChatMemoryEnabled</c> on both paths.</para>
+        /// </summary>
+        [JsonProperty]
+        public bool UseCompanionBrain
+        {
+            get => _useCompanionBrain;
+            set { _useCompanionBrain = value; OnPropertyChanged(); }
+        }
+
         private int _idleGiggleIntervalSeconds = 120; // 20-600 seconds; drives the idle BARK cadence (AvatarTubeWindow.OnIdleTick → BarkService.DispatchIdle)
         /// <summary>
         /// How often the companion speaks when idle (in seconds)

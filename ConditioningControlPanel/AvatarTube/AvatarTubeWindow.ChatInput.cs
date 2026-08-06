@@ -713,7 +713,16 @@ namespace ConditioningControlPanel
                     // badge should appear (true only for a genuine LLM reply; cloud
                     // fallback / offline / login-required / local-Ollama-down all return
                     // IsAiGenerated=false so the bubble appears unbadged).
-                    var result = await App.Ai.GetBambiReplyExAsync(input);
+                    //
+                    // Train 1: route through CompanionBrain so the reply carries the
+                    // conversation (and previous launches') context on EVERY provider, not
+                    // just local Ollama. The result shape is identical, so everything below —
+                    // badge, refusal bubble, chat history — is untouched. UseCompanionBrain=false
+                    // (or a brain that failed to construct) falls back to the legacy stateless call.
+                    var brain = App.Brain;
+                    var result = Services.Companion.Brain.CompanionBrain.ShouldRoute(brain)
+                        ? await brain!.ChatAsync(input)
+                        : await App.Ai.GetBambiReplyExAsync(input);
 
                     if (result.Refusal != null)
                     {

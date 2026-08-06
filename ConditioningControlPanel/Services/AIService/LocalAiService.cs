@@ -10,6 +10,11 @@ using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.AIService.Enrichment;
 using ConditioningControlPanel.Services.Moderation;
+// This file's unqualified `ChatMessage` is the mutable NESTED buffer type (nested types win over
+// namespace types inside the class body). The Train 1 transport currency is the namespace-level
+// record, aliased here so IAiService.SendAsync can be implemented without touching the ~15 existing
+// nested-type references below.
+using TransportMessage = ConditioningControlPanel.Services.AIService.ChatMessage;
 
 namespace ConditioningControlPanel.Services.AIService
 {
@@ -30,8 +35,13 @@ namespace ConditioningControlPanel.Services.AIService
         private readonly IPromptService _promptService;
 
         private readonly SemaphoreSlim _aiSemaphore = new(1, 1);
-        private bool _isProcessing;
+        private volatile bool _isProcessing;
         private bool _isUserQueued;
+
+        // One moderation spine for BOTH entry points (legacy one-shots and the Train 1
+        // multi-turn SendAsync). See TransportModeration for why this is an object and not
+        // two copies of the same twenty lines.
+        private readonly TransportModeration _moderation = CreateModeration();
 
         // Persistent chat history. Index 0 is system; optional enrichment block at 1
         // when effects are enabled; then alternating user/assistant turns.
@@ -90,6 +100,14 @@ namespace ConditioningControlPanel.Services.AIService
         // Cap on persisted user+assistant pairs. Picked so the file stays small (<200KB
         // typical) while preserving enough context that Bambi remembers a long conversation.
         private const int MaxPersistedPairs = 50;
+
+        /// <summary>
+        /// Ceiling on <c>options.num_predict</c> for the local provider. Generous compared with the
+        /// cloud's 100 (local inference is the user's own hardware, not our bill) but bounded, so a
+        /// caller asking for something absurd can't wedge the box.
+        /// </summary>
+        private const int LocalMaxTokensHardCap = 512;
+
         private static string HistoryFilePath =>
             Path.Combine(App.UserDataPath, "local_chat_history.json");
 
@@ -328,9 +346,24 @@ namespace ConditioningControlPanel.Services.AIService
             return "...";
         }
 
+        /// <summary>
+        /// This provider's moderation spine, pre-wired with its log prefix, counter source and
+        /// <c>local:{model}</c> hint. Static so a test can exercise the real, provider-configured
+        /// spine without standing up an Ollama client.
+        /// </summary>
+        internal static TransportModeration CreateModeration() =>
+            new("LocalAiService", "local", () =>
+            {
+                var model = GetConfiguredModel();
+                return "local:" + (string.IsNullOrWhiteSpace(model) ? "unknown" : model);
+            });
+
+        [Obsolete(AiLegacyApi.OneShotObsolete)]
         public async Task<string> GetBambiReplyAsync(string userInput, bool isUserMessage = false)
         {
+#pragma warning disable CS0618 // legacy internals: the adapter layer is one level up, in AiServiceStrategy
             var result = await GetBambiReplyExAsync(userInput, isUserMessage);
+#pragma warning restore CS0618
             if (result.Refusal != null)
             {
                 return result.Refusal.Source == ModerationSource.Input
@@ -343,6 +376,7 @@ namespace ConditioningControlPanel.Services.AIService
         /// <summary>
         /// Typed variant. See <see cref="IAiService.GetBambiReplyExAsync"/>.
         /// </summary>
+        [Obsolete(AiLegacyApi.OneShotObsolete)]
         public async Task<AiReplyResult> GetBambiReplyExAsync(string userInput, bool isUserMessage = false)
         {
             var prompt = _bambiSprite.GetSystemPrompt();
@@ -381,6 +415,228 @@ namespace ConditioningControlPanel.Services.AIService
             return new AiReplyResult(result, IsAiGenerated: true, Refusal: null);
         }
 
+        /// <summary>
+        /// Train 1 transport seam. See <see cref="IAiService.SendAsync"/> for the contract.
+        ///
+        /// <para>Ollama's <c>/api/chat</c> is natively multi-turn, so <paramref name="messages"/> is
+        /// posted verbatim, in order, including the caller's system message. This method deliberately
+        /// does NOT touch <c>_messages</c>: <c>CompanionBrain</c> owns conversation state now, and a
+        /// provider keeping a parallel history is what made switching providers lose the thread (and
+        /// what fixated ambient reactions on one video title). The legacy one-shot path below still
+        /// uses <c>_messages</c> for as long as <c>UseCompanionBrain=false</c> is a supported
+        /// configuration, and <c>local_chat_history.json</c> is still READ at construction so the
+        /// brain can import it.</para>
+        ///
+        /// <para>Single-flight is preserved: an interactive send waits its turn, an ambient one is
+        /// dropped when a call is already in flight (an ambient line is worth less than the chat reply
+        /// it would queue behind). The brain enforces the same rule one level up; this is the floor
+        /// that also covers a mixed build where a legacy call site is still live.</para>
+        /// </summary>
+        public async Task<AiReplyResult> SendAsync(IReadOnlyList<TransportMessage> messages, AiCallOptions options,
+            CancellationToken cancellationToken = default)
+        {
+            options ??= AiCallOptions.Chat;
+            var incoming = messages ?? (IReadOnlyList<TransportMessage>)Array.Empty<TransportMessage>();
+
+            // [AI-METER] — log-only sizing, stamped with the caller's purpose. Refined to the real
+            // outgoing list once the enrichment block (if any) has been folded in.
+            var meterStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var meterInputChars = TotalChars(incoming);
+            void Meter(string outcome, int outputChars = 0) =>
+                AiMeter.Record(AiMeter.ProviderLocal, options.MeterPurpose, meterInputChars, outputChars,
+                    meterStopwatch.ElapsedMilliseconds, outcome);
+
+            // INPUT MODERATION (Layer 1 — code-side, prompt cannot bypass). Only the newest user-role
+            // message is text we have not already checked: earlier turns passed the guard when they
+            // were first sent, and re-checking them would double-write the compliance log.
+            var newestUser = NewestUserText(incoming);
+            var blockedInput = _moderation.CheckInput(newestUser, escalate: options.Interactive);
+            if (blockedInput.HasValue)
+            {
+                Meter(AiMeter.OutcomeRefusedInput);
+                return new AiReplyResult(string.Empty, IsAiGenerated: false,
+                    Refusal: new ModerationRefusalInfo(blockedInput, ModerationSource.Input));
+            }
+
+            if (!options.Interactive && _isProcessing)
+            {
+                App.Logger?.Debug("LocalAiService.SendAsync: ambient request dropped (busy)");
+                return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
+            }
+
+            try
+            {
+                await _aiSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
+            }
+            catch (ObjectDisposedException)
+            {
+                return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
+            }
+
+            _isProcessing = true;
+            EnsureHost();
+            var model = GetConfiguredModel();
+
+            try
+            {
+                var outgoing = BuildOutgoing(incoming, BuildEnrichmentContent());
+                meterInputChars = outgoing.Sum(m => m.Content?.Length ?? 0);
+
+                App.Logger?.Information(
+                    "LocalAiService.SendAsync: sending to Ollama (model={Model}, msgs={MsgCount}, purpose={Purpose})",
+                    model, outgoing.Count, options.MeterPurpose);
+
+                // The caller's budget is honoured here, not silently dropped: a 60-token ambient quip
+                // that comes back as three paragraphs inflates every later window and costs seconds
+                // of local inference. LocalMaxTokensHardCap keeps a pathological request bounded.
+                var (status, body) = await SendChatAsync(model,
+                    outgoing.Select(m => (m.Role, (string?)m.Content)), cancellationToken,
+                    maxTokens: Math.Clamp(options.MaxTokens, 1, LocalMaxTokensHardCap),
+                    temperature: options.Temperature).ConfigureAwait(false);
+
+                if (status != 200)
+                {
+                    App.Logger?.Warning("LocalAiService.SendAsync: Ollama returned HTTP {Status}: {Body}", status, body);
+                    Meter(AiMeter.OutcomeError);
+                    // Diagnostics are not model output and must never wear the AI badge, but they are
+                    // the single most useful thing we can show ("Ollama isn't running — start it").
+                    return new AiReplyResult(DescribeOllamaError(status, body, model), IsAiGenerated: false, Refusal: null);
+                }
+
+                var content = ExtractContent(body);
+                if (string.IsNullOrEmpty(content))
+                {
+                    App.Logger?.Warning("LocalAiService.SendAsync: empty content in 200 response: {Body}", Truncate(body, 300));
+                    Meter(AiMeter.OutcomeEmpty);
+                    return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
+                }
+
+                var parsed = _parser.Parse(content);
+
+                // OUTPUT MODERATION (Layer 1) on the user-visible text — the JSON effects wrapper is
+                // already stripped by the parser. A blocked turn fires NO effects and shows no text;
+                // the caller (CompanionBrain) rolls its turns back so nothing reaches disk (P2/H5).
+                var blockedOutput = _moderation.CheckOutput(parsed.CleanText);
+                if (blockedOutput.HasValue)
+                {
+                    _currentCommands = new List<AiCommandData>();
+                    Meter(AiMeter.OutcomeRefusedOutput, content.Length);
+                    return new AiReplyResult(string.Empty, IsAiGenerated: false,
+                        Refusal: new ModerationRefusalInfo(blockedOutput, ModerationSource.Output));
+                }
+
+                _currentCommands = parsed.Commands;
+                if (_currentCommands.Count > 0 && App.Commands != null)
+                {
+                    App.Logger?.Information("LocalAiService.SendAsync: parsed {Count} command(s) from response",
+                        _currentCommands.Count);
+                    App.Commands.BeginBatch();
+                    foreach (var cmd in _currentCommands) App.Commands.ExecuteCommand(cmd);
+                }
+
+                if (string.IsNullOrWhiteSpace(parsed.CleanText))
+                {
+                    Meter(AiMeter.OutcomeEmpty, content.Length);
+                    return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
+                }
+
+                Meter(AiMeter.OutcomeOk, content.Length);
+                return new AiReplyResult(parsed.CleanText, IsAiGenerated: true, Refusal: null);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                Meter(AiMeter.OutcomeError);
+                return new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "LocalAiService.SendAsync: chat call threw (host={Host}, model={Model})",
+                    _activeHost, model);
+                Meter(AiMeter.OutcomeError);
+                return new AiReplyResult(DescribeChatException(ex, model), IsAiGenerated: false, Refusal: null);
+            }
+            finally
+            {
+                _isProcessing = false;
+                try { _aiSemaphore.Release(); } catch (ObjectDisposedException) { }
+            }
+        }
+
+        /// <summary>
+        /// The newest user-authored message in a transport window — the only text
+        /// <see cref="SendAsync"/> hands to <c>CheckInput</c>. Everything before it already passed the
+        /// guard on the turn it was sent, and re-checking it would double the compliance log and halve
+        /// the hits needed to trip the escalating counter.
+        /// </summary>
+        internal static string NewestUserText(IReadOnlyList<TransportMessage> messages)
+        {
+            if (messages == null) return string.Empty;
+            for (int i = messages.Count - 1; i >= 0; i--)
+            {
+                if (messages[i].Role == TransportMessage.RoleUser) return messages[i].Content ?? string.Empty;
+            }
+            return string.Empty;
+        }
+
+        private static int TotalChars(IReadOnlyList<TransportMessage> messages)
+        {
+            var total = 0;
+            for (int i = 0; i < messages.Count; i++) total += messages[i].Content?.Length ?? 0;
+            return total;
+        }
+
+        /// <summary>
+        /// The outgoing list: the caller's window, with the effects <c>[CONTEXT BLOCK]</c> spliced in
+        /// immediately after the leading system message(s) — the same position the legacy path used
+        /// (index 1). Pure, so the placement is pinned by a test rather than by reading the wire.
+        /// </summary>
+        internal static List<TransportMessage> BuildOutgoing(IReadOnlyList<TransportMessage> messages, string? enrichment)
+        {
+            var list = new List<TransportMessage>((messages?.Count ?? 0) + 1);
+            if (messages != null) list.AddRange(messages);
+            if (string.IsNullOrWhiteSpace(enrichment)) return list;
+
+            var insertAt = 0;
+            while (insertAt < list.Count && list[insertAt].Role == TransportMessage.RoleSystem) insertAt++;
+            list.Insert(insertAt, TransportMessage.User(enrichment!));
+            return list;
+        }
+
+        /// <summary>
+        /// The enrichment "[CONTEXT BLOCK — NOT DIALOGUE]" message, or null when AI Companion Effects
+        /// are off. Best-effort: a knowledge/prompt failure degrades to "no effects this turn" rather
+        /// than taking the reply down.
+        /// </summary>
+        private string? BuildEnrichmentContent()
+        {
+            if (App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects != true) return null;
+            try
+            {
+                var currentTime = DateTime.Now.ToString("yyyy-M-dd dddd h:mm:ss tt");
+                var facts = _knowledgeService.GetKnowledge("");
+                var factsJson = JsonSerializer.Serialize(facts);
+                return _promptService.BuildEnrichmentMessage(factsJson, currentTime).Content;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("LocalAiService: enrichment block build failed: {Error}", ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Raises <see cref="PersistentMemoryRecalled"/> from outside this class. Exists so
+        /// <c>CompanionBrain</c> — which took over cross-session dialogue persistence in Train 1 —
+        /// can fire the same signal that drives the <c>she_remembers</c> achievement and the
+        /// matching bark trigger, now for cloud users too. The event stays declared here so its two
+        /// existing subscribers (GamificationBridge, BarkService) need no change.
+        /// </summary>
+        internal static void SignalPersistentMemoryRecalled() => RaisePersistentMemoryRecalled();
+
         private static readonly string[] StillThinkingPhrases =
         {
             "Hmm... still thinking.",
@@ -400,67 +656,43 @@ namespace ConditioningControlPanel.Services.AIService
 
         private static readonly Random _random = new();
 
+        [Obsolete(AiLegacyApi.OneShotObsolete)]
         public async Task<string?> GetAwarenessReactionAsync(string detectedName, string category, string serviceName = "", string pageTitle = "", TimeSpan? duration = null)
         {
             var prompt = _bambiSprite.GetSystemPrompt();
-            var website = string.IsNullOrEmpty(serviceName) ? detectedName : serviceName;
-            var tabName = string.IsNullOrEmpty(pageTitle) ? detectedName : pageTitle;
-
-            // Same bucketing as the still-on path.
-            var elapsed = duration ?? TimeSpan.Zero;
-            string durationText;
-            if (elapsed.TotalMinutes < 1) durationText = $"{(int)elapsed.TotalSeconds}s";
-            else if (elapsed.TotalMinutes < 60) durationText = $"{(int)elapsed.TotalMinutes}m";
-            else durationText = $"{(int)elapsed.TotalHours}h";
-
-            var userInput = $"[Category: {category} | App: {website} | Title: {tabName} | Duration: {durationText}]";
+            var userInput = FrameFormatter.AwarenessFrame(detectedName, category, serviceName, pageTitle, duration);
             return await GetAiResponseAsync(userInput, prompt, purpose: AiMeter.PurposeAwareness);
         }
 
+        [Obsolete(AiLegacyApi.OneShotObsolete)]
         public async Task<string?> GetStillOnReactionAsync(string displayName, string category, TimeSpan duration)
         {
             var prompt = _bambiSprite.GetSystemPrompt();
-            string durationText;
-            if (duration.TotalMinutes < 1) durationText = $"{(int)duration.TotalSeconds}s";
-            else if (duration.TotalMinutes < 60) durationText = $"{(int)duration.TotalMinutes}m";
-            else durationText = $"{(int)duration.TotalHours}h";
-
-            var userInput = $"[Category: {category} | App: {displayName} | Title: {displayName} | Duration: {durationText}]";
+            var userInput = FrameFormatter.StillOnFrame(displayName, category, duration);
             return await GetAiResponseAsync(userInput, prompt, purpose: AiMeter.PurposeStillOn);
         }
 
+        [Obsolete(AiLegacyApi.OneShotObsolete)]
         public async Task<string?> GetKeywordCommentAsync(string keyword, string? promptTemplate = null)
         {
             var systemPrompt = _bambiSprite.GetSystemPrompt();
-            var userInput = string.IsNullOrEmpty(promptTemplate)
-                ? $"You just caught the user on the word '{keyword}'. React in character, one short line."
-                : promptTemplate.Replace("{keyword}", keyword);
+            var userInput = FrameFormatter.KeywordFrame(keyword, promptTemplate);
             return await GetAiResponseAsync(userInput, systemPrompt, purpose: AiMeter.PurposeKeyword);
         }
 
+        [Obsolete(AiLegacyApi.OneShotObsolete)]
         public async Task<string?> GetLockScreenReaction(string sentance, int mistakes, int amount, string? promptTemplate = null)
         {
             var systemPrompt = _bambiSprite.GetSystemPrompt();
-            string userInput;
-            if (string.IsNullOrEmpty(promptTemplate))
-            {
-                userInput = $"The user made {mistakes} mistakes in '{sentance}' for the lock screen. They had to type it {amount} of time. React in character, one short line.";
-            }
-            else
-            {
-                userInput = promptTemplate.Replace("{sentance}", sentance);
-                userInput = userInput.Replace("{mistakes}", mistakes.ToString());
-                userInput = userInput.Replace("{amount}", amount.ToString());
-            }
+            var userInput = FrameFormatter.LockScreenFrame(sentance, mistakes, amount, promptTemplate);
             return await GetAiResponseAsync(userInput, systemPrompt, purpose: AiMeter.PurposeLockScreen);
         }
 
+        [Obsolete(AiLegacyApi.OneShotObsolete)]
         public async Task<string?> GetVideoDoneReaction(string title, string? promptTemplate = null)
         {
             var systemPrompt = _bambiSprite.GetSystemPrompt();
-            var userInput = string.IsNullOrEmpty(promptTemplate)
-                ? $"The user has just finished the mandatory video {title}. React in character, one short line."
-                : promptTemplate.Replace("{title}", title);
+            var userInput = FrameFormatter.VideoDoneFrame(title, promptTemplate);
             return await GetAiResponseAsync(userInput, systemPrompt, purpose: AiMeter.PurposeVideoDone);
         }
 
@@ -478,30 +710,12 @@ namespace ConditioningControlPanel.Services.AIService
 
             // INPUT MODERATION (Layer 1 — code-side, prompt cannot bypass). Same semantics
             // as AiService cloud path: hard categories block before the HTTP call; refusal
-            // sentinel surfaces only when the caller is the chat UI.
-            var guard = App.ModerationGuard;
-            var modelName = GetConfiguredModel();
-            var modelHint = "local:" + (string.IsNullOrWhiteSpace(modelName) ? "unknown" : modelName);
-            if (guard != null)
+            // sentinel surfaces only when the caller is the chat UI. Shared with SendAsync
+            // through _moderation so the two entry points cannot fork the spine.
+            if (_moderation.CheckInput(userInput, escalate: returnRefusalSentinel).HasValue)
             {
-                var inputCheck = guard.CheckInput(userInput ?? string.Empty);
-                if (!inputCheck.Allow && inputCheck.Category.HasValue)
-                {
-                    App.ModerationLog?.Record(inputCheck.Category.Value, source: "input", modelHint: modelHint);
-                    // Only escalate the user-facing Content Policy Notice for content the
-                    // user actually typed (interactive chat path). Background/auto
-                    // reactions leave returnRefusalSentinel false and must not pop the
-                    // warning. Still logged above for the compliance record either way.
-                    if (returnRefusalSentinel)
-                        App.ModerationCounter?.RecordHit(inputCheck.Category.Value, "input:local");
-                    App.Logger?.Information("LocalAiService: input blocked by ModerationGuard (category={Cat})", inputCheck.Category);
-                    Meter(AiMeter.OutcomeRefusedInput);
-                    return returnRefusalSentinel ? ModerationRefusal.InputSentinel : null;
-                }
-                if (inputCheck.Allow && inputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
-                {
-                    App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "input", modelHint: modelHint);
-                }
+                Meter(AiMeter.OutcomeRefusedInput);
+                return returnRefusalSentinel ? ModerationRefusal.InputSentinel : null;
             }
 
             if (isUser)
@@ -583,7 +797,7 @@ namespace ConditioningControlPanel.Services.AIService
 
                 meterInputChars = outgoing.Sum(m => m.Content?.Length ?? 0);
 
-                var (status, body) = await SendChatAsync(model, outgoing);
+                var (status, body) = await SendChatAsync(model, outgoing.Select(m => (m.Role, m.Content)));
 
                 if (status != 200)
                 {
@@ -631,34 +845,21 @@ namespace ConditioningControlPanel.Services.AIService
                 // reloaded next launch. The user/assistant turns are also rolled back from
                 // the in-memory _messages list so future requests don't carry the rejected
                 // context.
-                if (guard != null)
+                if (_moderation.CheckOutput(parsed.CleanText).HasValue)
                 {
-                    var outputCheck = guard.CheckOutput(parsed.CleanText ?? string.Empty);
-                    if (!outputCheck.Allow && outputCheck.Category.HasValue)
+                    // Don't fire effects from a blocked response.
+                    _currentCommands = new List<AiCommandData>();
+                    // Roll back assistant turn first (most recent), then the user turn
+                    // that produced it. PersistHistory is NOT called — the file on disk
+                    // remains at the prior known-clean state. (Automated reactions never
+                    // appended to _messages, so there's nothing to roll back for them.)
+                    if (isUser)
                     {
-                        App.ModerationLog?.Record(outputCheck.Category.Value, source: "output", modelHint: modelHint);
-                        // Model OUTPUT tripping the filter is not the user's doing — log
-                        // for compliance (above) but do NOT escalate the Content Policy
-                        // Notice. The warning is reserved for user-typed input.
-                        App.Logger?.Information("LocalAiService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
-                        // Don't fire effects from a blocked response.
-                        _currentCommands = new List<AiCommandData>();
-                        // Roll back assistant turn first (most recent), then the user turn
-                        // that produced it. PersistHistory is NOT called — the file on disk
-                        // remains at the prior known-clean state. (Automated reactions never
-                        // appended to _messages, so there's nothing to roll back for them.)
-                        if (isUser)
-                        {
-                            if (_messages.Count > 0 && _messages[^1].Role == "assistant") _messages.RemoveAt(_messages.Count - 1);
-                            if (_messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
-                        }
-                        Meter(AiMeter.OutcomeRefusedOutput, content.Length);
-                        return returnRefusalSentinel ? ModerationRefusal.OutputSentinel : null;
+                        if (_messages.Count > 0 && _messages[^1].Role == "assistant") _messages.RemoveAt(_messages.Count - 1);
+                        if (_messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
                     }
-                    if (outputCheck.Allow && outputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
-                    {
-                        App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "output", modelHint: modelHint);
-                    }
+                    Meter(AiMeter.OutcomeRefusedOutput, content.Length);
+                    return returnRefusalSentinel ? ModerationRefusal.OutputSentinel : null;
                 }
 
                 // Persist asynchronously so chat latency isn't impacted by disk I/O.
@@ -701,27 +902,70 @@ namespace ConditioningControlPanel.Services.AIService
             }
         }
 
-        private async Task<(int status, string body)> SendChatAsync(string model, List<ChatMessage> messages)
+        /// <summary>
+        /// One POST to <c>/api/chat</c>. Takes role/content tuples so the legacy path's mutable
+        /// <see cref="ChatMessage"/> buffer and <see cref="SendAsync"/>'s immutable
+        /// <see cref="TransportMessage"/> window share a single wire encoder.
+        /// </summary>
+        private async Task<(int status, string body)> SendChatAsync(string model,
+            IEnumerable<(string role, string? content)> messages, CancellationToken cancellationToken = default,
+            int? maxTokens = null, double? temperature = null)
         {
-            // think:false tells reasoning models (qwen3, deepseek-r1, etc.) to skip the
-            // long internal reasoning phase and respond directly. Non-reasoning models
-            // ignore it. This can cut response time from ~50s to ~3s for qwen3-class models.
-            var payload = new
-            {
-                model = model,
-                messages = messages.Select(m => new { role = m.Role, content = m.Content ?? string.Empty }).ToArray(),
-                stream = false,
-                think = false
-            };
-            var json = JsonSerializer.Serialize(payload);
+            var json = BuildChatPayload(model, messages, maxTokens, temperature);
 
             using var req = new HttpRequestMessage(HttpMethod.Post, "api/chat")
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
             };
-            using var resp = await _http.SendAsync(req);
-            var body = await resp.Content.ReadAsStringAsync();
+            using var resp = await _http.SendAsync(req, cancellationToken);
+            var body = await resp.Content.ReadAsStringAsync(cancellationToken);
             return ((int)resp.StatusCode, body);
+        }
+
+        /// <summary>
+        /// Builds the <c>/api/chat</c> request body. Extracted (and internal) so the payload shape can
+        /// be asserted headlessly the way <see cref="BuildUnloadPayload"/> is.
+        ///
+        /// <para><c>think:false</c> tells reasoning models (qwen3, deepseek-r1, …) to skip the long
+        /// internal reasoning phase and respond directly; non-reasoning models ignore it. This can cut
+        /// response time from ~50s to ~3s for qwen3-class models.</para>
+        ///
+        /// <para><paramref name="maxTokens"/>/<paramref name="temperature"/> become Ollama's
+        /// <c>options.num_predict</c>/<c>options.temperature</c>. Dropping them is not free:
+        /// <c>AiCallOptions.Reaction</c> budgets an ambient quip at 60 tokens precisely so it stays a
+        /// one-liner, and without the clamp Ollama uses the model's default num_predict — producing a
+        /// multi-paragraph "reaction" that then rides in every later window. Both null (the legacy
+        /// one-shot path) omits the <c>options</c> object entirely, keeping that body byte-identical.
+        /// </para>
+        /// </summary>
+        internal static string BuildChatPayload(string model,
+            IEnumerable<(string role, string? content)> messages, int? maxTokens, double? temperature)
+        {
+            var wire = messages.Select(m => new { role = m.role, content = m.content ?? string.Empty }).ToArray();
+
+            if (maxTokens == null && temperature == null)
+            {
+                return JsonSerializer.Serialize(new
+                {
+                    model = model,
+                    messages = wire,
+                    stream = false,
+                    think = false
+                });
+            }
+
+            return JsonSerializer.Serialize(new
+            {
+                model = model,
+                messages = wire,
+                stream = false,
+                think = false,
+                options = new
+                {
+                    num_predict = maxTokens ?? -1,
+                    temperature = temperature ?? 0.8
+                }
+            });
         }
 
         private static string ExtractContent(string body)
