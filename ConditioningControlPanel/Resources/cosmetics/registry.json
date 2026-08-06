@@ -323,7 +323,7 @@
     },
     {
       "id": "circe_drone_visor",
-      "mod": "circe",
+      "mod": "drone",
       "type": "deco",
       "name": "Drone Visor",
       "file": "circe/circe_drone_visor.png",
@@ -331,7 +331,7 @@
     },
     {
       "id": "circe_gas_mask",
-      "mod": "circe",
+      "mod": "drone",
       "type": "deco",
       "name": "Filter Mask",
       "file": "circe/circe_gas_mask.png",
@@ -339,7 +339,7 @@
     },
     {
       "id": "circe_latex_hood",
-      "mod": "circe",
+      "mod": "drone",
       "type": "deco",
       "name": "Latex Hood",
       "file": "circe/circe_latex_hood.png",
@@ -347,7 +347,7 @@
     },
     {
       "id": "circe_antennae",
-      "mod": "circe",
+      "mod": "drone",
       "type": "deco",
       "name": "Signal Antennae",
       "file": "circe/circe_antennae.png",
@@ -355,7 +355,7 @@
     },
     {
       "id": "circe_ear_defenders",
-      "mod": "circe",
+      "mod": "drone",
       "type": "deco",
       "name": "Ear Defenders",
       "file": "circe/circe_ear_defenders.png",
@@ -363,7 +363,7 @@
     },
     {
       "id": "circe_hud_monocle",
-      "mod": "circe",
+      "mod": "drone",
       "type": "deco",
       "name": "HUD Monocle",
       "file": "circe/circe_hud_monocle.png",
@@ -371,7 +371,7 @@
     },
     {
       "id": "circe_chrome_halo",
-      "mod": "circe",
+      "mod": "drone",
       "type": "deco",
       "name": "Chrome Halo",
       "file": "circe/circe_chrome_halo.png",
@@ -379,7 +379,7 @@
     },
     {
       "id": "circe_data_collar",
-      "mod": "circe",
+      "mod": "drone",
       "type": "deco",
       "name": "Data Collar",
       "file": "circe/circe_data_collar.png",
@@ -387,7 +387,7 @@
     },
     {
       "id": "circe_cable_scarf",
-      "mod": "circe",
+      "mod": "drone",
       "type": "deco",
       "name": "Cable Scarf",
       "file": "circe/circe_cable_scarf.png",
@@ -395,7 +395,7 @@
     },
     {
       "id": "circe_optic_crown",
-      "mod": "circe",
+      "mod": "drone",
       "type": "deco",
       "name": "Optic Crown",
       "file": "circe/circe_optic_crown.png",
@@ -403,7 +403,7 @@
     },
     {
       "id": "circe_port_clips",
-      "mod": "circe",
+      "mod": "drone",
       "type": "deco",
       "name": "Port Clips",
       "file": "circe/circe_port_clips.png",
@@ -411,7 +411,7 @@
     },
     {
       "id": "circe_scan_lens",
-      "mod": "circe",
+      "mod": "drone",
       "type": "deco",
       "name": "Scan Lens",
       "file": "circe/circe_scan_lens.png",
@@ -419,7 +419,7 @@
     },
     {
       "id": "circe_hex_veil",
-      "mod": "circe",
+      "mod": "drone",
       "type": "deco",
       "name": "Hex Veil",
       "file": "circe/circe_hex_veil.png",
@@ -427,7 +427,7 @@
     },
     {
       "id": "circe_neural_band",
-      "mod": "circe",
+      "mod": "drone",
       "type": "deco",
       "name": "Neural Band",
       "file": "circe/circe_neural_band.png",
@@ -435,7 +435,7 @@
     },
     {
       "id": "circe_hover_drone",
-      "mod": "circe",
+      "mod": "drone",
       "type": "charm",
       "name": "Hover Drone",
       "file": "circe/circe_hover_drone.png",
@@ -443,7 +443,7 @@
     },
     {
       "id": "circe_datapad",
-      "mod": "circe",
+      "mod": "drone",
       "type": "charm",
       "name": "Datapad",
       "file": "circe/circe_datapad.png",
@@ -451,7 +451,7 @@
     },
     {
       "id": "circe_coolant_flask",
-      "mod": "circe",
+      "mod": "drone",
       "type": "charm",
       "name": "Coolant Flask",
       "file": "circe/circe_coolant_flask.png",
@@ -459,7 +459,7 @@
     },
     {
       "id": "circe_obedience_chip",
-      "mod": "circe",
+      "mod": "drone",
       "type": "charm",
       "name": "Obedience Chip",
       "file": "circe/circe_obedience_chip.png",
@@ -467,7 +467,7 @@
     },
     {
       "id": "circe_signal_beacon",
-      "mod": "circe",
+      "mod": "drone",
       "type": "charm",
       "name": "Signal Beacon",
       "file": "circe/circe_signal_beacon.png",
@@ -475,7 +475,7 @@
     },
     {
       "id": "circe_chrome_orb",
-      "mod": "circe",
+      "mod": "drone",
       "type": "charm",
       "name": "Chrome Orb",
       "file": "circe/circe_chrome_orb.png",

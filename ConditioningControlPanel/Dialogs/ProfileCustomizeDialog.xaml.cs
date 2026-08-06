@@ -26,6 +26,9 @@ namespace ConditioningControlPanel
         private readonly ProfileCosmetics _draft;
         private readonly List<Achievement> _unlocked;
 
+        /// <summary>The viewer's avatar picture, for the Wardrobe editor's stage. Optional.</summary>
+        private readonly ImageSource? _editorAvatar;
+
         private readonly Dictionary<string, Border> _bannerTiles = new(StringComparer.Ordinal);
         private readonly Dictionary<string, Border> _accentTiles = new(StringComparer.Ordinal);
         private readonly Dictionary<string, Border> _titleRows = new(StringComparer.Ordinal);
@@ -50,11 +53,13 @@ namespace ConditioningControlPanel
         /// <summary>The edited loadout. Only meaningful when ShowDialog() returned true.</summary>
         public ProfileCosmetics Result => _draft;
 
-        public ProfileCustomizeDialog(ProfileCosmetics current, IEnumerable<string>? unlockedAchievementIds)
+        public ProfileCustomizeDialog(ProfileCosmetics current, IEnumerable<string>? unlockedAchievementIds,
+                                      ImageSource? editorAvatar = null)
         {
             InitializeComponent();
 
             _draft = (current ?? new ProfileCosmetics()).Clone();
+            _editorAvatar = editorAvatar;
 
             var unlockedSet = new HashSet<string>(
                 unlockedAchievementIds ?? Enumerable.Empty<string>(), StringComparer.Ordinal);
@@ -608,6 +613,24 @@ namespace ConditioningControlPanel
         {
             if (string.IsNullOrWhiteSpace(value)) return value;
             return char.ToUpperInvariant(value[0]) + (value.Length > 1 ? value.Substring(1) : string.Empty);
+        }
+
+        /// <summary>
+        /// Opens the Wardrobe editor on this dialog's draft. The editor mutates only the
+        /// transform fields (and reverts them itself on its own Cancel), so nothing to merge
+        /// here - this dialog's Save/Cancel still decides whether anything is committed.
+        /// </summary>
+        private void BtnArrange_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var editor = new WardrobeEditorDialog(_draft, _editorAvatar) { Owner = this };
+                editor.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("ProfileCustomizeDialog: wardrobe editor failed: {E}", ex.Message);
+            }
         }
 
         // ============================== footer ==============================

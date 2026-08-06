@@ -250,4 +250,97 @@ public class ProfileCosmeticsSanitizeTests
         Assert.False(new ProfileCosmetics { Accent = "#FFD700" }.IsEmpty);
         Assert.False(new ProfileCosmetics { PinnedAchievements = new List<string> { "a1" } }.IsEmpty);
     }
+
+    // ---- wardrobe editor transforms ----
+
+    [Fact]
+    public void TransformValuesAreClampedToTheirEnvelopes()
+    {
+        var clean = Clean(new ProfileCosmetics
+        {
+            AvatarDeco = "bambi_silk_bow",
+            DecoTransform = new CosmeticTransform { X = 9, Y = -9, Scale = 50, Rotation = 720 },
+            Charms = new List<string> { "bambi_lollipop" },
+            CharmTransforms = new Dictionary<string, CosmeticTransform>
+            {
+                ["bambi_lollipop"] = new() { X = -3, Y = 4, Scale = 0.0001, Rotation = -999 }
+            }
+        });
+
+        Assert.NotNull(clean.DecoTransform);
+        Assert.Equal(0.75, clean.DecoTransform!.X);        // deco offsets clamp to [-0.75, 0.75]
+        Assert.Equal(-0.75, clean.DecoTransform.Y);
+        Assert.Equal(3.0, clean.DecoTransform.Scale);      // scale clamps to [0.3, 3]
+        Assert.Equal(180, clean.DecoTransform.Rotation);   // rotation clamps to [-180, 180]
+
+        var charm = clean.CharmTransforms!["bambi_lollipop"];
+        Assert.Equal(0, charm.X);                          // charm centres clamp to the card, [0, 1]
+        Assert.Equal(1, charm.Y);
+        Assert.Equal(0.3, charm.Scale);
+        Assert.Equal(-180, charm.Rotation);
+    }
+
+    [Fact]
+    public void TransformsForUnwornItemsAreDropped()
+    {
+        var clean = Clean(new ProfileCosmetics
+        {
+            // No deco equipped, and a charm transform pointing at an id that is not worn.
+            DecoTransform = new CosmeticTransform { X = 0.2 },
+            Charms = new List<string> { "bambi_lollipop" },
+            CharmTransforms = new Dictionary<string, CosmeticTransform>
+            {
+                ["sissy_heel"] = new() { X = 0.5, Y = 0.5 }
+            }
+        });
+
+        Assert.Null(clean.DecoTransform);
+        Assert.Null(clean.CharmTransforms);
+    }
+
+    [Fact]
+    public void AnIdentityDecoTransformIsNotCarried()
+    {
+        // Payload hygiene: a deco transform the editor put back to defaults must serialize away.
+        var clean = Clean(new ProfileCosmetics
+        {
+            AvatarDeco = "bambi_silk_bow",
+            DecoTransform = new CosmeticTransform()
+        });
+        Assert.Null(clean.DecoTransform);
+    }
+
+    [Fact]
+    public void TransformsRoundTripThroughJson()
+    {
+        var json = JsonConvert.SerializeObject(new ProfileCosmetics
+        {
+            AvatarDeco = "bambi_silk_bow",
+            DecoTransform = new CosmeticTransform { X = 0.1, Y = -0.2, Scale = 1.5, Rotation = 30, Flip = true },
+            Charms = new List<string> { "bambi_lollipop" },
+            CharmTransforms = new Dictionary<string, CosmeticTransform>
+            {
+                ["bambi_lollipop"] = new() { X = 0.9, Y = 0.8, Scale = 0.8 }
+            }
+        });
+
+        Assert.Contains("\"deco_transform\"", json);
+        Assert.Contains("\"charm_transforms\"", json);
+
+        var parsed = JsonConvert.DeserializeObject<ProfileCosmetics>(json)!;
+        var clean = Clean(parsed, Unlocked);
+        Assert.Equal(0.1, clean.DecoTransform!.X);
+        Assert.True(clean.DecoTransform.Flip);
+        Assert.Equal(0.9, clean.CharmTransforms!["bambi_lollipop"].X);
+    }
+
+    [Fact]
+    public void PreEditorPayloadsCarryNoTransformFields()
+    {
+        // Backward compatibility: a loadout that was never arranged serializes byte-identical to
+        // what a pre-editor client sent, so the server sees no phantom field churn.
+        var json = JsonConvert.SerializeObject(new ProfileCosmetics { AvatarDeco = "bambi_silk_bow" });
+        Assert.DoesNotContain("deco_transform", json);
+        Assert.DoesNotContain("charm_transforms", json);
+    }
 }

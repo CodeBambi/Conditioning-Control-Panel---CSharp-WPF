@@ -14,7 +14,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>Registry id - the value that rides the profile payload.</summary>
         public string Id { get; }
 
-        /// <summary>Mod bucket ("bambi" / "sissy" / "circe"). Drives the picker's tabs.</summary>
+        /// <summary>Mod bucket ("bambi" / "sissy" / "drone"). Drives the picker's tabs.</summary>
         public string Mod { get; }
 
         /// <summary><c>deco</c> (worn over the avatar) or <c>charm</c> (card corner prop).</summary>
@@ -70,6 +70,17 @@ namespace ConditioningControlPanel.Services
         /// lands exactly on the avatar at any render size.
         /// </summary>
         public const double AvatarCircleRatio = 0.70;
+
+        /// <summary>
+        /// A charm's base size at Scale = 1, as a fraction of the hero card's height. Shared by
+        /// the live renderer (MainWindow.ProfileWardrobe) and the wardrobe editor's stage so the
+        /// preview is exactly what viewers get.
+        /// </summary>
+        public const double CharmBaseHeightFraction = 0.35;
+
+        /// <summary>Default charm centre placements per slot, in card-fraction coordinates.</summary>
+        public static readonly IReadOnlyList<(double X, double Y)> DefaultCharmAnchors =
+            new (double, double)[] { (0.90, 0.76), (0.965, 0.90) };
 
         /// <summary>
         /// Decode cap for wardrobe art. The 512 canvases are only ever drawn at 148px (the hero's

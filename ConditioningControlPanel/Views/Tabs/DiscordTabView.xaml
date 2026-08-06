@@ -117,8 +117,15 @@
                         </Border>
 
                         <!-- The card itself -->
+                        <!-- MinHeight/MaxHeight: the hero is a fixed-band strip like a Discord
+                             profile header. Without the cap, the right column's stacked art
+                             (tier banner + charm slots) could grow the card past 380px and the
+                             banner ImageBrush then filled the whole page. Charms now live on
+                             ProfileCharmLayer (overlay, out of layout) so they can never add
+                             height again. -->
                         <Border x:Name="ProfileHeroCard" x:FieldModifier="internal" Margin="8"
                                 CornerRadius="14" ClipToBounds="True"
+                                MinHeight="200" MaxHeight="260"
                                 Background="#EE1A1A2E" BorderBrush="#66FF69B4" BorderThickness="1">
                             <Grid>
                                 <!-- Banner: gradient default now, cosmetic art in Phase 2
@@ -328,17 +335,24 @@
                                             <Image x:Name="ImgPatreonTierBanner" x:FieldModifier="internal" Stretch="Uniform"/>
                                         </Border>
 
-                                        <!-- Phase 3 charm slots (max 2, full card only) -->
-                                        <StackPanel x:Name="ProfileCharmSlots" x:FieldModifier="internal"
-                                                    Orientation="Horizontal" HorizontalAlignment="Right"
-                                                    Margin="0,8,0,0" Visibility="Collapsed">
-                                            <Image x:Name="ProfileCharmSlot1" x:FieldModifier="internal" Width="46" Height="46"
-                                                   Stretch="Uniform" Visibility="Collapsed"/>
-                                            <Image x:Name="ProfileCharmSlot2" x:FieldModifier="internal" Width="46" Height="46"
-                                                   Margin="6,0,0,0" Stretch="Uniform" Visibility="Collapsed"/>
-                                        </StackPanel>
                                     </StackPanel>
                                 </Grid>
+
+                                <!-- Phase 3 charm layer (max 2, full card only). A Canvas overlay:
+                                     charms are free-floating props placed by normalized (x,y)
+                                     card-fraction coordinates with the wearer's saved transform
+                                     (drag/scale/rotate/flip from the wardrobe editor), so they
+                                     never contribute to the card's measured height. Positioned in
+                                     code (MainWindow.ProfileWardrobe.cs) on apply and on resize. -->
+                                <Canvas x:Name="ProfileCharmLayer" x:FieldModifier="internal"
+                                        IsHitTestVisible="False">
+                                    <Image x:Name="ProfileCharmSlot1" x:FieldModifier="internal"
+                                           Stretch="Uniform" Visibility="Collapsed"
+                                           RenderTransformOrigin="0.5,0.5"/>
+                                    <Image x:Name="ProfileCharmSlot2" x:FieldModifier="internal"
+                                           Stretch="Uniform" Visibility="Collapsed"
+                                           RenderTransformOrigin="0.5,0.5"/>
+                                </Canvas>
                             </Grid>
                         </Border>
                     </Grid>
@@ -506,7 +520,11 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Grid Width="88" Height="88" Margin="0,0,10,10">
+                                            <!-- Left-click = unpin (own card only; quick path
+                                                 beside the Customize dialog's pin picker). -->
+                                            <Grid Width="88" Height="88" Margin="0,0,10,10"
+                                                  Background="Transparent" Cursor="Hand"
+                                                  MouseLeftButtonUp="ProfileAchievementTile_Click">
                                                 <Border CornerRadius="10" Background="{DynamicResource PanelAccentBrush}"
                                                         BorderBrush="#59FFD700" BorderThickness="1" ToolTip="{Binding Name}">
                                                     <Image Source="{Binding Image}" Stretch="Uniform" Margin="7"/>
@@ -564,8 +582,12 @@
                                             </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
+                                                    <!-- Left-click = pin/unpin (this grid only ever
+                                                         shows the viewer's own unlocks). -->
                                                     <Border Width="46" Height="46" Margin="3" CornerRadius="7"
-                                                            Background="{DynamicResource PanelAccentBrush}" ToolTip="{Binding Name}">
+                                                            Background="{DynamicResource PanelAccentBrush}" ToolTip="{Binding Name}"
+                                                            Cursor="Hand"
+                                                            MouseLeftButtonUp="ProfileAchievementTile_Click">
                                                         <Image Source="{Binding Image}" Stretch="Uniform" Margin="3"/>
                                                     </Border>
                                                 </DataTemplate>

@@ -106,5 +106,12 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.TxtProfileSearch_KeyDown(sender, e);
         }
+        private void ProfileAchievementTile_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw
+                && sender is FrameworkElement fe
+                && fe.DataContext is ProfileAchievementTile tile)
+                mw.ToggleOwnAchievementPin(tile.Id);
+        }
     }
 }

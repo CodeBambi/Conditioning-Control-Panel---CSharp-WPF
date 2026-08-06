@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Threading;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 
@@ -64,8 +65,9 @@ namespace ConditioningControlPanel
             ApplyProfileAccent(cosmetics.Accent);
             ApplyProfileTitle(cosmetics.TitleId);
             ApplyProfilePins(cosmetics.PinnedAchievements);
-            // Phase 3: the worn decoration and the two card charms (MainWindow.ProfileWardrobe).
-            ApplyProfileWardrobe(cosmetics.AvatarDeco, cosmetics.Charms);
+            // Phase 3: the worn decoration and the two card charms (MainWindow.ProfileWardrobe),
+            // with the wearer's saved editor transforms.
+            ApplyProfileWardrobe(cosmetics);
         }
 
         /// <summary>
@@ -214,8 +216,9 @@ namespace ConditioningControlPanel
                     if (!Achievement.All.TryGetValue(id, out var achievement)) continue;
                     var image = LoadAchievementImage(achievement.ImageName);
                     if (image == null) continue;   // art missing => the slot simply is not shown
-                    items.Add(new
+                    items.Add(new ProfileAchievementTile
                     {
+                        Id = id,
                         Name = ResolveAchievementTitle(id) ?? achievement.Name,
                         Image = image
                     });
@@ -250,44 +253,134 @@ namespace ConditioningControlPanel
                 var current = CosmeticsCatalog.SanitizeOwn(App.Settings?.Current?.ProfileCosmetics);
                 var unlocked = App.Achievements?.Progress?.UnlockedAchievements;
 
-                var dialog = new ProfileCustomizeDialog(current, unlocked) { Owner = this };
+                // The wardrobe editor's stage shows your avatar - but only when YOUR card is on
+                // screen; a searched profile's picture is not yours to arrange hats on.
+                var avatar = _profileViewingSelf ? DiscordTab?.ProfileViewerAvatar?.ImageSource : null;
+
+                var dialog = new ProfileCustomizeDialog(current, unlocked, avatar) { Owner = this };
                 if (dialog.ShowDialog() != true) return;
 
-                var chosen = CosmeticsCatalog.SanitizeOwn(dialog.Result);
-                if (App.Settings?.Current != null)
-                {
-                    App.Settings.Current.ProfileCosmetics = chosen;
-                    App.Settings.Save();
-                }
-
-                App.Logger?.Information(
-                    "Profile cosmetics saved: banner={Banner}, accent={Accent}, title={Title}, pins={Pins}, deco={Deco}, charms={Charms}",
-                    chosen.BannerId ?? "none", chosen.Accent ?? "none", chosen.TitleId ?? "none",
-                    chosen.PinnedAchievements.Count, chosen.AvatarDeco ?? "none", chosen.Charms.Count);
-
-                // Repaint immediately; the card on screen is the point of the dialog.
-                ApplyOwnProfileCosmetics();
-
-                // An empty loadout normally rides as null ("no change") so a fresh machine cannot
-                // wipe the account before it has read it — but saving an empty dialog IS the
-                // unequip-everything gesture, so flag this one push as an explicit clear.
-                if (chosen.IsEmpty && App.ProfileSync != null) App.ProfileSync.PendingCosmeticsClear = true;
-
-                // And push it, so other people see it. Fire-and-forget: a failed sync is not worth
-                // blocking the UI over — the next periodic sync carries the same payload.
-                _ = System.Threading.Tasks.Task.Run(async () =>
-                {
-                    try
-                    {
-                        if (App.ProfileSync != null) await App.ProfileSync.SyncProfileAsync();
-                    }
-                    catch (Exception ex) { App.Logger?.Debug("Cosmetics sync push failed: {E}", ex.Message); }
-                });
+                PersistOwnCosmetics(CosmeticsCatalog.SanitizeOwn(dialog.Result));
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "OpenProfileCustomizeDialog failed");
             }
+        }
+
+        /// <summary>
+        /// The single "this is my loadout now" path: saves to settings, repaints the card and
+        /// pushes the change. Used by the Customize dialog and by the Showcase's click-to-pin.
+        /// <paramref name="chosen"/> must already be sanitized.
+        /// </summary>
+        private void PersistOwnCosmetics(ProfileCosmetics chosen)
+        {
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.ProfileCosmetics = chosen;
+                App.Settings.Save();
+            }
+
+            App.Logger?.Information(
+                "Profile cosmetics saved: banner={Banner}, accent={Accent}, title={Title}, pins={Pins}, deco={Deco}, charms={Charms}",
+                chosen.BannerId ?? "none", chosen.Accent ?? "none", chosen.TitleId ?? "none",
+                chosen.PinnedAchievements.Count, chosen.AvatarDeco ?? "none", chosen.Charms.Count);
+
+            // Repaint immediately; the card on screen is the point.
+            ApplyOwnProfileCosmetics();
+
+            // An empty loadout normally rides as null ("no change") so a fresh machine cannot
+            // wipe the account before it has read it — but an explicit save of an empty loadout
+            // IS the unequip-everything gesture, so flag this one push as an explicit clear.
+            if (chosen.IsEmpty && App.ProfileSync != null) App.ProfileSync.PendingCosmeticsClear = true;
+
+            // And push it, so other people see it. Fire-and-forget: a failed sync is not worth
+            // blocking the UI over — the next periodic sync carries the same payload.
+            _ = System.Threading.Tasks.Task.Run(async () =>
+            {
+                try
+                {
+                    if (App.ProfileSync != null) await App.ProfileSync.SyncProfileAsync();
+                }
+                catch (Exception ex) { App.Logger?.Debug("Cosmetics sync push failed: {E}", ex.Message); }
+            });
+        }
+
+        // ============================== click-to-pin ==============================
+
+        /// <summary>
+        /// Left-click on a Showcase tile (a featured pin, or any achievement in the "All
+        /// achievements" grid) toggles that achievement's pin - the quick path beside the
+        /// Customize dialog's pin picker. Own card only: the grid is only ever populated for the
+        /// viewer's own profile, and the guard makes the rule explicit anyway.
+        /// </summary>
+        internal void ToggleOwnAchievementPin(string? achievementId)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(achievementId)) return;
+                if (!_profileViewingSelf) return;
+
+                // Only unlocked achievements are pinnable (same rule as the dialog).
+                var unlocked = App.Achievements?.Progress?.UnlockedAchievements;
+                if (unlocked == null || !unlocked.Contains(achievementId!)) return;
+
+                var current = CosmeticsCatalog.SanitizeOwn(App.Settings?.Current?.ProfileCosmetics);
+
+                if (current.PinnedAchievements.Contains(achievementId!))
+                {
+                    current.PinnedAchievements.Remove(achievementId!);
+                }
+                else
+                {
+                    if (current.PinnedAchievements.Count >= ProfileCosmetics.MaxPinnedAchievements)
+                    {
+                        FlashPinCapNotice();
+                        return;
+                    }
+                    current.PinnedAchievements.Add(achievementId!);
+                }
+
+                PersistOwnCosmetics(current);
+            }
+            catch (Exception ex) { App.Logger?.Debug("ToggleOwnAchievementPin: {E}", ex.Message); }
+        }
+
+        private DispatcherTimer? _pinCapNoticeTimer;
+
+        /// <summary>
+        /// A dead click at the pin cap reads as a broken tile (same lesson as the dialog), so the
+        /// unlock-summary line briefly says why before restoring itself.
+        /// </summary>
+        private void FlashPinCapNotice()
+        {
+            try
+            {
+                var summary = DiscordTab?.TxtProfileUnlockSummary;
+                if (summary == null) return;
+
+                _pinCapNoticeTimer?.Stop();
+                var original = summary.Text;
+                var originalBrush = summary.Foreground;
+
+                summary.Text = Localization.Loc.GetF(
+                    "profile_customize_pins_full", ProfileCosmetics.MaxPinnedAchievements);
+                summary.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF5C7A"));
+
+                _pinCapNoticeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
+                _pinCapNoticeTimer.Tick += (_, _) =>
+                {
+                    _pinCapNoticeTimer?.Stop();
+                    try
+                    {
+                        summary.Text = original;
+                        summary.Foreground = originalBrush;
+                    }
+                    catch { /* card may have re-rendered meanwhile - its own update wins */ }
+                };
+                _pinCapNoticeTimer.Start();
+            }
+            catch (Exception ex) { App.Logger?.Debug("FlashPinCapNotice: {E}", ex.Message); }
         }
     }
 }

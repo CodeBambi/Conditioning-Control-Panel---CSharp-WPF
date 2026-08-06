@@ -2273,7 +2273,12 @@ namespace ConditioningControlPanel
                     var image = LoadAchievementImage(achievement.ImageName);
                     if (image != null)
                     {
-                        achievementItems.Add(new { Name = App.Mods?.MakeModAware(achievement.Name) ?? achievement.Name, Image = image });
+                        achievementItems.Add(new ProfileAchievementTile
+                        {
+                            Id = achievement.Id,
+                            Name = App.Mods?.MakeModAware(achievement.Name) ?? achievement.Name,
+                            Image = image
+                        });
                     }
                 }
             }

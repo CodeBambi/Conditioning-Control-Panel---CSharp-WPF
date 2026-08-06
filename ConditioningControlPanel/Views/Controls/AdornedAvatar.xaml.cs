@@ -77,6 +77,56 @@ namespace ConditioningControlPanel.Views.Controls
         private static void OnDecorationIdChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
             => (d as AdornedAvatar)?.ApplyDecoration();
 
+        public static readonly DependencyProperty DecorationTransformProperty = DependencyProperty.Register(
+            nameof(DecorationTransform), typeof(Models.CosmeticTransform), typeof(AdornedAvatar),
+            new PropertyMetadata(null, OnDecorationTransformChanged));
+
+        /// <summary>
+        /// The wearer's saved placement (wardrobe editor: drag/resize/rotate/flip), or null for
+        /// the classic centred render. Offsets are fractions of the decoration canvas, so the same
+        /// transform reproduces the same composition at 104px or 28px.
+        /// </summary>
+        public Models.CosmeticTransform? DecorationTransform
+        {
+            get => (Models.CosmeticTransform?)GetValue(DecorationTransformProperty);
+            set => SetValue(DecorationTransformProperty, value);
+        }
+
+        private static void OnDecorationTransformChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+            => (d as AdornedAvatar)?.ApplyDecorationTransform();
+
+        private void ApplyDecorationTransform()
+        {
+            try
+            {
+                if (DecoLayer == null) return;
+
+                var t = DecorationTransform;
+                if (t == null)
+                {
+                    DecoLayer.RenderTransform = null;
+                    return;
+                }
+
+                var canvas = AvatarSize / WardrobeCatalog.AvatarCircleRatio;
+                if (double.IsNaN(canvas) || double.IsInfinity(canvas) || canvas <= 0) canvas = 148d;
+
+                var group = new TransformGroup();
+                group.Children.Add(new ScaleTransform(t.Flip ? -t.Scale : t.Scale, t.Scale));
+                group.Children.Add(new RotateTransform(t.Rotation));
+                group.Children.Add(new TranslateTransform(t.X * canvas, t.Y * canvas));
+                if (group.CanFreeze) group.Freeze();
+
+                DecoLayer.RenderTransformOrigin = new Point(0.5, 0.5);
+                DecoLayer.RenderTransform = group;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("AdornedAvatar: transform failed: {E}", ex.Message);
+                if (DecoLayer != null) DecoLayer.RenderTransform = null;
+            }
+        }
+
         private void ApplyDecoration()
         {
             try
@@ -186,6 +236,8 @@ namespace ConditioningControlPanel.Views.Controls
                     var canvas = size / WardrobeCatalog.AvatarCircleRatio;
                     DecoLayer.Width = canvas;
                     DecoLayer.Height = canvas;
+                    // Translate offsets are canvas-relative, so a size change re-derives them.
+                    ApplyDecorationTransform();
                 }
 
                 if (PresenceDotShape != null)

@@ -20,6 +20,63 @@ namespace ConditioningControlPanel.Models
     /// one but are only RENDERED by Phase 3's wardrobe. Round-tripping them now means a Phase 2
     /// client cannot silently wipe a Phase 3 loadout.
     /// </summary>
+    /// <summary>
+    /// How a worn wardrobe item is placed (wardrobe editor: drag / resize / rotate / flip). All
+    /// values are normalized so every viewer reconstructs the same composition at any render size:
+    /// for a decoration, <see cref="X"/>/<see cref="Y"/> are offsets from its centred-on-avatar
+    /// position in fractions of the decoration canvas; for a charm they are the sprite's centre in
+    /// fractions of the hero card's width/height. <see cref="Scale"/> multiplies the item's base
+    /// size, <see cref="Rotation"/> is degrees clockwise, <see cref="Flip"/> mirrors horizontally.
+    /// A missing/null transform means "default placement" and renders exactly like pre-editor
+    /// builds, so old payloads and old clients stay compatible in both directions.
+    /// </summary>
+    public class CosmeticTransform
+    {
+        [JsonProperty("x")] public double X { get; set; }
+        [JsonProperty("y")] public double Y { get; set; }
+        [JsonProperty("s")] public double Scale { get; set; } = 1.0;
+        [JsonProperty("r")] public double Rotation { get; set; }
+        [JsonProperty("f")] public bool Flip { get; set; }
+
+        public CosmeticTransform Clone() => new()
+        {
+            X = X, Y = Y, Scale = Scale, Rotation = Rotation, Flip = Flip
+        };
+
+        /// <summary>True when this transform changes nothing - not worth carrying in the payload.</summary>
+        [JsonIgnore]
+        public bool IsIdentity =>
+            Math.Abs(X) < 0.0005 && Math.Abs(Y) < 0.0005 &&
+            Math.Abs(Scale - 1.0) < 0.0005 && Math.Abs(Rotation) < 0.05 && !Flip;
+
+        /// <summary>
+        /// A clamped copy safe to render and to send. <paramref name="positional"/> selects the
+        /// charm envelope (centre must stay on the card, [0,1]) over the decoration envelope
+        /// (offset from centre, [-0.75, 0.75]). Non-finite garbage degrades to the default.
+        /// </summary>
+        public static CosmeticTransform? Sanitize(CosmeticTransform? raw, bool positional)
+        {
+            if (raw == null) return null;
+
+            static double Num(double v, double fallback) =>
+                double.IsNaN(v) || double.IsInfinity(v) ? fallback : v;
+
+            var clean = new CosmeticTransform
+            {
+                X = Math.Clamp(Num(raw.X, positional ? 0.5 : 0), positional ? 0 : -0.75, positional ? 1 : 0.75),
+                Y = Math.Clamp(Num(raw.Y, positional ? 0.5 : 0), positional ? 0 : -0.75, positional ? 1 : 0.75),
+                Scale = Math.Clamp(Num(raw.Scale, 1), 0.3, 3.0),
+                Rotation = Math.Clamp(Num(raw.Rotation, 0), -180, 180),
+                Flip = raw.Flip
+            };
+
+            // Positional transforms always carry a real placement; offset transforms that end up
+            // identity are dropped so the payload stays as small as a pre-editor one.
+            if (!positional && clean.IsIdentity) return null;
+            return clean;
+        }
+    }
+
     public class ProfileCosmetics
     {
         /// <summary>Showcase pins the hero card can display (spec: max 4).</summary>
@@ -63,6 +120,18 @@ namespace ConditioningControlPanel.Models
         [JsonProperty("charms", ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public List<string> Charms { get; set; } = new();
 
+        /// <summary>Wardrobe-editor placement of the worn decoration. Null = default (centred).</summary>
+        [JsonProperty("deco_transform", NullValueHandling = NullValueHandling.Ignore)]
+        public CosmeticTransform? DecoTransform { get; set; }
+
+        /// <summary>
+        /// Wardrobe-editor placement per equipped charm, keyed by charm id so the transform
+        /// follows the item through reorders. Entries for unequipped ids are dropped by Sanitize.
+        /// </summary>
+        [JsonProperty("charm_transforms", NullValueHandling = NullValueHandling.Ignore,
+                      ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, CosmeticTransform>? CharmTransforms { get; set; }
+
         /// <summary>True when nothing is equipped - the card renders exactly as it did in Phase 1.</summary>
         [JsonIgnore]
         public bool IsEmpty =>
@@ -81,7 +150,10 @@ namespace ConditioningControlPanel.Models
             TitleId = TitleId,
             PinnedAchievements = new List<string>(PinnedAchievements ?? new List<string>()),
             AvatarDeco = AvatarDeco,
-            Charms = new List<string>(Charms ?? new List<string>())
+            Charms = new List<string>(Charms ?? new List<string>()),
+            DecoTransform = DecoTransform?.Clone(),
+            CharmTransforms = CharmTransforms?.ToDictionary(
+                kv => kv.Key, kv => kv.Value.Clone(), StringComparer.Ordinal)
         };
 
         /// <summary>
@@ -168,6 +240,23 @@ namespace ConditioningControlPanel.Models
                         if (clean.Charms.Contains(charm)) continue;
                         if (knownCharmIds != null && !knownCharmIds.Contains(charm)) continue;
                         clean.Charms.Add(charm);
+                    }
+                }
+
+                // ---- editor transforms (clamped, and only for items actually worn) ----
+                if (clean.AvatarDeco != null)
+                    clean.DecoTransform = CosmeticTransform.Sanitize(raw.DecoTransform, positional: false);
+
+                if (raw.CharmTransforms != null && clean.Charms.Count > 0)
+                {
+                    foreach (var (id, t) in raw.CharmTransforms)
+                    {
+                        var key = Trim(id);
+                        if (key == null || !clean.Charms.Contains(key)) continue;
+                        var cleanT = CosmeticTransform.Sanitize(t, positional: true);
+                        if (cleanT == null) continue;
+                        clean.CharmTransforms ??= new Dictionary<string, CosmeticTransform>(StringComparer.Ordinal);
+                        clean.CharmTransforms[key] = cleanT;
                     }
                 }
             }

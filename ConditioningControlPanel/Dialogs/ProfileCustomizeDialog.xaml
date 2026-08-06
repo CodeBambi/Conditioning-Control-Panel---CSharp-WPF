@@ -123,9 +123,18 @@
                     <StackPanel>
                         <Grid Margin="0,0,0,3">
                             <TextBlock Text="{loc:Str profile_customize_wardrobe}" Foreground="#5EC8F2"
-                                       FontSize="12" FontWeight="Bold"/>
-                            <TextBlock x:Name="TxtWardrobeSlots" Foreground="#8079A3" FontSize="11"
-                                       HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                       FontSize="12" FontWeight="Bold" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <TextBlock x:Name="TxtWardrobeSlots" Foreground="#8079A3" FontSize="11"
+                                           VerticalAlignment="Center"/>
+                                <!-- Opens the Wardrobe editor (drag/resize/rotate/flip) on THIS
+                                     dialog's draft - Save here still commits everything at once. -->
+                                <Button x:Name="BtnArrange" Content="{loc:Str profile_customize_arrange}"
+                                        Margin="10,0,0,0" Background="#335EC8F2" Foreground="#5EC8F2"
+                                        BorderThickness="0" Padding="10,4" FontSize="10" FontWeight="Bold"
+                                        Cursor="Hand" ToolTip="{loc:Str profile_customize_arrange_tip}"
+                                        Click="BtnArrange_Click"/>
+                            </StackPanel>
                         </Grid>
                         <TextBlock Text="{loc:Str profile_customize_wardrobe_hint}" Foreground="#8079A3"
                                    FontSize="10" TextWrapping="Wrap" Margin="0,0,0,10"/>

@@ -9,6 +9,18 @@ using ConditioningControlPanel.Localization;
 namespace ConditioningControlPanel
 {
     /// <summary>
+    /// One tile in the Showcase (a featured pin or an "All achievements" grid entry). A named
+    /// class rather than the anonymous {Name, Image} it grew from, because click-to-pin needs the
+    /// achievement id back out of the clicked tile's DataContext.
+    /// </summary>
+    internal sealed class ProfileAchievementTile
+    {
+        public string Id { get; init; } = string.Empty;
+        public string Name { get; init; } = string.Empty;
+        public System.Windows.Media.ImageSource? Image { get; init; }
+    }
+
+    /// <summary>
     /// Drives the surfaces the Trainer Card layout added in Phase 1 of the Profile redesign:
     /// the hero XP meter, the Showcase's unlock progress + "next up" line, the community rail's
     /// sharing summary, the "back to me" chip, the me-first open, and the Privacy &amp; Sharing
