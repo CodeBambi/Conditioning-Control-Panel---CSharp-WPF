@@ -1,3 +1,5 @@
+using System.Reflection;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using Xunit;
 
@@ -121,5 +123,31 @@ public class AiInventedLinkStripTests
 
         Assert.Contains("NEVER write a URL", rule);
         Assert.Contains("NAME it in words only", rule);
+    }
+
+    [Fact]
+    public void ThePresetPathCarriesTheFloorToo_NotJustTheLegacyPrompt()
+    {
+        // The rule above was appended in GetDefaultBambiSpritePrompt only, and that is the FALLBACK.
+        // A user with an active personality preset — the normal case — goes through
+        // BuildPromptFromPreset, whose media block forbids URLs in three of its four branches. The
+        // fourth is SissyHypno with no configured links and no mod pool: it forbids naming TITLES
+        // and says nothing about URLs, and it is the branch the live bug actually took. A floor
+        // present on only one of two prompt paths is not a floor.
+        var preset = new PersonalityPreset
+        {
+            Id = "test-preset",
+            Name = "Test",
+            PromptSettings = new CompanionPromptSettings { Personality = "You are a test persona." }
+        };
+
+        var build = typeof(BambiSprite).GetMethod(
+            "BuildPromptFromPreset", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(build);
+
+        var prompt = (string)build!.Invoke(new BambiSprite(), new object[] { preset })!;
+
+        Assert.Contains("NEVER write a URL", prompt);
+        Assert.Contains("NAME it in words only", prompt);
     }
 }

@@ -969,6 +969,13 @@ Example responses with REAL video names:
                 sb.AppendLine();
             }
 
+            // The link floor, on this path too. GetCoreMediaLinks() carries a prohibition inside
+            // three of its four branches, but the fourth — SissyHypno with no configured links and
+            // no mod pool — still only forbids naming TITLES, which is exactly the branch the live
+            // bug took. A floor that only exists on the legacy prompt path is not a floor: presets
+            // are the normal path, so append it here as well.
+            sb.AppendLine(LinkFloorRule);
+
             // Make the prompt mode-aware by replacing "Bambi" references with appropriate term
             var prompt = MakePromptModeAware(sb.ToString());
 
