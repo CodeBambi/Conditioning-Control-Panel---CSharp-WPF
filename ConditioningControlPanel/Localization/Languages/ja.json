@@ -909,6 +909,8 @@
   "profile_customize_sub": "バナー、アクセント、身に着ける称号、最大4つのピン留め実績、そしてワードローブ。プロフィールを見た人全員に表示されます。",
   "profile_customize_banner": "バナー",
   "profile_customize_banner_hint": "ヒーローカードの背景アートです。",
+  "profile_customize_avatar": "アバター",
+  "profile_customize_avatar_hint": "Discordの画像を共有していないときに表示されます - あなた好みのスタイルの無個性サブジェクト。",
   "profile_customize_accent": "アクセント",
   "profile_customize_accent_hint": "カードの縁、グロー、列見出しに色が付きます。OGリングはゴールドのままです。",
   "profile_customize_title_section": "身に着ける称号",

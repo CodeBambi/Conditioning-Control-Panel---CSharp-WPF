@@ -910,6 +910,8 @@
   "profile_customize_sub": "Bannière, accent, un titre porté, jusqu'à quatre succès épinglés et ta garde-robe. Tous ceux qui voient ton profil les voient.",
   "profile_customize_banner": "Bannière",
   "profile_customize_banner_hint": "L'illustration derrière ta carte principale.",
+  "profile_customize_avatar": "Avatar",
+  "profile_customize_avatar_hint": "Affiché quand tu ne partages pas ta photo Discord - un sujet anonyme, à ton style.",
   "profile_customize_accent": "Accent",
   "profile_customize_accent_hint": "Teinte le bord, la lueur et les en-têtes de colonne de ta carte. Ton anneau OG reste doré.",
   "profile_customize_title_section": "Titre porté",

@@ -102,6 +102,14 @@ namespace ConditioningControlPanel.Models
         [JsonProperty("banner_id")]
         public string? BannerId { get; set; }
 
+        /// <summary>
+        /// Preset-avatar id (CosmeticsCatalog.AvatarPresets) shown when no Discord picture is
+        /// shared. NullValueHandling.Ignore so payloads written before this field existed keep
+        /// serializing byte-identically.
+        /// </summary>
+        [JsonProperty("avatar_id", NullValueHandling = NullValueHandling.Ignore)]
+        public string? AvatarId { get; set; }
+
         [JsonProperty("accent")]
         public string? Accent { get; set; }
 
@@ -136,6 +144,7 @@ namespace ConditioningControlPanel.Models
         [JsonIgnore]
         public bool IsEmpty =>
             string.IsNullOrWhiteSpace(BannerId) &&
+            string.IsNullOrWhiteSpace(AvatarId) &&
             string.IsNullOrWhiteSpace(Accent) &&
             string.IsNullOrWhiteSpace(TitleId) &&
             (PinnedAchievements == null || PinnedAchievements.Count == 0) &&
@@ -146,6 +155,7 @@ namespace ConditioningControlPanel.Models
         public ProfileCosmetics Clone() => new()
         {
             BannerId = BannerId,
+            AvatarId = AvatarId,
             Accent = Accent,
             TitleId = TitleId,
             PinnedAchievements = new List<string>(PinnedAchievements ?? new List<string>()),
@@ -173,13 +183,15 @@ namespace ConditioningControlPanel.Models
         /// <param name="unlockedAchievementIds">The card owner's unlocks, or null when unknowable.</param>
         /// <param name="knownDecoIds">Phase 3 registry ids of type <c>deco</c>, or null to skip.</param>
         /// <param name="knownCharmIds">Phase 3 registry ids of type <c>charm</c>, or null to skip.</param>
+        /// <param name="knownAvatarIds">Preset-avatar ids this build ships art for, or null to skip.</param>
         public static ProfileCosmetics Sanitize(
             ProfileCosmetics? raw,
             ISet<string>? knownBannerIds = null,
             ISet<string>? knownAchievementIds = null,
             ISet<string>? unlockedAchievementIds = null,
             ISet<string>? knownDecoIds = null,
-            ISet<string>? knownCharmIds = null)
+            ISet<string>? knownCharmIds = null,
+            ISet<string>? knownAvatarIds = null)
         {
             var clean = new ProfileCosmetics();
             if (raw == null) return clean;
@@ -190,6 +202,11 @@ namespace ConditioningControlPanel.Models
                 var banner = Trim(raw.BannerId);
                 if (banner != null && (knownBannerIds == null || knownBannerIds.Contains(banner)))
                     clean.BannerId = banner;
+
+                // ---- preset avatar ----
+                var avatar = Trim(raw.AvatarId);
+                if (avatar != null && (knownAvatarIds == null || knownAvatarIds.Contains(avatar)))
+                    clean.AvatarId = avatar;
 
                 // ---- accent ----
                 var accent = Trim(raw.Accent);

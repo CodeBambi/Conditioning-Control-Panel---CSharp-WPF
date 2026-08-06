@@ -60,6 +60,18 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ================= preset avatar ================= -->
+                <Border CornerRadius="10" Padding="14,12,14,10" Margin="0,0,0,12"
+                        Background="#B3252542" BorderBrush="#33B478FF" BorderThickness="1">
+                    <StackPanel>
+                        <TextBlock Text="{loc:Str profile_customize_avatar}" Foreground="#B478FF"
+                                   FontSize="12" FontWeight="Bold" Margin="0,0,0,3"/>
+                        <TextBlock Text="{loc:Str profile_customize_avatar_hint}" Foreground="#8079A3"
+                                   FontSize="10" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                        <WrapPanel x:Name="AvatarHost"/>
+                    </StackPanel>
+                </Border>
+
                 <!-- ================= accent ================= -->
                 <Border CornerRadius="10" Padding="14,12,14,10" Margin="0,0,0,12"
                         Background="#B3252542" BorderBrush="#33FF69B4" BorderThickness="1">

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Media;
@@ -36,6 +37,25 @@ namespace ConditioningControlPanel.Services
             Group = group;
             PackPath = packPath;
             Gradient = gradient;
+        }
+    }
+
+    /// <summary>One entry in the preset-avatar pool: a featureless "blank subject" bust.</summary>
+    public sealed class AvatarPresetOption
+    {
+        public string Id { get; }
+
+        /// <summary>Plain English proper noun, deliberately NOT localized (same rule as banners).</summary>
+        public string Name { get; }
+
+        /// <summary>Mod bucket ("bambi"/"sissy"/"drone"/"circe") - grouping only, no gating.</summary>
+        public string Mod { get; }
+
+        internal AvatarPresetOption(string id, string name, string mod)
+        {
+            Id = id;
+            Name = name;
+            Mod = mod;
         }
     }
 
@@ -130,6 +150,85 @@ namespace ConditioningControlPanel.Services
         /// <summary>Ids of every banner this build can paint. Feeds Sanitize.</summary>
         public static ISet<string> BannerIds => _bannerIds;
 
+        /// <summary>
+        /// The preset-avatar pool: featureless "blank subject" busts shown when no Discord picture
+        /// is shared (resolution order everywhere: shared pfp, then preset, then blank circle).
+        /// Art ships as Content in <c>Resources\cosmetics\avatars\&lt;id&gt;.png</c> - loaded off
+        /// disk like the wardrobe, so a missing PNG degrades to the blank circle, never a throw.
+        /// </summary>
+        public static readonly IReadOnlyList<AvatarPresetOption> AvatarPresets = new List<AvatarPresetOption>
+        {
+            new("avatar_bambi_1", "Pink Ponytail",  "bambi"),
+            new("avatar_bambi_2", "Twin Tails",     "bambi"),
+            new("avatar_bambi_3", "Bunny Bob",      "bambi"),
+            new("avatar_sissy_1", "The Updo",       "sissy"),
+            new("avatar_sissy_2", "Ringlets",       "sissy"),
+            new("avatar_sissy_3", "Braided Crown",  "sissy"),
+            new("avatar_drone_1", "Chrome Dome",    "drone"),
+            new("avatar_drone_2", "Stealth Unit",   "drone"),
+            new("avatar_drone_3", "Visor Unit",     "drone"),
+            new("avatar_circe_1", "Obsidian Bob",   "circe"),
+            new("avatar_circe_2", "Kept & Sleek",   "circe"),
+            new("avatar_circe_3", "High Ponytail",  "circe"),
+        };
+
+        private static readonly HashSet<string> _avatarIds =
+            new(AvatarPresets.Select(a => a.Id), StringComparer.Ordinal);
+
+        /// <summary>Ids of every preset avatar this build ships. Feeds Sanitize.</summary>
+        public static ISet<string> AvatarIds => _avatarIds;
+
+        /// <summary>
+        /// Decode cap for preset-avatar art. The bubble renders at 104px (208 at 200% DPI); the
+        /// source PNGs are 512. 256 keeps the circle crisp without holding 1MB per browsed tile.
+        /// </summary>
+        private const int AvatarDecodePixels = 256;
+
+        private static readonly Dictionary<string, ImageSource?> _avatarCache = new(StringComparer.Ordinal);
+
+        /// <summary>
+        /// The art for a preset-avatar id, or null when the id is unknown or its PNG is missing -
+        /// callers fall back to the blank circle. Results (including nulls) are cached.
+        /// </summary>
+        public static ImageSource? GetAvatarImage(string? id)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return null;
+
+            lock (_gate)
+            {
+                if (_avatarCache.TryGetValue(id!, out var cached)) return cached;
+
+                ImageSource? built = null;
+                try
+                {
+                    if (_avatarIds.Contains(id!))
+                    {
+                        var path = Path.Combine(AppContext.BaseDirectory,
+                            "Resources", "cosmetics", "avatars", id + ".png");
+                        if (File.Exists(path))
+                        {
+                            var bitmap = new BitmapImage();
+                            bitmap.BeginInit();
+                            bitmap.UriSource = new Uri(path, UriKind.Absolute);
+                            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                            bitmap.DecodePixelWidth = AvatarDecodePixels;
+                            bitmap.EndInit();
+                            if (bitmap.CanFreeze) bitmap.Freeze();
+                            built = bitmap;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("CosmeticsCatalog: avatar preset {Id} failed to load: {E}", id, ex.Message);
+                    built = null;
+                }
+
+                _avatarCache[id!] = built;
+                return built;
+            }
+        }
+
         /// <summary>The six curated accents (see <see cref="ProfileCosmetics.AccentSwatches"/>).</summary>
         public static IReadOnlyList<string> AccentSwatches => ProfileCosmetics.AccentSwatches;
 
@@ -158,13 +257,14 @@ namespace ConditioningControlPanel.Services
         public static ImageSource? GetBannerThumbnail(string? id)
             => GetBanner(id, _thumbCache, BannerThumbnailPixels);
 
-        /// <summary>Drops both banner caches. Exists for parity with WardrobeCatalog.Invalidate.</summary>
+        /// <summary>Drops the banner + avatar caches. Exists for parity with WardrobeCatalog.Invalidate.</summary>
         public static void Invalidate()
         {
             lock (_gate)
             {
                 _imageCache.Clear();
                 _thumbCache.Clear();
+                _avatarCache.Clear();
             }
         }
 
@@ -245,7 +345,7 @@ namespace ConditioningControlPanel.Services
             }
             catch { /* no achievement service yet (early boot / tests) - skip the unlock filter */ }
 
-            return ProfileCosmetics.Sanitize(raw, BannerIds, AchievementIds, unlocked, DecoIds(), CharmIds());
+            return ProfileCosmetics.Sanitize(raw, BannerIds, AchievementIds, unlocked, DecoIds(), CharmIds(), AvatarIds);
         }
 
         /// <summary>
@@ -253,7 +353,7 @@ namespace ConditioningControlPanel.Services
         /// so the unlock filter is skipped - ids the app recognises still render.
         /// </summary>
         public static ProfileCosmetics SanitizeViewed(ProfileCosmetics? raw)
-            => ProfileCosmetics.Sanitize(raw, BannerIds, AchievementIds, null, DecoIds(), CharmIds());
+            => ProfileCosmetics.Sanitize(raw, BannerIds, AchievementIds, null, DecoIds(), CharmIds(), AvatarIds);
 
         // ---------------------------------------------------------------------------------
 

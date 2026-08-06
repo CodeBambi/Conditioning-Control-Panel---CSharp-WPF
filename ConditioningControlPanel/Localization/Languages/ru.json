@@ -909,6 +909,8 @@
   "profile_customize_sub": "Баннер, акцент, надетый титул, до четырёх закреплённых достижений и гардероб. Их увидит каждый, кто откроет твой профиль.",
   "profile_customize_banner": "Баннер",
   "profile_customize_banner_hint": "Арт за твоей карточкой.",
+  "profile_customize_avatar": "Аватар",
+  "profile_customize_avatar_hint": "Показывается, когда вы не делитесь фото Discord - безликий субъект в вашем стиле.",
   "profile_customize_accent": "Акцент",
   "profile_customize_accent_hint": "Окрашивает край карточки, свечение и заголовки колонок. Твоё OG-кольцо остаётся золотым.",
   "profile_customize_title_section": "Надетый титул",

@@ -62,12 +62,46 @@ namespace ConditioningControlPanel
             if (DiscordTab == null) return;
 
             ApplyProfileBanner(cosmetics.BannerId);
+            ApplyProfileAvatarPreset(cosmetics.AvatarId);
             ApplyProfileAccent(cosmetics.Accent);
             ApplyProfileTitle(cosmetics.TitleId);
             ApplyProfilePins(cosmetics.PinnedAchievements);
             // Phase 3: the worn decoration and the two card charms (MainWindow.ProfileWardrobe),
             // with the wearer's saved editor transforms.
             ApplyProfileWardrobe(cosmetics);
+        }
+
+        /// <summary>
+        /// The preset image THIS method last put into the avatar bubble. Lets a later apply tell
+        /// "slot holds our preset" apart from "slot holds a real Discord picture" - a real picture
+        /// always wins and is never overwritten or cleared from here.
+        /// </summary>
+        private ImageSource? _appliedPresetAvatar;
+
+        /// <summary>
+        /// Preset avatar for the bubble (resolution order: shared Discord picture, then preset,
+        /// then blank circle). Every card render sets the bubble's ImageSource from the picture
+        /// BEFORE cosmetics are applied, so at this point: a non-null image that is not ours is a
+        /// real picture (leave it), and null or our own previous preset means the slot is ours to
+        /// fill, swap, or clear.
+        /// </summary>
+        private void ApplyProfileAvatarPreset(string? avatarId)
+        {
+            try
+            {
+                var bubble = DiscordTab?.ProfileViewerAvatar;
+                if (bubble == null) return;
+
+                var current = bubble.ImageSource;
+                var slotIsOurs = current == null ||
+                                 (_appliedPresetAvatar != null && ReferenceEquals(current, _appliedPresetAvatar));
+                if (!slotIsOurs) return;
+
+                var art = CosmeticsCatalog.GetAvatarImage(avatarId);
+                bubble.ImageSource = art;
+                _appliedPresetAvatar = art;
+            }
+            catch (Exception ex) { App.Logger?.Debug("ApplyProfileAvatarPreset: {E}", ex.Message); }
         }
 
         /// <summary>

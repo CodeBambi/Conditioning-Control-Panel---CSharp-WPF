@@ -1827,6 +1827,8 @@
   "profile_customize_sub": "Banner, accent, a worn title, up to four pinned unlocks and your wardrobe. Everyone who views your profile sees them.",
   "profile_customize_banner": "Banner",
   "profile_customize_banner_hint": "The art behind your hero card.",
+  "profile_customize_avatar": "Avatar",
+  "profile_customize_avatar_hint": "Shown when you don't share your Discord picture - a blank subject, styled your way.",
   "profile_customize_accent": "Accent",
   "profile_customize_accent_hint": "Tints your card's edge, glow and column headers. Your OG ring stays gold.",
   "profile_customize_title_section": "Worn title",
