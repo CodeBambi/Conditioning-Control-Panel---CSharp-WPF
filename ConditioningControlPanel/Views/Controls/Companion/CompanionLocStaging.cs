@@ -80,6 +80,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion
                 ["companion_chat_open_full"] = "Open full chat",
                 ["companion_chat_history"] = "History",
                 ["companion_chat_open_engine"] = "open the Engine Room",
+                ["companion_chat_send_tip"] = "send",
+                ["companion_chat_thinking"] = "she's thinking…",
 
                 // ---- Z3 memory ----
                 ["companion_memory_title"] = "What she knows about you",
@@ -87,6 +89,12 @@ namespace ConditioningControlPanel.Views.Controls.Companion
                 ["companion_memory_pin_tip"] = "pin",
                 ["companion_memory_edit_tip"] = "edit",
                 ["companion_memory_forget_tip"] = "forget",
+                ["companion_memory_edit_save"] = "save",
+                ["companion_memory_edit_cancel"] = "cancel",
+                // the wipe asks first, in her voice (design §3 Z3)
+                ["companion_memory_forget_confirm"] = "…all of it? even the good parts?",
+                ["companion_memory_forget_yes"] = "Yes, wipe it",
+                ["companion_memory_forget_no"] = "No, keep us",
 
                 // ---- Z4 personality ----
                 ["companion_personality_title"] = "Make her yours",
