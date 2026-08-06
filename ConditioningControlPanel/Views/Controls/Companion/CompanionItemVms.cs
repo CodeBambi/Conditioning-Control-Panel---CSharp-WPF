@@ -122,8 +122,36 @@ namespace ConditioningControlPanel.Views.Controls.Companion
     /// <summary>A pigeonhole in the Z8 Workshop grid.</summary>
     public interface IWorkshopCellVm
     {
+        /// <summary>
+        /// The deep-link anchor — the identity other zones point at (see
+        /// <see cref="CompanionRoomAnchors"/>). Stable, never localized, never shown.
+        ///
+        /// <para>Split from <see cref="Title"/> by the wiring pass. While the two were one string a
+        /// Workshop cell could not be localized without silently breaking the hero's Switch chip and
+        /// Z5's "fine-tuning ↓": both match by title, and a German title matches no anchor. The
+        /// default implementation returns <see cref="Title"/>, so callers written before the split
+        /// (the mocks, the zone tests) keep the behaviour they had.</para>
+        /// </summary>
+        string Key => Title;
+
+        /// <summary>The cell's heading as the user reads it. Localizable.</summary>
         string Title { get; }
+
         IReadOnlyList<IWorkshopRowVm> Rows { get; }
+
+        /// <summary>
+        /// The real control this pigeonhole holds, when it holds one.
+        ///
+        /// <para>Z8 was always specified as a container move rather than a rebuild (design §3 Z8):
+        /// the legacy accordions are re-parented into the drawer, not re-implemented. This is the
+        /// seam that lets a cell carry the actual re-parented control, and the view renders it
+        /// INSTEAD of <see cref="Rows"/> — a cell is one or the other, never both, so the mock's
+        /// scaffold rows and the wired-up controls can never double up on screen.</para>
+        ///
+        /// <para>Null on every design-time cell, which is what keeps the preview harness rendering
+        /// the scaffold exactly as it did.</para>
+        /// </summary>
+        object? Content => null;
     }
 
     /// <summary>
@@ -332,6 +360,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
     public sealed class CompanionWorkshopCell : IWorkshopCellVm
     {
+        private string? _key;
+
         public CompanionWorkshopCell()
         {
             Title = string.Empty;
@@ -344,8 +374,22 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             Rows = rows;
         }
 
+        /// <summary>
+        /// A cell built with a title alone is its own anchor — that is the pre-split behaviour and
+        /// what every design-time cell wants. The wiring pass sets this explicitly so a localized
+        /// heading can move without the deep links following it.
+        /// </summary>
+        public string Key
+        {
+            get => string.IsNullOrEmpty(_key) ? Title : _key!;
+            init => _key = value;
+        }
+
         public string Title { get; init; }
         public IReadOnlyList<IWorkshopRowVm> Rows { get; init; }
+
+        /// <summary>The re-parented control, when this cell holds one. Null on every mock cell.</summary>
+        public object? Content { get; init; }
     }
 
     public sealed class CompanionWorkshopRow : IWorkshopRowVm

@@ -1,6 +1,7 @@
 using System;
 using System.Windows;
 using System.Windows.Controls;
+using Border = System.Windows.Controls.Border;
 using System.Windows.Threading;
 
 namespace ConditioningControlPanel.Views.Controls.Companion
@@ -117,6 +118,14 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         /// <inheritdoc cref="TxtDetachStatusCompanion"/>
         internal Button HelpBtnCompanionSettings => WorkshopZone.HelpBtnCompanionSettings;
+
+        /// <summary>
+        /// The Brain-Parasite drain flash on the hero's companion XP bar. Unlike the three above
+        /// this one IS seen — it is the pink pulse <c>MainWindow.Companion.cs</c> fires on every
+        /// drain — and it is here for the same reason: the partial that animates it looks it up
+        /// through the tab.
+        /// </summary>
+        internal Border PrgCompanion0FlashOverlay => HeroZone.PrgCompanion0FlashOverlay;
 
         // =====================================================================================
         //  clock parking

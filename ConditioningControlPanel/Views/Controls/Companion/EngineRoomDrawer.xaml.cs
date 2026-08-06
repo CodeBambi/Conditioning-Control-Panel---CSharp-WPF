@@ -46,5 +46,17 @@ namespace ConditioningControlPanel.Views.Controls.Companion
                 catch (InvalidOperationException) { /* torn down mid-scroll */ }
             }), DispatcherPriority.Normal);
         }
+
+        /// <summary>
+        /// Pushes the typed key into the viewmodel.
+        ///
+        /// <para><c>PasswordBox.Password</c> is not a dependency property — deliberately, in WPF —
+        /// so there is no binding to do this. That is the whole point: the key travels one way, from
+        /// the box to the settings file, and nothing on this page can read it back.</para>
+        /// </summary>
+        private void CustomKeyBox_PasswordChanged(object sender, System.Windows.RoutedEventArgs e)
+        {
+            if (ViewModel is { } vm && sender is PasswordBox box) vm.CustomApiKey = box.Password;
+        }
     }
 }

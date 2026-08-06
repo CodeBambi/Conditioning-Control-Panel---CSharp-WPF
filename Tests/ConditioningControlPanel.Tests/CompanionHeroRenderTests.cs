@@ -17,6 +17,7 @@ namespace ConditioningControlPanel.Tests;
 /// <c>{StaticResource}</c> and template triggers are resolved at tree-build time, not at compile
 /// time — a renamed theme key compiles clean and throws the first time a user opens the tab.
 /// </summary>
+[Collection(CompanionWpfRenderCollection.Name)]
 public class CompanionHeroRenderTests
 {
     private static void OnStaThread(Action body)

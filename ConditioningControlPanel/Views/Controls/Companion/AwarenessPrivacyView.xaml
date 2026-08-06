@@ -231,8 +231,13 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Pre-Train 2 there is no setting behind this, so it reports the truth and
+                         cannot be flipped. A switch that snaps back is worse than one that is
+                         honestly unavailable — and this is the privacy card. -->
                     <ToggleButton Style="{StaticResource CmpToggleSwitchStyle}" Margin="0,0,9,0"
                                   ToolTip="{Binding PageTitlesLabel}"
+                                  ToolTipService.ShowOnDisabled="True"
+                                  IsEnabled="{Binding IsEverythingAvailable}"
                                   IsChecked="{Binding AllowPageTitles, Mode=TwoWay}"/>
                     <TextBlock Text="{Binding PageTitlesLabel}" FontSize="11.5" VerticalAlignment="Center"
                                TextTrimming="CharacterEllipsis">

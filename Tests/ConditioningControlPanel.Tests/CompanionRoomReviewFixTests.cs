@@ -14,6 +14,7 @@ namespace ConditioningControlPanel.Tests;
 /// <para>No WPF element is constructed here: every fix was deliberately pushed down into a pure
 /// helper or a viewmodel precisely so it could be pinned without a window.</para>
 /// </summary>
+[Collection(CompanionWpfRenderCollection.Name)]
 public class CompanionRoomReviewFixTests
 {
     // =====================================================================================

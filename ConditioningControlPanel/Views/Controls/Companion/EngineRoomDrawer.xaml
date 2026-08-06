@@ -182,10 +182,12 @@
 
                     <StackPanel Grid.Row="1" Grid.Column="0">
                         <TextBlock Text="{local:CmpStr companion_engine_field_api_key}" Style="{StaticResource CmpFieldLabelStyle}"/>
-                        <!-- A real PasswordBox replaces this in the wiring pass; a key must never be
-                             round-tripped through a plain TextBox binding once it is a real secret. -->
-                        <TextBox x:Name="CustomKeyBox" Style="{StaticResource CmpFieldBoxStyle}"
-                                 Text="{Binding CustomApiKey, Mode=TwoWay}"/>
+                        <!-- A PasswordBox, not a TextBox: Password is deliberately not a dependency
+                             property, so a stored key cannot be round-tripped out through a binding,
+                             a screenshot or a UI-automation dump. The code-behind pushes what the
+                             user types into the viewmodel; nothing ever reads it back. -->
+                        <PasswordBox x:Name="CustomKeyBox" Style="{StaticResource CmpFieldPasswordStyle}"
+                                     PasswordChanged="CustomKeyBox_PasswordChanged"/>
                         <TextBlock Text="{local:CmpStr companion_engine_api_key_note}"
                                    Style="{StaticResource CmpFaintTextStyle}" Margin="2,4,0,0"/>
                     </StackPanel>
@@ -200,8 +202,26 @@
                 </WrapPanel>
             </StackPanel>
 
+            <!-- ========== clear conversation ==========
+                 The legacy "🧹 Reset Memory" button's job, rehoused. Doc 01 §2.4 makes the diary's
+                 "Forget everything" THE wipe (facts + profile + conversation); this one is narrower
+                 and still worth having — she is stuck in a pattern, you want the thread gone, you do
+                 NOT want to lose that you are level 41. It calls CompanionBrain.ForgetConversation.
+
+                 The whole row hangs off the command's existence, so the design-time viewmodel (which
+                 has no such command, because it is the ZONE contract and this is a wiring-pass
+                 affordance) renders nothing rather than a dead button. -->
+            <StackPanel Margin="0,14,0,0"
+                        Visibility="{Binding ClearConversationCommand, Converter={StaticResource CmpHasContentToVis}}">
+                <Button Content="{Binding ClearConversationLabel}" Style="{StaticResource CmpGrayButtonStyle}"
+                        HorizontalAlignment="Left" Command="{Binding ClearConversationCommand}"/>
+                <TextBlock Text="{Binding ClearConversationNote}" Style="{StaticResource CmpFaintTextStyle}"
+                           Margin="2,5,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
+
             <!-- ========== live actions feed (local effects channel) ========== -->
             <TextBlock Text="{Binding LiveActionsPlaceholder}" Style="{StaticResource CmpDrawerNoteStyle}"
+                       Margin="0,14,0,0"
                        Visibility="{Binding ShowLiveActions, Converter={StaticResource CmpBoolToVisInverse}}"/>
 
             <Border Style="{StaticResource CmpInsetPanelStyle}" Margin="0,12,0,0"

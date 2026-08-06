@@ -183,7 +183,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             {
                 new MemoryFactCard(
                     "First trance: 2026-03-02 — “the day we met.”",
-                    "moment", CompanionLocStaging.Resolve("companion_memory_kind_moment"),
+                    "moment", CompanionLocStaging.Resolve("companion_memory_card_moment"),
                     "from the app · she brings this up on anniversaries",
                     isPinned: true),
                 DormantPromiseCard()
@@ -232,7 +232,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             new MemoryFactCard(
                 "Never tease about chastity.",
-                "boundary", CompanionLocStaging.Resolve("companion_memory_kind_boundary"),
+                "boundary", CompanionLocStaging.Resolve("companion_memory_card_boundary"),
                 "set by you · 2026-07-30",
                 isBoundary: true)
             {
@@ -240,7 +240,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             },
             new MemoryFactCard(
                 "First trance: 2026-03-02 — “the day we met.”",
-                "moment", CompanionLocStaging.Resolve("companion_memory_kind_moment"),
+                "moment", CompanionLocStaging.Resolve("companion_memory_card_moment"),
                 "pinned · she brings this up on anniversaries",
                 isPinned: true)
             {
@@ -248,21 +248,21 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             },
             new MemoryFactCard(
                 "Calls his cat “Prime Minister Beans.”",
-                "joke", CompanionLocStaging.Resolve("companion_memory_kind_joke"),
+                "joke", CompanionLocStaging.Resolve("companion_memory_card_joke"),
                 "used 4× · last: yesterday")
             {
                 UserEditedMetaLabel = "edited by you · she'll use your wording"
             },
             new MemoryFactCard(
                 "Melts fastest to spiral + whisper combos.",
-                "preference", CompanionLocStaging.Resolve("companion_memory_kind_preference"),
+                "preference", CompanionLocStaging.Resolve("companion_memory_card_preference"),
                 "from chat · salience high")
             {
                 UserEditedMetaLabel = "edited by you · she'll use your wording"
             },
             new MemoryFactCard(
                 "Wants to hit Level 50 before September.",
-                "goal", CompanionLocStaging.Resolve("companion_memory_kind_goal"),
+                "goal", CompanionLocStaging.Resolve("companion_memory_card_goal"),
                 "she checks in on this")
             {
                 UserEditedMetaLabel = "edited by you · she checks in on this"
@@ -272,7 +272,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         private static MemoryFactCard DormantPromiseCard() => new(
             CompanionLocStaging.Resolve("companion_memory_dormant_promise"),
-            "all", CompanionLocStaging.Resolve("companion_memory_kind_dormant"),
+            "all", CompanionLocStaging.Resolve("companion_memory_card_dormant"),
             string.Empty,
             isDormant: true);
     }

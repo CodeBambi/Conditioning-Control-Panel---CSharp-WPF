@@ -1,0 +1,76 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.Companion.Runtime.WorkshopTriggersCell"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             mc:Ignorable="d" d:DesignWidth="312">
+
+    <!-- ================================================================
+         Z8 · TRIGGERS & PHRASES — the System B keyword engine's mode
+         switch, its interval, the phrase editor, and the phrase-preset
+         shelf. Design §6 keeps all six controls; this is a container
+         move only.
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/ConditioningControlPanel;component/Views/Controls/Companion/Runtime/WorkshopCellTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <StackPanel>
+        <Grid Margin="0,0,0,4">
+            <StackPanel Margin="0,0,44,0">
+                <TextBlock Text="{loc:Str label_trigger_mode}" Style="{StaticResource CmpCellLabelStyle}"/>
+                <TextBlock Text="{loc:Str label_random_conditioning_phrases_with_audio}" Style="{StaticResource CmpCellHintStyle}"/>
+            </StackPanel>
+            <CheckBox x:Name="ChkTriggerModeCompanion" x:FieldModifier="internal" Style="{DynamicResource ToggleStyle}"
+                      HorizontalAlignment="Right" VerticalAlignment="Center"
+                      Checked="ChkTriggerMode_Changed" Unchecked="ChkTriggerMode_Changed"/>
+        </Grid>
+
+        <StackPanel x:Name="TriggerSettingsPanelCompanion" x:FieldModifier="internal" Visibility="Collapsed" Margin="0,0,0,9">
+            <Grid>
+                <TextBlock Text="{loc:Str label_interval}" Style="{StaticResource CmpCellLabelStyle}"/>
+                <TextBlock x:Name="TxtTriggerIntervalCompanion" x:FieldModifier="internal" Text="{loc:Str label_60s}"
+                           Style="{StaticResource CmpCellValueStyle}" Foreground="#9370DB"/>
+            </Grid>
+            <Slider x:Name="SliderTriggerIntervalCompanion" x:FieldModifier="internal" Style="{DynamicResource PinkSlider}"
+                    Minimum="10" Maximum="600" Value="60" Margin="0,4,0,6"
+                    ValueChanged="SliderTriggerInterval_ValueChanged"/>
+            <Button x:Name="BtnEditTriggersCompanion" Content="{loc:Str btn_edit_phrases_2}"
+                    Style="{StaticResource CmpCellButtonStyle}" HorizontalAlignment="Stretch"
+                    Click="BtnEditTriggers_Click"/>
+        </StackPanel>
+
+        <Button x:Name="BtnManagePhrases" Style="{StaticResource CmpCellButtonStyle}" Margin="0,0,0,6"
+                Click="BtnManagePhrases_Click">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <TextBlock Text="{loc:Str label_manage_phrases}" Foreground="#FFD8D2EA" FontSize="11"/>
+                <TextBlock x:Name="TxtPhraseCount" x:FieldModifier="internal" Text="{loc:Str label_0_active}"
+                           Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold" FontSize="11" Margin="4,0,0,0"/>
+            </StackPanel>
+        </Button>
+
+        <ComboBox x:Name="CmbPhrasePresets" x:FieldModifier="internal" FontSize="11" Margin="0,0,0,5"
+                  Style="{DynamicResource DarkComboBoxStyle}"
+                  DisplayMemberPath="DisplayText"
+                  SelectedValuePath="Id"
+                  SelectionChanged="CmbPhrasePresets_SelectionChanged"/>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="0" Content="{loc:Str btn_save}" Style="{StaticResource CmpCellButtonStyle}"
+                    Margin="0,0,3,0" ToolTip="{loc:Str tooltip_save_current_phrase_config_as_a_preset}"
+                    Click="BtnSavePhrasePreset_Click"/>
+            <Button Grid.Column="1" Content="{loc:Str btn_delete}" Style="{StaticResource CmpCellButtonStyle}"
+                    Margin="3,0,0,0" ToolTip="{loc:Str tooltip_delete_selected_phrase_preset}"
+                    Click="BtnDeletePhrasePreset_Click"/>
+        </Grid>
+    </StackPanel>
+</UserControl>

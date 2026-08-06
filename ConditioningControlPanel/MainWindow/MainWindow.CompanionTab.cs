@@ -40,9 +40,6 @@ namespace ConditioningControlPanel
             _isLoading = true;
             try
             {
-                // Sync avatar enabled
-                CompanionTab.ChkAvatarEnabledCompanion.IsChecked = _avatarTubeWindow?.IsVisible == true;
-
                 // Sync trigger mode
                 CompanionTab.ChkTriggerModeCompanion.IsChecked = App.Settings?.Current?.TriggerModeEnabled == true;
                 CompanionTab.TriggerSettingsPanelCompanion.Visibility = CompanionTab.ChkTriggerModeCompanion.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
@@ -62,10 +59,9 @@ namespace ConditioningControlPanel
                 CompanionTab.SliderBubbleDurationCompanion.Value = bubbleDuration;
                 CompanionTab.TxtBubbleDurationCompanion.Text = $"{(int)bubbleDuration}s";
 
-                // Sync detach status
+                // Sync detach status (hidden compat element — the hero's own chip shows the state)
                 var isDetached = _avatarTubeWindow?.IsDetached == true;
                 CompanionTab.TxtDetachStatusCompanion.Text = isDetached ? "Floating freely" : "Anchored to window";
-                CompanionTab.BtnDetachCompanionTab.Content = isDetached ? "Attach" : "Detach";
 
                 // Sync companion leveling UI (v5.3)
                 UpdateCompanionCardsUI();
@@ -77,6 +73,10 @@ namespace ConditioningControlPanel
             {
                 _isLoading = false;
             }
+
+            // Outside the loading guard: the page re-reads settings, and the guard exists to stop
+            // the CONTROLS' change handlers from writing back while we populate them.
+            CompanionRoom?.Sync();
         }
 
         /// <summary>
@@ -130,74 +130,17 @@ namespace ConditioningControlPanel
                 cards[i].Opacity = 1.0;
             }
 
-            // Update active companion details
-            var activeDef = Models.CompanionDefinition.GetById(activeId);
-            var activeProgress = App.Companion.ActiveProgress;
-
-            var activeDisplayName = activeDef.GetDisplayName(App.Settings?.Current?.SlutModeEnabled ?? false);
-            CompanionTab.TxtActiveCompanionName.Text = App.Mods?.MakeModAware(activeDisplayName) ?? activeDisplayName;
-            CompanionTab.TxtActiveCompanionLevel.Text = activeProgress.IsMaxLevel ? " · MAX LEVEL" : $" · Level {activeProgress.Level}";
-            CompanionTab.TxtActiveCompanionDesc.Text = activeDef.Description;
-            CompanionTab.TxtActiveCompanionXP.Text = activeProgress.IsMaxLevel
-                ? "Complete!"
-                : $"{activeProgress.CurrentXP:F0} / {activeProgress.XPForNextLevel:F0} XP";
-
-            // Update main progress bar
-            CompanionTab.PrgCompanion0.Value = activeProgress.LevelProgress * 100;
-            CompanionTab.PrgCompanion0.Foreground = new System.Windows.Media.SolidColorBrush(
-                (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(colors[(int)activeId]));
+            // The hero's identity, portrait, level and XP moved into CompanionHeroRuntimeVm with
+            // the Companion Card (design §6: "kept — Z1, restyled"). It reads the same
+            // CompanionProgress this method used to poke into five TextBlocks, so this is one call
+            // instead of eight writes — and the portrait pipeline (RefreshHeroAvatar) went with it.
+            CompanionRoom?.SyncHero();
 
             // Update community prompts UI
             UpdateCommunityPromptsUI();
 
             // Update companion prompt labels
             UpdateCompanionPromptLabels();
-
-            // Refresh hero avatar GIF (v5.9)
-            RefreshHeroAvatar();
-        }
-
-        /// <summary>
-        /// Loads the active companion's pose-1 portrait into the hero avatar circle.
-        /// Uses Stretch="Uniform" so the full figure shows centered inside the gradient ring,
-        /// scaled down to fit, instead of being cropped (which broke for avatars whose figure
-        /// isn't anchored to the top of the source PNG). Uses the same naming pattern as
-        /// AvatarTubeWindow (avatar_pose1.png / avatarN_pose1.png).
-        /// </summary>
-        private void RefreshHeroAvatar()
-        {
-            if (CompanionTab.HeroAvatarImage == null) return;
-            try
-            {
-                var setNumber = App.Settings?.Current?.SelectedAvatarSet ?? 1;
-                if (setNumber < 1)
-                {
-                    var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
-                    setNumber = AvatarTubeWindow.GetAvatarSetForLevel(playerLevel);
-                }
-                var prefix = setNumber == 1 ? "avatar_pose" : $"avatar{setNumber}_pose";
-                var resourceName = $"{prefix}1.png";
-
-                var resolved = Services.ModResourceResolver.ResolveImage(resourceName);
-                if (resolved != null)
-                {
-                    CompanionTab.HeroAvatarImage.Source = resolved;
-                    return;
-                }
-
-                var uri = new Uri($"pack://application:,,,/Resources/{resourceName}", UriKind.Absolute);
-                var bitmap = new System.Windows.Media.Imaging.BitmapImage();
-                bitmap.BeginInit();
-                bitmap.UriSource = uri;
-                bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-                bitmap.EndInit();
-                bitmap.Freeze();
-                CompanionTab.HeroAvatarImage.Source = bitmap;
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "Failed to load hero avatar pose");
-            }
         }
 
         /// <summary>
@@ -227,28 +170,11 @@ namespace ConditioningControlPanel
             var activePromptId = App.Settings?.Current?.ActiveCommunityPromptId;
             var installedIds = App.Settings?.Current?.InstalledCommunityPromptIds ?? new List<string>();
 
-            // Update the Customize button prompt name
-            CompanionTab.TxtCustomizePromptName.Text = GetActivePromptDisplayName();
-
-            // Update active prompt display
-            if (string.IsNullOrEmpty(activePromptId))
-            {
-                if (App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true)
-                {
-                    CompanionTab.TxtActivePromptName.Text = Loc.Get("label_custom_edited");
-                }
-                else
-                {
-                    CompanionTab.TxtActivePromptName.Text = Loc.Get("label_default_built_in");
-                }
-                CompanionTab.BtnDeactivatePrompt.Visibility = Visibility.Collapsed;
-            }
-            else
-            {
-                var prompt = App.CommunityPrompts?.GetInstalledPrompt(activePromptId);
-                CompanionTab.TxtActivePromptName.Text = prompt != null ? $"{prompt.Name} by {prompt.Author}" : "Custom";
-                CompanionTab.BtnDeactivatePrompt.Visibility = Visibility.Visible;
-            }
+            // The active-personality readout and its Reset link are Z4's now (design §6:
+            // "kept — Z4 readout line"), so the three writes that used to live here — the
+            // Customize button's prompt name, TxtActivePromptName, and BtnDeactivatePrompt's
+            // visibility — are one viewmodel re-read. Z4 derives all three from the same settings.
+            CompanionRoom?.PersonalityVm.Sync();
 
             // Update installed prompts list
             CompanionTab.InstalledPromptsPanel.Children.Clear();

@@ -208,10 +208,15 @@
 
             <!-- ========== input row ==========
                  Stands down entirely behind the lock: a disabled box under a veil reads as a
-                 broken card, and there is nothing to say into a thread you cannot have yet. -->
+                 broken card, and there is nothing to say into a thread you cannot have yet.
+
+                 Dormant stands it down for the same reason, not a related one: with the brain off
+                 (UseCompanionBrain=false, or a brain that failed to construct) the app is on the
+                 legacy stateless path and this card has no thread to add a line to. A send box that
+                 accepted a line and showed nothing back would be worse than no send box. -->
             <Grid Grid.Row="3" Margin="0,12,0,0"
                   Visibility="{Binding State, Converter={StaticResource CmpEnumToVisInverse},
-                                       ConverterParameter=Locked}">
+                                       ConverterParameter=Locked|Dormant}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>

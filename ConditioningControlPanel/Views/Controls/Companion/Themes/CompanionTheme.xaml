@@ -1365,6 +1365,31 @@
         <Setter Property="Foreground" Value="{StaticResource CmpFaintBrush}"/>
         <Setter Property="Margin" Value="0,0,0,3"/>
     </Style>
+    <!-- The BYO API-key field. Same chrome as CmpFieldBoxStyle, on a PasswordBox: the key is a
+         real secret, and PasswordBox is the only text input in WPF that does not expose its
+         content as a dependency property a binding (or an automation client) can read. -->
+    <Style x:Key="CmpFieldPasswordStyle" TargetType="PasswordBox">
+        <Setter Property="Background" Value="{StaticResource CmpSurfaceBrush}"/>
+        <Setter Property="Foreground" Value="#FFCFC9E4"/>
+        <Setter Property="CaretBrush" Value="#FFCFC9E4"/>
+        <Setter Property="BorderBrush" Value="#1CFFFFFF"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Padding" Value="10,7,10,7"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="PasswordBox">
+                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="7">
+                        <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
+                                      VerticalAlignment="Center" Focusable="False"
+                                      HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="CmpFieldBoxStyle" TargetType="TextBox">
         <Setter Property="Background" Value="{StaticResource CmpSurfaceBrush}"/>
         <Setter Property="Foreground" Value="#FFCFC9E4"/>

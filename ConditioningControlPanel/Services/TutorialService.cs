@@ -24,35 +24,47 @@ namespace ConditioningControlPanel.Services
     // highlighted the wrong thing (#443). Expand it via PrepareTargetWindowAction before those steps.
     internal static class CompanionTutorialPrep
     {
-        public static readonly Action<Window> ExpandBehaviourSection = w =>
+        /// <summary>
+        /// Opens the Workshop drawer, which is where the redesign put every control the timing /
+        /// triggers / phrases steps point at (design §6). Replaces the old "expand SectionBehaviour"
+        /// prep — that Expander no longer exists.
+        /// </summary>
+        public static readonly Action<Window> ExpandWorkshop = w => Reveal(w, null);
+
+        /// <summary>The same, landing on the roster pigeonhole for the Switch / roster steps.</summary>
+        public static readonly Action<Window> ExpandRoster = w =>
+            Reveal(w, Views.Controls.Companion.CompanionRoomAnchors.WorkshopRosterCell);
+
+        /// <summary>Opens the Engine Room drawer for the provider step.</summary>
+        public static readonly Action<Window> ExpandEngineRoom = w =>
         {
-            try
-            {
-                var ex = FindExpander(w, "SectionBehaviour");
-                if (ex != null) ex.IsExpanded = true;
-            }
-            catch { }
+            try { FindRoom(w)?.RevealEngineRoom(); }
+            catch { /* a tour never blocks on UI quirks */ }
         };
 
-        // Namescope-agnostic visual-tree search (the section lives inside the CompanionTabView
-        // UserControl, so Window.FindName wouldn't reach it). The Expander element itself is realized
-        // even while collapsed, so this finds it and flips IsExpanded; the overlay's UpdateLayout +
-        // bounds-retry then pick up the now-visible inner control.
-        private static System.Windows.Controls.Expander? FindExpander(DependencyObject? root, string name)
+        private static void Reveal(Window w, string? cellKey)
+        {
+            try { FindRoom(w)?.RevealWorkshop(cellKey); }
+            catch { /* a tour never blocks on UI quirks */ }
+        }
+
+        // Namescope-agnostic visual-tree search: the room lives inside the CompanionTabView
+        // UserControl, so Window.FindName wouldn't reach it. The control is realized as soon as the
+        // tab exists, even while the drawers are shut.
+        private static Views.Controls.Companion.CompanionRoomView? FindRoom(DependencyObject? root)
         {
             if (root == null) return null;
+            if (root is Views.Controls.Companion.CompanionRoomView hit) return hit;
             int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
             for (int i = 0; i < count; i++)
             {
-                var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
-                if (child is System.Windows.Controls.Expander ex && ex.Name == name)
-                    return ex;
-                var found = FindExpander(child, name);
+                var found = FindRoom(System.Windows.Media.VisualTreeHelper.GetChild(root, i));
                 if (found != null) return found;
             }
             return null;
         }
     }
+
     /// <summary>
     /// Types of tutorials available in the app
     /// </summary>
@@ -702,17 +714,14 @@ namespace ConditioningControlPanel.Services
 
         private List<TutorialStep> CreateCompanionSteps()
         {
-            // OnActivate helper: idempotently reveal the companion roster tray.
-            // Don't call BtnSwitchCompanion_Click — it's a toggle and would hide
-            // the tray if the user had already opened it before launching the tour.
+            // OnActivate helper: idempotently open the Workshop on its roster pigeonhole, which is
+            // where the roster tray went (design §6). Idempotent by construction now — the hero's
+            // Switch chip stopped being a toggle, so this is the same call it makes.
             Action revealRoster = () =>
             {
                 try
                 {
-                    var win = Application.Current?.MainWindow as MainWindow;
-                    if (win == null) return;
-                    var tray = win.FindName("CompanionRosterTray") as FrameworkElement;
-                    if (tray != null) tray.Visibility = Visibility.Visible;
+                    if (Application.Current?.MainWindow is Window win) CompanionTutorialPrep.ExpandRoster(win);
                 }
                 catch { /* tour never blocks on UI quirks */ }
             };
@@ -739,10 +748,11 @@ namespace ConditioningControlPanel.Services
                     Title = "Active Companion",
                     Description = "Up here you see who's currently active: her avatar, her name, " +
                                   "her level, and the XP bar toward her next level.\n\n" +
-                                  "The two pills on the right show whether AI is on (Off / Cloud / Local) " +
-                                  "and whether window-Awareness mode is running.",
+                                  "The two pills under her name show whether AI is on (Off / Cloud / Local) " +
+                                  "and whether she is watching your windows. Both are buttons - they jump " +
+                                  "straight to the section that controls them.",
                     RequiresTab = "companion",
-                    TargetElementName = "TxtActiveCompanionName",
+                    TargetElementName = "HeroZone",
                     TextPosition = TutorialStepPosition.Bottom
                 },
                 new TutorialStep
@@ -752,9 +762,9 @@ namespace ConditioningControlPanel.Services
                     Title = "Five Companions",
                     Description = "There are five companions, and each one gives you a different XP bonus " +
                                   "(Pink Filter, Autonomy, XP Drain, Strict Mode, Session Completion).\n\n" +
-                                  "Hit Switch any time to swap between them — your XP for each is tracked separately.",
+                                  "The Switch chip opens the Workshop on her roster — your XP for each is tracked separately.",
                     RequiresTab = "companion",
-                    TargetElementName = "BtnSwitchCompanion",
+                    TargetElementName = "HeroZone",
                     TextPosition = TutorialStepPosition.Right,
                     OnActivate = revealRoster
                 },
@@ -763,12 +773,13 @@ namespace ConditioningControlPanel.Services
                     Id = "comp_roster",
                     Icon = "🎭",
                     Title = "The Roster — Two Clicks",
-                    Description = "Two different clicks live on each card:\n\n" +
+                    Description = "The roster lives in the Workshop, at the bottom of the page. " +
+                                  "Two different clicks live on each card:\n\n" +
                                   "• Click the card itself → switch to that companion.\n" +
                                   "• Click the small 🎭 button → assign an AI personality to her without switching.\n\n" +
                                   "Each card also shows that companion's level and her XP bonus.",
                     RequiresTab = "companion",
-                    TargetElementName = "CompanionRosterTray",
+                    TargetElementName = "WorkshopZone",
                     TextPosition = TutorialStepPosition.Top,
                     OnActivate = revealRoster
                 },
@@ -778,10 +789,12 @@ namespace ConditioningControlPanel.Services
                     Icon = "💬",
                     Title = "Chat Hotkey",
                     Description = "She has a global hotkey for chat — Ctrl+T by default, anywhere on your machine.\n\n" +
-                                  "Click this button to rebind it to whatever combo you like. Useful when " +
-                                  "Ctrl+T collides with another app you use a lot.",
+                                  "The hero's Chat button shows the live combo; this is where you rebind it, " +
+                                  "in the Workshop's Behavior shelf. Useful when Ctrl+T collides with " +
+                                  "another app you use a lot.",
                     RequiresTab = "companion",
                     TargetElementName = "BtnChatShortcut",
+                    PrepareTargetWindowAction = CompanionTutorialPrep.ExpandWorkshop,
                     TextPosition = TutorialStepPosition.Left
                 },
                 new TutorialStep
@@ -789,13 +802,12 @@ namespace ConditioningControlPanel.Services
                     Id = "comp_avatar",
                     Icon = "👁",
                     Title = "Avatar Window Controls",
-                    Description = "Three quick toggles for her avatar window:\n\n" +
-                                  "• Show Avatar — pop her on or off your screen.\n" +
-                                  "• Mute — silence her speech and sound effects.\n" +
-                                  "• Detach (the button next to Switch) — float her free of the main window so " +
-                                  "you can drag her anywhere.",
+                    Description = "Three quick chips on her card:\n\n" +
+                                  "• The eye chip — pop her on or off your screen.\n" +
+                                  "• The speaker chip — silence her speech and sound effects.\n" +
+                                  "• Detach — float her free of the main window so you can drag her anywhere.",
                     RequiresTab = "companion",
-                    TargetElementName = "ChkAvatarEnabledCompanion",
+                    TargetElementName = "HeroZone",
                     TextPosition = TutorialStepPosition.Top
                 },
                 new TutorialStep
@@ -803,25 +815,26 @@ namespace ConditioningControlPanel.Services
                     Id = "comp_customize",
                     Icon = "🎨",
                     Title = "Personality Editor",
-                    Description = "Customize opens the full personality editor — her tone, her quirks, " +
-                                  "the system prompt that drives every AI reply.\n\n" +
-                                  "The \"Open Advanced Personality\" button down in AI Brain opens the same editor.",
+                    Description = "\"Make her yours\" is the front door to her personality — preset chips, " +
+                                  "the spice switch, and who she currently is.\n\n" +
+                                  "The quiet links at the bottom of that card - View compiled prompt, Fork & edit " +
+                                  "by hand, Community prompts - open the full editor.",
                     RequiresTab = "companion",
-                    TargetElementName = "BtnCustomizeCompanion",
+                    TargetElementName = "PersonalityZone",
                     TextPosition = TutorialStepPosition.Top
                 },
                 new TutorialStep
                 {
                     Id = "comp_ai_brain_intro",
                     Icon = "🧠",
-                    Title = "AI Brain",
+                    Title = "The Engine Room",
                     Description = aiUnlocked
-                        ? "AI Brain is what gives her real conversation. She'll reply to you, react to " +
+                        ? "The Engine Room is what gives her real conversation. She'll reply to you, react to " +
                           "what's on your screen, and chime in unprompted.\n\n" +
                           "Three things to set up here: which provider, which capabilities, and how spicy."
-                        : "AI Brain is what gives her real conversation — replies, reactions, unprompted chimes.\n\n" +
+                        : "The Engine Room is what gives her real conversation — replies, reactions, unprompted chimes.\n\n" +
                           "Right now it's locked because you're not signed in. " +
-                          "Sign in with Discord or Patreon (Patreon tab) and the section unlocks. " +
+                          "Sign in with Discord or Patreon and her chat unlocks. " +
                           "AI is free for all signed-in users.",
                     RequiresTab = "companion",
                     TextPosition = TutorialStepPosition.Center
@@ -842,7 +855,8 @@ namespace ConditioningControlPanel.Services
                                   "Pick Local and the model name + host fields appear below, along with a Setup wizard " +
                                   "that walks you through Ollama install.",
                     RequiresTab = "companion",
-                    TargetElementName = "AiProviderRadioGroup",
+                    TargetElementName = "EngineZone",
+                    PrepareTargetWindowAction = CompanionTutorialPrep.ExpandEngineRoom,
                     TextPosition = TutorialStepPosition.Top
                 });
                 steps.Add(new TutorialStep
@@ -851,12 +865,13 @@ namespace ConditioningControlPanel.Services
                     Icon = "💡",
                     Title = "Behaviour & Triggers",
                     Description = "Turning the provider above to Cloud or Local switches on her AI replies. " +
-                                  "Expand this Behaviour & Triggers section for the rest of her tuning:\n\n" +
+                                  "The Workshop holds the rest of her tuning:\n\n" +
                                   "• Idle chatter, bubble duration and trigger phrases.\n" +
-                                  "• Awareness Mode — she watches which window/program is active and reacts. " +
-                                  "Flipping it on reveals a cooldown slider so she doesn't spam.",
+                                  "• Awareness fine-tuning — the cooldowns that stop her spamming. The eye dial in " +
+                                  "\"What she can see\" is what turns the watching on.",
                     RequiresTab = "companion",
-                    TargetElementName = "SectionBehaviour",
+                    TargetElementName = "WorkshopZone",
+                    PrepareTargetWindowAction = CompanionTutorialPrep.ExpandWorkshop,
                     TextPosition = TutorialStepPosition.Right
                 });
                 steps.Add(new TutorialStep
@@ -864,10 +879,11 @@ namespace ConditioningControlPanel.Services
                     Id = "comp_slut_mode",
                     Icon = "🌶",
                     Title = "Slut Mode",
-                    Description = "Flips her to the spicier personality variant — same companion, dirtier mouth.\n\n" +
+                    Description = "The flame switch on \"Make her yours\" flips her to the spicier " +
+                                  "personality variant — same companion, dirtier mouth.\n\n" +
                                   "Toggle on or off whenever; it doesn't change her level or XP.",
                     RequiresTab = "companion",
-                    TargetElementName = "ChkSlutMode",
+                    TargetElementName = "PersonalityZone",
                     TextPosition = TutorialStepPosition.Right
                 });
             }
@@ -878,12 +894,13 @@ namespace ConditioningControlPanel.Services
                     Id = "comp_ai_locked",
                     Icon = "🔒",
                     Title = "Login Unlocks AI",
-                    Description = "Everything in AI Brain — provider choice, chat replies, awareness, slut mode — " +
-                                  "lives behind this lock until you sign in.\n\n" +
-                                  "Discord login or Patreon login both work. Once you're in, replay this tour and " +
-                                  "we'll cover all the AI controls.",
+                    Description = "Chatting with her needs a login — that is what the veil on " +
+                                  "\"Talk to her\" is.\n\n" +
+                                  "Discord login or Patreon login both work, and everything else on this page - " +
+                                  "her barks, her diary, her personality - is already yours. Once you're in, " +
+                                  "replay this tour and we'll cover all the AI controls.",
                     RequiresTab = "companion",
-                    TargetElementName = "AiFeaturesLockOverlay",
+                    TargetElementName = "ChatZone",
                     TextPosition = TutorialStepPosition.Top
                 });
             }
@@ -893,14 +910,14 @@ namespace ConditioningControlPanel.Services
                 Id = "comp_timing",
                 Icon = "⏱",
                 Title = "How Often, How Long",
-                Description = "Two timing sliders in the Behavior panel on the right:\n\n" +
+                Description = "Two timing sliders in the Workshop's Behavior shelf:\n\n" +
                               "• Idle Giggle Interval (5–300s) — how often she chimes in unprompted.\n" +
                               "• Bubble Duration (1–10s) — how long each speech bubble stays on screen.\n\n" +
                               "If she feels too chatty, raise the giggle interval. If you can't read fast enough, " +
                               "raise the bubble duration.",
                 RequiresTab = "companion",
                 TargetElementName = "SliderIdleIntervalCompanion",
-                PrepareTargetWindowAction = CompanionTutorialPrep.ExpandBehaviourSection,
+                PrepareTargetWindowAction = CompanionTutorialPrep.ExpandWorkshop,
                 TextPosition = TutorialStepPosition.Left
             });
             steps.Add(new TutorialStep
@@ -914,7 +931,7 @@ namespace ConditioningControlPanel.Services
                               "where you can add or remove phrases.",
                 RequiresTab = "companion",
                 TargetElementName = "ChkTriggerModeCompanion",
-                PrepareTargetWindowAction = CompanionTutorialPrep.ExpandBehaviourSection,
+                PrepareTargetWindowAction = CompanionTutorialPrep.ExpandWorkshop,
                 TextPosition = TutorialStepPosition.Left
             });
             steps.Add(new TutorialStep
@@ -922,14 +939,14 @@ namespace ConditioningControlPanel.Services
                 Id = "comp_phrases_community",
                 Icon = "📚",
                 Title = "Phrases & Community Prompts",
-                Description = "Three more knobs in this column:\n\n" +
+                Description = "Three more shelves in the Workshop:\n\n" +
                               "• Manage Phrases — her speech bubble library, with on/off per phrase.\n" +
                               "• Phrase Presets — save a phrase config and load it later.\n" +
                               "• Community Prompts — Browse / Import / Export AI personalities other users have made.\n" +
                               "• Hypnotube Links — comma-separated video URLs she's allowed to suggest (2000-char cap).",
                 RequiresTab = "companion",
                 TargetElementName = "BtnManagePhrases",
-                PrepareTargetWindowAction = CompanionTutorialPrep.ExpandBehaviourSection,
+                PrepareTargetWindowAction = CompanionTutorialPrep.ExpandWorkshop,
                 TextPosition = TutorialStepPosition.Left
             });
             steps.Add(new TutorialStep

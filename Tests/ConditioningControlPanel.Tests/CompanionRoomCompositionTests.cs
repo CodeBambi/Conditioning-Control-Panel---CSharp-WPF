@@ -23,6 +23,7 @@ namespace ConditioningControlPanel.Tests;
 ///   mode is an oscillation, i.e. a hang. A render smoke test would never find it.</item>
 /// </list>
 /// </summary>
+[Collection(CompanionWpfRenderCollection.Name)]
 public class CompanionRoomCompositionTests
 {
     private static void OnStaThread(Action body)

@@ -159,17 +159,38 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         }
     }
 
-    /// <summary>Same as <see cref="CompanionEnumEqualsConverter"/> but yields Visibility.</summary>
+    /// <summary>
+    /// Same as <see cref="CompanionEnumEqualsConverter"/> but yields Visibility.
+    ///
+    /// <para>The parameter may name SEVERAL states, pipe-separated
+    /// (<c>ConverterParameter=Locked|Dormant</c>): the match is "value is any of these". A single
+    /// name behaves exactly as it always did, so every existing binding is unaffected. The
+    /// alternative — a MultiDataTrigger per combination — puts the state ladder in the markup, and
+    /// this converter exists so it does not live there.</para>
+    /// </summary>
     public sealed class CompanionEnumToVisibilityConverter : IValueConverter
     {
         public bool Invert { get; set; }
 
         public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
         {
-            bool match = value != null && parameter != null &&
-                         string.Equals(value.ToString(), parameter.ToString(), StringComparison.OrdinalIgnoreCase);
+            bool match = Matches(value?.ToString(), parameter?.ToString());
             if (Invert) match = !match;
             return match ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// Whether <paramref name="value"/> is named by <paramref name="parameter"/>. Pure and
+        /// internal so the pipe-list behaviour is unit-testable without a visual tree.
+        /// </summary>
+        internal static bool Matches(string? value, string? parameter)
+        {
+            if (value == null || string.IsNullOrEmpty(parameter)) return false;
+            foreach (var name in parameter!.Split('|'))
+            {
+                if (string.Equals(value, name.Trim(), StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
         }
 
         public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)

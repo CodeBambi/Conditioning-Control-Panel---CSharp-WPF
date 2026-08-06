@@ -8,9 +8,10 @@ namespace ConditioningControlPanel.Views.Controls.Companion
     /// an anchor, and so the wiring pass has one place to keep in step when a Workshop cell is
     /// renamed or localized.</para>
     ///
-    /// <para>They are cell <i>titles</i> rather than ids because <see cref="WorkshopAccordion"/>
-    /// reveals by title (its cells are data, not named elements). When the Workshop titles become
-    /// loc keys, this is the file that resolves them.</para>
+    /// <para>They are <see cref="IWorkshopCellVm.Key"/> values, NOT headings. The wiring pass split
+    /// the two: <see cref="WorkshopAccordion"/> reveals by key and renders <c>Title</c>, so a cell's
+    /// heading can be translated (and re-worded) without any of these links following it into the
+    /// wrong language. The keys are ASCII, uppercase and deliberately not user-visible.</para>
     /// </summary>
     public static class CompanionRoomAnchors
     {
@@ -19,5 +20,17 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         /// <summary>The awareness cooldown pigeonhole — where Z5's "fine-tuning ↓" lands.</summary>
         public const string WorkshopAwarenessCell = "AWARENESS FINE-TUNING";
+
+        /// <summary>Behaviour sliders + the two shortcut editors.</summary>
+        public const string WorkshopBehaviorCell = "BEHAVIOR";
+
+        /// <summary>Trigger mode, its interval, and the phrase shelf.</summary>
+        public const string WorkshopTriggersCell = "TRIGGERS & PHRASES";
+
+        /// <summary>The per-mod Hypnotube link pool.</summary>
+        public const string WorkshopLibraryCell = "HER LIBRARY";
+
+        /// <summary>Community prompt browse / import / export / installed list.</summary>
+        public const string WorkshopCommunityCell = "COMMUNITY";
     }
 }

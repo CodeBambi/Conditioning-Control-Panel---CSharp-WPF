@@ -33,6 +33,7 @@ namespace ConditioningControlPanel.Tests;
 ///   <item>The Workshop's deep-link anchors and its actionable/inert row split.</item>
 /// </list>
 /// </summary>
+[Collection(CompanionWpfRenderCollection.Name)]
 public class CompanionDepthZoneTests
 {
     // =====================================================================================

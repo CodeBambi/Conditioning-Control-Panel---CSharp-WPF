@@ -21,6 +21,7 @@ namespace ConditioningControlPanel.Tests;
 /// Each case runs on its own STA thread because WPF elements demand one; nothing here needs an
 /// Application instance, which keeps the suite headless.
 /// </summary>
+[Collection(CompanionWpfRenderCollection.Name)]
 public class CompanionZoneRenderSmokeTests
 {
     /// <summary>

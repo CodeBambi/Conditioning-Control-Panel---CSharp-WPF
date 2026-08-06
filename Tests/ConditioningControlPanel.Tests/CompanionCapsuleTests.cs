@@ -22,6 +22,7 @@ namespace ConditioningControlPanel.Tests;
 /// rule (radius = height / 2), and one proves the shape that comes out is actually a stadium. If
 /// someone ever "simplifies" the attached property back to a constant, the third one falls over.</para>
 /// </summary>
+[Collection(CompanionWpfRenderCollection.Name)]
 public class CompanionCapsuleTests
 {
     private const double ChipWidth = 110;

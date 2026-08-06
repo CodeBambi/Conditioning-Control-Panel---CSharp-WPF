@@ -534,6 +534,15 @@
                                                 <ColumnDefinition Width="{Binding XpFraction, Converter={StaticResource CmpFractionToRemainderStar}}"/>
                                             </Grid.ColumnDefinitions>
                                             <Border Grid.Column="0" Style="{StaticResource CmpGaugeFillStyle}"/>
+                                            <!-- Brain-Parasite drain flash, kept from the old hero
+                                                 (MainWindow.Companion.cs FlashXpBarOnDrain). It no
+                                                 longer needs the ActualWidth arithmetic that used to
+                                                 come with it: this sits in the same star column as
+                                                 the fill, so it is already exactly as wide as the
+                                                 earned portion of the bar. -->
+                                            <Border x:Name="PrgCompanion0FlashOverlay" x:FieldModifier="internal"
+                                                    Grid.Column="0" Style="{StaticResource CmpGaugeFillStyle}"
+                                                    Opacity="0" IsHitTestVisible="False"/>
                                         </Grid>
                                     </Border>
                                     <Grid Grid.Row="1">

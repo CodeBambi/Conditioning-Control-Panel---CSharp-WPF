@@ -1,0 +1,190 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.Companion.Runtime.WorkshopRosterCell"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             mc:Ignorable="d" d:DesignWidth="312">
+
+    <!-- ================================================================
+         Z8 · ROSTER — the five companion cards, re-parented out of the
+         old hero's roster tray (design §6: "kept — Z8 Roster, opened by
+         the hero's Switch chip").
+
+         Every x:Name here is the one the MainWindow partials already
+         write to (UpdateCompanionCardsUI, UpdateCompanionPromptLabels)
+         and every handler forwards to the same MainWindow method the old
+         tab forwarded to. The tray's UniformGrid became a one-column list
+         because a Workshop pigeonhole is 340px wide — that is the only
+         thing about these cards that changed.
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/ConditioningControlPanel;component/Views/Controls/Companion/Runtime/WorkshopCellTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <Style x:Key="RosterCardStyle" TargetType="Border">
+                <Setter Property="CornerRadius" Value="7"/>
+                <Setter Property="Padding" Value="9,7"/>
+                <Setter Property="Margin" Value="0,0,0,5"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="BorderThickness" Value="2"/>
+                <Setter Property="BorderBrush" Value="Transparent"/>
+                <Setter Property="Background" Value="#FF1A1A32"/>
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <StackPanel>
+        <!-- The roster's own help affordance rides beside the beta chip, as it did in the tray. -->
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <Border Background="#FF6B6B" CornerRadius="3" Padding="5,1" VerticalAlignment="Center">
+                <TextBlock Text="{loc:Str label_beta}" Foreground="White" FontSize="9" FontWeight="Bold"/>
+            </Border>
+            <Button x:Name="HelpBtnCompanions" x:FieldModifier="internal" Style="{DynamicResource HelpButtonStyle}"
+                    VerticalAlignment="Center" Margin="7,0,0,0" Tag="Companions"/>
+        </StackPanel>
+
+        <Border x:Name="CompanionCard0" x:FieldModifier="internal" Style="{StaticResource RosterCardStyle}"
+                MouseLeftButtonDown="CompanionCard_Click" Tag="0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="TxtCompanion0Name" x:FieldModifier="internal" Text="{loc:Str label_synthetic_blowdoll}"
+                                   Foreground="{DynamicResource PinkBrush}" FontSize="11.5" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="TxtCompanion0Lock" x:FieldModifier="internal" Text=" [50]" Foreground="#FFD700"
+                                   FontSize="10" VerticalAlignment="Center" Visibility="Collapsed"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                        <Button x:Name="BtnCompanion0Personality" Content="🎭" FontSize="10" Padding="4,0"
+                                Background="{DynamicResource DarkerBgBrush}" Foreground="#888" BorderThickness="0" Cursor="Hand"
+                                PreviewMouseLeftButtonDown="BtnCompanionPersonality_Click" Tag="0"
+                                ToolTip="{loc:Str tooltip_assign_ai_personality}"/>
+                        <TextBlock x:Name="TxtCompanion0Prompt" x:FieldModifier="internal" Text="" Foreground="#666" FontSize="10"
+                                   VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="150"/>
+                    </StackPanel>
+                </StackPanel>
+                <TextBlock x:Name="TxtCompanion0Level" x:FieldModifier="internal" Grid.Column="1" Text="{loc:Str label_lv_1}"
+                           Style="{StaticResource CmpCellValueStyle}" Foreground="#AAAAAA"/>
+            </Grid>
+        </Border>
+
+        <Border x:Name="CompanionCard1" x:FieldModifier="internal" Style="{StaticResource RosterCardStyle}"
+                MouseLeftButtonDown="CompanionCard_Click" Tag="1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="TxtCompanion1Name" x:FieldModifier="internal" Text="{loc:Str label_perfect_fuckpuppet}"
+                                   Foreground="#9370DB" FontSize="11.5" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="TxtCompanion1Lock" x:FieldModifier="internal" Text=" [100]" Foreground="#FFD700"
+                                   FontSize="10" VerticalAlignment="Center" Visibility="Collapsed"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                        <Button x:Name="BtnCompanion1Personality" Content="🎭" FontSize="10" Padding="4,0"
+                                Background="{DynamicResource DarkerBgBrush}" Foreground="#888" BorderThickness="0" Cursor="Hand"
+                                PreviewMouseLeftButtonDown="BtnCompanionPersonality_Click" Tag="1"
+                                ToolTip="{loc:Str tooltip_assign_ai_personality}"/>
+                        <TextBlock x:Name="TxtCompanion1Prompt" x:FieldModifier="internal" Text="" Foreground="#666" FontSize="10"
+                                   VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="150"/>
+                    </StackPanel>
+                </StackPanel>
+                <TextBlock x:Name="TxtCompanion1Level" x:FieldModifier="internal" Grid.Column="1" Text="{loc:Str label_lv_1}"
+                           Style="{StaticResource CmpCellValueStyle}" Foreground="#AAAAAA"/>
+            </Grid>
+        </Border>
+
+        <Border x:Name="CompanionCard2" x:FieldModifier="internal" Style="{StaticResource RosterCardStyle}"
+                MouseLeftButtonDown="CompanionCard_Click" Tag="2">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="TxtCompanion2Name" x:FieldModifier="internal" Text="{loc:Str label_brainwashed_slavedoll}"
+                                   Foreground="#50C878" FontSize="11.5" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="TxtCompanion2Lock" x:FieldModifier="internal" Text=" [125]" Foreground="#FFD700"
+                                   FontSize="10" VerticalAlignment="Center" Visibility="Collapsed"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                        <Button x:Name="BtnCompanion2Personality" Content="🎭" FontSize="10" Padding="4,0"
+                                Background="{DynamicResource DarkerBgBrush}" Foreground="#888" BorderThickness="0" Cursor="Hand"
+                                PreviewMouseLeftButtonDown="BtnCompanionPersonality_Click" Tag="2"
+                                ToolTip="{loc:Str tooltip_assign_ai_personality}"/>
+                        <TextBlock x:Name="TxtCompanion2Prompt" x:FieldModifier="internal" Text="" Foreground="#666" FontSize="10"
+                                   VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="150"/>
+                    </StackPanel>
+                </StackPanel>
+                <TextBlock x:Name="TxtCompanion2Level" x:FieldModifier="internal" Grid.Column="1" Text="{loc:Str label_lv_1}"
+                           Style="{StaticResource CmpCellValueStyle}" Foreground="#AAAAAA"/>
+            </Grid>
+        </Border>
+
+        <Border x:Name="CompanionCard3" x:FieldModifier="internal" Style="{StaticResource RosterCardStyle}"
+                MouseLeftButtonDown="CompanionCard_Click" Tag="3">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="TxtCompanion3Name" x:FieldModifier="internal" Text="{loc:Str label_platinum_puppet}"
+                                   Foreground="#FF6B6B" FontSize="11.5" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="TxtCompanion3Lock" x:FieldModifier="internal" Text=" [150]" Foreground="#FFD700"
+                                   FontSize="10" VerticalAlignment="Center" Visibility="Collapsed"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                        <Button x:Name="BtnCompanion3Personality" Content="🎭" FontSize="10" Padding="4,0"
+                                Background="{DynamicResource DarkerBgBrush}" Foreground="#888" BorderThickness="0" Cursor="Hand"
+                                PreviewMouseLeftButtonDown="BtnCompanionPersonality_Click" Tag="3"
+                                ToolTip="{loc:Str tooltip_assign_ai_personality}"/>
+                        <TextBlock x:Name="TxtCompanion3Prompt" x:FieldModifier="internal" Text="" Foreground="#666" FontSize="10"
+                                   VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="150"/>
+                    </StackPanel>
+                </StackPanel>
+                <TextBlock x:Name="TxtCompanion3Level" x:FieldModifier="internal" Grid.Column="1" Text="{loc:Str label_lv_1}"
+                           Style="{StaticResource CmpCellValueStyle}" Foreground="#AAAAAA"/>
+            </Grid>
+        </Border>
+
+        <Border x:Name="CompanionCard4" x:FieldModifier="internal" Style="{StaticResource RosterCardStyle}"
+                MouseLeftButtonDown="CompanionCard_Click" Tag="4">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="TxtCompanion4Name" x:FieldModifier="internal" Text="{loc:Str label_bambi_cow}"
+                                   Foreground="#F5DEB3" FontSize="11.5" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="TxtCompanion4Lock" x:FieldModifier="internal" Text=" [75]" Foreground="#FFD700"
+                                   FontSize="10" VerticalAlignment="Center" Visibility="Collapsed"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                        <Button x:Name="BtnCompanion4Personality" Content="🎭" FontSize="10" Padding="4,0"
+                                Background="{DynamicResource DarkerBgBrush}" Foreground="#888" BorderThickness="0" Cursor="Hand"
+                                PreviewMouseLeftButtonDown="BtnCompanionPersonality_Click" Tag="4"
+                                ToolTip="{loc:Str tooltip_assign_ai_personality}"/>
+                        <TextBlock x:Name="TxtCompanion4Prompt" x:FieldModifier="internal" Text="" Foreground="#666" FontSize="10"
+                                   VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="150"/>
+                    </StackPanel>
+                </StackPanel>
+                <TextBlock x:Name="TxtCompanion4Level" x:FieldModifier="internal" Grid.Column="1" Text="{loc:Str label_lv_1}"
+                           Style="{StaticResource CmpCellValueStyle}" Foreground="#AAAAAA"/>
+            </Grid>
+        </Border>
+    </StackPanel>
+</UserControl>

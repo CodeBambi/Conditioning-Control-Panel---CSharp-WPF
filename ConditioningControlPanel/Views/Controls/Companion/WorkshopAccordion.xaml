@@ -123,22 +123,43 @@
                 </DataTemplate.Triggers>
             </DataTemplate>
 
-            <!-- one pigeonhole. The title is the deep-link anchor, so it is a button. -->
+            <!-- one pigeonhole. The heading is a button that deep-links to this cell; the
+                 CommandParameter is the KEY, never the title — the title is localizable and an
+                 anchor that moves with the language is an anchor that misses. -->
             <DataTemplate x:Key="CmpWorkshopCellTemplate">
                 <Border Style="{StaticResource CmpWorkshopCellStyle}" Width="340"
-                        Tag="{Binding Title}">
+                        Tag="{Binding Key}">
                     <StackPanel>
                         <Button Style="{StaticResource CmpZ8RowButtonStyle}"
                                 ToolTip="{local:CmpStr companion_workshop_focus_tip}"
                                 Command="{Binding DataContext.FocusCellCommand,
                                           RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                CommandParameter="{Binding Title}">
+                                CommandParameter="{Binding Key}">
                             <TextBlock Text="{Binding Title}" Style="{StaticResource CmpWorkshopCellTitleStyle}"/>
                         </Button>
-                        <ItemsControl ItemsSource="{Binding Rows}"
-                                      ItemTemplate="{StaticResource CmpWorkshopRowTemplate}"/>
+
+                        <!-- Scaffold rows: the design-time shape. A wired-up cell carries the real
+                             re-parented control instead and these collapse, so the two can never
+                             render on top of each other. -->
+                        <ItemsControl x:Name="ScaffoldRows" ItemsSource="{Binding Rows}"
+                                      ItemTemplate="{StaticResource CmpWorkshopRowTemplate}"
+                                      Visibility="Collapsed"/>
+
+                        <!-- The container move (design §3 Z8): the legacy accordion's own controls,
+                             re-parented, not rebuilt. -->
+                        <ContentPresenter x:Name="CellContent" Content="{Binding Content}"/>
                     </StackPanel>
                 </Border>
+                <DataTemplate.Triggers>
+                    <!-- Null-tested rather than converted to a Visibility: a DataTrigger compares
+                         Value with Equals, and a literal "Visible" in markup is the STRING, which
+                         never equals Visibility.Visible. {x:Null} is the same test the row template
+                         above uses for a missing command. -->
+                    <DataTrigger Binding="{Binding Content}" Value="{x:Null}">
+                        <Setter TargetName="ScaffoldRows" Property="Visibility" Value="Visible"/>
+                        <Setter TargetName="CellContent" Property="Visibility" Value="Collapsed"/>
+                    </DataTrigger>
+                </DataTemplate.Triggers>
             </DataTemplate>
         </ResourceDictionary>
     </UserControl.Resources>

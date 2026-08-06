@@ -35,6 +35,7 @@ namespace ConditioningControlPanel.Tests;
 /// <para>Plus the chat surface's send path and the fact-kind palette. Nothing here needs a
 /// window except the two render cases at the bottom, which run on their own STA thread.</para>
 /// </summary>
+[Collection(CompanionWpfRenderCollection.Name)]
 public class CompanionSurfaceTests
 {
     // =====================================================================================

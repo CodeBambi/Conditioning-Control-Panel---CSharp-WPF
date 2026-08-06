@@ -44,7 +44,19 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Effective daily limit based on user tier
         /// </summary>
-        private int DailyLimit => App.Patreon?.HasAiAccess == true ? PatreonDailyLimit : FreeDailyLimit;
+        private int DailyLimit => EffectiveDailyLimit;
+
+        /// <summary>
+        /// The same ceiling, reachable by UI that has to draw a meter against it.
+        ///
+        /// <para>The Companion tab's attention gauge needs a denominator:
+        /// <see cref="DailyRequestsRemaining"/> alone cannot say whether "40 left" is plenty or
+        /// nearly out. Exposed rather than duplicated so the gauge and the limiter can never
+        /// disagree about what a full tank is. Doc 01 §5.4 replaces the request counter with a
+        /// server-authoritative token budget; this is one of the two places that then changes.</para>
+        /// </summary>
+        internal static int EffectiveDailyLimit =>
+            App.Patreon?.HasAiAccess == true ? PatreonDailyLimit : FreeDailyLimit;
 
         // Fallback response when API unavailable or limit reached — pick from idle phrases for variety
         private static readonly Random _fallbackRandom = new();

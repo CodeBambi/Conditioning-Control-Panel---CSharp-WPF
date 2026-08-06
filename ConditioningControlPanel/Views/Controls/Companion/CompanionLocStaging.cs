@@ -161,13 +161,21 @@ namespace ConditioningControlPanel.Views.Controls.Companion
                 ["companion_memory_filter_preference"] = "preferences",
                 ["companion_memory_filter_goal"] = "goals",
                 ["companion_memory_filter_moment"] = "moments",
-                // the per-card kind caption (the tag above the fact text)
-                ["companion_memory_kind_boundary"] = "boundary · always honored",
-                ["companion_memory_kind_joke"] = "running joke",
-                ["companion_memory_kind_preference"] = "preference",
-                ["companion_memory_kind_goal"] = "goal · open thread",
-                ["companion_memory_kind_moment"] = "moment",
-                ["companion_memory_kind_dormant"] = "soon · train 4",
+                // The per-card kind caption (the tag above the fact text).
+                //
+                // "card", not "kind", because Train 1 already shipped a companion_memory_kind_*
+                // family in the language files — the GROUP HEADERS of the panel this zone replaces
+                // ("Boundaries she must respect"). Same names, different job: these are the little
+                // tag above one fact ("boundary · always honored"). Reusing the family would have
+                // made the live file win with header-length copy in a chip-sized slot, and made
+                // the staged masters unreachable. The collision is asserted against in
+                // CompanionRoomWiringTests so it cannot come back.
+                ["companion_memory_card_boundary"] = "boundary · always honored",
+                ["companion_memory_card_joke"] = "running joke",
+                ["companion_memory_card_preference"] = "preference",
+                ["companion_memory_card_goal"] = "goal · open thread",
+                ["companion_memory_card_moment"] = "moment",
+                ["companion_memory_card_dormant"] = "soon · train 4",
 
                 // ---- Z4 personality ----
                 ["companion_personality_title"] = "Make her yours",
@@ -278,7 +286,77 @@ namespace ConditioningControlPanel.Views.Controls.Companion
                 // ---- Z8 workshop ----
                 ["companion_workshop_header"] = "WORKSHOP — EVERY DIAL SHE HAS",
                 ["companion_workshop_focus_tip"] = "jump to this shelf",
-                ["companion_workshop_drawer_note"] = "nothing was deleted. it just stopped being the front door."
+                ["companion_workshop_drawer_note"] = "nothing was deleted. it just stopped being the front door.",
+
+                // ---- Z8 workshop: the cell HEADINGS ----
+                // Staged now because the wiring pass split heading from anchor: the deep links
+                // match IWorkshopCellVm.Key (CompanionRoomAnchors), so these can be translated
+                // without the hero's Switch chip or Z5's "fine-tuning" link following them.
+                ["companion_workshop_cell_roster"] = "ROSTER",
+                ["companion_workshop_cell_behavior"] = "BEHAVIOR",
+                ["companion_workshop_cell_triggers"] = "TRIGGERS & PHRASES",
+                ["companion_workshop_cell_library"] = "HER LIBRARY",
+                ["companion_workshop_cell_community"] = "COMMUNITY",
+                ["companion_workshop_cell_awareness"] = "AWARENESS FINE-TUNING",
+
+                // =============================================================================
+                //  Added by the wiring pass — copy the live page needs that the scaffold did not.
+                // =============================================================================
+
+                // ---- Z1 hero: the XP readout's two end states and the next-level hint ----
+                ["companion_hero_next_level_fmt"] = "next: Lv {0}",
+                ["companion_hero_max_level"] = "max level",
+                ["companion_hero_xp_complete"] = "Complete!",
+
+                // ---- Z2 chat: relative time, said in words, never a timestamp ----
+                ["companion_chat_time_now"] = "just now",
+                ["companion_chat_time_minutes"] = "{0}m ago",
+                ["companion_chat_time_hours"] = "{0}h ago",
+                ["companion_chat_time_days"] = "{0}d ago",
+                // the two static bubbles under the veil. Fiction, and obviously so — they are
+                // blurred and inert, and no real line ever appears there.
+                ["companion_chat_teaser_you"] = "are you still awake?",
+                ["companion_chat_teaser_her"] = "for you? always~",
+                // the read-only transcript viewer behind the History chip
+                ["companion_chat_history_title"] = "Everything you two have said",
+                ["companion_chat_history_empty"] = "nothing yet. the first thing you say is the first thing she keeps.",
+                ["companion_chat_history_you"] = "you",
+                ["companion_chat_history_her"] = "her",
+
+                // ---- Z3 memory: the per-card provenance line ----
+                ["companion_memory_meta_uses"] = "used {0}\u00D7",
+                ["companion_memory_meta_last"] = "last: {0}",
+                ["companion_memory_meta_edited"] = "you wrote this one",
+                ["companion_memory_meta_new"] = "brand new",
+                // identity facts have no filter chip of their own; they still need a card caption
+                ["companion_memory_card_identity"] = "about you",
+
+                // ---- Z5 awareness: the two states the wire view has today ----
+                ["companion_awareness_wire_idle"] = "[ nothing yet ]",
+                // no deny-list setting exists before Train 2, so the add chip says so and is inert
+                ["companion_awareness_deny_dormant"] = "+ hiding apps from her arrives with Train 2",
+
+                // ---- Z6 attention: the request mirror, in chats ----
+                ["companion_attention_detail_fmt"] = "~{0} chats left \u00B7 resets at midnight",
+                ["companion_attention_detail_unlimited"] = "she thinks on your machine \u00B7 no daily limit",
+
+                // ---- Z7 engine room ----
+                ["companion_engine_status_ready"] = "\u25CF Connected",
+                ["companion_engine_status_ready_fmt"] = "\u25CF Connected \u00B7 {0} chats left today",
+                ["companion_engine_daily_limit_none"] = "Daily limit: none",
+                // the legacy Reset Memory button's narrower scope, rehoused (doc 01 \u00A72.4)
+                ["companion_engine_clear_conversation"] = "Clear conversation",
+                ["companion_engine_clear_conversation_note"] =
+                    "drops the thread only \u2014 she keeps everything she knows about you. " +
+                    "to wipe that too, use \u201cForget everything\u201d in her diary.",
+                // Three keys, not one multi-paragraph string: the house rule bans literal line
+                // breaks in language files, and CompanionLocStagingTests enforces exactly that
+                // here. The dialog joins them with blank lines at the call site.
+                ["companion_engine_clear_conversation_confirm"] = "Clear the conversation?",
+                ["companion_engine_clear_conversation_confirm_body"] =
+                    "She forgets the thread — in memory and on disk — and starts fresh on your " +
+                    "next message. What she knows about you is untouched.",
+                ["companion_engine_clear_conversation_confirm_warn"] = "This can't be undone."
 
                 // NOT staged, on purpose:
                 //   · Workshop cell titles — they are ANCHORS (CompanionRoomAnchors), matched by
@@ -315,6 +393,31 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             if (!string.IsNullOrEmpty(live) && !string.Equals(live, key, StringComparison.Ordinal)) return live;
 
             return English.TryGetValue(key, out var staged) ? staged : key;
+        }
+
+        /// <summary>
+        /// <see cref="Resolve"/> plus <c>string.Format</c>.
+        ///
+        /// <para>The house <c>Loc.GetF</c> cannot be used for a staged key: it formats whatever
+        /// <c>LocalizationManager</c> returned, and for a key that has not reached the language
+        /// files yet that is the key itself — so a format string would render as
+        /// <c>companion_chat_time_minutes</c> rather than "22m ago". This is the same fallback
+        /// ladder <see cref="Resolve"/> walks, with the arguments applied afterwards.</para>
+        ///
+        /// <para>A malformed template returns the unformatted string rather than throwing: a bad
+        /// translation is a cosmetic bug and must never be able to take a card down.</para>
+        /// </summary>
+        public static string ResolveF(string? key, params object[] args)
+        {
+            var template = Resolve(key);
+            try
+            {
+                return string.Format(CultureInfo.CurrentCulture, template, args);
+            }
+            catch (FormatException)
+            {
+                return template;
+            }
         }
 
         /// <summary>

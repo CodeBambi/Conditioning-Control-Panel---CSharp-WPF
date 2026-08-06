@@ -30,6 +30,7 @@ namespace ConditioningControlPanel.Tests;
 ///
 /// No WPF window is created (the converters are pure), so these run on any thread.
 /// </summary>
+[Collection(CompanionWpfRenderCollection.Name)]
 public class CompanionZoneLogicTests
 {
     // =====================================================================================

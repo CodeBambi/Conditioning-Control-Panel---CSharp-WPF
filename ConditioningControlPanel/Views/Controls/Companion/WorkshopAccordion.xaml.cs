@@ -35,9 +35,11 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         /// The same deep link, but landing on a named pigeonhole: the hero's Switch chip asks for
         /// the roster, Z5's fine-tuning link asks for the awareness cell.
         ///
-        /// <para><paramref name="cellTitle"/> is matched against <see cref="IWorkshopCellVm.Title"/>
-        /// case-insensitively. An unknown title is not an error — the drawer still opens and the
-        /// caller simply gets the drawer's own scroll, which is the useful half of the job.</para>
+        /// <para><paramref name="cellTitle"/> is matched against <see cref="IWorkshopCellVm.Key"/> —
+        /// the anchor, not the heading. Before the wiring pass split the two, a localized Workshop
+        /// heading would have quietly broken every deep link on the page. An unknown key is not an
+        /// error: the drawer still opens and the caller gets the drawer's own scroll, which is the
+        /// useful half of the job.</para>
         /// </summary>
         public void ExpandAndReveal(string? cellTitle)
         {
@@ -60,12 +62,12 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         }
 
         /// <summary>
-        /// Resolves the container for a cell title, or null when there is no match (or the
+        /// Resolves the container for a cell anchor key, or null when there is no match (or the
         /// containers have not been generated because the drawer is still collapsed).
         /// </summary>
-        private FrameworkElement? FindCellContainer(string? cellTitle)
+        private FrameworkElement? FindCellContainer(string? cellKey)
         {
-            if (string.IsNullOrWhiteSpace(cellTitle)) return null;
+            if (string.IsNullOrWhiteSpace(cellKey)) return null;
 
             var cells = ViewModel?.Cells;
             if (cells == null || cells.Count == 0) return null;
@@ -77,7 +79,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             foreach (var cell in cells)
             {
                 if (cell == null) continue;
-                if (!string.Equals(cell.Title, cellTitle, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.Equals(cell.Key, cellKey, StringComparison.OrdinalIgnoreCase)) continue;
                 return CellHost.ItemContainerGenerator.ContainerFromItem(cell) as FrameworkElement;
             }
             return null;
