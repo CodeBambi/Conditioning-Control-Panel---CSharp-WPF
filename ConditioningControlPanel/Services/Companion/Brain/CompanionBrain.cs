@@ -234,9 +234,16 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 // Live 0806: small models imitate the bark-echo sigil and wrap their own replies in
                 // «X said aloud: "…"». Unwrap before the text reaches the bubble, history, or disk.
                 var chatText = AiTextHygiene.UnwrapSpokenSigil(result.Text);
+
+                // Live 0806: and they invent URLs when asked for a video they have no link for.
+                // Strip before the reply is appended — a fabricated link left in the window teaches
+                // the next turn to write another one.
+                chatText = AiTextHygiene.StripUnsanctionedLinks(chatText);
+
                 if (chatText.Length == 0)
                 {
-                    // The reply was nothing but sigil shell. Same treatment as a canned fallback.
+                    // Nothing but sigil shell, or nothing but invented links. Either way there is no
+                    // reply left to show: same treatment as a canned fallback.
                     Session.Remove(userTurn);
                     return new AiReplyResult(GetFallbackPhrase(), IsAiGenerated: false, Refusal: null);
                 }
@@ -313,6 +320,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 }
 
                 var reactionText = AiTextHygiene.UnwrapSpokenSigil(result.Text);
+                reactionText = AiTextHygiene.StripUnsanctionedLinks(reactionText);
                 if (reactionText.Length == 0)
                 {
                     Session.Remove(eventTurn);

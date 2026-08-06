@@ -288,6 +288,16 @@ CRITICAL: Do NOT mention any specific video names. Only give generic ""go browse
         private record ContentSuggestion(string Name, string Description, string Url);
 
         /// <summary>
+        /// The built-in clickable content as plain (title, url) pairs, for
+        /// <see cref="Companion.CompanionLinkIndex"/>. The list is compile-time constant and never
+        /// mutated after construction, so one snapshot serves the whole process.
+        /// </summary>
+        internal static IReadOnlyList<(string Name, string Url)> ContentCatalogue => CatalogueSnapshot.Value;
+
+        private static readonly Lazy<IReadOnlyList<(string Name, string Url)>> CatalogueSnapshot =
+            new(() => StableBuilder._clickableContent.Select(c => (c.Name, c.Url)).ToList());
+
+        /// <summary>
         /// Default hypnotube link URLs for the Sissy Hypno content mode, comma-separated.
         /// Shown in the companion tab link pool editor so users see the defaults and format.
         /// </summary>
@@ -1044,6 +1054,27 @@ Example responses with REAL video names:
         }
 
         /// <summary>
+        /// The one link rule every prompt gets, appended after the branches rather than inside one
+        /// of them.
+        ///
+        /// <para>Live bug 2026-08-06: the "never include URLs" instruction existed ONLY in the
+        /// branch that shipped a video list. A user on the SissyHypno mod with no configured links
+        /// took the other branch — no list to quote from AND no prohibition — so when asked for a
+        /// video she invented YouTube URLs from training data, one of them not even a valid video
+        /// id. The case with nothing real to offer was the case least defended.</para>
+        ///
+        /// <para>This is the advisory half of the fix; <see cref="AiTextHygiene.StripUnsanctionedLinks"/>
+        /// is the half that actually holds when a small model ignores it.</para>
+        /// </summary>
+        internal const string LinkFloorRule = @"
+LINK RULE (applies to every reply, no exceptions):
+- NEVER write a URL, web address, or markdown link that was not given to you above. Do not invent,
+  guess, complete, or reconstruct one - not for YouTube, not for any site.
+- If you want to suggest something you have no link for, NAME it in words only. The app turns a name
+  you got from the lists above into a real, working link by itself.
+- You have no way to check whether a link works, so a link you wrote from memory is always wrong.";
+
+        /// <summary>
         /// Returns the default BambiSprite prompt (fallback).
         /// </summary>
         private string GetDefaultBambiSpritePrompt()
@@ -1057,6 +1088,7 @@ Example responses with REAL video names:
             var sb = new StringBuilder();
 
             // In SH mode without user-configured links, don't include specific video names
+            // (the LinkFloorRule below is appended AFTER both branches — see its remarks).
             if (!isBambiMode && !hasUserSHLinks)
             {
                 sb.AppendLine($@"
@@ -1151,6 +1183,8 @@ OUTPUT RULES:
                     sb.AppendLine(link.ToPromptText());
                 }
             }
+
+            sb.AppendLine(LinkFloorRule);
 
             var defaultPrompt = sb.ToString();
             return App.Mods?.MakeModAware(defaultPrompt) ?? defaultPrompt;

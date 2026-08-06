@@ -922,6 +922,40 @@
         <Setter Property="Foreground" Value="{StaticResource CmpFaintBrush}"/>
     </Style>
 
+    <!-- .watchchip — sits under her line when she NAMED something the app has a real link for.
+         Quiet by design: it is an offer, not a call to action, and it must never compete with the
+         zone's own CTA. The play glyph is the whole affordance; the label is her wording. -->
+    <Style x:Key="CmpWatchChipStyle" TargetType="Button">
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="Margin" Value="0,7,0,0"/>
+        <Setter Property="Padding" Value="9,4"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpPinkBrush}"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Chip" CornerRadius="9" Padding="{TemplateBinding Padding}"
+                            Background="#26FF69B4" BorderBrush="#59FF69B4" BorderThickness="1">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="▶" FontSize="9" VerticalAlignment="Center"
+                                       Margin="0,0,5,0" Foreground="{TemplateBinding Foreground}"/>
+                            <TextBlock Text="{TemplateBinding Content}" TextTrimming="CharacterEllipsis"
+                                       MaxWidth="240" VerticalAlignment="Center"
+                                       Foreground="{TemplateBinding Foreground}"/>
+                        </StackPanel>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chip" Property="Background" Value="#3DFF69B4"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- .aibadge — the pink AI badge. INVARIANT: this rides IsAiGenerated only. It must never
          appear on a bark, a canned line, or a BarkEcho. -->
     <Style x:Key="CmpAiBadgeStyle" TargetType="Border">

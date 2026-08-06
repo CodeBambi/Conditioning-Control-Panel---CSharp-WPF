@@ -29,6 +29,19 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         /// <summary>Relative time for the tooltip ("2h ago"). Optional.</summary>
         string? Timestamp { get; }
+
+        /// <summary>
+        /// Title of a video she NAMED that the app has a real link for, or null. Drives the watch
+        /// chip under the bubble.
+        ///
+        /// <para>She is forbidden from writing URLs (she has no way to check one, and on 2026-08-06
+        /// she was caught inventing them). Naming a title is the half she can do honestly; resolving
+        /// that name to a working link is the half the app can do honestly.</para>
+        /// </summary>
+        string? LinkTitle { get; }
+
+        /// <summary>Opens <see cref="LinkTitle"/>'s link. Null when there is nothing to open.</summary>
+        ICommand? OpenLinkCommand { get; }
     }
 
     /// <summary>One card on the Z3 fact wall.</summary>
@@ -186,18 +199,23 @@ namespace ConditioningControlPanel.Views.Controls.Companion
     {
         public CompanionChatBubble() { Text = string.Empty; }
 
-        public CompanionChatBubble(CompanionBubbleKind kind, string text, bool isAi = false, string? timestamp = null)
+        public CompanionChatBubble(CompanionBubbleKind kind, string text, bool isAi = false, string? timestamp = null,
+            string? linkTitle = null, ICommand? openLink = null)
         {
             Kind = kind;
             Text = text;
             IsAiGenerated = isAi;
             Timestamp = timestamp;
+            LinkTitle = linkTitle;
+            OpenLinkCommand = openLink;
         }
 
         public CompanionBubbleKind Kind { get; init; }
         public string Text { get; init; }
         public bool IsAiGenerated { get; init; }
         public string? Timestamp { get; init; }
+        public string? LinkTitle { get; init; }
+        public ICommand? OpenLinkCommand { get; init; }
     }
 
     public sealed class CompanionMemoryFact : CompanionObservable, IMemoryFactVm
