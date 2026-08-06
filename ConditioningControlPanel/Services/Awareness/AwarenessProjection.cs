@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace ConditioningControlPanel.Services.Awareness
 {
@@ -10,20 +11,36 @@ namespace ConditioningControlPanel.Services.Awareness
     /// may legitimately hold things the cloud must never see; what leaves the machine is whatever this
     /// class writes, and nothing else.
     ///
-    /// <para><b>Cloud projection — the exhaustive list of what crosses the wire:</b> cluster id,
-    /// category, our own coarse app id and display name, bucketed history numbers (visits, minutes
-    /// rounded to five, dwell as a band), the transition kind, trend LABELS, time bucket and weekday,
-    /// in-app CCP state, habit pattern labels, recent-reaction summaries, the rarity tier, and — only
-    /// when the user allow-listed that app for titles — the sanitised page title.</para>
+    /// <para><b>Cloud projection — the exhaustive list of what crosses the wire:</b> the schema
+    /// version; cluster id; category; our own coarse app id and display name; bucketed history numbers
+    /// (visits today, minutes today and this week rounded to five, gap since the last visit rounded to
+    /// five, day streak, switch count); dwell and input-idle as BANDS rather than seconds; the
+    /// fullscreen flag; the transition kind; trend LABELS (kind + magnitude); the day-arc summary,
+    /// which is built from app ids only; time bucket and weekday; in-app CCP state (session running,
+    /// level, login streak, recent achievement id); a media block carrying only a whitelisted playback
+    /// state and a repeat COUNT; habit pattern labels; the rarity tier; her own recent lines; and —
+    /// only when the user allow-listed that app for titles — the sanitised, scrubbed page title.</para>
     ///
-    /// <para><b>Never, on any path:</b> raw window titles, OCR text, keystrokes, URLs, process paths,
-    /// screenshots, or SMTC track/artist names. And for the <c>site_eh</c> cluster the app id, the
-    /// display name, the title and the day arc are all withheld as well — only the cluster id goes,
-    /// regardless of allow lists.</para>
+    /// <para><b>Never, on any cloud path:</b> raw window titles, OCR text, keystrokes, URLs, process
+    /// paths, screenshots, SMTC track or artist names, or the id of the app they came FROM. That last
+    /// one is deliberate: the frame carries <see cref="ContextFrame.PreviousAppId"/> but not the
+    /// previous app's CLUSTER, so there is no way to tell here whether the app they just left was an
+    /// adult one. Sending it would leak past the adult rule below through the back door, so it is a
+    /// local-only field (addendum D: when the privacy layer cannot answer, drop it).</para>
     ///
-    /// <para><b>Shell status.</b> The privacy rules above are implemented and tested now, because they
-    /// are the part that cannot be walked back after it ships. The shape is minimal and the prompt
-    /// package owns making it good — it may add fields, but it may not widen this list.</para>
+    /// <para><b>And for the <c>site_eh</c> cluster</b> the app id, the display name, the title, the day
+    /// arc and the habit labels are all withheld as well — only the cluster id goes, regardless of
+    /// allow lists (doc 02 §6.1, and the conservative reading of open question 2: cluster-level jokes
+    /// on by default, per-site specificity opt-in).</para>
+    ///
+    /// <para><b>The local projection</b> is the fuller frame for the machine-local Ollama path: the
+    /// page title, the now-playing track and artist, the previous app and the raw second counts are
+    /// included and the adult cluster is not collapsed. Nothing this method writes is permitted to
+    /// reach a remote endpoint.</para>
+    ///
+    /// <para><b>This is also the "what she can see" panel's source of truth.</b> Showing the real wire
+    /// format is the point (doc 02 §6.4), so this method must never grow a prettier "for display"
+    /// variant that differs from what is actually sent.</para>
     /// </summary>
     public static class AwarenessProjection
     {
@@ -34,16 +51,44 @@ namespace ConditioningControlPanel.Services.Awareness
         public const int MaxRecentReactions = 10;
 
         /// <summary>
-        /// The sanitised, bucketed JSON that may be sent to a cloud provider. Also exactly what the
-        /// "what she can see" panel renders — showing the real wire format is the point (doc 02 §6.4),
-        /// so this method must never grow a "for display" variant that differs from the truth.
+        /// How many of the recent lines are sent at (near) full length. Doc 02 §3.1 item 4 asks for
+        /// "summaries + the full text of the last 3": the newest few are what the model is most likely
+        /// to accidentally rewrite, and the older ones only need to be recognisable.
+        /// </summary>
+        public const int FullTextRecentReactions = 3;
+
+        /// <summary>Character cap on the newest recent lines.</summary>
+        public const int RecentFullLength = 160;
+
+        /// <summary>Character cap on the older recent lines — enough to spot a repeated opening.</summary>
+        public const int RecentSummaryLength = 64;
+
+        /// <summary>Character cap on an allow-listed page title after scrubbing.</summary>
+        public const int TitleLength = 120;
+
+        // Emails and long digit runs are the two things most likely to be sitting in a window title
+        // that the user allow-listed for a good reason ("Inbox — 4 unread") and would regret sending
+        // in full ("Order 100293847562 — receipt for card ending 4471"). Order numbers, card
+        // fragments, phone numbers and account ids are all digit runs; six is short enough to catch
+        // them and long enough to leave "Bambi TikTok 4" and a 4-digit year alone.
+        private static readonly Regex EmailPattern = new(
+            @"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}", RegexOptions.Compiled);
+
+        private static readonly Regex LongDigitRun = new(@"\d{6,}", RegexOptions.Compiled);
+
+        /// <summary>Playback states SMTC actually reports. Anything else reads as "unknown".</summary>
+        private static readonly string[] KnownPlaybackStates =
+        {
+            "closed", "opened", "changing", "stopped", "playing", "paused"
+        };
+
+        /// <summary>
+        /// The sanitised, bucketed JSON that may be sent to a cloud provider.
         /// </summary>
         public static string BuildCloudProjection(ContextFrame? frame) => Build(frame, cloud: true);
 
         /// <summary>
-        /// The fuller frame for the local Ollama path, which is machine-local by definition: page title
-        /// and now-playing are included, and the adult cluster is not collapsed. Nothing here is
-        /// permitted to reach a remote endpoint.
+        /// The fuller frame for the local Ollama path, which is machine-local by definition.
         /// </summary>
         public static string BuildLocalProjection(ContextFrame? frame) => Build(frame, cloud: false);
 
@@ -53,7 +98,7 @@ namespace ConditioningControlPanel.Services.Awareness
 
             bool adult = cloud && frame.IsAdultCluster;
 
-            using var stream = new MemoryStream(512);
+            using var stream = new MemoryStream(768);
             using (var w = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false }))
             {
                 w.WriteStartObject();
@@ -72,7 +117,8 @@ namespace ConditioningControlPanel.Services.Awareness
                 // Populated upstream ONLY for user-allow-listed apps; the shipped allow list is empty.
                 if (!adult && !string.IsNullOrWhiteSpace(frame.PageTitleSanitized))
                 {
-                    w.WriteString("title", AwarenessText.SanitizeDisplayName(frame.PageTitleSanitized, 120));
+                    var scrubbed = ScrubTitle(frame.PageTitleSanitized);
+                    if (scrubbed.Length > 0) w.WriteString("title", scrubbed);
                 }
 
                 w.WriteString("transition", frame.Transition.ToString());
@@ -118,23 +164,47 @@ namespace ConditioningControlPanel.Services.Awareness
                 }
                 w.WriteEndObject();
 
-                // Pattern labels only — a habit's label is authored by us, its evidence never leaves.
-                w.WriteStartArray("habits");
-                foreach (var habit in frame.MatchedHabits)
+                // The media SIGNAL without the media CONTENT: how it is playing and how many times it
+                // has come round. "That is the fourth replay" is the joke; the track name is not, and
+                // is machine-local (doc 02 §2.2).
+                if (frame.NowPlaying is { } playing)
                 {
-                    if (habit == null || habit.Muted) continue;
-                    w.WriteStringValue(AwarenessText.SanitizeId(habit.Pattern));
+                    w.WriteStartObject("media");
+                    w.WriteString("state", PlaybackState(playing.PlaybackState));
+                    w.WriteNumber("repeats", Math.Max(0, playing.RepeatCount));
+                    w.WriteEndObject();
                 }
-                w.WriteEndArray();
 
-                // The ban list: her own delivered lines, so she cannot reuse a punchline.
+                // Pattern labels only — a habit's label is authored by us, its evidence never leaves.
+                // Withheld entirely for adult frames: a per-site habit label is exactly the
+                // specificity the cluster rule exists to prevent, and Train 2 never has any anyway.
+                if (!adult)
+                {
+                    w.WriteStartArray("habits");
+                    foreach (var habit in frame.MatchedHabits)
+                    {
+                        if (habit == null || habit.Muted) continue;
+                        w.WriteStringValue(AwarenessText.SanitizeId(habit.Pattern));
+                    }
+                    w.WriteEndArray();
+                }
+
+                // The ban list: her own delivered lines, so she cannot reuse a punchline. The newest
+                // few go at full length because they are what she is most likely to rewrite by
+                // accident; the older ones only need to be recognisable.
                 w.WriteStartArray("recent");
                 int written = 0;
                 foreach (var line in frame.RecentReactions)
                 {
                     if (line == null || string.IsNullOrWhiteSpace(line.Text)) continue;
-                    if (written++ >= MaxRecentReactions) break;
-                    w.WriteStringValue(AwarenessText.SanitizeDisplayName(line.Text, 160));
+                    if (written >= MaxRecentReactions) break;
+
+                    int cap = written < FullTextRecentReactions ? RecentFullLength : RecentSummaryLength;
+                    var text = AwarenessText.SanitizeDisplayName(line.Text, cap);
+                    written++;
+                    if (text.Length == 0) continue;
+                    if (line.Text.Length > text.Length) text += "…";
+                    w.WriteStringValue(text);
                 }
                 w.WriteEndArray();
 
@@ -149,9 +219,12 @@ namespace ConditioningControlPanel.Services.Awareness
                         {
                             w.WriteString("artist", AwarenessText.SanitizeDisplayName(media.Artist, 80));
                         }
-                        w.WriteString("state", AwarenessText.SanitizeDisplayName(media.PlaybackState, 24));
-                        w.WriteNumber("repeats", Math.Max(0, media.RepeatCount));
                         w.WriteEndObject();
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(frame.PreviousAppId))
+                    {
+                        w.WriteString("from", AwarenessText.SanitizeId(frame.PreviousAppId));
                     }
 
                     w.WriteNumber("idle_seconds", Math.Max(0, frame.InputIdleSeconds));
@@ -162,6 +235,23 @@ namespace ConditioningControlPanel.Services.Awareness
             }
 
             return Encoding.UTF8.GetString(stream.ToArray());
+        }
+
+        /// <summary>
+        /// Removes email addresses and digit runs of six or more from an allow-listed page title, then
+        /// caps it. The allow list is an "I am fine with this app's titles" statement about an APP, not
+        /// a promise that every future title from it is harmless, so the scrub runs regardless.
+        ///
+        /// <para>Returns an empty string when nothing usable survived, in which case no title field is
+        /// written at all.</para>
+        /// </summary>
+        public static string ScrubTitle(string? title)
+        {
+            if (string.IsNullOrWhiteSpace(title)) return "";
+
+            var text = EmailPattern.Replace(title, "…");
+            text = LongDigitRun.Replace(text, "…");
+            return AwarenessText.SanitizeDisplayName(text, TitleLength);
         }
 
         /// <summary>Minutes to the nearest five (doc 02 §6.2) — enough for a joke, not enough for a timeline.</summary>
@@ -191,5 +281,20 @@ namespace ConditioningControlPanel.Services.Awareness
             < 1800 => "idle",
             _ => "away"
         };
+
+        /// <summary>
+        /// Whitelisted playback state. SMTC reports one of six values; anything else — including
+        /// whatever a future Windows build or a third-party session decides to call itself — reads as
+        /// "unknown" rather than being forwarded verbatim.
+        /// </summary>
+        public static string PlaybackState(string? raw)
+        {
+            var id = AwarenessText.SanitizeId(raw);
+            foreach (var known in KnownPlaybackStates)
+            {
+                if (string.Equals(id, known, StringComparison.Ordinal)) return known;
+            }
+            return "unknown";
+        }
     }
 }

@@ -491,6 +491,12 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- Awareness v2 angle cards. Shipped as Content next to app_clusters.json by the glob above so a
+         mod can REPLACE the file on disk, and ALSO embedded here so there is a fail-closed floor: a
+         missing, oversized, malformed or hostile override falls back to this copy rather than to a
+         prompt with no angle cards and no persona digest.
+         See Services\Awareness\AwarenessAngleCards.cs. -->
+    <EmbeddedResource Include="Resources\sounds\companion_audio\awareness_angles.json" />
     <!-- Endless three.js "rabbit hole" tunnel background (HTML/JS + vendored three.js) and the
          DtRH browser game (Resources\web\dtrh). Served to a WebView2 via virtual hosts, so they
          must live on disk in the output. Remove from the default None glob first so a no-copy
