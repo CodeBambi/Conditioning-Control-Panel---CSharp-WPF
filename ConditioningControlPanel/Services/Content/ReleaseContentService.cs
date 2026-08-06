@@ -1143,37 +1143,106 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Extensions that count as pack-delivered media. PNG is in deliberately: the packs carry
+        /// portrait/pose art as well as voice (builtin-sissyhypno ships 312 PNGs next to its ~1,700
+        /// audio files) and a mod whose art did not survive is just as broken to the user as a
+        /// silent one. The <c>.json</c> manifests in these folders stay in the installer, so they
+        /// must never count — that is what let a stripped install read as fully stocked.
+        /// </summary>
+        private static readonly string[] MediaExtensions = { ".mp3", ".wav", ".ogg", ".m4a", ".png" };
+
+        /// <summary>
+        /// How many media files a mod's own subtree must hold before <see cref="HasModMediaOnDisk"/>
+        /// calls it present.
+        ///
+        /// "Any .mp3 at all" is what wedged v6.6.4: ONE file surviving a half-merged install
+        /// satisfied the probe forever, so the pack was never re-fetched and the user stayed
+        /// voiceless. Healthy trees are nowhere near this line — an extracted built-in mod runs 390+
+        /// media files and the loose companion audio 1,400-2,000 — so any floor between "a handful"
+        /// and "a hundred" separates clearly-present from clearly-broken. 50 is chosen at the low end
+        /// on purpose: this number decides whether to spend a user's bandwidth, and a hand-trimmed
+        /// but working install must not be dragged into a re-download.
+        /// </summary>
+        internal const int MinModMediaFiles = 50;
+
+        /// <summary>
+        /// Media files among <paramref name="paths"/>, counting no further than
+        /// <paramref name="stopAt"/> — callers only ever compare against a floor, and these
+        /// enumerations run over thousands of files during startup.
+        /// </summary>
+        internal static int CountMediaFiles(IEnumerable<string>? paths, int stopAt = int.MaxValue)
+        {
+            if (paths == null || stopAt <= 0) return 0;
+
+            var count = 0;
+            foreach (var path in paths)
+            {
+                if (string.IsNullOrEmpty(path)) continue;
+                var ext = Path.GetExtension(path);
+                if (string.IsNullOrEmpty(ext)) continue;
+
+                foreach (var known in MediaExtensions)
+                {
+                    if (!ext.Equals(known, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (++count >= stopAt) return count;
+                    break;
+                }
+            }
+            return count;
+        }
+
+        /// <summary>
         /// True when a built-in mod's media is present WITHOUT its pack being stamped — the surviving
-        /// state of an in-place upgrade. Two shapes to probe, matching the two shapes the packs take:
-        /// an extracted <c>.ccpmod</c> tree (drone, locked) and loose companion audio (bambi, sissy,
-        /// locked). Any failure answers "present" so a bad probe can never trigger a download.
+        /// state of an in-place upgrade. Both shapes the packs take feed ONE count: an extracted
+        /// <c>.ccpmod</c> tree (drone, locked) and loose companion audio (bambi, sissy, locked). A
+        /// half-merged install leaves debris in either, so neither shape may vote "present" on its
+        /// structure alone — see <see cref="MinModMediaFiles"/>.
+        ///
+        /// A probe failure answers "missing": a needless re-download costs bandwidth once, a probe
+        /// that answers "present" whenever it breaks wedges the user voiceless forever.
         /// </summary>
         private static bool HasModMediaOnDisk(string modId)
         {
+            var count = 0;
             try
             {
-                // 1) Extracted .ccpmod payload — the exact probes ModService.PrepareBuiltInMod uses
-                //    (mod.json for a full package, resources\ for a resources-only one).
+                // 1) Extracted .ccpmod payload, under the root ModService.PrepareBuiltInMod fills.
                 var extractDir = Path.Combine(App.UserDataPath, "builtin_mods", modId);
-                if (File.Exists(Path.Combine(extractDir, "mod.json"))) return true;
-                if (Directory.Exists(Path.Combine(extractDir, "resources"))) return true;
+                if (Directory.Exists(extractDir))
+                    count = CountMediaFiles(SafeEnumerateFiles(extractDir), MinModMediaFiles);
 
-                // 2) Loose companion audio. Deliberately audio-only patterns: the .json manifests in
-                //    this folder STAY in the installer, so "any file here" would report a stripped
-                //    install as fully stocked. ContentLocator covers both roots.
-                var relAudio = Path.Combine("Resources", "sounds", "companion_audio", "mods", modId);
-                foreach (var pattern in new[] { "*.mp3", "*.wav" })
+                // 2) Loose companion audio. ContentLocator covers both roots.
+                if (count < MinModMediaFiles)
                 {
-                    if (ContentLocator.EnumerateFiles(relAudio, pattern, SearchOption.AllDirectories).Any())
-                        return true;
+                    var relAudio = Path.Combine("Resources", "sounds", "companion_audio", "mods", modId);
+                    count += CountMediaFiles(
+                        ContentLocator.EnumerateFiles(relAudio, "*", SearchOption.AllDirectories),
+                        MinModMediaFiles - count);
                 }
 
-                return false;
+                if (count >= MinModMediaFiles) return true;
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("ReleaseContentService: mod-media probe for {Mod} failed: {Error}", modId, ex.Message);
-                return true;
+                App.Logger?.Information(
+                    "ReleaseContentService: mod-media probe for {Mod} failed ({Error}) — treating it as missing so the pack re-fetches",
+                    modId, ex.Message);
+                return false;
+            }
+
+            App.Logger?.Information(
+                "ReleaseContentService: mod {Mod} has only {Count} media file(s) on disk (floor {Floor}) — queueing a pack re-fetch",
+                modId, count, MinModMediaFiles);
+            return false;
+        }
+
+        private static IEnumerable<string> SafeEnumerateFiles(string dir)
+        {
+            try { return Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories); }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("ReleaseContentService: could not enumerate {Dir}: {Error}", dir, ex.Message);
+                return Array.Empty<string>();
             }
         }
 
