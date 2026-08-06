@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using ConditioningControlPanel.Services.Haptics.Core;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
@@ -14,6 +15,10 @@ namespace ConditioningControlPanel.Models.Deeper
     {
         string? PatternName { get; set; }
         List<double[]>? CustomPattern { get; set; }
+
+        // Which toy role receives the pattern. Null = All. Implementers that
+        // carry no role of their own (timeline effect items) take this default.
+        ToyRole? Target { get => null; set { } }
     }
 
     public class HapticTrack
@@ -52,6 +57,11 @@ namespace ConditioningControlPanel.Models.Deeper
         [JsonProperty("activation", NullValueHandling = NullValueHandling.Ignore)]
         [JsonConverter(typeof(StringEnumConverter))]
         public EffectActivation? Activation { get; set; }
+
+        // Null = All (every toy). Absent in old files, so they keep routing to all roles.
+        [JsonProperty("target", NullValueHandling = NullValueHandling.Ignore)]
+        [JsonConverter(typeof(StringEnumConverter))]
+        public ToyRole? Target { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken>? UnknownFields { get; set; }

@@ -123,6 +123,11 @@ namespace ConditioningControlPanel.Services.Haptics.Core
         /// Arrays are replaced wholesale, never mutated, so the loop may read them unlocked.</summary>
         private readonly double[]?[] _layerSplits = new double[]?[LayerCount];
         private volatile bool _anySplit;
+        /// <summary>Per-layer role override owned by the RUNNING envelope on that layer: while it
+        /// plays, it routes instead of the layer rule's Target. Null for every layer in the normal
+        /// case, and dies with the envelope — a layer rule must never inherit it.</summary>
+        private readonly ToyRole?[] _layerTargets = new ToyRole?[LayerCount];
+        private volatile bool _anyLayerTarget;
         /// <summary>Phase F: continuous layers are muted until this tick (user turned the toy up or
         /// down themselves — see <see cref="SuppressLayersUntil"/>). Transients still fire.</summary>
         private long _layersSuppressedUntil;
@@ -266,6 +271,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             List<PulseSample>? pulseSamples;
             double[] layerSnapshot;
             double[]?[]? splitSnapshot = null;
+            ToyRole?[]? targetSnapshot = null;
 
             lock (_gate)
             {
@@ -280,14 +286,27 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 // User-override back-off: the toy's own controls win for a while, so the floor
                 // goes away entirely. Transients are deliberately still allowed — an achievement
                 // buzz is an event, not the app quietly overriding the user's choice again.
-                if (now < _layersSuppressedUntil || testWindowOnly)
+                if (now < _layersSuppressedUntil)
                 {
                     for (int i = 0; i < LayerCount; i++) layerSnapshot[i] = 0;
+                }
+                else if (testWindowOnly)
+                {
+                    // H2, with one hole: an envelope SUBMITTED during the test window is the thing
+                    // the user asked to hear. Everything else — held Video/AudioSync/Dtrh floors,
+                    // splits, envelopes from before the master toggle went off — stays muted,
+                    // because a stale floor restarting the toy is what H2 exists to stop.
+                    for (int i = 0; i < LayerCount; i++)
+                        if (_layerEnvelopes[i]?.TestEligible != true) layerSnapshot[i] = 0;
                 }
                 else if (_anySplit)
                 {
                     splitSnapshot = (double[]?[])_layerSplits.Clone();
                 }
+
+                // Snapshotted under the same lock as the layers it routes; BuildOutputs runs
+                // outside it.
+                if (_anyLayerTarget) targetSnapshot = (ToyRole?[])_layerTargets.Clone();
 
                 pulseSamples = _active.Count == 0 ? null : new List<PulseSample>(_active.Count);
                 if (pulseSamples != null)
@@ -329,7 +348,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                     // for as long as the device stays registered.
                     var st = GetDeviceState(device.DeviceKey);
                     if (!device.IsConnected) st.Offline = true;
-                    outputs = BuildOutputs(device, ZeroLayers, null, null, now, out changed, out pending);
+                    outputs = BuildOutputs(device, ZeroLayers, null, null, null, now, out changed, out pending);
                 }
                 else
                 {
@@ -337,7 +356,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                     // Back from the dead: whatever this toy is doing now, we did not put it there
                     // (our zeros went nowhere while it was off the air), so forget the cache.
                     if (st.Offline) { st.Offline = false; Invalidate(st, now); }
-                    outputs = BuildOutputs(device, layerSnapshot, splitSnapshot, pulseSamples, now, out changed, out pending);
+                    outputs = BuildOutputs(device, layerSnapshot, splitSnapshot, targetSnapshot, pulseSamples, now, out changed, out pending);
                 }
 
                 if (outputs == null || !changed) continue;
@@ -380,7 +399,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
         /// Returns null when there is nothing to send. <paramref name="pending"/> is the quantized
         /// cache the caller must commit once (and only once) the send succeeds.</summary>
         private IReadOnlyList<ActuatorOutput>? BuildOutputs(
-            HapticDevice device, double[] layers, double[]?[]? splits,
+            HapticDevice device, double[] layers, double[]?[]? splits, ToyRole?[]? layerTargets,
             List<PulseSample>? pulses, long now, out bool changed, out int[]? pending)
         {
             changed = false;
@@ -407,7 +426,8 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 if (value <= 0) continue;
                 var rule = v2.Rule((HapticLayer)i);
                 if (!rule.Enabled) continue;
-                if (!RoleMatches(rule.Target, device.Role)) continue;
+                // A running envelope may route itself; everything else about the rule still applies.
+                if (!RoleMatches(layerTargets?[i] ?? rule.Target, device.Role)) continue;
                 var layerScale = Math.Clamp(rule.Intensity, 0, 1) * temperament.ContinuousScale;
                 var scaled = value * layerScale;
                 if (scaled > floorTarget) floorTarget = scaled;
@@ -621,6 +641,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 _layerValues[i] = value;
                 _layerAutoZeroAt[i] = (value > 0 && autoZeroMs > 0) ? Environment.TickCount64 + autoZeroMs : 0;
                 if (_layerSplits[i] != null) { _layerSplits[i] = null; RecomputeAnySplitLocked(); }
+                if (_layerTargets[i] != null) { _layerTargets[i] = null; RecomputeAnyLayerTargetLocked(); }
             }
             if (value > 0) Start();
         }
@@ -661,6 +682,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 _layerValues[i] = scalar;
                 _layerAutoZeroAt[i] = 0;
                 RecomputeAnySplitLocked();
+                if (_layerTargets[i] != null) { _layerTargets[i] = null; RecomputeAnyLayerTargetLocked(); }
             }
             if (scalar > 0) Start();
         }
@@ -672,6 +694,15 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 if (_layerSplits[i] != null) { _anySplit = true; return; }
             }
             _anySplit = false;
+        }
+
+        private void RecomputeAnyLayerTargetLocked()
+        {
+            for (int i = 0; i < LayerCount; i++)
+            {
+                if (_layerTargets[i] != null) { _anyLayerTarget = true; return; }
+            }
+            _anyLayerTarget = false;
         }
 
         /// <summary>
@@ -704,6 +735,13 @@ namespace ConditioningControlPanel.Services.Haptics.Core
         /// keyframe patterns). Replaces any running envelope on the same layer; the layer returns
         /// to 0 when it ends.</summary>
         public void PlayLayerEnvelope(HapticLayer layer, IReadOnlyList<double> values, int totalMs)
+            => PlayLayerEnvelope(layer, values, totalMs, null);
+
+        /// <summary>As above, but <paramref name="targetOverride"/> routes THIS envelope by role
+        /// instead of the layer rule's Target for as long as it runs. It dies with the envelope, so
+        /// whatever writes the layer next is back on the rule.</summary>
+        public void PlayLayerEnvelope(HapticLayer layer, IReadOnlyList<double> values, int totalMs,
+                                      ToyRole? targetOverride)
         {
             if (_disposed || values == null || values.Count == 0 || totalMs <= 0) return;
             var copy = new double[values.Count];
@@ -715,10 +753,15 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 {
                     Values = copy,
                     StartAt = Environment.TickCount64,
-                    TotalMs = totalMs
+                    TotalMs = totalMs,
+                    // Master toggle off AND an open test window at submit time = a preview/test
+                    // path (nothing else is audible), so this envelope alone survives the H2 mute.
+                    // An envelope submitted with no test window open stays mutable like any other.
+                    TestEligible = !_settings.Enabled && IsGateOpen
                 };
                 _layerAutoZeroAt[i] = 0;
                 if (_layerSplits[i] != null) { _layerSplits[i] = null; RecomputeAnySplitLocked(); }
+                if (_layerTargets[i] != targetOverride) { _layerTargets[i] = targetOverride; RecomputeAnyLayerTargetLocked(); }
             }
             Start();
         }
@@ -735,6 +778,7 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                     {
                         _layerEnvelopes[i] = null;
                         _layerValues[i] = 0;
+                        if (_layerTargets[i] != null) { _layerTargets[i] = null; RecomputeAnyLayerTargetLocked(); }
                     }
                     else
                     {
@@ -934,8 +978,10 @@ namespace ConditioningControlPanel.Services.Haptics.Core
                 _layerAutoZeroAt[i] = 0;
                 _layerEnvelopes[i] = null;
                 _layerSplits[i] = null;
+                _layerTargets[i] = null;
             }
             _anySplit = false;
+            _anyLayerTarget = false;
             // DeviceState belongs to the loop thread (M3): ask for a resync instead of zeroing it
             // here. That also re-opens the zero re-assert window, so the loop stamps real zeros.
             RequestResync();
@@ -1111,6 +1157,9 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             public double[] Values = Array.Empty<double>();
             public long StartAt;
             public int TotalMs;
+            /// <summary>Submitted during an open test window while the master toggle was off —
+            /// i.e. a preview/test path. Exempts THIS envelope — and nothing else — from the H2 mute.</summary>
+            public bool TestEligible;
         }
 
         /// <summary>Loop-thread-owned output state for one device (see the single-writer note on

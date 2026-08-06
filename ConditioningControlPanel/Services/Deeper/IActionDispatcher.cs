@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models.Deeper;
+using ConditioningControlPanel.Services.Haptics.Core;
 
 namespace ConditioningControlPanel.Services.Deeper
 {
@@ -202,6 +203,7 @@ namespace ConditioningControlPanel.Services.Deeper
             public float[] Samples = System.Array.Empty<float>();
             public double Intensity = 1.0;
             public int OriginalDurationMs;
+            public ToyRole? Target;
         }
 
         public async Task DispatchAsync(EnhancementAction action, EnhancementDispatchContext ctx, CancellationToken ct = default)
@@ -606,12 +608,13 @@ namespace ConditioningControlPanel.Services.Deeper
                         {
                             Samples = samples,
                             Intensity = haptic.Intensity,
-                            OriginalDurationMs = haptic.DurationMs
+                            OriginalDurationMs = haptic.DurationMs,
+                            Target = haptic.Target
                         };
                     }
                 }
 
-                await App.Haptics.SetSyncPatternAsync(samples, haptic.DurationMs);
+                await App.Haptics.SetSyncPatternAsync(samples, haptic.DurationMs, haptic.Target);
             }
             catch (Exception ex)
             {
