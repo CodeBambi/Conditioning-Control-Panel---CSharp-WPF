@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Linq;
 using System.Reflection;
+using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.Awareness;
 using ConditioningControlPanel.Services.Companion.Brain;
 using ConditioningControlPanel.Views.Controls.Companion;
 using ConditioningControlPanel.Views.Controls.Companion.Runtime;
@@ -250,32 +252,38 @@ public class CompanionRoomLiveSurfaceTests
     // =====================================================================================
 
     /// <summary>
-    /// Z5 shipped "incognito is always invisible" and "page titles stay hidden unless you allow
-    /// them" in nine languages. Neither exists: <c>grep -i incognito</c> over the C# returns
-    /// nothing, <c>WindowAwarenessService</c>'s browser branch has no private-session check, and
-    /// <c>AllowPageTitles</c> is a hardwired <c>get =&gt; true</c> behind a permanently disabled
-    /// switch. On the one card whose premise is that it does not overstate, an unimplemented
-    /// absolute is worse than no copy at all — so both lines are now Train 2 promises, which is what
-    /// the deny list next to them already said.
+    /// The same two lines, one train later.
+    ///
+    /// <para><b>History.</b> Z5 first shipped "incognito is always invisible" and "page titles stay
+    /// hidden unless you allow them" in nine languages while neither existed in code, so both were
+    /// demoted to explicit Train 2 promises and this suite pinned the word "Train 2" into them.
+    /// Train 2 has now landed — <c>AwarenessPrivacyRules</c> drops private windows before anything is
+    /// counted and returns a title only for an app the user allow-listed — so deferring would be the
+    /// new lie. The assertion inverts with the behaviour, and the promise is now checked against the
+    /// code that keeps it rather than against a release name.</para>
     /// </summary>
     [Theory]
     [InlineData("companion_awareness_incognito")]
     [InlineData("companion_awareness_wire_caption")]
-    public void AwarenessCopy_PromisesOnlyWhatTrain1Does(string key)
+    public void AwarenessCopy_MatchesTheMergedPrivacyLayer(string key)
     {
         foreach (var language in CompanionLocMasters.Languages)
         {
             var value = CompanionLocMasters.For(language).TryGetValue(key, out var v) ? v : null;
             Assert.True(!string.IsNullOrWhiteSpace(value), $"{language}.json is missing {key}");
 
-            // "Train 2" is a product name and is left untranslated in all nine files, which makes it
-            // the one language-agnostic assertion available here.
-            Assert.Contains("Train 2", value!, StringComparison.Ordinal);
+            // "Train 2" is untranslated in all nine files, which makes it the one language-agnostic
+            // assertion available here: a shipped capability may not still be described as coming.
+            Assert.DoesNotContain("Train 2", value!, StringComparison.Ordinal);
         }
 
         var english = CompanionLocMasters.Get(key);
         Assert.DoesNotContain("always invisible", english, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("stay hidden unless", english, StringComparison.OrdinalIgnoreCase);
+
+        // …and the two claims those lines make, asserted against the merged code path.
+        Assert.True(AwarenessPrivacyRules.LooksIncognito("Bank — InPrivate — Microsoft Edge"));
+        Assert.True(AwarenessPrivacyRules.LooksIncognito("Something (Incognito) - Google Chrome"));
+        Assert.False(AwarenessPrivacyRules.IsTitleAllowed("chrome", "Chrome", null, new AppSettings()));
     }
 
     /// <summary>

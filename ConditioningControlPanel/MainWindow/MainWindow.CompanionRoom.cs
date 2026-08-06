@@ -135,21 +135,43 @@ namespace ConditioningControlPanel
         /// <summary>
         /// The awareness capability, driven by Z5's dial instead of the old checkbox.
         ///
-        /// <para>Body unchanged from <c>ChkAwarenessMode_Changed</c>, including the auto-consent
-        /// (turning it on IS the consent, which is how the toggle always behaved) and the
-        /// service start/stop. The cooldown panel it used to reveal now lives in the Workshop and
-        /// still hides while her eyes are closed.</para>
+        /// <para><b>Consent is no longer silent.</b> The auto-consent this method used to perform —
+        /// "turning it on IS the consent" — is replaced by the one-time plain-language dialog
+        /// (<see cref="AwarenessConsentDialog"/>, doc 02 §6.3). Declining leaves awareness OFF and
+        /// returns false; the caller re-reads and the dial snaps back. Returning users keep the
+        /// one-click toggle, because <c>AwarenessConsentShownV2</c> makes the dialog a once-ever
+        /// interruption rather than a confirmation prompt.</para>
+        ///
+        /// <para>This is the only place <c>AwarenessModeEnabled</c> / <c>AwarenessConsentGiven</c> are
+        /// written outside settings load, which is what keeps "every entry point is gated" a fact:
+        /// Z5's dial, its page-titles switch and the Workshop's intensity dial all route here.</para>
+        ///
+        /// <para>Returns whether awareness is enabled after the call.</para>
         /// </summary>
-        internal void SetAwarenessEnabled(bool enabled)
+        internal bool SetAwarenessEnabled(bool enabled)
         {
-            if (_isLoading) return;
-            if (App.Settings?.Current == null) return;
+            if (_isLoading) return App.Settings?.Current?.AwarenessModeEnabled == true;
+            if (App.Settings?.Current == null) return false;
 
-            CompanionTab.AwarenessSettingsPanel.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+            if (enabled && !AwarenessConsentDialog.EnsureConsent(this, App.Settings.Current))
+            {
+                // Declined (or the dialog could not open). Nothing is written, nothing starts, and the
+                // dial re-reads the unchanged setting.
+                CompanionRoom?.AwarenessVm.Sync();
+                return false;
+            }
+
+            // The legacy cooldown sliders only mean anything on the legacy pipeline; under v2 the
+            // Workshop shows the intensity dial instead. See WorkshopAwarenessCell.
+            CompanionTab.AwarenessSettingsPanel.Visibility =
+                enabled && App.Settings.Current.UseAwarenessV2 != true ? Visibility.Visible : Visibility.Collapsed;
 
             App.Settings.Current.AwarenessModeEnabled = enabled;
             App.Settings.Current.AwarenessConsentGiven = enabled;
             App.Settings.Save();
+
+            // Opening her eyes lifts any running "pause for an hour": the user just said yes on purpose.
+            if (enabled) Services.Awareness.AwarenessPause.Resume();
 
             if (enabled)
             {
@@ -163,6 +185,29 @@ namespace ConditioningControlPanel
             }
 
             CompanionRoom?.SyncHero();
+            CompanionRoom?.AwarenessVm.Sync();
+            return enabled;
+        }
+
+        /// <summary>
+        /// The Workshop's intensity dial (doc 02 §8): how talkative she is, not whether she watches.
+        /// Writing it never opens her eyes — that stays Z5's single gated decision — so this needs no
+        /// consent gate of its own, and the cell says as much when her eyes are closed.
+        /// </summary>
+        internal void SetAwarenessIntensity(Services.Awareness.AwarenessIntensity intensity)
+        {
+            if (_isLoading) return;
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+            if (settings.AwarenessIntensity == intensity) return;
+
+            settings.AwarenessIntensity = intensity;
+            // The migration is what stops a later start-up from overwriting this choice.
+            settings.AwarenessIntensityMigrated = true;
+            App.Settings?.Save();
+
+            App.Logger?.Information("Awareness intensity set to {Intensity}", intensity);
+            CompanionRoom?.AwarenessVm.Sync();
         }
 
         // =====================================================================================

@@ -1,0 +1,136 @@
+<Window x:Class="ConditioningControlPanel.AwarenessConsentDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str awareness_consent_title}"
+        Width="580"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{DynamicResource DarkerBgBrush}">
+
+    <!-- ================================================================
+         First-enable consent for Awareness (doc 02 §6.3).
+
+         Replaces the silent auto-consent the toggle used to perform. It
+         interrupts exactly once; after that the dial is one click, like
+         every other setting on the page.
+
+         COPY RULE: every sentence in here is checked against the merged
+         code path (see AwarenessConsentDialog.xaml.cs for the map). If a
+         claim cannot be verified in code it is weakened, never the other
+         way round — this is the dialog that earns the feature's trust,
+         and one false promise in it is worth more than the feature.
+         ================================================================ -->
+
+    <Window.Resources>
+        <Style x:Key="DlgHeader" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style x:Key="DlgBody" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#E8E8E8"/>
+            <Setter Property="FontSize" Value="13.5"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="LineHeight" Value="21"/>
+        </Style>
+        <Style x:Key="DlgSectionHead" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,14,0,3"/>
+        </Style>
+        <Style x:Key="DlgFaint" TargetType="TextBlock" BasedOn="{StaticResource DlgBody}">
+            <Setter Property="Foreground" Value="#9A9AB8"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style x:Key="DlgButton" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="22,10"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="MinWidth" Value="150"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="DlgPrimaryButton" TargetType="Button" BasedOn="{StaticResource DlgButton}">
+            <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
+        </Style>
+        <Style x:Key="DlgSecondaryButton" TargetType="Button" BasedOn="{StaticResource DlgButton}">
+            <Setter Property="Background" Value="#3A3A52"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="30,26,30,22">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock Style="{StaticResource DlgHeader}" Text="{loc:Str awareness_consent_title}"/>
+            <TextBlock Style="{StaticResource DlgBody}" Margin="0,14,0,0" Text="{loc:Str awareness_consent_intro}"/>
+        </StackPanel>
+
+        <Border Grid.Row="1" Margin="0,16,0,0" Padding="16,10,16,14" CornerRadius="6"
+                Background="#1F1F38"
+                BorderBrush="{StaticResource PinkBrush}"
+                BorderThickness="0,0,0,3">
+            <StackPanel>
+                <TextBlock Style="{StaticResource DlgSectionHead}" Margin="0,4,0,3"
+                           Text="{loc:Str awareness_consent_watch_head}"/>
+                <TextBlock Style="{StaticResource DlgBody}" Text="{loc:Str awareness_consent_watch_body}"/>
+
+                <TextBlock Style="{StaticResource DlgSectionHead}" Text="{loc:Str awareness_consent_leaves_head}"/>
+                <!-- Set in code-behind: the sentence differs when the v2 kill switch is down, and a
+                     dialog that describes v2's projection while the legacy path is running would be
+                     exactly the class of lie this dialog exists to avoid. -->
+                <TextBlock x:Name="TxtLeavesBody" Style="{StaticResource DlgBody}"/>
+
+                <TextBlock Style="{StaticResource DlgSectionHead}" Text="{loc:Str awareness_consent_never_head}"/>
+                <TextBlock Style="{StaticResource DlgBody}" Text="{loc:Str awareness_consent_never_body}"/>
+                <TextBlock Style="{StaticResource DlgFaint}" Margin="0,4,0,0"
+                           Text="{loc:Str awareness_consent_never_note}"/>
+
+                <TextBlock Style="{StaticResource DlgSectionHead}" Text="{loc:Str awareness_consent_control_head}"/>
+                <TextBlock Style="{StaticResource DlgBody}" Text="{loc:Str awareness_consent_control_body}"/>
+                <TextBlock x:Name="TxtRetention" Style="{StaticResource DlgFaint}" Margin="0,4,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="2" Margin="0,18,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0" Style="{StaticResource DlgFaint}" VerticalAlignment="Center"
+                       Margin="0,0,14,0" Text="{loc:Str awareness_consent_footer}"/>
+
+            <Button x:Name="BtnDecline" Grid.Column="1"
+                    Style="{StaticResource DlgSecondaryButton}"
+                    Margin="0,0,10,0"
+                    Content="{loc:Str awareness_consent_decline}"
+                    Click="BtnDecline_Click"/>
+
+            <Button x:Name="BtnAccept" Grid.Column="2"
+                    Style="{StaticResource DlgPrimaryButton}"
+                    Content="{loc:Str awareness_consent_accept}"
+                    Click="BtnAccept_Click"/>
+        </Grid>
+    </Grid>
+</Window>

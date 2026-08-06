@@ -890,9 +890,14 @@ namespace ConditioningControlPanel
                 ? Loc.Get("label_cooldown_off")
                 : $"{settings.AwarenessCooldownMaxSeconds}s";
 
-            // Show/hide awareness settings panel based on enabled state
+            // Show/hide awareness settings panel based on enabled state. Under Awareness v2 the two
+            // cooldown sliders are superseded by the intensity dial in the same cell and are no longer
+            // surfaced (doc 02 §8) — the SETTING is kept, because the v2 kill switch falls back to the
+            // legacy pipeline that reads it, but a control that no longer drives anything is a lie.
             var awarenessEnabled = awarenessAvailable && settings.AwarenessModeEnabled && settings.AwarenessConsentGiven;
-            CompanionTab.AwarenessSettingsPanel.Visibility = awarenessEnabled ? Visibility.Visible : Visibility.Collapsed;
+            CompanionTab.AwarenessSettingsPanel.Visibility =
+                awarenessEnabled && !settings.UseAwarenessV2 ? Visibility.Visible : Visibility.Collapsed;
+            CompanionTab.AwarenessCell.SyncIntensity();
 
             // Trigger Mode settings (free for all)
             CompanionTab.ChkTriggerModeCompanion.IsChecked = settings.TriggerModeEnabled;
@@ -1114,8 +1119,10 @@ namespace ConditioningControlPanel
         }
 
         // ChkAwarenessMode_Changed went with its checkbox: Z5's three-stop dial calls
-        // SetAwarenessEnabled (MainWindow.CompanionRoom.cs), which keeps the auto-consent write,
-        // the service start/stop and the Workshop cooldown panel's visibility.
+        // SetAwarenessEnabled (MainWindow.CompanionRoom.cs), which owns the service start/stop and the
+        // Workshop panel's visibility. The auto-consent that used to live there is gone — Awareness v2
+        // raises AwarenessConsentDialog the first time her eyes are opened (doc 02 §6.3), and a decline
+        // leaves the setting untouched.
 
         internal void BtnPrivacySpoiler_Click(object sender, RoutedEventArgs e)
         {
@@ -1597,7 +1604,7 @@ namespace ConditioningControlPanel
 
             if (CompanionTab.AwarenessSettingsPanel != null)
                 CompanionTab.AwarenessSettingsPanel.Visibility =
-                    s.AwarenessModeEnabled ? Visibility.Visible : Visibility.Collapsed;
+                    s.AwarenessModeEnabled && !s.UseAwarenessV2 ? Visibility.Visible : Visibility.Collapsed;
 
             UpdateAiBrainPills();
         }

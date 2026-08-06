@@ -132,5 +132,11 @@ namespace ConditioningControlPanel.Views.Tabs
         internal Button BtnPrivacySpoiler => _vm.Shelf.Awareness.BtnPrivacySpoiler;
         internal TextBlock TxtPrivacyDetails => _vm.Shelf.Awareness.TxtPrivacyDetails;
         internal Button HelpBtnAwareness => _vm.Shelf.Awareness.HelpBtnAwareness;
+
+        /// <summary>
+        /// The awareness cell itself, for the one thing that is not a named element: the v2 intensity
+        /// dial reads its state back from settings rather than being written control-by-control.
+        /// </summary>
+        internal Views.Controls.Companion.Runtime.WorkshopAwarenessCell AwarenessCell => _vm.Shelf.Awareness;
     }
 }
