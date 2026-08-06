@@ -107,6 +107,15 @@ namespace ConditioningControlPanel.Services.Companion
 
             try
             {
+                // The ACTIVE MOD'S POOL FIRST — user override, else the mod's shipped
+                // DefaultVideoLinks. This is what she is actually told to name, so it is the set
+                // that most needs a working chip; omitting it would also strip her own pool's URLs
+                // as "unsanctioned" if she ever echoed one.
+                var pool = App.Mods?.GetVideoLinks();
+                if (pool != null)
+                    foreach (var kvp in pool)
+                        Add(entries, urls, kvp.Key, kvp.Value);
+
                 foreach (var (title, url) in BambiSprite.ContentCatalogue)
                     Add(entries, urls, title, url);
 
@@ -142,16 +151,23 @@ namespace ConditioningControlPanel.Services.Companion
         }
 
         /// <summary>
-        /// Cheap stand-in for "did the catalogue change": the built-in list is compile-time constant,
-        /// so only the knowledge base can move underneath us.
+        /// Cheap stand-in for "did the catalogue change". The built-in list is compile-time
+        /// constant; the two things that move are the knowledge base and the active mod's pool —
+        /// and a mod switch replaces the whole pool, so the mod id has to be in here or a switch
+        /// would keep sanctioning the previous mod's links.
         /// </summary>
         private static string Fingerprint()
         {
-            var kb = App.Settings?.Current?.GlobalKnowledgeBaseLinks;
-            if (kb == null || kb.Count == 0) return "kb:0";
+            var sb = new System.Text.StringBuilder("mod:").Append(App.Mods?.ActiveModId ?? "none");
 
-            var sb = new System.Text.StringBuilder("kb:").Append(kb.Count);
-            foreach (var link in kb) sb.Append('|').Append(link?.Url).Append('#').Append(link?.Title);
+            var pool = App.Mods?.GetVideoLinks();
+            sb.Append("|pool:").Append(pool?.Count ?? 0);
+
+            var kb = App.Settings?.Current?.GlobalKnowledgeBaseLinks;
+            sb.Append("|kb:").Append(kb?.Count ?? 0);
+            if (kb != null)
+                foreach (var link in kb) sb.Append('|').Append(link?.Url).Append('#').Append(link?.Title);
+
             return sb.ToString();
         }
 

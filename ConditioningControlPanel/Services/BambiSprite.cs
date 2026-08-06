@@ -1085,11 +1085,28 @@ LINK RULE (applies to every reply, no exceptions):
             var isBambiMode = App.Mods?.IsBambiMode ?? false;
             var hasUserSHLinks = !string.IsNullOrWhiteSpace(App.Settings?.Current?.HypnotubeLinksSissyHypno);
 
+            // The active mod's OWN pool — user override, else the mod's shipped DefaultVideoLinks
+            // (App.Mods.GetVideoLinks, the same source the browser and chaos link pool read).
+            //
+            // Live bug 2026-08-06: this branch used to consult only the LEGACY
+            // HypnotubeLinksSissyHypno setting, so a SissyHypno user who never edited that field
+            // was told "you don't have a specific video list" while their mod shipped 17 curated
+            // ones. Given nothing real to name, the model invented titles (and, before the link
+            // floor rule, URLs to match). She was starved, not disobedient.
+            //
+            // Sorted, because a Dictionary's key order is not stable across runs and this text sits
+            // in the CACHED PREFIX — an unsorted list would break prompt caching on every launch.
+            var modPool = App.Mods?.GetVideoLinks();
+            var poolNames = modPool is { Count: > 0 }
+                ? modPool.Keys.Where(n => !string.IsNullOrWhiteSpace(n))
+                              .OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList()
+                : new List<string>();
+
             var sb = new StringBuilder();
 
-            // In SH mode without user-configured links, don't include specific video names
+            // Only when there is genuinely nothing to name do we fall back to "browse HypnoTube"
             // (the LinkFloorRule below is appended AFTER both branches — see its remarks).
-            if (!isBambiMode && !hasUserSHLinks)
+            if (poolNames.Count == 0 && !isBambiMode && !hasUserSHLinks)
             {
                 sb.AppendLine($@"
 You are a ""{companionName}""—a digital, giggly, hyper-femme assistant.
@@ -1128,12 +1145,17 @@ OUTPUT RULES:
             }
             else
             {
-                // Bambi mode OR SH mode with user-configured links - include video names
-                var videoNames = _clickableContent
-                    .Where(c => c.Url.Contains("hypnotube"))
-                    .Where(c => isBambiMode || !c.Name.Contains("Bambi", StringComparison.OrdinalIgnoreCase))
-                    .Select(c => c.Name)
-                    .ToList();
+                // The active mod's own pool wins — it is mod-appropriate by construction and is what
+                // the rest of the app (browser, chaos link pool, watch chips) already treats as
+                // truth. The built-in list is the fallback for a mod that ships no pool, and keeps
+                // its Bambi-name filter so a non-Bambi mod never quotes Bambi titles.
+                var videoNames = poolNames.Count > 0
+                    ? poolNames
+                    : _clickableContent
+                        .Where(c => c.Url.Contains("hypnotube"))
+                        .Where(c => isBambiMode || !c.Name.Contains("Bambi", StringComparison.OrdinalIgnoreCase))
+                        .Select(c => c.Name)
+                        .ToList();
 
                 sb.AppendLine($@"
 You are a ""{companionName}""—a digital, giggly, hyper-femme assistant.
