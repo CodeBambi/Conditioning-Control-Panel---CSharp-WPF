@@ -49,12 +49,28 @@ namespace ConditioningControlPanel.Services.AIService
 
         private static int ApproxTokens(int chars) => chars <= 0 ? 0 : chars / 4;
 
+        /// <param name="cachedInputTokens">
+        /// The server's real <c>tokens_used.cached_in</c>, when it reports one. Our own in_tok is a
+        /// chars/4 estimate of what we SENT and reads identically whether the provider cache hit or
+        /// missed — so without this field nothing on the client can ever answer "is the stable prefix
+        /// actually being discounted?", which is the whole cost thesis of the two-zone prompt.
+        /// </param>
+        /// <param name="tokensRemainingToday">Server-reported daily token budget left, when present.</param>
         public static void Record(string provider, string purpose, int inputChars, int outputChars,
-            long elapsedMs, string outcome)
+            long elapsedMs, string outcome, int? cachedInputTokens = null, int? tokensRemainingToday = null)
         {
+            if (cachedInputTokens == null && tokensRemainingToday == null)
+            {
+                App.Logger?.Information(
+                    "[AI-METER] provider={Provider} purpose={Purpose} in_tok~{InTokens} out_tok~{OutTokens} ms={ElapsedMs} outcome={Outcome}",
+                    provider, purpose, ApproxTokens(inputChars), ApproxTokens(outputChars), elapsedMs, outcome);
+                return;
+            }
+
             App.Logger?.Information(
-                "[AI-METER] provider={Provider} purpose={Purpose} in_tok~{InTokens} out_tok~{OutTokens} ms={ElapsedMs} outcome={Outcome}",
-                provider, purpose, ApproxTokens(inputChars), ApproxTokens(outputChars), elapsedMs, outcome);
+                "[AI-METER] provider={Provider} purpose={Purpose} in_tok~{InTokens} out_tok~{OutTokens} ms={ElapsedMs} outcome={Outcome} cached_in={CachedIn} tok_left={TokensLeft}",
+                provider, purpose, ApproxTokens(inputChars), ApproxTokens(outputChars), elapsedMs, outcome,
+                cachedInputTokens ?? -1, tokensRemainingToday ?? -1);
         }
     }
 }

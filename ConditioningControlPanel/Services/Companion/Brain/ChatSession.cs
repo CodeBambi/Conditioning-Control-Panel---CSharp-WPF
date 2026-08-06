@@ -27,11 +27,19 @@ namespace ConditioningControlPanel.Services.Companion.Brain
     /// chat thread into a one-line reaction is what made past "watch X~" lines act as few-shot bait
     /// and fixate the model on one title.
     /// </param>
+    /// <param name="MaxAmbientTurns">
+    /// Cap on <see cref="TurnKind.AmbientEvent"/> + <see cref="TurnKind.AmbientReply"/> turns.
+    /// Awareness fires on a ~10s cooldown, so an hour of browsing produces enough event/reply pairs
+    /// to fill the whole chat budget on their own and push the actual conversation out of the window.
+    /// Older ambient turns are SKIPPED rather than ending the walk, so real dialogue behind them is
+    /// still reachable — the same rule bark echoes follow.
+    /// </param>
     public sealed record ChatWindowSpec(
         int TokenBudget,
         int MaxMessages = ChatSession.MaxWindowMessages,
         int MaxBarkEchoes = ChatSession.MaxBarkEchoesInWindow,
-        int MaxDialogueTurns = int.MaxValue)
+        int MaxDialogueTurns = int.MaxValue,
+        int MaxAmbientTurns = ChatSession.MaxAmbientTurnsInChatWindow)
     {
         /// <summary>Chat-box window: ~1,600 tokens of history, self-capped at 40 messages.</summary>
         public static ChatWindowSpec Chat { get; } = new(ChatSession.ChatHistoryTokenBudget);
@@ -39,7 +47,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// <summary>Ambient window: ~300 tokens, last ~4 dialogue turns (doc 01 §1.4).</summary>
         public static ChatWindowSpec Ambient { get; } = new(
             ChatSession.AmbientHistoryTokenBudget,
-            MaxDialogueTurns: ChatSession.AmbientDialogueTurnLimit);
+            MaxDialogueTurns: ChatSession.AmbientDialogueTurnLimit,
+            MaxAmbientTurns: ChatSession.MaxAmbientTurnsInAmbientWindow);
     }
 
     /// <summary>
@@ -70,6 +79,12 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
         /// <summary>Dialogue turns an ambient window may carry (doc 01 §1.4).</summary>
         public const int AmbientDialogueTurnLimit = 4;
+
+        /// <summary>Ambient event/reply turns a CHAT window may carry — 3 pairs of recent context.</summary>
+        public const int MaxAmbientTurnsInChatWindow = 6;
+
+        /// <summary>Ambient event/reply turns an AMBIENT window may carry — 4 pairs.</summary>
+        public const int MaxAmbientTurnsInAmbientWindow = 8;
 
         private readonly object _lock = new();
         private readonly List<CompanionTurn> _turns = new();
@@ -176,6 +191,9 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         ///   <item>SystemNotes never enter a window (they are housekeeping, not conversation).</item>
         ///   <item>At most <see cref="ChatWindowSpec.MaxBarkEchoes"/> bark echoes; older ones are skipped
         ///         but do NOT stop the walk — real dialogue behind them is still reachable.</item>
+        ///   <item>At most <see cref="ChatWindowSpec.MaxAmbientTurns"/> ambient event/reply turns, same
+        ///         skip-don't-stop rule: awareness fires often enough to fill the whole budget by
+        ///         itself and evict the conversation.</item>
         ///   <item>At most <see cref="ChatWindowSpec.MaxDialogueTurns"/> dialogue turns; hitting the cap
         ///         STOPS the walk, because anything older is older dialogue.</item>
         ///   <item>Stop on the message cap or when the next turn would exceed the token budget.</item>
@@ -192,7 +210,10 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             lock (_lock) source = _turns.ToList();
 
             var picked = new List<CompanionTurn>();
-            int tokens = 0, barkEchoes = 0, dialogue = 0;
+            int tokens = 0, barkEchoes = 0, dialogue = 0, ambient = 0;
+
+            static bool IsAmbient(CompanionTurn t) =>
+                t.Kind is TurnKind.AmbientEvent or TurnKind.AmbientReply;
 
             for (int i = source.Count - 1; i >= 0; i--)
             {
@@ -202,6 +223,10 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 if (turn.Kind == TurnKind.BarkEcho)
                 {
                     if (barkEchoes >= spec.MaxBarkEchoes) continue;
+                }
+                else if (IsAmbient(turn))
+                {
+                    if (ambient >= spec.MaxAmbientTurns) continue;
                 }
                 else if (turn.IsDialogue)
                 {
@@ -217,6 +242,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 picked.Add(turn);
                 tokens += cost;
                 if (turn.Kind == TurnKind.BarkEcho) barkEchoes++;
+                else if (IsAmbient(turn)) ambient++;
                 else if (turn.IsDialogue) dialogue++;
             }
 

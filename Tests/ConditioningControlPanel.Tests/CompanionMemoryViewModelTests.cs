@@ -339,6 +339,33 @@ public class CompanionMemoryViewModelTests : IDisposable
     }
 
     [Fact]
+    public void ForgetEverything_GoesThroughTheBrainWhenThereIsOne()
+    {
+        // The store wipe deletes session.json but cannot touch the live turn log CompanionBrain holds
+        // in RAM — so a store-only wipe is undone by the very next reply, or by the shutdown flush
+        // even if the user never sends one. The dialog promises "she's a blank slate"; only the
+        // brain's Forget() makes that true.
+        var store = StoreWith(("calls his cat Beans", MemoryFactKind.Joke));
+        int brainWipes = 0;
+        var vm = new CompanionMemoryViewModel(store, () => { brainWipes++; store.Wipe(); });
+
+        Assert.True(vm.ForgetEverything());
+
+        Assert.Equal(1, brainWipes);
+        Assert.True(vm.IsEmpty);
+    }
+
+    [Fact]
+    public void ForgetEverything_StillWipesTheStoreWhenThereIsNoBrain()
+    {
+        var store = StoreWith(("calls his cat Beans", MemoryFactKind.Joke));
+        var vm = new CompanionMemoryViewModel(store, forgetEverything: null);
+
+        Assert.True(vm.ForgetEverything());
+        Assert.Empty(store.GetFacts());
+    }
+
+    [Fact]
     public void ForgetEverything_DoesNotEvenSpareAPinnedBoundary()
     {
         // "Forget everything" has to mean everything, pins and boundaries included, or the

@@ -247,6 +247,27 @@ public class MemorySignalWriterTests : IDisposable
     }
 
     [Fact]
+    public void WireDeferredSources_IsIdempotentAndSafeWithoutTheLateServices()
+    {
+        // Start() runs inside `new MemoryStore()` inside `new CompanionBrain(Ai)`, which OnStartup
+        // builds ~200 lines before App.Mantra — and Start() is idempotent-by-flag, so without a
+        // second pass MantraCompleted is never wired for the whole process lifetime and a user who
+        // does mantras every session never sees "mantra" in their favourite features. Headless,
+        // App.Mantra is null, so this must be a no-op rather than a throw.
+        var store = NewStore();
+        var writer = new MemorySignalWriter(store, () => Now);
+        _disposables.Add(writer);
+
+        writer.Start();
+        writer.WireDeferredSources();
+        writer.WireDeferredSources();
+        store.WireDeferredSignals();   // the production entry point, via the store
+
+        writer.Stop();
+        writer.Dispose();
+    }
+
+    [Fact]
     public void NullStore_IsRejectedAtConstruction()
         => Assert.Throws<ArgumentNullException>(() => new MemorySignalWriter(null!));
 }

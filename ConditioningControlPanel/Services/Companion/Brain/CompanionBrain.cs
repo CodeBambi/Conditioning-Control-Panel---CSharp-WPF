@@ -67,6 +67,10 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         private readonly IPromptAssembler _assembler;
         private readonly ICompanionSessionStore _store;
 
+        // The linkable media pool, exactly as the stable prefix lists it. Injected so the
+        // recommendation scan is testable without standing up BambiSprite and the whole mod stack.
+        private readonly Func<IReadOnlyList<string>> _mediaTitles;
+
         // Single-flight (doc 01 §1.6, promoted from LocalAiService): exactly one LLM call in flight;
         // a second USER send queues at depth 1; ambient requests are DROPPED when busy. Barks are
         // unaffected — they never wait on the LLM.
@@ -92,7 +96,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             IPromptAssembler? assembler = null,
             IMemoryStore? memory = null,
             ICompanionSessionStore? store = null,
-            RecentRecommendations? recommendations = null)
+            RecentRecommendations? recommendations = null,
+            Func<IReadOnlyList<string>>? mediaTitles = null)
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
             _ownsMemory = memory == null;
@@ -100,6 +105,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             Recommendations = recommendations ?? new RecentRecommendations();
             _assembler = assembler ?? new PromptAssembler(Memory, Recommendations);
             _store = store ?? new CompanionSessionStore();
+            _mediaTitles = mediaTitles ?? DefaultMediaTitles;
 
             Session = new ChatSession();
 
@@ -110,6 +116,20 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 App.Logger?.Information(
                     "CompanionBrain: session restored ({Count} turn(s), imported={Imported})",
                     snapshot.Turns.Count, snapshot.ImportedFromLegacy);
+            }
+        }
+
+        /// <summary>
+        /// The pool titles the stable prefix actually offered her. Never throws: a prompt-stack
+        /// failure costs the exclusion line, not the reply.
+        /// </summary>
+        private static IReadOnlyList<string> DefaultMediaTitles()
+        {
+            try { return BambiSprite.StableMediaTitles(); }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("CompanionBrain: media title lookup failed: {Error}", ex.Message);
+                return Array.Empty<string>();
             }
         }
 
@@ -201,13 +221,18 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
                 if (!result.IsAiGenerated)
                 {
-                    // Canned fallback / login hint / transport failure. The user's turn was a genuine
-                    // send, so it stays in the transcript for coherence, but there is no assistant
-                    // turn to record and nothing new worth persisting.
+                    // Canned fallback / login hint / transport failure. Roll the user turn back the
+                    // way the legacy path always did ("don't poison history with an unanswered
+                    // turn"): with Ollama down a user retries, and a run of consecutive user
+                    // messages with no answers is both wasted history budget and terrible context
+                    // once the provider comes back. The bubble transcript the user actually reads is
+                    // AvatarTubeWindow.ChatHistory, which is untouched by this.
+                    Session.Remove(userTurn);
                     return result;
                 }
 
                 Session.Append(TurnKind.AssistantChat, result.Text);
+                NoteRecommendedTitles(result.Text);
                 PersistAsync();
                 SignalMemoryRecallIfDue();
                 return result;
@@ -228,8 +253,9 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
         /// <summary>
         /// An ambient moment. Appends the event, sends it with the SMALL window (~300 tokens, last ~4
-        /// dialogue turns) plus the anti-repeat line, and appends the reply as AssistantChat — so if
-        /// the user then opens the chat box and asks "why'd you say that?", she knows.
+        /// dialogue turns) plus the anti-repeat line, and appends the reply as
+        /// <see cref="TurnKind.AmbientReply"/> — so if the user then opens the chat box and asks
+        /// "why'd you say that?", she knows. Neither half is persisted: see that enum member.
         ///
         /// <para>Dropped silently when a call is already in flight: an ambient line is worth less than
         /// the chat reply it would queue behind.</para>
@@ -274,8 +300,12 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                         : new AiReplyResult(string.Empty, IsAiGenerated: false, Refusal: null);
                 }
 
-                Session.Append(TurnKind.AssistantChat, result.Text);
-                PersistAsync();
+                // AmbientReply, not AssistantChat: it shapes the live window but never reaches disk.
+                // See TurnKind.AmbientReply for why persisting the reply without its event is worse
+                // than persisting neither. Nothing dialogue-shaped changed, so there is nothing to
+                // persist here at all.
+                Session.Append(TurnKind.AmbientReply, result.Text);
+                NoteRecommendedTitles(result.Text);
                 SignalMemoryRecallIfDue();
                 return result;
             }
@@ -345,17 +375,86 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         public void NoteRecommendation(string? title) => Recommendations.Note(title);
 
         /// <summary>
-        /// Forgets the conversation: in-memory log, disk file, and the recommendation ban list.
-        /// Memory facts go with <see cref="IMemoryStore.Wipe"/>, which this also calls.
+        /// Scans a delivered reply for titles from our own media pool and bans them for the next 24h.
+        ///
+        /// <para>This is the PRODUCER half of the structural anti-fixation fix (doc 01 §3.4). The
+        /// per-call Fisher-Yates shuffle it replaced is genuinely gone — the stable prefix lists the
+        /// pool alphabetically and resolves its <c>{{VIDEO}}</c> examples once per launch — so without
+        /// a producer <see cref="RecentRecommendations.BuildExclusionLine"/> returns null forever and
+        /// the only anti-fixation left is one line of prose. Train 1 also newly puts her own previous
+        /// replies into the window, which is the exact condition that produced the fixation bug.</para>
+        ///
+        /// <para>Titles come from our own list, never from the model, so nothing user- or
+        /// model-authored can reach the prompt through this path.</para>
         /// </summary>
-        public void Forget()
+        internal void NoteRecommendedTitles(string? replyText)
+        {
+            var text = replyText ?? string.Empty;
+            if (text.Length == 0) return;
+
+            try
+            {
+                var titles = _mediaTitles() ?? Array.Empty<string>();
+                var noted = new List<string>();
+                // Longest first, and a shorter title contained in an already-noted one is skipped, so
+                // "Bambi Bae" doesn't burn a slot every time "Bambi Bae 2" is named.
+                foreach (var title in titles
+                             .Where(t => !string.IsNullOrWhiteSpace(t))
+                             .OrderByDescending(t => t.Length))
+                {
+                    if (text.IndexOf(title, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    if (noted.Any(n => n.IndexOf(title, StringComparison.OrdinalIgnoreCase) >= 0)) continue;
+                    noted.Add(title);
+                    Recommendations.Note(title);
+                }
+
+                if (noted.Count > 0)
+                    App.Logger?.Debug("CompanionBrain: banned {Count} just-recommended title(s) for 24h", noted.Count);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("CompanionBrain: recommendation scan failed: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Forgets the CONVERSATION only: the in-memory turn log, session.json, and the recommendation
+        /// ban list. Durable memory facts and the deterministic profile survive.
+        ///
+        /// <para>This is what the chat-memory surfaces call — "Reset companion memory", "Forget
+        /// everything" on the Lab tab, and turning <c>ChatMemoryEnabled</c> off, which is a privacy
+        /// promise about dialogue and not about what level you are. Clearing the live
+        /// <see cref="Session"/> is the load-bearing half: deleting session.json alone would be undone
+        /// by the very next reply, which re-persists the whole in-RAM log.</para>
+        /// </summary>
+        public void ForgetConversation()
         {
             Session.Clear();
             Recommendations.Clear();
-            Memory.Wipe();
             _store.Wipe();
             _memoryRecallSignaled = false;
-            App.Logger?.Information("CompanionBrain: conversation and memory wiped");
+
+            // Memory derived from the conversation goes too — the per-mod turn counters and any
+            // chat-sourced facts. Level/streak/archetype are app state, not dialogue, and stay.
+            if (Memory is MemoryStore store)
+            {
+                try { store.ForgetChatDerived(); }
+                catch (Exception ex) { App.Logger?.Debug("CompanionBrain: chat-derived wipe failed: {Error}", ex.Message); }
+            }
+
+            App.Logger?.Information("CompanionBrain: conversation wiped");
+        }
+
+        /// <summary>
+        /// Forgets the conversation: in-memory log, disk file, and the recommendation ban list.
+        /// Memory facts go with <see cref="IMemoryStore.Wipe"/>, which this also calls. Backs the
+        /// "What she knows about you" panel's all-or-nothing wipe.
+        /// </summary>
+        public void Forget()
+        {
+            ForgetConversation();
+            Memory.Wipe();
+            App.Logger?.Information("CompanionBrain: memory wiped");
         }
 
         /// <summary>Writes the current dialogue synchronously — used on shutdown.</summary>

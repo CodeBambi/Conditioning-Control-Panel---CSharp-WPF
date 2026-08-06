@@ -155,10 +155,20 @@ namespace ConditioningControlPanel.ViewModels
         };
 
         private readonly IMemoryStore? _store;
+        private readonly Action? _forgetEverything;
 
-        public CompanionMemoryViewModel(IMemoryStore? store)
+        /// <param name="forgetEverything">
+        /// The brain's full wipe (<c>CompanionBrain.Forget</c>), when there is a brain. It is NOT
+        /// optional flavour: <see cref="IMemoryStore.Wipe"/> deletes session.json off disk but cannot
+        /// touch the live turn log the brain holds in RAM, so a store-only wipe is undone by the very
+        /// next reply — or by the shutdown flush, even if the user never sends one. Null degrades to
+        /// the store-only wipe, which is correct for tests and for a null brain (there is no live
+        /// conversation to survive).
+        /// </param>
+        public CompanionMemoryViewModel(IMemoryStore? store, Action? forgetEverything = null)
         {
             _store = store;
+            _forgetEverything = forgetEverything;
             Refresh();
         }
 
@@ -379,7 +389,13 @@ namespace ConditioningControlPanel.ViewModels
         public bool ForgetEverything()
         {
             if (_store == null) return false;
-            _store.Wipe();
+
+            // Through the brain when there is one: it clears the live turn log and the recommendation
+            // ban list as well as every file, which is the only ordering that makes the dialog's
+            // "she's a blank slate" true a second later.
+            if (_forgetEverything != null) _forgetEverything();
+            else _store.Wipe();
+
             Refresh();
             return true;
         }

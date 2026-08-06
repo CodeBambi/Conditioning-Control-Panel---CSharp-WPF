@@ -35,6 +35,13 @@ namespace ConditioningControlPanel.Services
         private const int MaxTokensHardCap = 100; // Hard cap on response tokens to control costs (~50 words, enough for video names)
 
         /// <summary>
+        /// History turns kept when retrying after an <c>input_too_large</c> rejection. Small enough
+        /// that the retry is very likely to fit, large enough that she still has the turn she is
+        /// answering plus the one before it.
+        /// </summary>
+        private const int RetryHistoryTurns = 4;
+
+        /// <summary>
         /// Effective daily limit based on user tier
         /// </summary>
         private int DailyLimit => App.Patreon?.HasAiAccess == true ? PatreonDailyLimit : FreeDailyLimit;
@@ -292,7 +299,7 @@ namespace ConditioningControlPanel.Services
                 new ProxyChatMessage { Role = "user", Content = userInput }
             };
 
-            var post = await PostToProxyAsync(messages, MaxTokensHardCap, 0.7, purposeWire: null);
+            var post = await PostToProxyAsync(messages, MaxTokensHardCap, 0.7, LegacyPurposeWire(purpose));
             // Skipped = never reached the wire (no access / daily limit): not a request, stays
             // silent in the meter, exactly as before the Train 1 extraction.
             if (post.Outcome == ProxyOutcome.Skipped) return null;
@@ -337,10 +344,19 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// <see cref="Skipped"/> means the request never reached the wire (no entitlement, daily
         /// limit) — those are not requests and must stay silent in the [AI-METER] stream.
+        /// <see cref="TooLarge"/> is the proxy's machine-readable <c>input_too_large</c> rejection,
+        /// kept distinct from <see cref="Error"/> so the caller can compact and retry instead of
+        /// silently degrading to a canned phrase forever.
         /// </summary>
-        private enum ProxyOutcome { Ok, Error, Empty, Skipped }
+        private enum ProxyOutcome { Ok, Error, Empty, Skipped, TooLarge }
 
-        private sealed record ProxyPostResult(ProxyOutcome Outcome, string? Content);
+        /// <param name="CachedInputTokens">
+        /// The server's <c>tokens_used.cached_in</c>, when it reports it. This is the ONLY client-side
+        /// signal that the stable prefix is actually being cache-discounted — [AI-METER]'s in_tok is
+        /// chars/4 of what we sent and reads identically whether cached_in was 0 or 2,000.
+        /// </param>
+        private sealed record ProxyPostResult(ProxyOutcome Outcome, string? Content,
+            int? CachedInputTokens = null, int? TokensRemainingToday = null);
 
         /// <summary>
         /// The whole proxy round trip: entitlement gate, daily circuit breaker, V2 auth with the
@@ -353,7 +369,8 @@ namespace ConditioningControlPanel.Services
         /// to a model tier; null omits it entirely (legacy call sites).
         /// </summary>
         private async Task<ProxyPostResult> PostToProxyAsync(ProxyChatMessage[] messages, int maxTokens,
-            double temperature, string? purposeWire)
+            double temperature, string? purposeWire,
+            System.Threading.CancellationToken cancellationToken = default)
         {
             // Check access (cloud identity or Patreon)
             if (!IsAvailable)
@@ -403,32 +420,38 @@ namespace ConditioningControlPanel.Services
                         v2Msg.Headers.TryAddWithoutValidation("X-Auth-Token", authToken);
                     v2Msg.Content = JsonContent.Create(v2Request);
 
-                    response = await _httpClient.SendAsync(v2Msg);
+                    response = await _httpClient.SendAsync(v2Msg, cancellationToken);
 
                     // If V2 endpoint not deployed yet (404), fall back to legacy Patreon auth
                     if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                     {
                         App.Logger?.Debug("AiService: V2 endpoint not available, trying legacy auth");
                         response.Dispose();
-                        response = await SendLegacyRequestAsync(messages, maxTokens, temperature, purposeWire);
+                        response = await SendLegacyRequestAsync(messages, maxTokens, temperature, purposeWire, cancellationToken);
                         if (response == null) return new ProxyPostResult(ProxyOutcome.Error, null);
                     }
                 }
                 else
                 {
-                    response = await SendLegacyRequestAsync(messages, maxTokens, temperature, purposeWire);
+                    response = await SendLegacyRequestAsync(messages, maxTokens, temperature, purposeWire, cancellationToken);
                     if (response == null) return new ProxyPostResult(ProxyOutcome.Error, null);
                 }
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    var errorText = await response.Content.ReadAsStringAsync();
+                    var errorText = await response.Content.ReadAsStringAsync(cancellationToken);
                     App.Logger?.Warning("AiService: Proxy returned {Status}: {Error}",
                         response.StatusCode, errorText);
-                    return new ProxyPostResult(ProxyOutcome.Error, null);
+                    // The proxy rejects a >10,000-char message (or >50 messages) with a
+                    // machine-readable code so a client can compact and retry. Without this branch
+                    // every such call is an indistinguishable "Error" and the user just sees the
+                    // companion quietly stop using AI.
+                    return IsInputTooLarge(errorText)
+                        ? new ProxyPostResult(ProxyOutcome.TooLarge, null)
+                        : new ProxyPostResult(ProxyOutcome.Error, null);
                 }
 
-                var result = await response.Content.ReadFromJsonAsync<ProxyChatResponse>();
+                var result = await response.Content.ReadFromJsonAsync<ProxyChatResponse>(cancellationToken);
 
                 if (result == null || !string.IsNullOrEmpty(result.Error))
                 {
@@ -462,7 +485,8 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("AiService: raw reply ({Length} chars): {Raw}",
                     result.Content?.Length ?? 0, result.Content ?? "(null)");
 
-                return new ProxyPostResult(ProxyOutcome.Ok, result.Content);
+                return new ProxyPostResult(ProxyOutcome.Ok, result.Content,
+                    result.TokensUsed?.CachedIn, result.TokensRemainingToday);
             }
             catch (TaskCanceledException)
             {
@@ -479,6 +503,55 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Error(ex, "AiService: Failed to get AI reply");
                 return new ProxyPostResult(ProxyOutcome.Error, null);
             }
+        }
+
+        /// <summary>
+        /// Maps a legacy per-call-site [AI-METER] purpose onto the server's tier vocabulary.
+        ///
+        /// <para>The legacy one-shot path is NOT dead: any keyword trigger or lock card with a custom
+        /// prompt template fails <c>FrameFormatter.CanRouteAmbient</c> and falls through to it, as do
+        /// the autonomy nudge and the double-click random thought. Sending no purpose made the server
+        /// resolve those one-line quips at the CHAT tier — and made the client's
+        /// <c>[AI-METER] purpose=keyword</c> disagree with the server's <c>[AI_USAGE] purpose=chat</c>
+        /// for the same request, which is exactly what the Phase 0 instrumentation exists to
+        /// prevent.</para>
+        /// </summary>
+        internal static string LegacyPurposeWire(string meterPurpose) => meterPurpose switch
+        {
+            AiMeter.PurposeAwareness or AiMeter.PurposeStillOn or AiMeter.PurposeKeyword
+                or AiMeter.PurposeLockScreen or AiMeter.PurposeVideoDone => "reaction",
+            _ => "chat"
+        };
+
+        /// <summary>
+        /// True when the proxy's 400 body carries the <c>input_too_large</c> code (contract §5).
+        /// String match rather than a parse: the body is already read as text, and a malformed error
+        /// body must never turn into an exception on the failure path.
+        /// </summary>
+        internal static bool IsInputTooLarge(string? errorBody) =>
+            !string.IsNullOrEmpty(errorBody) &&
+            errorBody!.Contains("input_too_large", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Drops the oldest history messages, keeping the system prompt (message 0) and the newest
+        /// <paramref name="keepTail"/> turns. Used once, after an <c>input_too_large</c> rejection, so
+        /// a long conversation degrades to a shorter one instead of to a canned phrase.
+        /// Returns null when there is nothing left to shed (the system message alone is too big —
+        /// see <c>PromptAssembler.SystemMessageCharCeiling</c>).
+        /// </summary>
+        internal static ProxyChatMessage[]? CompactForRetry(ProxyChatMessage[] messages, int keepTail)
+        {
+            if (messages == null || messages.Length == 0) return null;
+
+            bool hasSystem = string.Equals(messages[0].Role, ChatMessage.RoleSystem, StringComparison.OrdinalIgnoreCase);
+            int firstHistory = hasSystem ? 1 : 0;
+            int history = messages.Length - firstHistory;
+            if (history <= keepTail) return null; // nothing left to drop
+
+            var kept = new List<ProxyChatMessage>(keepTail + 1);
+            if (hasSystem) kept.Add(messages[0]);
+            for (int i = messages.Length - keepTail; i < messages.Length; i++) kept.Add(messages[i]);
+            return kept.ToArray();
         }
 
         /// <summary>
@@ -499,9 +572,10 @@ namespace ConditioningControlPanel.Services
 
             var meterStopwatch = System.Diagnostics.Stopwatch.StartNew();
             var meterInputChars = wire.Sum(m => m.Content?.Length ?? 0);
+            int? meterCachedIn = null, meterTokensLeft = null;
             void Meter(string outcome, int outputChars = 0) =>
                 AiMeter.Record(AiMeter.ProviderCloud, options.MeterPurpose, meterInputChars, outputChars,
-                    meterStopwatch.ElapsedMilliseconds, outcome);
+                    meterStopwatch.ElapsedMilliseconds, outcome, meterCachedIn, meterTokensLeft);
 
             AiReplyResult Canned() => new(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
 
@@ -544,8 +618,34 @@ namespace ConditioningControlPanel.Services
 
             // MaxTokensHardCap is the client's cost ceiling; the server clamps again per purpose.
             var maxTokens = Math.Clamp(options.MaxTokens, 1, MaxTokensHardCap);
-            var post = await PostToProxyAsync(wire, maxTokens, options.Temperature, options.PurposeWire);
+            var post = await PostToProxyAsync(wire, maxTokens, options.Temperature, options.PurposeWire, cancellationToken);
+
+            // input_too_large: shed the oldest history and try once more. Train 1 is the first thing
+            // that ever sent a long messages[] from this client, so this is a live failure mode, not
+            // a theoretical one — and without the retry it presents as "the companion stopped using
+            // AI" with nothing in the log but a 400.
+            if (post.Outcome == ProxyOutcome.TooLarge)
+            {
+                var compacted = CompactForRetry(wire, RetryHistoryTurns);
+                if (compacted != null)
+                {
+                    App.Logger?.Warning(
+                        "AiService.SendAsync: proxy rejected the request as input_too_large — retrying with {Before}→{After} message(s)",
+                        wire.Length, compacted.Length);
+                    meterInputChars = compacted.Sum(m => m.Content?.Length ?? 0);
+                    post = await PostToProxyAsync(compacted, maxTokens, options.Temperature, options.PurposeWire, cancellationToken);
+                }
+                else
+                {
+                    App.Logger?.Warning(
+                        "AiService.SendAsync: proxy rejected the request as input_too_large and there is no history left to shed — " +
+                        "the system prompt itself is over the 10000-char cap");
+                }
+            }
+
             if (post.Outcome == ProxyOutcome.Skipped) return Canned();
+            meterCachedIn = post.CachedInputTokens;
+            meterTokensLeft = post.TokensRemainingToday;
             if (post.Outcome != ProxyOutcome.Ok)
             {
                 Meter(post.Outcome == ProxyOutcome.Empty ? AiMeter.OutcomeEmpty : AiMeter.OutcomeError);
@@ -611,7 +711,8 @@ namespace ConditioningControlPanel.Services
         /// Sends AI request via legacy Patreon Bearer auth. Returns null if no Patreon token available.
         /// </summary>
         private async Task<HttpResponseMessage?> SendLegacyRequestAsync(ProxyChatMessage[] messages,
-            int maxTokens, double temperature, string? purposeWire)
+            int maxTokens, double temperature, string? purposeWire,
+            System.Threading.CancellationToken cancellationToken = default)
         {
             var accessToken = App.Patreon?.GetAccessToken();
             if (string.IsNullOrEmpty(accessToken))
@@ -632,7 +733,7 @@ namespace ConditioningControlPanel.Services
             legacyMsg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
             legacyMsg.Content = JsonContent.Create(legacyRequest);
 
-            return await _httpClient.SendAsync(legacyMsg);
+            return await _httpClient.SendAsync(legacyMsg, cancellationToken);
         }
 
         public void Dispose()

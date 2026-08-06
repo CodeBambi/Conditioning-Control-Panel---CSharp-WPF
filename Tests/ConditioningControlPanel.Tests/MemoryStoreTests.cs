@@ -43,9 +43,10 @@ public class MemoryStoreTests : IDisposable
         try { Directory.Delete(_dir, recursive: true); } catch { }
     }
 
-    private MemoryStore NewStore(Func<DateTime>? clock = null, int? seed = 1234)
+    private MemoryStore NewStore(Func<DateTime>? clock = null, int? seed = 1234,
+        Func<bool>? chatMemoryEnabled = null)
     {
-        var store = new MemoryStore(_path, clock, seed);
+        var store = new MemoryStore(_path, clock, seed, chatMemoryEnabled);
         _stores.Add(store);
         return store;
     }
@@ -573,5 +574,164 @@ public class MemoryStoreTests : IDisposable
         Assert.Equal("true", MemoryStore.FormatProfileValue(true));
         Assert.Equal("a/b", MemoryStore.FormatProfileValue(new[] { "a", "b" }));
         Assert.Equal("", MemoryStore.FormatProfileValue(null));
+    }
+
+    // ================= moderation on the way IN to durable memory =================
+
+    /// <summary>A guard that blocks anything containing a marker word.</summary>
+    private sealed class BlockingGuard : ConditioningControlPanel.Services.Moderation.IModerationGuard
+    {
+        public ConditioningControlPanel.Services.Moderation.ModerationResult CheckInput(string text) =>
+            text != null && text.Contains("PROHIBITED", StringComparison.OrdinalIgnoreCase)
+                ? ConditioningControlPanel.Services.Moderation.ModerationResult.Block(
+                    ConditioningControlPanel.Services.Moderation.ProhibitedCategory.ProfessionalAdvice, "test")
+                : ConditioningControlPanel.Services.Moderation.ModerationResult.Pass();
+
+        public ConditioningControlPanel.Services.Moderation.ModerationResult CheckOutput(string text) => CheckInput(text);
+    }
+
+    [Fact]
+    public void ProhibitedText_NeverBecomesADurableFact()
+    {
+        // A stored fact is rendered into the system prompt's tail on EVERY later call, and boundary
+        // lines are deliberately exempt from the tail clamp — so a prohibited fact would be
+        // guaranteed delivery on a path the transport guard never sees (CheckInput only ever
+        // inspects the newest user-role MESSAGE, never the system prompt).
+        var guard = new BlockingGuard();
+
+        Assert.False(MemoryStore.IsStorable(guard, "PROHIBITED thing", MemoryFact.SourceUserEdited));
+        Assert.False(MemoryStore.IsStorable(guard, "PROHIBITED thing", MemoryFact.SourceChat));
+        Assert.True(MemoryStore.IsStorable(guard, "calls his cat Beans", MemoryFact.SourceUserEdited));
+    }
+
+    [Fact]
+    public void AppSourcedFactsSkipTheGuard_AndANullGuardNeverBlocks()
+    {
+        // Level/streak are ours, not user- or model-authored. And a build with no guard configured
+        // must degrade to "unchecked", never to "memory refuses to store anything".
+        Assert.True(MemoryStore.IsStorable(new BlockingGuard(), "PROHIBITED", MemoryFact.SourceApp));
+        Assert.True(MemoryStore.IsStorable(null, "PROHIBITED", MemoryFact.SourceUserEdited));
+    }
+
+    // ================= chat-memory OFF: no record of conversations =================
+
+    [Fact]
+    public void ChatMemoryOff_NeverWritesTheRelationshipBlock()
+    {
+        // relationship = per-mod turn count + last-chat timestamp. However deterministically it is
+        // produced, it is a plaintext record of WHEN and HOW OFTEN the user talked to her — derived
+        // from the exact events the toggle exists to stop recording — in a file the toggle does not
+        // otherwise govern. Level/streak legitimately survive; this does not.
+        var store = NewStore(() => Now, chatMemoryEnabled: () => false);
+        store.UpdateProfileSignal(MemoryStore.KeyLevel, 41L);
+        store.NoteChatTurn("bambi");
+        store.NoteChatTurn("bambi");
+        store.SaveNow();
+
+        var json = File.ReadAllText(_path);
+        Assert.DoesNotContain("chatTurnsTotal", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("lastChat", json, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"level\"", json);      // the carve-out that IS defensible still applies
+
+        var reloaded = new MemoryStore(_path, () => Now, 1234, () => false);
+        _stores.Add(reloaded);
+        Assert.Empty(reloaded.Relationships);
+    }
+
+    [Fact]
+    public void ChatMemoryOff_NoteChatTurnDoesNotEvenAccumulateInMemory()
+    {
+        var store = NewStore(() => Now, chatMemoryEnabled: () => false);
+        store.NoteChatTurn("bambi");
+
+        Assert.Empty(store.Relationships);
+    }
+
+    [Fact]
+    public void ChatMemoryOn_StillWritesTheRelationshipBlock()
+    {
+        var store = NewStore(() => Now, chatMemoryEnabled: () => true);
+        store.NoteChatTurn("bambi");
+        store.SaveNow();
+
+        Assert.Equal(1, NewStore(() => Now).Relationships["bambi"].ChatTurnsTotal);
+    }
+
+    // ================= durability =================
+
+    [Fact]
+    public void SaveNow_LeavesNoTruncatedFileBehind_AndNoStrayTempFile()
+    {
+        // A bare File.WriteAllText truncates before the new bytes land, and BOTH parsers here read a
+        // JsonException as "empty" — so a crash mid-write silently costs the user every memory, with
+        // no error and no backup, for the feature whose pitch is "she remembers you".
+        var store = NewStore(() => Now);
+        store.AddFact("Calls his cat Beans", MemoryFactKind.Joke, 0.8);
+        store.SaveNow();
+
+        Assert.False(File.Exists(_path + ".tmp"));
+        Assert.Equal("Calls his cat Beans", NewStore(() => Now).GetFacts().Single().Text);
+    }
+
+    [Fact]
+    public void ConcurrentSaves_AllSucceed_AndTheFileStaysParseable()
+    {
+        // Three legitimate concurrent callers exist in production: the debounce timer, Dispose(),
+        // and the AppDomain.ProcessExit backstop.
+        var store = NewStore(() => Now);
+        store.AddFact("durable", MemoryFactKind.Identity, 0.9);
+
+        System.Threading.Tasks.Parallel.For(0, 24, _ => store.SaveNow());
+
+        Assert.False(File.Exists(_path + ".tmp"));
+        Assert.Equal("durable", NewStore(() => Now).GetFacts().Single().Text);
+    }
+
+    // ================= wipe =================
+
+    [Fact]
+    public void ForgetChatDerived_ClearsTheConversationTrail_ButNotTheAppProfile()
+    {
+        // What "reset companion memory" / unticking ChatMemoryEnabled reaches. It must land on disk
+        // immediately: otherwise the {chatTurnsTotal, lastChat} block the user just asked to remove
+        // sits there until some unrelated signal happens to trigger the next debounced save.
+        var store = NewStore(() => Now);
+        store.UpdateProfileSignal(MemoryStore.KeyLevel, 41L);
+        store.NoteChatTurn("bambi");
+        store.AddFact("said he hates mondays", MemoryFactKind.Event, 0.5, MemoryFact.SourceChat);
+        store.AddFact("no teasing about work", MemoryFactKind.Boundary, 0.9, MemoryFact.SourceUserEdited);
+        store.SaveNow();
+
+        store.ForgetChatDerived();
+
+        var json = File.ReadAllText(_path);
+        Assert.DoesNotContain("chatTurnsTotal", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("hates mondays", json, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("no teasing about work", json);
+        Assert.Contains("\"level\"", json);
+
+        var reloaded = NewStore(() => Now);
+        Assert.Empty(reloaded.Relationships);
+        Assert.Equal("no teasing about work", reloaded.GetFacts().Single().Text);
+        Assert.Equal(41L, reloaded.Profile[MemoryStore.KeyLevel]);
+    }
+
+    [Fact]
+    public void Wipe_KeepsTheFirstSeenLatch()
+    {
+        // Wipe leaves MemorySignalWriter running. The very next flash/level-up recomputes the profile
+        // from `existingFirstSeen` — which a naive wipe just erased — so firstSeen silently re-latches
+        // to TODAY and the anniversary the latch exists to protect is gone. Carrying it across is both
+        // the honest value and the deterministic one.
+        var store = NewStore(() => Now);
+        store.UpdateProfileSignal(MemoryStore.KeyFirstSeen, "2025-11-02");
+        store.UpdateProfileSignal(MemoryStore.KeyLevel, 41L);
+        store.AddFact("a joke", MemoryFactKind.Joke, 0.5);
+
+        store.Wipe();
+
+        Assert.Equal("2025-11-02", store.Profile[MemoryStore.KeyFirstSeen]);
+        Assert.False(store.Profile.ContainsKey(MemoryStore.KeyLevel));
+        Assert.Empty(store.GetFacts());
     }
 }

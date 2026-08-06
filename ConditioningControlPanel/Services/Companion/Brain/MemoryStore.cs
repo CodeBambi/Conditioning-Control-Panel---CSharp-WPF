@@ -124,8 +124,19 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         };
 
         private readonly object _lock = new();
+
+        /// <summary>
+        /// Serialises the FILE write only. Separate from <see cref="_lock"/> (which guards the model)
+        /// because there are three legitimate concurrent callers of <see cref="SaveNow"/> — the
+        /// debounce timer thread, <see cref="Dispose"/> on the caller's thread, and the
+        /// <c>AppDomain.ProcessExit</c> backstop — and two of them racing on the same path means one
+        /// loses with an IOException and that shutdown's signals are gone.
+        /// </summary>
+        private readonly object _writeLock = new();
+
         private readonly string _path;
         private readonly Func<DateTime> _clock;
+        private readonly Func<bool> _chatMemoryEnabled;
 
         /// <summary>
         /// Per-app-session jitter seed. Fact selection is randomised *within the top band* once per
@@ -155,14 +166,22 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// <param name="memoryPath">Full path of memory.json.</param>
         /// <param name="utcClock">Injectable clock for recency maths.</param>
         /// <param name="sessionSeed">Fixes the per-session selection jitter.</param>
-        public MemoryStore(string memoryPath, Func<DateTime>? utcClock = null, int? sessionSeed = null)
-            : this(memoryPath, utcClock, sessionSeed, mirrorAppSignals: false) { }
+        /// <param name="chatMemoryEnabled">
+        /// Overrides the <c>ChatMemoryEnabled</c> read. <c>App.Settings</c> is null headlessly and the
+        /// gate reads "not explicitly false", so without this seam the OFF path — the privacy
+        /// behaviour, i.e. the half that matters — cannot be tested at all.
+        /// </param>
+        public MemoryStore(string memoryPath, Func<DateTime>? utcClock = null, int? sessionSeed = null,
+            Func<bool>? chatMemoryEnabled = null)
+            : this(memoryPath, utcClock, sessionSeed, mirrorAppSignals: false, chatMemoryEnabled) { }
 
-        private MemoryStore(string memoryPath, Func<DateTime>? utcClock, int? sessionSeed, bool mirrorAppSignals)
+        private MemoryStore(string memoryPath, Func<DateTime>? utcClock, int? sessionSeed, bool mirrorAppSignals,
+            Func<bool>? chatMemoryEnabled = null)
         {
             _path = string.IsNullOrWhiteSpace(memoryPath) ? DefaultMemoryPath : memoryPath;
             _clock = utcClock ?? (() => DateTime.UtcNow);
             _sessionSeed = sessionSeed ?? Environment.TickCount;
+            _chatMemoryEnabled = chatMemoryEnabled ?? DefaultChatMemoryEnabled;
 
             Load();
             _saveTimer = new Timer(_ => SaveNow(), null, Timeout.Infinite, Timeout.Infinite);
@@ -197,6 +216,18 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
         /// <summary>Full path of memory.json — surfaced for the privacy panel and diagnostics.</summary>
         public string MemoryPath => _path;
+
+        /// <summary>
+        /// Subscribes the app signals that did not exist when this store was constructed (the brain is
+        /// built well before the optional services). Called once from the end of <c>OnStartup</c>;
+        /// idempotent and a no-op for a store built without app-signal mirroring.
+        /// See <see cref="MemorySignalWriter.WireDeferredSources"/>.
+        /// </summary>
+        public void WireDeferredSignals()
+        {
+            try { _signals?.WireDeferredSources(); }
+            catch (Exception ex) { App.Logger?.Debug("MemoryStore: deferred signal wiring failed: {Error}", ex.Message); }
+        }
 
         // ===================== profile =====================
 
@@ -238,9 +269,16 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// Counts one user chat turn against the active mod. Deterministic, no LLM: this is the raw
         /// material the Train 4 relationship arc reads. Blank/unknown mod ids fall back to
         /// <c>"default"</c> so the count is never silently dropped.
+        ///
+        /// <para>A no-op while <c>ChatMemoryEnabled</c> is off. Unlike level or streak, this counter
+        /// is derived from the very chat events that toggle exists to stop recording — accumulating
+        /// "how many times they talked to her and when" in a plaintext file the toggle does not
+        /// govern would be the toggle failing at the one thing it promises.</para>
         /// </summary>
         public void NoteChatTurn(string? modId)
         {
+            if (!ChatDerivedPersistenceEnabled) return;
+
             var key = string.IsNullOrWhiteSpace(modId) ? "default" : modId.Trim();
             lock (_lock)
             {
@@ -287,10 +325,52 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             }
         }
 
+        /// <summary>
+        /// Moderation gate for text that is about to become durable memory (doc 01 §8 risk 4).
+        ///
+        /// <para>A stored fact is rendered into the system prompt's dynamic tail on EVERY later call,
+        /// and boundary lines are deliberately exempt from the tail clamp — so a prohibited fact would
+        /// be guaranteed delivery, wearing the authority of the memory block, on a path the transport
+        /// guard never sees (<c>CheckInput</c> only ever inspects the newest user-role *message*,
+        /// never the system prompt). Facts sourced from the app itself (level, streak) are ours and
+        /// skip the check.</para>
+        ///
+        /// <para>Logged to <c>ModerationLog</c> for the CCBill record but deliberately NOT escalated
+        /// through <c>ModerationCounter</c>: editing a memory row is not a chat turn, and it must not
+        /// count toward the cooldown that gates conversation.</para>
+        /// </summary>
+        private static bool IsStorable(string text, string source)
+            => IsStorable(App.ModerationGuard, text, source);
+
+        /// <summary>Testable core of the storage gate. <c>App.ModerationGuard</c> is null headlessly.</summary>
+        internal static bool IsStorable(Moderation.IModerationGuard? guard, string text, string source)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return true;
+            if (string.Equals(source, MemoryFact.SourceApp, StringComparison.OrdinalIgnoreCase)) return true;
+
+            try
+            {
+                var check = guard?.CheckInput(text);
+                if (check == null || check.Allow || !check.Category.HasValue) return true;
+
+                App.ModerationLog?.Record(check.Category.Value, source: "memory", modelHint: "store");
+                App.Logger?.Information("MemoryStore: fact rejected by ModerationGuard (category={Cat})", check.Category);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                // A guard that throws must not take memory down; the transport guard still stands
+                // between this text and any model.
+                App.Logger?.Debug("MemoryStore: moderation check failed: {Error}", ex.Message);
+                return true;
+            }
+        }
+
         public MemoryFact AddFact(string text, MemoryFactKind kind, double salience = 0.5,
             string source = MemoryFact.SourceChat)
         {
             var body = (text ?? string.Empty).Trim();
+            if (!IsStorable(body, source)) body = string.Empty;
             var now = _clock();
             var fact = new MemoryFact(
                 Id: NewFactId(),
@@ -317,6 +397,11 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         public bool UpdateFact(string id, string? text = null, double? salience = null, bool? pinned = null)
         {
             if (string.IsNullOrEmpty(id)) return false;
+
+            // Hand-typed text is the one memory path the transport guard can never see (it inspects
+            // messages, not the system prompt), so it is checked here before it can become durable.
+            if (text != null && !IsStorable(text, MemoryFact.SourceUserEdited)) return false;
+
             lock (_lock)
             {
                 int i = _facts.FindIndex(f => f.Id == id);
@@ -508,10 +593,18 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         {
             lock (_lock)
             {
+                // firstSeen survives. It is a latch, not a memory: MemorySignalWriter recomputes the
+                // profile on the next flash/level-up/settings change and would re-latch it to TODAY,
+                // silently rewriting the anniversary the latch exists to protect. Carrying it across
+                // is both the honest value and the deterministic one.
+                _profile.TryGetValue(KeyFirstSeen, out var firstSeen);
+
                 _profile.Clear();
                 _relationship.Clear();
                 _usage.Clear();
                 _facts.Clear();
+
+                if (firstSeen != null) _profile[KeyFirstSeen] = firstSeen;
             }
 
             var dir = Path.GetDirectoryName(_path);
@@ -537,6 +630,27 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             App.Logger?.Information("MemoryStore: memory wiped");
         }
 
+        /// <summary>
+        /// Forgets everything DERIVED FROM CONVERSATION — the per-mod relationship counters and any
+        /// chat-sourced facts — and writes the file immediately. The deterministic profile (level,
+        /// streak, sessions, archetype) and user-authored facts survive.
+        ///
+        /// <para>Backs "reset companion memory" and unticking <c>ChatMemoryEnabled</c>. Without the
+        /// synchronous write, turning the toggle off would leave the existing
+        /// <c>{chatTurnsTotal, lastChat}</c> block on disk until some unrelated signal happened to
+        /// trigger the next debounced save.</para>
+        /// </summary>
+        public void ForgetChatDerived()
+        {
+            lock (_lock)
+            {
+                _relationship.Clear();
+                _facts.RemoveAll(f => string.Equals(f.Source, MemoryFact.SourceChat, StringComparison.OrdinalIgnoreCase));
+            }
+            SaveNow();
+            App.Logger?.Information("MemoryStore: chat-derived memory cleared");
+        }
+
         private string? LegacyLocalHistoryPath()
         {
             // companion\memory.json → the app data root one level up.
@@ -557,7 +671,9 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// are not dialogue and keep persisting — turning off chat memory should not make her forget
         /// what level you are.
         /// </summary>
-        private static bool ChatDerivedPersistenceEnabled =>
+        private bool ChatDerivedPersistenceEnabled => _chatMemoryEnabled();
+
+        private static bool DefaultChatMemoryEnabled() =>
             App.Settings?.Current?.CompanionPrompt?.ChatMemoryEnabled != false;
 
         /// <summary>Schedules a debounced background save. Cheap and safe to call on every mutation.</summary>
@@ -582,16 +698,36 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 return;
             }
 
-            try
+            lock (_writeLock)
             {
-                var dir = Path.GetDirectoryName(_path);
-                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-                File.WriteAllText(_path, json, Encoding.UTF8);
+                try
+                {
+                    var dir = Path.GetDirectoryName(_path);
+                    if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                    AtomicWrite(_path, json);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "MemoryStore: failed to persist memory");
+                }
             }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "MemoryStore: failed to persist memory");
-            }
+        }
+
+        /// <summary>
+        /// Writes <paramref name="json"/> to a sibling temp file and moves it into place.
+        ///
+        /// <para>A bare <c>File.WriteAllText</c> opens with <c>FileMode.Create</c>, which truncates
+        /// the file BEFORE the new bytes land: a crash or a power cut mid-write leaves a truncated
+        /// document, and both parsers here treat a JsonException as "empty", so the user silently
+        /// loses every memory with no error and no recovery path. This app ships a crash log
+        /// precisely because that happens. The move is atomic on NTFS, so the file on disk is always
+        /// either the previous complete document or the new one.</para>
+        /// </summary>
+        internal static void AtomicWrite(string path, string json)
+        {
+            var tmp = path + ".tmp";
+            File.WriteAllText(tmp, json, Encoding.UTF8);
+            File.Move(tmp, path, overwrite: true);
         }
 
         /// <summary>
@@ -600,12 +736,12 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// </summary>
         private string SerializeLocked()
         {
-            bool keepChatFacts = ChatDerivedPersistenceEnabled;
+            bool keepChatDerived = ChatDerivedPersistenceEnabled;
             var persistable = _facts
-                .Where(f => keepChatFacts || !string.Equals(f.Source, MemoryFact.SourceChat, StringComparison.OrdinalIgnoreCase))
+                .Where(f => keepChatDerived || !string.Equals(f.Source, MemoryFact.SourceChat, StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-            var json = Render(persistable);
+            var json = Render(persistable, keepChatDerived);
             if (Encoding.UTF8.GetByteCount(json) <= SoftMaxBytes) return json;
 
             // Over the soft cap. Drop the weakest unprotected facts a slice at a time; protected
@@ -622,7 +758,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             {
                 removed += Math.Max(1, shed.Count / 10);
                 var survivors = persistable.Except(shed.Take(removed)).ToList();
-                json = Render(survivors);
+                json = Render(survivors, keepChatDerived);
                 if (Encoding.UTF8.GetByteCount(json) <= SoftMaxBytes)
                 {
                     App.Logger?.Warning("MemoryStore: soft size cap hit, shed {Count} fact(s)", removed);
@@ -634,7 +770,13 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             return json;
         }
 
-        private string Render(IEnumerable<MemoryFact> facts)
+        /// <param name="keepChatDerived">
+        /// <c>ChatMemoryEnabled</c>. False drops the <c>relationship</c> block as well as chat-sourced
+        /// facts: per-mod turn counts and last-chat timestamps ARE a record of the conversations the
+        /// toggle exists to stop recording, however deterministically they were produced. The profile
+        /// block (level, streak, archetype) is not dialogue and stays either way.
+        /// </param>
+        private string Render(IEnumerable<MemoryFact> facts, bool keepChatDerived)
         {
             var payload = new PersistedMemory
             {
@@ -643,10 +785,12 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     p => p.Key,
                     p => JsonSerializer.SerializeToElement(p.Value),
                     StringComparer.OrdinalIgnoreCase),
-                Relationship = _relationship.ToDictionary(
-                    r => r.Key,
-                    r => new PersistedRelationship { ChatTurnsTotal = r.Value.ChatTurnsTotal, LastChat = r.Value.LastChat },
-                    StringComparer.OrdinalIgnoreCase),
+                Relationship = keepChatDerived
+                    ? _relationship.ToDictionary(
+                        r => r.Key,
+                        r => new PersistedRelationship { ChatTurnsTotal = r.Value.ChatTurnsTotal, LastChat = r.Value.LastChat },
+                        StringComparer.OrdinalIgnoreCase)
+                    : new Dictionary<string, PersistedRelationship>(StringComparer.OrdinalIgnoreCase),
                 Usage = new Dictionary<string, int>(_usage, StringComparer.OrdinalIgnoreCase),
                 Facts = facts.Select(f => new PersistedFact
                 {
@@ -877,7 +1021,18 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 _processExitHandler = null;
             }
             catch { }
-            try { _saveTimer?.Dispose(); } catch { }
+
+            // Timer.Dispose() does NOT wait for a callback that is already running, so a debounce
+            // firing at this instant would race the final SaveNow below. Dispose(WaitHandle) signals
+            // once every callback has drained; the bounded wait is there so a wedged callback can
+            // never hold up shutdown.
+            try
+            {
+                using var drained = new ManualResetEvent(false);
+                if (_saveTimer?.Dispose(drained) == true) drained.WaitOne(TimeSpan.FromSeconds(2));
+            }
+            catch { try { _saveTimer?.Dispose(); } catch { } }
+
             try { SaveNow(); } catch { }
         }
 

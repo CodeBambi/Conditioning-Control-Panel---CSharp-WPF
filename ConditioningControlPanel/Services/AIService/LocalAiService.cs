@@ -100,6 +100,14 @@ namespace ConditioningControlPanel.Services.AIService
         // Cap on persisted user+assistant pairs. Picked so the file stays small (<200KB
         // typical) while preserving enough context that Bambi remembers a long conversation.
         private const int MaxPersistedPairs = 50;
+
+        /// <summary>
+        /// Ceiling on <c>options.num_predict</c> for the local provider. Generous compared with the
+        /// cloud's 100 (local inference is the user's own hardware, not our bill) but bounded, so a
+        /// caller asking for something absurd can't wedge the box.
+        /// </summary>
+        private const int LocalMaxTokensHardCap = 512;
+
         private static string HistoryFilePath =>
             Path.Combine(App.UserDataPath, "local_chat_history.json");
 
@@ -482,8 +490,13 @@ namespace ConditioningControlPanel.Services.AIService
                     "LocalAiService.SendAsync: sending to Ollama (model={Model}, msgs={MsgCount}, purpose={Purpose})",
                     model, outgoing.Count, options.MeterPurpose);
 
+                // The caller's budget is honoured here, not silently dropped: a 60-token ambient quip
+                // that comes back as three paragraphs inflates every later window and costs seconds
+                // of local inference. LocalMaxTokensHardCap keeps a pathological request bounded.
                 var (status, body) = await SendChatAsync(model,
-                    outgoing.Select(m => (m.Role, (string?)m.Content)), cancellationToken).ConfigureAwait(false);
+                    outgoing.Select(m => (m.Role, (string?)m.Content)), cancellationToken,
+                    maxTokens: Math.Clamp(options.MaxTokens, 1, LocalMaxTokensHardCap),
+                    temperature: options.Temperature).ConfigureAwait(false);
 
                 if (status != 200)
                 {
@@ -895,19 +908,10 @@ namespace ConditioningControlPanel.Services.AIService
         /// <see cref="TransportMessage"/> window share a single wire encoder.
         /// </summary>
         private async Task<(int status, string body)> SendChatAsync(string model,
-            IEnumerable<(string role, string? content)> messages, CancellationToken cancellationToken = default)
+            IEnumerable<(string role, string? content)> messages, CancellationToken cancellationToken = default,
+            int? maxTokens = null, double? temperature = null)
         {
-            // think:false tells reasoning models (qwen3, deepseek-r1, etc.) to skip the
-            // long internal reasoning phase and respond directly. Non-reasoning models
-            // ignore it. This can cut response time from ~50s to ~3s for qwen3-class models.
-            var payload = new
-            {
-                model = model,
-                messages = messages.Select(m => new { role = m.role, content = m.content ?? string.Empty }).ToArray(),
-                stream = false,
-                think = false
-            };
-            var json = JsonSerializer.Serialize(payload);
+            var json = BuildChatPayload(model, messages, maxTokens, temperature);
 
             using var req = new HttpRequestMessage(HttpMethod.Post, "api/chat")
             {
@@ -916,6 +920,52 @@ namespace ConditioningControlPanel.Services.AIService
             using var resp = await _http.SendAsync(req, cancellationToken);
             var body = await resp.Content.ReadAsStringAsync(cancellationToken);
             return ((int)resp.StatusCode, body);
+        }
+
+        /// <summary>
+        /// Builds the <c>/api/chat</c> request body. Extracted (and internal) so the payload shape can
+        /// be asserted headlessly the way <see cref="BuildUnloadPayload"/> is.
+        ///
+        /// <para><c>think:false</c> tells reasoning models (qwen3, deepseek-r1, …) to skip the long
+        /// internal reasoning phase and respond directly; non-reasoning models ignore it. This can cut
+        /// response time from ~50s to ~3s for qwen3-class models.</para>
+        ///
+        /// <para><paramref name="maxTokens"/>/<paramref name="temperature"/> become Ollama's
+        /// <c>options.num_predict</c>/<c>options.temperature</c>. Dropping them is not free:
+        /// <c>AiCallOptions.Reaction</c> budgets an ambient quip at 60 tokens precisely so it stays a
+        /// one-liner, and without the clamp Ollama uses the model's default num_predict — producing a
+        /// multi-paragraph "reaction" that then rides in every later window. Both null (the legacy
+        /// one-shot path) omits the <c>options</c> object entirely, keeping that body byte-identical.
+        /// </para>
+        /// </summary>
+        internal static string BuildChatPayload(string model,
+            IEnumerable<(string role, string? content)> messages, int? maxTokens, double? temperature)
+        {
+            var wire = messages.Select(m => new { role = m.role, content = m.content ?? string.Empty }).ToArray();
+
+            if (maxTokens == null && temperature == null)
+            {
+                return JsonSerializer.Serialize(new
+                {
+                    model = model,
+                    messages = wire,
+                    stream = false,
+                    think = false
+                });
+            }
+
+            return JsonSerializer.Serialize(new
+            {
+                model = model,
+                messages = wire,
+                stream = false,
+                think = false,
+                options = new
+                {
+                    num_predict = maxTokens ?? -1,
+                    temperature = temperature ?? 0.8
+                }
+            });
         }
 
         private static string ExtractContent(string body)

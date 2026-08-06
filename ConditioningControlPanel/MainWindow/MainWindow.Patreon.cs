@@ -988,9 +988,15 @@ namespace ConditioningControlPanel
 
             try
             {
-                // Cloud provider is stateless, so this only does work for local Ollama users.
-                // App.Ai is typed as the IAiService interface; ClearLocalHistory lives on
-                // the concrete strategy (which is what's always assigned).
+                // Train 1 moved conversation state out of the providers and into the brain, for
+                // EVERY provider — so the brain is now the thing that has to forget. Without this a
+                // cloud user (the default) keeps companion/session.json AND the live turn log after
+                // a reset that promised "both in memory and on disk".
+                App.Brain?.ForgetConversation();
+
+                // Legacy local-Ollama history file, still owned by LocalAiService whenever
+                // UseCompanionBrain=false. App.Ai is typed as the IAiService interface;
+                // ClearLocalHistory lives on the concrete strategy (which is what's always assigned).
                 (App.Ai as Services.AIService.AiServiceStrategy)?.ClearLocalHistory();
 
                 // Drop the on-screen history too (the data store the avatar window binds to).
@@ -1578,6 +1584,10 @@ namespace ConditioningControlPanel
 
             try
             {
+                // The brain owns the transcript for every provider since Train 1; clearing only the
+                // legacy local file would leave companion/session.json (and the live log) intact.
+                App.Brain?.ForgetConversation();
+
                 if (App.Ai is Services.AIService.AiServiceStrategy strategy)
                 {
                     strategy.ClearLocalHistory();
@@ -1608,11 +1618,21 @@ namespace ConditioningControlPanel
             s.ChatMemoryEnabled = on;
             App.Settings?.Save();
 
-            // Turning memory off should wipe what's already saved — not just stop persisting new turns.
-            if (!on && App.Ai is Services.AIService.AiServiceStrategy strategy)
+            // Turning memory off should wipe what's already saved — not just stop persisting new
+            // turns. That promise now spans companion/session.json (every provider, since Train 1)
+            // AND the live turn log the brain holds, not just the legacy local-Ollama file: a cloud
+            // user unticking this box has a transcript on disk that never existed before Train 1,
+            // and it is exactly what they are asking to remove.
+            if (!on)
             {
-                try { strategy.ClearLocalHistory(); }
-                catch (Exception ex) { App.Logger?.Warning(ex, "ChkChatMemoryEnabled_Changed: ClearLocalHistory failed"); }
+                try { App.Brain?.ForgetConversation(); }
+                catch (Exception ex) { App.Logger?.Warning(ex, "ChkChatMemoryEnabled_Changed: brain wipe failed"); }
+
+                if (App.Ai is Services.AIService.AiServiceStrategy strategy)
+                {
+                    try { strategy.ClearLocalHistory(); }
+                    catch (Exception ex) { App.Logger?.Warning(ex, "ChkChatMemoryEnabled_Changed: ClearLocalHistory failed"); }
+                }
             }
         }
 

@@ -389,6 +389,65 @@ public class PromptTwoZoneTests : IDisposable
         Assert.True(ChatSession.ApproxTokens(line) < 30);
     }
 
+    [Fact]
+    public void TimeOfDayLine_IsStableWithinTheHour()
+    {
+        // At HH:mm resolution this line changes every minute, and it sits inside message 0 AHEAD of
+        // the whole history window — so two chat turns a minute apart share no cacheable prefix and
+        // the ~1,600 tokens of history Train 1 added get re-billed in full on every single turn.
+        var a = PromptAssembler.TimeOfDayLine(new DateTime(2026, 8, 6, 22, 1, 0));
+        var b = PromptAssembler.TimeOfDayLine(new DateTime(2026, 8, 6, 22, 58, 0));
+        var nextHour = PromptAssembler.TimeOfDayLine(new DateTime(2026, 8, 6, 23, 1, 0));
+
+        Assert.Equal(a, b);
+        Assert.NotEqual(a, nextHour);
+    }
+
+    // ---------- the proxy's 10,000-char per-message cap ----------
+
+    [Fact]
+    public void Compose_KeepsTheSystemMessageUnderTheProxyCap_ByTrimmingTheTail()
+    {
+        // proxy/server.js rejects any single message over 10,000 chars with input_too_large, and the
+        // client packs the whole prefix AND the tail into one system message. A long knowledge base
+        // plus Train 1's new tail is enough to cross that line — and every cloud call then returns an
+        // unbadged canned phrase with no user-visible reason.
+        var prefix = new string('p', 8600);
+        var tail = PromptAssembler.TailHeader + "\n"
+                   + string.Join("\n", Enumerable.Repeat("a tail line about right now", 40)) + "\n"
+                   + PromptAssembler.ChatInstruction;
+
+        var composed = PromptAssembler.Compose(prefix, tail, PromptAssembler.ChatInstruction);
+
+        Assert.True(composed.Length <= PromptAssembler.SystemMessageCharCeiling,
+            $"composed was {composed.Length} chars, ceiling is {PromptAssembler.SystemMessageCharCeiling}");
+        Assert.StartsWith(prefix, composed, StringComparison.Ordinal);
+        // The purpose instruction is never what we drop.
+        Assert.EndsWith(PromptAssembler.ChatInstruction, composed, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Compose_NeverTrimsThePrefix_BecauseTheSafetyFloorLivesAtItsEnd()
+    {
+        // Cutting the prefix to satisfy a length cap would trade a compliance control for a cost
+        // control: SafetyComposer.Floor is the LAST thing in the stable prefix.
+        var prefix = new string('p', 9500) + SafetyComposer.Floor;
+        var tail = PromptAssembler.TailHeader + "\nsomething\n" + PromptAssembler.ChatInstruction;
+
+        var composed = PromptAssembler.Compose(prefix, tail, PromptAssembler.ChatInstruction);
+
+        Assert.StartsWith(prefix, composed, StringComparison.Ordinal);
+        Assert.Contains(SafetyComposer.Floor, composed, StringComparison.Ordinal);
+        Assert.EndsWith(PromptAssembler.ChatInstruction, composed, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Compose_LeavesAnOrdinaryPromptExactlyAsItWas()
+    {
+        Assert.Equal("prefix\n\ntail", PromptAssembler.Compose("prefix", "tail", PromptAssembler.ChatInstruction));
+        Assert.Equal("prefix", PromptAssembler.Compose("prefix", "", PromptAssembler.ChatInstruction));
+    }
+
     /// <summary>A store that ignores the budget it is handed — the case the assembler must survive.</summary>
     private sealed class GreedyMemory : IMemoryStore
     {

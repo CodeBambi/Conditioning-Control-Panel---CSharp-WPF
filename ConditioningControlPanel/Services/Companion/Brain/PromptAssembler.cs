@@ -88,6 +88,23 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         public const string TailHeader = "--- RIGHT NOW ---";
 
         /// <summary>
+        /// Hard ceiling, in CHARACTERS, on the assembled system message.
+        ///
+        /// <para>The cloud proxy rejects any single message over 10,000 chars with
+        /// <c>400 {error:"input_too_large"}</c>, and the client packs the whole stable prefix AND this
+        /// tail into one system message. A user with a long knowledge base or a mod shipping ~100
+        /// video titles already sits near that line; the tail adds up to
+        /// <see cref="TailTokenBudget"/> + <see cref="BoundaryOvershootTokens"/> ≈ 4,000 chars more.
+        /// Going over turns EVERY cloud call — chat and ambient — into an unbadged canned phrase with
+        /// no user-visible reason.</para>
+        ///
+        /// <para>Only the TAIL is ever trimmed to fit. The prefix ends with
+        /// <c>SafetyComposer.Floor</c>, so cutting it from the end would silently drop the safety
+        /// floor: an oversized prefix is logged loudly and sent whole instead.</para>
+        /// </summary>
+        public const int SystemMessageCharCeiling = 9000;
+
+        /// <summary>
         /// The anti-repeat rule ambient calls carry. Together with
         /// <see cref="RecentRecommendations"/> this is what lets ambient calls hold history at all —
         /// past "watch X~" lines used to act as few-shot bait and fixate the model on one title,
@@ -170,7 +187,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
             var prefix = _systemPromptProvider() ?? string.Empty;
             var tail = BuildTail(purpose, window);
-            var systemPrompt = tail.Length == 0 ? prefix : prefix + "\n\n" + tail;
+            var systemPrompt = Compose(prefix, tail, PurposeInstruction(purpose));
 
             var messages = new List<ChatMessage>(window.Count + 1) { ChatMessage.System(systemPrompt) };
             messages.AddRange(ChatSession.ToMessages(window));
@@ -180,6 +197,63 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 purpose, ChatSession.ApproxTokens(prefix), ChatSession.ApproxTokens(tail), window.Count);
 
             return new PromptRequest(systemPrompt, messages);
+        }
+
+        /// <summary>
+        /// Joins the cached prefix and the per-call tail into one system message, keeping the result
+        /// under <see cref="SystemMessageCharCeiling"/>.
+        ///
+        /// <para>Over the ceiling, the tail is shed from its LOW-priority end (the last lines
+        /// <see cref="BuildTail"/> added) and <paramref name="instruction"/> is always kept — a call
+        /// with no purpose instruction is worse than a call with no time-of-day line. If the prefix
+        /// alone is already over, it is sent untouched and logged: the prefix ends with the safety
+        /// floor, and trimming it to satisfy a length cap would be trading a compliance control for a
+        /// cost control.</para>
+        /// </summary>
+        internal static string Compose(string prefix, string tail, string instruction)
+        {
+            prefix ??= string.Empty;
+            tail ??= string.Empty;
+            if (tail.Length == 0) return WarnIfOversize(prefix);
+
+            var joined = prefix + "\n\n" + tail;
+            if (joined.Length <= SystemMessageCharCeiling) return joined;
+
+            // Room the tail may occupy, after the prefix and the two joining newlines.
+            int room = SystemMessageCharCeiling - prefix.Length - 2;
+            var floor = TailHeader + "\n" + instruction;
+            if (room < floor.Length)
+            {
+                // Even the minimum tail doesn't fit. Send the prefix plus just the instruction —
+                // dropping the instruction entirely would leave the call with no purpose at all.
+                App.Logger?.Warning(
+                    "[AI-PROMPT] system prompt over the {Ceiling}-char proxy cap (prefix={Prefix} chars) — tail reduced to the purpose instruction",
+                    SystemMessageCharCeiling, prefix.Length);
+                return WarnIfOversize(prefix + "\n\n" + floor);
+            }
+
+            var lines = tail.Replace("\r\n", "\n").Split('\n').ToList();
+            // Drop from the end, but never the instruction (the last line) or the header (the first).
+            while (lines.Count > 2 && string.Join("\n", lines).Length > room)
+                lines.RemoveAt(lines.Count - 2);
+
+            var trimmed = string.Join("\n", lines);
+            App.Logger?.Warning(
+                "[AI-PROMPT] system prompt trimmed to fit the {Ceiling}-char proxy cap (tail {Before}→{After} chars)",
+                SystemMessageCharCeiling, tail.Length, trimmed.Length);
+            return WarnIfOversize(prefix + "\n\n" + trimmed);
+        }
+
+        private static string WarnIfOversize(string systemPrompt)
+        {
+            if (systemPrompt.Length > SystemMessageCharCeiling)
+            {
+                App.Logger?.Warning(
+                    "[AI-PROMPT] system prompt is {Chars} chars — the cloud proxy rejects anything over 10000 with input_too_large; " +
+                    "trim the knowledge base or the mod's video list",
+                    systemPrompt.Length);
+            }
+            return systemPrompt;
         }
 
         /// <summary>
@@ -255,6 +329,14 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// the same footing without pushing a clock into the cached prefix, where it would invalidate
         /// the cache once a minute.
         /// </summary>
+        /// <param name="local">Local wall clock.</param>
+        /// <remarks>
+        /// The clock is rendered to the HOUR, not the minute. Providers discount the longest common
+        /// prefix of a request, and this line sits inside message 0 ahead of the whole history window:
+        /// at <c>HH:mm</c> resolution two chat turns a minute apart share no cacheable prefix at all,
+        /// so the ~1,600 tokens of history Train 1 added get re-billed at full price on every single
+        /// turn. The hour band plus the hour is all the flavour she has ever used.
+        /// </remarks>
         internal static string TimeOfDayLine(DateTime local)
         {
             var band = local.Hour switch
@@ -268,8 +350,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 _ => "late night"
             };
             return string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                "Right now it is {0}, {1:HH:mm} their time ({2}).",
-                band, local, local.DayOfWeek);
+                "Right now it is {0}, around {1:00}:00 their time ({2}).",
+                band, local.Hour, local.DayOfWeek);
         }
 
         /// <summary>

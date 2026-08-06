@@ -1810,6 +1810,13 @@ namespace ConditioningControlPanel
                 Logger?.Information("Mantra Chant left OFF on startup (it never auto-resumes — #685)");
             }
 
+            // The companion's memory mirror subscribes its app signals when the brain is constructed,
+            // ~200 lines above — before Mantra (and anything else built down here) exists. This second
+            // pass picks those up; without it MantraCompleted is never wired for the whole process
+            // lifetime and "mantra" can never become a favourite feature.
+            try { (Brain?.Memory as Services.Companion.Brain.MemoryStore)?.WireDeferredSignals(); }
+            catch (Exception ex) { Logger?.Debug("MemoryStore: deferred signal pass failed: {Error}", ex.Message); }
+
             // Initialize wallpaper override service
             Wallpaper = new WallpaperService();
 

@@ -87,6 +87,11 @@ public class CompanionBrainTests
     private static CompanionBrain Build(FakeTransport transport, FakeStore store) =>
         new(transport, new StubAssembler(), new InertMemoryStore(), store);
 
+    private static CompanionBrain Build(FakeTransport transport, FakeStore store,
+        RecentRecommendations recommendations, params string[] mediaTitles) =>
+        new(transport, new StubAssembler(), new InertMemoryStore(), store, recommendations,
+            () => mediaTitles);
+
     /// <summary>Drains the fire-and-forget persistence Task.Run without a fixed sleep.</summary>
     private static async Task<IReadOnlyList<CompanionTurn>> WaitForWrite(FakeStore store, int expectedWrites)
     {
@@ -207,10 +212,12 @@ public class CompanionBrainTests
     // ---------- canned / failure ----------
 
     [Fact]
-    public async Task CannedReply_KeepsTheUserTurn_ButRecordsNoAssistantTurn()
+    public async Task CannedReply_RollsBackTheUnansweredUserTurn()
     {
-        // A fallback string is a legitimate send that failed for an infrastructure reason: the user
-        // turn stays for transcript coherence, but nothing badge-worthy or new hits the disk.
+        // Ollama down / not logged in / proxy 5xx. The user's turn has no answer, so it must not
+        // stay in the log: retries would stack consecutive user messages with nothing between them,
+        // and the first later success would persist the whole block. The legacy path rolled this
+        // back explicitly and so do we.
         var transport = new FakeTransport
         {
             Respond = (_, _) => new AiReplyResult("Good girl~", IsAiGenerated: false, Refusal: null)
@@ -221,9 +228,28 @@ public class CompanionBrainTests
         var result = await brain.ChatAsync("hello?");
 
         Assert.False(result.IsAiGenerated);
-        Assert.Single(brain.Session.Turns);
-        Assert.Equal(TurnKind.UserChat, brain.Session.Turns[0].Kind);
+        Assert.Empty(brain.Session.Turns);
         Assert.Empty(store.Writes);
+    }
+
+    [Fact]
+    public async Task RepeatedTransportFailures_NeverPersistABlockOfUnansweredUserTurns()
+    {
+        var transport = new FakeTransport
+        {
+            Respond = (_, _) => new AiReplyResult("(Can't reach Ollama)", IsAiGenerated: false, Refusal: null)
+        };
+        var store = new FakeStore();
+        using var brain = Build(transport, store);
+
+        for (int i = 0; i < 5; i++) await brain.ChatAsync("hey");
+
+        transport.Respond = (_, _) => new AiReplyResult("hi~", IsAiGenerated: true, Refusal: null);
+        await brain.ChatAsync("you back?");
+
+        var saved = await WaitForWrite(store, 1);
+        Assert.Equal(2, saved.Count);                       // the one real exchange, nothing else
+        Assert.Equal("you back?", saved[0].Text);
     }
 
     [Fact]
@@ -243,7 +269,7 @@ public class CompanionBrainTests
     // ---------- ambient ----------
 
     [Fact]
-    public async Task ReactAsync_UsesTheReactionPurpose_AndAppendsTheReplyAsChat()
+    public async Task ReactAsync_UsesTheReactionPurpose_AndAppendsTheReplyAsAmbientReply()
     {
         var transport = new FakeTransport();
         var store = new FakeStore();
@@ -257,13 +283,37 @@ public class CompanionBrainTests
 
         var turns = brain.Session.Turns;
         Assert.Equal(TurnKind.AmbientEvent, turns[0].Kind);
-        // The reply lands as AssistantChat so a follow-up "why'd you say that?" has context.
-        Assert.Equal(TurnKind.AssistantChat, turns[1].Kind);
+        // AmbientReply, not AssistantChat: it shapes the live window (so a follow-up "why'd you say
+        // that?" has context) but is not dialogue and so never reaches disk.
+        Assert.Equal(TurnKind.AmbientReply, turns[1].Kind);
+        Assert.False(turns[1].IsDialogue);
+        Assert.Equal(ChatMessage.RoleAssistant, turns[1].Role);
 
         // The event went on the wire wearing the sigil, as a user-role message.
         var evt = transport.Sends[0].Messages[^1];
         Assert.Equal(ChatMessage.RoleUser, evt.Role);
         Assert.Equal("«event: finished mandatory video 'Bambi Bae'»", evt.Content);
+    }
+
+    [Fact]
+    public async Task AmbientReplies_NeverReachDisk_AndCannotEvictRealDialogue()
+    {
+        // Awareness fires all day. Persisting her ambient one-liners (while their triggering events
+        // are dropped) would fill the 100-turn cap with orphaned assistant lines and push the actual
+        // conversation off the front — and it would put browsing commentary on disk under a toggle
+        // labelled *chat* memory.
+        var transport = new FakeTransport();
+        var store = new FakeStore();
+        using var brain = Build(transport, store);
+
+        await brain.ChatAsync("hi");
+        for (int i = 0; i < 20; i++) await brain.ReactAsync($"user opened Reddit ({i})");
+
+        brain.Flush();
+
+        Assert.All(store.Saved, t => Assert.True(t.IsDialogue));
+        Assert.Equal(2, store.Saved.Count);                       // just the one real exchange
+        Assert.DoesNotContain(store.Saved, t => t.Kind == TurnKind.AmbientReply);
     }
 
     [Fact]
@@ -393,6 +443,76 @@ public class CompanionBrainTests
         Assert.Contains(transport.Sends[0].Messages, m => m.Content == "i'm scared of the spiral");
     }
 
+    // ---------- anti-fixation (RecentRecommendations producer) ----------
+
+    [Fact]
+    public async Task AReplyThatNamesAPoolTitle_BansItFromTheNextPrompt()
+    {
+        // The structural half of the anti-fixation fix. The per-call title shuffle is gone (the
+        // stable prefix lists the pool alphabetically and resolves its {{VIDEO}} examples once per
+        // launch), so if nothing ever WRITES into RecentRecommendations the exclusion line is null
+        // forever and the only mitigation left is one sentence of prose.
+        var recommendations = new RecentRecommendations();
+        var transport = new FakeTransport
+        {
+            Respond = (_, _) => new AiReplyResult("go watch Bambi Bae, good girl~", true, null)
+        };
+        using var brain = Build(transport, new FakeStore(), recommendations, "Bambi Bae", "IQ Programming");
+
+        await brain.ChatAsync("give me something to watch");
+
+        Assert.Contains("Bambi Bae", recommendations.Current());
+        Assert.DoesNotContain("IQ Programming", recommendations.Current());
+        Assert.Contains("Bambi Bae", recommendations.BuildExclusionLine());
+    }
+
+    [Fact]
+    public async Task AnAmbientQuipThatNamesAPoolTitle_AlsoBansIt()
+    {
+        // Ambient calls carry history now, so an ambient "watch X~" is exactly the few-shot bait
+        // that fixated the model on one title before. It has to burn a slot too.
+        var recommendations = new RecentRecommendations();
+        var transport = new FakeTransport
+        {
+            Respond = (_, _) => new AiReplyResult("still doomscrolling? go watch Bambi Bae instead~", true, null)
+        };
+        using var brain = Build(transport, new FakeStore(), recommendations, "Bambi Bae");
+
+        await brain.ReactAsync("user has been on Reddit 22m");
+
+        Assert.Contains("Bambi Bae", recommendations.Current());
+    }
+
+    [Fact]
+    public async Task ALongerTitleWins_SoASubstringDoesNotBurnASecondSlot()
+    {
+        var recommendations = new RecentRecommendations();
+        var transport = new FakeTransport
+        {
+            Respond = (_, _) => new AiReplyResult("try Bambi Bae 2~", true, null)
+        };
+        using var brain = Build(transport, new FakeStore(), recommendations, "Bambi Bae", "Bambi Bae 2");
+
+        await brain.ChatAsync("something new?");
+
+        Assert.Equal(new[] { "Bambi Bae 2" }, recommendations.Current());
+    }
+
+    [Fact]
+    public async Task ACannedFallbackNeverBurnsARecommendationSlot()
+    {
+        var recommendations = new RecentRecommendations();
+        var transport = new FakeTransport
+        {
+            Respond = (_, _) => new AiReplyResult("Bambi Bae is fun~", IsAiGenerated: false, Refusal: null)
+        };
+        using var brain = Build(transport, new FakeStore(), recommendations, "Bambi Bae");
+
+        await brain.ChatAsync("what should i watch");
+
+        Assert.Empty(recommendations.Current());
+    }
+
     [Fact]
     public void Forget_ClearsSession_Recommendations_MemoryAndDisk()
     {
@@ -408,6 +528,50 @@ public class CompanionBrainTests
         Assert.Empty(brain.Recommendations.Current());
         Assert.Empty(brain.Memory.GetFacts());
         Assert.Equal(1, store.WipeCount);
+    }
+
+    [Fact]
+    public async Task Forget_IsNotUndoneByTheNextTurnOrTheShutdownFlush()
+    {
+        // The wipe's whole job. Deleting session.json without clearing the live log is cosmetic:
+        // the next reply re-persists the entire pre-wipe conversation, and even if the user never
+        // sends one, Dispose() -> Flush() writes it back at shutdown.
+        var transport = new FakeTransport();
+        var store = new FakeStore();
+        var brain = Build(transport, store);
+
+        await brain.ChatAsync("something private");
+        await WaitForWrite(store, 1);
+
+        brain.Forget();
+
+        await brain.ChatAsync("hello again");
+        var saved = await WaitForWrite(store, 2);
+        Assert.DoesNotContain(saved, t => t.Text == "something private");
+
+        brain.Dispose();
+        Assert.DoesNotContain(store.Saved, t => t.Text == "something private");
+        Assert.Equal(0, brain.RestoredTurnCount);
+    }
+
+    [Fact]
+    public async Task ForgetConversation_ClearsTheTranscriptButKeepsDurableMemory()
+    {
+        // What the chat-memory surfaces call. Turning off "chat memory" is a promise about
+        // dialogue — it is not a request to forget what level you are.
+        var store = new FakeStore();
+        var memory = new InertMemoryStore();
+        using var brain = new CompanionBrain(new FakeTransport(), new StubAssembler(), memory, store);
+
+        await brain.ChatAsync("hi");
+        brain.ForgetConversation();
+
+        Assert.Empty(brain.Session.Turns);
+        Assert.Equal(1, store.WipeCount);
+        Assert.Equal(0, memory.WipeCalls);   // durable memory is NOT what this button forgets
+
+        brain.Forget();
+        Assert.Equal(1, memory.WipeCalls);   // the panel's all-or-nothing wipe still does
     }
 
     // ---------- kill switch ----------

@@ -34,7 +34,8 @@ namespace ConditioningControlPanel.Views.Controls
         }
 
         /// <summary>The bound view model. Created on first use so tests/designers never need a brain.</summary>
-        internal CompanionMemoryViewModel Model => _vm ??= new CompanionMemoryViewModel(ResolveStore());
+        internal CompanionMemoryViewModel Model =>
+            _vm ??= new CompanionMemoryViewModel(ResolveStore(), ResolveForgetEverything());
 
         private static IMemoryStore? ResolveStore()
         {
@@ -42,6 +43,25 @@ namespace ConditioningControlPanel.Views.Controls
             catch (Exception ex)
             {
                 App.Logger?.Debug(ex, "CompanionMemoryPanel: no memory store available");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// The brain's full wipe, so "Forget everything" also clears the live conversation the brain
+        /// holds in RAM. Without it the store wipe deletes session.json and the next reply (or the
+        /// shutdown flush) writes the entire pre-wipe transcript straight back.
+        /// </summary>
+        private static Action? ResolveForgetEverything()
+        {
+            try
+            {
+                var brain = App.Brain;
+                return brain == null ? null : brain.Forget;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug(ex, "CompanionMemoryPanel: no brain available for wipe");
                 return null;
             }
         }

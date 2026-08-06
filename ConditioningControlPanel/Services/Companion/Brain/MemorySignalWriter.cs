@@ -69,6 +69,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         private readonly object _lock = new();
         private bool _started;
         private bool _disposed;
+        private bool _mantraWired;
 
         public MemorySignalWriter(MemoryStore store, Func<DateTime>? utcClock = null)
         {
@@ -94,6 +95,26 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             App.Logger?.Debug("MemorySignalWriter: mirroring {Count} app signal source(s)", _unsubscribe.Count);
         }
 
+        /// <summary>
+        /// Wires the signal sources that do not exist yet at <see cref="Start"/> time.
+        ///
+        /// <para><see cref="Start"/> runs inside <c>new MemoryStore()</c> inside
+        /// <c>new CompanionBrain(Ai)</c>, which <c>App.OnStartup</c> builds ~200 lines before
+        /// <c>App.Mantra</c>. <see cref="WireFeatureUsage"/>'s <c>if (App.Mantra != null)</c> is
+        /// therefore false, and <see cref="Start"/> is idempotent-by-flag — so without a second pass
+        /// the mantra counter is never subscribed for the whole process lifetime, and a user who does
+        /// mantras every session never sees "mantra" in their favourite features. Called once from the
+        /// end of <c>OnStartup</c>; idempotent, so a second call costs nothing.</para>
+        /// </summary>
+        public void WireDeferredSources()
+        {
+            if (_disposed || _mantraWired || App.Mantra == null) return;
+            _mantraWired = true;
+            Wire<Action>(h => App.Mantra.MantraCompleted += h, h => App.Mantra.MantraCompleted -= h,
+                () => NoteFeatureUse(FeatureMantra));
+            App.Logger?.Debug("MemorySignalWriter: deferred sources wired");
+        }
+
         /// <summary>Unsubscribes everything. Safe to call twice, or without a prior <see cref="Start"/>.</summary>
         public void Stop()
         {
@@ -110,6 +131,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 catch (Exception ex) { App.Logger?.Debug("MemorySignalWriter: unsubscribe failed: {Error}", ex.Message); }
             }
             _started = false;
+            _mantraWired = false;
         }
 
         // ===================== wiring =====================
@@ -189,9 +211,9 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 Wire<Action>(h => App.Bubbles.OnBubblePopped += h, h => App.Bubbles.OnBubblePopped -= h,
                     () => NoteFeatureUse(FeatureBubbles));
 
-            if (App.Mantra != null)
-                Wire<Action>(h => App.Mantra.MantraCompleted += h, h => App.Mantra.MantraCompleted -= h,
-                    () => NoteFeatureUse(FeatureMantra));
+            // App.Mantra is built ~200 lines AFTER the brain in OnStartup, so this is normally false
+            // on the Start() pass; WireDeferredSources() picks it up at the end of startup.
+            WireDeferredSources();
         }
 
         private void WireRelationship()
