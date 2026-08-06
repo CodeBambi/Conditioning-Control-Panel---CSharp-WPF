@@ -107,6 +107,21 @@ namespace ConditioningControlPanel.Services
             // --- tier art (unlock gating is deliberately out of scope for this build) ---
             new("tier_pink_filter",   "Subject",     "Patron", "Resources/Pink filter.webp"),
             new("tier_prime_subject", "Prime",       "Patron", "Resources/prime subject.webp"),
+
+            // --- per-mod scene banners (Resources\banners\*.png, Resource; owner-approved
+            //     2026-08-06 one-shot set, pre-cropped to the 3:1 hero band) ---
+            new("bambi_neon_den",  "Neon Den",        "Bambi",       "Resources/banners/bambi_neon_den.png"),
+            new("bambi_arcade",    "Claw Machine",    "Bambi",       "Resources/banners/bambi_arcade.png"),
+            new("bambi_diner",     "Milkshake Diner", "Bambi",       "Resources/banners/bambi_diner.png"),
+            new("sissy_boudoir",   "Boudoir",         "Sissy",       "Resources/banners/sissy_boudoir.png"),
+            new("sissy_wardrobe",  "Walk-In",         "Sissy",       "Resources/banners/sissy_wardrobe.png"),
+            new("sissy_canopy",    "Canopy Bed",      "Sissy",       "Resources/banners/sissy_canopy.png"),
+            new("drone_bay",       "Conversion Bay",  "Drone",       "Resources/banners/drone_bay.png"),
+            new("drone_chargers",  "Charging Bay",    "Drone",       "Resources/banners/drone_chargers.png"),
+            new("drone_control",   "Control Room",    "Drone",       "Resources/banners/drone_control.png"),
+            new("lock_keywall",    "Key Wall",        "Circe's Lock", "Resources/banners/lock_keywall.png"),
+            new("lock_chamber",    "Her Chamber",     "Circe's Lock", "Resources/banners/lock_chamber.png"),
+            new("lock_vault",      "The Vault",       "Circe's Lock", "Resources/banners/lock_vault.png"),
         };
 
         private static readonly HashSet<string> _bannerIds =

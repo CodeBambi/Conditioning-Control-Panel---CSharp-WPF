@@ -358,6 +358,11 @@
          SINGLE LEVEL on purpose - a Resources\programs\<sub>\ folder would compile fine and then
          fail at runtime with a broken pack:// URI, because nothing here globs recursively. -->
     <Resource Include="Resources\programs\*.png" />
+
+    <!-- Profile hero banners (CosmeticsCatalog.Banners). Resource, NOT Content: the banner
+         loader is pack:// only, and these must never fall under the Resources\cosmetics\**
+         Content glob that ships the wardrobe art loose on disk. -->
+    <Resource Include="Resources\banners\*.png" />
   </ItemGroup>
 
   <ItemGroup>
