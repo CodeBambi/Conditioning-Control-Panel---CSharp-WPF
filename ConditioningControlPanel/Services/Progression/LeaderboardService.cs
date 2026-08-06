@@ -726,6 +726,19 @@ public class UserLookupResult
     [JsonProperty("is_patreon")]
     public bool IsPatreon { get; set; }
 
+    /// <summary>Whitelist (Lab pass) badge. Server-computed; false on older servers.</summary>
+    [JsonProperty("is_whitelisted")]
+    public bool IsWhitelisted { get; set; }
+
+    /// <summary>Discord staff-role badge. Only ever written server-side from the bot's
+    /// guild-member fetch; false on older servers.</summary>
+    [JsonProperty("is_staff")]
+    public bool IsStaff { get; set; }
+
+    /// <summary>Staff tier ("owner" | "admin" | "support") or null; badge border color.</summary>
+    [JsonProperty("staff_role")]
+    public string? StaffRole { get; set; }
+
     [JsonProperty("patreon_tier")]
     public int PatreonTier { get; set; }
 

@@ -156,19 +156,34 @@ export const S = Object.freeze({
                               We cannot unsend it and the copy must not imply we can. */
     transferSub: 'a few of your images and clips are sent to your opponent — encrypted, straight to their machine, never through our servers. what lands on their side is theirs to keep.',
     /**
-     * NO LONGER A PITCH, because it is no longer a perk (owner call 2026-08-05):
-     * sending is free for every seat and the only thing money buys is HOSTING
-     * (title.hostNoLab, above). Renamed off `transferNoPremium` so the key stops
-     * lying about why the row is dark.
+     * IT IS A PERK AGAIN (owner call 2026-08-06), and this line is the whole
+     * reason the re-gate is allowed to exist.
      *
-     * Deliberately still HERE rather than deleted. caps.mediaTransfer can be
-     * false in exactly two ways now — a server that answers `media_send:false`
-     * (the policy hook the field was kept alive for), or a host frame so old it
-     * never carried the flag — and a greyed row with no sentence under it is the
-     * precise bug report this string family exists to prevent. Vague on purpose:
-     * naming a cause we cannot tell apart would be a guess.
+     * THE HISTORY, because it is the argument. The FIRST tier gate shipped with
+     * no copy at all: a free seat's attacks silently fell back to the RECEIVER's
+     * own pool for the whole match, every gate green, nothing on screen — and it
+     * was read as a broken feature rather than as a paywall, which is why it was
+     * un-gated on 2026-08-05 rather than explained. Sending was free for exactly
+     * one day. What comes back on 2026-08-06 is the gate WITH its sentence: tier
+     * 1+ (any paid tier or whitelist) may send, an anonymous `g_` guest may not,
+     * and this row says which one this seat is instead of going quietly dark.
+     *
+     * ONE SEND POLICY, NOT TWO. Voice notes ride the SAME `caps.mediaTransfer`
+     * (S.voice.lobbyNoPerk says this in the voice row's own words), so a player
+     * never has to learn two entitlements for one idea.
+     *
+     * NAMES THE PERK, THEN NAMES WHAT IS STILL FREE — the shape title.hostNoLab
+     * uses, because "no" on its own is what got read as breakage. RECEIVING was
+     * never gated in any era and the second clause is the load-bearing half.
+     *
+     * STILL THE ONLY SENTENCE FOR THE OTHER TWO CAUSES, and it is correct for
+     * them: caps.mediaTransfer can also be false because a server answered
+     * `media_send:false` (the policy hook) or because a host frame is too old to
+     * carry the flag. The tier gate is the dominant one by orders of magnitude,
+     * and the affordance is identical in all three — sending off, receiving on —
+     * so naming the perk is the honest read of a dark row rather than a guess.
      */
-    transferOff: 'sending is switched off for this seat — you can still receive theirs.',
+    transferOff: 'sending your own media is a supporter perk — you can still receive theirs.',
     transferPeerOld: 'their app is too old for this — nothing crosses either way.',
     transferRelay: 'only on a direct connection. this one is relayed.',
     /**
@@ -342,6 +357,24 @@ export const S = Object.freeze({
     reportPick: 'pick the one you mean',
     reportFlagged: 'flagged during the match',
     reportPrivacy: "a moderator gets the file's fingerprint, a small thumbnail and your note. they never get your name, and the other player is never told.",
+    /* --- THE OTHER ROAD (owner ask, 2026-08-06). The card above reports ONE
+       FILE: a fingerprint, a thumbnail and a note, filed against an artifact. A
+       lot of what a person actually needs to report is not a file at all — being
+       threatened, being harassed across several duels, something said on a voice
+       note — and none of that fits a picker of pictures.
+       So the humans get named too, and the line asks for the two things that make
+       a mail actionable: the pictures, and WHO. The name is interpolated when the
+       recap knows it (match.opponent.displayName) because "the name of the player
+       you were with" is the single hardest field for a stranger to reconstruct an
+       hour later, and it is right there on this screen. It is a DISPLAY NAME, not
+       an id or an account — nothing here leaks an identifier the page would not
+       already have shown (see the discord block's rule 2).
+       Rendered BEFORE submitting, not as a receipt afterwards: somebody who is
+       upset enough to need this must not have to file a file-report first to
+       find out that email exists. --- */
+    reportEmail: (name) => (name
+      ? 'for anything serious, email support@cclabs.app — send screenshots of what happened and the name of the player you were with (' + name + ').'
+      : 'for anything serious, email support@cclabs.app — send screenshots of what happened and the name of the player you were with.'),
 
     /* --- the "so what WAS that" card. STANDALONE ONLY: it is written for the
        phone joiner who arrived from an invite link, endured a match and has
@@ -620,6 +653,24 @@ export const S = Object.freeze({
      * decision that is not about this link. See lobby.js paintVoice.
      */
     lobbyRelay: 'this connection is relayed — voice notes only cross a direct one, so the mic is off this match.',
+    /**
+     * THE SEND PERK, in the voice row's own words (owner call 2026-08-06). Voice
+     * notes ride the SAME capability as media (`session.caps.mediaTransfer`, C#
+     * TransferAllowed / the server's `media_send` verdict, tier 1+): one send
+     * policy, not two, so a player never has to hold two entitlements in their
+     * head for one idea.
+     *
+     * SAID HERE, IN THE LOBBY, because the mic is HIDDEN rather than greyed when
+     * this bites (ui/voice/micHud.js applyPresence — a disabled mic would be a
+     * standing invitation), and a hidden control with no sentence anywhere is
+     * precisely the failure that got the first media gate reverted. The row is
+     * NOT disabled: this checkbox is also the RECEIVE gate and the standing
+     * answer for the next duel, exactly as with lobbyRelay above.
+     *
+     * Same shape as S.lobby.transferOff and S.title.hostNoLab — name the perk,
+     * then name what is still free. Hearing them was never gated.
+     */
+    lobbyNoPerk: 'sending your own voice is a supporter perk — you can still hear theirs.',
     /** The row's own explanation, when there is no status to report yet. */
     lobbySub: 'hold the mic under your items to send ten seconds of your voice. you both have to switch it on.',
     /** Before the acknowledgment has been read. Says what to press, not "no". */
@@ -639,6 +690,11 @@ export const S = Object.freeze({
     micPeerOldToast: 'no mic this duel — their app is too old for voice notes',
     micRelayToast: 'no mic this duel — relayed connection, and voice only crosses a direct one',
     micZenToast: 'your mic is live but hidden by zen — bring the desk chrome back to use it',
+    /** ...and the entitlement, in the same one-toast family (2026-08-06). Without
+     *  this arm a seat that opted in, reached a direct duel and met both consents
+     *  would get a hidden mic and SILENCE from every surface in the match — the
+     *  one outcome this whole toast family exists to make impossible. */
+    micNoPerkToast: 'no mic this duel — sending your voice is a supporter perk',
 
     /* --- the refusals ----------------------------------------------------- */
     /** getUserMedia said no. NOT an error tone: it is a perfectly good answer. */
@@ -656,6 +712,23 @@ export const S = Object.freeze({
      * through ourselves.
      */
     relayOff: 'no direct link — voice notes stay home',
+    /**
+     * THE ENTITLEMENT REFUSAL, on the strip (ui/voice/micHud.js sendReasonLine,
+     * reason 'not-entitled'). In practice the mic is already gone by the time a
+     * send could answer this — the service folds the cap into available() — so
+     * this is the copy for the race where a server verdict lands mid-gesture.
+     * Short, because it lands on a 48px strip, and it still names the perk.
+     */
+    noPerkSend: 'sending voice is a supporter perk — nothing was sent',
+    /**
+     * THE LIBRARY SCREEN'S LINE (ui/screens/voice.js). The screen KEEPS WORKING
+     * when this shows: recording, playing back, deleting and pinning notes to
+     * emotes are all local and none of them is gated. Only the crossing is. Said
+     * as plainly as that, because "a supporter perk" over a screen that had
+     * silently stopped functioning would be the 2026-08-05 mistake with better
+     * words on it.
+     */
+    screenNoPerk: 'sending your voice to an opponent is a supporter perk. recording, keeping and pinning notes to emotes all still work, and you can still hear theirs.',
     /** Where the volume lives, from the screen that made the note. */
     volumeHint: 'their notes play at the Voice notes volume in options.',
   },

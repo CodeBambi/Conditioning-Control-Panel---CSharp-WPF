@@ -292,25 +292,25 @@ export function standaloneInit() {
       // transfer-cache to talk to: the assets screen renders "compression lives in
       // the app" instead of a spinner that never resolves.
       assetCache: false,
-      /* SENDING IS FREE FOR EVERY SEAT (owner call, 2026-08-05). This WAS a
-       * premium default — OFF against any real server, ON only on the pure-local
-       * dev path — and boot.js flipped it on once the server's `media_send`
-       * verdict landed. That defaulting is what a free guest experienced as
-       * "my attacks throw blanks": the paid perk is HOSTING (caps.canHost, the
-       * server's tier-2 bar at /v2/goon/invite) and once a room exists BOTH
-       * players sending their own media is the whole shape of a duel.
+      /* DEFAULT ON, SERVER DECIDES (re-gated 2026-08-06: sending — media and
+       * voice notes alike — is a tier-1+ supporter perk again, after one day
+       * free-for-every-seat). This flat TRUE is NOT the entitlement; it is the
+       * optimistic default the server's `media_send` verdict overwrites: boot.js
+       * folds it in (adoptServerSendVerdict) on /invite and /join, so a free or
+       * anonymous seat is switched off by the answer, with no client release.
+       * A server that predates the field (null) leaves this default alone.
        *
-       * It stays TRUE here and the server's verdict stays the AUTHORITY: boot.js
-       * still folds `media_send` in (adoptServerSendVerdict), so a server that
-       * answers false turns sending off again with no client release, and a
-       * server that predates the field (null) leaves this default alone. The
-       * inversion matters — defaulting ON and letting the server veto is a very
-       * different failure mode from defaulting OFF and hoping a verdict arrives
-       * in time, and the second one is the bug this replaced.
+       * WHY DEFAULT ON RATHER THAN OFF (2026-08-05's lesson, keep it): the old
+       * premium default was OFF-until-verdict, the verdict arrives AFTER
+       * attachMatch, and a free guest experienced the window as "my attacks
+       * throw blanks" — a broken feature, not a paywall. Defaulting ON and
+       * letting the server veto is the survivable failure mode, and the lobby
+       * row (S.lobby.transferOff) now names the perk when the veto lands.
        *
        * NOT an enforcement point either way: media is P2P, so this gate is
-       * advisory UX (the lobby row's explanation, the queue's send arm). The
-       * REAL gates are the two lobby consent toggles, which are untouched.
+       * advisory UX (the lobby row's explanation, the queue's send arm, the
+       * voice service's sendAllowed). The REAL gates are the two lobby consent
+       * toggles, which are untouched.
        */
       mediaTransfer: true,
     }, prefs.caps || {}),

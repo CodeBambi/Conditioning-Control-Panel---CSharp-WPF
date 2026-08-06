@@ -235,13 +235,19 @@ function createLedger() {
  * the suite pins the mapping rather than re-deriving it, and so a reason nobody
  * anticipated still says something true instead of nothing.
  *
- * @param {string} reason  sent|relay|unavailable|too-soon|busy|empty|too-big|unreadable|aborted|send-failed
+ * @param {string} reason  sent|not-entitled|relay|unavailable|too-soon|busy|empty|too-big|unreadable|aborted|send-failed
  * @param {number} [waitSec] seconds left on the 4s floor, for 'too-soon'
  */
 export function sendReasonLine(reason, waitSec = 1) {
   switch (reason) {
     case 'sent':        return S.voice.sent;
     case 'too-soon':    return S.voice.tooSoon(Math.max(1, Math.ceil(waitSec)));
+    /* THE PERK (2026-08-06). Its own sentence for the same reason 'relay' has one:
+     * `notActive` sends the player to the two consent checkboxes, and neither of
+     * them is the thing standing in the way. Rare by construction — the mic is not
+     * on the desk for an ungated seat at all (voiceService.available folds the cap
+     * in), so this is the copy for the race where a verdict lands mid-gesture. */
+    case 'not-entitled': return S.voice.noPerkSend;
     /* THE RELAYED DUEL. Its own sentence rather than `notActive`, because it is not a
      * switch anybody can flip: voice notes are P2P-only and this link never came up
      * direct. In practice the mic is already gone by the time a send could answer this

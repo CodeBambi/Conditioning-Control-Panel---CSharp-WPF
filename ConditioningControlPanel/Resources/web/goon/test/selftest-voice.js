@@ -786,6 +786,100 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
     svc.dispose();
   }
 
+  /* --- THE SEND PERK (re-gate 2026-08-06) ---------------------------------------------
+   *
+   * Sending voice notes is tier 1+ again and rides the SAME capability as media
+   * (`session.caps.mediaTransfer`; boot.js hands it in as `sendAllowed`). Four things
+   * are asserted here and each one is a decision somebody could undo by accident:
+   *
+   *   1. CAP FALSE => NO SEND, live mic AND emote-attached, with its own reason word
+   *      ('not-entitled', never the catch-all 'unavailable' — the strip says
+   *      "supporter perk", and "you both have to switch it on" would point a paying
+   *      question at the wrong control).
+   *   2. CAP FALSE => NO MIC. available() folds it in, so an ungated seat never opens
+   *      a microphone it cannot send from. Recording somebody's voice and then telling
+   *      them it is going nowhere is a worse answer than no mic.
+   *   3. RECEIVING IS UNTOUCHED. This is the load-bearing one: the perk is the
+   *      crossing OUT. An ungated seat hears every note its opponent sends.
+   *   4. CAP TRUE => SEND, and no predicate at all => send (every other block in this
+   *      file constructs the service without one).
+   * ---------------------------------------------------------------------------------- */
+  {
+    let entitled = false;
+    const match = fakeMatch();
+    const audio = fakeAudio();
+    const store = { get: async () => ({ blob: bytes(500), durMs: 2500, emote: '👀' }) };
+    const svc = createVoiceService({
+      match, audio, prefs: fakePrefs(), noteStore: store, logger: quiet,
+      sendAllowed: () => entitled, now: () => 1e6,
+    });
+
+    // 1 + 2. the gate shut
+    const r = await svc.sendBlob(bytes(4000), { durMs: 3000 });
+    ok(!r.ok && r.reason === 'not-entitled',
+      'an unentitled seat cannot send, and the refusal has its OWN word', JSON.stringify(r));
+    ok(match.frames.length === 0, 'not one frame reached the engine');
+    ok((await svc.sendNote('n1')).reason === 'not-entitled',
+      'and the EMOTE-ATTACHED road is refused at the same door — one choke point, not two');
+    ok(match.frames.length === 0, 'still nothing on the wire');
+    ok(svc.available() === false, 'so there is no mic on the desk either, rather than one that refuses on release');
+    ok(svc.sendEntitled() === false, 'and the service will say so on its own');
+    ok(/perk|entitle/i.test(svc.whyUnavailable()),
+      'the log line names the entitlement, not a switch that cannot help', svc.whyUnavailable());
+    /* THE ORDER, and it is the legibility argument in one assertion: reported AFTER
+     * the opt-in, this sentence would send an unentitled player to a checkbox that
+     * changes nothing for them — the 2026-08-05 blindness with an extra step. */
+    const offPrefs = fakePrefs({ voiceNotesEnabled: false });
+    const bothOff = createVoiceService({
+      match, audio: fakeAudio(), prefs: offPrefs, logger: quiet,
+      sendAllowed: () => false, now: () => 1e6,
+    });
+    ok(/perk|entitle/i.test(bothOff.whyUnavailable()),
+      'with BOTH shut, the entitlement is what is reported — no switch on this page moves it',
+      bothOff.whyUnavailable());
+    bothOff.dispose();
+
+    // 3. RECEIVING IS NOT GATED BY IT.
+    const b64 = bytesToVoiceB64(bytes(600));
+    match.deliver({ sub: 'meta', id: 1, bytes: 600, parts: 1, durMs: 2000 });
+    match.deliver({ sub: 'chunk', id: 1, seq: 0, data: b64 });
+    match.deliver({ sub: 'end', id: 1 });
+    await tick();
+    await tick();
+    ok(audio.played.length === 1,
+      'THE PERK IS THE CROSSING OUT: an unentitled seat still HEARS everything they are sent',
+      String(audio.played.length));
+
+    // 4. the gate open, on the same service — it is read live, never captured, because
+    //    the server verdict can land after the service was built (boot.js runs
+    //    adoptServerSendVerdict on two roads and the first is after attachMatch).
+    entitled = true;
+    ok(svc.sendEntitled() === true && svc.available() === true, 'granting the cap brings the mic back with no rebuild');
+    const ok2 = await svc.sendBlob(bytes(4000), { durMs: 3000 });
+    ok(ok2.ok && ok2.reason === 'sent', 'and an entitled seat sends normally', JSON.stringify(ok2));
+    svc.dispose();
+
+    // NO PREDICATE = NOT GATED. Every other block in this file omits `sendAllowed`,
+    // and a closed default would have turned "we added an option" into "voice is off".
+    const m2 = fakeMatch();
+    const plain = createVoiceService({ match: m2, audio: fakeAudio(), prefs: fakePrefs(), logger: quiet, now: () => 1e6 });
+    ok(plain.sendEntitled() === true && (await plain.sendBlob(bytes(400))).ok,
+      'a service built without an entitlement predicate is not gated by one');
+    plain.dispose();
+
+    // ...but a predicate that THROWS is a no. Once somebody is gating this build, an
+    // unreadable answer must never become a send.
+    const m3 = fakeMatch();
+    const angry = createVoiceService({
+      match: m3, audio: fakeAudio(), prefs: fakePrefs(), logger: quiet,
+      sendAllowed: () => { throw new Error('caps went away'); }, now: () => 1e6,
+    });
+    ok(angry.sendEntitled() === false, 'a throwing entitlement predicate fails CLOSED');
+    ok((await angry.sendBlob(bytes(400))).reason === 'not-entitled', 'and nothing crosses');
+    ok(m3.frames.length === 0, 'literally nothing');
+    angry.dispose();
+  }
+
   // --- THE RECEIVE GUARD: an unpatched (or hostile) peer cannot push one through us ------
   //
   // core/match.js refuses to DELIVER a voice frame on a relayed link, so in the real page
@@ -1175,6 +1269,32 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
   ok(/localCapsOf\(\{ elements, payloads, rounds, platform: 'web', voice: voiceCap, transfer: true \}\)/.test(boot),
     'boot advertises caps.voice AND caps.transfer — the only way a fire-and-forget sender ever learns the peer can hear it');
   ok(/const voiceCap = VOICE_CAP_VERSION;/.test(boot), 'from the pinned revision constant');
+
+  /* --- ONE SEND POLICY, NOT TWO (re-gate 2026-08-06) -----------------------------
+   * Voice notes ride the SAME `session.caps.mediaTransfer` media does. Pinned at the
+   * call site because the service defaults to UNGATED when no predicate is handed in
+   * (see §5) — which means a wiring line silently going missing would not fail a
+   * behaviour test anywhere, it would just quietly make the perk free again. */
+  ok(/sendAllowed: \(\) => !!\(session\.caps && session\.caps\.mediaTransfer === true\)/.test(boot),
+    'boot hands the voice service the entitlement — the SAME expression the media queue uses');
+  ok(/canSend: \(\) => !!\(session\.caps && session\.caps\.mediaTransfer === true\)/.test(boot),
+    '...which is that expression, still on the media queue, unchanged');
+  ok(/function attachMatch\([\s\S]{0,6000}?sendAllowed:/.test(boot),
+    'handed in at the per-match construction, so a relay rebuild re-reads the cap');
+  // A THUNK, never a snapshot: adoptServerSendVerdict REPLACES session.caps, and on
+  // the first-connect road it does so after this service was built.
+  ok(!/sendAllowed: session\.caps/.test(boot), 'and it is a thunk, not a captured boolean');
+
+  /* THE IN-MATCH SURFACE. The mic is HIDDEN for an unentitled seat, so without this
+   * arm a player who opted in, reached a direct duel and met both consents would get
+   * silence from every surface in the match — the exact blindness this toast family
+   * was built for, one cause later. */
+  const toast = boot.slice(boot.indexOf('function micGateToast('), boot.indexOf('function mountHudNow('));
+  ok(/S\.voice\.micNoPerkToast/.test(toast), 'the mic-gate toast has an arm for the entitlement');
+  ok(toast.indexOf('micNoPerkToast') < toast.indexOf('micRelayToast'),
+    'reported ahead of the facts about the duel, in the order available() applies its gates');
+  ok(/session\.caps && session\.caps\.mediaTransfer === true/.test(toast),
+    'read off the SEAT (session.caps), not off the match — it is the one gate here that is not about the duel');
 
   // exec/ must not have learned anything about this.
   const execFiles = fs.readdirSync(url.fileURLToPath(new URL('../exec/', import.meta.url)));

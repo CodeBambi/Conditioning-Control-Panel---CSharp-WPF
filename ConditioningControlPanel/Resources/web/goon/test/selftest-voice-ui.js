@@ -351,13 +351,23 @@ function fakeToasts() {
   return { shown, show(text, o) { shown.push({ text, kind: (o && o.kind) || 'info' }); return null; } };
 }
 
-async function mountVoiceScreen({ prefs, sheets, toasts, notes = null, match = null, audio = null }) {
+/**
+ * `caps` defaults to ENTITLED (2026-08-06) for the reason mountLobby's does: every
+ * block below is about the library, the ack gate or the recorder, and none of them
+ * should be asserting the supporter-perk line by accident. The perk case has its
+ * own block.
+ */
+async function mountVoiceScreen({
+  prefs, sheets, toasts, notes = null, match = null, audio = null,
+  caps = { mediaTransfer: true },
+}) {
   const container = dom.doc.getElementById('scr-voice');
   container.replaceChildren();
   const handle = voiceScreen.mount(container, {
     actions: { goTitle() {} },
     audio, prefs, sheets, toasts, logger: quiet,
     notes,
+    session: { caps },
     getMatch: () => match,
   });
   await sleep(5);
@@ -987,14 +997,26 @@ function mountSheet(provider) {
     return m;
   }
 
-  /** `linkState` is a parameter because voice notes are P2P-only: the row says so. */
-  function mountLobby({ prefs, sheets, match, linkState = GoonTransportState.ConnectedP2P }) {
+  /**
+   * `linkState` is a parameter because voice notes are P2P-only: the row says so.
+   *
+   * `caps` is a parameter for the same kind of reason (2026-08-06): SENDING voice
+   * notes is a tier-1+ perk riding `session.caps.mediaTransfer`, so the row has a
+   * sentence for a seat without it. The DEFAULT IS ENTITLED because every case
+   * below this one is about the consent statuses and the link — an unentitled
+   * default would make all of them assert the perk line by accident. The perk
+   * case gets its own block.
+   */
+  function mountLobby({
+    prefs, sheets, match, linkState = GoonTransportState.ConnectedP2P,
+    caps = { mediaTransfer: true },
+  }) {
     const container = dom.byId.get('scr-lobby');
     container.replaceChildren();
     const handle = lobbyScreen.mount(container, {
       actions: { goTitle() {}, leave() {} },
       audio: null, prefs, sheets, discord: null, logger: quiet,
-      session: { caps: {} },
+      session: { caps },
       getMatch: () => match,
       getTransport: () => ({ state: linkState, onStateChanged() { return () => {}; } }),
     });
@@ -1153,6 +1175,102 @@ function mountSheet(provider) {
         'state ' + st + ' has decided nothing, so the ordinary sentence stands', s2 && s2.textContent);
       r2.handle.unmount();
     }
+  }
+
+  /* ---- THE SEND PERK, IN THE ROW (re-gate 2026-08-06) -----------------------
+   *
+   * Sending voice notes is tier 1+ again and rides the SAME cap as media
+   * (session.caps.mediaTransfer). The mic is HIDDEN for a seat without it — the
+   * service folds the cap into available() — so this row is the surface that has
+   * to name the perk. This is the whole condition on the re-gate being allowed:
+   * the FIRST tier gate shipped with no copy anywhere, was read as breakage
+   * rather than as a paywall, and was reverted for it.
+   * ------------------------------------------------------------------------- */
+  {
+    const prefs = createPrefs();
+    prefs.set('voiceAckSeen', true);
+    const match = fakeLobbyMatch({ localVoiceNotes: true, remoteVoiceNotes: true });
+    const { container, handle } = mountLobby({
+      prefs, sheets: fakeSheets(), match, caps: { mediaTransfer: false },
+    });
+    const sub = findOne(container, 'gg-voice-lobbyline');
+    ok(sub && sub.textContent === S.voice.lobbyNoPerk,
+      'an unentitled seat is TOLD, in the row, instead of getting a hidden mic and silence',
+      sub && sub.textContent);
+    ok(/supporter perk/i.test(S.voice.lobbyNoPerk), 'and the sentence names the perk in so many words');
+    ok(/hear theirs/i.test(S.voice.lobbyNoPerk),
+      'AND says receiving still works — the free half must not read as taken away');
+    const input = findTag(findOne(container, 'gg-voice-lobbyrow'), 'input')[0];
+    ok(input.disabled === false,
+      'the box stays live: it is the RECEIVE gate and the standing answer, and neither is paid for');
+    handle.unmount();
+
+    // The relayed link still outranks it: with no direct link there is no voice in
+    // EITHER direction, so promising "you can still hear theirs" over it would be
+    // the one thing this copy may not do.
+    const p2 = createPrefs();
+    p2.set('voiceAckSeen', true);
+    const m2 = fakeLobbyMatch({ localVoiceNotes: true, remoteVoiceNotes: true });
+    const r2 = mountLobby({
+      prefs: p2, sheets: fakeSheets(), match: m2,
+      caps: { mediaTransfer: false }, linkState: GoonTransportState.ConnectedRelay,
+    });
+    const s2 = findOne(r2.container, 'gg-voice-lobbyline');
+    ok(s2 && s2.textContent === S.voice.lobbyRelay,
+      'relayed AND unentitled says the LINK — the bigger truth, and the only one true in both directions',
+      s2 && s2.textContent);
+    r2.handle.unmount();
+
+    // ...and an entitled seat is never sold anything it already has.
+    const p3 = createPrefs();
+    p3.set('voiceAckSeen', true);
+    const m3 = fakeLobbyMatch({ localVoiceNotes: true, remoteVoiceNotes: true });
+    const r3 = mountLobby({ prefs: p3, sheets: fakeSheets(), match: m3, caps: { mediaTransfer: true } });
+    const s3 = findOne(r3.container, 'gg-voice-lobbyline');
+    ok(s3 && s3.textContent === S.voice.lobbyBoth, 'a tier-1+ seat sees the ordinary status, no pitch');
+    r3.handle.unmount();
+  }
+
+  /* ---- THE LIBRARY SCREEN SAYS IT TOO --------------------------------------
+   * The lead on ui/screens/voice.js promises these notes are "sent to whoever you
+   * are duelling" — a sentence an unentitled seat cannot act on. The correction
+   * goes in the same eyeline, and the screen itself KEEPS WORKING: recording,
+   * playback and the emote picker are local and none of them is gated.
+   * ------------------------------------------------------------------------- */
+  {
+    // ...on the real screen, first.
+    const prefsA = createPrefs();
+    prefsA.set('voiceAckSeen', true);
+    const gated = await mountVoiceScreen({
+      prefs: prefsA, sheets: fakeSheets(), toasts: fakeToasts(), caps: { mediaTransfer: false },
+    });
+    const perk = findOne(gated.container, 'gg-voice-perk');
+    ok(!!perk && perk.textContent === S.voice.screenNoPerk,
+      'an unentitled seat gets the perk line on the library screen', perk && perk.textContent);
+    ok(findAll(gated.container, 'gg-voice-record').length === 1,
+      'and the Record button is STILL THERE — recording is local and was never the paid half');
+    gated.handle.unmount();
+
+    const prefsB = createPrefs();
+    prefsB.set('voiceAckSeen', true);
+    const paid = await mountVoiceScreen({
+      prefs: prefsB, sheets: fakeSheets(), toasts: fakeToasts(), caps: { mediaTransfer: true },
+    });
+    ok(!findOne(paid.container, 'gg-voice-perk'),
+      'and an entitled seat is not sold anything it already has');
+    paid.handle.unmount();
+
+    const vsrc = stripComments(read('ui/screens/voice.js'));
+    ok(/S\.voice\.screenNoPerk/.test(vsrc), 'the voice screen renders the perk line from strings');
+    ok(/caps\.mediaTransfer === true/.test(vsrc),
+      'off session.caps.mediaTransfer — the SAME cap media sends on, not a second entitlement');
+    ok(!/screenNoPerk[\s\S]{0,200}disabled/.test(vsrc),
+      'and nothing on that screen is disabled by it — only the crossing is paid for');
+    ok(/supporter perk/i.test(S.voice.screenNoPerk), 'the line names the perk');
+    ok(/still work/i.test(S.voice.screenNoPerk) && /hear theirs/i.test(S.voice.screenNoPerk),
+      'and says what still works, because a library that looked broken is the bug this replaced');
+    ok(S.voice.screenNoPerk === S.voice.screenNoPerk.toLowerCase(),
+      'lowercase furniture, like the rest of the screen');
   }
 
   // ---- source pins ----------------------------------------------------------
