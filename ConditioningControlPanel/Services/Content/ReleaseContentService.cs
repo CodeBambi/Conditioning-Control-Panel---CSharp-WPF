@@ -385,12 +385,18 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>Accepts both the envelope form ({ packs: [...] }) and a bare array.</summary>
-        private static List<ContentPackInfo>? ParseManifest(string json)
+        internal static List<ContentPackInfo>? ParseManifest(string json)
         {
             if (string.IsNullOrWhiteSpace(json)) return null;
             try
             {
-                var token = JToken.Parse(json);
+                // The published manifest carries a UTF-8 BOM. ReadAsStringAsync strips it today, but
+                // JToken.Parse rejects a leading U+FEFF outright, so whether every user's content
+                // packs resolve must not hinge on how the bytes happened to be decoded.
+                var trimmed = json.TrimStart('\uFEFF', '\u200B', ' ', '\t', '\r', '\n');
+                if (trimmed.Length == 0) return null;
+
+                var token = JToken.Parse(trimmed);
                 if (token is JArray array)
                     return array.ToObject<List<ContentPackInfo>>();
 
