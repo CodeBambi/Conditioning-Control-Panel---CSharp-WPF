@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Windows.Input;
 
 namespace ConditioningControlPanel.Views.Controls.Companion
@@ -7,9 +8,19 @@ namespace ConditioningControlPanel.Views.Controls.Companion
     /// <summary>
     /// Design-time / state-gallery implementation of <see cref="IMemoryDiaryVm"/>.
     ///
-    /// <para>This mock carries the wall's real projection behaviour (filter chip → sorted list via
-    /// <see cref="FactOrdering.Project"/>) rather than a frozen array, because that behaviour is
-    /// the part the builders will reuse and the part the unit tests pin down.</para>
+    /// <para>This mock carries the wall's real projection behaviour rather than a frozen array,
+    /// because that behaviour is the part the builders will reuse and the part the unit tests pin
+    /// down. Three things actually happen here:</para>
+    /// <list type="bullet">
+    ///   <item>selecting a kind chip re-projects the wall through
+    ///   <see cref="FactOrdering.Project"/> (filter ▸ boundary ▸ pinned ▸ salience ▸ dormant);</item>
+    ///   <item>pinning a card re-projects too, so the card visibly climbs — that feedback is the
+    ///   whole point of the pin;</item>
+    ///   <item>forgetting a card removes it and can tip the wall back into its empty state.</item>
+    /// </list>
+    ///
+    /// <para>The cards are <see cref="MemoryFactCard"/>s, so pin / edit / forget are real commands
+    /// in the designer and in a play-test, not no-ops.</para>
     /// </summary>
     public sealed class MockMemoryDiaryVm : CompanionObservable, IMemoryDiaryVm
     {
@@ -22,12 +33,13 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         public MockMemoryDiaryVm(List<IMemoryFactVm> facts, IReadOnlyList<IProfileStatVm> stats)
         {
-            _all = facts;
+            _all = facts ?? new List<IMemoryFactVm>();
             ProfileStats = stats;
             Filters = BuildFilters();
+            foreach (var fact in _all) Attach(fact);
             _facts = FactOrdering.Project(_all, _selectedFilterKey);
             OpenStorageFolderCommand = CompanionRelayCommand.NoOp("memory.openFolder");
-            ForgetEverythingCommand = CompanionRelayCommand.NoOp("memory.forgetAll");
+            ForgetEverythingCommand = new CompanionRelayCommand(ForgetEverything);
 
             // The chips are radio-like: selecting one clears the rest and re-projects the wall.
             foreach (var f in Filters)
@@ -61,7 +73,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             {
                 if (!Set(ref _selectedFilterKey, value)) return;
                 foreach (var f in Filters) f.IsSelected = string.Equals(f.Key, value, StringComparison.OrdinalIgnoreCase);
-                Facts = FactOrdering.Project(_all, value);
+                Reproject();
             }
         }
 
@@ -82,6 +94,57 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         public ICommand OpenStorageFolderCommand { get; }
         public ICommand ForgetEverythingCommand { get; }
+
+        // ------------------------------- wall mutation -------------------------------
+
+        /// <summary>
+        /// Wires a card up to the wall: a pin flips the sort rank, so the projection has to be
+        /// rerun, and a forget takes the card out of the underlying list.
+        /// </summary>
+        private void Attach(IMemoryFactVm fact)
+        {
+            if (fact is MemoryFactCard card) card.Forgotten = Forget;
+            fact.PropertyChanged += OnFactPropertyChanged;
+        }
+
+        private void Detach(IMemoryFactVm fact)
+        {
+            if (fact is MemoryFactCard card) card.Forgotten = null;
+            fact.PropertyChanged -= OnFactPropertyChanged;
+        }
+
+        private void OnFactPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(IMemoryFactVm.IsPinned)) Reproject();
+        }
+
+        /// <summary>Removes one card and re-projects. Public shape kept small on purpose.</summary>
+        public void Forget(IMemoryFactVm fact)
+        {
+            if (fact == null || !_all.Remove(fact)) return;
+            Detach(fact);
+            Reproject();
+            Raise(nameof(IsEmpty));
+        }
+
+        /// <summary>
+        /// "Forget everything…" — every real fact goes; the dormant promise card is copy, not a
+        /// memory, so it stays and the wall lands on its designed empty state rather than a hole.
+        /// </summary>
+        public void ForgetEverything()
+        {
+            for (int i = _all.Count - 1; i >= 0; i--)
+            {
+                var fact = _all[i];
+                if (fact.IsDormant) continue;
+                _all.RemoveAt(i);
+                Detach(fact);
+            }
+            Reproject();
+            Raise(nameof(IsEmpty));
+        }
+
+        private void Reproject() => Facts = FactOrdering.Project(_all, _selectedFilterKey);
 
         // ------------------------------- state exhibits -------------------------------
 
@@ -106,14 +169,11 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             var facts = new List<IMemoryFactVm>
             {
-                new CompanionMemoryFact
-                {
-                    Text = "First trance: 2026-03-02 — “the day we met.”",
-                    KindKey = "moment",
-                    KindLabel = "moment",
-                    MetaLabel = "from the app · she brings this up on anniversaries",
-                    IsPinned = true
-                },
+                new MemoryFactCard(
+                    "First trance: 2026-03-02 — “the day we met.”",
+                    "moment", "moment",
+                    "from the app · she brings this up on anniversaries",
+                    isPinned: true),
                 DormantPromiseCard()
             };
             return new MockMemoryDiaryVm(facts, ArtboardStats());
@@ -150,53 +210,50 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         private static List<IMemoryFactVm> ArtboardFacts() => new()
         {
-            new CompanionMemoryFact
+            new MemoryFactCard(
+                "Never tease about chastity.",
+                "boundary", "boundary · always honored",
+                "set by you · 2026-07-30",
+                isBoundary: true)
             {
-                Text = "Never tease about chastity.",
-                KindKey = "boundary",
-                KindLabel = "boundary · always honored",
-                MetaLabel = "set by you · 2026-07-30",
-                IsBoundary = true
+                UserEditedMetaLabel = "set by you · edited just now"
             },
-            new CompanionMemoryFact
+            new MemoryFactCard(
+                "First trance: 2026-03-02 — “the day we met.”",
+                "moment", "moment",
+                "pinned · she brings this up on anniversaries",
+                isPinned: true)
             {
-                Text = "First trance: 2026-03-02 — “the day we met.”",
-                KindKey = "moment",
-                KindLabel = "moment",
-                MetaLabel = "pinned · she brings this up on anniversaries",
-                IsPinned = true
+                UserEditedMetaLabel = "pinned · edited by you"
             },
-            new CompanionMemoryFact
+            new MemoryFactCard(
+                "Calls his cat “Prime Minister Beans.”",
+                "joke", "running joke",
+                "used 4× · last: yesterday")
             {
-                Text = "Calls his cat “Prime Minister Beans.”",
-                KindKey = "joke",
-                KindLabel = "running joke",
-                MetaLabel = "used 4× · last: yesterday"
+                UserEditedMetaLabel = "edited by you · she'll use your wording"
             },
-            new CompanionMemoryFact
+            new MemoryFactCard(
+                "Melts fastest to spiral + whisper combos.",
+                "preference", "preference",
+                "from chat · salience high")
             {
-                Text = "Melts fastest to spiral + whisper combos.",
-                KindKey = "preference",
-                KindLabel = "preference",
-                MetaLabel = "from chat · salience high"
+                UserEditedMetaLabel = "edited by you · she'll use your wording"
             },
-            new CompanionMemoryFact
+            new MemoryFactCard(
+                "Wants to hit Level 50 before September.",
+                "goal", "goal · open thread",
+                "she checks in on this")
             {
-                Text = "Wants to hit Level 50 before September.",
-                KindKey = "goal",
-                KindLabel = "goal · open thread",
-                MetaLabel = "she checks in on this"
+                UserEditedMetaLabel = "edited by you · she checks in on this"
             },
             DormantPromiseCard()
         };
 
-        private static CompanionMemoryFact DormantPromiseCard() => new()
-        {
-            Text = "“soon I'll remember what you say too… choose your words carefully~”",
-            KindKey = "all",
-            KindLabel = "soon · train 4",
-            MetaLabel = string.Empty,
-            IsDormant = true
-        };
+        private static MemoryFactCard DormantPromiseCard() => new(
+            "“soon I'll remember what you say too… choose your words carefully~”",
+            "all", "soon · train 4",
+            string.Empty,
+            isDormant: true);
     }
 }
