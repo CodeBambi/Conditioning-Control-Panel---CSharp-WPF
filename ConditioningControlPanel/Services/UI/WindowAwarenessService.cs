@@ -71,8 +71,17 @@ namespace ConditioningControlPanel.Services
         /// True while Awareness v2 owns the reaction pipeline, in which case this service's events are
         /// suppressed. Read per raise rather than latched: the kill switch is a live setting and a user
         /// flipping it mid-session must not need a relaunch to get the legacy path back.
+        ///
+        /// <para><b>This asks whether v2 has a MOUTH, not whether it is configured.</b>
+        /// <c>AwarenessV2Routing.IsActive</c> is <c>AwarenessObserver.IsEnabled</c> AND an attached
+        /// arbiter — the same predicate every legacy self-firing path already checks. Reading
+        /// <c>IsEnabled</c> alone here silently muted awareness completely whenever the observer failed
+        /// to construct: the settings still said v2 was on, so these events stayed suppressed, while
+        /// there was no arbiter on the other side to say anything. That is the one case the
+        /// construction's catch block exists to survive, and it claims in its log line to fall back to
+        /// legacy awareness — so it has to actually do it.</para>
         /// </summary>
-        private static bool V2OwnsReactions => Services.Awareness.AwarenessObserver.IsEnabled;
+        private static bool V2OwnsReactions => Services.Awareness.AwarenessV2Routing.IsActive;
 
         // P/Invoke declarations
         [DllImport("user32.dll")]

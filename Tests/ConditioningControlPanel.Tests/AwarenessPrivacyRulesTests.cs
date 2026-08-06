@@ -20,6 +20,7 @@ namespace ConditioningControlPanel.Tests;
 /// lives in the property setters, and testing the rules against a bag of raw strings would skip
 /// exactly the layer that turns hostile input into safe input.</para>
 /// </summary>
+[Collection(AwarenessStaticsCollection.Name)]
 public class AwarenessPrivacyRulesTests
 {
     private static readonly DateTime Noon = new(2026, 8, 6, 12, 0, 0, DateTimeKind.Local);

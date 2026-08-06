@@ -17,6 +17,7 @@ namespace ConditioningControlPanel.Tests;
 /// below against the code that has to honour it — including the ORDER of the drops, because "we do
 /// check incognito" is worth nothing if the check runs after the ledger write.</para>
 /// </summary>
+[Collection(AwarenessStaticsCollection.Name)]
 public class AwarenessObserverPolicyTests
 {
     private static AwarenessPolicySettings Policy(

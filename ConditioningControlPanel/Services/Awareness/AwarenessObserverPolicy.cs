@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
+using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services.Awareness
 {
@@ -30,7 +31,14 @@ namespace ConditioningControlPanel.Services.Awareness
         PolicyUnavailable,
 
         /// <summary>Adult cluster with adult RECORDING switched off: nothing is written and no frame is cut.</summary>
-        AdultRecordingOff
+        AdultRecordingOff,
+
+        /// <summary>
+        /// The user pressed pause (<see cref="AwarenessPause"/>). Nothing is recorded and nothing is
+        /// said until it expires — a pause that only muted her while still counting would be a lie
+        /// with a button on it. Process-lifetime only; it does not survive a restart.
+        /// </summary>
+        Paused
     }
 
     /// <summary>Why a cut frame was not offered to the arbiter. The frame IS in the ledger; she can joke later.</summary>
@@ -81,7 +89,11 @@ namespace ConditioningControlPanel.Services.Awareness
                 if (s == null) return null;
 
                 return new AwarenessPolicySettings(
-                    AwarenessText.SanitizeRuleList(s.AwarenessDenyList),
+                    // EFFECTIVE, not raw: the shipped protection is three group tokens that
+                    // AwarenessPrivacyRules applies whether or not the one-time seed has run yet.
+                    // Reading s.AwarenessDenyList directly is how the password-manager, banking and
+                    // email-title groups silently stop blocking anything.
+                    AwarenessPrivacyRules.EffectiveDenyList(s),
                     AwarenessText.SanitizeRuleList(s.AwarenessTitleAllowList),
                     s.AwarenessAdultReactionsEnabled,
                     s.AwarenessAdultRecordingEnabled);
@@ -194,17 +206,40 @@ namespace ConditioningControlPanel.Services.Awareness
         /// <summary>
         /// Turns a raw foreground sample into either a drop or a resolved, title-free identity.
         ///
+        /// <para><b>This resolves identity; it does not decide privacy.</b> The decision — incognito,
+        /// pause, deny list, whether a title may be carried — belongs to
+        /// <see cref="AwarenessPrivacyRules.Evaluate(AwarenessSightRequest, AppSettings?, DateTime)"/>,
+        /// which is the same call the consent dialog and the privacy panel describe to the user. A
+        /// second implementation here would be a second dialect: the panel would show one set of rules
+        /// and the observer would enforce another. Concretely, this method used to match the deny list
+        /// literally, which silently never expanded the seeded group tokens
+        /// (<c>password-managers</c>, <c>banking</c>, <c>email-clients</c>) — so the chips the panel
+        /// displayed as active rules blocked nothing.</para>
+        ///
         /// <para>Evaluation order, which is the contract:</para>
         /// <list type="number">
         /// <item>no policy (settings unreadable) → <see cref="FrameDrop.PolicyUnavailable"/>;</item>
         /// <item>no usable window → <see cref="FrameDrop.NoForeground"/>;</item>
-        /// <item>incognito title → <see cref="FrameDrop.Incognito"/>, ahead of every list;</item>
-        /// <item>deny-list match on title, process, app id, cluster or display name → <see cref="FrameDrop.DenyListed"/>;</item>
-        /// <item>adult cluster with recording off → <see cref="FrameDrop.AdultRecordingOff"/>;</item>
+        /// <item>incognito title → <see cref="FrameDrop.Incognito"/>, ahead of every list and before
+        /// anything is classified, so a private window is never even resolved. Re-checked inside the
+        /// shared rules; this is defence in depth, not the enforcing copy;</item>
+        /// <item>identity cannot be resolved → <see cref="FrameDrop.PolicyUnavailable"/>;</item>
+        /// <item>adult cluster with recording off → <see cref="FrameDrop.AdultRecordingOff"/>. Observer-
+        /// only: the shared rules have no notion of a recording toggle;</item>
+        /// <item>the shared privacy rules: pause, deny list, title allow list;</item>
         /// <item>otherwise allowed, with the title carried ONLY if the app is title-allow-listed.</item>
         /// </list>
         /// </summary>
-        public static PrivacyVerdict EvaluatePrivacy(ForegroundSample? sample, AwarenessPolicySettings? policy)
+        public static PrivacyVerdict EvaluatePrivacy(ForegroundSample? sample, AwarenessPolicySettings? policy) =>
+            EvaluatePrivacy(sample, policy, DateTime.Now);
+
+        /// <summary>
+        /// The testable body. <paramref name="now"/> is handed to the shared
+        /// <see cref="AwarenessPrivacyRules"/> so a test can drive the pause window without waiting for
+        /// one. The deny and title-allow lists come from <paramref name="policy"/>.
+        /// </summary>
+        public static PrivacyVerdict EvaluatePrivacy(
+            ForegroundSample? sample, AwarenessPolicySettings? policy, DateTime now)
         {
             if (policy == null) return PrivacyVerdict.Dropped(FrameDrop.PolicyUnavailable);
             if (sample == null) return PrivacyVerdict.Dropped(FrameDrop.NoForeground);
@@ -234,23 +269,36 @@ namespace ConditioningControlPanel.Services.Awareness
                 return PrivacyVerdict.Dropped(FrameDrop.PolicyUnavailable);
             }
 
-            if (MatchesAny(policy.DenyList, title, process, appId, cluster, serviceName))
-                return PrivacyVerdict.Dropped(FrameDrop.DenyListed);
-
             bool adult = string.Equals(cluster, AwarenessClusters.Adult, StringComparison.OrdinalIgnoreCase);
             if (adult && !policy.AdultRecordingEnabled)
                 return PrivacyVerdict.Dropped(FrameDrop.AdultRecordingOff);
 
-            // The title allow list is matched against the app's IDENTITY only, never against the title
-            // itself: a title that contained its own allow key would otherwise allow-list itself.
-            string? allowedTitle = null;
-            if (!adult && MatchesAny(policy.TitleAllowList, null, process, appId, cluster, serviceName))
-            {
-                allowedTitle = SanitizeAllowedTitle(title);
-            }
+            // The one privacy call. Same matcher the privacy panel and the consent dialog describe:
+            // pause, deny list (seeded groups expanded, cluster rules honoured) and the title allow
+            // list — failing closed on anything it cannot answer. The lists come from the per-tick
+            // policy snapshot rather than a fresh settings read; `settings` is still passed for the
+            // rules that read it directly.
+            var decision = AwarenessPrivacyRules.Evaluate(
+                new AwarenessSightRequest(appId, serviceName, cluster, title),
+                policy.DenyList, policy.TitleAllowList, now);
 
-            return new PrivacyVerdict(FrameDrop.None, appId, cluster, category, serviceName, allowedTitle);
+            if (!decision.Allowed) return PrivacyVerdict.Dropped(MapDrop(decision.Reason));
+
+            return new PrivacyVerdict(FrameDrop.None, appId, cluster, category, serviceName,
+                decision.TitleForWire);
         }
+
+        /// <summary>Maps the shared privacy layer's reason onto the observer's drop enum.</summary>
+        private static FrameDrop MapDrop(AwarenessDropReason reason) => reason switch
+        {
+            AwarenessDropReason.Incognito => FrameDrop.Incognito,
+            AwarenessDropReason.DenyList => FrameDrop.DenyListed,
+            AwarenessDropReason.Paused => FrameDrop.Paused,
+            AwarenessDropReason.NoAppId => FrameDrop.NoForeground,
+            AwarenessDropReason.NoTitle => FrameDrop.NoForeground,
+            // Error, and anything added later that this switch has not been taught: fail closed.
+            _ => FrameDrop.PolicyUnavailable
+        };
 
         /// <summary>True when the title says the user is in a private-browsing window.</summary>
         public static bool IsIncognitoTitle(string? title)

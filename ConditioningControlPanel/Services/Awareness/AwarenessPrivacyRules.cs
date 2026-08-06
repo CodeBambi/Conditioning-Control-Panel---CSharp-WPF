@@ -240,7 +240,30 @@ namespace ConditioningControlPanel.Services.Awareness
         /// The testable body. <paramref name="settings"/> null reads as "nothing configured", which
         /// still applies the seeded groups and the hard-coded incognito rule.
         /// </summary>
-        public static AwarenessPrivacyDecision Evaluate(AwarenessSightRequest request, AppSettings? settings, DateTime now)
+        public static AwarenessPrivacyDecision Evaluate(AwarenessSightRequest request, AppSettings? settings, DateTime now) =>
+            Evaluate(request, EffectiveDenyList(settings), settings?.AwarenessTitleAllowList, now);
+
+        /// <summary>
+        /// The rule body, with the two lists supplied by the caller.
+        ///
+        /// <para><b>Why the lists are a parameter.</b> "One dialect" is about the MATCHING — group-token
+        /// expansion, what a rule is matched against, the incognito and pause and adult rules — not
+        /// about who owns the array. The observer already snapshots the lists once per tick
+        /// (<c>AwarenessPolicySettings.FromSettings</c>) rather than re-reading settings 40 times a
+        /// minute, and it must be able to hand that snapshot in. Both callers reach the same matcher,
+        /// which is the property that matters: the panel cannot display one set of rules while the
+        /// observer enforces another.</para>
+        ///
+        /// <para><paramref name="denyList"/> is expected to be the EFFECTIVE list — see
+        /// <see cref="EffectiveDenyList"/>, which applies the seeded groups until the user's own list
+        /// exists. Passing the raw setting silently disables the password-manager, banking and email
+        /// groups.</para>
+        /// </summary>
+        public static AwarenessPrivacyDecision Evaluate(
+            AwarenessSightRequest request,
+            IReadOnlyList<string>? denyList,
+            IReadOnlyList<string>? titleAllowList,
+            DateTime now)
         {
             try
             {
@@ -259,14 +282,17 @@ namespace ConditioningControlPanel.Services.Awareness
                 if (AwarenessPause.IsPaused(now))
                     return AwarenessPrivacyDecision.Drop(AwarenessDropReason.Paused);
 
-                var deny = EffectiveDenyList(settings);
+                var deny = denyList ?? Array.Empty<string>();
                 var display = AwarenessText.SanitizeDisplayName(request.DisplayName);
 
-                if (MatchesAny(deny, appId, display, request.RawTitle))
+                // The cluster is matched too, so a rule can silence a whole category ("site_doomscroll")
+                // and not just one app. The title is matched for the same reason a group's terms are:
+                // "Chase Online" arrives as a browser tab, not as a process called chase.exe.
+                if (MatchesAny(deny, appId, display, request.RawTitle, request.Cluster))
                     return AwarenessPrivacyDecision.Drop(AwarenessDropReason.DenyList);
 
                 return new AwarenessPrivacyDecision(true, AwarenessDropReason.None,
-                    ResolveTitle(request, appId, display, deny, settings));
+                    ResolveTitle(request, appId, display, deny, titleAllowList));
             }
             catch (Exception ex)
             {
@@ -307,9 +333,9 @@ namespace ConditioningControlPanel.Services.Awareness
 
             var display = AwarenessText.SanitizeDisplayName(displayName);
             var deny = EffectiveDenyList(settings);
-            if (deny.Any(e => TokenIs(e, GroupEmailTitles)) && MatchesAny(EmailClientTerms, id, display, null)) return false;
+            if (deny.Any(e => TokenIs(e, GroupEmailTitles)) && MatchesAny(EmailClientTerms, id, display, null, null)) return false;
 
-            return MatchesAny(allow, id, display, null);
+            return MatchesAny(allow, id, display, null, null);
         }
 
         /// <summary>
@@ -426,30 +452,38 @@ namespace ConditioningControlPanel.Services.Awareness
 
         private static string? ResolveTitle(
             AwarenessSightRequest request, string appId, string display,
-            IReadOnlyList<string> deny, AppSettings? settings)
+            IReadOnlyList<string> deny, IReadOnlyList<string>? allow)
         {
-            var allow = settings?.AwarenessTitleAllowList;
             if (allow == null || allow.Count == 0) return null;
             if (string.Equals(request.Cluster, AwarenessClusters.Adult, StringComparison.OrdinalIgnoreCase)) return null;
-            if (deny.Any(e => TokenIs(e, GroupEmailTitles)) && MatchesAny(EmailClientTerms, appId, display, null)) return null;
-            if (!MatchesAny(allow, appId, display, null)) return null;
+            if (deny.Any(e => TokenIs(e, GroupEmailTitles)) && MatchesAny(EmailClientTerms, appId, display, null, null)) return null;
+
+            // Matched against the app's IDENTITY only — never the title, and never the cluster. A title
+            // containing its own allow key would otherwise allow-list itself, and allowing a whole
+            // cluster's titles is a far wider grant than "name an app you're fine with".
+            if (!MatchesAny(allow, appId, display, null, null)) return null;
 
             return SanitizeTitleForWire(request.RawTitle);
         }
 
         /// <summary>
         /// Substring match of a rule list against an app id, a display name and (optionally) the raw
-        /// title. Group tokens expand to their term lists; everything else is a plain case-insensitive
-        /// substring, which is what the panel's copy says it is.
+        /// title and the cluster. Group tokens expand to their term lists; everything else is a plain
+        /// case-insensitive substring, which is what the panel's copy says it is.
+        ///
+        /// <para><paramref name="cluster"/> is supplied for the DENY list only, so one rule can silence
+        /// a whole category. It is deliberately null for the title allow list — see
+        /// <see cref="ResolveTitle"/>.</para>
         /// </summary>
         private static bool MatchesAny(
-            IReadOnlyList<string>? rules, string? appId, string? displayName, string? rawTitle)
+            IReadOnlyList<string>? rules, string? appId, string? displayName, string? rawTitle, string? cluster)
         {
             if (rules == null || rules.Count == 0) return false;
 
             var id = (appId ?? string.Empty).ToLowerInvariant();
             var name = (displayName ?? string.Empty).ToLowerInvariant();
             var title = (rawTitle ?? string.Empty).ToLowerInvariant();
+            var group = (cluster ?? string.Empty).ToLowerInvariant();
 
             foreach (var rule in rules)
             {
@@ -469,6 +503,10 @@ namespace ConditioningControlPanel.Services.Awareness
                 if (id.Contains(needle, StringComparison.Ordinal)) return true;
                 if (name.Length > 0 && name.Contains(needle, StringComparison.Ordinal)) return true;
                 if (title.Length > 0 && title.Contains(needle, StringComparison.Ordinal)) return true;
+
+                // Cluster ids are exact tokens ("site_doomscroll"), not free text: a substring match
+                // here would let a two-character rule silence every cluster that contains it.
+                if (group.Length > 0 && string.Equals(group, needle, StringComparison.Ordinal)) return true;
             }
 
             return false;

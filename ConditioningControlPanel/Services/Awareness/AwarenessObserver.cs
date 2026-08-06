@@ -347,6 +347,18 @@ namespace ConditioningControlPanel.Services.Awareness
 
             _lastFrame = frame;
 
+            // The privacy panel's "what she can see" wire view renders the LAST FRAME, verbatim,
+            // through AwarenessProjection. Publishing here is what makes that view show the real thing
+            // rather than a reconstruction — and it is also the frame the panel's wipe has to erase.
+            try
+            {
+                AwarenessLive.Publish(frame);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("AwarenessObserver: AwarenessLive.Publish threw - {Error}", ex.Message);
+            }
+
             try
             {
                 FrameCut?.Invoke(this, frame);
@@ -478,7 +490,9 @@ namespace ConditioningControlPanel.Services.Awareness
             }
 
             // --- privacy, BEFORE anything is written anywhere ---
-            var verdict = AwarenessObserverPolicy.EvaluatePrivacy(sample, policy);
+            // `now` is the observer's clock, not DateTime.Now, so a test that drives the tick also
+            // drives the pause window rather than silently falling back to wall time.
+            var verdict = AwarenessObserverPolicy.EvaluatePrivacy(sample, policy, now);
             if (!verdict.Allowed)
             {
                 DropForeground(now, verdict.Drop, sample?.ProcessName ?? "");

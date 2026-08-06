@@ -22,6 +22,7 @@ namespace ConditioningControlPanel.Tests;
 /// covered here: the JSON, the '.tmp', the in-memory counters and ring, the published frame and the
 /// memory's habits/recent lines.</para>
 /// </summary>
+[Collection(AwarenessStaticsCollection.Name)]
 public class AwarenessErasureTests : IDisposable
 {
     private readonly string _dir;

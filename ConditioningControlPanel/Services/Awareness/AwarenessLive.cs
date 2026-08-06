@@ -34,6 +34,18 @@ namespace ConditioningControlPanel.Services.Awareness
         /// <summary>The habit/reaction store behind her callbacks. Null until the memory owner sets it.</summary>
         public static ICompanionMemory? Memory { get; set; }
 
+        /// <summary>
+        /// Clears the observer's in-RAM state; set by whoever owns the observer, to
+        /// <c>AwarenessObserver.ResetTransientState</c>.
+        ///
+        /// <para><b>Why the wipe is incomplete without it.</b> The ledger and the memory live on disk;
+        /// the observer additionally holds a pending candidate, the committed app and cluster, the
+        /// churn counter, the fullscreen/wake flags, the media loop counter and its own last frame —
+        /// none of which are files. Erasing only the files would leave her able to say something about
+        /// the very thing the user just erased, which is the one moment this feature cannot survive.</para>
+        /// </summary>
+        public static Action? ResetObserverState { get; set; }
+
         /// <summary>The last frame that was actually cut, or null when none has been.</summary>
         public static ContextFrame? LastFrame
         {
@@ -86,7 +98,10 @@ namespace ConditioningControlPanel.Services.Awareness
         ///   <item>the pending debounced save, cancelled — otherwise a queued write resurrects all of it;</item>
         ///   <item>the last published frame held here for the panel's wire view;</item>
         ///   <item>the recent-reaction ban list and any habits, via
-        ///   <see cref="ICompanionMemory.ForgetAsync"/> with a null app id.</item>
+        ///   <see cref="ICompanionMemory.ForgetAsync"/> with a null app id;</item>
+        ///   <item>the observer's in-RAM state — pending candidate, committed app and cluster, churn
+        ///   counter, fullscreen/wake flags, media loop counter, its own last frame — via
+        ///   <see cref="ResetObserverState"/>. None of these are files, so nothing above reaches them.</item>
         /// </list>
         ///
         /// <para>Deliberately NOT in scope, and the panel's copy says so rather than implying otherwise:
@@ -116,6 +131,12 @@ namespace ConditioningControlPanel.Services.Awareness
                 try { _ = memory.ForgetAsync(null); }
                 catch (Exception ex) { App.Logger?.Warning(ex, "AwarenessLive: memory forget failed"); }
             }
+
+            // The in-RAM half of the erasure. Without this the observer still holds the app it had
+            // committed to and the candidate it was about to cut, and could speak about what was just
+            // wiped on its very next tick.
+            try { ResetObserverState?.Invoke(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "AwarenessLive: observer state reset failed"); }
 
             Clear();
             App.Logger?.Information("Awareness: everything she noticed has been erased");

@@ -1628,19 +1628,63 @@ namespace ConditioningControlPanel
             // the ledger, so retention is honoured whether or not any UI is ever opened.
             try
             {
+                var awarenessLedger = new Services.Awareness.ActivityLedger();
+
+                // ONE memory instance. The observer and the arbiter must share it, or the
+                // recent-reaction ban list splits across two rings and she repeats herself while both
+                // halves believe they are keeping her honest.
+                var awarenessMemory = new Services.Awareness.StubCompanionMemory();
+
+                // ONE arbiter. It is the single cooldown ledger every awareness line, bark and
+                // keyword-triggered comment passes through, which is the whole "one character, one
+                // mouth" guarantee — a second instance would be a second mouth with its own cooldowns.
+                // The staleness check asks "what is in front of the user NOW". The observer already
+                // resolved that on its last poll, so the speaker reads it from there instead of
+                // re-reading the foreground window and re-running AppClusterMap.Classify — one
+                // classification, and the answer it compares against is the same one the frame was
+                // built from. Deferred through a closure because the observer does not exist yet.
+                Services.Awareness.AwarenessObserver? observerRef = null;
+                var arbiter = new Services.Awareness.ReactionArbiter(
+                    cooldowns: null,
+                    scorer: null,
+                    localClock: null,
+                    speaker: new Services.Awareness.AvatarAwarenessSpeaker(
+                        currentAppId: () => observerRef?.CurrentAppId),
+                    lineSource: new Services.Awareness.BrainAwarenessLineSource(),
+                    memory: awarenessMemory);
+
                 Awareness = new Services.Awareness.AwarenessObserver(
-                    new Services.Awareness.ActivityLedger(),
+                    awarenessLedger,
                     new Services.Awareness.WorthinessScorer(),
-                    new Services.Awareness.ReactionArbiter(),
-                    new Services.Awareness.StubCompanionMemory());
+                    arbiter,
+                    awarenessMemory);
+                observerRef = Awareness;
+
+                // The trust surface's seam: the privacy panel renders the real last frame and erases
+                // the real ledger through these. Set before anything can cut a frame.
+                Services.Awareness.AwarenessLive.Ledger = awarenessLedger;
+                Services.Awareness.AwarenessLive.Memory = awarenessMemory;
+                Services.Awareness.AwarenessLive.ResetObserverState = Awareness.ResetTransientState;
+
+                // Engages v2: suppresses the legacy awareness mouth (BarkService's awareness-gated
+                // rules, the tube's legacy reaction handlers) and lets the keyword engine register its
+                // lines against the one cooldown ledger. Without this call BOTH mouths stay in their
+                // v1 state and nothing in v2 speaks — the flag alone is not the switch.
+                Services.Awareness.AwarenessV2Routing.Attach(arbiter);
+
                 Logger?.Information("AwarenessObserver constructed (v2 enabled={Enabled})",
                     Services.Awareness.AwarenessObserver.IsEnabled);
             }
             catch (Exception ex)
             {
                 // An observer that will not build must not take the app down: the legacy awareness
-                // pipeline is still there and still works.
+                // pipeline is still there and still works. Detach so the legacy mouth is not left
+                // suppressed by a half-built v2 that can never speak.
                 Awareness = null;
+                try { Services.Awareness.AwarenessV2Routing.Detach(); } catch { }
+                Services.Awareness.AwarenessLive.Ledger = null;
+                Services.Awareness.AwarenessLive.Memory = null;
+                Services.Awareness.AwarenessLive.ResetObserverState = null;
                 Logger?.Error(ex, "AwarenessObserver: initialization failed, falling back to legacy awareness");
             }
 
@@ -3742,7 +3786,12 @@ Application State:
             Achievements?.Dispose();
             // Before WindowAwareness: its Dispose runs Stop(), which also stops the observer — and the
             // observer's own Stop is what closes the open visit and flushes the ledger to disk.
+            // Detach first so nothing can route a line into a half-disposed arbiter on the way down.
+            try { Services.Awareness.AwarenessV2Routing.Detach(); } catch { }
             Awareness?.Dispose();
+            Services.Awareness.AwarenessLive.ResetObserverState = null;
+            Services.Awareness.AwarenessLive.Ledger = null;
+            Services.Awareness.AwarenessLive.Memory = null;
             WindowAwareness?.Dispose();
             // Before Ai: Dispose flushes the conversation to companion/session.json and unhooks the
             // bark echo, and it must not race the transport being torn down underneath it.

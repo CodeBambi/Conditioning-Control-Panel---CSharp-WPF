@@ -54,8 +54,23 @@ pipeline instead, and the differences that matter when reading the rest of this 
   window before anything is written; page titles are withheld from the frame unless the user
   allow-listed that app (the shipped allow list is empty); adult-cluster frames send only the cluster
   id. All of it runs *before* the `ActivityLedger` write, not after.
+- **One privacy implementation, not two.** `AwarenessPrivacyRules.Evaluate` is the only place these
+  rules live; `AwarenessObserverPolicy.EvaluatePrivacy` resolves the app's *identity* and then asks
+  it. That matters because the shipped deny protection is three **group tokens** (`@passwords`,
+  `@banking`, `@email-titles`) which mean nothing until that class expands them — a second matcher
+  comparing them literally would show the user active chips that blocked nothing.
+- **Pause is a real drop**, not a mute: while `AwarenessPause.IsPaused`, nothing is recorded and
+  nothing is said. Process-lifetime only; it does not survive a restart.
+- **The LLM leg has its own prompt.** Awareness does *not* go through `CompanionBrain.ReactAsync` or
+  the multi-thousand-token chat prompt; `AwarenessReactionService` builds a dedicated ~800-token
+  reaction prompt (persona digest + angle cards + frame projection + ban list) and sends it with
+  `AiCallOptions.Reaction`, so `[AI-METER]` shows `purpose=reaction`. Moderation is unchanged — the
+  full spine runs inside `IAiService.SendAsync` exactly as it does for chat. One consequence worth
+  knowing: an awareness line does **not** enter the chat turn log.
 
-`UseAwarenessV2 = false` restores every line of the legacy behaviour documented below.
+`UseAwarenessV2 = false` restores every line of the legacy behaviour documented below — and so does
+"v2 is configured but its observer failed to construct", because the legacy suppression asks
+`AwarenessV2Routing.IsActive` (an arbiter is attached *and* v2 is enabled), never the setting alone.
 
 ---
 

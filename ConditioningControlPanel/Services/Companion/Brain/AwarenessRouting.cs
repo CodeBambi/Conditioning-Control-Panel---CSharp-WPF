@@ -157,24 +157,45 @@ namespace ConditioningControlPanel.Services.Awareness
     }
 
     /// <summary>
-    /// The production line source: <c>App.Brain.ReactAsync</c>, so an awareness reaction lands in the
-    /// turn log as an <c>AmbientEvent</c> and the chat thread knows what she just commented on.
+    /// The production line source: <see cref="AwarenessReactionService"/>, which builds awareness's own
+    /// dedicated ~800-token reaction prompt (persona digest + angle cards + frame projection + recent
+    /// ban list) and sends it with <c>AiCallOptions.Reaction</c>.
     ///
-    /// <para><b>What crosses the wire is the projection and nothing else.</b> The event text is
+    /// <para><b>Why not <c>App.Brain.ReactAsync</c>.</b> That path exists for short ambient nudges and
+    /// clamps its descriptor to <c>CompanionEvent.MaxChars</c> (~100 characters), which every
+    /// projection exceeds — it would hand the model JSON cut mid-key. It also carries the
+    /// multi-thousand-token companion chat prompt, which is exactly the cost the dedicated reaction
+    /// prompt exists to avoid (doc 02: "~700-900 tokens in, ~40 out. Versus today's
+    /// multi-thousand-token prompt for the same"). One consequence worth stating plainly: an awareness
+    /// line does NOT land in the chat turn log, so the chat thread does not know what she just
+    /// commented on. Train 4's memory seam is where that reconnects.</para>
+    ///
+    /// <para><b>Moderation is untouched.</b> The Layer-1 spine — <c>CheckInput</c> on the frame message,
+    /// <c>CheckOutput</c> on the reply, <c>ModerationLog</c> — runs inside <c>IAiService.SendAsync</c>
+    /// exactly as it does for chat. A refusal comes back as <c>AwarenessReaction.Refusal</c> and is
+    /// treated here as "nothing usable", so the arbiter serves a bark and a refusal is never spoken.</para>
+    ///
+    /// <para><b>What crosses the wire is the projection and nothing else.</b> The frame message is
     /// <see cref="AwarenessProjection.BuildCloudProjection"/> — categories and bucketed numbers — and
     /// the fuller local projection is used only when the active provider is the machine-local Ollama
-    /// path. Any doubt about which provider is live resolves to the cloud projection.</para>
+    /// path. Any doubt about which provider is live resolves to the cloud projection. That decision now
+    /// lives inside <see cref="AwarenessReactionService"/>, so exactly one place makes it.</para>
     /// </summary>
     public sealed class BrainAwarenessLineSource : IAwarenessLineSource
     {
         private readonly Func<CompanionBrain?> _brain;
-        private readonly Func<bool> _isLocalTransport;
-        private bool _warnedAboutClamp;
+        private readonly AwarenessReactionService _reactions;
 
-        public BrainAwarenessLineSource(Func<CompanionBrain?>? brain = null, Func<bool>? isLocalTransport = null)
+        public BrainAwarenessLineSource(
+            Func<CompanionBrain?>? brain = null,
+            Func<bool>? isLocalTransport = null,
+            AwarenessReactionService? reactions = null)
         {
             _brain = brain ?? (() => App.Brain);
-            _isLocalTransport = isLocalTransport ?? DefaultIsLocalTransport;
+            // isLocalTransport stays in the signature because the projection choice remains the
+            // caller's to override; it is answered inside the reaction service now, which is the one
+            // place that assembles the prompt. Passing null keeps that service's own default.
+            _reactions = reactions ?? new AwarenessReactionService(isMachineLocal: isLocalTransport);
         }
 
         /// <inheritdoc />
@@ -194,72 +215,25 @@ namespace ConditioningControlPanel.Services.Awareness
         /// <inheritdoc />
         public async Task<AwarenessReply> RequestAsync(ContextFrame frame, CancellationToken cancellationToken)
         {
-            var brain = _brain();
-            if (brain == null || frame == null) return AwarenessReply.Empty;
+            if (frame == null) return AwarenessReply.Empty;
 
-            string projection;
-            try
-            {
-                projection = _isLocalTransport()
-                    ? AwarenessProjection.BuildLocalProjection(frame)
-                    : AwarenessProjection.BuildCloudProjection(frame);
-            }
-            catch (Exception ex)
-            {
-                // The privacy layer could not answer. Drop the frame rather than improvise a
-                // descriptor — an improvised one is exactly how content leaks past a projection.
-                App.Logger?.Warning(ex, "BrainAwarenessLineSource: projection failed, dropping the frame");
+            // The reaction service never throws and never speaks: every ordinary failure (no
+            // transport, prompt build failed, refusal, empty reply) comes back as a reason token, and
+            // every reason other than a deliberate pass means "nothing usable" — which costs a bark,
+            // not a crash, on a path that runs from a background timer.
+            var reaction = await _reactions.GetAwarenessReactionAsync(frame, cancellationToken)
+                                           .ConfigureAwait(false);
+
+            if (reaction == null) return AwarenessReply.Empty;
+
+            // A deliberate [PASS] is not a failure. It must survive as a pass so the arbiter refunds
+            // the slot instead of answering her chosen silence with a canned bark (doc 02 §7 item 5).
+            if (reaction.Passed) return AwarenessReply.Pass;
+
+            if (!reaction.IsAiGenerated || reaction.Refusal != null || !reaction.HasLine)
                 return AwarenessReply.Empty;
-            }
 
-            // CompanionEvent clamps an ambient descriptor to ~100 characters (25 tokens), which a
-            // projection always exceeds. Sending it anyway would hand the model a JSON fragment cut
-            // mid-key, so this path stands down and the arbiter falls back to a bark instead. See the
-            // integration note: the reaction prompt needs a structured-context hook, which is the
-            // prompt package's deliverable.
-            if (new CompanionEvent(projection).Normalized().Length < projection.Trim().Length)
-            {
-                if (!_warnedAboutClamp)
-                {
-                    _warnedAboutClamp = true;
-                    App.Logger?.Warning(
-                        "[AWARE] awareness projection ({Length} chars) exceeds CompanionEvent.MaxChars ({Max}); " +
-                        "LLM awareness lines stand down until the reaction prompt takes structured context",
-                        projection.Length, CompanionEvent.MaxChars);
-                }
-                return AwarenessReply.Empty;
-            }
-
-            try
-            {
-                var result = await brain.ReactAsync(new CompanionEvent(projection), cancellationToken)
-                    .ConfigureAwait(false);
-
-                // A refusal, a canned fallback or a dropped ambient call are all "nothing usable".
-                // Moderation already logged whatever it needed to; the arbiter serves a bark.
-                if (result == null || result.Refusal != null || !result.IsAiGenerated) return AwarenessReply.Empty;
-                return AwarenessReply.Parse(result.Text);
-            }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "BrainAwarenessLineSource: reaction call failed");
-                return AwarenessReply.Empty;
-            }
-        }
-
-        /// <summary>
-        /// True only when the active provider is provably the machine-local one. Anything else — a
-        /// cloud provider, a custom endpoint, an unreadable setting — is treated as remote, because the
-        /// fuller projection may only ever be built for a transport that cannot forward it.
-        /// </summary>
-        private static bool DefaultIsLocalTransport()
-        {
-            try
-            {
-                return App.Settings?.Current?.CompanionPrompt?.AiProvider == Models.AiProviderType.Local;
-            }
-            catch { return false; }
+            return new AwarenessReply(reaction.Line, reaction.Callback, IsPass: false);
         }
     }
 }
