@@ -258,6 +258,20 @@ namespace ConditioningControlPanel.Models
             set { _modPickerOfflineOffers = value; OnPropertyChanged(); }
         }
 
+        private string _pendingModActivationId = "";
+        /// <summary>
+        /// Mod the user picked in the first-run mod picker whose content was still downloading, so it
+        /// could not be activated yet (<c>Services.PendingModActivation</c>). Persisted because the
+        /// download can outlive the session that started it — a restart mid-download still ends up on
+        /// the mod the user chose. Cleared once applied, and dropped the moment the user switches mods
+        /// by hand: a manual choice outranks a queued one.
+        /// </summary>
+        public string PendingModActivationId
+        {
+            get => _pendingModActivationId;
+            set { _pendingModActivationId = value ?? ""; OnPropertyChanged(); }
+        }
+
         private string _lastSeenVersion = "";
         /// <summary>
         /// Last version the user has seen patch notes for. Used to show "What's New" after updates.

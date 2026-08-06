@@ -2038,6 +2038,12 @@ namespace ConditioningControlPanel.Services
             try { ModResourceResolver.ClearCache(); }
             catch (Exception ex) { _log?.Debug("ModService: resolver cache clear failed: {Error}", ex.Message); }
 
+            // Before ModChanged fires: AvatarTubeWindow re-evaluates the portrait gate from that
+            // event, and the adopted package may have just delivered the portrait PNGs — a stale
+            // cached "absent" would park the avatar on the legacy poses for the whole session.
+            try { AvatarPortraitLoader.InvalidateAvailabilityCache(); }
+            catch (Exception ex) { _log?.Debug("ModService: portrait cache clear failed: {Error}", ex.Message); }
+
             // The extracted mod.json can declare a different companion set than the hardcoded
             // manifest we were running on.
             try
@@ -2198,6 +2204,9 @@ namespace ConditioningControlPanel.Services
         /// <summary>Raises <see cref="ModAvailabilityChanged"/>; a throwing subscriber never escapes.</summary>
         private void RaiseModAvailabilityChanged(string modOrPackId)
         {
+            // A pack landing can be the moment the avatar portraits finally exist on disk; drop the
+            // cached "no portraits" answer so the next mod/avatar-set switch can enter portrait mode.
+            AvatarPortraitLoader.InvalidateAvailabilityCache();
             try { ModAvailabilityChanged?.Invoke(this, modOrPackId); }
             catch (Exception ex) { _log?.Debug("ModAvailabilityChanged subscriber error: {Error}", ex.Message); }
         }

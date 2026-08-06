@@ -491,18 +491,10 @@ namespace ConditioningControlPanel.Services
             // cleanup at all, so a reasoning model's scratchpad rendered verbatim into the bubble.
             response = AiTextHygiene.Clean(response);
 
-            // Remove context metadata tags like [Category: X | App: Y | Title: Z | Duration: Nm]
-            var sanitized = Regex.Replace(response, @"\[Category:[^\]]*\]", "", RegexOptions.IgnoreCase);
-
-            // Remove reaction category tags like [Media/Streaming] or [Gaming/Casual]
-            sanitized = Regex.Replace(sanitized, @"\[[A-Za-z]+/[A-Za-z]+\]", "", RegexOptions.IgnoreCase);
-
-            // Remove any standalone square bracket tags that look like metadata
-            sanitized = Regex.Replace(sanitized, @"\[(?:Category|App|Title|Duration|Context):[^\]]*\]", "", RegexOptions.IgnoreCase);
-
-            // Clean up any resulting double spaces or leading/trailing whitespace
-            sanitized = Regex.Replace(sanitized, @"\s{2,}", " ");
-            sanitized = sanitized.Trim();
+            // Remove context metadata tags like [Category: X | App: Y | Title: Z | Duration: Nm],
+            // reaction tags like [Media/Streaming], and the truncated variants the 100-token cap
+            // produces. Shared with the parser path so both stay in step.
+            var sanitized = AiTextHygiene.StripMetadataTags(response);
 
             // If sanitization removed everything meaningful, return a fallback
             if (string.IsNullOrWhiteSpace(sanitized))

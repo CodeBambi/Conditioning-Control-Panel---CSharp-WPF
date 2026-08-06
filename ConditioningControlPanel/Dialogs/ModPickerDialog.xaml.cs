@@ -177,6 +177,7 @@ namespace ConditioningControlPanel
     public partial class ModPickerDialog : Window
     {
         private readonly ObservableCollection<ModPickerCard> _cards = new();
+        private readonly string? _preselectModId;
         private bool _offline;
         private bool _downloading;
         private bool _finished;
@@ -191,6 +192,10 @@ namespace ConditioningControlPanel
         {
             InitializeComponent();
 
+            // Kept for BtnDownload_Click: a preselect means an UPGRADER restoring media for the
+            // mod they already run - never auto-switch them (queue[0] is catalogue order, so a
+            // Sissy upgrader who also ticks Bambi would get demoted onto Bambi otherwise).
+            _preselectModId = preselectModId;
             BuildCards(preselectModId);
             CardsList.ItemsSource = _cards;
 
@@ -459,6 +464,21 @@ namespace ConditioningControlPanel
             {
                 Close();
                 return;
+            }
+
+            // Choosing a mod here MEANS choosing to run it - the picker used to leave a first-run user
+            // on CCP Default after a 300 MB download. Pressing the button is the explicit choice, so
+            // this is the only place the intent is ever recorded, and with several ticked the first in
+            // catalogue order is the one they land on. The switch happens as soon as the content
+            // exists - even after this dialog is gone, or in a later session. UPGRADERS (preselect
+            // set) are only re-downloading media for the mod they already run: recording would
+            // switch them to whichever ticked pack finishes first, so their intent is never recorded.
+            if (_preselectModId == null)
+            {
+                PendingModActivation.Record(queue[0].ModId);
+                // Unreachable today (installed cards are filtered out of the queue above), kept as a
+                // belt in case the queue filter ever admits an already-on-disk pack.
+                PendingModActivation.ApplyIfReady(PendingModActivation.Trigger.Immediate);
             }
 
             _downloading = true;

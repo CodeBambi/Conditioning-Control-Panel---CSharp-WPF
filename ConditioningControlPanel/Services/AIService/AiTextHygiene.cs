@@ -30,6 +30,55 @@ namespace ConditioningControlPanel.Services
             @"</(think|thinking|reasoning|thought)>",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+        // Context metadata the model echoes back instead of answering, e.g.
+        // "[Category: Media | App: VLC | Title: ... | Duration: 12m]".
+        private static readonly Regex ClosedCategoryTag = new(
+            @"\[Category:[^\]]*\]", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        // Reaction category tags like [Media/Streaming] or [Gaming/Casual].
+        private static readonly Regex ReactionCategoryTag = new(
+            @"\[[A-Za-z]+/[A-Za-z]+\]", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        // Any standalone bracket tag that looks like metadata.
+        private static readonly Regex ClosedMetadataTag = new(
+            @"\[(?:Category|App|Title|Duration|Context):[^\]]*\]", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        // Replies are hard-capped at 100 tokens, so a fabricated tag can be cut off before its closing
+        // bracket - and every pass above needs that bracket, so the fragment rendered raw in the bubble.
+        // Both passes exclude newlines: truncation can only land on the LAST line, and letting [^\]]
+        // cross \n would delete everything after a mid-reply bracket in a multi-line answer.
+        // Two end-of-string passes, because the cap can land anywhere:
+        //   1. a known metadata keyword (\b so "[Apple pie" isn't eaten by "App"), colon optional;
+        private static readonly Regex UnclosedKnownTag = new(
+            @"\[(?:Category|App|Title|Duration|Context)\b[^\]\r\n]*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        //   2. anything shaped like "[Word:" for tags we haven't seen yet - production also showed a
+        //      fabricated "[Satisf: ...". The colon is what marks the fragment as metadata rather than
+        //      prose, so stage directions ("[giggles") and citations ("[3") survive while an unknown
+        //      "[Mood: playful" does not. Matching bare keyword prefixes instead (e.g. "[Cat") would
+        //      widen this to ordinary words, which is the one failure this must not have.
+        private static readonly Regex UnclosedKeyedTag = new(
+            @"\[[A-Za-z][A-Za-z0-9 _-]*:[^\]\r\n]*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        /// <summary>
+        /// Strip leaked context-metadata tags, closed or truncated, then collapse the whitespace the
+        /// removal leaves behind. An empty result means the reply was nothing but metadata - the caller
+        /// decides what to say instead.
+        /// </summary>
+        internal static string StripMetadataTags(string? text)
+        {
+            if (string.IsNullOrEmpty(text)) return text ?? string.Empty;
+
+            var sanitized = ClosedCategoryTag.Replace(text, "");
+            sanitized = ReactionCategoryTag.Replace(sanitized, "");
+            sanitized = ClosedMetadataTag.Replace(sanitized, "");
+            sanitized = UnclosedKnownTag.Replace(sanitized, "");
+            sanitized = UnclosedKeyedTag.Replace(sanitized, "");
+
+            sanitized = Regex.Replace(sanitized, @"\s{2,}", " ");
+            return sanitized.Trim();
+        }
+
         /// <summary>
         /// Strip tokenizer artifacts and reasoning blocks. Whitespace is normalised but the text is
         /// otherwise left alone - callers layer their own product-specific sanitising on top.
