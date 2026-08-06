@@ -82,6 +82,12 @@ namespace ConditioningControlPanel.Services.Awareness
         private readonly Func<AwarenessPolicySettings?> _policy;
 
         private DispatcherTimer? _pollTimer;
+
+        // Cancels anything still in flight when she is told to stop watching. The LLM leg can take
+        // eight seconds; without this a user who closes her eyes mid-call still gets a line about what
+        // they were doing six seconds after telling her to stop.
+        private CancellationTokenSource? _lifetime;
+
         private bool _running;
         private bool _disposed;
         private int _tickInFlight;
@@ -206,7 +212,16 @@ namespace ConditioningControlPanel.Services.Awareness
         public bool MediaSignalAvailable => _media?.IsAvailable == true;
 
         /// <summary>
-        /// Whether v2 may run at all: the kill switch, the feature toggle and consent, all three.
+        /// Whether v2 may run at all: the kill switch, the feature toggle, the legacy consent AND the
+        /// v2 consent, all four.
+        ///
+        /// <para><b>Why <c>AwarenessConsentShownV2</c> is in here.</b> v1 persisted nothing; v2 keeps a
+        /// 30-day on-disk record of per-app visit counts, minute totals, day streaks and a machine-wide
+        /// hourly histogram. That is a materially new capability, and an upgrader already has
+        /// <c>AwarenessModeEnabled</c> and <c>AwarenessConsentGiven</c> set from the old silent
+        /// auto-consent — so without this clause the ledger starts recording on the first launch after
+        /// the update, for a dialog the user has never seen. Until the v2 explanation is accepted the
+        /// legacy pipeline runs exactly as it does today and nothing is written.</para>
         ///
         /// <para>Reads defensively — headless and during early startup <c>App.Settings</c> is null, and
         /// a null settings object must read as "no consent", never as "sure, go ahead".</para>
@@ -219,7 +234,8 @@ namespace ConditioningControlPanel.Services.Awareness
                 {
                     var s = App.Settings?.Current;
                     if (s == null) return false;
-                    return s.UseAwarenessV2 && s.AwarenessModeEnabled && s.AwarenessConsentGiven;
+                    return s.UseAwarenessV2 && s.AwarenessModeEnabled &&
+                           s.AwarenessConsentGiven && s.AwarenessConsentShownV2;
                 }
                 catch { return false; }
             }
@@ -244,6 +260,7 @@ namespace ConditioningControlPanel.Services.Awareness
             // must not depend on a window being open.
             _ledger.Start();
             _running = true;
+            _lifetime = new CancellationTokenSource();
 
             var now = _clock();
             _pendingSince = now;
@@ -283,6 +300,15 @@ namespace ConditioningControlPanel.Services.Awareness
             try { _input.Stop(); } catch { }
             try { _media?.Stop(); } catch { }
 
+            // Anything mid-flight stops being wanted the moment she is told to stop watching.
+            var lifetime = _lifetime;
+            _lifetime = null;
+            if (lifetime != null)
+            {
+                try { lifetime.Cancel(); } catch { }
+                try { lifetime.Dispose(); } catch { }
+            }
+
             if (!_running) return;
             _running = false;
 
@@ -301,6 +327,10 @@ namespace ConditioningControlPanel.Services.Awareness
             try { _input.Dispose(); } catch { }
             try { _media?.Dispose(); } catch { }
             try { (_appState as IDisposable)?.Dispose(); } catch { }
+
+            // Stop() flushed it; this is what actually releases its two System.Threading.Timers, which
+            // otherwise survive shutdown.
+            try { _ledger.Dispose(); } catch { }
         }
 
         /// <summary>
@@ -341,7 +371,9 @@ namespace ConditioningControlPanel.Services.Awareness
         /// than private so the arbiter and prompt packages can drive the whole chain from a synthetic
         /// frame in tests without a foreground window.
         /// </summary>
-        public void PublishFrame(ContextFrame frame)
+        public void PublishFrame(ContextFrame frame) => PublishFrame(frame, null);
+
+        private void PublishFrame(ContextFrame frame, TrendDerivation? trends)
         {
             if (frame == null) return;
 
@@ -368,14 +400,22 @@ namespace ConditioningControlPanel.Services.Awareness
                 App.Logger?.Warning(ex, "AwarenessObserver: a FrameCut subscriber threw");
             }
 
-            _ = SubmitAsync(frame);
+            _ = SubmitAsync(frame, trends);
         }
 
-        private async Task SubmitAsync(ContextFrame frame)
+        private async Task SubmitAsync(ContextFrame frame, TrendDerivation? trends)
         {
             try
             {
-                var decision = await _arbiter.SubmitAsync(frame).ConfigureAwait(false);
+                var token = _lifetime?.Token ?? CancellationToken.None;
+                var decision = await _arbiter.SubmitAsync(frame, token).ConfigureAwait(false);
+
+                // The one-shot trend guards burn HERE, on an actual delivery — not when the trend was
+                // derived. A frame gated by the global gap, starved by the hourly budget, refused as
+                // busy or scored below threshold must leave that day's callback available for the next
+                // frame that does get spoken.
+                if (decision.Verdict != AwarenessVerdict.Silence) _ledger.CommitTrends(trends);
+
                 App.Logger?.Debug("[AWARE] arbiter verdict={Verdict} tier={Tier} gate={Reason}",
                     decision.Verdict, decision.Tier, decision.Reason);
             }
@@ -611,10 +651,12 @@ namespace ConditioningControlPanel.Services.Awareness
         /// <summary>
         /// The asynchronous half: DND, trends, memory hooks, scoring, publication.
         ///
-        /// <para>DND is applied BEFORE <see cref="ActivityLedger.DeriveTrends"/> on purpose. That call
-        /// CONSUMES the one-shot trend guards, so scoring a frame the user will never hear would burn
-        /// the joke — the whole design of "record it anyway, she can bring it up later" depends on the
-        /// trend still being available when the fullscreen stint ends.</para>
+        /// <para>DND is applied BEFORE the trends are derived at all, and the trends that ARE derived
+        /// are only RESERVED (<see cref="ActivityLedger.PeekTrends"/>) until a line actually reaches
+        /// the user (<see cref="ActivityLedger.CommitTrends"/>). Both halves protect the same thing:
+        /// the whole design of "record it anyway, she can bring it up later" depends on a once-per-day
+        /// callback still being available when the fullscreen stint ends — or when the next frame that
+        /// clears the cooldowns comes along.</para>
         /// </summary>
         private async Task CutFrameAsync(Candidate candidate, DateTime now)
         {
@@ -636,19 +678,24 @@ namespace ConditioningControlPanel.Services.Awareness
 
             if (dnd != DndGate.None)
             {
-                // Invariant: every candidate leaves exactly one [AWARE] line. "score=gated" is literal —
-                // the frame was never scored, because scoring would have consumed the trends.
-                App.Logger?.Information(
+                // Invariant: every candidate leaves exactly one [AWARE] line. Debug, not Information:
+                // it names the resolved app id, and Serilog's floor is Information (see
+                // ReactionArbiter.Log for the whole argument).
+                App.Logger?.Debug(
                     "[AWARE] app={App} score=gated tier=- verdict=Silence gate=dnd-{Gate} transition={Transition}",
-                    verdict.AppId, dnd.ToString().ToLowerInvariant(), candidate.Transition);
+                    AwarenessText.SanitizeId(verdict.AppId), dnd.ToString().ToLowerInvariant(), candidate.Transition);
                 return;
             }
 
-            // Consumes the one-shot guards. Called exactly once per candidate frame, never speculatively.
-            var trends = _ledger.DeriveTrends(
+            // RESERVES the one-shot guards without burning them. They are committed in SubmitAsync,
+            // and only when a line actually reached the user — every gate between here and there
+            // (threshold, bark floor, global gap, hourly budget, same-app gap, busy, stale) would
+            // otherwise spend that day's best callback on a frame nobody hears.
+            var derivation = _ledger.PeekTrends(
                 verdict.AppId, verdict.Cluster, now,
                 inputIdleSecondsBeforeWake: candidate.WakeIdleSeconds,
                 mediaRepeatCount: candidate.MediaRepeats);
+            var trends = derivation.Trends;
 
             var snapshot = _ledger.Snapshot(verdict.AppId, now);
 
@@ -713,7 +760,7 @@ namespace ConditioningControlPanel.Services.Awareness
                 CutAt = now
             };
 
-            PublishFrame(frame);
+            PublishFrame(frame, derivation);
         }
 
         // =================================================================================

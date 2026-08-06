@@ -20,7 +20,12 @@ namespace ConditioningControlPanel.Services.Awareness
     /// deliberately excludes the constitutional safety block, which is fixed, identical on every LLM
     /// path in the app, and sits at the very head of the prefix where providers cache it.
     /// </param>
-    /// <param name="TotalTokens">Approximate tokens actually billed on a cold (uncached) call.</param>
+    /// <param name="TotalTokens">
+    /// Approximate tokens actually billed on a cold (uncached) call — the authored zones PLUS the
+    /// safety preamble and floor, which together are the larger half. This lands around twice
+    /// <paramref name="AuthoredTokens"/>, so it is this number and not the doc's budget that a cost
+    /// model should be built on until a provider is measured caching the prefix.
+    /// </param>
     public sealed record AwarenessPrompt(
         string SystemPrompt,
         string FrameMessage,
@@ -128,8 +133,18 @@ Output only those lines: no quotes, no name label, no brackets, no stage directi
         /// <summary>Header above the output contract.</summary>
         public const string ContractHeader = "--- HOW TO ANSWER ---";
 
-        /// <summary>Appended to a card that is licensed to name something from her own media list.</summary>
-        public const string PlugLicenseNote = "(this angle, and only this angle, may name one thing of yours.)";
+        /// <summary>
+        /// Appended to a plug-licensed card. It licenses an OFFER, never a TITLE.
+        ///
+        /// <para>Unlike the legacy companion prompt, this one deliberately carries no media catalogue —
+        /// the projection is app ids and bucketed numbers — so a licence to "name one thing of yours"
+        /// is a licence to invent a filename the user does not have, in direct contradiction of the
+        /// contract's "never imply you know anything that is not there". What she can honestly offer is
+        /// herself, or something the app does.</para>
+        /// </summary>
+        public const string PlugLicenseNote =
+            "(this angle, and only this angle, may make an offer - of yourself, or of something this app does. " +
+            "You cannot see their library: never name a title.)";
 
         // ===================== state =====================
 

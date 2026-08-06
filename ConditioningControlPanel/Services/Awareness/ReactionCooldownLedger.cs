@@ -139,7 +139,11 @@ namespace ConditioningControlPanel.Services.Awareness
             }
         }
 
-        /// <summary>Clears every cooldown. Backs the privacy panel's pause/resume and wipe paths.</summary>
+        /// <summary>
+        /// Clears every cooldown. Reached from the privacy panel's wipe through
+        /// <see cref="AwarenessLive.ResetPacingState"/>: the per-app map is keyed by the app ids the
+        /// wipe just erased, so leaving it behind leaves an artifact of what was forgotten.
+        /// </summary>
         public void Reset()
         {
             lock (_lock)
@@ -149,6 +153,17 @@ namespace ConditioningControlPanel.Services.Awareness
                 _perApp.Clear();
                 _recent.Clear();
             }
+        }
+
+        /// <summary>
+        /// Drops one app's per-app cooldown. The per-app "forget this app" control's half of the
+        /// erasure — the global gap and the hourly budget are about pacing, not about that app, and
+        /// stay where they are.
+        /// </summary>
+        public void Forget(string? appId)
+        {
+            if (string.IsNullOrWhiteSpace(appId)) return;
+            lock (_lock) _perApp.Remove(AwarenessText.SanitizeId(appId));
         }
 
         private void TrimLocked(DateTime at)

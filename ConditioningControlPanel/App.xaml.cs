@@ -1635,6 +1635,13 @@ namespace ConditioningControlPanel
                 // halves believe they are keeping her honest.
                 var awarenessMemory = new Services.Awareness.StubCompanionMemory();
 
+                // ONE scorer, for the same reason there is one arbiter. The arbiter is the ONLY thing
+                // that calls WorthinessScorer.RegisterDelivery, so handing it a different instance from
+                // the observer's leaves the whole silence budget inert: the floating threshold never
+                // rises after a delivered line and the per-app repetition penalty is permanently 0.0,
+                // which pins the score's threshold at the intensity baseline forever (doc 02 §3.4/§4.1).
+                var awarenessScorer = new Services.Awareness.WorthinessScorer();
+
                 // ONE arbiter. It is the single cooldown ledger every awareness line, bark and
                 // keyword-triggered comment passes through, which is the whole "one character, one
                 // mouth" guarantee — a second instance would be a second mouth with its own cooldowns.
@@ -1646,7 +1653,7 @@ namespace ConditioningControlPanel
                 Services.Awareness.AwarenessObserver? observerRef = null;
                 var arbiter = new Services.Awareness.ReactionArbiter(
                     cooldowns: null,
-                    scorer: null,
+                    scorer: awarenessScorer,
                     localClock: null,
                     speaker: new Services.Awareness.AvatarAwarenessSpeaker(
                         currentAppId: () => observerRef?.CurrentAppId),
@@ -1655,7 +1662,7 @@ namespace ConditioningControlPanel
 
                 Awareness = new Services.Awareness.AwarenessObserver(
                     awarenessLedger,
-                    new Services.Awareness.WorthinessScorer(),
+                    awarenessScorer,
                     arbiter,
                     awarenessMemory);
                 observerRef = Awareness;
@@ -1665,6 +1672,42 @@ namespace ConditioningControlPanel
                 Services.Awareness.AwarenessLive.Ledger = awarenessLedger;
                 Services.Awareness.AwarenessLive.Memory = awarenessMemory;
                 Services.Awareness.AwarenessLive.ResetObserverState = Awareness.ResetTransientState;
+
+                // The in-RAM pacing half of the erasure. The ledger and the memory are files; the
+                // cooldown ledger's per-app last-spoke map and the scorer's repetition counters are
+                // not, and both are keyed by the app ids a wipe or a per-app forget just erased.
+                Services.Awareness.AwarenessLive.ResetPacingState = () =>
+                {
+                    arbiter.Cooldowns.Reset();
+                    awarenessScorer.Reset();
+                };
+                Services.Awareness.AwarenessLive.ForgetPacingState = id =>
+                {
+                    arbiter.Cooldowns.Forget(id);
+                    awarenessScorer.Forget(id);
+                };
+
+                // Retention does NOT depend on the feature being switched on. Every other pruning path
+                // hangs off the observer's Start(), which returns early when awareness is off — so a
+                // user who ran awareness for three weeks and then turned it off kept those three weeks
+                // on disk forever, while the consent dialog and the settings notice both promise the
+                // counts are deleted after the retention period. This sweep runs on every launch,
+                // creates nothing when there is no file, and is a no-op once the ledger is live.
+                try { awarenessLedger.PruneOnDisk(); }
+                catch (Exception pruneEx) { Logger?.Warning(pruneEx, "ActivityLedger: startup retention sweep failed"); }
+
+                // The two one-time initialisers used to hang off the consent dialog's accept path,
+                // which an upgrader with awareness already on never reaches. Run them here so the
+                // shipped deny groups are materialised and the pacing dial is migrated for every
+                // profile, whether or not the dialog is ever raised. Both are idempotent.
+                try
+                {
+                    var awarenessSettings = Settings?.Current;
+                    bool wrote = Services.Awareness.AwarenessPrivacyRules.EnsureSeeded(awarenessSettings);
+                    wrote |= Services.Awareness.AwarenessIntensityMigration.EnsureMigrated(awarenessSettings);
+                    if (wrote) Settings?.Save();
+                }
+                catch (Exception seedEx) { Logger?.Warning(seedEx, "Awareness: deny-group seed / intensity migration failed"); }
 
                 // Engages v2: suppresses the legacy awareness mouth (BarkService's awareness-gated
                 // rules, the tube's legacy reaction handlers) and lets the keyword engine register its
@@ -1685,6 +1728,8 @@ namespace ConditioningControlPanel
                 Services.Awareness.AwarenessLive.Ledger = null;
                 Services.Awareness.AwarenessLive.Memory = null;
                 Services.Awareness.AwarenessLive.ResetObserverState = null;
+                Services.Awareness.AwarenessLive.ResetPacingState = null;
+                Services.Awareness.AwarenessLive.ForgetPacingState = null;
                 Logger?.Error(ex, "AwarenessObserver: initialization failed, falling back to legacy awareness");
             }
 

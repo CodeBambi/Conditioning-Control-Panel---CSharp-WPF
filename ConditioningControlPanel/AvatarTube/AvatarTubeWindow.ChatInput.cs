@@ -233,6 +233,23 @@ namespace ConditioningControlPanel
             
             bool isRecognizedActivity = category != ActivityCategory.Unknown && category != ActivityCategory.Idle;
 
+            // The double-click is a THIRD awareness mouth, and under v2 it must not be a v1 one.
+            // The legacy branch below reads App.WindowAwareness.CurrentPageTitle (still populated on
+            // every poll — only the event raise is suppressed) and hands it to the obsolete
+            // GetAwarenessReactionAsync, which builds the raw-title frame AND the whole companion
+            // prompt, including the retired "plug a video from the VIDEO LIST" rules. That breaks
+            // three v2 guarantees at once: the consent dialog's "page titles stay on this PC unless
+            // you name an app yourself", the deny list and incognito hard-drop (neither runs here),
+            // and the one cooldown ledger (this line could stack with a v2 one). So under v2 the
+            // last real frame goes through the arbiter instead — same projection, same deny list,
+            // same ledger — and anything it declines falls through to a preset phrase.
+            if (isRecognizedActivity && Services.Awareness.AwarenessV2Routing.IsActive)
+            {
+                if (await TrySpeakAwarenessV2CommentAsync()) return;
+                GigglePriority(GetPhraseForCategory(category, detectedName), aiGenerated: false);
+                return;
+            }
+
             if (isRecognizedActivity)
             {
                 // Try AI Activity Comment
@@ -312,6 +329,31 @@ namespace ConditioningControlPanel
             // Display the result with priority. The badge only fires when we actually got an
             // AI-generated reaction — preset fallbacks are unmarked.
             GigglePriority(reaction, aiGenerated: gotAiResponse);
+        }
+
+        /// <summary>
+        /// Offers the observer's last real frame to the arbiter, so a double-click's activity comment
+        /// travels the same road as every other ambient line: the cloud projection (no raw title), the
+        /// deny list and incognito drops that produced the frame in the first place, and the one
+        /// cooldown ledger.
+        /// </summary>
+        /// <returns>True when a line actually reached the user, so the caller says nothing more.</returns>
+        private static async Task<bool> TrySpeakAwarenessV2CommentAsync()
+        {
+            try
+            {
+                var arbiter = Services.Awareness.AwarenessV2Routing.Arbiter;
+                var frame = App.Awareness?.LastFrame;
+                if (arbiter == null || frame == null) return false;
+
+                var decision = await arbiter.SubmitAsync(frame).ConfigureAwait(true);
+                return decision.Verdict != Services.Awareness.AwarenessVerdict.Silence;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Double-click awareness comment failed: {Error}", ex.Message);
+                return false;
+            }
         }
 
         private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)

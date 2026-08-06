@@ -239,20 +239,48 @@ namespace ConditioningControlPanel.Services
         {
             if (frame == null) return false;
 
-            if (frame.Transition == Awareness.TransitionKind.Milestone)
+            // The arbiter records THIS delivery itself (cooldown ledger first, pacing state second),
+            // so CommitFire must not also report it as an external bark — one line, one charge.
+            _inAwarenessBark = true;
+            try
             {
-                return Raise("StillOnActivity", c => c
+                if (frame.Transition == Awareness.TransitionKind.Milestone)
+                {
+                    return Raise("StillOnActivity", c => c
+                        .Set("activity", frame.ServiceName ?? "")
+                        .Set("still_minutes", Math.Floor(Math.Max(0, frame.DwellSeconds) / 60.0))
+                        .Set("app_cluster", frame.AppCluster ?? "")
+                        .Set("app", frame.AppId ?? ""));
+                }
+
+                return Raise("ActivityChanged", c => c
                     .Set("activity", frame.ServiceName ?? "")
-                    .Set("still_minutes", Math.Floor(Math.Max(0, frame.DwellSeconds) / 60.0))
+                    .Set("category", frame.Category.ToString())
                     .Set("app_cluster", frame.AppCluster ?? "")
                     .Set("app", frame.AppId ?? ""));
             }
+            finally { _inAwarenessBark = false; }
+        }
 
-            return Raise("ActivityChanged", c => c
-                .Set("activity", frame.ServiceName ?? "")
-                .Set("category", frame.Category.ToString())
-                .Set("app_cluster", frame.AppCluster ?? "")
-                .Set("app", frame.AppId ?? ""));
+        /// <summary>
+        /// Re-entrancy guard for the one place a bark is fired ON BEHALF of the arbiter. See
+        /// <see cref="CommitFire"/>: every other bark reports itself to the arbiter's shared ledger,
+        /// this one is already accounted for there.
+        /// </summary>
+        private bool _inAwarenessBark;
+
+        /// <summary>
+        /// Tells this service that the companion just spoke a line it did not fire — today, an
+        /// awareness quip written by the model and delivered straight to the speech bubble.
+        ///
+        /// <para>The 60s <see cref="GlobalMinGapMs"/> floor is only a floor if it moves for every
+        /// ambient line, not just the ones this class produced: without this the next bark trigger
+        /// after the awareness bubble closes fires against a stale gap, and a preempting bark can
+        /// speak over the bubble outright.</para>
+        /// </summary>
+        public void NotifyExternalLineSpoken()
+        {
+            lock (_gate) _globalLastFireUtc = DateTime.UtcNow;
         }
 
         /// <summary>A dashboard feature popup was opened (feature = control type name w/o "FeatureControl", e.g. "Flash").</summary>
@@ -1519,6 +1547,23 @@ namespace ConditioningControlPanel.Services
             var now = DateTime.UtcNow;
             _lastFiredUtc[rule.Id] = now;
             _globalLastFireUtc = now;
+
+            // One mouth, in BOTH directions (doc 02 §5.1). The arbiter's cooldown ledger is the shared
+            // "when did anything last speak", so every non-safety bark this service fires on its own —
+            // achievement, level-up, video-done, flash, idle chatter — has to land in it. Without this
+            // an achievement bark at T is followed by an awareness quip at T+5s, because the arbiter's
+            // last-spoke-at was still null. Safety barks are exempt for the same reason they bypass
+            // every other floor. The awareness bark path is excluded because the arbiter records that
+            // one itself, and recording it twice would double-charge the hourly budget.
+            // IsActive, not "an arbiter exists": with the v2 kill switch down the flag's contract is
+            // that no v2 state has any effect, and writing into a ledger nothing reads is how that
+            // quietly stops being true (the keyword path had the same bug).
+            if (!_inAwarenessBark && !DryRun && rule.Class != BarkClass.Safety &&
+                Awareness.AwarenessV2Routing.IsActive)
+            {
+                try { Awareness.AwarenessV2Routing.Arbiter?.RecordExternalLine(Awareness.ReactionSource.Bark); }
+                catch (Exception ex) { App.Logger?.Debug("BarkService: arbiter report failed: {Error}", ex.Message); }
+            }
 
             // Feed the global recency window so the NEXT pick (any rule) avoids this exact line.
             if (variantIndex >= 0 && variantIndex < pool.Count)

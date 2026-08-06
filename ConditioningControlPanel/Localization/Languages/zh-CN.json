@@ -4205,7 +4205,7 @@
   "companion_awareness_page_titles_allowed": "页面标题：允许",
   "companion_awareness_page_titles_hidden": "页面标题：隐藏",
   "companion_awareness_title": "她能看到什么",
-  "companion_awareness_wire_caption": "她拿到的就是这一行，仅此而已。除非你亲自指定应用，页面标题都留在你的电脑上。",
+  "companion_awareness_wire_caption": "这是下方实际数据的摘要——她拿到的就是那段 JSON，仅此而已。除非你亲自指定应用，页面标题都留在你的电脑上。",
   "companion_awareness_wire_closed": "[ 她闭着眼 ]",
   "companion_awareness_wire_idle": "[ 还没有内容 ]",
   "companion_awareness_wire_prefix": "她看到 → ",

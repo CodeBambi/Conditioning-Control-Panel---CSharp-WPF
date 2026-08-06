@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
-using System.Text.RegularExpressions;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services.Awareness
@@ -38,7 +36,15 @@ namespace ConditioningControlPanel.Services.Awareness
         /// said until it expires — a pause that only muted her while still counting would be a lie
         /// with a button on it. Process-lifetime only; it does not survive a restart.
         /// </summary>
-        Paused
+        Paused,
+
+        /// <summary>
+        /// The foreground window is one of OURS — the dashboard, the Companion tab, the avatar tube.
+        /// She does not observe herself: it is not material, it crowds the day arc that IS material,
+        /// and "you've been in the app you're in for 40 minutes" is the least interesting thing she
+        /// could ever say.
+        /// </summary>
+        OwnProcess
     }
 
     /// <summary>Why a cut frame was not offered to the arbiter. The frame IS in the ledger; she can joke later.</summary>
@@ -152,9 +158,6 @@ namespace ConditioningControlPanel.Services.Awareness
     /// </summary>
     public static class AwarenessObserverPolicy
     {
-        /// <summary>Longest sanitised title placed on a frame, for an allow-listed app.</summary>
-        public const int MaxTitleLength = 120;
-
         /// <summary>Real input idle under which fullscreen counts as "playing", not "left running".</summary>
         public const int FullscreenRecentInputSeconds = 30;
 
@@ -195,11 +198,10 @@ namespace ConditioningControlPanel.Services.Awareness
             "waterfox", "safari", "iexplore", "arc", "zen", "floorp", "chromium", "thorium"
         };
 
-        private static readonly Regex EmailPattern =
-            new(@"[\w.+-]+@[\w-]+\.[\w.-]+", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
-        private static readonly Regex LongNumberPattern =
-            new(@"\d{6,}", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        // Title scrubbing lives in exactly one place — AwarenessPrivacyRules.SanitizeTitleForWire —
+        // and the wire cap is exactly one number. This class used to carry a second copy of the
+        // email/digit-run pair with a different cap (120 vs 80); it was dead, and a dead second dialect
+        // of a privacy rule is a live one waiting for a caller.
 
         // ===================== privacy =====================
 
@@ -220,6 +222,8 @@ namespace ConditioningControlPanel.Services.Awareness
         /// <list type="number">
         /// <item>no policy (settings unreadable) → <see cref="FrameDrop.PolicyUnavailable"/>;</item>
         /// <item>no usable window → <see cref="FrameDrop.NoForeground"/>;</item>
+        /// <item>the window is one of ours → <see cref="FrameDrop.OwnProcess"/>. She does not observe
+        /// herself, and nothing about our own window is ever written to the ledger;</item>
         /// <item>incognito title → <see cref="FrameDrop.Incognito"/>, ahead of every list and before
         /// anything is classified, so a private window is never even resolved. Re-checked inside the
         /// shared rules; this is defence in depth, not the enforcing copy;</item>
@@ -249,6 +253,13 @@ namespace ConditioningControlPanel.Services.Awareness
 
             if (title.Trim().Length == 0 && process.Length == 0)
                 return PrivacyVerdict.Dropped(FrameDrop.NoForeground);
+
+            // Ourselves, before anything else is resolved. With no entry in AppClusterMap and no
+            // trusted dictionary service, our own window would otherwise resolve to appId
+            // "conditioningcontrolpanel" with first-ever novelty — scoring over the Chatty threshold,
+            // so the first v2 line many users would ever hear is a quip about them using the app — and
+            // would then dominate the day arc, which rides into the cloud projection of EVERY frame.
+            if (IsOwnProcess(process)) return PrivacyVerdict.Dropped(FrameDrop.OwnProcess);
 
             // Incognito first. Before classification, before the lists, before anything is resolved:
             // the cheapest way to be certain nothing about a private session is ever computed.
@@ -300,6 +311,37 @@ namespace ConditioningControlPanel.Services.Awareness
             _ => FrameDrop.PolicyUnavailable
         };
 
+        /// <summary>
+        /// Our own process name, lower-cased and without ".exe" — the same shape
+        /// <see cref="Win32ForegroundProbe"/> reports. Resolved once; a failure reads as the shipped
+        /// assembly name rather than as "match nothing", because failing open here means joking about
+        /// ourselves.
+        /// </summary>
+        private static readonly string OwnProcessName = ResolveOwnProcessName();
+
+        private static string ResolveOwnProcessName()
+        {
+            try
+            {
+                using var self = System.Diagnostics.Process.GetCurrentProcess();
+                var name = (self.ProcessName ?? "").ToLowerInvariant();
+                if (name.EndsWith(".exe", StringComparison.Ordinal)) name = name[..^4];
+                if (name.Length > 0) return name;
+            }
+            catch { }
+            return "conditioningcontrolpanel";
+        }
+
+        /// <summary>True when the foreground window belongs to CCP itself.</summary>
+        public static bool IsOwnProcess(string? processName)
+        {
+            if (string.IsNullOrWhiteSpace(processName)) return false;
+            var lower = processName.Trim().ToLowerInvariant();
+            if (lower.EndsWith(".exe", StringComparison.Ordinal)) lower = lower[..^4];
+            return string.Equals(lower, OwnProcessName, StringComparison.Ordinal) ||
+                   string.Equals(lower, "conditioningcontrolpanel", StringComparison.Ordinal);
+        }
+
         /// <summary>True when the title says the user is in a private-browsing window.</summary>
         public static bool IsIncognitoTitle(string? title)
         {
@@ -310,33 +352,6 @@ namespace ConditioningControlPanel.Services.Awareness
                 if (lower.Contains(marker, StringComparison.Ordinal)) return true;
             }
             return false;
-        }
-
-        /// <summary>
-        /// The only function in the feature that may put title text on a frame, and only for an app the
-        /// user allow-listed. Email addresses and runs of six or more digits (order numbers, account
-        /// numbers, card fragments) are removed before anything else happens, then the usual display
-        /// sanitiser strips control characters and instruction-shaped lines, then it is capped.
-        /// </summary>
-        public static string? SanitizeAllowedTitle(string? title)
-        {
-            if (string.IsNullOrWhiteSpace(title)) return null;
-
-            var stripped = EmailPattern.Replace(title, " ");
-            stripped = LongNumberPattern.Replace(stripped, " ");
-
-            var collapsed = new StringBuilder(stripped.Length);
-            bool lastWasSpace = false;
-            foreach (var ch in stripped)
-            {
-                bool space = char.IsWhiteSpace(ch);
-                if (space && lastWasSpace) continue;
-                collapsed.Append(space ? ' ' : ch);
-                lastWasSpace = space;
-            }
-
-            var clean = AwarenessText.SanitizeDisplayName(collapsed.ToString().Trim(), MaxTitleLength);
-            return clean.Length == 0 ? null : clean;
         }
 
         /// <summary>

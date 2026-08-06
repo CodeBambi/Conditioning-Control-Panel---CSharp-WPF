@@ -194,6 +194,19 @@ namespace ConditioningControlPanel.Services.Awareness
                 return FallbackBark(frame, "llm-empty");
             }
 
+            // The gate was asked before the call; the call took up to eight seconds. Anything may have
+            // spoken in that window — a keyword comment, a bark, another source's external line — and
+            // none of them can queue behind us. Ask again at the moment of delivery, which is the only
+            // moment the answer is about (doc 02 §5.3: "a keyword fire and an awareness reaction can't
+            // stack within seconds"). A raced frame is DROPPED rather than degraded to a bark: a bark
+            // would violate the very floor that just refused the line.
+            if (!_cooldowns.CanSpeak(ReactionSource.AwarenessLlm, frame.AppId, _clock(), out var raced))
+            {
+                App.Logger?.Debug("[AWARE] dropped a line for {App}: something else spoke during the call ({Gate})",
+                    AwarenessText.SanitizeId(frame.AppId), raced);
+                return ArbiterDecision.Silent(Gate("raced", raced));
+            }
+
             if (_speaker == null || !_speaker.TrySpeakLine(text!, frame.Tier))
                 return FallbackBark(frame, "no-mouth");
 
@@ -304,13 +317,18 @@ namespace ConditioningControlPanel.Services.Awareness
         /// name or a gate name from our own code, and the app id goes through
         /// <see cref="AwarenessText.SanitizeId"/>: a mod-supplied cluster file must not be able to
         /// write newlines into the log.
+        ///
+        /// <para>Written at DEBUG. It carries the resolved app id, which for an adult-cluster frame is
+        /// the one string the whole projection layer withholds; Serilog's floor is Information, so at
+        /// Information this would put a timestamped browsing history into <c>logs/app-.log</c> — a file
+        /// the wipe button does not touch and the bug-report flow asks users to attach.</para>
         /// </summary>
         private ArbiterDecision Log(ContextFrame? frame, ArbiterDecision decision)
         {
             try
             {
                 var now = _clock();
-                App.Logger?.Information(
+                App.Logger?.Debug(
                     "[AWARE] app={App} score={Score} tier={Tier} verdict={Verdict} gate={Gate} lines_hr={Lines}",
                     AwarenessText.SanitizeId(frame?.AppId),
                     AwarenessText.Num(frame?.Worthiness ?? 0),

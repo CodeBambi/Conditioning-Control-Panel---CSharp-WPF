@@ -3745,7 +3745,7 @@
   "companion_awareness_page_titles_allowed": "페이지 제목: 허용",
   "companion_awareness_page_titles_hidden": "페이지 제목: 숨김",
   "companion_awareness_title": "그녀가 볼 수 있는 것",
-  "companion_awareness_wire_caption": "그녀가 받는 건 정확히 이 한 줄뿐입니다. 앱을 직접 지정하지 않는 한 페이지 제목은 이 PC에 남습니다.",
+  "companion_awareness_wire_caption": "아래 실제 데이터의 요약입니다. 그녀가 받는 건 그 JSON이 전부입니다. 앱을 직접 지정하지 않는 한 페이지 제목은 이 PC에 남습니다.",
   "companion_awareness_wire_closed": "[ 그녀는 눈을 감고 있어요 ]",
   "companion_awareness_wire_idle": "[ 아직 아무것도 없어요 ]",
   "companion_awareness_wire_prefix": "그녀가 보는 것 → ",

@@ -10,7 +10,8 @@ namespace ConditioningControlPanel.Services.Awareness
     /// an adult video. It exists for exactly three purposes — cluster matching, incognito detection,
     /// and (only for a user-allow-listed app) the sanitised title on the frame — and it is never
     /// written to disk, never logged, and never placed on a <see cref="ContextFrame"/> except through
-    /// <see cref="AwarenessObserverPolicy.SanitizeAllowedTitle"/>. Nothing downstream of
+    /// <see cref="AwarenessPrivacyRules.SanitizeTitleForWire"/> — the one title scrubber, reached only
+    /// for an app the user allow-listed by name. Nothing downstream of
     /// <see cref="AwarenessObserverPolicy.EvaluatePrivacy"/> ever sees it.</para>
     /// </summary>
     /// <param name="Handle">Foreground HWND, or <see cref="IntPtr.Zero"/> when there is none.</param>

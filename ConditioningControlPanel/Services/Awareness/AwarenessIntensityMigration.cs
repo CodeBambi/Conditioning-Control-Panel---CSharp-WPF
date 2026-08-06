@@ -17,6 +17,13 @@ namespace ConditioningControlPanel.Services.Awareness
     /// </summary>
     public static class AwarenessIntensityMigration
     {
+        /// <summary>
+        /// The cooldown every user who never touched the slider has
+        /// (<c>AppSettings._awarenessReactionCooldownSeconds</c>, which is also the slider's minimum).
+        /// A value AT this number expresses no preference at all, so it must not be read as one.
+        /// </summary>
+        public const int ShippedDefaultCooldownSeconds = 10;
+
         /// <summary>At or below this cooldown the user was asking for as much as she had.</summary>
         public const int UnhingedAtOrBelowSeconds = 30;
 
@@ -36,19 +43,37 @@ namespace ConditioningControlPanel.Services.Awareness
         ///
         /// <para>Once only, by design: after this the dial is the user's setting, and a second run would
         /// silently undo whatever they chose the next time the app started.</para>
+        ///
+        /// <para><b>A slider left where it shipped is not a preference.</b> The old default was 10s,
+        /// which is also the slider's floor, and <see cref="FromCooldownSeconds"/> maps 10 to
+        /// <see cref="AwarenessIntensity.Unhinged"/> — so migrating it unconditionally would set every
+        /// user who never dragged the slider (including brand-new installs, which run this from the
+        /// consent flow) to twice the documented line rate and twice the documented LLM call rate on
+        /// the train whose stated goal is fewer, better lines. At the shipped default the dial keeps
+        /// its own default of Chatty and only the "already migrated" flag is written.</para>
         /// </summary>
         public static bool EnsureMigrated(AppSettings? settings)
         {
             if (settings == null) return false;
             if (settings.AwarenessIntensityMigrated) return false;
 
-            var mapped = FromCooldownSeconds(settings.AwarenessReactionCooldownSeconds);
+            int cooldown = settings.AwarenessReactionCooldownSeconds;
+            if (cooldown <= ShippedDefaultCooldownSeconds)
+            {
+                settings.AwarenessIntensityMigrated = true;
+                App.Logger?.Information(
+                    "Awareness: reaction cooldown was still the shipped {Seconds}s default — keeping intensity {Intensity}",
+                    cooldown, settings.AwarenessIntensity);
+                return true;
+            }
+
+            var mapped = FromCooldownSeconds(cooldown);
             settings.AwarenessIntensity = mapped;
             settings.AwarenessIntensityMigrated = true;
 
             App.Logger?.Information(
                 "Awareness: migrated the {Seconds}s reaction cooldown to intensity {Intensity}",
-                settings.AwarenessReactionCooldownSeconds, mapped);
+                cooldown, mapped);
             return true;
         }
     }

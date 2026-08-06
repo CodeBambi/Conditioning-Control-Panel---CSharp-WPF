@@ -183,6 +183,10 @@ public class AwarenessLedgerTests : IDisposable
         Assert.Equal(20, ledger.Snapshot("youtube", end).MinutesToday);
     }
 
+    /// <summary>
+    /// Yesterday's visit count does not follow the user into today — when the visit actually ENDED
+    /// before midnight.
+    /// </summary>
     [Fact]
     public void MidnightRollover_ResetsVisitsToday()
     {
@@ -194,8 +198,41 @@ public class AwarenessLedgerTests : IDisposable
         Visit(ledger, "reddit", t, 60);
         Assert.Equal(2, ledger.Snapshot("reddit", t.AddSeconds(60)).VisitsToday);
 
+        // They closed it BEFORE the day turned (23:59:30), so the new day genuinely has no visit yet.
+        ledger.NoteFocusEnd(new DateTime(2026, 8, 3, 23, 59, 30, DateTimeKind.Local));
+
         var afterMidnight = new DateTime(2026, 8, 4, 0, 30, 0, DateTimeKind.Local);
         Assert.Equal(0, ledger.Snapshot("reddit", afterMidnight).VisitsToday);
+    }
+
+    /// <summary>
+    /// A visit that SPANS midnight is a visit on the new day too. `Visits` is only incremented by
+    /// NoteFocus's new-visit branch, and an unchanged foreground takes its early return — so the new
+    /// day used to accrue MINUTES against a visit count of ZERO. A Milestone frame cut at 00:30 after
+    /// three hours then projected "visits_today: 0, minutes_today: 30" and re-read as "first visit
+    /// today". Doc 02 §9: a wrong number destroys the trick entirely.
+    /// </summary>
+    [Fact]
+    public void AVisitThatSpansMidnight_OpensAVisitOnTheNewDay()
+    {
+        var yesterday = new DateTime(2026, 8, 2, 12, 0, 0, DateTimeKind.Local);
+        var lateNight = new DateTime(2026, 8, 3, 22, 0, 0, DateTimeKind.Local);
+        var ledger = NewLedger(() => yesterday);
+
+        // Seen before, so this is about the visit COUNT and not about first-ever novelty.
+        Visit(ledger, "youtube", yesterday, 600);
+        ledger.NoteFocusEnd(yesterday.AddMinutes(10));
+
+        ledger.NoteFocus("youtube", "site_video", ActivityCategory.Media, lateNight);
+
+        // Never leaves. The observer's poll (or the rollover timer) keeps the clock moving.
+        var afterMidnight = new DateTime(2026, 8, 4, 0, 30, 0, DateTimeKind.Local);
+        ledger.Heartbeat(afterMidnight);
+
+        var snap = ledger.Snapshot("youtube", afterMidnight);
+
+        Assert.True(snap.MinutesToday > 0, "the new day accrued minutes");
+        Assert.Equal(1, snap.VisitsToday);
     }
 
     [Fact]

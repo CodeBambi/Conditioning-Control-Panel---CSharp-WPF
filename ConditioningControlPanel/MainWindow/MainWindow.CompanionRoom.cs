@@ -25,6 +25,52 @@ namespace ConditioningControlPanel
         /// <summary>Re-reads the whole Companion page from settings and services.</summary>
         internal void SyncCompanionRoom() => CompanionRoom?.Sync();
 
+        /// <summary>Asked at most once per process — a declined dialog must not become a nag.</summary>
+        private bool _awarenessV2ConsentAsked;
+
+        /// <summary>
+        /// Raises the v2 consent dialog for an UPGRADER: someone whose awareness was already on before
+        /// this version, so the dial they would otherwise have to touch is already in the "on"
+        /// position and <see cref="AwarenessConsentDialog.EnsureConsent"/> would never run.
+        ///
+        /// <para>Until they accept, <see cref="Services.Awareness.AwarenessObserver.IsEnabled"/> is
+        /// false and v2 is dormant — the legacy pipeline behaves exactly as it did on the previous
+        /// version and no ledger is written. Accepting is what starts the observer, which is why this
+        /// restarts the awareness service rather than waiting for a relaunch.</para>
+        ///
+        /// <para>Declining leaves them on the legacy pipeline they already consented to, and is not
+        /// asked again this session. Turning the dial off remains the way to say no permanently.</para>
+        /// </summary>
+        internal void EnsureAwarenessV2Consent()
+        {
+            if (_awarenessV2ConsentAsked || _isLoading) return;
+
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+            if (!settings.UseAwarenessV2) return;                  // kill switch down: v2 has nothing to ask
+            if (settings.AwarenessConsentShownV2) return;          // already accepted
+            if (!settings.AwarenessModeEnabled || !settings.AwarenessConsentGiven) return;   // off: the dial asks
+
+            _awarenessV2ConsentAsked = true;
+
+            if (!AwarenessConsentDialog.EnsureConsent(this, settings))
+            {
+                App.Logger?.Information("Awareness: v2 consent declined by an upgrader — staying on the legacy pipeline");
+                return;
+            }
+
+            // The observer refused to start while consent was missing; restart the one on/off call
+            // site so v2 engages now instead of on the next launch.
+            try
+            {
+                App.WindowAwareness?.Stop();
+                App.WindowAwareness?.Start();
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Awareness: restart after v2 consent failed"); }
+
+            CompanionRoom?.AwarenessVm.Sync();
+        }
+
         // =====================================================================================
         //  quick actions (Z1)
         // =====================================================================================

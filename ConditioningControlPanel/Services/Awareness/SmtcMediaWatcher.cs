@@ -51,6 +51,21 @@ namespace ConditioningControlPanel.Services.Awareness
             if (_disposed || _started) return;
             _started = true;
 
+            // Restart, not first start: the manager was already resolved, so re-arm the poll instead
+            // of asking WinRT for a second session manager. Stop/Start is a mainline UX cycle (the
+            // privacy card's pause button and the awareness dial both do it).
+            if (_manager != null)
+            {
+                _available = true;
+                if (_timer != null)
+                {
+                    try { _timer.Change(TimeSpan.Zero, PollInterval); return; }
+                    catch (ObjectDisposedException) { _timer = null; }
+                }
+                _timer = new Timer(_ => Poll(), null, TimeSpan.Zero, PollInterval);
+                return;
+            }
+
             _ = Task.Run(async () =>
             {
                 try
@@ -59,6 +74,10 @@ namespace ConditioningControlPanel.Services.Awareness
                     if (_disposed) return;
 
                     _manager = manager;
+
+                    // Stopped while WinRT was thinking. Keep the manager (a later Start() re-arms from
+                    // it) but do not start polling for a watcher nobody asked for any more.
+                    if (!_started) return;
                     _available = manager != null;
 
                     if (!_available)
@@ -82,6 +101,10 @@ namespace ConditioningControlPanel.Services.Awareness
         /// <inheritdoc />
         public void Stop()
         {
+            // Clearing _started is the whole point: Start() guards on it, so leaving it set turns the
+            // first Stop() into a permanent one and the media signal never comes back for the rest of
+            // the session.
+            _started = false;
             try { _timer?.Change(Timeout.Infinite, Timeout.Infinite); } catch (ObjectDisposedException) { }
             lock (_lock) _current = null;
         }

@@ -1731,7 +1731,11 @@ namespace ConditioningControlPanel.Services
                     // they are exempt from the LLM floor and the hourly budget and are never starved;
                     // they are only paced by the global gap that stops two voices inside a second.
                     // Reported after the line is on screen, because cooldowns burn on delivery only.
-                    Awareness.AwarenessV2Routing.Arbiter?.RecordExternalLine(Awareness.ReactionSource.Keyword);
+                    // Gated on IsActive like every other legacy call site: with the v2 kill switch down
+                    // the flag's contract is "no v2 setting on this page has any effect", and writing
+                    // into a ledger nothing reads is how that quietly stops being true.
+                    if (Awareness.AwarenessV2Routing.IsActive)
+                        Awareness.AwarenessV2Routing.Arbiter?.RecordExternalLine(Awareness.ReactionSource.Keyword);
                 }
                 catch (Exception ex) { App.Logger?.Debug("AvatarWindow awareness line failed: {Error}", ex.Message); }
             }));

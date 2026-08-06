@@ -33,9 +33,10 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
     /// <see cref="ActivityLedger"/>. This class reads them and offers buttons; a second dialect of any
     /// of those is how the panel would end up describing behaviour the code does not have.</para>
     ///
-    /// <para><b>Nothing here is load-bearing for retention either.</b> Pruning happens when the ledger
-    /// starts and on day rollover, whether or not this card is ever opened — changing the retention
-    /// choice prunes immediately on top of that, it does not replace it.</para>
+    /// <para><b>Nothing here is load-bearing for retention either.</b> Pruning happens at startup
+    /// (<c>ActivityLedger.PruneOnDisk</c>, whether or not awareness is even switched on), when the
+    /// ledger starts, and on day rollover — never because this card was opened. Changing the retention
+    /// choice prunes immediately on top of that; it does not replace it.</para>
     /// </summary>
     internal sealed class AwarenessPrivacyRuntimeVm : CompanionObservable, IAwarenessPrivacyVm
     {
@@ -283,7 +284,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             Raise(nameof(Intensity));
 
             IsWireLive = on && !paused;
-            WireLine = BuildWireLine(settings, on, paused);
+            WireLine = BuildWireLine(on, paused);
             WireJson = BuildWireJson(on);
 
             RebuildDeny(settings);
@@ -320,35 +321,49 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         }
 
         /// <summary>
-        /// The live line for the CURRENT window, run through the same privacy layer the observer uses —
-        /// so a deny-listed or incognito window shows as dropped here exactly as it is dropped there,
-        /// and the page title only ever appears when the app is allow-listed.
+        /// A one-line SUMMARY of the last frame that actually went out — read from the same
+        /// <see cref="AwarenessLive.LastFrame"/> the JSON block below it renders in full, through the
+        /// same <see cref="AwarenessProjection"/> rules.
+        ///
+        /// <para><b>Why it is not re-derived from the legacy readouts.</b> It used to be, and the two
+        /// answered differently in both directions: with the cluster hard-coded null the adult rule
+        /// could not fire, so the card showed an adult site's display name and title for a frame whose
+        /// projection carries the cluster id alone; and an allow-list entry that matched the resolved
+        /// process id but not the display name made the card show no title while one really was on the
+        /// wire. A trust surface that can over-report OR under-report is not one.</para>
+        ///
+        /// <para>The caption under this line says "a summary of the exact data below" — it must stay
+        /// true, so this renders a strict subset of the projection and never a field the projection
+        /// does not contain.</para>
         /// </summary>
-        private static string BuildWireLine(AppSettings? settings, bool on, bool paused)
+        private static string BuildWireLine(bool on, bool paused)
         {
             if (!on) return Loc.Get("companion_awareness_wire_closed");
             if (paused) return Loc.Get("companion_awareness_wire_paused");
 
-            var awareness = App.WindowAwareness;
-            if (awareness == null || !awareness.IsRunning) return Loc.Get("companion_awareness_wire_idle");
+            var frame = AwarenessLive.LastFrame;
+            if (frame == null) return Loc.Get("companion_awareness_wire_idle");
 
-            var app = string.IsNullOrEmpty(awareness.CurrentServiceName)
-                ? awareness.CurrentDetectedName
-                : awareness.CurrentServiceName;
-            var rawTitle = string.IsNullOrEmpty(awareness.CurrentPageTitle)
-                ? awareness.CurrentDetectedName
-                : awareness.CurrentPageTitle;
+            // The projection withholds the app id, the display name and the title for the adult
+            // cluster whatever any allow list says; the summary must withhold exactly the same things.
+            if (frame.IsAdultCluster)
+            {
+                return FormatWire(frame.Category.ToString().ToLowerInvariant(),
+                                  AwarenessText.SanitizeId(frame.AppCluster), null,
+                                  TimeSpan.FromSeconds(Math.Max(0, frame.DwellSeconds)));
+            }
 
-            // The cluster is passed as null because the legacy service exposes no cluster property.
-            // That only ever makes this readout MORE conservative — the adult-cluster rule can only
-            // remove a title — so the line can under-report what she would get, never over-report it.
-            var decision = AwarenessPrivacyRules.Evaluate(
-                new AwarenessSightRequest(app, app, null, rawTitle), settings, DateTime.Now);
+            var app = string.IsNullOrWhiteSpace(frame.ServiceName)
+                ? AwarenessText.SanitizeId(frame.AppId)
+                : AwarenessText.SanitizeDisplayName(frame.ServiceName);
 
-            if (!decision.Allowed) return Loc.Get("companion_awareness_wire_dropped");
+            var title = string.IsNullOrWhiteSpace(frame.PageTitleSanitized)
+                ? null
+                : AwarenessProjection.ScrubTitle(frame.PageTitleSanitized);
 
-            return FormatWire(awareness.CurrentActivity.ToString().ToLowerInvariant(), app,
-                              decision.TitleForWire, awareness.CurrentActivityDuration);
+            return FormatWire(frame.Category.ToString().ToLowerInvariant(), app,
+                              string.IsNullOrWhiteSpace(title) ? null : title,
+                              TimeSpan.FromSeconds(Math.Max(0, frame.DwellSeconds)));
         }
 
         /// <summary>
@@ -447,9 +462,14 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         }
 
         /// <summary>
-        /// The apps the ledger is actually counting this session, each with a forget button. Reads the
-        /// live ledger's session ring — there is no second store, and when no ledger exists yet the row
-        /// is simply empty rather than invented.
+        /// The apps the ledger is actually counting, each with a forget button.
+        ///
+        /// <para>Sourced from <see cref="ActivityLedger.KnownAppIds"/> — the PERSISTED per-app
+        /// counters, newest first — not from the session ring. The ring is only populated when the user
+        /// LEAVES an app and never survives a restart, so a panel built on it showed no chips at all on
+        /// a fresh launch, which is exactly when someone opens this card to remove one specific site
+        /// she joked about yesterday. The ring is still folded in for apps visited this session that
+        /// have not accrued a day row yet. When no ledger exists the row is empty rather than invented.</para>
         /// </summary>
         private void RebuildKnown()
         {
@@ -458,8 +478,10 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             var ledger = AwarenessLive.Ledger;
             if (ledger == null) return;
 
-            foreach (var id in ledger.RecentTransitions
-                         .Select(t => t.AppId)
+            var ids = new List<string>(ledger.KnownAppIds);
+            ids.AddRange(ledger.RecentTransitions.Select(t => t.AppId));
+
+            foreach (var id in ids
                          .Where(id => !string.IsNullOrWhiteSpace(id))
                          .Distinct(StringComparer.OrdinalIgnoreCase))
             {
@@ -479,7 +501,12 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             var settings = App.Settings?.Current;
             if (settings == null) return;
 
-            var list = new List<string>(settings.AwarenessDenyList ?? new List<string>());
+            // EFFECTIVE, not raw — exactly as RemoveFromDeny and EditDenyList do. Setting
+            // AwarenessDenySeeded means "the stored list is now the whole truth", so building the new
+            // list from the RAW setting while the seed had not run yet DELETED the password-manager,
+            // banking and email-title groups: one click on "hide this app" and the three shipped
+            // protections were gone, silently, for every user who had awareness on before v2.
+            var list = new List<string>(AwarenessPrivacyRules.EffectiveDenyList(settings));
             if (!list.Contains(entry, StringComparer.OrdinalIgnoreCase)) list.Add(entry);
             settings.AwarenessDenyList = list;              // setter sanitises and de-duplicates
             settings.AwarenessDenySeeded = true;            // the list is the user's from here on

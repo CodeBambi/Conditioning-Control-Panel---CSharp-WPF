@@ -47,6 +47,34 @@ namespace ConditioningControlPanel.Services.Awareness
         DateTime At);
 
     /// <summary>
+    /// One <see cref="ActivityLedger.PeekTrends"/> result: the trends themselves, plus the one-shot
+    /// guard keys they RESERVED but did not consume.
+    ///
+    /// <para>The guards are opaque on purpose. Recomputing them from a <see cref="TrendEvent"/> would
+    /// need the visit sequence and the wake minute, neither of which the event carries — and a
+    /// commit that recomputed a key slightly differently from the peek would silently re-offer a
+    /// once-per-day callback forever.</para>
+    /// </summary>
+    public sealed class TrendDerivation
+    {
+        /// <summary>A derivation that reserved nothing. Committing it is a no-op.</summary>
+        public static TrendDerivation Empty { get; } =
+            new(Array.Empty<TrendEvent>(), Array.Empty<string>());
+
+        internal TrendDerivation(IReadOnlyList<TrendEvent> trends, IReadOnlyList<string> guards)
+        {
+            Trends = trends;
+            Guards = guards;
+        }
+
+        /// <summary>The trends this frame may use.</summary>
+        public IReadOnlyList<TrendEvent> Trends { get; }
+
+        /// <summary>The guard keys <see cref="ActivityLedger.CommitTrends"/> will burn on delivery.</summary>
+        internal IReadOnlyList<string> Guards { get; }
+    }
+
+    /// <summary>
     /// The local, persisted memory of what this machine has been used for — day-keyed counters per app
     /// id plus an in-memory ring of the last <see cref="SessionRingCapacity"/> transitions. Everything
     /// that makes an awareness line a callback rather than an observation comes from here.
@@ -163,6 +191,14 @@ namespace ConditioningControlPanel.Services.Awareness
         private int _segmentSeconds;
         private DateTime _lastRolloverDate;
 
+        /// <summary>
+        /// Bumped by <see cref="Wipe"/> and <see cref="Forget"/>. <see cref="SaveNow"/> captures it
+        /// alongside the JSON and refuses to write if it moved in between — otherwise a debounced save
+        /// that serialised just before the wipe can win the race for <c>_writeLock</c> and recreate the
+        /// file the user just erased, every counter intact.
+        /// </summary>
+        private long _generation;
+
         private Timer? _saveTimer;
         private Timer? _rolloverTimer;
         private bool _started;
@@ -202,6 +238,30 @@ namespace ConditioningControlPanel.Services.Awareness
             get { lock (_lock) return _ring.ToList(); }
         }
 
+        /// <summary>
+        /// Every app id the ledger is actually holding counters for, most recently seen first — up to
+        /// <c>AwarenessRetentionDays</c> of history, including the app in the foreground right now.
+        ///
+        /// <para>This, not <see cref="RecentTransitions"/>, is what the privacy panel's per-app forget
+        /// must enumerate. The ring is populated only when the user LEAVES an app and never survives a
+        /// restart, so a panel built on it offers no chips at all on a fresh launch — leaving
+        /// "forget everything" as the only control for a user who came looking to remove one site.</para>
+        /// </summary>
+        public IReadOnlyList<string> KnownAppIds
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _apps
+                        .OrderByDescending(p => p.Value.LastSeen ?? DateTime.MinValue)
+                        .ThenBy(p => p.Key, StringComparer.Ordinal)
+                        .Select(p => p.Key)
+                        .ToList();
+                }
+            }
+        }
+
         private static int DefaultRetentionFromSettings()
         {
             try { return App.Settings?.Current?.AwarenessRetentionDays ?? DefaultRetentionDays; }
@@ -236,6 +296,13 @@ namespace ConditioningControlPanel.Services.Awareness
 
             _saveTimer ??= new Timer(_ => { try { SaveNow(); } catch { } }, null, Timeout.Infinite, Timeout.Infinite);
             _rolloverTimer ??= new Timer(_ => OnRolloverTick(), null, RolloverCheckInterval, RolloverCheckInterval);
+
+            // ALWAYS re-arm, not just on the first Start: Stop() disarms this timer and leaves the
+            // object non-null, so a pause/resume or an awareness off/on cycle would otherwise kill the
+            // rollover backstop for the rest of the session — and the backstop matters most exactly
+            // when the observer's own poll is not running (no dispatcher: "ledger is live, polling is not").
+            try { _rolloverTimer.Change(RolloverCheckInterval, RolloverCheckInterval); }
+            catch (ObjectDisposedException) { }
 
             App.Logger?.Information("ActivityLedger: started ({Apps} app(s), retention {Days}d)",
                 AppCount, Math.Clamp(_retentionDays(), 1, 365));
@@ -570,16 +637,37 @@ namespace ConditioningControlPanel.Services.Awareness
         // ===================== trends =====================
 
         /// <summary>
-        /// Derives the trend events for a frame about <paramref name="appId"/> (doc 02 §2.4).
-        ///
-        /// <para><b>This call consumes one-shot trends.</b> A LongHaul milestone, a Streak and a
-        /// ReturnVisit number each fire once and then stay quiet — otherwise every subsequent frame in
-        /// the same visit would re-offer the same joke. The guard set is in memory and clears on day
-        /// rollover, so the observer must call this once per candidate frame, not speculatively.</para>
+        /// Derives the trend events for a frame AND consumes their one-shot guards in one step. Kept
+        /// for callers that genuinely deliver whatever they derive (and for tests that pin the
+        /// once-only semantics); the observer uses <see cref="PeekTrends"/> +
+        /// <see cref="CommitTrends"/> instead, because it cannot know at derivation time whether the
+        /// frame will ever be spoken.
         /// </summary>
         /// <param name="inputIdleSecondsBeforeWake">Real input idle that immediately preceded this frame.</param>
         /// <param name="mediaRepeatCount">Consecutive plays of the current track, counted by the observer.</param>
         public IReadOnlyList<TrendEvent> DeriveTrends(string? appId, string? cluster, DateTime at,
+            int inputIdleSecondsBeforeWake = 0, int mediaRepeatCount = 0)
+        {
+            var derivation = PeekTrends(appId, cluster, at, inputIdleSecondsBeforeWake, mediaRepeatCount);
+            CommitTrends(derivation);
+            return derivation.Trends;
+        }
+
+        /// <summary>
+        /// Derives the trend events for a frame about <paramref name="appId"/> (doc 02 §2.4) WITHOUT
+        /// consuming their one-shot guards.
+        ///
+        /// <para><b>Why derivation and consumption are separate.</b> A LongHaul milestone, a Streak, a
+        /// ReturnVisit number and a NightShift each fire once per day/night and then stay quiet. If the
+        /// guard burns when the trend is DERIVED, every frame that is scored below threshold, refused
+        /// by the arbiter's global gap, starved by the hourly budget or dropped as stale takes that
+        /// day's best callback with it — permanently, because the guard set only clears on rollover.
+        /// The DND path already returned early for exactly this reason; the other exits did not.</para>
+        ///
+        /// <para>Hand the returned token to <see cref="CommitTrends"/> only once a line has actually
+        /// reached the user.</para>
+        /// </summary>
+        public TrendDerivation PeekTrends(string? appId, string? cluster, DateTime at,
             int inputIdleSecondsBeforeWake = 0, int mediaRepeatCount = 0)
         {
             var id = string.IsNullOrWhiteSpace(appId) ? AwarenessText.UnknownId : AwarenessText.SanitizeId(appId);
@@ -596,14 +684,23 @@ namespace ConditioningControlPanel.Services.Awareness
                 int seq = visit?.Seq ?? 0;
 
                 var trends = new List<TrendEvent>(2);
+                var guards = new List<string>(2);
 
                 TrendEvent Make(TrendKind kind, int magnitude) => new(
                     kind, id, clusterId, magnitude,
                     snap.VisitsToday, snap.MinutesToday, snap.CurrentVisitDwellSeconds, snap.SinceLastVisit);
 
+                // Reserve, do not consume: true when this guard has not fired yet AND has not already
+                // been reserved by this same derivation. The reservation only becomes permanent in
+                // CommitTrends, i.e. only if a line reaches the user.
+                bool Available(string key) =>
+                    !_emitted.Contains(key) && !guards.Contains(key, StringComparer.Ordinal) && Reserve(key);
+
+                bool Reserve(string key) { guards.Add(key); return true; }
+
                 // ReturnVisit — the nth arrival today.
                 if (snap.VisitsToday >= ReturnVisitMinimum &&
-                    _emitted.Add(Key("rv", id, day, snap.VisitsToday)))
+                    Available(Key("rv", id, day, snap.VisitsToday)))
                 {
                     trends.Add(Make(TrendKind.ReturnVisit, snap.VisitsToday));
                 }
@@ -614,18 +711,18 @@ namespace ConditioningControlPanel.Services.Awareness
                 foreach (var milestone in LongHaulMilestonesMinutes)
                 {
                     if (snap.CurrentVisitDwellSeconds < milestone * 60) continue;
-                    if (_emitted.Add(Key("lh", id, day, seq * 1000 + milestone))) crossed = milestone;
+                    if (Available(Key("lh", id, day, seq * 1000 + milestone))) crossed = milestone;
                 }
                 if (crossed.HasValue) trends.Add(Make(TrendKind.LongHaul, crossed.Value));
 
                 // Streak — same app d days running. One mention per day; the number does not change.
-                if (snap.DayStreak >= StreakMinimumDays && _emitted.Add(Key("st", id, day, 0)))
+                if (snap.DayStreak >= StreakMinimumDays && Available(Key("st", id, day, 0)))
                 {
                     trends.Add(Make(TrendKind.Streak, snap.DayStreak));
                 }
 
                 // MediaLoop — k consecutive plays of the same track (counter fed by the observer).
-                if (mediaRepeatCount >= MediaLoopMinimum && _emitted.Add(Key("ml", id, day, mediaRepeatCount)))
+                if (mediaRepeatCount >= MediaLoopMinimum && Available(Key("ml", id, day, mediaRepeatCount)))
                 {
                     trends.Add(Make(TrendKind.MediaLoop, mediaRepeatCount));
                 }
@@ -635,7 +732,7 @@ namespace ConditioningControlPanel.Services.Awareness
                 if (string.Equals(clusterId, AwarenessClusters.Doomscroll, StringComparison.OrdinalIgnoreCase) &&
                     visit != null && snap.SinceLastVisit is { } gap &&
                     gap.TotalSeconds > ExcursionToleranceSeconds && gap.TotalSeconds <= BacksideWindowSeconds &&
-                    _emitted.Add(Key("bs", id, day, seq)))
+                    Available(Key("bs", id, day, seq)))
                 {
                     trends.Add(Make(TrendKind.Backslide, (int)Math.Round(gap.TotalSeconds)));
                 }
@@ -643,19 +740,35 @@ namespace ConditioningControlPanel.Services.Awareness
                 // GhostTown — first activity after a long REAL idle. Keyed to the minute of the wake, so
                 // a second nap the same day gets its own greeting.
                 if (inputIdleSecondsBeforeWake >= GhostTownMinimumIdleSeconds &&
-                    _emitted.Add(Key("gt", id, at.ToString("yyyyMMddHHmm", CultureInfo.InvariantCulture), 0)))
+                    Available(Key("gt", id, at.ToString("yyyyMMddHHmm", CultureInfo.InvariantCulture), 0)))
                 {
                     trends.Add(Make(TrendKind.GhostTown, Math.Max(1, inputIdleSecondsBeforeWake / 3600)));
                 }
 
                 // NightShift — past this machine's own learned bedtime. Purely local maths.
                 if (TryNightShiftLocked(at, out int hoursPast) &&
-                    _emitted.Add(Key("ns", "", DayKey(NightDateOf(at)), 0)))
+                    Available(Key("ns", "", DayKey(NightDateOf(at)), 0)))
                 {
                     trends.Add(Make(TrendKind.NightShift, hoursPast));
                 }
 
-                return trends;
+                return new TrendDerivation(trends, guards);
+            }
+        }
+
+        /// <summary>
+        /// Permanently consumes the one-shot guards a <see cref="PeekTrends"/> reserved. Called ONLY
+        /// after a line has actually reached the user — the same rule the cooldown ledger follows, for
+        /// the same reason: a joke that was never told has not been told.
+        ///
+        /// <para>Idempotent, and a no-op for a null or empty derivation.</para>
+        /// </summary>
+        public void CommitTrends(TrendDerivation? derivation)
+        {
+            if (derivation == null || derivation.Guards.Count == 0) return;
+            lock (_lock)
+            {
+                foreach (var key in derivation.Guards) _emitted.Add(key);
             }
         }
 
@@ -807,6 +920,23 @@ namespace ConditioningControlPanel.Services.Awareness
 
             _lastRolloverDate = at.Date;
             _emitted.Clear();
+
+            // A visit that spans midnight is still a visit on the new day. `Visits` is only ever
+            // incremented by NoteFocus's new-visit branch, and a foreground that never changes takes
+            // its early return — so without this the new day accrues MINUTES with a visit count of
+            // ZERO, and a frame cut at 00:30 after three hours reports "visits_today: 0,
+            // minutes_today: 30" and re-reads as "first visit today". Wrong numbers are the one bug
+            // this class cannot survive.
+            if (_currentAppId != null && _apps.TryGetValue(_currentAppId, out var live))
+            {
+                var newDay = GetOrCreateDayLocked(live, at);
+                if (newDay.Visits == 0)
+                {
+                    newDay.Visits = 1;
+                    if (_visits.TryGetValue(_currentAppId, out var open)) open.Seq = 1;
+                }
+            }
+
             PruneRetentionLocked(at);
             App.Logger?.Information("ActivityLedger: day rollover to {Day}", DayKey(at));
             RequestSave();
@@ -949,16 +1079,12 @@ namespace ConditioningControlPanel.Services.Awareness
         {
             lock (_lock)
             {
-                _apps.Clear();
-                _nightHistogram.Clear();
-                _visits.Clear();
-                _ring.Clear();
-                _emitted.Clear();
-                _currentAppId = null;
-                _currentCluster = null;
+                ClearInMemoryLocked();
                 _currentCategory = ActivityCategory.Unknown;
                 _segmentStart = _clock();
-                _segmentSeconds = 0;
+
+                // Invalidates any save that has already serialised but not yet written. See _generation.
+                _generation++;
             }
 
             CancelPendingSave();
@@ -1002,6 +1128,10 @@ namespace ConditioningControlPanel.Services.Awareness
                     _currentCluster = null;
                     _segmentSeconds = 0;
                 }
+
+                // Same race as Wipe: a debounced save that serialised before this call must not write
+                // the forgotten app back out.
+                _generation++;
             }
 
             SaveNow();
@@ -1040,9 +1170,14 @@ namespace ConditioningControlPanel.Services.Awareness
         public void SaveNow()
         {
             string json;
+            long generation;
             try
             {
-                lock (_lock) json = SerializeLocked();
+                lock (_lock)
+                {
+                    json = SerializeLocked();
+                    generation = _generation;
+                }
             }
             catch (Exception ex)
             {
@@ -1050,8 +1185,29 @@ namespace ConditioningControlPanel.Services.Awareness
                 return;
             }
 
+            WriteSnapshotIfCurrent(json, generation);
+        }
+
+        /// <summary>
+        /// The write half of <see cref="SaveNow"/>, split out so the erasure race is testable rather
+        /// than only arguable.
+        ///
+        /// <para><paramref name="generation"/> is the value <see cref="_generation"/> had when
+        /// <paramref name="json"/> was serialised. If a <see cref="Wipe"/> or a <see cref="Forget"/>
+        /// happened in between, this snapshot is a copy of data the user just erased and writing it
+        /// would recreate <c>awareness_ledger.json</c> with every counter intact — the one failure a
+        /// "forget everything" button cannot have. Erasure wins the race by construction.</para>
+        /// </summary>
+        internal void WriteSnapshotIfCurrent(string json, long generation)
+        {
             lock (_writeLock)
             {
+                if (Volatile.Read(ref _generation) != generation)
+                {
+                    App.Logger?.Debug("ActivityLedger: dropped a stale save (the ledger was erased mid-write)");
+                    return;
+                }
+
                 try
                 {
                     var dir = Path.GetDirectoryName(_path);
@@ -1063,6 +1219,89 @@ namespace ConditioningControlPanel.Services.Awareness
                     App.Logger?.Warning(ex, "ActivityLedger: failed to persist");
                 }
             }
+        }
+
+        /// <summary>
+        /// The serialise half of <see cref="SaveNow"/> — the JSON plus the generation it belongs to.
+        /// Split out for the same reason as <see cref="WriteSnapshotIfCurrent"/>.
+        /// </summary>
+        internal (string Json, long Generation) SnapshotForWrite()
+        {
+            lock (_lock) return (SerializeLocked(), _generation);
+        }
+
+        /// <summary>
+        /// Ages the on-disk ledger out to the retention window WITHOUT starting the observer — load,
+        /// prune, write back, release.
+        ///
+        /// <para><b>Why it exists.</b> Every other pruning path hangs off <see cref="Start"/>, which
+        /// returns early when awareness is switched off. A user who ran awareness for three weeks and
+        /// then turned it off would keep those three weeks on disk forever, while the consent dialog
+        /// and the settings notice both say the counts are deleted after the retention period. This is
+        /// called unconditionally at startup so the promise holds in exactly the state a
+        /// privacy-conscious user puts the feature into.</para>
+        ///
+        /// <para>A no-op when there is no file (it must never CREATE one) or when the ledger is
+        /// already live, in which case the running instance owns pruning.</para>
+        /// </summary>
+        public void PruneOnDisk()
+        {
+            if (_disposed) return;
+
+            string json;
+            long generation;
+            lock (_lock)
+            {
+                if (_started) { PruneRetentionLocked(_clock()); return; }
+
+                try
+                {
+                    if (!File.Exists(_path)) return;
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("ActivityLedger: retention sweep could not stat the ledger - {Error}", ex.Message);
+                    return;
+                }
+
+                Load();
+                PruneRetentionLocked(_clock());
+
+                try { json = SerializeLocked(); }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "ActivityLedger: retention sweep failed to serialize");
+                    ClearInMemoryLocked();
+                    return;
+                }
+
+                generation = _generation;
+
+                // Release the loaded state again: this instance is not started, and leaving a loaded
+                // copy behind would let Start() skip Load() and work from a snapshot taken at boot.
+                ClearInMemoryLocked();
+            }
+
+            lock (_writeLock)
+            {
+                if (Volatile.Read(ref _generation) != generation) return;
+                try { AtomicWrite(_path, json); }
+                catch (Exception ex) { App.Logger?.Warning(ex, "ActivityLedger: retention sweep failed to persist"); }
+            }
+
+            App.Logger?.Information("ActivityLedger: retention swept on disk (awareness need not be running)");
+        }
+
+        private void ClearInMemoryLocked()
+        {
+            _apps.Clear();
+            _nightHistogram.Clear();
+            _visits.Clear();
+            _ring.Clear();
+            _emitted.Clear();
+            _currentAppId = null;
+            _currentCluster = null;
+            _segmentSeconds = 0;
         }
 
         /// <summary>

@@ -3747,7 +3747,7 @@
   "companion_awareness_page_titles_allowed": "titres de page : autorisés",
   "companion_awareness_page_titles_hidden": "titres de page : masqués",
   "companion_awareness_title": "Ce qu'elle peut voir",
-  "companion_awareness_wire_caption": "c’est exactement cette ligne — rien de plus — qu’elle reçoit. Les titres de page restent sur ton PC tant que tu ne désignes pas une application.",
+  "companion_awareness_wire_caption": "un résumé des données exactes ci-dessous — ce JSON est tout ce qu’elle reçoit. Les titres de page restent sur ton PC tant que tu ne désignes pas une application.",
   "companion_awareness_wire_closed": "[ elle a les yeux fermés ]",
   "companion_awareness_wire_idle": "[ rien pour l'instant ]",
   "companion_awareness_wire_prefix": "elle voit → ",

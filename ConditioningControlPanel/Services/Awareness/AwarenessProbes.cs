@@ -211,7 +211,18 @@ namespace ConditioningControlPanel.Services.Awareness
         /// <inheritdoc />
         public void Start()
         {
-            if (_disposed || _timer != null) return;
+            if (_disposed) return;
+
+            // Re-arm an existing timer rather than bailing: Stop() disarms it and leaves it in place,
+            // and Stop/Start is a mainline cycle (the privacy card's pause, the awareness dial). The
+            // old guard turned the first Stop() into a permanent one — the typing-burst sampler never
+            // came back, so the DND rule that keeps her from interrupting mid-sentence went dead.
+            if (_timer != null)
+            {
+                try { _timer.Change(SampleInterval, SampleInterval); return; }
+                catch (ObjectDisposedException) { _timer = null; }
+            }
+
             _timer = new Timer(_ => Sample(), null, SampleInterval, SampleInterval);
         }
 

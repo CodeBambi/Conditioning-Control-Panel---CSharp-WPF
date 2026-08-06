@@ -91,6 +91,8 @@ namespace ConditioningControlPanel.Services.Awareness
         /// <inheritdoc />
         public bool TrySpeakBark(ContextFrame frame)
         {
+            if (!StillWatching()) return false;
+
             try { return App.Bark?.RaiseAwarenessBark(frame) ?? false; }
             catch (Exception ex)
             {
@@ -103,6 +105,7 @@ namespace ConditioningControlPanel.Services.Awareness
         public bool TrySpeakLine(string line, RarityTier tier)
         {
             if (string.IsNullOrWhiteSpace(line)) return false;
+            if (!StillWatching()) return false;
 
             try
             {
@@ -112,8 +115,19 @@ namespace ConditioningControlPanel.Services.Awareness
                 var avatar = App.AvatarWindow;
                 if (avatar == null) return false;
 
+                // Chat-suppression, the same question BarkService asks before every bark: an ambient
+                // quip must not land on top of a conversation the user is actually having. Awareness
+                // is the quieter of the two by design, so it defers rather than pre-empting.
+                if (IsCompanionBusy()) return false;
+
                 // Rare and above get the double bounce; Uncommon is a quip, not an event (doc 02 §3.2).
                 avatar.SpeakAwarenessLine(line, doubleBounce: tier >= RarityTier.Rare);
+
+                // The 60s outer floor is shared in BOTH directions or it is not a floor: BarkService
+                // reports its barks to the arbiter's ledger, and an LLM line pushes BarkService's own
+                // global gap forward. Without this the next bark trigger after the bubble closes fires
+                // against a stale gap and speaks seconds after she just spoke.
+                App.Bark?.NotifyExternalLineSpoken();
 
                 // Self-echo guard: the same call BarkService makes after every spoken line, so she can
                 // never trip an OCR/keyword trigger off her own bubble.
@@ -125,6 +139,29 @@ namespace ConditioningControlPanel.Services.Awareness
                 App.Logger?.Warning(ex, "AvatarAwarenessSpeaker: line delivery failed");
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Whether awareness is still switched on RIGHT NOW. The LLM leg can take eight seconds, and
+        /// the user can close her eyes inside those eight seconds — delivering a line about what they
+        /// were doing after they told her to stop watching is the worst possible moment for a trust
+        /// surface. Read defensively; unreadable settings mean "do not speak".
+        /// </summary>
+        private static bool StillWatching()
+        {
+            try { return AwarenessObserver.IsEnabled; }
+            catch { return false; }
+        }
+
+        /// <summary>Mirrors <c>BarkService.CompanionBusy</c>'s window and question.</summary>
+        private static bool IsCompanionBusy()
+        {
+            try
+            {
+                int window = App.Settings?.Current?.BarkChatSuppressionMs ?? 10000;
+                return App.AvatarWindow?.IsCompanionBusy(window) ?? false;
+            }
+            catch { return false; }
         }
 
         /// <summary>Matches <c>BarkService.SelfEchoMuteMs</c>: after speaking, mute that text for OCR/keywords.</summary>
@@ -158,8 +195,15 @@ namespace ConditioningControlPanel.Services.Awareness
 
     /// <summary>
     /// The production line source: <see cref="AwarenessReactionService"/>, which builds awareness's own
-    /// dedicated ~800-token reaction prompt (persona digest + angle cards + frame projection + recent
-    /// ban list) and sends it with <c>AiCallOptions.Reaction</c>.
+    /// dedicated small reaction prompt (persona digest + angle cards + frame projection + recent ban
+    /// list) and sends it with <c>AiCallOptions.Reaction</c>.
+    ///
+    /// <para><b>The real number, since a cost model built on the wrong one is worse than none.</b> The
+    /// AWARENESS-authored zones are the ~700-900 tokens doc 02 §3.1 budgets, and
+    /// <c>AwarenessPrompt.AuthoredTokens</c> measures exactly those. A cold, uncached request is
+    /// roughly twice that once the constitutional safety block, its floor and the per-call tail are
+    /// counted — see <c>AwarenessPrompt.TotalTokens</c>, which is what actually gets billed until a
+    /// provider caches the (genuinely byte-stable) prefix.</para>
     ///
     /// <para><b>Why not <c>App.Brain.ReactAsync</c>.</b> That path exists for short ambient nudges and
     /// clamps its descriptor to <c>CompanionEvent.MaxChars</c> (~100 characters), which every
@@ -205,7 +249,17 @@ namespace ConditioningControlPanel.Services.Awareness
             {
                 try
                 {
-                    if (!CompanionBrain.ShouldRoute(_brain())) return false;
+                    var brain = _brain();
+                    if (!CompanionBrain.ShouldRoute(brain)) return false;
+
+                    // Awareness is an AMBIENT source, and the brain's single-flight contract is
+                    // "ambient requests are DROPPED when busy" (CompanionBrain §1.6). This leg does not
+                    // go through the brain's gate — it has its own small prompt — so it has to honour
+                    // the same rule here, or a quip runs concurrently with an in-flight chat reply and
+                    // then stomps it: delivery goes through GigglePriority, which clears the speech
+                    // queue and cancels the thinking animation.
+                    if (brain != null && brain.IsBusy) return false;
+
                     return App.Settings?.Current?.AiChatEnabled == true && App.Ai?.IsAvailable == true;
                 }
                 catch { return false; }

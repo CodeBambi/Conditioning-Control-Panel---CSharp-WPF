@@ -46,6 +46,23 @@ namespace ConditioningControlPanel.Services.Awareness
         /// </summary>
         public static Action? ResetObserverState { get; set; }
 
+        /// <summary>
+        /// Clears the PACING state — the arbiter's cooldown ledger and the worthiness scorer's
+        /// floating threshold and per-app repetition counters. Set by whoever owns the arbiter.
+        ///
+        /// <para>Small, in RAM and self-expiring, but <see cref="WipeEverything"/> claims to erase
+        /// every artifact this feature creates, and these are two of them: after a wipe the ledger
+        /// would still be holding "you were told about this app nine minutes ago" for up to ten more
+        /// minutes, and the scorer a decaying counter keyed by that same app id for up to thirty.</para>
+        /// </summary>
+        public static Action? ResetPacingState { get; set; }
+
+        /// <summary>
+        /// Drops one app from the pacing state. The per-app half of <see cref="ResetPacingState"/>,
+        /// used by <see cref="Forget"/>.
+        /// </summary>
+        public static Action<string>? ForgetPacingState { get; set; }
+
         /// <summary>The last frame that was actually cut, or null when none has been.</summary>
         public static ContextFrame? LastFrame
         {
@@ -101,7 +118,10 @@ namespace ConditioningControlPanel.Services.Awareness
         ///   <see cref="ICompanionMemory.ForgetAsync"/> with a null app id;</item>
         ///   <item>the observer's in-RAM state — pending candidate, committed app and cluster, churn
         ///   counter, fullscreen/wake flags, media loop counter, its own last frame — via
-        ///   <see cref="ResetObserverState"/>. None of these are files, so nothing above reaches them.</item>
+        ///   <see cref="ResetObserverState"/>. None of these are files, so nothing above reaches them;</item>
+        ///   <item>the pacing state — the arbiter's cooldown ledger (per-app last-spoke times, the
+        ///   hourly line list) and the scorer's threshold bump and repetition counters — via
+        ///   <see cref="ResetPacingState"/>. Also not files, and also keyed by the erased app ids.</item>
         /// </list>
         ///
         /// <para>Deliberately NOT in scope, and the panel's copy says so rather than implying otherwise:
@@ -138,6 +158,11 @@ namespace ConditioningControlPanel.Services.Awareness
             try { ResetObserverState?.Invoke(); }
             catch (Exception ex) { App.Logger?.Warning(ex, "AwarenessLive: observer state reset failed"); }
 
+            // The other in-RAM half: the cooldown ledger's per-app last-spoke times and the scorer's
+            // repetition counters, both keyed by the app ids that were just erased.
+            try { ResetPacingState?.Invoke(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "AwarenessLive: pacing state reset failed"); }
+
             Clear();
             App.Logger?.Information("Awareness: everything she noticed has been erased");
         }
@@ -157,6 +182,9 @@ namespace ConditioningControlPanel.Services.Awareness
 
             try { _ = Memory?.ForgetAsync(id); }
             catch (Exception ex) { App.Logger?.Warning(ex, "AwarenessLive: memory forget failed"); }
+
+            try { ForgetPacingState?.Invoke(id); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "AwarenessLive: pacing forget failed"); }
 
             lock (Lock)
             {

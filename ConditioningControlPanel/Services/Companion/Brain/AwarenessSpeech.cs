@@ -1,5 +1,4 @@
 using System;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -44,8 +43,14 @@ namespace ConditioningControlPanel.Services.Awareness
 
     /// <summary>
     /// Where an awareness line comes from. Implemented in production by
-    /// <see cref="BrainAwarenessLineSource"/>, which routes through <c>App.Brain.ReactAsync</c> so the
-    /// moderation spine, the single-flight gate and the turn log all apply unchanged.
+    /// <see cref="BrainAwarenessLineSource"/>.
+    ///
+    /// <para>It does NOT route through <c>App.Brain.ReactAsync</c> — the reaction prompt is its own
+    /// small one, sent straight to <c>IAiService.SendAsync</c>, which is where the moderation spine
+    /// lives and therefore still applies unchanged. What that path does not give it for free is the
+    /// brain's single-flight gate and its turn log, so it asks <c>CompanionBrain.IsBusy</c> itself and
+    /// stands down when a chat call is in flight (ambient requests are dropped when busy), and an
+    /// awareness line does not land in the chat thread. Train 4's memory seam reconnects the latter.</para>
     /// </summary>
     public interface IAwarenessLineSource
     {
@@ -60,37 +65,36 @@ namespace ConditioningControlPanel.Services.Awareness
     }
 
     /// <summary>
-    /// What came back from the model, parsed.
+    /// What came back from the model, as the arbiter consumes it.
     ///
-    /// <para><b>The response contract this parses</b> (the prompt package owns instructing the model;
-    /// this owns honouring it):</para>
+    /// <para><b>The response contract</b> (the prompt package owns instructing the model;
+    /// <see cref="AwarenessReactionService.Parse"/> owns honouring it, and is the ONLY parser — this
+    /// type used to carry a second one that expected <c>ALT:</c> while the shipped prompt teaches
+    /// <c>CALLBACK:</c>, so any caller that reached for "the obvious parser on the type that models
+    /// the contract" would have folded every callback into the spoken line and silently killed the
+    /// staleness re-tag):</para>
     /// <list type="bullet">
     /// <item>One line of text — what she says.</item>
-    /// <item>An optional second line beginning <c>ALT:</c> — the same beat written as a past-tense
-    /// callback ("I saw you on X a minute ago…"). It is used ONLY when the line arrived too late and
-    /// the user has already moved on; a present-tense line about the wrong window is the single most
-    /// common way this feature reads as broken (doc 02 §4.3).</item>
+    /// <item>An optional second line beginning <c>CALLBACK:</c> — the same beat written as a past-tense
+    /// callback ("I saw you on X a minute ago…"), carried here as <see cref="Alternate"/>. It is used
+    /// ONLY when the line arrived too late and the user has already moved on; a present-tense line
+    /// about the wrong window is the single most common way this feature reads as broken (doc 02 §4.3).</item>
     /// <item><c>[PASS]</c> alone — she has nothing good. Nothing is said and nothing is spent.</item>
     /// </list>
     ///
     /// <para>Model text is untrusted in the same sense authored card text is: it is echoed into a
-    /// bubble and back into later prompts as the ban list. Every field goes through
-    /// <see cref="AwarenessText.SanitizeDisplayName"/>, which strips control characters and rejects
-    /// anything shaped like a role marker.</para>
+    /// bubble and back into later prompts as the ban list. The sanitising lives in the one parser.</para>
     /// </summary>
     public sealed record AwarenessReply(string? Line, string? Alternate, bool IsPass)
     {
-        /// <summary>The silence token. Trim- and case-tolerant when parsed.</summary>
-        public const string PassSentinel = "[PASS]";
+        /// <summary>The silence token, as the one parser recognises it.</summary>
+        public const string PassSentinel = AwarenessReactionService.PassToken;
 
-        /// <summary>Prefix marking the stale-delivery alternate line.</summary>
-        public const string AlternatePrefix = "ALT:";
+        /// <summary>Prefix marking the stale-delivery callback line, as the shipped prompt teaches it.</summary>
+        public const string CallbackPrefix = AwarenessReactionService.CallbackPrefix;
 
-        /// <summary>
-        /// Hard cap on a delivered line. The output contract asks for ≤140 characters; this is the
-        /// backstop that stops a model ignoring it from pasting an essay into the bubble.
-        /// </summary>
-        public const int MaxLineLength = 400;
+        /// <summary>Hard cap on a delivered line, owned by the one parser's clamp.</summary>
+        public const int MaxLineLength = AwarenessReactionService.MaxLineLength;
 
         /// <summary>Nothing usable came back. The arbiter falls back to a bark exactly once.</summary>
         public static readonly AwarenessReply Empty = new(null, null, false);
@@ -105,59 +109,17 @@ namespace ConditioningControlPanel.Services.Awareness
         public bool HasAlternate => !string.IsNullOrWhiteSpace(Alternate);
 
         /// <summary>
-        /// Parses raw model text into the contract above. Tolerant by design: a model that answers with
-        /// just the line, or wraps <c>[PASS]</c> in quotes, or puts the ALT line first, all parse.
+        /// Parses raw model text through <see cref="AwarenessReactionService.Parse"/> — the parser the
+        /// production path already uses — so there is exactly one implementation of one contract.
         /// Anything it cannot make sense of becomes <see cref="Empty"/>, which costs a bark, not a crash.
         /// </summary>
         public static AwarenessReply Parse(string? raw)
         {
-            if (string.IsNullOrWhiteSpace(raw)) return Empty;
-
-            string? alternate = null;
-            var primary = new StringBuilder();
-
-            var normalized = raw.Replace("\r\n", "\n").Replace('\r', '\n');
-            foreach (var rawLine in normalized.Split('\n'))
-            {
-                var line = rawLine.Trim();
-                if (line.Length == 0) continue;
-
-                if (line.StartsWith(AlternatePrefix, StringComparison.OrdinalIgnoreCase))
-                {
-                    // Last ALT wins; a model that emits two has already lost the plot, and taking the
-                    // first would silently prefer the one it changed its mind about.
-                    alternate = line.Substring(AlternatePrefix.Length).Trim();
-                    continue;
-                }
-
-                if (primary.Length > 0) primary.Append(' ');
-                primary.Append(line);
-            }
-
-            var text = primary.ToString().Trim();
-            if (IsPassToken(text)) return Pass;
-
-            var line1 = AwarenessText.SanitizeDisplayName(text, MaxLineLength);
-            var line2 = AwarenessText.SanitizeDisplayName(alternate, MaxLineLength);
-
-            if (line1.Length == 0 && line2.Length == 0) return Empty;
-            return new AwarenessReply(
-                line1.Length == 0 ? null : line1,
-                line2.Length == 0 ? null : line2,
-                IsPass: false);
-        }
-
-        /// <summary>
-        /// Whether the whole answer is the silence token, allowing for the punctuation and quoting
-        /// small models sprinkle around sentinels.
-        /// </summary>
-        private static bool IsPassToken(string text)
-        {
-            if (text.Length == 0) return false;
-
-            var trimmed = text.Trim().Trim('"', '\'', '`', '*', '.', '!', ' ');
-            return string.Equals(trimmed, PassSentinel, StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(trimmed, "PASS", StringComparison.OrdinalIgnoreCase);
+            var reaction = AwarenessReactionService.Parse(raw);
+            if (reaction == null) return Empty;
+            if (reaction.Passed) return Pass;
+            if (!reaction.HasLine) return Empty;
+            return new AwarenessReply(reaction.Line, reaction.Callback, IsPass: false);
         }
     }
 }

@@ -34,9 +34,12 @@ namespace ConditioningControlPanel
     ///   the footnote names the Triggers tab's keyword/OCR engine, which is the separate feature that
     ///   does, so the sentence cannot be read as a claim about the whole app.</item>
     ///   <item><i>"kept for N days"</i> — <c>AwarenessRetentionDays</c>, pruned from
-    ///   <c>ActivityLedger.Start</c> and on every day rollover, never from a UI surface. The number is
-    ///   substituted live rather than written into the sentence, so changing the setting cannot leave
-    ///   the copy stale.</item>
+    ///   <c>ActivityLedger.Start</c>, on every day rollover, and from <c>ActivityLedger.PruneOnDisk</c>
+    ///   at startup whether or not awareness is switched on — never from a UI surface. That last one is
+    ///   what makes the sentence true for a user who runs awareness for a while and then turns it off,
+    ///   which is exactly the state a privacy-conscious reader of this dialog puts it into. The number
+    ///   is substituted live rather than written into the sentence, so changing the setting cannot
+    ///   leave the copy stale.</item>
     /// </list>
     /// </summary>
     public partial class AwarenessConsentDialog : Window

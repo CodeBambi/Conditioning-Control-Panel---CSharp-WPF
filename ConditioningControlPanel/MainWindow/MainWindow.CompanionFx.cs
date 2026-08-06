@@ -41,6 +41,12 @@ namespace ConditioningControlPanel
                 if (!visible) PersistCompanionDrawerStates();
 
                 InitializeCompanionFx();
+
+                // The one place an UPGRADER is offered the Awareness v2 consent dialog. They already
+                // have awareness on, so the dial that normally gates it is never touched and v2 stays
+                // dormant until they have seen the explanation — raised here, on the page that gives
+                // it, rather than at startup or from a background service.
+                if (visible) EnsureAwarenessV2Consent();
             }
             catch (Exception ex) { App.Logger?.Debug("OnCompanionTabVisibilityChanged: {E}", ex.Message); }
         }

@@ -3745,7 +3745,7 @@
   "companion_awareness_page_titles_allowed": "заголовки страниц: разрешены",
   "companion_awareness_page_titles_hidden": "заголовки страниц: скрыты",
   "companion_awareness_title": "Что она может видеть",
-  "companion_awareness_wire_caption": "она получает ровно эту строку — и ничего больше. Заголовки страниц остаются на твоём ПК, пока ты сам не укажешь приложение.",
+  "companion_awareness_wire_caption": "это сводка точных данных ниже — она получает именно этот JSON, и ничего больше. Заголовки страниц остаются на твоём ПК, пока ты сам не укажешь приложение.",
   "companion_awareness_wire_closed": "[ её глаза закрыты ]",
   "companion_awareness_wire_idle": "[ пока ничего ]",
   "companion_awareness_wire_prefix": "она видит → ",

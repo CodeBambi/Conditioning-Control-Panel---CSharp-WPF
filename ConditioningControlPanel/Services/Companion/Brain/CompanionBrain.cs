@@ -151,6 +151,15 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         internal static bool ShouldRoute(CompanionBrain? brain, bool killSwitchOn) =>
             brain != null && killSwitchOn;
 
+        /// <summary>
+        /// True while an LLM call owns the single-flight gate. Ambient sources that do NOT route
+        /// through <see cref="ChatAsync"/>/<see cref="ReactAsync"/> — Train 2's awareness leg has its
+        /// own small prompt and its own transport call — must ask this and stand down, or the
+        /// "ambient requests are dropped when busy" half of the contract only holds for the callers
+        /// that happen to take the gate.
+        /// </summary>
+        public bool IsBusy => _isProcessing;
+
         /// <summary>The live turn log. Read-only for callers in Train 1.</summary>
         public ChatSession Session { get; }
 

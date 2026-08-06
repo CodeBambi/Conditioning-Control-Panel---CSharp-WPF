@@ -4307,7 +4307,7 @@
   "companion_awareness_page_titles_allowed": "page titles: allowed",
   "companion_awareness_page_titles_hidden": "page titles: hidden",
   "companion_awareness_title": "What she can see",
-  "companion_awareness_wire_caption": "this exact line — nothing more — is what she gets. page titles stay on your PC unless you name an app yourself.",
+  "companion_awareness_wire_caption": "a summary of the exact data below — that JSON is everything she gets. page titles stay on your PC unless you name an app yourself.",
   "companion_awareness_wire_closed": "[ her eyes are closed ]",
   "companion_awareness_wire_idle": "[ nothing yet ]",
   "companion_awareness_wire_prefix": "she sees → ",

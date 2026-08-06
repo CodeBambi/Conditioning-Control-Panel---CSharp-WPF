@@ -3738,7 +3738,7 @@
   "companion_awareness_page_titles_allowed": "ページタイトル: 許可",
   "companion_awareness_page_titles_hidden": "ページタイトル: 非表示",
   "companion_awareness_title": "彼女に見えるもの",
-  "companion_awareness_wire_caption": "彼女に渡るのはこの行だけです。あなたがアプリを指定しない限り、ページタイトルはこの PC に留まります。",
+  "companion_awareness_wire_caption": "下にある実際のデータの要約です。彼女に渡るのはその JSON がすべてです。あなたがアプリを指定しない限り、ページタイトルはこの PC に留まります。",
   "companion_awareness_wire_closed": "[ 彼女は目を閉じてる ]",
   "companion_awareness_wire_idle": "[ まだ何もない ]",
   "companion_awareness_wire_prefix": "彼女が見てるもの → ",

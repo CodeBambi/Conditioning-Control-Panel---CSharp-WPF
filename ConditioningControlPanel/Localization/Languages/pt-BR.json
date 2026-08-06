@@ -3746,7 +3746,7 @@
   "companion_awareness_page_titles_allowed": "títulos de página: permitidos",
   "companion_awareness_page_titles_hidden": "títulos de página: ocultos",
   "companion_awareness_title": "O que ela consegue ver",
-  "companion_awareness_wire_caption": "é exatamente esta linha — nada mais — que ela recebe. Os títulos de página ficam no seu PC a menos que você indique um app.",
+  "companion_awareness_wire_caption": "um resumo dos dados exatos abaixo — esse JSON é tudo o que ela recebe. Os títulos de página ficam no seu PC a menos que você indique um app.",
   "companion_awareness_wire_closed": "[ os olhos dela estão fechados ]",
   "companion_awareness_wire_idle": "[ nada ainda ]",
   "companion_awareness_wire_prefix": "ela vê → ",

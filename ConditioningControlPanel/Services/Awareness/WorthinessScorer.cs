@@ -122,6 +122,11 @@ namespace ConditioningControlPanel.Services.Awareness
 
         private readonly Func<AwarenessIntensity> _intensity;
 
+        // The pacing state is written from the arbiter's post-await continuation (a thread-pool thread)
+        // and read from the observer's dispatcher tick, so every touch of it is under this lock. A
+        // plain Dictionary torn between those two is a hang, not a wrong number.
+        private readonly object _lock = new();
+
         private readonly Dictionary<string, DecayingCounter> _repetition =
             new(StringComparer.OrdinalIgnoreCase);
 
@@ -145,7 +150,7 @@ namespace ConditioningControlPanel.Services.Awareness
         {
             double baseline = AwarenessIntensityProfile.BaselineThreshold(_intensity());
             if (double.IsPositiveInfinity(baseline)) return baseline;
-            return baseline + DecayedBump(at);
+            lock (_lock) return baseline + DecayedBumpLocked(at);
         }
 
         /// <summary>
@@ -210,7 +215,12 @@ namespace ConditioningControlPanel.Services.Awareness
             var result = new WorthinessResult(input.AppId, score, threshold, novelty, trend, dwell,
                 transition, inApp, penalty, tier, verdict, reason);
 
-            App.Logger?.Information(result.LogLine);
+            // DEBUG, not Information. This line names the resolved app id — including an adult-cluster
+            // one — and Serilog's minimum level is Information, so at Information it would land in
+            // logs/app-.log, which "forget everything" does not erase and which the bug-report flow
+            // asks users to attach. The legacy service kept its equivalent readout at Debug for
+            // exactly this reason; matching it is the fix, not inventing a second discipline.
+            App.Logger?.Debug(result.LogLine);
             return result;
         }
 
@@ -224,29 +234,40 @@ namespace ConditioningControlPanel.Services.Awareness
         /// </summary>
         public void RegisterDelivery(string? appId, DateTime at)
         {
-            _thresholdBump = Math.Min(MaxThresholdBump, DecayedBump(at) + ThresholdBump);
-            _lastBumpAt = at;
+            lock (_lock)
+            {
+                _thresholdBump = Math.Min(MaxThresholdBump, DecayedBumpLocked(at) + ThresholdBump);
+                _lastBumpAt = at;
 
-            var id = AwarenessText.SanitizeId(appId);
-            if (!_repetition.TryGetValue(id, out var counter)) counter = new DecayingCounter();
-            counter.Points = counter.Decayed(at) + 1.0;
-            counter.At = at;
-            _repetition[id] = counter;
+                var id = AwarenessText.SanitizeId(appId);
+                if (!_repetition.TryGetValue(id, out var counter)) counter = new DecayingCounter();
+                counter.Points = counter.Decayed(at) + 1.0;
+                counter.At = at;
+                _repetition[id] = counter;
+            }
         }
 
-        /// <summary>Clears all pacing state — used by the privacy pause/wipe paths and by tests.</summary>
+        /// <summary>
+        /// Clears all pacing state. Called by the privacy panel's wipe path (through
+        /// <see cref="AwarenessLive.ResetPacingState"/>) and by tests: the threshold bump and the
+        /// per-app repetition counters are in-RAM artifacts of this feature, and a wipe that leaves
+        /// them behind is a wipe that missed something.
+        /// </summary>
         public void Reset()
         {
-            _thresholdBump = 0;
-            _lastBumpAt = null;
-            _repetition.Clear();
+            lock (_lock)
+            {
+                _thresholdBump = 0;
+                _lastBumpAt = null;
+                _repetition.Clear();
+            }
         }
 
         /// <summary>Forgets one app's repetition history (per-app "forget" in the privacy panel).</summary>
         public void Forget(string? appId)
         {
             if (string.IsNullOrWhiteSpace(appId)) return;
-            _repetition.Remove(AwarenessText.SanitizeId(appId));
+            lock (_lock) _repetition.Remove(AwarenessText.SanitizeId(appId));
         }
 
         // ===================== components =====================
@@ -326,12 +347,15 @@ namespace ConditioningControlPanel.Services.Awareness
         public double RepetitionPenalty(string? appId, DateTime at)
         {
             var id = AwarenessText.SanitizeId(appId);
-            if (!_repetition.TryGetValue(id, out var counter)) return 0.0;
-            double points = counter.Decayed(at);
-            return points <= 0 ? 0.0 : 1.0 - Math.Exp(-RepetitionSteepness * points);
+            lock (_lock)
+            {
+                if (!_repetition.TryGetValue(id, out var counter)) return 0.0;
+                double points = counter.Decayed(at);
+                return points <= 0 ? 0.0 : 1.0 - Math.Exp(-RepetitionSteepness * points);
+            }
         }
 
-        private double DecayedBump(DateTime at)
+        private double DecayedBumpLocked(DateTime at)
         {
             if (_thresholdBump <= 0 || _lastBumpAt == null) return 0.0;
             var elapsed = at - _lastBumpAt.Value;

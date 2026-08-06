@@ -3747,7 +3747,7 @@
   "companion_awareness_page_titles_allowed": "Seitentitel: erlaubt",
   "companion_awareness_page_titles_hidden": "Seitentitel: verborgen",
   "companion_awareness_title": "Was sie sehen kann",
-  "companion_awareness_wire_caption": "genau diese Zeile — mehr nicht — bekommt sie. Seitentitel bleiben auf deinem PC, bis du selbst eine App benennst.",
+  "companion_awareness_wire_caption": "eine Zusammenfassung der exakten Daten unten — dieses JSON ist alles, was sie bekommt. Seitentitel bleiben auf deinem PC, bis du selbst eine App benennst.",
   "companion_awareness_wire_closed": "[ ihre Augen sind zu ]",
   "companion_awareness_wire_idle": "[ noch nichts ]",
   "companion_awareness_wire_prefix": "sie sieht → ",
