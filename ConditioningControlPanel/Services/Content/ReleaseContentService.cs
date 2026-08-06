@@ -102,6 +102,14 @@ namespace ConditioningControlPanel.Services
         private static readonly TimeSpan InstallRetryDelay = TimeSpan.FromSeconds(5);
 
         /// <summary>
+        /// Multiple of a pack's advertised size that must be free before an install starts: the
+        /// <c>.partial</c> zip, the extract staging tree and the merged copies all coexist on the
+        /// same drive at peak. Running out mid-merge is the other half of the wedge story — it is
+        /// what leaves a part-copied payload behind.
+        /// </summary>
+        private const int InstallFreeSpaceFactor = 3;
+
+        /// <summary>
         /// Bound on the (tiny) manifest GET. <see cref="HttpClient.Timeout"/> is sized for a 380 MB
         /// pack, so without this a black-holing network would leave the picker "not offline yet" for
         /// half an hour. Downloads keep the long timeout — they have their own retry ladder.
@@ -633,6 +641,12 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("ReleaseContentService: offline mode — pack {Pack} download skipped", packId);
                 return false;
             }
+            if (!HasRoomForPack(info))
+            {
+                // Fail here, not 380 MB in: a merge that runs out of disk is precisely the failure
+                // that strands a half-copied payload in the live content tree.
+                return false;
+            }
 
             var baseUrl = _resolvedBaseUrl ?? BaseUrl;
             var url = baseUrl + Uri.EscapeDataString(info.File);
@@ -1095,6 +1109,55 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "ReleaseContentService: could not persist install stamp for {Pack}", info.Id);
+            }
+        }
+
+        /// <summary>
+        /// Peak bytes an install of this size occupies on the content drive — see
+        /// <see cref="InstallFreeSpaceFactor"/>. Zero for a manifest entry with no size, which the
+        /// caller reads as "cannot judge, proceed".
+        /// </summary>
+        internal static long RequiredFreeBytes(long sizeBytes)
+        {
+            if (sizeBytes <= 0) return 0;
+            // A tampered manifest must not overflow this into a negative "plenty of room".
+            if (sizeBytes > long.MaxValue / InstallFreeSpaceFactor) return long.MaxValue;
+            return sizeBytes * InstallFreeSpaceFactor;
+        }
+
+        /// <summary>False only when the drive demonstrably cannot hold the install.</summary>
+        internal static bool HasEnoughFreeSpace(long sizeBytes, long availableBytes)
+            => availableBytes >= RequiredFreeBytes(sizeBytes);
+
+        /// <summary>
+        /// Free-space gate for a pack install. A probe that cannot answer (unknown size, network
+        /// path, drive not ready) says yes — a wrong "no space" would lock a user out of content
+        /// they have the disk for, which is worse than the disk error it was trying to pre-empt.
+        /// </summary>
+        private static bool HasRoomForPack(ContentPackInfo info)
+        {
+            try
+            {
+                if (info.SizeBytes <= 0) return true;
+
+                var driveRoot = Path.GetPathRoot(Path.GetFullPath(ContentRoot));
+                if (string.IsNullOrEmpty(driveRoot)) return true;
+
+                var drive = new DriveInfo(driveRoot);
+                if (!drive.IsReady) return true;
+
+                var available = drive.AvailableFreeSpace;
+                if (HasEnoughFreeSpace(info.SizeBytes, available)) return true;
+
+                App.Logger?.Error(
+                    "ReleaseContentService: not enough free space for pack {Pack} on {Drive} — needs {Required} bytes ({Factor}x its {Size}-byte zip for partial + extract + merged copies), {Available} available",
+                    info.Id, drive.Name, RequiredFreeBytes(info.SizeBytes), InstallFreeSpaceFactor, info.SizeBytes, available);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("ReleaseContentService: free-space probe for {Pack} failed: {Error}", info.Id, ex.Message);
+                return true;
             }
         }
 
