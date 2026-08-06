@@ -50,6 +50,14 @@ namespace ConditioningControlPanel.Views.Controls.Companion
                 ["companion_tag_train3"] = "TRAIN 3",
                 ["companion_tag_train4"] = "TRAIN 4",
 
+                // ---- Z0 header band ----
+                ["companion_header_title"] = "Companion",
+                ["companion_header_subtitle"] = "her room — everything she is, knows, and notices",
+                ["companion_header_tutorial"] = "Tutorial",
+                ["companion_header_plate_ai"] = "LAB · AI",
+                ["companion_header_plate_next"] = "PRIME",
+                ["companion_header_teaser"] = "unlock her voice",
+
                 // ---- Z1 hero ----
                 ["companion_hero_chat"] = "Chat with her",
                 ["companion_hero_switch"] = "⇄ Switch",

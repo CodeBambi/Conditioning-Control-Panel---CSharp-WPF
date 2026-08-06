@@ -81,5 +81,14 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         /// <summary>The constellation band along the hero's bottom edge.</summary>
         IRelationshipConstellationVm Constellation { get; }
+
+        /// <summary>
+        /// Z0 — the header band above the card (title, tutorial chip, AI entitlement plate).
+        ///
+        /// <para>Defaulted to <c>null</c> on purpose: a host that already draws its own page header
+        /// implements nothing and the band collapses, so this stayed an additive change to a
+        /// contract other packages code against.</para>
+        /// </summary>
+        ICompanionHeaderVm? Header => null;
     }
 }

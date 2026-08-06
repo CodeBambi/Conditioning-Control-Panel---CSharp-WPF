@@ -27,6 +27,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion
                 ["hero.asleep"] = () => MockCompanionHeroCardVm.Asleep(),
                 ["hero.aiOff"] = () => MockCompanionHeroCardVm.AiOff(),
                 ["hero.freshUser"] = () => MockCompanionHeroCardVm.FreshUser(),
+                ["hero.freeTier"] = () => MockCompanionHeroCardVm.FreeTier(),
+                ["hero.noHeader"] = () => MockCompanionHeroCardVm.NoHeader(),
 
                 // Z1 constellation
                 ["constellation.live"] = () => MockRelationshipConstellationVm.Live(),

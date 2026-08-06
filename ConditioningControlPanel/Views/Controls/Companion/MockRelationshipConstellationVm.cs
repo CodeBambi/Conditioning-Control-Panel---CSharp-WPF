@@ -72,12 +72,21 @@ namespace ConditioningControlPanel.Views.Controls.Companion
                 {
                     Index = i,
                     Name = CompanionLocStaging.Resolve(ConstellationMath.StageKey(i)),
-                    Glyph = state == ConstellationNodeState.Current ? "★" : "✦",
+                    // Mockup glyph ladder: reached ✦, here ★, still ahead ✧.
+                    Glyph = GlyphFor(state),
                     Description = blurbs[i],
                     State = state
                 });
             }
             return list;
         }
+
+        /// <summary>The mockup's three star glyphs, one per node state.</summary>
+        public static string GlyphFor(ConstellationNodeState state) => state switch
+        {
+            ConstellationNodeState.Filled => "✦",
+            ConstellationNodeState.Current => "★",
+            _ => "✧"
+        };
     }
 }

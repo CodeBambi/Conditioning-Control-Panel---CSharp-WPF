@@ -24,6 +24,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             FocusAwarenessCommand = CompanionRelayCommand.NoOp("hero.awareness");
             WakeCommand = CompanionRelayCommand.NoOp("hero.wake");
             Constellation = MockRelationshipConstellationVm.Dormant();
+            Header = MockCompanionHeaderVm.Entitled();
         }
 
         public string Name { get; init; } = "Bambi";
@@ -39,8 +40,10 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public string AsleepCopy { get; init; } = "she's asleep — wake her?";
 
         public bool IsMoodLive { get; init; }
+        /// <summary>The live mood glyph. Pre-Train-4 the view swaps in the sleeping moon itself.</summary>
         public string MoodGlyph { get; init; } = "✧";
-        public string MoodWord { get; init; } = "bratty";
+        /// <summary>Dormant on purpose: claiming a mood she does not have yet would be a lie.</summary>
+        public string MoodWord { get; init; } = "asleep";
         public string MoodCaption { get; init; } = "she wakes up with a mood of her own soon~";
 
         public int Level { get; init; } = 41;
@@ -73,6 +76,9 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         public IRelationshipConstellationVm Constellation { get; init; }
 
+        /// <summary>Z0 band. Set to null to prove the hero renders with the header collapsed.</summary>
+        public ICompanionHeaderVm? Header { get; init; }
+
         // ------------------------------- state exhibits -------------------------------
 
         /// <summary>The artboard: AI live, awareness on, mood token still dormant (pre-Train 4).</summary>
@@ -82,9 +88,24 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public static MockCompanionHeroCardVm FullyAlive() => new()
         {
             IsMoodLive = true,
+            MoodWord = "bratty",
             MoodCaption = "today's mood",
             Constellation = MockRelationshipConstellationVm.Live()
         };
+
+        /// <summary>
+        /// No AI entitlement. The design's rule made visible: the hero is untouched (barks are free)
+        /// and the only difference is the header plate dimming behind a Vault teaser ribbon.
+        /// </summary>
+        public static MockCompanionHeroCardVm FreeTier() => new()
+        {
+            Header = MockCompanionHeaderVm.FreeTier(),
+            IsAiLive = false,
+            AiPillText = "Off — she's asleep"
+        };
+
+        /// <summary>Hosted by a page that draws its own header: the Z0 band collapses.</summary>
+        public static MockCompanionHeroCardVm NoHeader() => new() { Header = null };
 
         /// <summary>ChkAvatarEnabled off — the portrait desaturates and the wake affordance appears.</summary>
         public static MockCompanionHeroCardVm Asleep() => new()

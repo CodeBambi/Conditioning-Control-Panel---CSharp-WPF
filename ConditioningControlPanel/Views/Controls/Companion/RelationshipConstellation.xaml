@@ -14,14 +14,22 @@
          bottom edge. Ratchet design: names are visible, mechanics are not.
 
          Live      → filled pink nodes behind you, a gold node where you
-                     are, faint outlines ahead, one vague flavor line.
+                     are, faint outlines ahead, and the connector's pink
+                     run stops exactly on the current node's centre.
          Dormant   → every node an outline, names still readable, a
                      one-shot shimmer sweep on load and the promise copy.
                      No lock glyph: this is not a paywall.
 
-         Motion budget: the node pop is a ONE-SHOT fired on load and on
-         stage-up. The tab's single Forever loop belongs to the hero
-         portrait, not to this strip.
+         Motion budget: everything here is a ONE-SHOT fired from PlayIntro
+         (on load, and again on stage-up when the host re-plays it) — the
+         staggered node twinkle when live, the shimmer sweep when dormant.
+         The tab's single Forever loop belongs to the hero portrait; this
+         strip must never add a second one.
+
+         Geometry: the connector is laid across the span between the first
+         and last node CENTRES. With five equal columns those sit at 1/10
+         and 9/10 of the width, which is what the 1*/8*/1* frame below
+         reproduces without a single ActualWidth read.
          ================================================================ -->
 
     <UserControl.Resources>
@@ -29,6 +37,38 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="pack://application:,,,/ConditioningControlPanel;component/Views/Controls/Companion/Themes/CompanionTheme.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- Converters a DataTemplate needs must live in the dictionary the template was
+                 declared in (Known Issues #4), so the connector pair is instanced right here. -->
+            <local:ConstellationFillConverter x:Key="CmpConstellationFillStar"/>
+            <local:ConstellationFillConverter x:Key="CmpConstellationFillRemainderStar" Invert="True"/>
+
+            <!-- Node click → the stage card, styled like an achievement toast. An implicit
+                 ToolTip style keeps every node's popup consistent with no per-node markup. -->
+            <Style TargetType="ToolTip">
+                <Setter Property="Foreground" Value="{StaticResource CmpBodyBrush}"/>
+                <Setter Property="FontSize" Value="11.5"/>
+                <Setter Property="FontStyle" Value="Italic"/>
+                <Setter Property="MaxWidth" Value="240"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ToolTip">
+                            <Border Background="{StaticResource CmpElevBrush}"
+                                    BorderBrush="#66FF69B4" BorderThickness="1"
+                                    CornerRadius="{StaticResource CmpRadiusInner}"
+                                    Padding="12,9,12,9">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#FF000000" BlurRadius="18" ShadowDepth="3"
+                                                      Direction="270" Opacity="0.45"/>
+                                </Border.Effect>
+                                <ContentPresenter TextBlock.Foreground="{TemplateBinding Foreground}"
+                                                  TextBlock.FontSize="{TemplateBinding FontSize}"
+                                                  TextBlock.FontStyle="Italic"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
 
             <!-- One node: glyph disc over a name. The three visual states are picked by a
                  DataTrigger on State so the item template stays code-free. -->
@@ -41,15 +81,21 @@
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
                             <StackPanel Background="Transparent">
-                                <Border x:Name="Node" Style="{StaticResource CmpConstellationNodeStyle}"
-                                        RenderTransformOrigin="0.5,0.5">
-                                    <Border.RenderTransform>
-                                        <ScaleTransform ScaleX="1" ScaleY="1"/>
-                                    </Border.RenderTransform>
-                                    <TextBlock x:Name="Glyph" Text="{Binding Glyph}" FontSize="13"
-                                               Foreground="#40FFFFFF"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
+                                <!-- outer transform = hover only; inner = the intro pop -->
+                                <Grid HorizontalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                    <Grid.RenderTransform>
+                                        <ScaleTransform x:Name="HoverScale" ScaleX="1" ScaleY="1"/>
+                                    </Grid.RenderTransform>
+                                    <Border x:Name="Node" Style="{StaticResource CmpConstellationNodeStyle}"
+                                            RenderTransformOrigin="0.5,0.5">
+                                        <Border.RenderTransform>
+                                            <ScaleTransform ScaleX="1" ScaleY="1"/>
+                                        </Border.RenderTransform>
+                                        <TextBlock x:Name="Glyph" Text="{Binding Glyph}" FontSize="13"
+                                                   Foreground="#40FFFFFF"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                </Grid>
                                 <TextBlock x:Name="Label" Text="{Binding Name}"
                                            Style="{StaticResource CmpConstellationLabelStyle}"/>
                             </StackPanel>
@@ -68,6 +114,32 @@
                                     <Setter TargetName="Label" Property="Style"
                                             Value="{StaticResource CmpConstellationLabelCurrentStyle}"/>
                                 </DataTrigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Trigger.EnterActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="HoverScale"
+                                                                 Storyboard.TargetProperty="ScaleX"
+                                                                 To="1.12" Duration="0:0:0.18"/>
+                                                <DoubleAnimation Storyboard.TargetName="HoverScale"
+                                                                 Storyboard.TargetProperty="ScaleY"
+                                                                 To="1.12" Duration="0:0:0.18"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </Trigger.EnterActions>
+                                    <Trigger.ExitActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="HoverScale"
+                                                                 Storyboard.TargetProperty="ScaleX"
+                                                                 To="1.0" Duration="0:0:0.18"/>
+                                                <DoubleAnimation Storyboard.TargetName="HoverScale"
+                                                                 Storyboard.TargetProperty="ScaleY"
+                                                                 To="1.0" Duration="0:0:0.18"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </Trigger.ExitActions>
+                                </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Button.Template>
@@ -75,7 +147,12 @@
             </DataTemplate>
 
             <!-- Five equal columns. UniformGrid keeps the nodes evenly spaced at any width and
-                 needs no ActualWidth arithmetic. -->
+                 needs no ActualWidth arithmetic.
+
+                 This is the one list on the page that does NOT use CmpVirtualizedItemsControlStyle:
+                 the ladder is exactly ConstellationMath.StageCount items, forever, and the connector
+                 geometry depends on all five columns existing at once. Virtualisation is for the
+                 unbounded walls (facts, chat), not for a fixed five. -->
             <ItemsPanelTemplate x:Key="CmpConstellationPanel">
                 <UniformGrid Rows="1"/>
             </ItemsPanelTemplate>
@@ -94,11 +171,49 @@
 
             <!-- nodes + the connector running behind them -->
             <Grid Grid.Row="0">
-                <!-- The connector sits at the vertical centre of the 28px discs (13px down) and is
-                     inset by half a node either side so it never pokes out past the first/last. -->
-                <Border Height="2" VerticalAlignment="Top" Margin="34,13,34,0" CornerRadius="1"
-                        Background="{StaticResource CmpConstellationConnectorBrush}"
-                        x:Name="ConnectorLine"/>
+                <!-- The connector sits at the vertical centre of the 28px discs (14px down, less
+                     half its own 2px height) and spans first-centre to last-centre. -->
+                <Grid VerticalAlignment="Top" Height="2" Margin="0,13,0,0" IsHitTestVisible="False">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1*"/>
+                        <ColumnDefinition Width="8*"/>
+                        <ColumnDefinition Width="1*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid Grid.Column="1">
+                        <!-- the unearned run: a hairline the whole way, so the ladder is always
+                             legible even at stage 0 and in the dormant state -->
+                        <Border Background="{StaticResource CmpTrackSoftBrush}" CornerRadius="1"/>
+
+                        <!-- the earned run: pink→purple, stopping on the current node's centre -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition>
+                                    <ColumnDefinition.Width>
+                                        <MultiBinding Converter="{StaticResource CmpConstellationFillStar}">
+                                            <Binding Path="CurrentStage"/>
+                                            <Binding Path="IsLive"/>
+                                        </MultiBinding>
+                                    </ColumnDefinition.Width>
+                                </ColumnDefinition>
+                                <ColumnDefinition>
+                                    <ColumnDefinition.Width>
+                                        <MultiBinding Converter="{StaticResource CmpConstellationFillRemainderStar}">
+                                            <Binding Path="CurrentStage"/>
+                                            <Binding Path="IsLive"/>
+                                        </MultiBinding>
+                                    </ColumnDefinition.Width>
+                                </ColumnDefinition>
+                            </Grid.ColumnDefinitions>
+                            <Border x:Name="ConnectorLine" Grid.Column="0" CornerRadius="1"
+                                    Background="{StaticResource CmpPinkPurpleBrush}">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#FFFF69B4" BlurRadius="10" ShadowDepth="0" Opacity="0.45"/>
+                                </Border.Effect>
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </Grid>
+
                 <ItemsControl ItemsSource="{Binding Nodes}"
                               ItemsPanel="{StaticResource CmpConstellationPanel}"
                               ItemTemplate="{StaticResource CmpConstellationNodeTemplate}"
