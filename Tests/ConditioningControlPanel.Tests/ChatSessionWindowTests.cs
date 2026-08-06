@@ -229,4 +229,41 @@ public class ChatSessionWindowTests
         Assert.Equal(0, s.RestoredTurnCount);
         Assert.Equal(0, s.Count);
     }
+
+    [Fact]
+    public void ABrowsingHeavyDay_CannotEvictTheConversationFromTheChatWindow()
+    {
+        // Awareness fires on a ~10s cooldown. Uncapped, an hour of browsing produces enough
+        // event/reply pairs to consume the whole 1,600-token chat budget on their own, and the walk
+        // backwards never reaches the actual conversation behind them.
+        var s = new ChatSession();
+        s.Append(TurnKind.UserChat, "remember my cat?");
+        s.Append(TurnKind.AssistantChat, "Prime Minister Beans~");
+        for (int i = 0; i < 60; i++)
+        {
+            s.Append(TurnKind.AmbientEvent, $"user has been on Reddit {i}m");
+            s.Append(TurnKind.AmbientReply, $"still doomscrolling number {i}?~");
+        }
+
+        var window = s.BuildWindow(ChatWindowSpec.Chat);
+
+        Assert.Contains(window, t => t.Text == "remember my cat?");
+        Assert.Contains(window, t => t.Text == "Prime Minister Beans~");
+        Assert.True(
+            window.Count(t => t.Kind is TurnKind.AmbientEvent or TurnKind.AmbientReply)
+                <= ChatSession.MaxAmbientTurnsInChatWindow);
+    }
+
+    [Fact]
+    public void AmbientTurnsAreNeverDialogue_SoTheyCannotReachDisk()
+    {
+        var s = new ChatSession();
+        s.Append(TurnKind.AmbientEvent, "user opened Amazon");
+        s.Append(TurnKind.AmbientReply, "shopping instead of sinking?~");
+        s.Append(TurnKind.UserChat, "hi");
+
+        Assert.Equal("hi", Assert.Single(s.DialogueTurns()).Text);
+        Assert.Equal(ChatMessage.RoleAssistant,
+            s.Turns.Single(t => t.Kind == TurnKind.AmbientReply).Role);
+    }
 }

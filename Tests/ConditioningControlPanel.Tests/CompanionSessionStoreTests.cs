@@ -184,4 +184,57 @@ public class CompanionSessionStoreTests
         var turns = new List<CompanionTurn> { CompanionTurn.Create(TurnKind.UserChat, "only") };
         Assert.Same(turns, CompanionSessionStore.Trim(turns));
     }
+
+    // ---------- what is allowed on disk ----------
+
+    [Fact]
+    public void ParseSession_DropsAmbientRepliesEvenIfAFileSomehowCarriesThem()
+    {
+        // A file written by an older build (or hand-edited) must not be able to reintroduce orphaned
+        // ambient quips into the restored window: the events that motivated them were never stored,
+        // so they would arrive as a run of assistant messages answering nothing.
+        const string json = """
+        {"Version":1,"Turns":[
+          {"Kind":"AmbientReply","Text":"still on Reddit at 2am?","Utc":"2026-08-06T02:00:00Z"},
+          {"Kind":"UserChat","Text":"hi","Utc":"2026-08-06T02:01:00Z"}
+        ]}
+        """;
+
+        var turns = CompanionSessionStore.ParseSession(json);
+
+        Assert.Equal("hi", Assert.Single(turns).Text);
+    }
+
+    // ---------- durability ----------
+
+    [Fact]
+    public void Save_IsAtomic_AndLeavesNoStrayTempFile()
+    {
+        var dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ccp-session-tests", Guid.NewGuid().ToString("N"));
+        var path = System.IO.Path.Combine(dir, "session.json");
+        try
+        {
+            var store = new CompanionSessionStore(path, System.IO.Path.Combine(dir, "legacy.json"));
+            var turns = new[]
+            {
+                CompanionTurn.Create(TurnKind.UserChat, "remember my cat?"),
+                CompanionTurn.Create(TurnKind.AssistantChat, "Prime Minister Beans~")
+            };
+
+            // PersistAsync fires a Task per reply and Flush runs on the shutdown thread, so
+            // overlapping writes are a real production shape, not a contrived one. A truncated
+            // session.json parses as empty, i.e. the whole conversation lost with no error.
+            System.Threading.Tasks.Parallel.For(0, 16, _ => store.Save(turns));
+
+            Assert.False(System.IO.File.Exists(path + ".tmp"));
+            Assert.Equal(2, CompanionSessionStore.ParseSession(System.IO.File.ReadAllText(path)).Count);
+
+            store.Wipe();
+            Assert.False(System.IO.File.Exists(path));
+        }
+        finally
+        {
+            try { System.IO.Directory.Delete(dir, recursive: true); } catch { }
+        }
+    }
 }

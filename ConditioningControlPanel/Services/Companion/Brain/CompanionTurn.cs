@@ -23,6 +23,21 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         AmbientEvent,
 
         /// <summary>
+        /// The model's answer to an <see cref="AmbientEvent"/> — an unprompted quip, not a reply to
+        /// anything the user typed. Assistant-role on the wire so the live window knows what she just
+        /// said (and a "why'd you say that?" follow-up has context), but deliberately NOT
+        /// <see cref="CompanionTurn.IsDialogue"/>, so it never reaches disk.
+        ///
+        /// <para>The event that caused it is not persisted either (it is stale the moment it is over),
+        /// and persisting one half of the pair is worse than persisting neither: the next launch would
+        /// restore a run of assistant one-liners with nothing they were answering, which is exactly the
+        /// few-shot bait that made ambient calls stateless in the first place. Awareness replies also
+        /// name the app/tab they saw, and the toggle that governs disk writes is labelled *chat*
+        /// memory — browsing commentary is not what a user ticks that box about.</para>
+        /// </summary>
+        AmbientReply,
+
+        /// <summary>
         /// What the pre-recorded voice just said out loud, carried as an assistant-role line so the
         /// model knows what "she" already said and doesn't repeat it. Flavor, not content: capped
         /// hard in the prompt window and never persisted (barks replay from bark_rules.json).
@@ -88,6 +103,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         public string Role => Kind switch
         {
             TurnKind.AssistantChat => ChatMessage.RoleAssistant,
+            TurnKind.AmbientReply => ChatMessage.RoleAssistant,
             TurnKind.BarkEcho => ChatMessage.RoleAssistant,
             _ => ChatMessage.RoleUser
         };

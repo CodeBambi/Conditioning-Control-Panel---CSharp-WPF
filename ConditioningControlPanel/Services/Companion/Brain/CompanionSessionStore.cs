@@ -65,6 +65,13 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         private readonly string _sessionPath;
         private readonly string _legacyPath;
 
+        /// <summary>
+        /// Serialises writers. Persistence is fire-and-forget (<c>CompanionBrain.PersistAsync</c>
+        /// spawns a Task per reply) and <c>Flush</c> runs on the shutdown thread, so two writes to the
+        /// same path can overlap; the loser throws and that turn is lost.
+        /// </summary>
+        private readonly object _writeLock = new();
+
         public CompanionSessionStore(string? sessionPath = null, string? legacyPath = null)
         {
             _sessionPath = sessionPath ?? Path.Combine(App.UserDataPath, "companion", "session.json");
@@ -246,10 +253,15 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     }).ToList()
                 };
 
-                var dir = Path.GetDirectoryName(_sessionPath);
-                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-                File.WriteAllText(_sessionPath,
-                    JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = false }));
+                var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = false });
+                lock (_writeLock)
+                {
+                    var dir = Path.GetDirectoryName(_sessionPath);
+                    if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                    // Temp-then-move: a truncated session.json parses as empty, so a crash mid-write
+                    // costs the user the whole conversation with no error and no recovery path.
+                    MemoryStore.AtomicWrite(_sessionPath, json);
+                }
             }
             catch (Exception ex)
             {
@@ -261,7 +273,13 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         {
             try
             {
-                if (File.Exists(_sessionPath)) File.Delete(_sessionPath);
+                lock (_writeLock)
+                {
+                    if (File.Exists(_sessionPath)) File.Delete(_sessionPath);
+                    // A .tmp left behind by a crashed write is the same conversation on disk.
+                    var tmp = _sessionPath + ".tmp";
+                    if (File.Exists(tmp)) File.Delete(tmp);
+                }
                 App.Logger?.Information("CompanionSessionStore: session wiped");
             }
             catch (Exception ex)

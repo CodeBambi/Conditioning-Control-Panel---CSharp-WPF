@@ -179,13 +179,21 @@ namespace ConditioningControlPanel.Models
     /// </summary>
     public class ProxyChatRequest
     {
+        // Both attribute families on every member. The body actually goes out through
+        // JsonContent.Create — System.Text.Json with default options — which ignores the Newtonsoft
+        // attributes entirely, so without the JsonPropertyName half this request serialised as
+        // PascalCase: the server's `!messages || !Array.isArray(messages)` guard would reject it
+        // outright, and the Train 1 tier hint arrived as "Purpose" and was silently discarded.
         [JsonProperty("messages")]
+        [JsonPropertyName("messages")]
         public ProxyChatMessage[] Messages { get; set; } = Array.Empty<ProxyChatMessage>();
 
         [JsonProperty("max_tokens")]
+        [JsonPropertyName("max_tokens")]
         public int MaxTokens { get; set; } = 60;
 
         [JsonProperty("temperature")]
+        [JsonPropertyName("temperature")]
         public double Temperature { get; set; } = 0.9;
 
         /// <summary>
@@ -194,6 +202,7 @@ namespace ConditioningControlPanel.Models
         /// that maps it to a model tier + max_tokens clamp (MASTER-SCOPE §6.1).
         /// </summary>
         [JsonProperty("purpose", NullValueHandling = NullValueHandling.Ignore)]
+        [JsonPropertyName("purpose")]
         [System.Text.Json.Serialization.JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Purpose { get; set; }
     }
@@ -260,6 +269,44 @@ namespace ConditioningControlPanel.Models
         [JsonProperty("requests_remaining")]
         [JsonPropertyName("requests_remaining")]
         public int? RequestsRemaining { get; set; }
+
+        /// <summary>
+        /// Which tier the server actually resolved this request to. Present only once the purpose-tier
+        /// deploy lands; null against today's production proxy.
+        /// </summary>
+        [JsonProperty("purpose")]
+        [JsonPropertyName("purpose")]
+        public string? Purpose { get; set; }
+
+        /// <summary>
+        /// Real provider token accounting. The only client-visible signal that the stable prefix is
+        /// being cache-discounted: [AI-METER]'s <c>in_tok</c> is chars/4 of what we sent and reads the
+        /// same whether <c>cached_in</c> was 0 or 2,000. Null against a proxy that doesn't report it.
+        /// </summary>
+        [JsonProperty("tokens_used")]
+        [JsonPropertyName("tokens_used")]
+        public ProxyTokenUsage? TokensUsed { get; set; }
+
+        [JsonProperty("tokens_remaining_today")]
+        [JsonPropertyName("tokens_remaining_today")]
+        public int? TokensRemainingToday { get; set; }
+    }
+
+    /// <summary>Server-reported token counts for one AI request.</summary>
+    public class ProxyTokenUsage
+    {
+        [JsonProperty("in")]
+        [JsonPropertyName("in")]
+        public int? In { get; set; }
+
+        /// <summary>Prompt tokens the provider served from ITS cache — the caching lever, measured.</summary>
+        [JsonProperty("cached_in")]
+        [JsonPropertyName("cached_in")]
+        public int? CachedIn { get; set; }
+
+        [JsonProperty("out")]
+        [JsonPropertyName("out")]
+        public int? Out { get; set; }
     }
 
     // ============================================================
