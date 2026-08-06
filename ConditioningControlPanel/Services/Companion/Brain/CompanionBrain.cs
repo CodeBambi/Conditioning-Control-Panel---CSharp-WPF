@@ -80,6 +80,11 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         private bool _memoryRecallSignaled;
         private bool _disposed;
 
+        // True when WE built the memory store, and are therefore the thing that must shut it down.
+        // An injected store belongs to its caller (tests own theirs); disposing someone else's store
+        // out from under them would be the more surprising bug of the two.
+        private readonly bool _ownsMemory;
+
         private static readonly Random _random = new();
 
         public CompanionBrain(
@@ -90,6 +95,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             RecentRecommendations? recommendations = null)
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
+            _ownsMemory = memory == null;
             Memory = memory ?? new MemoryStore();
             Recommendations = recommendations ?? new RecentRecommendations();
             _assembler = assembler ?? new PromptAssembler(Memory, Recommendations);
@@ -403,6 +409,18 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             _disposed = true;
             DetachBarkSource();
             try { Flush(); } catch { /* shutdown is best-effort */ }
+
+            // Deterministic memory shutdown, ordered before the transport goes away. MemoryStore
+            // debounces its writes, so without this the last window's worth of signals would only
+            // reach disk via its AppDomain.ProcessExit backstop — which still exists, but runs
+            // after WPF has torn everything else down and cannot be relied on for ordering.
+            // MemoryStore.Dispose unhooks that handler and does the final SaveNow itself.
+            if (_ownsMemory)
+            {
+                try { (Memory as IDisposable)?.Dispose(); }
+                catch (Exception ex) { App.Logger?.Debug("CompanionBrain: memory dispose failed: {Error}", ex.Message); }
+            }
+
             _gate.Dispose();
         }
     }

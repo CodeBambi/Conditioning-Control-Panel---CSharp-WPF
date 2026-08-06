@@ -59,10 +59,28 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         public const int MemoryTokenBudget = 500;
 
         /// <summary>
+        /// Extra headroom the memory block gets ON TOP of <see cref="MemoryTokenBudget"/>, for
+        /// boundary lines only.
+        ///
+        /// <para><see cref="MemoryStore.GetInjectionBlock"/> deliberately renders boundaries outside
+        /// its own budget — a remembered "stop teasing me about X" is consent hygiene and must not
+        /// lose a budget race to a joke about the user's cat — so the block it returns can legally
+        /// exceed the budget it was handed. Clamping it flat at 500 here would quietly undo that.
+        /// The exemption is bounded on both sides: the store caps boundaries at
+        /// <see cref="MemoryStore.MaxBoundaryLines"/> (+1 overflow line), and this allowance caps
+        /// what they may cost, so a pathological file still cannot inflate every request.</para>
+        /// </summary>
+        public const int BoundaryOvershootTokens = 300;
+
+        /// <summary>
         /// Ceiling on the WHOLE dynamic tail. The tail is what the user pays full price for on every
         /// single call, so it is bounded here as well as inside the memory store: a third-party
         /// <see cref="IMemoryStore"/> that ignores its budget must not be able to inflate every
         /// request forever.
+        ///
+        /// <para>The one documented exception is <see cref="BoundaryOvershootTokens"/>, so the true
+        /// worst case is <c>TailTokenBudget + BoundaryOvershootTokens</c> and only a user with 20
+        /// recorded boundaries ever reaches it.</para>
         /// </summary>
         public const int TailTokenBudget = 700;
 
@@ -119,7 +137,12 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         public PromptAssembler(IMemoryStore memory, RecentRecommendations recommendations,
             Func<string>? systemPromptProvider = null, Func<DateTime>? localClock = null)
         {
-            _memory = memory ?? new MemoryStore();
+            // Deliberately NOT `?? new MemoryStore()`. The production MemoryStore constructor is not
+            // inert — it loads memory.json, starts a MemorySignalWriter and registers a shutdown
+            // save — so a silent fallback here would give the process a SECOND store racing the
+            // brain's on the same file. Every real caller passes CompanionBrain.Memory; null is a
+            // wiring bug and should say so.
+            _memory = memory ?? throw new ArgumentNullException(nameof(memory));
             _recommendations = recommendations ?? new RecentRecommendations();
             _systemPromptProvider = systemPromptProvider ?? DefaultSystemPrompt;
             _localClock = localClock ?? (() => DateTime.Now);
@@ -170,9 +193,6 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             var instruction = PurposeInstruction(purpose);
             var lines = new List<string>();
 
-            var memory = ClampToTokens(_memory.GetInjectionBlock(MemoryTokenBudget), MemoryTokenBudget);
-            if (!string.IsNullOrWhiteSpace(memory)) lines.Add(memory!);
-
             lines.Add(TimeOfDayLine(_localClock()));
 
             var exclusion = _recommendations.BuildExclusionLine();
@@ -190,7 +210,21 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                          - ChatSession.ApproxTokens(TailHeader) - 1
                          - ChatSession.ApproxTokens(instruction) - 1;
             int spent = 0;
-            var kept = new List<string>(lines.Count);
+            var kept = new List<string>(lines.Count + 1);
+
+            // The memory block is charged against the budget but is never itself dropped: it is
+            // already independently bounded by the clamp above, and it is the one part of the tail
+            // that can carry the user's boundaries. Letting a fat-but-legal memory block fall off
+            // the end of a generic budget loop would delete boundaries to make room for a
+            // "vary your picks" reminder.
+            var memory = ClampToTokens(
+                _memory.GetInjectionBlock(MemoryTokenBudget), MemoryTokenBudget, BoundaryOvershootTokens);
+            if (!string.IsNullOrWhiteSpace(memory))
+            {
+                kept.Add(memory!);
+                spent += ChatSession.ApproxTokens(memory) + 1;
+            }
+
             foreach (var line in lines)
             {
                 int cost = ChatSession.ApproxTokens(line) + 1;
@@ -243,19 +277,44 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// budget (or a future one that grows a new section) can never inflate every request.
         /// </summary>
         internal static string? ClampToTokens(string? block, int tokenBudget)
+            => ClampToTokens(block, tokenBudget, exemptTokenBudget: 0);
+
+        /// <summary>
+        /// As above, but lines the memory store rendered outside its own budget
+        /// (<see cref="MemoryStore.IsUnbudgetedInjectionLine"/> — boundaries) are charged to a
+        /// SEPARATE <paramref name="exemptTokenBudget"/> instead of the main one, so an ordinary
+        /// fact can never crowd out a boundary and vice versa. Both buckets are hard ceilings, so
+        /// the result is still bounded at <c>tokenBudget + exemptTokenBudget</c>.
+        ///
+        /// <para>An over-budget line is skipped rather than ending the scan: a later, shorter
+        /// boundary must still get its chance even if an earlier long fact did not fit.</para>
+        /// </summary>
+        internal static string? ClampToTokens(string? block, int tokenBudget, int exemptTokenBudget)
         {
             if (string.IsNullOrWhiteSpace(block)) return null;
             if (ChatSession.ApproxTokens(block) <= tokenBudget) return block;
 
             var sb = new StringBuilder();
             int spent = 0;
+            int exemptSpent = 0;
             foreach (var line in block!.Replace("\r\n", "\n").Split('\n'))
             {
                 int cost = ChatSession.ApproxTokens(line) + 1;
-                if (spent + cost > tokenBudget) break;
+                bool exempt = exemptTokenBudget > 0 && MemoryStore.IsUnbudgetedInjectionLine(line);
+
+                if (exempt)
+                {
+                    if (exemptSpent + cost > exemptTokenBudget) continue;
+                    exemptSpent += cost;
+                }
+                else
+                {
+                    if (spent + cost > tokenBudget) continue;
+                    spent += cost;
+                }
+
                 if (sb.Length > 0) sb.Append('\n');
                 sb.Append(line);
-                spent += cost;
             }
 
             var clamped = sb.ToString().TrimEnd();

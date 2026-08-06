@@ -79,7 +79,7 @@ public class LegacyAdapterRoutingTests
     }
 
     private static CompanionBrain Build(FakeTransport transport) =>
-        new(transport, new StubAssembler(), new MemoryStore(), new NullStore());
+        new(transport, new StubAssembler(), new InertMemoryStore(), new NullStore());
 
     // ---------- routing gates: ambient ----------
 

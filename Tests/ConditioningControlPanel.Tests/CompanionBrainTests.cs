@@ -85,7 +85,7 @@ public class CompanionBrainTests
     }
 
     private static CompanionBrain Build(FakeTransport transport, FakeStore store) =>
-        new(transport, new StubAssembler(), new MemoryStore(), store);
+        new(transport, new StubAssembler(), new InertMemoryStore(), store);
 
     /// <summary>Drains the fire-and-forget persistence Task.Run without a fixed sleep.</summary>
     private static async Task<IReadOnlyList<CompanionTurn>> WaitForWrite(FakeStore store, int expectedWrites)

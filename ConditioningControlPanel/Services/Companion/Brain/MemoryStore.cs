@@ -64,6 +64,30 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// </summary>
         public const int MaxBoundaryLines = 20;
 
+        /// <summary>
+        /// Prefix of every boundary line <see cref="GetInjectionBlock"/> emits. Public because the
+        /// prompt assembler has to be able to tell a boundary line apart from an ordinary fact line
+        /// in the rendered block, so it can carry the same budget exemption through into the prompt
+        /// tail. A shared constant rather than a literal on both sides: a drifting prefix would fail
+        /// open (boundaries quietly trimmable again) instead of failing loudly.
+        /// </summary>
+        public const string BoundaryLinePrefix = "Boundary (honor this): ";
+
+        /// <summary>Distinctive middle of the "there were more boundaries than we showed" line.</summary>
+        private const string BoundaryOverflowMarker = " more boundaries on file";
+
+        /// <summary>
+        /// True for the lines <see cref="GetInjectionBlock"/> renders OUTSIDE the token budget it was
+        /// handed — i.e. the ones a downstream clamp must not drop. See that method's remarks.
+        /// </summary>
+        public static bool IsUnbudgetedInjectionLine(string? line)
+        {
+            if (string.IsNullOrEmpty(line)) return false;
+            return line!.StartsWith(BoundaryLinePrefix, StringComparison.Ordinal)
+                   || (line.StartsWith("(+", StringComparison.Ordinal)
+                       && line.Contains(BoundaryOverflowMarker, StringComparison.Ordinal));
+        }
+
         /// <summary>Recency decay constant, in days: weight = e^(-days/30).</summary>
         public const double RecencyDecayDays = 30d;
 
@@ -341,7 +365,12 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         ///
         /// <para>Boundaries deliberately ignore <paramref name="tokenBudget"/> (up to
         /// <see cref="MaxBoundaryLines"/>): a remembered "stop teasing me about X" is consent hygiene
-        /// and must not lose a budget race to a joke about the user's cat.</para>
+        /// and must not lose a budget race to a joke about the user's cat. The returned block can
+        /// therefore be LARGER than the budget asked for — only ever by boundary lines, and only up
+        /// to <see cref="MaxBoundaryLines"/> of them plus one overflow line. Callers that re-clamp
+        /// this block must recognise those lines with <see cref="IsUnbudgetedInjectionLine"/> and
+        /// give them the same exemption, or the clamp silently reintroduces the exact failure this
+        /// exemption exists to prevent.</para>
         /// </summary>
         public string? GetInjectionBlock(int tokenBudget)
         {
@@ -384,9 +413,9 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 .ThenBy(f => f.Created)
                 .ToList();
             foreach (var f in boundaries.Take(MaxBoundaryLines))
-                Append("Boundary (honor this): " + f.Text);
+                Append(BoundaryLinePrefix + f.Text);
             if (boundaries.Count > MaxBoundaryLines)
-                Append($"(+{boundaries.Count - MaxBoundaryLines} more boundaries on file — stay careful.)");
+                Append($"(+{boundaries.Count - MaxBoundaryLines}{BoundaryOverflowMarker} — stay careful.)");
 
             foreach (var f in RankFacts(facts.Where(f => f.Kind != MemoryFactKind.Boundary)))
             {

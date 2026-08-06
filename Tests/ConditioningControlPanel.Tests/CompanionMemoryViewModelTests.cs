@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using ConditioningControlPanel.Services.Companion.Brain;
 using ConditioningControlPanel.ViewModels;
@@ -13,14 +14,49 @@ namespace ConditioningControlPanel.Tests;
 /// This is the trust surface for an adult app that keeps personal statements on disk, so the
 /// plumbing between the panel and <see cref="IMemoryStore"/> is the compliance story, not polish:
 /// if "Forget everything" or the per-row bin silently fails to reach the store, the UI is lying
-/// about what has been deleted. These tests pin the view model against the real shell store plus a
+/// about what has been deleted. These tests pin the view model against the real store plus a
 /// hostile fake (rejecting writes, vanishing rows, no store at all).
+///
+/// <para><b>Every store here is built on a throwaway temp directory through the TEST constructor.</b>
+/// The parameterless <see cref="MemoryStore"/> constructor is the production one: it loads the real
+/// <c>%LOCALAPPDATA%\ConditioningControlPanel\companion\memory.json</c>, starts a
+/// <see cref="MemorySignalWriter"/> that immediately mirrors app signals into the profile, and
+/// registers a shutdown save. Using it here made these tests read and WRITE the developer's own
+/// memory file — which both corrupted user data and made "empty store" assertions fail against
+/// whatever facts and signals happened to be on the machine.</para>
 /// </summary>
-public class CompanionMemoryViewModelTests
+public class CompanionMemoryViewModelTests : IDisposable
 {
-    private static MemoryStore StoreWith(params (string Text, MemoryFactKind Kind)[] facts)
+    private readonly string _dir;
+    private readonly List<MemoryStore> _stores = new();
+    private int _next;
+
+    public CompanionMemoryViewModelTests()
     {
-        var store = new MemoryStore();
+        _dir = Path.Combine(Path.GetTempPath(), "ccp-panel-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_dir);
+    }
+
+    public void Dispose()
+    {
+        foreach (var s in _stores)
+        {
+            try { s.Dispose(); } catch { }
+        }
+        try { Directory.Delete(_dir, recursive: true); } catch { }
+    }
+
+    /// <summary>An isolated, empty store: no disk history, no signal writer, no app subscriptions.</summary>
+    private MemoryStore NewStore()
+    {
+        var store = new MemoryStore(Path.Combine(_dir, $"memory{_next++}.json"), sessionSeed: 1234);
+        _stores.Add(store);
+        return store;
+    }
+
+    private MemoryStore StoreWith(params (string Text, MemoryFactKind Kind)[] facts)
+    {
+        var store = NewStore();
         foreach (var (text, kind) in facts) store.AddFact(text, kind);
         return store;
     }
@@ -50,7 +86,7 @@ public class CompanionMemoryViewModelTests
     [Fact]
     public void EmptyStore_IsTheNormalTrain1State()
     {
-        var vm = new CompanionMemoryViewModel(new MemoryStore());
+        var vm = new CompanionMemoryViewModel(NewStore());
 
         Assert.True(vm.IsAvailable);
         Assert.True(vm.IsEmpty);
@@ -111,7 +147,7 @@ public class CompanionMemoryViewModelTests
     {
         // Pinning is not authorship. If pinning marked the fact "user-edited", a future extractor
         // would treat every pinned app-sourced fact as hand-written and stop maintaining it.
-        var store = new MemoryStore();
+        var store = NewStore();
         store.AddFact("level 41", MemoryFactKind.Event, source: MemoryFact.SourceApp);
         var vm = new CompanionMemoryViewModel(store);
 
@@ -159,7 +195,7 @@ public class CompanionMemoryViewModelTests
     [Fact]
     public void CommitEdit_FloorsSalienceSoTheFixedFactActuallyGetsUsed()
     {
-        var store = new MemoryStore();
+        var store = NewStore();
         store.AddFact("wrong name", MemoryFactKind.Identity, salience: 0.1);
         var vm = new CompanionMemoryViewModel(store);
         var row = Row(vm, "wrong name");
@@ -174,7 +210,7 @@ public class CompanionMemoryViewModelTests
     [Fact]
     public void CommitEdit_NeverLowersAnAlreadySalientFact()
     {
-        var store = new MemoryStore();
+        var store = NewStore();
         store.AddFact("no teasing about work", MemoryFactKind.Boundary, salience: 0.95);
         var vm = new CompanionMemoryViewModel(store);
         var row = Row(vm, "no teasing about work");
@@ -321,7 +357,7 @@ public class CompanionMemoryViewModelTests
     [Fact]
     public void ProfileSignals_AreSortedAndSkipEmptyValues()
     {
-        var store = new MemoryStore();
+        var store = NewStore();
         store.UpdateProfileSignal("streakDays", 12);
         store.UpdateProfileSignal("level", 41);
         store.UpdateProfileSignal("archetype", "   ");
@@ -336,7 +372,7 @@ public class CompanionMemoryViewModelTests
     [Fact]
     public void ProfileSignals_FlattenListValues()
     {
-        var store = new MemoryStore();
+        var store = NewStore();
         store.UpdateProfileSignal("favoriteFeatures", new List<string> { "flash", "chaos" });
 
         var vm = new CompanionMemoryViewModel(store);

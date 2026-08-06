@@ -247,7 +247,7 @@ public class PromptTwoZoneTests : IDisposable
 
     private static PromptAssembler Assembler(IMemoryStore? memory = null,
         RecentRecommendations? recs = null, Func<string>? prefix = null, DateTime? now = null) =>
-        new(memory ?? new MemoryStore(), recs ?? new RecentRecommendations(), prefix,
+        new(memory ?? new InertMemoryStore(), recs ?? new RecentRecommendations(), prefix,
             now.HasValue ? () => now.Value : () => new DateTime(2026, 8, 6, 15, 30, 0));
 
     [Fact]
