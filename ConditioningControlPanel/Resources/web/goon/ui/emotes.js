@@ -39,6 +39,15 @@ const RATE_MS = 5000;
  *   pinned to this emote. Six icons in a sheet must not be able to fail because
  *   of a microphone feature.
  *
+ * ...WHICH IS ALSO HOW THE SEND PERK LANDS HERE (2026-08-06). Sending voice notes
+ * is tier 1+ now, gated at the one choke point in ui/voice/voiceService.js
+ * (`sendBlob` -> reason 'not-entitled'). Nothing in this file learned a new fact:
+ * an ungated seat's emote goes out exactly as it always did and simply does not
+ * carry its note, the rejected promise is swallowed by the same handler below,
+ * and the player is told once in the lobby (S.voice.lobbyNoPerk) rather than six
+ * times a match by a toast. NO ERROR SPAM is the requirement, and the existing
+ * fire-and-forget shape is what satisfies it.
+ *
  * IT IS A MODULE-LEVEL PROVIDER, set by boot.js, rather than a mountEmotes()
  * dependency — because this sheet is mounted by ui/hud.js, which is owned by
  * another wave and cannot be asked to thread a new dep through. An instance

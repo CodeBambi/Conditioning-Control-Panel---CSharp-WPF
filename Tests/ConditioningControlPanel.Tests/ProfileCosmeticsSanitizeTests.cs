@@ -378,4 +378,66 @@ public class ProfileCosmeticsSanitizeTests
         Assert.DoesNotContain("deco_transform", json);
         Assert.DoesNotContain("charm_transforms", json);
     }
+
+    // ---- achievement-gated wardrobe items -------------------------------------------------
+    // Gates only bite when BOTH the gate table and the owner's unlock list are knowable; a
+    // viewed card (unlocks unknowable) and a build without a registry (gates unknowable) must
+    // keep rendering whatever was equipped.
+
+    private static readonly Dictionary<string, string> Gates = new()
+    {
+        ["bambi_silk_bow"] = "a1",      // deco gated on an unlocked achievement
+        ["circe_visor"] = "a6",         // deco gated on a LOCKED achievement
+        ["sissy_heel"] = "a6",          // charm gated on a LOCKED achievement
+        // bambi_lollipop: ungated
+    };
+
+    private static ProfileCosmetics CleanGated(ProfileCosmetics? raw, HashSet<string>? unlocked)
+        => ProfileCosmetics.Sanitize(raw, Banners, Achievements, unlocked, Decos, Charms, Avatars, Gates);
+
+    [Fact]
+    public void GatedDecoWithEarnedAchievementSurvivesOnYourOwnCard()
+    {
+        var clean = CleanGated(new ProfileCosmetics { AvatarDeco = "bambi_silk_bow" }, Unlocked);
+        Assert.Equal("bambi_silk_bow", clean.AvatarDeco);
+    }
+
+    [Fact]
+    public void GatedDecoWithoutTheAchievementIsDroppedOnYourOwnCard()
+    {
+        var clean = CleanGated(new ProfileCosmetics { AvatarDeco = "circe_visor" }, Unlocked);
+        Assert.Null(clean.AvatarDeco);
+    }
+
+    [Fact]
+    public void GatedCharmWithoutTheAchievementIsDroppedButUngatedCharmSurvives()
+    {
+        var clean = CleanGated(new ProfileCosmetics
+        {
+            Charms = new List<string> { "sissy_heel", "bambi_lollipop" }
+        }, Unlocked);
+        Assert.Equal(new List<string> { "bambi_lollipop" }, clean.Charms);
+    }
+
+    [Fact]
+    public void GatesDoNotApplyToViewedCards()
+    {
+        // Another user's unlock list is unknowable (null): their gated gear still renders.
+        var clean = CleanGated(new ProfileCosmetics
+        {
+            AvatarDeco = "circe_visor",
+            Charms = new List<string> { "sissy_heel" }
+        }, unlocked: null);
+        Assert.Equal("circe_visor", clean.AvatarDeco);
+        Assert.Equal(new List<string> { "sissy_heel" }, clean.Charms);
+    }
+
+    [Fact]
+    public void MissingGateTableNeverStrips()
+    {
+        // No readable registry (gates null) = cannot validate: pass through, even with unlocks known.
+        var clean = ProfileCosmetics.Sanitize(new ProfileCosmetics { AvatarDeco = "circe_visor" },
+            Banners, Achievements, Unlocked, Decos, Charms, Avatars, wardrobeAchievementGates: null);
+        Assert.Equal("circe_visor", clean.AvatarDeco);
+    }
 }

@@ -184,6 +184,10 @@ namespace ConditioningControlPanel.Models
         /// <param name="knownDecoIds">Phase 3 registry ids of type <c>deco</c>, or null to skip.</param>
         /// <param name="knownCharmIds">Phase 3 registry ids of type <c>charm</c>, or null to skip.</param>
         /// <param name="knownAvatarIds">Preset-avatar ids this build ships art for, or null to skip.</param>
+        /// <param name="wardrobeAchievementGates">Registry gates (item id → required achievement id),
+        /// or null to skip. Only enforced when <paramref name="unlockedAchievementIds"/> is also
+        /// non-null - a gate we cannot check against real unlock data must never strip a loadout
+        /// (VIEWED cards, early boot).</param>
         public static ProfileCosmetics Sanitize(
             ProfileCosmetics? raw,
             ISet<string>? knownBannerIds = null,
@@ -191,7 +195,8 @@ namespace ConditioningControlPanel.Models
             ISet<string>? unlockedAchievementIds = null,
             ISet<string>? knownDecoIds = null,
             ISet<string>? knownCharmIds = null,
-            ISet<string>? knownAvatarIds = null)
+            ISet<string>? knownAvatarIds = null,
+            IReadOnlyDictionary<string, string>? wardrobeAchievementGates = null)
         {
             var clean = new ProfileCosmetics();
             if (raw == null) return clean;
@@ -243,8 +248,17 @@ namespace ConditioningControlPanel.Models
                 // proxy/cosmetics.js). A union check here would let a charm id equip into the
                 // decoration slot, render locally, and then be silently stripped on the way up -
                 // so the wearer would see it forever and no viewer ever would.
+                // Achievement gate, own-card only: enforced solely when BOTH the gate table and
+                // the owner's unlock list are knowable (see the parameter doc above).
+                bool PassesGate(string itemId)
+                {
+                    if (wardrobeAchievementGates == null || unlockedAchievementIds == null) return true;
+                    return !wardrobeAchievementGates.TryGetValue(itemId, out var required)
+                        || unlockedAchievementIds.Contains(required);
+                }
+
                 var deco = Trim(raw.AvatarDeco);
-                if (deco != null && (knownDecoIds == null || knownDecoIds.Contains(deco)))
+                if (deco != null && (knownDecoIds == null || knownDecoIds.Contains(deco)) && PassesGate(deco))
                     clean.AvatarDeco = deco;
 
                 if (raw.Charms != null)
@@ -256,6 +270,7 @@ namespace ConditioningControlPanel.Models
                         if (charm == null) continue;
                         if (clean.Charms.Contains(charm)) continue;
                         if (knownCharmIds != null && !knownCharmIds.Contains(charm)) continue;
+                        if (!PassesGate(charm)) continue;
                         clean.Charms.Add(charm);
                     }
                 }

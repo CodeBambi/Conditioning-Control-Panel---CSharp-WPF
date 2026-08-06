@@ -2255,6 +2255,10 @@ namespace ConditioningControlPanel
                 Logger.Error(ex, "Failed to show achievement popup for: {Name}", achievement.Name);
             }
 
+            // If this achievement gates a wardrobe item, announce that too - a beat later, so it
+            // reads as a consequence of the achievement popup rather than a second competing toast.
+            ShowWardrobeRewardToasts(achievement);
+
             // Play achievement sound
             PlayAchievementSound();
 
@@ -2282,7 +2286,92 @@ namespace ConditioningControlPanel
                 Logger?.Information("Achievement '{Name}' not shared to Discord: DiscordShareAchievements is off", achievement.Name);
             }
         }
-        
+
+        /// <summary>Never show more than this many item toasts for one unlock - the column runs out of screen.</summary>
+        private const int MaxWardrobeRewardToasts = 3;
+
+        /// <summary>
+        /// Reverse-lookup of the wardrobe registry's achievement gates (item id → achievement id):
+        /// any item gated on THIS achievement just became wearable, so it gets an
+        /// <see cref="ItemUnlockedPopup"/> 900ms after the achievement popup.
+        ///
+        /// No suppression logic of its own, deliberately: <c>AchievementService.SuppressPopups</c>
+        /// already returns before the AchievementUnlocked event is fired (AchievementService.cs:830),
+        /// so a cloud restore that back-fills 40 achievements never reaches this handler at all.
+        ///
+        /// No haptics either - the unlock path already fires exactly one achievement pattern.
+        /// </summary>
+        private void ShowWardrobeRewardToasts(Models.Achievement? achievement)
+        {
+            try
+            {
+                var achievementId = achievement?.Id;
+                if (string.IsNullOrWhiteSpace(achievementId)) return;
+
+                var gates = WardrobeCatalog.AchievementGates();
+                if (gates == null || gates.Count == 0) return;   // null = no readable registry
+
+                var rewards = new System.Collections.Generic.List<WardrobeItem>();
+                foreach (var gate in gates)
+                {
+                    if (!string.Equals(gate.Value, achievementId, StringComparison.OrdinalIgnoreCase)) continue;
+                    var item = WardrobeCatalog.Find(gate.Key);
+                    if (item == null) continue;                  // registry id with no row - skip quietly
+                    rewards.Add(item);
+                    if (rewards.Count >= MaxWardrobeRewardToasts) break;
+                }
+
+                if (rewards.Count == 0) return;
+
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+
+                Logger?.Information("Achievement '{Id}' unlocked {Count} wardrobe item(s); queuing item toast(s)",
+                    achievementId, rewards.Count);
+
+                // One-shot delay so the achievement popup lands first. DispatcherTimer (not
+                // Task.Delay) keeps the callback on the UI thread by construction - these are
+                // WPF windows and the handler is fire-and-forget.
+                var timer = new System.Windows.Threading.DispatcherTimer(
+                    System.Windows.Threading.DispatcherPriority.Normal, dispatcher)
+                {
+                    Interval = TimeSpan.FromMilliseconds(900)
+                };
+                timer.Tick += (s, e) =>
+                {
+                    timer.Stop();
+                    try
+                    {
+                        if (Application.Current?.Dispatcher == null ||
+                            Application.Current.Dispatcher.HasShutdownStarted) return;
+
+                        // stackIndex pushes each extra toast a further (Height + 8) upward.
+                        for (int i = 0; i < rewards.Count; i++)
+                        {
+                            try
+                            {
+                                new ItemUnlockedPopup(rewards[i], i).Show();
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger?.Error(ex, "Failed to show item unlocked popup for: {Id}", rewards[i].Id);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger?.Error(ex, "Item unlocked toast tick failed");
+                    }
+                };
+                timer.Start();
+            }
+            catch (Exception ex)
+            {
+                Logger?.Error(ex, "Failed to resolve wardrobe reward for achievement: {Name}", achievement?.Name);
+            }
+        }
+
+
         /// <summary>
         /// Initialize Patreon and load cloud profile if authenticated
         /// </summary>

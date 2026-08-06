@@ -1185,15 +1185,26 @@ async function testSelfDuel() {
 /* ================================================================================
  * 12. BETA GATES (pre-ship follow-ups, 2026-08-04)
  *
- *   a) THE SEND VERDICT. Was "the PREMIUM send verdict": the server answered
- *      /invite and /join with `media_send` (tier>=1), the standalone cap
- *      defaulted OFF against any real server, and boot.js flipped it on when the
- *      verdict landed. Owner call 2026-08-05 made SENDING FREE FOR EVERY SEAT —
- *      the paid perk is hosting alone — so the default inverted to ON and the
- *      verdict became a VETO the server can still exercise (`media_send:false`)
- *      rather than the grant that turns the lane on. Both directions are pinned
- *      below, along with the free-seat fixture: a guest with no account at all
- *      may send, and hosting is still refused to it.
+ *   a) THE SEND VERDICT, which has been three things in three days. Originally
+ *      the PREMIUM verdict: the server answered /invite and /join with
+ *      `media_send` (tier>=1), the standalone cap defaulted OFF against any real
+ *      server, and boot.js flipped it on when the verdict landed. Owner call
+ *      2026-08-05 made SENDING FREE FOR EVERY SEAT — the paid perk was hosting
+ *      alone — so the default inverted to ON and the verdict became a veto rather
+ *      than the grant that turns the lane on. Owner call 2026-08-06 RE-GATED it
+ *      at tier 1+ (abuse beat generosity; voice notes ride the same cap now), and
+ *      this time the page ANSWERS THE FREE SEAT IN WORDS — the first gate shipped
+ *      silent, was read as a broken feature rather than as a paywall, and that is
+ *      the only reason it was ever reverted.
+ *
+ *      THE MECHANISM DID NOT MOVE through any of that, which is what the pins
+ *      below are for: bridge.js still defaults ON, adoptServerSendVerdict still
+ *      folds in whatever the server said, and a `null` still changes nothing.
+ *      What moved is the ANSWER — `media_send` computes computeEffectiveTier >= 1
+ *      again, so an anonymous `g_` seat is told false and the fold is once more
+ *      the thing that decides a standalone seat's lane rather than a veto nobody
+ *      exercises. The free-seat fixture below asserts both halves of that: no
+ *      send, and no room, at two different bars.
  *   b) THE OWED OFFER. A guest that redeemed a code is owed the host's offer
  *      within a poll round trip; a dead host used to leave it on "joining…"
  *      forever because the ICE budget never started. NoOfferTimeoutMs now feeds
@@ -1222,58 +1233,81 @@ async function testBetaGates() {
       '/join carries the verdict and the client records true (premium)');
   }
 
-  /* --- a) THE FREE-SEAT FIXTURE (2026-08-05) -----------------------------------
+  /* --- a) THE FREE-SEAT FIXTURE (re-gated 2026-08-06) --------------------------
    * The owner's decision in one runnable shape: the seat with the LEAST standing
    * this protocol has — an anonymous invite-link click, no account, no tier, a
-   * server-minted `g_` id — may SEND its media, and still may not HOST. The two
-   * halves are asserted against the same server instance on purpose: one gate
-   * moving must not drag the other with it.
+   * server-minted `g_` id — is told it MAY NOT SEND, and may not host either. It
+   * still JOINS, still plays, still RECEIVES everything: two entitlements are
+   * refused to it and nothing else is.
+   *
+   * THE FAKE SERVER HAS ONE GLOBAL `mediaSend` SWITCH, not a tier model (see
+   * net/fakeSignaling.js, and the DOCUMENTED GAP its C# twin carries), so the
+   * per-seat verdict is modelled by setting the switch to what the real server's
+   * computeEffectiveTier would answer for the caller about to speak. That is the
+   * honest fixture available here: the tier arithmetic itself lives server-side,
+   * in another repository, and this suite has never been able to execute it.
    * -------------------------------------------------------------------------- */
   {
-    // Prod's answer as of 2026-08-04: media_send true unconditionally, host gate on.
     const prod = new GoonFakeSignalingServer({ mediaSend: true, hostGate: true });
     prod.setLabAccess('u_lab', true);
 
+    // A tier-2 supporter: over both bars, so it mints a room AND may send.
     const labHost = new GoonSignalingClient({ post: prod.post, unifiedId: 'u_lab', logger: quiet });
     const room = await labHost.createInvite('Lab');
     ok(!!room && labHost.mediaSend === true, 'the tier-2 host mints a room and may send');
 
+    // ...and now the anonymous joiner, for whom computeEffectiveTier is 0.
+    prod.setMediaSend(false);
     // `anonymous: true` is the whole free seat — /join omits unified_id and the
     // server hands back the `g_` identity it minted (see net/signaling.js).
     const freeSeat = new GoonSignalingClient({ post: prod.post, anonymous: true, logger: quiet });
     const joined = await freeSeat.join(room.code, 'Nobody');
-    ok(!!joined, 'an anonymous invite-link click gets a seat with no account at all');
+    ok(!!joined, 'an anonymous invite-link click still GETS A SEAT — joining is free and always was');
     ok(/^g_[a-f0-9]{16}$/.test(freeSeat.guestId), 'and a server-minted guest identity');
-    ok(joined.mediaSend === true && freeSeat.mediaSend === true,
-      'AND THE SERVER SAYS IT MAY SEND — the free seat is a full participant in the media lane');
+    ok(joined.mediaSend === false && freeSeat.mediaSend === false,
+      'AND IS TOLD IT MAY NOT SEND — tier 1+ again as of 2026-08-06, and the client records it');
+    /* THE HALF THE CLIENT OWES IT. This verdict is what boot.js folds into
+     * caps.mediaTransfer, and a `false` there is what the lobby row must EXPLAIN
+     * rather than merely obey — the first tier gate refused in silence and was read
+     * as a broken feature. S.lobby.transferOff / S.voice.lobbyNoPerk are pinned in
+     * selftest-hostgate.js; this is the wire fact they exist to translate. */
 
-    // The other half, unmoved: the same seat cannot mint a room of its own.
+    // The other bar, unmoved and higher: the same seat cannot mint a room of its own.
     const wouldHost = new GoonSignalingClient({
       post: prod.post, unifiedId: freeSeat.guestId, logger: quiet,
     });
     const refused = await wouldHost.createInvite('Nobody');
     ok(refused === null && wouldHost.lastError === GoonSignalError.NoHostAccess,
-      'while HOSTING stays tier 2 — free to send, not free to host');
+      'while HOSTING stays TIER 2 — the two bars are different heights, not one gate');
 
-    // And the veto still works, so the field is a live policy hook rather than
-    // decoration: a server that answers false is obeyed.
-    prod.setMediaSend(false);
-    prod.setLabAccess('u_lab2', true);          // clears the host gate; the veto is the subject here
-    const vetoed = new GoonSignalingClient({ post: prod.post, unifiedId: 'u_lab2', logger: quiet });
-    await vetoed.createInvite('Vetoed');
-    ok(vetoed.mediaSend === false,
-      'a server that answers media_send:false is still obeyed — the grant can be taken back');
+    // And a server that grants it is obeyed just as readily: the field is a live
+    // policy hook in both directions, which is what made three policy changes in
+    // three days shippable without a client release.
+    prod.setMediaSend(true);
+    prod.setLabAccess('u_lab2', true);          // clears the host gate; the verdict is the subject here
+    const granted = new GoonSignalingClient({ post: prod.post, unifiedId: 'u_lab2', logger: quiet });
+    await granted.createInvite('Granted');
+    ok(granted.mediaSend === true,
+      'a server that answers media_send:true is obeyed too — the gate can be moved from the server alone');
   }
 
   // --- a) the page halves, pinned at source level -------------------------------
   {
     const bridge = readSource('../bridge.js');
-    /* THE INVERSION, pinned. Was `!(q.get('server') || prefs.serverBase ||
-     * defaultServerBase())` — sending self-granted ONLY with no server in play.
-     * A free seat always has a server in play, so that expression was the client
-     * half of "my attacks throw blanks". */
+    /* THE INVERSION, pinned, and it SURVIVES the 2026-08-06 re-gate deliberately.
+     * Was `!(q.get('server') || prefs.serverBase || defaultServerBase())` — sending
+     * self-granted ONLY with no server in play, which for a free seat (always with a
+     * server in play) was the client half of "my attacks throw blanks".
+     *
+     * IT STAYS `true` BECAUSE THE DEFAULT IS NOT THE POLICY. The tier gate out here
+     * is the SERVER'S VERDICT (adoptServerSendVerdict, pinned below), and defaulting
+     * ON while letting the server say no is a very different failure mode from
+     * defaulting OFF and hoping a verdict arrives before the first payload: the
+     * second one is the bug this replaced, and re-gating the policy is not a reason
+     * to walk back into it. The pure-local dev path — no server at all, nothing to
+     * ask — is the only case the default is the final answer for. */
     ok(/mediaTransfer:\s*true,/.test(bridge),
-      'standaloneInit grants sending to every seat — the capability is free, hosting is the perk');
+      'standaloneInit still defaults sending ON — the SERVER VERDICT is the gate, not this line');
     ok(!/mediaTransfer:\s*!\(q\.get\('server'\)/.test(bridge),
       'and the old server-presence default is gone, not commented out beside it');
     ok(/\(\^\|\\\.\)cclabs\\\.app\$/.test(bridge),
@@ -1295,6 +1329,12 @@ async function testBetaGates() {
       'hostStart folds AFTER /invite answers');
     ok(/await s\.join\(inviteCode\);[\s\S]{0,400}?adoptServerSendVerdict\(\);/.test(boot),
       'joinStart folds AFTER /join answers');
+    /* ONE CAP, TWO LANES (re-gate 2026-08-06). Whatever this fold decides now also
+     * decides voice notes: both read `session.caps.mediaTransfer` and neither has a
+     * second entitlement of its own. Pinned here rather than only in the voice suite
+     * because THIS is the function that moves the value. */
+    ok((boot.match(/session\.caps && session\.caps\.mediaTransfer === true/g) || []).length >= 2,
+      'the adopted verdict gates BOTH the media queue and the voice service — one send policy');
   }
 
   /* --- a) WHY THE POST-AWAIT FOLD EXISTS, proven rather than asserted ----------

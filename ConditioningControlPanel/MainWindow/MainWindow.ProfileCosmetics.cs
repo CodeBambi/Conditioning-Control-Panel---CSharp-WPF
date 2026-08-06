@@ -133,7 +133,9 @@ namespace ConditioningControlPanel
                 {
                     Stretch = Stretch.UniformToFill,
                     AlignmentX = AlignmentX.Center,
-                    AlignmentY = AlignmentY.Center
+                    // Top-anchored: banner art tends to put its subject in the upper
+                    // half, and a center crop on the wide hero band cut it off.
+                    AlignmentY = AlignmentY.Top
                 };
                 if (brush.CanFreeze) brush.Freeze();
                 layer.Background = brush;

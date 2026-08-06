@@ -288,13 +288,34 @@ function recorder(server) {
   ok(S.sheets.noPass === undefined, 'the weekly-pass copy is retired — the server never sends it');
   ok(typeof S.title.hostNoLab === 'string' && S.title.hostNoLab === S.title.hostNoLab.toLowerCase(),
     'the menu note is lowercase, same voice as lobby.transferOff');
-  /* HOSTING IS THE LAST PAID THING IN THE DUEL (2026-08-05). The lobby's
-   * send-side copy used to make the same pitch; it does not any more, and this
-   * pins that so a future edit cannot quietly re-sell a free capability. */
+  /* TWO PAID THINGS AGAIN, AT TWO DIFFERENT BARS (re-gate 2026-08-06): SENDING is
+   * tier 1+ (caps.mediaTransfer / the server's media_send verdict, and voice notes
+   * ride the same cap), HOSTING is tier 2 (caps.canHost). Sending was free for one
+   * day — 2026-08-05 — and these pins flipped with it; they flip back here.
+   *
+   * WHAT IS PINNED IS THE SHAPE OF THE SENTENCE, not the existence of a pitch. The
+   * FIRST tier gate shipped SILENT: a free seat's attacks fell back to the
+   * receiver's own pool with nothing on screen, and it was read as a broken
+   * feature rather than as a paywall, which is why it was un-gated instead of
+   * explained. The row naming the perk is the condition on the gate coming back. */
   ok(S.lobby.transferNoPremium === undefined,
-    'the old "sending is a supporter perk" key is gone, not merely reworded');
-  ok(typeof S.lobby.transferOff === 'string' && !/supporter|perk|premium/i.test(S.lobby.transferOff),
-    'and its replacement explains the dark row without selling anything');
+    'the retired key stays retired — the live one is transferOff, whatever the policy is this week');
+  ok(typeof S.lobby.transferOff === 'string' && /supporter perk/i.test(S.lobby.transferOff),
+    'the transfer row NAMES the perk — a dark row with no reason is what got the first gate reverted');
+  ok(/receive theirs/i.test(S.lobby.transferOff),
+    'and names what is still free: receiving was never gated, in any era');
+  ok(S.lobby.transferOff === S.lobby.transferOff.toLowerCase(),
+    'lowercase, the same voice as title.hostNoLab');
+  /* ONE SEND POLICY, NOT TWO (owner call, same day). Voice notes ride the SAME
+   * capability, and the voice row makes the same promise in its own vocabulary. */
+  ok(typeof S.voice.lobbyNoPerk === 'string' && /supporter perk/i.test(S.voice.lobbyNoPerk),
+    'the voice row names the same perk — one send policy, said in two places');
+  ok(/hear theirs/i.test(S.voice.lobbyNoPerk), 'and its own free half: hearing them was never gated');
+  /* THE BARS ARE NOT THE SAME BAR, and the copy must not merge them: a tier-1
+   * supporter who may send is still refused a room, and this is the sentence that
+   * has to keep making sense to them. */
+  ok(/tier 2/i.test(S.sheets.noHostAccess.line) || /Tier 2/.test(S.sheets.noHostAccess.line),
+    'the host refusal still names TIER 2 — sending at tier 1 does not buy a room');
 
   const sheets = read('ui/sheets.js');
   ok(/case 'no_host_access':\s*\n\s*case 'no_pass':/.test(sheets),
@@ -470,6 +491,22 @@ function mountTitle(sessionShape) {
     'right beside the transfer verdict it is a rung above');
   ok(/HostingAllowed\(\)\s*\n?\s*\{[\s\S]{0,160}App\.Patreon\?\.HasLabAccess == true;[\s\S]{0,80}catch \{ return false; \}/.test(hostSvc),
     'computed from HasLabAccess, defaulting false in the same try/catch style as TransferAllowed');
+  /* THE OTHER BAR, AND THE PIN IT NEVER HAD (re-gate 2026-08-06). TransferAllowed()
+   * was a bare `return true` for one day and nothing in this suite noticed, because
+   * "free" is the one state a gate does not need asserting. It is tier 1+ again —
+   * HasPremiumAccess, the SAME bar the server's media_send verdict computes
+   * (computeEffectiveTier >= 1) — so the two halves of one policy cannot drift
+   * apart silently a second time. */
+  ok(/TransferAllowed\(\)\s*\n?\s*\{[\s\S]{0,160}App\.Patreon\?\.HasPremiumAccess == true;[\s\S]{0,80}catch \{ return false; \}/.test(hostSvc),
+    'the hosted send verdict is TIER 1+ (HasPremiumAccess), failing closed in the same try/catch style');
+  ok(!/TransferAllowed\(\)\s*\n?\s*\{\s*\n?\s*return true;/.test(hostSvc),
+    'and is not the free-for-every-seat `return true` it was for one day');
+  // Loose across the line wrap: the doc comment breaks mid-sentence and `///` sits
+  // between the words, so the assertion is on the phrase, not on the formatting.
+  ok(/voice notes ride this same[\s\S]{0,24}cap/i.test(hostSvc),
+    'with ONE SEND POLICY documented where the verdict is computed — voice is not a second entitlement');
+  ok(/S\.lobby\.transferOff/.test(hostSvc),
+    'and the C# doc points at the client sentence that keeps the gate legible');
 
   const cs = readApp('Services', 'GoonGame', 'GoonSignalingClient.cs');
   ok(/ErrorNoHostAccess = "no_host_access"/.test(cs), 'the C# client knows no_host_access');

@@ -5010,6 +5010,20 @@ const audioMod = await import('../ui/audio.js');
       && micMod.sendReasonLine('relay') !== micMod.sendReasonLine('nope'),
     '...which is neither the "switch it on" line nor the generic failure');
 
+    /* THE SEND PERK (re-gate 2026-08-06). Sending voice notes is tier 1+ and rides
+     * session.caps.mediaTransfer, the same cap media sends on. Its refusal gets its
+     * own sentence for exactly the reason 'relay' does: `notActive` points at the
+     * two consent checkboxes, and neither of them is what is in the way. Rare by
+     * construction — an unentitled seat has no mic at all — so this is the copy for
+     * the race where a server verdict lands mid-gesture. */
+    ok(micMod.sendReasonLine('not-entitled') === S20.voice.noPerkSend,
+      'an unentitled send names the perk', micMod.sendReasonLine('not-entitled'));
+    ok(/supporter perk/i.test(S20.voice.noPerkSend), 'in so many words');
+    ok(micMod.sendReasonLine('not-entitled') !== micMod.sendReasonLine('unavailable')
+      && micMod.sendReasonLine('not-entitled') !== micMod.sendReasonLine('relay')
+      && micMod.sendReasonLine('not-entitled') !== micMod.sendReasonLine('nope'),
+    '...and is its own line, not borrowed from the switch, the link or the catch-all');
+
     /* TWO KINDS OF NO, AND THEY ARE NOT THE SAME SENTENCE. sendReasonLine is
      * about a NOTE that failed to cross; micReasonLine is about a MICROPHONE
      * that never opened. Telling somebody "that one did not record" when nothing
