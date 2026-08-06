@@ -153,10 +153,13 @@ public class AwarenessArbiterTests
         Assert.Equal(0, ledger.LinesLastHour(T0));
     }
 
-    // ===================== the shell arbiter =====================
+    // ===================== the arbiter =====================
+    // The decision table, the one-reaction-per-frame guarantee and the [PASS]/timeout/staleness paths
+    // live in AwarenessArbiterDecisionTests, which drives a fake mouth. These cover the wiring-free
+    // arbiter — the shape the observer gets when nothing has been handed to it yet.
 
     [Fact]
-    public async Task TheShellArbiterNeverPromisesAnLlmLineItCannotDeliver()
+    public async Task AnArbiterWithNoMouthWiredNeverPromisesALineItCannotDeliver()
     {
         var arbiter = new ReactionArbiter(Chatty(), new WorthinessScorer(() => AwarenessIntensity.Chatty), () => T0);
         var frame = new ContextFrame { AppId = "youtube", Tier = RarityTier.Rare };

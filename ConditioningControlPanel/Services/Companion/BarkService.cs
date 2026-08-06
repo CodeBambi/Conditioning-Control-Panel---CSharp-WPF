@@ -220,6 +220,41 @@ namespace ConditioningControlPanel.Services
         public void NotifyStreakMilestone(int days)
             => Raise("StreakMilestone", c => c.Set("streak_days", (double)days), guaranteed: true);
 
+        /// <summary>
+        /// Awareness v2's bark entry point: the arbiter has decided this moment is worth the free,
+        /// instant, voiced tier and asks for a line.
+        ///
+        /// <para>This raises exactly the same <c>ActivityChanged</c>/<c>StillOnActivity</c> triggers the
+        /// direct subscriptions used to, with the same context keys, so every authored rule in
+        /// <c>bark_rules.json</c> keeps working untouched — the only change is WHO decides. The bark
+        /// system's own gates (per-rule cooldown, the 60s global min-gap, chat suppression, safety
+        /// hold) still apply on top of the arbiter's, because they are the outer floor for non-safety
+        /// lines and v2 tightens pacing, never loosens it.</para>
+        ///
+        /// <para>Nothing about the frame reaches disk or the network here: bark context values are
+        /// substituted into a local, authored line and spoken.</para>
+        /// </summary>
+        /// <returns>True only when a line actually spoke, so the arbiter records one delivery or none.</returns>
+        public bool RaiseAwarenessBark(Awareness.ContextFrame frame)
+        {
+            if (frame == null) return false;
+
+            if (frame.Transition == Awareness.TransitionKind.Milestone)
+            {
+                return Raise("StillOnActivity", c => c
+                    .Set("activity", frame.ServiceName ?? "")
+                    .Set("still_minutes", Math.Floor(Math.Max(0, frame.DwellSeconds) / 60.0))
+                    .Set("app_cluster", frame.AppCluster ?? "")
+                    .Set("app", frame.AppId ?? ""));
+            }
+
+            return Raise("ActivityChanged", c => c
+                .Set("activity", frame.ServiceName ?? "")
+                .Set("category", frame.Category.ToString())
+                .Set("app_cluster", frame.AppCluster ?? "")
+                .Set("app", frame.AppId ?? ""));
+        }
+
         /// <summary>A dashboard feature popup was opened (feature = control type name w/o "FeatureControl", e.g. "Flash").</summary>
         public void NotifyFeatureOpened(string? feature)
         {
@@ -557,18 +592,32 @@ namespace ConditioningControlPanel.Services
                         .Set("kw_effect", kt?.VisualEffect.ToString() ?? "")));
             if (App.WindowAwareness != null)
             {
+                // Awareness v2: when the arbiter is driving, these two must NOT fire. They are one of
+                // the two legacy mouths (doc 02 §1.5) — the other is AvatarTubeWindow's reaction
+                // handlers — and both firing on one window change is the double-reaction bug. The
+                // arbiter re-raises the same triggers through RaiseAwarenessBark once it has decided
+                // the moment is worth a bark, so nothing is lost, it is just gated. With v2 off (or
+                // unwired) this is byte-for-byte today's behaviour.
                 Wire<EventHandler<ActivityChangedEventArgs>>(h => App.WindowAwareness.ActivityChanged += h, h => App.WindowAwareness.ActivityChanged -= h,
-                    (_, a) => Raise("ActivityChanged", c => c
-                        .Set("activity", a?.ServiceName ?? "")
-                        .Set("category", a?.Category.ToString() ?? "")
-                        // Fine-grained awareness (item G) — populated only when AppClusterMap matched the
-                        // title; empty otherwise so app_cluster_eq/app_eq rules simply don't match.
-                        .Set("app_cluster", a?.AppCluster ?? "")
-                        .Set("app", a?.AppId ?? "")));
+                    (_, a) =>
+                    {
+                        if (Awareness.AwarenessV2Routing.IsActive) return;
+                        Raise("ActivityChanged", c => c
+                            .Set("activity", a?.ServiceName ?? "")
+                            .Set("category", a?.Category.ToString() ?? "")
+                            // Fine-grained awareness (item G) — populated only when AppClusterMap matched the
+                            // title; empty otherwise so app_cluster_eq/app_eq rules simply don't match.
+                            .Set("app_cluster", a?.AppCluster ?? "")
+                            .Set("app", a?.AppId ?? ""));
+                    });
                 Wire<EventHandler<ActivityChangedEventArgs>>(h => App.WindowAwareness.StillOnActivity += h, h => App.WindowAwareness.StillOnActivity -= h,
-                    (_, a) => Raise("StillOnActivity", c => c
-                        .Set("activity", a?.ServiceName ?? "")
-                        .Set("still_minutes", App.WindowAwareness?.CurrentActivityDuration.TotalMinutes ?? 0)));
+                    (_, a) =>
+                    {
+                        if (Awareness.AwarenessV2Routing.IsActive) return;
+                        Raise("StillOnActivity", c => c
+                            .Set("activity", a?.ServiceName ?? "")
+                            .Set("still_minutes", App.WindowAwareness?.CurrentActivityDuration.TotalMinutes ?? 0));
+                    });
             }
 
             // ---- Progression / companion / skills ----
