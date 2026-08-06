@@ -92,6 +92,16 @@ namespace ConditioningControlPanel.Services
         private const int MaxDownloadAttempts = 10;
 
         /// <summary>
+        /// Extract+merge passes before a pack install is called lost. Two, because the usual reason a
+        /// download that arrived intact still fails to install is a real-time antivirus scanner
+        /// holding freshly written files open — which clears on its own within seconds. The rollback
+        /// only runs after the LAST attempt, so the retry keeps whatever the first pass landed.
+        /// </summary>
+        private const int MaxInstallAttempts = 2;
+
+        private static readonly TimeSpan InstallRetryDelay = TimeSpan.FromSeconds(5);
+
+        /// <summary>
         /// Bound on the (tiny) manifest GET. <see cref="HttpClient.Timeout"/> is sized for a 380 MB
         /// pack, so without this a black-holing network would leave the picker "not offline yet" for
         /// half an hour. Downloads keep the long timeout — they have their own retry ladder.
@@ -668,10 +678,6 @@ namespace ConditioningControlPanel.Services
                 // ---- install: extract to a temp sibling, then merge into content\{targetRoot} ----
                 SetState(ReleaseContentState.Installing, packId, 100);
 
-                TryDeleteDirectory(extractPath);
-                await Task.Run(() => ZipFile.ExtractToDirectory(partialPath, extractPath, overwriteFiles: true), ct)
-                    .ConfigureAwait(false);
-
                 var target = ResolveTargetDirectory(info);
                 if (target == null)
                 {
@@ -683,7 +689,42 @@ namespace ConditioningControlPanel.Services
                     return false;
                 }
 
-                await Task.Run(() => MergeDirectory(extractPath, target), ct).ConfigureAwait(false);
+                // One journal across BOTH attempts: the retry merges on top of whatever the first
+                // attempt already wrote, so only a journal that spans them can take the whole failed
+                // install back out.
+                var journal = new MergeJournal();
+
+                for (var attempt = 1; attempt <= MaxInstallAttempts; attempt++)
+                {
+                    try
+                    {
+                        TryDeleteDirectory(extractPath);
+                        await Task.Run(() => ZipFile.ExtractToDirectory(partialPath, extractPath, overwriteFiles: true), ct)
+                            .ConfigureAwait(false);
+                        await Task.Run(() => MergeDirectory(extractPath, target, journal), ct).ConfigureAwait(false);
+                        break;
+                    }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex) when (attempt < MaxInstallAttempts)
+                    {
+                        // Real-time antivirus holds freshly written files open for a beat, which is
+                        // the common way a download that arrived intact still fails to install.
+                        App.Logger?.Warning(
+                            "ReleaseContentService: install of {Pack} failed on attempt {Attempt}/{Max} ({Error}) — retrying in {Seconds}s",
+                            packId, attempt, MaxInstallAttempts, ex.Message, (int)InstallRetryDelay.TotalSeconds);
+                        await Task.Delay(InstallRetryDelay, ct).ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        // Out of attempts: pull this merge's files back out so the pack reads as
+                        // clearly missing next launch instead of "present" over half a payload.
+                        RollbackMerge(journal, packId);
+                        throw;
+                    }
+                }
 
                 TryDeleteDirectory(extractPath);
                 TryDeleteFile(partialPath);
@@ -921,13 +962,20 @@ namespace ConditioningControlPanel.Services
         /// <see cref="Directory.Move"/> when the target does not exist (both live under LOCALAPPDATA,
         /// so it is a same-volume rename); otherwise a recursive file-by-file overwrite so an update
         /// replaces changed files without orphaning the rest.
+        ///
+        /// Everything it writes goes into <paramref name="journal"/> so a failure part-way through
+        /// can be taken back out — see <see cref="MergeJournal"/>.
         /// </summary>
-        private static void MergeDirectory(string source, string target)
+        private static void MergeDirectory(string source, string target, MergeJournal journal)
         {
             if (!Directory.Exists(target))
             {
                 var parent = Path.GetDirectoryName(target);
-                if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
+                if (!string.IsNullOrEmpty(parent)) CreateDirectoryTracked(parent, journal);
+
+                // Recorded BEFORE the rename: nothing else can own a tree that did not exist a
+                // moment ago, so on failure it comes out whole regardless of how far Move got.
+                journal.RecordTree(target);
                 Directory.Move(source, target);
                 return;
             }
@@ -935,7 +983,7 @@ namespace ConditioningControlPanel.Services
             foreach (var dir in Directory.GetDirectories(source, "*", SearchOption.AllDirectories))
             {
                 var rel = Path.GetRelativePath(source, dir);
-                Directory.CreateDirectory(Path.Combine(target, rel));
+                CreateDirectoryTracked(Path.Combine(target, rel), journal);
             }
 
             foreach (var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
@@ -943,8 +991,48 @@ namespace ConditioningControlPanel.Services
                 var rel = Path.GetRelativePath(source, file);
                 var dest = Path.Combine(target, rel);
                 var destDir = Path.GetDirectoryName(dest);
-                if (!string.IsNullOrEmpty(destDir)) Directory.CreateDirectory(destDir);
+                if (!string.IsNullOrEmpty(destDir)) CreateDirectoryTracked(destDir, journal);
                 File.Copy(file, dest, overwrite: true);
+                journal.RecordFile(dest);
+            }
+        }
+
+        /// <summary>
+        /// <see cref="Directory.CreateDirectory"/> that tells <paramref name="journal"/> about every
+        /// folder it actually had to create, so a rollback removes only the ones this merge
+        /// introduced and never a shared folder that was already there.
+        /// </summary>
+        private static void CreateDirectoryTracked(string path, MergeJournal journal)
+        {
+            if (string.IsNullOrEmpty(path) || Directory.Exists(path)) return;
+
+            // The missing ancestors count too: CreateDirectory makes the whole chain in one call,
+            // and a rollback that only knew the leaf would leave the empty chain above it behind.
+            var parent = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(parent)) CreateDirectoryTracked(parent, journal);
+
+            Directory.CreateDirectory(path);
+            journal.RecordDirectory(path);
+        }
+
+        /// <summary>
+        /// Undoes a merge that threw part-way, so the pack converges back to "clearly missing" and
+        /// the next launch's floor probe re-fetches it. Never throws.
+        /// </summary>
+        private static void RollbackMerge(MergeJournal journal, string packId)
+        {
+            try
+            {
+                if (journal.IsEmpty) return;
+
+                var removed = journal.Rollback();
+                App.Logger?.Warning(
+                    "ReleaseContentService: rolled back the failed {Pack} install — removed {Removed} merged file(s) so the next launch re-fetches",
+                    packId, removed);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "ReleaseContentService: rollback of the failed {Pack} install did not complete", packId);
             }
         }
 
