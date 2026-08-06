@@ -1049,6 +1049,7 @@ namespace ConditioningControlPanel
         {
             var map = App.Settings?.Current?.CompanionSectionOpen;
             if (map == null) return;
+            if (CompanionTab.SectionMemory    != null && map.TryGetValue("Memory",    out var mm)) CompanionTab.SectionMemory.IsExpanded    = mm;
             if (CompanionTab.SectionBehaviour != null && map.TryGetValue("Behaviour", out var b)) CompanionTab.SectionBehaviour.IsExpanded = b;
             if (CompanionTab.SectionPhrases   != null && map.TryGetValue("Phrases",   out var p)) CompanionTab.SectionPhrases.IsExpanded   = p;
             if (CompanionTab.SectionContent   != null && map.TryGetValue("Content",   out var c)) CompanionTab.SectionContent.IsExpanded   = c;
