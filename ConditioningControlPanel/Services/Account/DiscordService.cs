@@ -25,6 +25,9 @@ namespace ConditioningControlPanel.Services
 
         // Configuration
         private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";
+
+        /// <summary>Our Discord server's guild id — used to build per-guild avatar CDN URLs.</summary>
+        public const string GuildId = "1456573221489999934";
         private const int LocalCallbackPort = 47833; // Different port than Patreon (47832)
         private const int CacheHours = 24;
         private const int OAuthTimeoutMinutes = 5;
@@ -58,6 +61,19 @@ namespace ConditioningControlPanel.Services
         /// Discord avatar hash
         /// </summary>
         public string? Avatar { get; private set; }
+
+        /// <summary>
+        /// Per-guild avatar hash for our Discord server (null when the user is not
+        /// in the guild or has no server-specific avatar). Preferred over the global
+        /// <see cref="Avatar"/> when building avatar URLs.
+        /// </summary>
+        public string? GuildAvatar { get; private set; }
+
+        /// <summary>
+        /// True when the user holds a staff role on our Discord server (server-computed
+        /// from the bot's guild-member fetch; drives the profile STAFF badge).
+        /// </summary>
+        public bool IsStaff { get; private set; }
 
         /// <summary>
         /// Whether the user is authenticated with Discord
@@ -98,7 +114,16 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public string? GetAvatarUrl(int size = 128)
         {
-            if (string.IsNullOrEmpty(Avatar) || string.IsNullOrEmpty(UserId))
+            if (string.IsNullOrEmpty(UserId))
+                return null;
+
+            if (!string.IsNullOrEmpty(GuildAvatar))
+            {
+                var guildExt = GuildAvatar.StartsWith("a_") ? "gif" : "png";
+                return $"https://cdn.discordapp.com/guilds/{GuildId}/users/{UserId}/avatars/{GuildAvatar}.{guildExt}?size={size}";
+            }
+
+            if (string.IsNullOrEmpty(Avatar))
                 return null;
 
             var extension = Avatar.StartsWith("a_") ? "gif" : "png";
@@ -469,6 +494,8 @@ namespace ConditioningControlPanel.Services
                 Username = user.Username;
                 DisplayName = user.DisplayName;
                 Avatar = user.Avatar;
+                GuildAvatar = user.GuildAvatar;
+                IsStaff = user.IsStaff;
                 NeedsRegistration = user.NeedsRegistration;
 
                 // Apply server-side whitelist so whitelisted Discord-only users get
@@ -486,6 +513,8 @@ namespace ConditioningControlPanel.Services
                     Username = user.Username,
                     GlobalName = user.GlobalName,
                     Avatar = user.Avatar,
+                    GuildAvatar = user.GuildAvatar,
+                    IsStaff = user.IsStaff,
                     IsWhitelisted = user.IsWhitelisted,
                     LastVerified = DateTime.UtcNow,
                     CacheExpiresAt = DateTime.UtcNow.AddHours(CacheHours)
@@ -547,6 +576,8 @@ namespace ConditioningControlPanel.Services
             Username = cachedState.Username;
             DisplayName = cachedState.DisplayName;
             Avatar = cachedState.Avatar;
+            GuildAvatar = cachedState.GuildAvatar;
+            IsStaff = cachedState.IsStaff;
             CustomDisplayName = cachedState.CustomDisplayName;
 
             // Re-apply whitelist on a cache-hit so access survives across restarts
@@ -582,6 +613,8 @@ namespace ConditioningControlPanel.Services
             Username = null;
             DisplayName = null;
             Avatar = null;
+            GuildAvatar = null;
+            IsStaff = false;
             CustomDisplayName = null;
         }
 

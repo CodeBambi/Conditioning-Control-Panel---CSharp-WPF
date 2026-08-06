@@ -219,6 +219,39 @@
                                                 <TextBlock Text="{loc:Str label_og_good_girl}" Foreground="{DynamicResource DarkerBgBrush}" FontSize="10" FontWeight="ExtraBold"
                                                            FontFamily="Segoe UI" VerticalAlignment="Center"/>
                                             </Border>
+                                            <!-- STAFF: dark pill, crimson->gold gradient border (inverse of the
+                                                 OG pill's gradient-fill look so the two never read as one). -->
+                                            <Border x:Name="StaffBadge" x:FieldModifier="internal" Visibility="Collapsed"
+                                                    Padding="8,3" CornerRadius="9" BorderThickness="1.5"
+                                                    Background="#CC1A1226" VerticalAlignment="Center" Margin="0,0,8,0">
+                                                <Border.BorderBrush>
+                                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                        <GradientStop Color="#FF5C7A" Offset="0"/>
+                                                        <GradientStop Color="#FFD700" Offset="1"/>
+                                                    </LinearGradientBrush>
+                                                </Border.BorderBrush>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="🛠" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                    <TextBlock Text="{loc:Str label_badge_staff}" Foreground="#FFD9A0" FontSize="10"
+                                                               FontWeight="ExtraBold" FontFamily="Segoe UI" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Border>
+                                            <!-- WHITELISTED: dark pill, cyan->pink gradient border. -->
+                                            <Border x:Name="WhitelistBadge" x:FieldModifier="internal" Visibility="Collapsed"
+                                                    Padding="8,3" CornerRadius="9" BorderThickness="1.5"
+                                                    Background="#CC0F1A26" VerticalAlignment="Center" Margin="0,0,8,0">
+                                                <Border.BorderBrush>
+                                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                        <GradientStop Color="#5EC8F2" Offset="0"/>
+                                                        <GradientStop Color="{DynamicResource PinkColor}" Offset="1"/>
+                                                    </LinearGradientBrush>
+                                                </Border.BorderBrush>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="⚗" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                    <TextBlock Text="{loc:Str label_badge_whitelist}" Foreground="#A9E4FF" FontSize="10"
+                                                               FontWeight="ExtraBold" FontFamily="Segoe UI" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Border>
                                             <Image x:Name="ProfilePatreonTierBadge" x:FieldModifier="internal" Height="30" Width="30"
                                                    Margin="0,0,6,0" VerticalAlignment="Center" Visibility="Collapsed" Stretch="Uniform"/>
                                             <Image x:Name="ProfilePatreonBadge" x:FieldModifier="internal" Height="26"

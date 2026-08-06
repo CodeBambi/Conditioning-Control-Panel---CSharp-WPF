@@ -255,12 +255,16 @@ namespace ConditioningControlPanel
         {
             try
             {
-                Border? tile = null;
+                // The card is looked up directly rather than walked up from the badge Image: on the
+                // redesigned cards the Image's parent is a layout Grid inside the ToggleButton's
+                // content, not the card itself.
+                FrameworkElement? tile = null;
                 if (!string.IsNullOrEmpty(achievementId)
-                    && _achievementImages.TryGetValue(achievementId!, out var image))
+                    && _achievementCards.TryGetValue(achievementId!, out var card))
                 {
-                    tile = image?.Parent as Border;
-                    if (tile != null && AchievementsTab?.IsVisible == true) RevealAchievementTile(tile, image!);
+                    tile = card;
+                    _achievementImages.TryGetValue(achievementId!, out var image);
+                    if (image != null && AchievementsTab?.IsVisible == true) RevealAchievementTile(tile, image);
                 }
 
                 FireBurstAtFirstVisible(FxBurstSpot.Center, FxTheme.GlowColor, AchievementBurstCount,
@@ -277,7 +281,7 @@ namespace ConditioningControlPanel
         /// Where glow/blur is not allowed (Performance tier) it degrades to the opacity+scale
         /// settle alone, which is the same beat without the raster.
         /// </summary>
-        private void RevealAchievementTile(Border tile, Image image)
+        private void RevealAchievementTile(FrameworkElement tile, Image image)
         {
             try
             {

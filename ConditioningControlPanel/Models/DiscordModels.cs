@@ -85,6 +85,23 @@ namespace ConditioningControlPanel.Models
         [JsonPropertyName("avatar")]
         public string? Avatar { get; set; }
 
+        /// <summary>
+        /// Per-guild avatar hash for our Discord server, when the user has set one.
+        /// Fetched server-side via the bot token during /discord/validate; null when
+        /// the user is not in the guild or uses their global avatar there.
+        /// </summary>
+        [JsonProperty("guild_avatar")]
+        [JsonPropertyName("guild_avatar")]
+        public string? GuildAvatar { get; set; }
+
+        /// <summary>
+        /// True when the user holds a configured staff role on our Discord server.
+        /// Determined server-side from the bot's guild-member fetch (never client-supplied).
+        /// </summary>
+        [JsonProperty("is_staff")]
+        [JsonPropertyName("is_staff")]
+        public bool IsStaff { get; set; }
+
         [JsonProperty("verified")]
         [JsonPropertyName("verified")]
         public bool Verified { get; set; }
@@ -140,6 +157,12 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         public string? GetAvatarUrl(int size = 128)
         {
+            if (!string.IsNullOrEmpty(GuildAvatar) && !string.IsNullOrEmpty(Id))
+            {
+                var guildExt = GuildAvatar.StartsWith("a_") ? "gif" : "png";
+                return $"https://cdn.discordapp.com/guilds/{Services.DiscordService.GuildId}/users/{Id}/avatars/{GuildAvatar}.{guildExt}?size={size}";
+            }
+
             if (string.IsNullOrEmpty(Avatar))
                 return null;
 
@@ -164,6 +187,17 @@ namespace ConditioningControlPanel.Models
 
         [JsonProperty("avatar")]
         public string? Avatar { get; set; }
+
+        /// <summary>
+        /// Cached per-guild avatar hash for our Discord server (see
+        /// <see cref="DiscordUserResponse.GuildAvatar"/>).
+        /// </summary>
+        [JsonProperty("guild_avatar")]
+        public string? GuildAvatar { get; set; }
+
+        /// <summary>Cached staff flag (see <see cref="DiscordUserResponse.IsStaff"/>).</summary>
+        [JsonProperty("is_staff")]
+        public bool IsStaff { get; set; }
 
         [JsonProperty("custom_display_name")]
         public string? CustomDisplayName { get; set; }
