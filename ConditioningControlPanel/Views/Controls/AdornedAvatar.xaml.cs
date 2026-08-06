@@ -236,6 +236,21 @@ namespace ConditioningControlPanel.Views.Controls
                     var canvas = size / WardrobeCatalog.AvatarCircleRatio;
                     DecoLayer.Width = canvas;
                     DecoLayer.Height = canvas;
+
+                    // ...and the one piece of WPF trivia that makes it work. A child whose
+                    // UNCLIPPED desired size exceeds its arrange slot gets a layout clip from
+                    // FrameworkElement.ArrangeCore - nothing to do with ClipToBounds, and it cannot
+                    // be turned off. At 104px that silently cut the 148px canvas down to the
+                    // avatar's own 104x104 box, i.e. it threw away the outer 30% of EVERY
+                    // decoration: headset headbands lost their arc, scarves lost their fringe. The
+                    // wardrobe editor draws the same sprite on a Canvas (measured against infinity)
+                    // and so was never clipped, which is exactly why the preview lied.
+                    //
+                    // A symmetric negative margin makes the total desired size (canvas + margin)
+                    // equal the slot again, so there is no clip and the art still centres on the
+                    // avatar and still contributes only `size` to layout.
+                    DecoLayer.Margin = new Thickness(-(canvas - size) / 2d);
+
                     // Translate offsets are canvas-relative, so a size change re-derives them.
                     ApplyDecorationTransform();
                 }

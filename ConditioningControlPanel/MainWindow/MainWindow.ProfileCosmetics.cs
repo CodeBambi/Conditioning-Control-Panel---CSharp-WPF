@@ -293,7 +293,15 @@ namespace ConditioningControlPanel
                 // screen; a searched profile's picture is not yours to arrange hats on.
                 var avatar = _profileViewingSelf ? DiscordTab?.ProfileViewerAvatar?.ImageSource : null;
 
-                var dialog = new ProfileCustomizeDialog(current, unlocked, avatar) { Owner = this };
+                // The wardrobe stage mocks the card at ITS aspect ratio: charm placement is stored
+                // as a fraction of card width/height, so a preview drawn at any other shape shows a
+                // composition no viewer will ever see. Zero (card never arranged) is handled by
+                // WardrobeStageGeometry.
+                var card = DiscordTab?.ProfileHeroCard;
+
+                var dialog = new ProfileCustomizeDialog(
+                    current, unlocked, avatar, card?.ActualWidth ?? 0, card?.ActualHeight ?? 0)
+                { Owner = this };
                 if (dialog.ShowDialog() != true) return;
 
                 PersistOwnCosmetics(CosmeticsCatalog.SanitizeOwn(dialog.Result));

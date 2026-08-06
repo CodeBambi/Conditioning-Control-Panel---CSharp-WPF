@@ -29,6 +29,13 @@ namespace ConditioningControlPanel
         /// <summary>The viewer's avatar picture, for the Wardrobe editor's stage. Optional.</summary>
         private readonly ImageSource? _editorAvatar;
 
+        /// <summary>
+        /// The live hero card's measured size, forwarded to the Wardrobe editor so its stage is a
+        /// to-scale mock of the card the wearer is actually looking at. Zero when unknown.
+        /// </summary>
+        private readonly double _cardWidth;
+        private readonly double _cardHeight;
+
         private readonly Dictionary<string, Border> _bannerTiles = new(StringComparer.Ordinal);
         private readonly Dictionary<string, Border> _avatarTiles = new(StringComparer.Ordinal);
         private readonly Dictionary<string, Border> _accentTiles = new(StringComparer.Ordinal);
@@ -56,12 +63,15 @@ namespace ConditioningControlPanel
         public ProfileCosmetics Result => _draft;
 
         public ProfileCustomizeDialog(ProfileCosmetics current, IEnumerable<string>? unlockedAchievementIds,
-                                      ImageSource? editorAvatar = null)
+                                      ImageSource? editorAvatar = null,
+                                      double cardWidth = 0, double cardHeight = 0)
         {
             InitializeComponent();
 
             _draft = (current ?? new ProfileCosmetics()).Clone();
             _editorAvatar = editorAvatar;
+            _cardWidth = cardWidth;
+            _cardHeight = cardHeight;
 
             var unlockedSet = new HashSet<string>(
                 unlockedAchievementIds ?? Enumerable.Empty<string>(), StringComparer.Ordinal);
@@ -736,7 +746,8 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var editor = new WardrobeEditorDialog(_draft, _editorAvatar) { Owner = this };
+                var editor = new WardrobeEditorDialog(_draft, _editorAvatar, _cardWidth, _cardHeight)
+                { Owner = this };
                 editor.ShowDialog();
             }
             catch (Exception ex)
