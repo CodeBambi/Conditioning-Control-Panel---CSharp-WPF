@@ -674,7 +674,7 @@ namespace ConditioningControlPanel
                 App.Settings.Current.AllowDiscordDm = isChecked;
 
                 // Sync profile tab checkbox
-                if (DiscordTab.ChkDiscordTabAllowDm != null && DiscordTab.ChkDiscordTabAllowDm != chk)
+                if (DiscordTab?.ChkDiscordTabAllowDm != null && DiscordTab.ChkDiscordTabAllowDm != chk)
                     DiscordTab.ChkDiscordTabAllowDm.IsChecked = isChecked;
 
                 // Sync immediately so the setting takes effect on the leaderboard
@@ -710,7 +710,7 @@ namespace ConditioningControlPanel
                 App.Settings.Current.ShareProfilePicture = isChecked;
 
                 // Sync profile tab checkbox
-                if (DiscordTab.ChkDiscordTabSharePfp != null && DiscordTab.ChkDiscordTabSharePfp != chk)
+                if (DiscordTab?.ChkDiscordTabSharePfp != null && DiscordTab.ChkDiscordTabSharePfp != chk)
                     DiscordTab.ChkDiscordTabSharePfp.IsChecked = isChecked;
 
                 // Sync immediately so the setting takes effect
@@ -792,7 +792,7 @@ namespace ConditioningControlPanel
                 App.Settings.Current.ShowOnlineStatus = isChecked;
 
                 // Sync profile tab checkbox
-                if (DiscordTab.ChkDiscordTabShowOnline != null && DiscordTab.ChkDiscordTabShowOnline != chk)
+                if (DiscordTab?.ChkDiscordTabShowOnline != null && DiscordTab.ChkDiscordTabShowOnline != chk)
                     DiscordTab.ChkDiscordTabShowOnline.IsChecked = isChecked;
 
                 App.Logger?.Information("Online status visibility changed: {Visible}", isChecked);

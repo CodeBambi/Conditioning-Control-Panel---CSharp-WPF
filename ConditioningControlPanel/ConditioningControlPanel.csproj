@@ -193,6 +193,22 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- Profile cosmetics: the wardrobe registry + the 512x512 avatar-decoration and
+         charm PNGs (Resources\cosmetics\<mod>\<id>.png). Loaded OFF DISK from
+         AppContext.BaseDirectory like the Chaos art, NOT via pack:// - so a missing
+         file degrades to "no decoration" instead of failing a Resource URI at runtime.
+         Remove from the default None glob first so the no-copy None item doesn't
+         suppress this Content copy. -->
+    <None Remove="Resources\cosmetics\**\*.png;Resources\cosmetics\*.json" />
+    <!-- The art pipeline leaves downscale sanity checks (<id>_104.png, <id>_28.png) and
+         placement guides (<id>_guide.png) beside the finals. Only ids the registry names
+         are ever loaded, so those would ship as dead weight - keep them out of the build. -->
+    <Content Include="Resources\cosmetics\**\*.png;Resources\cosmetics\*.json"
+             Exclude="Resources\cosmetics\**\*_28.png;Resources\cosmetics\**\*_104.png;Resources\cosmetics\**\*_guide.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
     <!-- Exclusives tab art (vault backdrop), loaded off disk by Views/Tabs/ExclusivesTabView -->
     <None Remove="assets\exclusives\*.png" />
     <Content Include="assets\exclusives\*.png">
@@ -342,6 +358,11 @@
          SINGLE LEVEL on purpose - a Resources\programs\<sub>\ folder would compile fine and then
          fail at runtime with a broken pack:// URI, because nothing here globs recursively. -->
     <Resource Include="Resources\programs\*.png" />
+
+    <!-- Profile hero banners (CosmeticsCatalog.Banners). Resource, NOT Content: the banner
+         loader is pack:// only, and these must never fall under the Resources\cosmetics\**
+         Content glob that ships the wardrobe art loose on disk. -->
+    <Resource Include="Resources\banners\*.png" />
   </ItemGroup>
 
   <ItemGroup>

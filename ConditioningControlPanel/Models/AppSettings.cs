@@ -2154,6 +2154,24 @@ namespace ConditioningControlPanel.Models
             set { _shareProfilePicture = value; OnPropertyChanged(); }
         }
 
+        private ProfileCosmetics _profileCosmetics = new();
+        /// <summary>
+        /// What this subject has equipped on their Trainer Card: banner, accent, worn title,
+        /// pinned achievements (and, from Phase 3, avatar decoration + charms).
+        ///
+        /// Stored locally AND synced (<c>cosmetics</c> in the /user/sync payload) so the same look
+        /// follows the account to a new machine and renders on other people's screens. Always run
+        /// it through <see cref="Services.CosmeticsCatalog.SanitizeOwn"/> before sending or
+        /// rendering - the settings file is user-editable and the ids in it may be from a build
+        /// whose art this one does not ship.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public ProfileCosmetics ProfileCosmetics
+        {
+            get => _profileCosmetics;
+            set { _profileCosmetics = value ?? new ProfileCosmetics(); OnPropertyChanged(); }
+        }
+
         private bool _showOnlineStatus = true;
         /// <summary>
         /// Show your online status on the leaderboard and profile viewer.

@@ -4,72 +4,96 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+             xmlns:ctrl="clr-namespace:ConditioningControlPanel.Views.Controls"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
-             d:DesignHeight="450" d:DesignWidth="800">
+             d:DesignHeight="620" d:DesignWidth="1460">
+
+    <!-- ================================================================
+         PROFILE — "The Trainer Card"  (redesign Phase 1, "Reclaim")
+
+         Three strata, borrowing the Velvet Vault's room/scrim language:
+           1. The room   — flat #12101F ground under a vertical scrim.
+           2. The hero   — full-width Trainer Card: banner + 104px avatar
+                           (OG ring untouched), identity, XP bar, gold
+                           LEVEL/RANK plates, Customize + Privacy buttons.
+           3. The shelf  — The Record (ledger) | Showcase (pins + all) |
+                           Community rail (search, chips, teaser plates).
+
+         Rules honoured here:
+           • Every x:Name MainWindow's partials write to is preserved, and
+             the whole sharing column moved verbatim into
+             Views/Controls/ProfilePrivacyPanel.xaml — DiscordTabView
+             re-exposes those controls as passthrough properties, so no
+             MainWindow partial had to change.
+           • De-blurple: #5865F2 survives ONLY on Discord-specific chips
+             (the "Message on Discord" button here, the connection card and
+             Join-server CTA in the privacy dialog).
+           • The rotating OG border is left exactly as it shipped, clock and
+             all (MainWindow.ProfileFx owns when it turns).
+           • The Record + Showcase columns mirror ProfileCardWrapper's
+             visibility via ElementName binding, so a cleared/failed search
+             empties them without a line of code. The Community rail is
+             deliberately OUTSIDE that group: the search box must stay
+             reachable when no card is shown.
+         ================================================================ -->
+
+    <Border CornerRadius="12" ClipToBounds="True" Background="#12101F"
+            BorderBrush="#33B478FF" BorderThickness="1">
         <Grid>
-        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-        <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="10"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-        <Border Grid.Column="0" Grid.Row="0" Grid.RowSpan="3" Style="{StaticResource SectionPanel}" BorderBrush="#5865F2" BorderThickness="1">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <!-- 1. The room -->
+            <Border>
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#D91B1733" Offset="0"/>
+                        <GradientStop Color="#A612101F" Offset="0.3"/>
+                        <GradientStop Color="#C41A1430" Offset="0.7"/>
+                        <GradientStop Color="#F012101F" Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.Background>
+            </Border>
+
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <!-- ProfileColumnStack is the entrance-stagger host (MainWindow.ProfileFx): its
-                     direct children are the tab's cards. The rotating OG border below is left
-                     exactly as it shipped - it is this tab's one ambient element. -->
-                <StackPanel x:Name="ProfileColumnStack" x:FieldModifier="internal" Margin="15">
-                    <Grid Margin="0,0,0,15">
-                        <TextBlock Text="{loc:Str label_profile_viewer}" Foreground="#5865F2" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center"/>
-                        <Button x:Name="HelpBtnDiscordProfile" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="DiscordProfile"/>
-                    </Grid>
-    
-                    <!-- Search Input. The 1px border is transparent at rest and brightens on focus
-                         (MainWindow.ProfileFx); Padding drops from 10 to 9 so the box occupies
-                         exactly the same space it always did. -->
-                    <Border x:Name="ProfileSearchBox" x:FieldModifier="internal"
-                            Background="{DynamicResource SurfaceBgBrush}" CornerRadius="8"
-                            BorderThickness="1" Padding="9" Margin="0,0,0,15">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="TxtProfileSearch" x:FieldModifier="internal" Background="Transparent" BorderThickness="0" Foreground="White"
-                                     FontSize="13" VerticalAlignment="Center" KeyDown="TxtProfileSearch_KeyDown">
-                                <TextBox.Style>
-                                    <Style TargetType="TextBox">
-                                        <Style.Triggers>
-                                            <Trigger Property="Text" Value="">
-                                                <Setter Property="Background">
-                                                    <Setter.Value>
-                                                        <VisualBrush Stretch="None" AlignmentX="Left">
-                                                            <VisualBrush.Visual>
-                                                                <TextBlock Text="{loc:Str label_search_by_display_name}" Foreground="#606080" FontSize="13" Margin="2,0,0,0"/>
-                                                            </VisualBrush.Visual>
-                                                        </VisualBrush>
-                                                    </Setter.Value>
-                                                </Setter>
-                                            </Trigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBox.Style>
-                            </TextBox>
-                            <Button Grid.Column="1" Content="🔍" Background="Transparent" BorderThickness="0"
-                                    Foreground="#5865F2" FontSize="16" Cursor="Hand" Click="BtnProfileSearch_Click"
-                                    ToolTip="{loc:Str tooltip_search_profile}"/>
-                        </Grid>
-                    </Border>
-    
-                    <!-- Quick buttons -->
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,15">
-                        <Button Content="{loc:Str btn_my_profile}" Background="#5865F2" Foreground="White" BorderThickness="0"
-                                Padding="12,6" Margin="0,0,8,0" FontSize="11" FontWeight="SemiBold" Cursor="Hand"
+                     direct children are the tab's cards. -->
+                <StackPanel x:Name="ProfileColumnStack" x:FieldModifier="internal" Margin="22,18,22,20">
+
+                    <!-- ===================== header ===================== -->
+                    <Grid Margin="2,0,2,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str profile_tab_heading}"
+                                   FontFamily="/Fonts/#Fredoka" FontWeight="SemiBold"
+                                   FontSize="25" Foreground="White" VerticalAlignment="Center">
+                            <TextBlock.Effect>
+                                <DropShadowEffect Color="#FF69B4" BlurRadius="18" ShadowDepth="0" Opacity="0.8"/>
+                            </TextBlock.Effect>
+                        </TextBlock>
+
+                        <!-- "back to me" chip: only up while a searched profile is on screen -->
+                        <Button x:Name="BtnProfileBackToMe" x:FieldModifier="internal" Grid.Column="1"
+                                Visibility="Collapsed" Margin="14,2,0,0" Padding="12,4"
+                                Background="#33B478FF" Foreground="#E7DEFF" BorderThickness="0"
+                                FontSize="11" FontWeight="SemiBold" Cursor="Hand"
+                                VerticalAlignment="Center"
+                                Content="{loc:Str profile_back_to_me}"
+                                ToolTip="{loc:Str profile_back_to_me_tip}"
                                 Click="BtnViewMyProfile_Click"/>
-                        <Button Content="{loc:Str btn_clear}" Background="{DynamicResource PanelAccentBrush}" Foreground="White" BorderThickness="0"
-                                Padding="12,6" FontSize="11" Cursor="Hand" Click="BtnClearProfile_Click"/>
-                    </StackPanel>
-    
-                    <!-- Profile Card with optional OG animated border (layered via Grid) -->
-                    <Grid x:Name="ProfileCardWrapper" x:FieldModifier="internal" Visibility="Collapsed">
-                        <!-- OG animated border (behind the card) -->
+
+                        <Button Grid.Column="3" x:Name="HelpBtnDiscordProfile" x:FieldModifier="internal"
+                                Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right"
+                                Tag="DiscordProfile"/>
+                    </Grid>
+
+                    <!-- ===================== 2. the hero ===================== -->
+                    <Grid x:Name="ProfileCardWrapper" x:FieldModifier="internal" Visibility="Collapsed"
+                          Margin="0,0,0,14">
+
+                        <!-- OG animated border (behind the card) — untouched from the original -->
                         <Border x:Name="OgBorderContainer" x:FieldModifier="internal" Visibility="Collapsed" Padding="0" CornerRadius="18">
                             <Border.Resources>
                                 <Storyboard x:Key="OgBorderAnimation" RepeatBehavior="Forever">
@@ -91,63 +115,100 @@
                                 </LinearGradientBrush>
                             </Border.Background>
                         </Border>
-                        <!-- Profile card content (always visible when wrapper is visible) -->
-                        <Border x:Name="ProfileCardContainer" Margin="8" Background="{DynamicResource DarkerBgBrush}" CornerRadius="12">
-                        <StackPanel>
-                            <!-- Profile Header (Avatar + Name + Status) -->
-                            <Border CornerRadius="12" Padding="15" Margin="0,0,0,10">
-                                <Border.Background>
-                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                        <GradientStop Color="#1E1E3F" Offset="0"/>
-                                        <GradientStop Color="#2A2A4A" Offset="1"/>
-                                    </LinearGradientBrush>
-                                </Border.Background>
-                                <Grid>
+
+                        <!-- The card itself -->
+                        <!-- MinHeight/MaxHeight: the hero is a fixed-band strip like a Discord
+                             profile header. Without the cap, the right column's stacked art
+                             (tier banner + charm slots) could grow the card past 380px and the
+                             banner ImageBrush then filled the whole page. Charms now live on
+                             ProfileCharmLayer (overlay, out of layout) so they can never add
+                             height again. -->
+                        <Border x:Name="ProfileHeroCard" x:FieldModifier="internal" Margin="8"
+                                CornerRadius="14" ClipToBounds="True"
+                                MinHeight="200" MaxHeight="260"
+                                Background="#EE1A1A2E" BorderBrush="#66FF69B4" BorderThickness="1">
+                            <Grid>
+                                <!-- Banner: gradient default now, cosmetic art in Phase 2
+                                     (ProfileHeroBanner.Background is set to an ImageBrush by the
+                                     customization kit).
+
+                                     The art layer is a Border painted with an ImageBrush, NOT an
+                                     Image: this Grid sits in a vertical StackPanel inside a
+                                     ScrollViewer, so height is unconstrained at measure time and an
+                                     Image with Stretch=UniformToFill reports a DesiredSize of
+                                     sourceH * cardWidth / sourceW. The art — not the content —
+                                     would then drive the card height (a 1024x1024 banner blew the
+                                     hero to ~1383px at 1400px wide). A brush paints inside the
+                                     arranged bounds and contributes nothing to measure. -->
+                                <Border>
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="#2A1E4D" Offset="0"/>
+                                            <GradientStop Color="#3B2159" Offset="0.5"/>
+                                            <GradientStop Color="#1E1E3F" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+                                <Border x:Name="ProfileHeroBanner" x:FieldModifier="internal"
+                                        Opacity="0.85" IsHitTestVisible="False"/>
+                                <!-- left-dark scrim so identity copy always reads over the banner -->
+                                <Border IsHitTestVisible="False">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                            <GradientStop Color="#F51A1A2E" Offset="0"/>
+                                            <GradientStop Color="#D91A1A2E" Offset="0.45"/>
+                                            <GradientStop Color="#A61A1A2E" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+
+                                <Grid Margin="18,16,18,16">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-    
-                                    <!-- Avatar with online indicator -->
-                                    <Grid Width="100" Height="100">
-                                        <Border CornerRadius="50" BorderBrush="#5865F2" BorderThickness="3">
-                                            <Border.Background>
-                                                <ImageBrush x:Name="ProfileViewerAvatar" x:FieldModifier="internal" Stretch="UniformToFill"/>
-                                            </Border.Background>
-                                        </Border>
-                                        <!-- Online status dot -->
-                                        <Ellipse x:Name="ProfileOnlineIndicator" x:FieldModifier="internal" Width="20" Height="20"
-                                                 HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                                 Margin="0,0,5,5" Stroke="#1E1E3F" StrokeThickness="3" Fill="#43B581"/>
-                                    </Grid>
-    
-                                    <!-- Name and handle -->
-                                    <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+
+                                    <!-- ==== avatar (104px) + presence dot + decoration ====
+                                         AdornedAvatar owns all three layers; the avatar brush and
+                                         presence dot are re-exposed by the code-behind under their
+                                         original names, so MainWindow's ~16 call sites are unchanged.
+                                         An equipped decoration is drawn at 104/0.70 = 148px, centred
+                                         and unclipped - the 6px margin buys back the room a hat
+                                         needs above the head before the hero card's clip. -->
+                                    <ctrl:AdornedAvatar x:Name="ProfileHeroAvatar" x:FieldModifier="internal"
+                                                        Grid.Column="0" AvatarSize="104"
+                                                        VerticalAlignment="Top" Margin="6,6,0,0"/>
+
+                                    <!-- ==== identity ==== -->
+                                    <StackPanel Grid.Column="1" Margin="16,0,14,0" VerticalAlignment="Top">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock x:Name="TxtProfileViewerName" x:FieldModifier="internal" Text="{loc:Str login_display_name}"
-                                                       Foreground="White" FontSize="18" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
-                                            <!-- Edit display name button (own profile only) -->
+                                                       FontFamily="/Fonts/#Fredoka" FontWeight="SemiBold"
+                                                       Foreground="White" FontSize="23" TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center"/>
                                             <Button x:Name="BtnChangeDisplayName" x:FieldModifier="internal" Visibility="Collapsed"
-                                                    Width="24" Height="24" Margin="6,0,0,0"
+                                                    Width="24" Height="24" Margin="8,2,0,0"
                                                     Background="Transparent" BorderThickness="0"
                                                     Cursor="Hand" VerticalAlignment="Center"
                                                     ToolTip="{loc:Str tooltip_change_display_name}"
                                                     Click="BtnChangeDisplayName_Click">
-                                                <helpers:EmojiTextBlock Text="{loc:Str label_text}" Foreground="#888" FontSize="14" VerticalAlignment="Center"/>
+                                                <helpers:EmojiTextBlock Text="{loc:Str label_text}" Foreground="#B9B0D6" FontSize="14" VerticalAlignment="Center"/>
                                             </Button>
-                                            <!-- Delete profile button (own profile only) -->
                                             <Button x:Name="BtnDeleteProfile" x:FieldModifier="internal" Visibility="Collapsed"
-                                                    Width="24" Height="24" Margin="4,0,0,0"
+                                                    Width="24" Height="24" Margin="2,2,0,0"
                                                     Background="Transparent" BorderThickness="0"
                                                     Cursor="Hand" VerticalAlignment="Center"
                                                     ToolTip="{loc:Str tooltip_delete_your_profile}"
                                                     Click="BtnDeleteProfile_Click">
-                                                <helpers:EmojiTextBlock Text="{loc:Str label_text_2}" Foreground="#FF4444" FontSize="13" VerticalAlignment="Center"/>
+                                                <helpers:EmojiTextBlock Text="{loc:Str label_text_2}" Foreground="#FF5C7A" FontSize="13" VerticalAlignment="Center"/>
                                             </Button>
-                                            <!-- OG GOOD GIRL Banner -->
-                                            <Border x:Name="OgBannerBadge" x:FieldModifier="internal" Visibility="Collapsed" Margin="10,0,0,0" Padding="8,3" CornerRadius="4"
-                                                    VerticalAlignment="Center">
+                                        </StackPanel>
+
+                                        <!-- earned badges: OG banner + Patreon plates -->
+                                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                            <Border x:Name="OgBannerBadge" x:FieldModifier="internal" Visibility="Collapsed"
+                                                    Padding="8,3" CornerRadius="9" VerticalAlignment="Center" Margin="0,0,8,0">
                                                 <Border.Background>
                                                     <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
                                                         <GradientStop Color="#FFD700" Offset="0"/>
@@ -158,214 +219,547 @@
                                                 <TextBlock Text="{loc:Str label_og_good_girl}" Foreground="{DynamicResource DarkerBgBrush}" FontSize="10" FontWeight="ExtraBold"
                                                            FontFamily="Segoe UI" VerticalAlignment="Center"/>
                                             </Border>
-                                        </StackPanel>
-                                        <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
-                                            <TextBlock x:Name="TxtProfileViewerOnline" x:FieldModifier="internal" Text="{loc:Str label_online}"
-                                                       Foreground="#43B581" FontSize="11"/>
-                                        </StackPanel>
-                                        <!-- Discord button + Patreon badge row -->
-                                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                            <Button x:Name="BtnProfileDiscord" x:FieldModifier="internal" Visibility="Collapsed"
-                                                    Background="#5865F2" Foreground="White" BorderThickness="0"
-                                                    Padding="10,5" Cursor="Hand"
-                                                    HorizontalAlignment="Left" VerticalAlignment="Center"
-                                                    Click="BtnProfileDiscord_Click"
-                                                    ToolTip="{loc:Str tooltip_open_discord_profile}">
-                                                <Button.Template>
-                                                    <ControlTemplate TargetType="Button">
-                                                        <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
-                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                        </Border>
-                                                    </ControlTemplate>
-                                                </Button.Template>
-                                                <StackPanel Orientation="Horizontal">
-                                                    <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                                           Source="{Binding Source='💬', Converter={StaticResource EmojiToImageSource}}"/>
-                                                    <TextBlock x:Name="TxtProfileDiscordId" x:FieldModifier="internal" Text="{loc:Str label_message_on_discord}" Foreground="White" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                                </StackPanel>
-                                            </Button>
-                                            <!-- Patreon tier badge (same as leaderboard) -->
-                                            <Image x:Name="ProfilePatreonTierBadge" x:FieldModifier="internal" Width="80" Height="80" Margin="8,0,0,0"
+                                            <Image x:Name="ProfilePatreonTierBadge" x:FieldModifier="internal" Height="30" Width="30"
+                                                   Margin="0,0,6,0" VerticalAlignment="Center" Visibility="Collapsed" Stretch="Uniform"/>
+                                            <Image x:Name="ProfilePatreonBadge" x:FieldModifier="internal" Height="26"
                                                    VerticalAlignment="Center" Visibility="Collapsed" Stretch="Uniform"/>
                                         </StackPanel>
+
+                                        <!-- equipped title (Phase 2 cosmetics; an unlocked achievement's name) -->
+                                        <TextBlock x:Name="TxtProfileEquippedTitle" x:FieldModifier="internal"
+                                                   Visibility="Collapsed" Foreground="#FFD700" FontSize="12"
+                                                   FontWeight="SemiBold" Margin="0,6,0,0" TextTrimming="CharacterEllipsis"/>
+
+                                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                            <Ellipse Width="7" Height="7" Fill="#43B581" VerticalAlignment="Center" Margin="0,1,6,0"/>
+                                            <TextBlock x:Name="TxtProfileViewerOnline" x:FieldModifier="internal" Text="{loc:Str label_online}"
+                                                       Foreground="#43B581" FontSize="11" VerticalAlignment="Center"/>
+                                        </StackPanel>
+
+                                        <!-- Discord-specific chip: blurple is allowed here. -->
+                                        <Button x:Name="BtnProfileDiscord" x:FieldModifier="internal" Visibility="Collapsed"
+                                                Background="#5865F2" Foreground="White" BorderThickness="0"
+                                                Padding="10,5" Margin="0,10,0,0" Cursor="Hand"
+                                                HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                Click="BtnProfileDiscord_Click"
+                                                ToolTip="{loc:Str tooltip_open_discord_profile}">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                       Source="{Binding Source='💬', Converter={StaticResource EmojiToImageSource}}"/>
+                                                <TextBlock x:Name="TxtProfileDiscordId" x:FieldModifier="internal" Text="{loc:Str label_message_on_discord}"
+                                                           Foreground="White" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Button>
+
+                                        <!-- XP bar. The fill is a star-width column, so it needs no
+                                             ActualWidth maths and survives any resize. -->
+                                        <Grid Margin="0,14,0,0" MaxWidth="420" HorizontalAlignment="Left" Width="380">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+                                            <Border Grid.Row="0" Height="10" CornerRadius="5" Background="#33FFFFFF">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition x:Name="ProfileXpFillCol" x:FieldModifier="internal" Width="0*"/>
+                                                        <ColumnDefinition x:Name="ProfileXpRestCol" x:FieldModifier="internal" Width="1*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0" CornerRadius="5">
+                                                        <Border.Background>
+                                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                                                <GradientStop Color="#FF69B4" Offset="0"/>
+                                                                <GradientStop Color="#B478FF" Offset="1"/>
+                                                            </LinearGradientBrush>
+                                                        </Border.Background>
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+                                            <TextBlock x:Name="TxtProfileXpProgress" x:FieldModifier="internal" Grid.Row="1"
+                                                       Text="0 / 0 XP" Foreground="#B8B1CC" FontSize="11" Margin="0,5,0,0"/>
+                                        </Grid>
                                     </StackPanel>
-    
-                                    <!-- Patreon tier banner -->
-                                    <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="10,0,0,0">
-                                        <!-- Patreon tier banner (Pink filter / Prime subject) -->
+
+                                    <!-- ==== plates + card actions ==== -->
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Top" HorizontalAlignment="Right">
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                            <!-- Phase 2: opens the customization kit. Always edits YOUR
+                                                 loadout, even while someone else's card is on screen. -->
+                                            <Button x:Name="BtnProfileCustomize" x:FieldModifier="internal"
+                                                    Content="{loc:Str profile_btn_customize}"
+                                                    Background="#33B478FF" Foreground="#E7DEFF" BorderThickness="0"
+                                                    Padding="14,6" Margin="0,0,8,0" FontSize="11" FontWeight="SemiBold"
+                                                    Cursor="Hand" ToolTip="{loc:Str profile_btn_customize_tip}"
+                                                    Click="BtnProfileCustomize_Click"/>
+                                            <Button x:Name="BtnProfilePrivacy" x:FieldModifier="internal"
+                                                    Content="{loc:Str profile_btn_privacy}"
+                                                    Background="#FF69B4" Foreground="#1A1A2E" BorderThickness="0"
+                                                    Padding="14,6" FontSize="11" FontWeight="Bold" Cursor="Hand"
+                                                    ToolTip="{loc:Str profile_btn_privacy_tip}"
+                                                    Click="BtnProfilePrivacy_Click"/>
+                                        </StackPanel>
+
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+                                            <Border CornerRadius="10" Padding="16,6" Margin="0,0,8,0"
+                                                    Background="#26FFD700" BorderBrush="#59FFD700" BorderThickness="1">
+                                                <StackPanel>
+                                                    <TextBlock Text="{loc:Str label_level_2}" Foreground="#D8C88A" FontSize="9" FontWeight="Bold"
+                                                               HorizontalAlignment="Center"/>
+                                                    <TextBlock x:Name="TxtProfileViewerLevel" x:FieldModifier="internal" Text="1"
+                                                               Foreground="#FFD700" FontSize="30" FontWeight="ExtraBold"
+                                                               HorizontalAlignment="Center" Margin="0,-4,0,0"/>
+                                                </StackPanel>
+                                            </Border>
+                                            <Border CornerRadius="10" Padding="16,6"
+                                                    Background="#26FFD700" BorderBrush="#59FFD700" BorderThickness="1">
+                                                <StackPanel>
+                                                    <TextBlock Text="{loc:Str label_rank}" Foreground="#D8C88A" FontSize="9" FontWeight="Bold"
+                                                               HorizontalAlignment="Center"/>
+                                                    <TextBlock x:Name="TxtProfileViewerRank" x:FieldModifier="internal" Text="#-"
+                                                               Foreground="#FFD700" FontSize="30" FontWeight="ExtraBold"
+                                                               HorizontalAlignment="Center" Margin="0,-4,0,0"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
+
+                                        <!-- Patreon tier art (Pink filter / Prime subject) -->
                                         <Border x:Name="ProfilePatreonTierBanner" x:FieldModifier="internal" Visibility="Collapsed"
-                                                Width="140" Height="100" CornerRadius="8">
+                                                Width="146" Height="84" CornerRadius="8" Margin="0,12,0,0"
+                                                HorizontalAlignment="Right" ClipToBounds="True">
                                             <Image x:Name="ImgPatreonTierBanner" x:FieldModifier="internal" Stretch="Uniform"/>
                                         </Border>
+
                                     </StackPanel>
                                 </Grid>
-                            </Border>
-    
-                            <!-- Level, Rank & Patreon Badge -->
-                            <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="10" Padding="12" Margin="0,0,0,10">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0">
-                                        <TextBlock Text="{loc:Str label_level_2}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" FontWeight="Bold"/>
-                                        <TextBlock x:Name="TxtProfileViewerLevel" x:FieldModifier="internal" Text="1" Foreground="#FFD700" FontSize="32" FontWeight="ExtraBold" Margin="0,-5,0,0"/>
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="1">
-                                        <TextBlock Text="{loc:Str label_rank}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" FontWeight="Bold"/>
-                                        <TextBlock x:Name="TxtProfileViewerRank" x:FieldModifier="internal" Text="#-" Foreground="#FFD700" FontSize="32" FontWeight="ExtraBold" Margin="0,-5,0,0"/>
-                                    </StackPanel>
-                                    <!-- Patreon Badge -->
-                                    <Image x:Name="ProfilePatreonBadge" x:FieldModifier="internal" Grid.Column="2" Height="40" VerticalAlignment="Center"
-                                           Visibility="Collapsed"/>
-                                </Grid>
-                            </Border>
-    
-                            <!-- Stats Grid (Trainer Card Style) -->
-                            <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="10" Padding="12" Margin="0,0,0,10">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                    </Grid.RowDefinitions>
-    
-                                    <!-- XP with image -->
-                                    <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,0,12" Orientation="Horizontal">
-                                        <Border Width="64" Height="64" CornerRadius="8" Background="{DynamicResource PanelAccentBrush}" Margin="0,0,12,0">
-                                            <Image x:Name="ImgStatXp" Source="pack://application:,,,/Resources/achievements/lv_10.png" Stretch="Uniform" Margin="3"/>
-                                        </Border>
-                                        <StackPanel VerticalAlignment="Center">
-                                            <TextBlock Text="{loc:Str label_xp}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold"/>
-                                            <TextBlock x:Name="TxtProfileViewerXp" x:FieldModifier="internal" Text="0" Foreground="White" FontSize="18" FontWeight="Bold"/>
-                                        </StackPanel>
-                                    </StackPanel>
-    
-                                    <!-- Bubbles with image -->
-                                    <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,12" Orientation="Horizontal">
-                                        <Border Width="64" Height="64" CornerRadius="8" Background="{DynamicResource PanelAccentBrush}" Margin="0,0,12,0">
-                                            <Image x:Name="ImgStatBubbles" Source="pack://application:,,,/Resources/achievements/pop_the_Thought.png" Stretch="Uniform" Margin="3"/>
-                                        </Border>
-                                        <StackPanel VerticalAlignment="Center">
-                                            <TextBlock Text="{loc:Str label_bubbles_2}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold"/>
-                                            <TextBlock x:Name="TxtProfileViewerBubbles" x:FieldModifier="internal" Text="0" Foreground="White" FontSize="18" FontWeight="Bold"/>
-                                        </StackPanel>
-                                    </StackPanel>
-    
-                                    <!-- Video Time with image -->
-                                    <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,0,12" Orientation="Horizontal">
-                                        <Border Width="64" Height="64" CornerRadius="8" Background="{DynamicResource PanelAccentBrush}" Margin="0,0,12,0">
-                                            <Image x:Name="ImgStatVideos" Source="pack://application:,,,/Resources/achievements/10_hours_pink.png" Stretch="Uniform" Margin="3"/>
-                                        </Border>
-                                        <StackPanel VerticalAlignment="Center">
-                                            <TextBlock Text="{loc:Str label_videos}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold"/>
-                                            <TextBlock x:Name="TxtProfileViewerVideos" x:FieldModifier="internal" Text="{loc:Str label_0h}" Foreground="White" FontSize="18" FontWeight="Bold"/>
-                                        </StackPanel>
-                                    </StackPanel>
-    
-                                    <!-- GIFs with image -->
-                                    <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,0,12" Orientation="Horizontal">
-                                        <Border Width="64" Height="64" CornerRadius="8" Background="{DynamicResource PanelAccentBrush}" Margin="0,0,12,0">
-                                            <Image x:Name="ImgStatGifs" Source="pack://application:,,,/Resources/achievements/retinal_burn.png" Stretch="Uniform" Margin="3"/>
-                                        </Border>
-                                        <StackPanel VerticalAlignment="Center">
-                                            <TextBlock Text="{loc:Str label_flashes}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold"/>
-                                            <TextBlock x:Name="TxtProfileViewerGifs" x:FieldModifier="internal" Text="0" Foreground="White" FontSize="18" FontWeight="Bold"/>
-                                        </StackPanel>
-                                    </StackPanel>
-    
-                                    <!-- Lock Cards with image -->
-                                    <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal">
-                                        <Border Width="64" Height="64" CornerRadius="8" Background="{DynamicResource PanelAccentBrush}" Margin="0,0,12,0">
-                                            <Image x:Name="ImgStatLockCards" Source="pack://application:,,,/Resources/achievements/total_lockdown.png" Stretch="Uniform" Margin="3"/>
-                                        </Border>
-                                        <StackPanel VerticalAlignment="Center">
-                                            <TextBlock Text="{loc:Str label_lock_cards_2}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold"/>
-                                            <TextBlock x:Name="TxtProfileViewerLockCards" x:FieldModifier="internal" Text="0" Foreground="White" FontSize="18" FontWeight="Bold"/>
-                                        </StackPanel>
-                                    </StackPanel>
-    
-                                    <!-- Achievements with image -->
-                                    <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal">
-                                        <Border Width="64" Height="64" CornerRadius="8" Background="{DynamicResource PanelAccentBrush}" Margin="0,0,12,0">
-                                            <Image x:Name="ImgStatAchievements" Source="pack://application:,,,/Resources/achievements/spiral_eyes.png" Stretch="Uniform" Margin="3"/>
-                                        </Border>
-                                        <StackPanel VerticalAlignment="Center">
-                                            <TextBlock Text="{loc:Str label_achievements}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold"/>
-                                            <TextBlock x:Name="TxtProfileViewerAchievements" x:FieldModifier="internal" Text="0" Foreground="White" FontSize="18" FontWeight="Bold"/>
-                                        </StackPanel>
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
-    
-                            <!-- Achievement Images Grid -->
-                            <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="10" Padding="10" Margin="0,0,0,5">
-                                <StackPanel>
-                                    <TextBlock Text="{loc:Str label_achievements}" Foreground="#5865F2" FontSize="11" FontWeight="Bold" Margin="0,0,0,8"/>
-                                    <ItemsControl x:Name="ProfileAchievementGrid" x:FieldModifier="internal">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <WrapPanel/>
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <Border Width="80" Height="80" Margin="4" CornerRadius="8"
-                                                        Background="{DynamicResource PanelAccentBrush}" ToolTip="{Binding Name}">
-                                                    <Image Source="{Binding Image}" Stretch="Uniform" Margin="4"/>
-                                                </Border>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                    <TextBlock x:Name="TxtNoAchievements" x:FieldModifier="internal" Text="{loc:Str label_no_achievements_yet}"
-                                               Foreground="#606080" FontSize="11" FontStyle="Italic"
-                                               HorizontalAlignment="Center" Visibility="Collapsed"/>
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
-                    </Border>
+
+                                <!-- Phase 3 charm layer (max 2, full card only). A Canvas overlay:
+                                     charms are free-floating props placed by normalized (x,y)
+                                     card-fraction coordinates with the wearer's saved transform
+                                     (drag/scale/rotate/flip from the wardrobe editor), so they
+                                     never contribute to the card's measured height. Positioned in
+                                     code (MainWindow.ProfileWardrobe.cs) on apply and on resize. -->
+                                <Canvas x:Name="ProfileCharmLayer" x:FieldModifier="internal"
+                                        IsHitTestVisible="False">
+                                    <Image x:Name="ProfileCharmSlot1" x:FieldModifier="internal"
+                                           Stretch="Uniform" Visibility="Collapsed"
+                                           RenderTransformOrigin="0.5,0.5"/>
+                                    <Image x:Name="ProfileCharmSlot2" x:FieldModifier="internal"
+                                           Stretch="Uniform" Visibility="Collapsed"
+                                           RenderTransformOrigin="0.5,0.5"/>
+                                </Canvas>
+                            </Grid>
+                        </Border>
                     </Grid>
-    
-                    <!-- No profile selected message -->
-                    <Border x:Name="NoProfileSelected" x:FieldModifier="internal" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="10" Padding="30">
+
+                    <!-- No profile selected / not found -->
+                    <Border x:Name="NoProfileSelected" x:FieldModifier="internal"
+                            Background="#B3252542" CornerRadius="12" Padding="30" Margin="0,0,0,14"
+                            BorderBrush="#33B478FF" BorderThickness="1">
                         <StackPanel HorizontalAlignment="Center">
                             <Image Width="44" Height="44" HorizontalAlignment="Center" Margin="0,0,0,10"
                                    Source="{Binding Source='👤', Converter={StaticResource EmojiToImageSource}}"/>
                             <TextBlock Text="{loc:Str label_search_for_a_user}" Foreground="{DynamicResource TextMutedBrush}" FontSize="14" HorizontalAlignment="Center"/>
-                            <TextBlock Text="{loc:Str label_or_click_my_profile}" Foreground="#606080" FontSize="12" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                            <TextBlock Text="{loc:Str label_or_click_my_profile}" Foreground="#8079A3" FontSize="12" HorizontalAlignment="Center" Margin="0,5,0,0"/>
                         </StackPanel>
                     </Border>
+
+                    <!-- ===================== 3. the shelf ===================== -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="250"/>
+                            <ColumnDefinition Width="14"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="14"/>
+                            <ColumnDefinition Width="258"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- ========== The Record (ledger) ========== -->
+                        <Border Grid.Column="0" x:Name="ProfileShelfRecord" x:FieldModifier="internal"
+                                Visibility="{Binding Visibility, ElementName=ProfileCardWrapper}"
+                                VerticalAlignment="Top" CornerRadius="12" Padding="14,12,14,10"
+                                Background="#B3252542" BorderBrush="#33FF69B4" BorderThickness="1">
+                            <StackPanel>
+                                <!-- Column headers carry the equipped accent (Phase 2). -->
+                                <TextBlock x:Name="TxtProfileRecordHeader" x:FieldModifier="internal"
+                                           Text="{loc:Str profile_record_title}"
+                                           FontFamily="/Fonts/#Fredoka" FontWeight="Medium"
+                                           FontSize="15" Foreground="White" Margin="0,0,0,10"/>
+
+                                <!-- XP -->
+                                <Grid Margin="0,0,0,9">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Width="34" Height="34" CornerRadius="7" Background="{DynamicResource PanelAccentBrush}">
+                                        <Image x:Name="ImgStatXp" Source="pack://application:,,,/Resources/achievements/lv_10.png" Stretch="Uniform" Margin="2"/>
+                                    </Border>
+                                    <TextBlock Grid.Column="1" Text="{loc:Str label_xp}" Foreground="#B8B1CC" FontSize="11"
+                                               VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtProfileViewerXp" x:FieldModifier="internal" Text="0"
+                                               Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas"
+                                               VerticalAlignment="Center" TextAlignment="Right"/>
+                                </Grid>
+
+                                <!-- Bubbles -->
+                                <Grid Margin="0,0,0,9">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Width="34" Height="34" CornerRadius="7" Background="{DynamicResource PanelAccentBrush}">
+                                        <Image x:Name="ImgStatBubbles" Source="pack://application:,,,/Resources/achievements/pop_the_Thought.png" Stretch="Uniform" Margin="2"/>
+                                    </Border>
+                                    <TextBlock Grid.Column="1" Text="{loc:Str label_bubbles_2}" Foreground="#B8B1CC" FontSize="11"
+                                               VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtProfileViewerBubbles" x:FieldModifier="internal" Text="0"
+                                               Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas"
+                                               VerticalAlignment="Center" TextAlignment="Right"/>
+                                </Grid>
+
+                                <!-- Video time -->
+                                <Grid Margin="0,0,0,9">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Width="34" Height="34" CornerRadius="7" Background="{DynamicResource PanelAccentBrush}">
+                                        <Image x:Name="ImgStatVideos" Source="pack://application:,,,/Resources/achievements/10_hours_pink.png" Stretch="Uniform" Margin="2"/>
+                                    </Border>
+                                    <TextBlock Grid.Column="1" Text="{loc:Str label_videos}" Foreground="#B8B1CC" FontSize="11"
+                                               VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtProfileViewerVideos" x:FieldModifier="internal" Text="{loc:Str label_0h}"
+                                               Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas"
+                                               VerticalAlignment="Center" TextAlignment="Right"/>
+                                </Grid>
+
+                                <!-- Flashes -->
+                                <Grid Margin="0,0,0,9">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Width="34" Height="34" CornerRadius="7" Background="{DynamicResource PanelAccentBrush}">
+                                        <Image x:Name="ImgStatGifs" Source="pack://application:,,,/Resources/achievements/retinal_burn.png" Stretch="Uniform" Margin="2"/>
+                                    </Border>
+                                    <TextBlock Grid.Column="1" Text="{loc:Str label_flashes}" Foreground="#B8B1CC" FontSize="11"
+                                               VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtProfileViewerGifs" x:FieldModifier="internal" Text="0"
+                                               Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas"
+                                               VerticalAlignment="Center" TextAlignment="Right"/>
+                                </Grid>
+
+                                <!-- Lock cards -->
+                                <Grid Margin="0,0,0,9">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Width="34" Height="34" CornerRadius="7" Background="{DynamicResource PanelAccentBrush}">
+                                        <Image x:Name="ImgStatLockCards" Source="pack://application:,,,/Resources/achievements/total_lockdown.png" Stretch="Uniform" Margin="2"/>
+                                    </Border>
+                                    <TextBlock Grid.Column="1" Text="{loc:Str label_lock_cards_2}" Foreground="#B8B1CC" FontSize="11"
+                                               VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtProfileViewerLockCards" x:FieldModifier="internal" Text="0"
+                                               Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas"
+                                               VerticalAlignment="Center" TextAlignment="Right"/>
+                                </Grid>
+
+                                <!-- Achievements -->
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Width="34" Height="34" CornerRadius="7" Background="{DynamicResource PanelAccentBrush}">
+                                        <Image x:Name="ImgStatAchievements" Source="pack://application:,,,/Resources/achievements/spiral_eyes.png" Stretch="Uniform" Margin="2"/>
+                                    </Border>
+                                    <TextBlock Grid.Column="1" Text="{loc:Str label_achievements}" Foreground="#B8B1CC" FontSize="11"
+                                               VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtProfileViewerAchievements" x:FieldModifier="internal" Text="0"
+                                               Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas"
+                                               VerticalAlignment="Center" TextAlignment="Right"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ========== Showcase ========== -->
+                        <Border Grid.Column="2" x:Name="ProfileShelfShowcase" x:FieldModifier="internal"
+                                Visibility="{Binding Visibility, ElementName=ProfileCardWrapper}"
+                                VerticalAlignment="Top" CornerRadius="12" Padding="16,12,16,14"
+                                Background="#B3252542" BorderBrush="#33B478FF" BorderThickness="1">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,10">
+                                    <TextBlock x:Name="TxtProfileShowcaseHeader" x:FieldModifier="internal"
+                                               Text="{loc:Str profile_showcase_title}"
+                                               FontFamily="/Fonts/#Fredoka" FontWeight="Medium"
+                                               FontSize="15" Foreground="White"/>
+                                    <TextBlock Text="{loc:Str profile_showcase_hint}" Foreground="#8079A3" FontSize="10"
+                                               HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                </Grid>
+
+                                <!-- Up to 4 pinned achievements at full size. Phase 2's customization
+                                     kit sets the ItemsSource from cosmetics.pinned_achievements. -->
+                                <ItemsControl x:Name="ProfilePinnedShowcase" x:FieldModifier="internal">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <!-- Left-click = unpin (own card only; quick path
+                                                 beside the Customize dialog's pin picker). -->
+                                            <Grid Width="88" Height="88" Margin="0,0,10,10"
+                                                  Background="Transparent" Cursor="Hand"
+                                                  MouseLeftButtonUp="ProfileAchievementTile_Click">
+                                                <Border CornerRadius="10" Background="{DynamicResource PanelAccentBrush}"
+                                                        BorderBrush="#59FFD700" BorderThickness="1" ToolTip="{Binding Name}">
+                                                    <Image Source="{Binding Image}" Stretch="Uniform" Margin="7"/>
+                                                </Border>
+                                                <TextBlock Text="★" Foreground="#FFD700" FontSize="14"
+                                                           HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                           Margin="0,3,6,0"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Empty pin slots, shown until something is pinned -->
+                                <StackPanel x:Name="ProfilePinnedPlaceholders" x:FieldModifier="internal" Orientation="Horizontal">
+                                    <Border Width="88" Height="88" Margin="0,0,10,10" CornerRadius="10"
+                                            Background="#26FFFFFF" BorderBrush="#33FFD700" BorderThickness="1">
+                                        <TextBlock Text="☆" Foreground="#59FFD700" FontSize="26"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <Border Width="88" Height="88" Margin="0,0,10,10" CornerRadius="10"
+                                            Background="#26FFFFFF" BorderBrush="#33FFD700" BorderThickness="1">
+                                        <TextBlock Text="☆" Foreground="#59FFD700" FontSize="26"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <Border Width="88" Height="88" Margin="0,0,10,10" CornerRadius="10"
+                                            Background="#26FFFFFF" BorderBrush="#33FFD700" BorderThickness="1">
+                                        <TextBlock Text="☆" Foreground="#59FFD700" FontSize="26"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <Border Width="88" Height="88" Margin="0,0,10,10" CornerRadius="10"
+                                            Background="#26FFFFFF" BorderBrush="#33FFD700" BorderThickness="1">
+                                        <TextBlock Text="☆" Foreground="#59FFD700" FontSize="26"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <TextBlock Text="{loc:Str profile_showcase_pins_empty}" Foreground="#8079A3"
+                                               FontSize="11" FontStyle="Italic" VerticalAlignment="Center"
+                                               TextWrapping="Wrap" Margin="4,0,0,10" MaxWidth="180"/>
+                                </StackPanel>
+
+                                <!-- Everything else, folded away -->
+                                <Expander x:Name="ProfileAllAchievementsExpander" x:FieldModifier="internal"
+                                          Style="{StaticResource CollapsibleCard}" IsExpanded="False"
+                                          Margin="0,2,0,0">
+                                    <Expander.Header>
+                                        <TextBlock x:Name="TxtProfileAllAchievementsHeader" x:FieldModifier="internal"
+                                                   Text="{loc:Str profile_showcase_all}" Foreground="White"
+                                                   FontSize="12" FontWeight="SemiBold"/>
+                                    </Expander.Header>
+                                    <StackPanel Margin="12,0,12,12">
+                                        <ItemsControl x:Name="ProfileAchievementGrid" x:FieldModifier="internal">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <!-- Left-click = pin/unpin (this grid only ever
+                                                         shows the viewer's own unlocks). -->
+                                                    <Border Width="46" Height="46" Margin="3" CornerRadius="7"
+                                                            Background="{DynamicResource PanelAccentBrush}" ToolTip="{Binding Name}"
+                                                            Cursor="Hand"
+                                                            MouseLeftButtonUp="ProfileAchievementTile_Click">
+                                                        <Image Source="{Binding Image}" Stretch="Uniform" Margin="3"/>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <TextBlock x:Name="TxtNoAchievements" x:FieldModifier="internal" Text="{loc:Str label_no_achievements_yet}"
+                                                   Foreground="#8079A3" FontSize="11" FontStyle="Italic"
+                                                   HorizontalAlignment="Center" Visibility="Collapsed"/>
+                                    </StackPanel>
+                                </Expander>
+
+                                <!-- Unlock progress + what is next -->
+                                <Border Height="8" CornerRadius="4" Background="#33FFFFFF" Margin="0,8,0,0">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition x:Name="ProfileUnlockFillCol" x:FieldModifier="internal" Width="0*"/>
+                                            <ColumnDefinition x:Name="ProfileUnlockRestCol" x:FieldModifier="internal" Width="1*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" CornerRadius="4">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                                    <GradientStop Color="#B478FF" Offset="0"/>
+                                                    <GradientStop Color="#FFD700" Offset="1"/>
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                                <Grid Margin="0,6,0,0">
+                                    <TextBlock x:Name="TxtProfileUnlockSummary" x:FieldModifier="internal"
+                                               Foreground="#B8B1CC" FontSize="11"/>
+                                    <TextBlock x:Name="TxtProfileNextUp" x:FieldModifier="internal"
+                                               Foreground="#8079A3" FontSize="11" HorizontalAlignment="Right"
+                                               TextTrimming="CharacterEllipsis" MaxWidth="320"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ========== Community rail ========== -->
+                        <Border Grid.Column="4" VerticalAlignment="Top" CornerRadius="12" Padding="14,12,14,12"
+                                Background="#B3252542" BorderBrush="#33FF69B4" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock x:Name="TxtProfileCommunityHeader" x:FieldModifier="internal"
+                                           Text="{loc:Str profile_community_title}"
+                                           FontFamily="/Fonts/#Fredoka" FontWeight="Medium"
+                                           FontSize="15" Foreground="White" Margin="0,0,0,10"/>
+
+                                <!-- Search. The 1px border is transparent at rest and brightens on
+                                     focus (MainWindow.ProfileFx owns the brush). -->
+                                <Border x:Name="ProfileSearchBox" x:FieldModifier="internal"
+                                        Background="{DynamicResource SurfaceBgBrush}" CornerRadius="8"
+                                        BorderThickness="1" Padding="8" Margin="0,0,0,8">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="TxtProfileSearch" x:FieldModifier="internal" Background="Transparent" BorderThickness="0" Foreground="White"
+                                                 FontSize="12" VerticalAlignment="Center" KeyDown="TxtProfileSearch_KeyDown">
+                                            <TextBox.Style>
+                                                <Style TargetType="TextBox">
+                                                    <Style.Triggers>
+                                                        <Trigger Property="Text" Value="">
+                                                            <Setter Property="Background">
+                                                                <Setter.Value>
+                                                                    <VisualBrush Stretch="None" AlignmentX="Left">
+                                                                        <VisualBrush.Visual>
+                                                                            <TextBlock Text="{loc:Str label_search_by_display_name}" Foreground="#6C6590" FontSize="12" Margin="2,0,0,0"/>
+                                                                        </VisualBrush.Visual>
+                                                                    </VisualBrush>
+                                                                </Setter.Value>
+                                                            </Setter>
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBox.Style>
+                                        </TextBox>
+                                        <Button Grid.Column="1" Content="🔍" Background="Transparent" BorderThickness="0"
+                                                Foreground="#FF69B4" FontSize="14" Cursor="Hand" Click="BtnProfileSearch_Click"
+                                                ToolTip="{loc:Str tooltip_search_profile}"/>
+                                    </Grid>
+                                </Border>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                                    <Button Content="{loc:Str btn_my_profile}" Background="#33FF69B4" Foreground="#FFD7EB"
+                                            BorderThickness="0" Padding="10,4" Margin="0,0,6,0" FontSize="11"
+                                            FontWeight="SemiBold" Cursor="Hand" Click="BtnViewMyProfile_Click"/>
+                                    <Button Content="{loc:Str btn_clear}" Background="#26FFFFFF" Foreground="#B8B1CC"
+                                            BorderThickness="0" Padding="10,4" FontSize="11" Cursor="Hand"
+                                            Click="BtnClearProfile_Click"/>
+                                </StackPanel>
+
+                                <!-- Friends: teaser plates only. No backend ships in this phase —
+                                     the Vault's coming-soon pattern, so the rail never reads as
+                                     broken. -->
+                                <TextBlock Text="{loc:Str profile_friends_title}" Foreground="#B478FF"
+                                           FontSize="12" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <Border Height="46" CornerRadius="9" Margin="0,0,0,7"
+                                        Background="#1FFFFFFF" BorderBrush="#1FB478FF" BorderThickness="1">
+                                    <Grid Margin="9,0,9,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Ellipse Grid.Column="0" Width="28" Height="28" Fill="#33B478FF" VerticalAlignment="Center"/>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
+                                            <Border Height="8" Width="96" CornerRadius="4" Background="#26FFFFFF" HorizontalAlignment="Left"/>
+                                            <Border Height="6" Width="62" CornerRadius="3" Background="#1AFFFFFF" HorizontalAlignment="Left" Margin="0,5,0,0"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                                <Border Height="46" CornerRadius="9" Margin="0,0,0,7"
+                                        Background="#1AFFFFFF" BorderBrush="#1FB478FF" BorderThickness="1">
+                                    <Grid Margin="9,0,9,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Ellipse Grid.Column="0" Width="28" Height="28" Fill="#2BFF69B4" VerticalAlignment="Center"/>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
+                                            <Border Height="8" Width="78" CornerRadius="4" Background="#22FFFFFF" HorizontalAlignment="Left"/>
+                                            <Border Height="6" Width="50" CornerRadius="3" Background="#17FFFFFF" HorizontalAlignment="Left" Margin="0,5,0,0"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                                <Border Height="46" CornerRadius="9" Margin="0,0,0,10"
+                                        Background="#14FFFFFF" BorderBrush="#1FB478FF" BorderThickness="1">
+                                    <Grid Margin="9,0,9,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Ellipse Grid.Column="0" Width="28" Height="28" Fill="#26FFD700" VerticalAlignment="Center"/>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
+                                            <Border Height="8" Width="88" CornerRadius="4" Background="#1FFFFFFF" HorizontalAlignment="Left"/>
+                                            <Border Height="6" Width="42" CornerRadius="3" Background="#14FFFFFF" HorizontalAlignment="Left" Margin="0,5,0,0"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                                <Border CornerRadius="9" Padding="10,7" Margin="0,0,0,14"
+                                        Background="#1FB478FF" BorderBrush="#33B478FF" BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock Text="{loc:Str profile_friends_soon_title}" Foreground="#E7DEFF"
+                                                   FontSize="11" FontWeight="Bold"/>
+                                        <TextBlock Text="{loc:Str profile_friends_soon_body}" Foreground="#9A93B8"
+                                                   FontSize="10" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Sharing footer -->
+                                <Rectangle Height="1" Fill="#1FFFFFFF" Margin="0,0,0,9"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" x:Name="TxtProfileSharingSummary" x:FieldModifier="internal"
+                                               Foreground="#9A93B8" FontSize="11" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <Button Grid.Column="1" x:Name="BtnProfilePrivacyGear" x:FieldModifier="internal"
+                                            Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                            Padding="6,2" ToolTip="{loc:Str profile_btn_privacy_tip}"
+                                            Click="BtnProfilePrivacy_Click">
+                                        <Image Width="16" Height="16"
+                                               Source="{Binding Source='⚙️', Converter={StaticResource EmojiToImageSource}}"/>
+                                    </Button>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
                 </StackPanel>
             </ScrollViewer>
-        </Border>            <Border Grid.Column="2" Grid.Row="0" Grid.RowSpan="3" Style="{StaticResource SectionPanel}" BorderBrush="#5865F2" BorderThickness="1"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="10"><TextBlock Text="{loc:Str label_community_settings}" Foreground="#5865F2" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"/><Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="8" Padding="15" Margin="0,0,0,12" BorderBrush="#5865F2" BorderThickness="1"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel VerticalAlignment="Center"><TextBlock x:Name="TxtDiscordTabStatus" x:FieldModifier="internal" Text="{loc:Str label_not_connected}" Foreground="White" FontSize="14" FontWeight="Bold"/><TextBlock x:Name="TxtDiscordTabInfo" x:FieldModifier="internal" Text="{loc:Str label_link_discord_for_community_features}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,2,0,0"/></StackPanel><Button x:Name="BtnDiscordTabLogin" x:FieldModifier="internal" Grid.Column="1" Content="{loc:Str btn_login}" Background="#5865F2" Foreground="White" BorderThickness="0" Padding="15,8" FontWeight="Bold" FontSize="11" Cursor="Hand" Click="BtnDiscordTabLogin_Click"/></Grid></Border><Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="{loc:Str label_discord_rich_presence}" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="{loc:Str label_show_your_activity_status}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabRichPresence" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkDiscordRichPresence_Changed" Unchecked="ChkDiscordRichPresence_Changed"/></Grid></Border><Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="{loc:Str label_show_level_in_status}" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="{loc:Str label_display_your_level}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShowLevel" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" Checked="ChkShowLevelInPresence_Changed" Unchecked="ChkShowLevelInPresence_Changed"/></Grid></Border><TextBlock Text="{loc:Str label_community_sharing}" Foreground="#5865F2" FontSize="13" FontWeight="Bold" Margin="0,12,0,10"/><Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="{loc:Str label_share_achievements}" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="{loc:Str label_post_achievements_to_discord}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShareAchievements" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShareAchievements_Changed" Unchecked="ChkShareAchievements_Changed"/></Grid></Border><Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="{loc:Str label_share_level_milestones}" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="{loc:Str label_post_level_ups_to_discord}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShareLevelUps" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShareLevelUps_Changed" Unchecked="ChkShareLevelUps_Changed"/></Grid></Border><Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="{loc:Str label_allow_dms_from_leaderboard}" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="{loc:Str label_let_others_message_you}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabAllowDm" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkAllowDiscordDm_Changed" Unchecked="ChkAllowDiscordDm_Changed"/></Grid></Border><Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="{loc:Str label_share_profile_picture}" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="{loc:Str label_show_your_avatar_to_others}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabSharePfp" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShareProfilePicture_Changed" Unchecked="ChkShareProfilePicture_Changed"/></Grid></Border><Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="{loc:Str label_show_online_status}" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="{loc:Str label_appear_offline_when_disabled}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShowOnline" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" Checked="ChkShowOnlineStatus_Changed" Unchecked="ChkShowOnlineStatus_Changed"/></Grid></Border>
-                    <!-- Goon Game sharing (opt-in, sharer-only; all three default OFF).
-                         Separate audience from the community-sharing block above: these only
-                         affect the person you are currently duelling. -->
-                    <TextBlock Text="{loc:Str label_goon_game_sharing}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="Bold" Margin="0,16,0,10"/>
-                    <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8" ToolTip="{loc:Str tooltip_goon_share_avatar}">
-                        <Grid>
-                            <TextBlock Text="{loc:Str label_goon_share_avatar}" Foreground="White" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,50,0"/>
-                            <CheckBox x:Name="ChkGoonShareAvatar" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkGoonShareAvatar_Changed" Unchecked="ChkGoonShareAvatar_Changed"/>
-                        </Grid>
-                    </Border>
-                    <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8" ToolTip="{loc:Str tooltip_goon_share_discord_dm}">
-                        <Grid>
-                            <TextBlock Text="{loc:Str label_goon_share_discord_dm}" Foreground="White" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,50,0"/>
-                            <CheckBox x:Name="ChkGoonShareDiscordDm" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkGoonShareDiscordDm_Changed" Unchecked="ChkGoonShareDiscordDm_Changed"/>
-                        </Grid>
-                    </Border>
-                    <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8" ToolTip="{loc:Str tooltip_goon_rich_presence}">
-                        <Grid>
-                            <TextBlock Text="{loc:Str label_goon_rich_presence}" Foreground="White" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,50,0"/>
-                            <CheckBox x:Name="ChkGoonRichPresence" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkGoonRichPresence_Changed" Unchecked="ChkGoonRichPresence_Changed"/>
-                        </Grid>
-                    </Border>
-                    <TextBlock Text="{loc:Str label_all_sharing_is_opt_in}" Foreground="#5865F2" FontSize="10" FontStyle="Italic" Margin="0,10,0,0"/><Button Content="{loc:Str btn_join_discord_server}" Background="#5865F2" Foreground="White" BorderThickness="0" Padding="15,12" Margin="0,15,0,0" FontWeight="Bold" FontSize="12" Cursor="Hand" Click="BtnDiscord_Click"/></StackPanel></ScrollViewer></Border>
         </Grid>
+    </Border>
 </UserControl>

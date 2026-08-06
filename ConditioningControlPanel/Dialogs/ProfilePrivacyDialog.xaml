@@ -1,0 +1,59 @@
+<Window x:Class="ConditioningControlPanel.ProfilePrivacyDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="Privacy &amp; Sharing"
+        Width="500" Height="700" MinWidth="420" MinHeight="420"
+        Background="{DynamicResource DarkerBgBrush}"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize"
+        ShowInTaskbar="False">
+
+    <!-- Host for the single long-lived ProfilePrivacyPanel instance owned by DiscordTabView.
+         The panel is attached in the constructor and detached on Closed so the next open can
+         re-parent the same instance (a WPF element may have only one parent at a time). -->
+    <Grid Margin="18,16,18,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,14">
+            <TextBlock Text="{loc:Str profile_privacy_title}"
+                       FontFamily="/Fonts/#Fredoka" FontWeight="SemiBold"
+                       FontSize="22" Foreground="White">
+                <TextBlock.Effect>
+                    <DropShadowEffect Color="#FF69B4" BlurRadius="16" ShadowDepth="0" Opacity="0.6"/>
+                </TextBlock.Effect>
+            </TextBlock>
+            <TextBlock Text="{loc:Str profile_privacy_sub}" Foreground="#9A93B8" FontSize="12"
+                       TextWrapping="Wrap" Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      Padding="0,0,8,0">
+            <Border x:Name="PanelHost"/>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="2" Margin="0,14,0,0">
+            <TextBlock Text="{loc:Str label_all_sharing_is_opt_in}" Foreground="#B478FF"
+                       FontSize="10" FontStyle="Italic" Margin="0,0,0,10"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <!-- Discord-specific CTA: blurple is allowed here. -->
+                <Button Grid.Column="0" Content="{loc:Str btn_join_discord_server}"
+                        Background="#5865F2" Foreground="White" BorderThickness="0"
+                        Padding="15,10" FontWeight="Bold" FontSize="12" Cursor="Hand"
+                        HorizontalAlignment="Left" Click="BtnJoinDiscord_Click"/>
+                <Button Grid.Column="1" Content="{loc:Str btn_close}"
+                        Background="#FF69B4" Foreground="Black" BorderThickness="0"
+                        Padding="24,10" FontWeight="Bold" FontSize="12" Cursor="Hand"
+                        Click="BtnClose_Click"/>
+            </Grid>
+        </StackPanel>
+    </Grid>
+</Window>

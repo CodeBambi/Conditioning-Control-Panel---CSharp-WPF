@@ -1377,6 +1377,8 @@ namespace ConditioningControlPanel
             {
                 DiscordTab.ProfilePatreonTierBadge.Visibility = Visibility.Collapsed;
             }
+            // Nothing on screen belongs to anyone else any more, so the "back to me" chip retires.
+            SetProfileViewingSelf(true);
         }
 
         private void ProfileDiscordHandle_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -1806,14 +1808,23 @@ namespace ConditioningControlPanel
             }
             if (DiscordTab.TxtProfileViewerGifs != null) DiscordTab.TxtProfileViewerGifs.Text = FormatNumber(progress?.TotalFlashImages ?? 0);
             if (DiscordTab.TxtProfileViewerLockCards != null) DiscordTab.TxtProfileViewerLockCards.Text = FormatNumber(progress?.TotalLockCardsCompleted ?? 0);
+            // Free-only count so the patron-exclusive set is never folded into this number.
+            var unlockedCount = App.Achievements?.GetUnlockedCount(exclusive: false) ?? 0;
+            var totalCount = App.Achievements?.GetTotalCount(exclusive: false)
+                        ?? System.Linq.Enumerable.Count(Models.Achievement.All.Values, a => !a.IsExclusive && !a.IsHidden);
             if (DiscordTab.TxtProfileViewerAchievements != null)
             {
-                // Free-only count so the patron-exclusive set is never folded into this number.
-                var unlocked = App.Achievements?.GetUnlockedCount(exclusive: false) ?? 0;
-                var total = App.Achievements?.GetTotalCount(exclusive: false)
-                            ?? System.Linq.Enumerable.Count(Models.Achievement.All.Values, a => !a.IsExclusive && !a.IsHidden);
-                DiscordTab.TxtProfileViewerAchievements.Text = $"{unlocked} / {total}";
+                DiscordTab.TxtProfileViewerAchievements.Text = $"{unlockedCount} / {totalCount}";
             }
+
+            // Trainer Card surfaces (redesign Phase 1): hero XP meter, Showcase progress and the
+            // "back to me" chip. PlayerXP is progress inside the level; `xp` above is lifetime.
+            SetProfileViewingSelf(true);
+            UpdateProfileXpMeter(level, localXp);
+            UpdateProfileShowcase(unlockedCount, totalCount, progress?.UnlockedAchievements);
+            // Phase 2 cosmetics. Applied AFTER UpdateProfileShowcase because both touch the empty
+            // pin placeholders and this one is the authority on whether anything is pinned.
+            ApplyOwnProfileCosmetics();
 
             // Patreon badge - use settings tier (works for Discord-only login with linked Patreon)
             var patreonTier = App.Settings?.Current?.PatreonTier ?? (int)(App.Patreon?.CurrentTier ?? 0);
@@ -2072,6 +2083,29 @@ namespace ConditioningControlPanel
                 DiscordTab.TxtNoAchievements.Text = $"{entry.AchievementsCount} achievements unlocked";
                 DiscordTab.TxtNoAchievements.Visibility = Visibility.Visible;
             }
+
+            // Trainer Card surfaces (redesign Phase 1). The leaderboard hands out a count, not the
+            // unlocked ids, so the Showcase's "next up" line stays hidden for other people's cards.
+            //
+            // entry.Xp is LIFETIME xp — it is exactly what the client uploads via
+            // ProgressionService.GetTotalXP, and it is what the ledger's "XP" row shows. The hero
+            // meter wants progress INSIDE the current level, so run it back through the documented
+            // inverse; feeding it the lifetime value pins every searched card's bar at 100%.
+            SetProfileViewingSelf(isOwnProfile);
+            UpdateProfileXpMeter(
+                entry.Level,
+                App.Progression?.GetCurrentLevelXP(entry.Level, entry.Xp) ?? 0);
+            UpdateProfileShowcase(
+                entry.AchievementsCount,
+                App.Achievements?.GetTotalCount(exclusive: false)
+                    ?? System.Linq.Enumerable.Count(Models.Achievement.All.Values, a => !a.IsExclusive && !a.IsHidden),
+                isOwnProfile ? App.Achievements?.Progress?.UnlockedAchievements : null);
+
+            // Phase 2 cosmetics. The leaderboard entry carries none, so someone else's card starts
+            // bare and is dressed by the /user/lookup round-trip already in flight above; your own
+            // card is dressed from settings immediately and never waits on the network.
+            if (isOwnProfile) ApplyOwnProfileCosmetics();
+            else ApplyViewedProfileCosmetics(null);
             }
             catch (Exception ex)
             {
@@ -2153,6 +2187,23 @@ namespace ConditioningControlPanel
                         }
                     }
 
+                    // Trainer Card cosmetics (Phase 2). Your own card is dressed from settings
+                    // instead: the local copy is what you just picked in the Customize dialog and
+                    // the server echo may still be a sync behind it.
+                    var ownName = App.Settings?.Current?.UserDisplayName
+                                  ?? App.Discord?.CustomDisplayName
+                                  ?? App.Discord?.DisplayName
+                                  ?? App.Patreon?.DisplayName;
+                    if (!string.IsNullOrEmpty(ownName) &&
+                        displayName.Equals(ownName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        ApplyOwnProfileCosmetics();
+                    }
+                    else
+                    {
+                        ApplyViewedProfileCosmetics(lookup.Cosmetics);
+                    }
+
                     // Load achievements from lookup result (for other users)
                     if (lookup.Achievements != null && lookup.Achievements.Count > 0)
                     {
@@ -2222,7 +2273,12 @@ namespace ConditioningControlPanel
                     var image = LoadAchievementImage(achievement.ImageName);
                     if (image != null)
                     {
-                        achievementItems.Add(new { Name = App.Mods?.MakeModAware(achievement.Name) ?? achievement.Name, Image = image });
+                        achievementItems.Add(new ProfileAchievementTile
+                        {
+                            Id = achievement.Id,
+                            Name = App.Mods?.MakeModAware(achievement.Name) ?? achievement.Name,
+                            Image = image
+                        });
                     }
                 }
             }
