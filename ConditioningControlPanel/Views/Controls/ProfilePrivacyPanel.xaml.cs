@@ -21,9 +21,21 @@ namespace ConditioningControlPanel.Views.Controls
             InitializeComponent();
         }
 
-        private static MainWindow? Host =>
-            Application.Current?.Windows.OfType<MainWindow>().FirstOrDefault()
-            ?? Application.Current?.MainWindow as MainWindow;
+        // IsInitialized gate: this panel is constructed inside DiscordTabView's constructor, i.e.
+        // while MainWindow.xaml is still being parsed — and the XAML defaults (IsChecked="True")
+        // raise Checked during that parse. MainWindow is already in Application.Windows at that
+        // point but its named fields (DiscordTab, ...) are not assigned yet, and forwarding a
+        // parse-time default into a settings handler would overwrite the user's saved preference.
+        // The old in-tab controls got this for free: Window.GetWindow(this) was null during parse.
+        private static MainWindow? Host
+        {
+            get
+            {
+                var mw = Application.Current?.Windows.OfType<MainWindow>().FirstOrDefault()
+                         ?? Application.Current?.MainWindow as MainWindow;
+                return mw?.IsInitialized == true ? mw : null;
+            }
+        }
 
         private void BtnDiscordTabLogin_Click(object sender, RoutedEventArgs e)
             => Host?.BtnDiscordTabLogin_Click(sender, e);
