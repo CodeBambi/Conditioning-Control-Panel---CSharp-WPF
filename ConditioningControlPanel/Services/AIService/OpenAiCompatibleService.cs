@@ -168,6 +168,16 @@ namespace ConditioningControlPanel.Services.AIService
             return model;
         }
 
+        /// <summary>
+        /// Model identifier recorded in moderation.log. Mirrors the "local:{model}" shape the
+        /// Ollama provider uses so the compliance record says which endpoint produced the hit.
+        /// </summary>
+        private static string ModelHint()
+        {
+            var model = GetConfiguredModel();
+            return "openai_compat:" + (string.IsNullOrWhiteSpace(model) ? "unknown" : model);
+        }
+
         private static string? GetApiKey()
         {
             var raw = Settings?.OpenAiCompatibleApiKey;
@@ -362,12 +372,59 @@ namespace ConditioningControlPanel.Services.AIService
             _dailyRequestCount++;
         }
 
-        private async Task<string?> SendChatAsync(string systemPrompt, string userInput)
+        /// <summary>
+        /// Core request path.
+        ///
+        /// Moderation: if <paramref name="returnRefusalSentinel"/> is true and the input or
+        /// output trips <see cref="App.ModerationGuard"/>, returns the appropriate
+        /// <see cref="ModerationRefusal"/> sentinel string so the chat UI can render the
+        /// refusal bubble + POLICY badge. When false (awareness, keyword, lockscreen, video
+        /// paths) a moderation hit returns null and the caller silently drops the reaction —
+        /// surfacing a refusal there would be jarring (user didn't actively prompt).
+        /// </summary>
+        private async Task<string?> SendChatAsync(string systemPrompt, string userInput, bool returnRefusalSentinel = false,
+            string purpose = AiMeter.PurposeChat)
         {
             if (App.Settings?.Current?.OfflineMode == true)
             {
                 App.Logger?.Debug("OpenAiCompatibleService: Offline mode enabled, skipping AI request");
                 return null;
+            }
+
+            // [AI-METER] — log-only sizing, one line per request attempt (plus refused input,
+            // a request we deliberately didn't make). Missing-key and daily-limit bails never
+            // reach the wire and stay silent. Refined to the real message list below.
+            var meterStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var meterInputChars = (systemPrompt?.Length ?? 0) + (userInput?.Length ?? 0);
+            void Meter(string outcome, int outputChars = 0) =>
+                AiMeter.Record(AiMeter.ProviderOpenAiCompatible, purpose, meterInputChars, outputChars,
+                    meterStopwatch.ElapsedMilliseconds, outcome);
+
+            // INPUT MODERATION (Layer 1 — code-side, prompt cannot bypass). Runs BEFORE the
+            // HTTP request so prohibited inputs never leave the client. Same semantics as the
+            // cloud and local providers.
+            var guard = App.ModerationGuard;
+            if (guard != null)
+            {
+                var inputCheck = guard.CheckInput(userInput ?? string.Empty);
+                if (!inputCheck.Allow && inputCheck.Category.HasValue)
+                {
+                    App.ModerationLog?.Record(inputCheck.Category.Value, source: "input", modelHint: ModelHint());
+                    // Only escalate the user-facing Content Policy Notice for content the user
+                    // actually typed (interactive chat path). Background/auto reactions leave
+                    // returnRefusalSentinel false and must not pop the warning — that filtering
+                    // is "on us, not on them". Logged above for compliance either way.
+                    if (returnRefusalSentinel)
+                        App.ModerationCounter?.RecordHit(inputCheck.Category.Value, "input:openai_compat");
+                    App.Logger?.Information("OpenAiCompatibleService: input blocked by ModerationGuard (category={Cat})", inputCheck.Category);
+                    Meter(AiMeter.OutcomeRefusedInput);
+                    return returnRefusalSentinel ? ModerationRefusal.InputSentinel : null;
+                }
+                // ProfessionalAdvice is soft (Allow=true with Category set) — log only.
+                if (inputCheck.Allow && inputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
+                {
+                    App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "input", modelHint: ModelHint());
+                }
             }
 
             var apiKey = GetApiKey();
@@ -387,6 +444,7 @@ namespace ConditioningControlPanel.Services.AIService
 
             var model = GetConfiguredModel();
             var messages = BuildMessages(systemPrompt, userInput);
+            meterInputChars = messages.Sum(m => m.Content?.Length ?? 0);
 
             var payload = new Dictionary<string, object>
             {
@@ -430,6 +488,7 @@ namespace ConditioningControlPanel.Services.AIService
                             status,
                             endpointUri,
                             json);
+                        Meter(AiMeter.OutcomeError);
                         return null;
                     }
 
@@ -437,6 +496,7 @@ namespace ConditioningControlPanel.Services.AIService
                     if (!doc.RootElement.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0)
                     {
                         App.Logger?.Warning("OpenAiCompatibleService: response has no choices");
+                        Meter(AiMeter.OutcomeError);
                         return null;
                     }
 
@@ -445,11 +505,16 @@ namespace ConditioningControlPanel.Services.AIService
                         !message.TryGetProperty("content", out var contentElement))
                     {
                         App.Logger?.Warning("OpenAiCompatibleService: response missing message.content");
+                        Meter(AiMeter.OutcomeError);
                         return null;
                     }
 
                     var content = CleanTokenizerArtifacts(contentElement.GetString());
-                    return ProcessResponse(content);
+                    var processed = ProcessResponse(content, returnRefusalSentinel, out var outputBlocked);
+                    Meter(outputBlocked ? AiMeter.OutcomeRefusedOutput
+                            : string.IsNullOrWhiteSpace(processed) ? AiMeter.OutcomeEmpty : AiMeter.OutcomeOk,
+                        content?.Length ?? 0);
+                    return processed;
                 }
                 catch (HttpRequestException) when (attempt == 0)
                 {
@@ -462,11 +527,13 @@ namespace ConditioningControlPanel.Services.AIService
                 catch (Exception ex)
                 {
                     App.Logger?.Warning(ex, "OpenAiCompatibleService: request failed");
+                    Meter(AiMeter.OutcomeError);
                     return null;
                 }
             }
 
             App.Logger?.Warning("OpenAiCompatibleService: request failed after retry");
+            Meter(AiMeter.OutcomeError);
             return null;
         }
 
@@ -491,17 +558,69 @@ namespace ConditioningControlPanel.Services.AIService
             return messages;
         }
 
-        private string? ProcessResponse(string? content)
+        /// <summary>
+        /// OUTPUT MODERATION (Layer 1). Returns true when <paramref name="text"/> is safe to
+        /// show. On a block, <paramref name="refusal"/> carries the value the caller must
+        /// return — the sentinel on the interactive chat path, null everywhere else.
+        /// </summary>
+        private static bool PassesOutputModeration(string? text, bool returnRefusalSentinel, out string? refusal)
         {
+            refusal = null;
+
+            var guard = App.ModerationGuard;
+            if (guard == null) return true;
+
+            var outputCheck = guard.CheckOutput(text ?? string.Empty);
+            if (!outputCheck.Allow && outputCheck.Category.HasValue)
+            {
+                App.ModerationLog?.Record(outputCheck.Category.Value, source: "output", modelHint: ModelHint());
+                // Model OUTPUT that trips the filter is never the user's doing, so it does NOT
+                // escalate the Content Policy Notice (logged above for compliance only). The
+                // warning is reserved for user-typed input.
+                App.Logger?.Information("OpenAiCompatibleService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
+                refusal = returnRefusalSentinel ? ModerationRefusal.OutputSentinel : null;
+                return false;
+            }
+            if (outputCheck.Allow && outputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
+            {
+                App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "output", modelHint: ModelHint());
+            }
+
+            return true;
+        }
+
+        private string? ProcessResponse(string? content, bool returnRefusalSentinel, out bool outputBlocked)
+        {
+            outputBlocked = false;
+
             if (string.IsNullOrWhiteSpace(content))
                 return null;
 
             var effectsEnabled = App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects == true;
             if (!effectsEnabled)
-                return content;
+            {
+                // Strip context-tag echoes BEFORE moderation, matching the cloud path's
+                // ordering (AiService.SanitizeResponse): an echoed awareness tag carries the
+                // user's raw tab title, which must not be able to trip the output guard and
+                // write a false model-output hit into the compliance log. The effects branch
+                // below gets this for free — Parse() sanitizes CleanText.
+                var visible = _parser.SanitizeVisibleText(content);
+                if (PassesOutputModeration(visible, returnRefusalSentinel, out var plainRefusal)) return visible;
+                outputBlocked = true;
+                return plainRefusal;
+            }
 
             var parsed = _parser.Parse(content);
             var commands = parsed.Commands;
+
+            // Moderate the user-visible text (JSON effects wrapper already stripped) BEFORE
+            // executing anything, as the local provider does: a blocked turn fires no effects
+            // and shows no text.
+            if (!PassesOutputModeration(parsed.CleanText, returnRefusalSentinel, out var blockedRefusal))
+            {
+                outputBlocked = true;
+                return blockedRefusal;
+            }
 
             if (commands.Count > 0)
             {
@@ -544,23 +663,47 @@ namespace ConditioningControlPanel.Services.AIService
                 return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
 
             var prompt = _bambiSprite.GetSystemPrompt();
-            var reply = await SendChatAsync(prompt, userInput).ConfigureAwait(false);
+            // Interactive path: a moderation block must surface as a POLICY bubble, not a
+            // silent drop, so ask for the refusal sentinel here (and only here).
+            var reply = await SendChatAsync(prompt, userInput, returnRefusalSentinel: true, purpose: AiMeter.PurposeChat).ConfigureAwait(false);
+
+            var refusalSource = ModerationRefusal.GetSource(reply);
+            if (refusalSource.HasValue)
+            {
+                // Category was already logged inside SendChatAsync; the sentinel string can't
+                // carry it, so we surface only the source here.
+                return new AiReplyResult(
+                    string.Empty,
+                    IsAiGenerated: false,
+                    Refusal: new ModerationRefusalInfo(Category: null, Source: refusalSource.Value));
+            }
+
             if (string.IsNullOrWhiteSpace(reply))
                 return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
 
             return new AiReplyResult(reply, IsAiGenerated: true, Refusal: null);
         }
 
-        public async Task<string?> GetAwarenessReactionAsync(string detectedName, string category, string serviceName = "", string pageTitle = "")
+        public async Task<string?> GetAwarenessReactionAsync(string detectedName, string category, string serviceName = "", string pageTitle = "", TimeSpan? duration = null)
         {
             var prompt = _bambiSprite.GetSystemPrompt();
 
             var website = string.IsNullOrEmpty(serviceName) ? detectedName : serviceName;
             var tabName = string.IsNullOrEmpty(pageTitle) ? detectedName : pageTitle;
 
-            var userInput = $"[Category: {category} | App: {website} | Title: {tabName} | Duration: 0m]";
+            // Same bucketing as the still-on path.
+            var elapsed = duration ?? TimeSpan.Zero;
+            string durationText;
+            if (elapsed.TotalMinutes < 1)
+                durationText = $"{(int)elapsed.TotalSeconds}s";
+            else if (elapsed.TotalMinutes < 60)
+                durationText = $"{(int)elapsed.TotalMinutes}m";
+            else
+                durationText = $"{(int)elapsed.TotalHours}h";
 
-            return await SendChatAsync(prompt, userInput).ConfigureAwait(false);
+            var userInput = $"[Category: {category} | App: {website} | Title: {tabName} | Duration: {durationText}]";
+
+            return await SendChatAsync(prompt, userInput, purpose: AiMeter.PurposeAwareness).ConfigureAwait(false);
         }
 
         public async Task<string?> GetStillOnReactionAsync(string displayName, string category, TimeSpan duration)
@@ -577,7 +720,7 @@ namespace ConditioningControlPanel.Services.AIService
 
             var userInput = $"[Category: {category} | App: {displayName} | Title: {displayName} | Duration: {durationText}]";
 
-            return await SendChatAsync(prompt, userInput).ConfigureAwait(false);
+            return await SendChatAsync(prompt, userInput, purpose: AiMeter.PurposeStillOn).ConfigureAwait(false);
         }
 
         public async Task<string?> GetKeywordCommentAsync(string keyword, string? promptTemplate = null)
@@ -587,7 +730,7 @@ namespace ConditioningControlPanel.Services.AIService
                 ? $"You just caught the user on the word '{keyword}'. React in character, one short line."
                 : promptTemplate.Replace("{keyword}", keyword);
 
-            return await SendChatAsync(systemPrompt, userInput).ConfigureAwait(false);
+            return await SendChatAsync(systemPrompt, userInput, purpose: AiMeter.PurposeKeyword).ConfigureAwait(false);
         }
 
         public async Task<string?> GetLockScreenReaction(string sentance, int mistakes, int amount, string? promptTemplate = null)
@@ -605,7 +748,7 @@ namespace ConditioningControlPanel.Services.AIService
                 userInput = userInput.Replace("{amount}", amount.ToString());
             }
 
-            return await SendChatAsync(systemPrompt, userInput).ConfigureAwait(false);
+            return await SendChatAsync(systemPrompt, userInput, purpose: AiMeter.PurposeLockScreen).ConfigureAwait(false);
         }
 
         public async Task<string?> GetVideoDoneReaction(string title, string? promptTemplate = null)
@@ -615,7 +758,7 @@ namespace ConditioningControlPanel.Services.AIService
                 ? $"The user has just finished the mandatory video {title}. React in character, one short line."
                 : promptTemplate.Replace("{title}", title);
 
-            return await SendChatAsync(systemPrompt, userInput).ConfigureAwait(false);
+            return await SendChatAsync(systemPrompt, userInput, purpose: AiMeter.PurposeVideoDone).ConfigureAwait(false);
         }
 
         public void Dispose()

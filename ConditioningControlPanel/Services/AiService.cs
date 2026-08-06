@@ -123,7 +123,7 @@ namespace ConditioningControlPanel.Services
             //   • a refusal sentinel string → typed refusal result
             //   • null on any failure (HTTP error, empty content, daily-limit, etc.) → canned fallback
             //   • model text → genuine AI reply
-            var result = await GetAiResponseAsync(userInput, prompt, returnRefusalSentinel: true);
+            var result = await GetAiResponseAsync(userInput, prompt, returnRefusalSentinel: true, purpose: AiMeter.PurposeChat);
 
             var refusalSource = ModerationRefusal.GetSource(result);
             if (refusalSource.HasValue)
@@ -147,7 +147,7 @@ namespace ConditioningControlPanel.Services
         /// Used by Awareness Mode. Passes raw website and tab name for AI to interpret.
         /// Returns null if AI unavailable (caller should use preset phrase).
         /// </summary>
-        public async Task<string?> GetAwarenessReactionAsync(string detectedName, string category, string serviceName = "", string pageTitle = "")
+        public async Task<string?> GetAwarenessReactionAsync(string detectedName, string category, string serviceName = "", string pageTitle = "", TimeSpan? duration = null)
         {
             // Get prompt from active personality preset
             var prompt = _bambiSprite.GetSystemPrompt();
@@ -156,11 +156,21 @@ namespace ConditioningControlPanel.Services
             var website = string.IsNullOrEmpty(serviceName) ? detectedName : serviceName;
             var tabName = string.IsNullOrEmpty(pageTitle) ? detectedName : pageTitle;
 
-            // Format context with category for accurate reactions
-            // Format: [Category: X | App: Y | Title: Z | Duration: 0m]
-            var userInput = $"[Category: {category} | App: {website} | Title: {tabName} | Duration: 0m]";
+            // Format duration nicely (same bucketing as the still-on path)
+            var elapsed = duration ?? TimeSpan.Zero;
+            string durationText;
+            if (elapsed.TotalMinutes < 1)
+                durationText = $"{(int)elapsed.TotalSeconds}s";
+            else if (elapsed.TotalMinutes < 60)
+                durationText = $"{(int)elapsed.TotalMinutes}m";
+            else
+                durationText = $"{(int)elapsed.TotalHours}h";
 
-            return await GetAiResponseAsync(userInput, prompt);
+            // Format context with category for accurate reactions
+            // Format: [Category: X | App: Y | Title: Z | Duration: Nm]
+            var userInput = $"[Category: {category} | App: {website} | Title: {tabName} | Duration: {durationText}]";
+
+            return await GetAiResponseAsync(userInput, prompt, purpose: AiMeter.PurposeAwareness);
         }
 
         /// <summary>
@@ -185,7 +195,7 @@ namespace ConditioningControlPanel.Services
             // Format: [Category: X | App: Y | Title: Z | Duration: Nm]
             var userInput = $"[Category: {category} | App: {displayName} | Title: {displayName} | Duration: {durationText}]";
 
-            return await GetAiResponseAsync(userInput, prompt);
+            return await GetAiResponseAsync(userInput, prompt, purpose: AiMeter.PurposeStillOn);
         }
 
         /// <summary>
@@ -202,7 +212,7 @@ namespace ConditioningControlPanel.Services
                 ? $"You just caught the user on the word '{keyword}'. React in character, one short line."
                 : promptTemplate.Replace("{keyword}", keyword);
 
-            return await GetAiResponseAsync(userInput, systemPrompt);
+            return await GetAiResponseAsync(userInput, systemPrompt, purpose: AiMeter.PurposeKeyword);
         }
 
         /// <summary>
@@ -226,7 +236,7 @@ namespace ConditioningControlPanel.Services
                 userInput = userInput.Replace("{amount}", amount.ToString());
             }
 
-            return await GetAiResponseAsync(userInput, systemPrompt);
+            return await GetAiResponseAsync(userInput, systemPrompt, purpose: AiMeter.PurposeLockScreen);
         }
 
         /// <summary>
@@ -242,7 +252,7 @@ namespace ConditioningControlPanel.Services
                 ? $"The user has just finished the mandatory video {title}. React in character, one short line."
                 : promptTemplate.Replace("{title}", title);
 
-            return await GetAiResponseAsync(userInput, systemPrompt);
+            return await GetAiResponseAsync(userInput, systemPrompt, purpose: AiMeter.PurposeVideoDone);
         }
 
         /// <summary>
@@ -257,7 +267,8 @@ namespace ConditioningControlPanel.Services
         /// reaction — surfacing a refusal there would be jarring (user didn't actively
         /// prompt).
         /// </summary>
-        private async Task<string?> GetAiResponseAsync(string userInput, string systemPrompt, bool returnRefusalSentinel = false)
+        private async Task<string?> GetAiResponseAsync(string userInput, string systemPrompt, bool returnRefusalSentinel = false,
+            string purpose = AiMeter.PurposeChat)
         {
             // Check offline mode first
             if (App.Settings?.Current?.OfflineMode == true)
@@ -265,6 +276,16 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("AiService: Offline mode enabled, skipping AI request");
                 return null;
             }
+
+            // [AI-METER] — log-only sizing. Emitted once per request attempt (and for a
+            // moderation-refused input, which is a request we deliberately didn't make).
+            // The paths that never reach the wire at all — offline, no access, daily limit —
+            // are not requests and stay silent.
+            var meterStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var meterInputChars = (systemPrompt?.Length ?? 0) + (userInput?.Length ?? 0);
+            void Meter(string outcome, int outputChars = 0) =>
+                AiMeter.Record(AiMeter.ProviderCloud, purpose, meterInputChars, outputChars,
+                    meterStopwatch.ElapsedMilliseconds, outcome);
 
             // INPUT MODERATION (Layer 1 — code-side, prompt cannot bypass).
             // Runs BEFORE the HTTP request so prohibited inputs never leave the client.
@@ -284,6 +305,7 @@ namespace ConditioningControlPanel.Services
                     if (returnRefusalSentinel)
                         App.ModerationCounter?.RecordHit(inputCheck.Category.Value, "input:cloud");
                     App.Logger?.Information("AiService: input blocked by ModerationGuard (category={Cat})", inputCheck.Category);
+                    Meter(AiMeter.OutcomeRefusedInput);
                     return returnRefusalSentinel ? ModerationRefusal.InputSentinel : null;
                 }
                 // ProfessionalAdvice is soft (Allow=true with Category set) — log only.
@@ -355,13 +377,13 @@ namespace ConditioningControlPanel.Services
                         App.Logger?.Debug("AiService: V2 endpoint not available, trying legacy auth");
                         response.Dispose();
                         response = await SendLegacyRequestAsync(messages);
-                        if (response == null) return null;
+                        if (response == null) { Meter(AiMeter.OutcomeError); return null; }
                     }
                 }
                 else
                 {
                     response = await SendLegacyRequestAsync(messages);
-                    if (response == null) return null;
+                    if (response == null) { Meter(AiMeter.OutcomeError); return null; }
                 }
 
                 if (!response.IsSuccessStatusCode)
@@ -369,6 +391,7 @@ namespace ConditioningControlPanel.Services
                     var errorText = await response.Content.ReadAsStringAsync();
                     App.Logger?.Warning("AiService: Proxy returned {Status}: {Error}",
                         response.StatusCode, errorText);
+                    Meter(AiMeter.OutcomeError);
                     return null;
                 }
 
@@ -377,12 +400,14 @@ namespace ConditioningControlPanel.Services
                 if (result == null || !string.IsNullOrEmpty(result.Error))
                 {
                     App.Logger?.Warning("AiService: Proxy error: {Error}", result?.Error);
+                    Meter(AiMeter.OutcomeError);
                     return null;
                 }
 
                 if (string.IsNullOrEmpty(result.Content))
                 {
                     App.Logger?.Warning("AiService: Empty response from proxy");
+                    Meter(AiMeter.OutcomeEmpty);
                     return null;
                 }
 
@@ -421,6 +446,7 @@ namespace ConditioningControlPanel.Services
                         // it does NOT escalate the Content Policy Notice (logged above for
                         // compliance only). The warning is reserved for user-typed input.
                         App.Logger?.Information("AiService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
+                        Meter(AiMeter.OutcomeRefusedOutput, result.Content!.Length);
                         return returnRefusalSentinel ? ModerationRefusal.OutputSentinel : null;
                     }
                     if (outputCheck.Allow && outputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
@@ -429,21 +455,25 @@ namespace ConditioningControlPanel.Services
                     }
                 }
 
+                Meter(AiMeter.OutcomeOk, result.Content!.Length);
                 return sanitized;
             }
             catch (TaskCanceledException)
             {
                 App.Logger?.Warning("AiService: Request timed out");
+                Meter(AiMeter.OutcomeError);
                 return null;
             }
             catch (HttpRequestException ex)
             {
                 App.Logger?.Warning(ex, "AiService: Network error");
+                Meter(AiMeter.OutcomeError);
                 return null;
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "AiService: Failed to get AI reply");
+                Meter(AiMeter.OutcomeError);
                 return null;
             }
         }

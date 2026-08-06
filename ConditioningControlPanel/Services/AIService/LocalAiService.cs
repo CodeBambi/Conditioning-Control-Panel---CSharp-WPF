@@ -348,7 +348,7 @@ namespace ConditioningControlPanel.Services.AIService
             var prompt = _bambiSprite.GetSystemPrompt();
             // Mark this as a user request so a second click while busy gets a "still thinking"
             // phrase back instead of the bare fallback.
-            var result = await GetAiResponseAsync(userInput, prompt, isUser: true, returnRefusalSentinel: true);
+            var result = await GetAiResponseAsync(userInput, prompt, isUser: true, returnRefusalSentinel: true, purpose: AiMeter.PurposeChat);
 
             var refusalSource = ModerationRefusal.GetSource(result);
             if (refusalSource.HasValue)
@@ -400,13 +400,21 @@ namespace ConditioningControlPanel.Services.AIService
 
         private static readonly Random _random = new();
 
-        public async Task<string?> GetAwarenessReactionAsync(string detectedName, string category, string serviceName = "", string pageTitle = "")
+        public async Task<string?> GetAwarenessReactionAsync(string detectedName, string category, string serviceName = "", string pageTitle = "", TimeSpan? duration = null)
         {
             var prompt = _bambiSprite.GetSystemPrompt();
             var website = string.IsNullOrEmpty(serviceName) ? detectedName : serviceName;
             var tabName = string.IsNullOrEmpty(pageTitle) ? detectedName : pageTitle;
-            var userInput = $"[Category: {category} | App: {website} | Title: {tabName} | Duration: 0m]";
-            return await GetAiResponseAsync(userInput, prompt);
+
+            // Same bucketing as the still-on path.
+            var elapsed = duration ?? TimeSpan.Zero;
+            string durationText;
+            if (elapsed.TotalMinutes < 1) durationText = $"{(int)elapsed.TotalSeconds}s";
+            else if (elapsed.TotalMinutes < 60) durationText = $"{(int)elapsed.TotalMinutes}m";
+            else durationText = $"{(int)elapsed.TotalHours}h";
+
+            var userInput = $"[Category: {category} | App: {website} | Title: {tabName} | Duration: {durationText}]";
+            return await GetAiResponseAsync(userInput, prompt, purpose: AiMeter.PurposeAwareness);
         }
 
         public async Task<string?> GetStillOnReactionAsync(string displayName, string category, TimeSpan duration)
@@ -418,7 +426,7 @@ namespace ConditioningControlPanel.Services.AIService
             else durationText = $"{(int)duration.TotalHours}h";
 
             var userInput = $"[Category: {category} | App: {displayName} | Title: {displayName} | Duration: {durationText}]";
-            return await GetAiResponseAsync(userInput, prompt);
+            return await GetAiResponseAsync(userInput, prompt, purpose: AiMeter.PurposeStillOn);
         }
 
         public async Task<string?> GetKeywordCommentAsync(string keyword, string? promptTemplate = null)
@@ -427,7 +435,7 @@ namespace ConditioningControlPanel.Services.AIService
             var userInput = string.IsNullOrEmpty(promptTemplate)
                 ? $"You just caught the user on the word '{keyword}'. React in character, one short line."
                 : promptTemplate.Replace("{keyword}", keyword);
-            return await GetAiResponseAsync(userInput, systemPrompt);
+            return await GetAiResponseAsync(userInput, systemPrompt, purpose: AiMeter.PurposeKeyword);
         }
 
         public async Task<string?> GetLockScreenReaction(string sentance, int mistakes, int amount, string? promptTemplate = null)
@@ -444,7 +452,7 @@ namespace ConditioningControlPanel.Services.AIService
                 userInput = userInput.Replace("{mistakes}", mistakes.ToString());
                 userInput = userInput.Replace("{amount}", amount.ToString());
             }
-            return await GetAiResponseAsync(userInput, systemPrompt);
+            return await GetAiResponseAsync(userInput, systemPrompt, purpose: AiMeter.PurposeLockScreen);
         }
 
         public async Task<string?> GetVideoDoneReaction(string title, string? promptTemplate = null)
@@ -453,11 +461,21 @@ namespace ConditioningControlPanel.Services.AIService
             var userInput = string.IsNullOrEmpty(promptTemplate)
                 ? $"The user has just finished the mandatory video {title}. React in character, one short line."
                 : promptTemplate.Replace("{title}", title);
-            return await GetAiResponseAsync(userInput, systemPrompt);
+            return await GetAiResponseAsync(userInput, systemPrompt, purpose: AiMeter.PurposeVideoDone);
         }
 
-        private async Task<string?> GetAiResponseAsync(string userInput, string systemPrompt, bool isUser = false, bool returnRefusalSentinel = false)
+        private async Task<string?> GetAiResponseAsync(string userInput, string systemPrompt, bool isUser = false, bool returnRefusalSentinel = false,
+            string purpose = AiMeter.PurposeChat)
         {
+            // [AI-METER] — log-only sizing, one line per request attempt (plus refused input,
+            // a request we deliberately didn't make). Queue-drop paths never reach Ollama and
+            // stay silent. meterInputChars is refined to the real outgoing message list below.
+            var meterStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var meterInputChars = (systemPrompt?.Length ?? 0) + (userInput?.Length ?? 0);
+            void Meter(string outcome, int outputChars = 0) =>
+                AiMeter.Record(AiMeter.ProviderLocal, purpose, meterInputChars, outputChars,
+                    meterStopwatch.ElapsedMilliseconds, outcome);
+
             // INPUT MODERATION (Layer 1 — code-side, prompt cannot bypass). Same semantics
             // as AiService cloud path: hard categories block before the HTTP call; refusal
             // sentinel surfaces only when the caller is the chat UI.
@@ -477,6 +495,7 @@ namespace ConditioningControlPanel.Services.AIService
                     if (returnRefusalSentinel)
                         App.ModerationCounter?.RecordHit(inputCheck.Category.Value, "input:local");
                     App.Logger?.Information("LocalAiService: input blocked by ModerationGuard (category={Cat})", inputCheck.Category);
+                    Meter(AiMeter.OutcomeRefusedInput);
                     return returnRefusalSentinel ? ModerationRefusal.InputSentinel : null;
                 }
                 if (inputCheck.Allow && inputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
@@ -562,6 +581,8 @@ namespace ConditioningControlPanel.Services.AIService
                 App.Logger?.Information("LocalAiService: sending to Ollama (model={Model}, effects={Effects}, isUser={IsUser}, msgs={MsgCount})",
                     model, effectsEnabled, isUser, outgoing.Count);
 
+                meterInputChars = outgoing.Sum(m => m.Content?.Length ?? 0);
+
                 var (status, body) = await SendChatAsync(model, outgoing);
 
                 if (status != 200)
@@ -570,6 +591,7 @@ namespace ConditioningControlPanel.Services.AIService
                     // Roll back the user turn so we don't poison history with an unanswered turn.
                     // (Automated reactions never appended to _messages, so there's nothing to undo.)
                     if (isUser && _messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
+                    Meter(AiMeter.OutcomeError);
                     return DescribeOllamaError(status, body, model);
                 }
 
@@ -578,6 +600,7 @@ namespace ConditioningControlPanel.Services.AIService
                 {
                     App.Logger?.Warning("LocalAiService: empty content in 200 response: {Body}", Truncate(body, 300));
                     if (isUser && _messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
+                    Meter(AiMeter.OutcomeEmpty);
                     return GetFallbackResponse();
                 }
 
@@ -629,6 +652,7 @@ namespace ConditioningControlPanel.Services.AIService
                             if (_messages.Count > 0 && _messages[^1].Role == "assistant") _messages.RemoveAt(_messages.Count - 1);
                             if (_messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
                         }
+                        Meter(AiMeter.OutcomeRefusedOutput, content.Length);
                         return returnRefusalSentinel ? ModerationRefusal.OutputSentinel : null;
                     }
                     if (outputCheck.Allow && outputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
@@ -658,12 +682,15 @@ namespace ConditioningControlPanel.Services.AIService
                     foreach (var cmd in _currentCommands) App.Commands.ExecuteCommand(cmd);
                 }
 
+                Meter(string.IsNullOrWhiteSpace(parsed.CleanText) ? AiMeter.OutcomeEmpty : AiMeter.OutcomeOk, content.Length);
+
                 return parsed.CleanText;
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "LocalAiService: chat call threw (host={Host}, model={Model})", _activeHost, model);
                 if (_messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
+                Meter(AiMeter.OutcomeError);
                 return DescribeChatException(ex, model);
             }
             finally
