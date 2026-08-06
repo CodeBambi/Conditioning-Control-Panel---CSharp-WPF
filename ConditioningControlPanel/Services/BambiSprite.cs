@@ -19,7 +19,7 @@ namespace ConditioningControlPanel.Services
 
         // Core video/audio links that should ALWAYS be included in prompts
         // These exact names match AvatarTubeWindow.KnownVideoLinks for clickable links
-        private static string GetCoreMediaLinks()
+        private string GetCoreMediaLinks()
         {
             var isBambiMode = App.Mods?.IsBambiMode ?? false;
 
@@ -31,10 +31,9 @@ namespace ConditioningControlPanel.Services
                 // Audio/playlist guidance below is unchanged either way.
                 string bambiVideoTitles =
                     "Naughty Bambi, Bambi Bae, Bambi Slay, Overload, TikTok Loop, Bambi TikTok - In Beat, Bambi TikTok - In Beat - Longer Version, Bambi TikTok - Good Girls Dont Cum, Bambi Chastity Overload, Dumb Bimbo Brainwash, Bambi TikTok Eager Slut, Yes Brain Loop, Day 1, Day 2, Day 4, Day 5, Toms Dangerous Tik Tok, Bambi TikTok 7, Bambi's Naughty TikTok Collection";
-                var bambiPool = App.Mods?.GetVideoLinks();
+                var bambiPool = GetVideoPool();
                 if (bambiPool != null && bambiPool.Count > 0)
-                    bambiVideoTitles = string.Join(", ", bambiPool.Keys
-                        .Where(k => !string.Equals(k, "Movies", System.StringComparison.OrdinalIgnoreCase)));
+                    bambiVideoTitles = string.Join(", ", PoolTitles());
 
                 // Draw the example title from the live pool (varies every build) instead of
                 // hardcoding "Naughty Bambi" — a fixed example here made the companion fixate on
@@ -76,15 +75,13 @@ Creator to recommend: PlatinumPuppets";
             // recommends the mod's content instead of falling into the legacy Bambi/Sissy
             // branches below. The titles become clickable when the AI says them verbatim
             // (KnownVideoLinks is reloaded from the active mod's links on switch).
-            var modVideoLinks = App.Mods?.GetVideoLinks();
+            var modVideoLinks = GetVideoPool();
             if (modVideoLinks != null && modVideoLinks.Count > 0)
             {
                 // List one title per line, quoted — the same format the legacy HYPNOTUBE
                 // section uses, which the models copy from reliably (so the titles match
                 // KnownVideoLinks and render as clickable links).
-                var titleLines = string.Join("\n", modVideoLinks.Keys
-                    .Where(k => !string.Equals(k, "Movies", System.StringComparison.OrdinalIgnoreCase))
-                    .Select(k => $"- \"{k}\""));
+                var titleLines = string.Join("\n", PoolTitles().Select(k => $"- \"{k}\""));
                 App.Logger?.Debug("BambiSprite: mod video-link block active with {Count} titles", modVideoLinks.Count);
                 return $@"
 --- VIDEO LINKS (the ONLY videos you may name) ---
@@ -131,24 +128,29 @@ CRITICAL: Do NOT mention any specific video names. Only give generic ""go browse
         }
 
         /// <summary>
-        /// Returns up to <paramref name="count"/> distinct video titles drawn at random from the
-        /// ACTIVE mod's real video pool (the same names <see cref="AvatarTubeWindow.KnownVideoLinks"/>
-        /// can auto-link). Prompt EXAMPLES are seeded from this so the model anchors on titles that
-        /// (a) actually exist for the current mod and (b) rotate every build — replacing the
-        /// hardcoded "Naughty Bambi"/"Yes Brain Loop" examples that made the companion fixate on one
-        /// Bambi video and, in Sissy mode, invent un-linkable titles. Empty when the mod ships no
-        /// pool (e.g. Sissy default with no configured links) — callers fall back to generic prose.
+        /// Returns up to <paramref name="count"/> distinct video titles from the ACTIVE mod's real
+        /// video pool (the same names <see cref="AvatarTubeWindow.KnownVideoLinks"/> can auto-link).
+        /// Prompt EXAMPLES are seeded from this so the model anchors on titles that actually exist
+        /// for the current mod — replacing the hardcoded "Naughty Bambi"/"Yes Brain Loop" examples
+        /// that made the companion fixate on one Bambi video and, in Sissy mode, invent un-linkable
+        /// titles. Empty when the mod ships no pool (e.g. Sissy default with no configured links) —
+        /// callers fall back to generic prose.
+        ///
+        /// <para>In the two-zone build (<see cref="GetStablePrompt"/>) the pick is
+        /// <see cref="StableSample"/>: resolved ONCE per app-session from the alphabetised pool, so
+        /// the prompt prefix is byte-identical call after call and provider prompt caching can hit.
+        /// The legacy build keeps the per-call Fisher-Yates shuffle — which is exactly the thing that
+        /// guaranteed a 0% cache rate, and is why it now only runs behind the kill switch.</para>
         /// </summary>
-        private static List<string> SampleVideoTitles(int count)
+        private List<string> SampleVideoTitles(int count)
         {
-            var pool = App.Mods?.GetVideoLinks();
-            if (pool == null || pool.Count == 0) return new List<string>();
+            var titles = PoolTitles().ToList();
+            if (titles.Count == 0 || count <= 0) return new List<string>();
 
-            var titles = pool.Keys
-                .Where(k => !string.Equals(k, "Movies", System.StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            if (_deterministicSampling) return StableSample(titles, count, PromptSessionSeed);
 
-            // Fisher–Yates shuffle so examples cycle across the whole pool, not just the first keys.
+            // Legacy: Fisher–Yates shuffle so examples cycle across the whole pool, not just the
+            // first keys — at the price of a brand-new prompt on every single call.
             var rng = System.Random.Shared;
             for (int i = titles.Count - 1; i > 0; i--)
             {
@@ -156,6 +158,54 @@ CRITICAL: Do NOT mention any specific video names. Only give generic ""go browse
                 (titles[i], titles[j]) = (titles[j], titles[i]);
             }
             return titles.Take(count).ToList();
+        }
+
+        /// <summary>
+        /// Deterministic sample: the same <paramref name="titles"/> and <paramref name="seed"/> always
+        /// yield the same list, in the same order. Seeded once per app-session so examples still
+        /// rotate between launches (no fixation on one title across days) while every prompt built
+        /// within a launch is byte-identical.
+        /// </summary>
+        internal static List<string> StableSample(IReadOnlyList<string> titles, int count, int seed)
+        {
+            if (titles == null || titles.Count == 0 || count <= 0) return new List<string>();
+
+            var work = titles.ToList();
+            var rng = new System.Random(seed);
+            for (int i = work.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                (work[i], work[j]) = (work[j], work[i]);
+            }
+            return work.Take(count).ToList();
+        }
+
+        /// <summary>
+        /// The active mod's video pool, behind one accessor so the whole prompt build sees a single
+        /// consistent snapshot source (and so tests can supply a pool without a ModService).
+        /// </summary>
+        private static Dictionary<string, string>? GetVideoPool()
+            => VideoPoolProvider != null ? VideoPoolProvider() : App.Mods?.GetVideoLinks();
+
+        /// <summary>Test seam for <see cref="GetVideoPool"/>. Null in production.</summary>
+        internal static Func<Dictionary<string, string>?>? VideoPoolProvider;
+
+        /// <summary>
+        /// Linkable titles from the pool ("Movies" is a folder, not a video). Alphabetical in the
+        /// two-zone build — a FIXED order is half of what makes the prefix cacheable — and in pool
+        /// order on the legacy path so its output is byte-for-byte what shipped before.
+        /// </summary>
+        private IEnumerable<string> PoolTitles()
+        {
+            var pool = GetVideoPool();
+            if (pool == null || pool.Count == 0) return Enumerable.Empty<string>();
+
+            var titles = pool.Keys
+                .Where(k => !string.Equals(k, "Movies", System.StringComparison.OrdinalIgnoreCase));
+
+            return _deterministicSampling
+                ? titles.OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
+                : titles;
         }
 
         /// <summary>
@@ -507,7 +557,210 @@ Example responses with REAL video names:
         // ==========================================
         // 3. MAIN PROMPT BUILDER - Uses Active Personality Preset
         // ==========================================
+
+        #region Two-zone layout (stable prefix)
+
+        /// <summary>
+        /// When true this instance builds the STABLE PREFIX: alphabetised media list, session-stable
+        /// examples, no per-call randomness. Set once at construction and never mutated, so the two
+        /// shared builder instances below are safe to use from several provider threads at once.
+        /// </summary>
+        private readonly bool _deterministicSampling;
+
+        /// <summary>
+        /// Drawn once per process. Keeps every prompt built during this launch byte-identical while
+        /// still letting the {{VIDEO}} examples differ from launch to launch (doc 01 §5.2: "resolved
+        /// ONCE per app-session"). Provider prompt caches live for minutes, so per-launch rotation
+        /// costs nothing and per-call rotation costs everything.
+        /// </summary>
+        private static readonly int PromptSessionSeed = System.Random.Shared.Next();
+
+        /// <summary>Stateless builder used for the cached prefix; only reads settings/mod state.</summary>
+        private static readonly BambiSprite StableBuilder = new(deterministicSampling: true);
+
+        private static readonly object PrefixLock = new();
+        private static string? _cachedPrefix;
+        private static string? _cachedFingerprint;
+
+        /// <summary>Number of times the prefix was actually rebuilt. Diagnostics + tests.</summary>
+        internal static int PrefixBuildCount { get; private set; }
+
+        public BambiSprite() : this(deterministicSampling: false) { }
+
+        private BambiSprite(bool deterministicSampling)
+        {
+            _deterministicSampling = deterministicSampling;
+        }
+
+        /// <summary>
+        /// The STABLE PREFIX (doc 01 §5.2): byte-identical across calls and purposes, rebuilt only
+        /// when something it is made of actually changed — mod switch, personality/preset edit, slut
+        /// mode, knowledge-base links, quiz result, video pool. That is the single biggest cost lever
+        /// in the whole rework: providers discount the longest common prefix of a prompt, and until
+        /// now <c>SampleVideoTitles</c> shuffled titles into the middle of every build, so the common
+        /// prefix between two consecutive calls ended somewhere in the first few hundred tokens.
+        ///
+        /// <para>Everything that varies per call — memory, time of day, the recommendation exclusion
+        /// set, the purpose instruction — lives in <see cref="Companion.Brain.PromptAssembler"/>'s
+        /// dynamic tail instead, appended after this string.</para>
+        /// </summary>
+        internal static string GetStablePrompt()
+        {
+            var fingerprint = ComputeFingerprint(CaptureFingerprintInputs());
+
+            lock (PrefixLock)
+            {
+                if (_cachedPrefix != null && string.Equals(_cachedFingerprint, fingerprint, StringComparison.Ordinal))
+                    return _cachedPrefix;
+
+                var built = StableBuilder.BuildSystemPrompt();
+                _cachedPrefix = built;
+                _cachedFingerprint = fingerprint;
+                PrefixBuildCount++;
+
+                App.Logger?.Information(
+                    "[AI-PROMPT] prefix rebuilt prefix_tok~{Tokens} builds={Builds}",
+                    built.Length / 4, PrefixBuildCount);
+
+                return built;
+            }
+        }
+
+        /// <summary>
+        /// Drops the cached prefix. The fingerprint already catches every input we know about; this
+        /// exists for the cases we don't (a mod hot-reloading its own files) and for tests.
+        /// </summary>
+        internal static void InvalidateStablePrompt()
+        {
+            lock (PrefixLock)
+            {
+                _cachedPrefix = null;
+                _cachedFingerprint = null;
+            }
+        }
+
+        /// <summary>
+        /// Everything the stable prefix is built from. Captured as plain values so
+        /// <see cref="ComputeFingerprint"/> stays a pure function the tests can drive without an
+        /// <see cref="App"/>.
+        /// </summary>
+        internal sealed record PrefixInputs(
+            string ModId,
+            bool IsBambiMode,
+            bool SlutMode,
+            string PresetId,
+            string CommunityPromptId,
+            bool UseCustomPrompt,
+            IReadOnlyList<string> PromptSections,
+            IReadOnlyList<string> GlobalLinks,
+            string BambiLinks,
+            string SissyLinks,
+            int QuizPercent,
+            string QuizArchetype,
+            string QuizProfile,
+            IReadOnlyList<string> VideoPoolTitles);
+
+        /// <summary>
+        /// The linkable titles exactly as the stable prefix lists them: alphabetical, "Movies"
+        /// dropped. A FIXED order is half of what makes the prefix cacheable, so it is worth a seam
+        /// of its own rather than being an emergent property of a 900-line build.
+        /// </summary>
+        internal static IReadOnlyList<string> StableMediaTitles() => StableBuilder.PoolTitles().ToList();
+
+        internal static PrefixInputs CaptureFingerprintInputs()
+        {
+            var s = App.Settings?.Current;
+            var companionPrompt = s?.CompanionPrompt;
+            var useCustom = companionPrompt?.UseCustomPrompt == true &&
+                            !string.IsNullOrEmpty(s?.ActiveCommunityPromptId);
+
+            // The sections that actually get baked in: the community prompt when one is assigned,
+            // otherwise the active preset's. Hashing the TEXT (not just the id) is what makes an edit
+            // in the Companion tab invalidate the prefix on the very next call.
+            var sections = Sections(useCustom ? companionPrompt : App.Personality?.GetActivePreset()?.PromptSettings);
+
+            return new PrefixInputs(
+                ModId: App.Mods?.ActiveModId ?? "none",
+                IsBambiMode: App.Mods?.IsBambiMode ?? false,
+                SlutMode: s?.SlutModeEnabled == true,
+                PresetId: s?.ActivePersonalityPresetId ?? string.Empty,
+                CommunityPromptId: s?.ActiveCommunityPromptId ?? string.Empty,
+                UseCustomPrompt: useCustom,
+                PromptSections: sections,
+                GlobalLinks: s?.GlobalKnowledgeBaseLinks?.Select(l => l.ToPromptText()).ToList()
+                             ?? new List<string>(),
+                BambiLinks: s?.HypnotubeLinksBambiSleep ?? string.Empty,
+                SissyLinks: s?.HypnotubeLinksSissyHypno ?? string.Empty,
+                QuizPercent: s?.LatestQuizScorePercentage ?? -1,
+                QuizArchetype: s?.LatestQuizArchetype ?? string.Empty,
+                QuizProfile: s?.LatestQuizProfileText ?? string.Empty,
+                VideoPoolTitles: StableMediaTitles());
+
+            static IReadOnlyList<string> Sections(Models.CompanionPromptSettings? p) => new[]
+            {
+                p?.Personality ?? string.Empty,
+                p?.SlutModePersonality ?? string.Empty,
+                p?.ExplicitReaction ?? string.Empty,
+                p?.KnowledgeBase ?? string.Empty,
+                p?.ContextReactions ?? string.Empty,
+                p?.OutputRules ?? string.Empty
+            };
+        }
+
+        /// <summary>
+        /// Stable hash of the prefix inputs. Pure: same inputs in, same string out, no app state.
+        /// A record's own <c>GetHashCode</c> would not do — it is randomised per process and does not
+        /// look inside the lists.
+        /// </summary>
+        internal static string ComputeFingerprint(PrefixInputs inputs)
+        {
+            var sb = new StringBuilder();
+            // Every value is length-prefixed and every list is count-prefixed, so no two different
+            // input sets can collide by concatenation — a collision here means an edit silently keeps
+            // a stale prompt for the rest of the launch.
+            void Field(string? value) { var v = value ?? string.Empty; sb.Append(v.Length).Append(':').Append(v); }
+            void List(IReadOnlyList<string> values)
+            {
+                sb.Append(values.Count).Append('#');
+                foreach (var value in values) Field(value);
+            }
+
+            Field(inputs.ModId);
+            Field(inputs.IsBambiMode ? "1" : "0");
+            Field(inputs.SlutMode ? "1" : "0");
+            Field(inputs.PresetId);
+            Field(inputs.CommunityPromptId);
+            Field(inputs.UseCustomPrompt ? "1" : "0");
+            List(inputs.PromptSections);
+            List(inputs.GlobalLinks);
+            Field(inputs.BambiLinks);
+            Field(inputs.SissyLinks);
+            Field(inputs.QuizPercent.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Field(inputs.QuizArchetype);
+            Field(inputs.QuizProfile);
+            List(inputs.VideoPoolTitles);
+
+            var hash = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
+            return Convert.ToHexString(hash);
+        }
+
+        #endregion
+
+        /// <summary>
+        /// The system prompt for this build. Routes to the cached two-zone prefix when the companion
+        /// brain is on, and to the legacy per-call build (shuffled examples, pool-ordered media list)
+        /// when the <c>UseCompanionBrain</c> kill switch is off — so flipping the switch really does
+        /// restore today's byte-for-byte output.
+        /// </summary>
         public string GetSystemPrompt()
+            => Companion.Brain.CompanionBrain.IsEnabled ? GetStablePrompt() : BuildSystemPrompt();
+
+        /// <summary>
+        /// The actual assembly, unchanged from what shipped. Randomness (and therefore whether the
+        /// result is byte-stable) is decided by <see cref="_deterministicSampling"/>, not by this
+        /// method.
+        /// </summary>
+        internal string BuildSystemPrompt()
         {
             // Layer 2 (Safety Sandwich): every system prompt this method returns is
             // wrapped with SafetyComposer.Preamble (first) and SafetyComposer.Floor
@@ -627,7 +880,7 @@ Example responses with REAL video names:
             // link pools here stops off-theme (sissy) suggestions like "Ultimate Sissy Mindfuck"
             // from leaking in through HypnotubeLinksSissyHypno.
             string hypnotubeLinks = "";
-            var modProvidesVideoLinks = (App.Mods?.GetVideoLinks()?.Count ?? 0) > 0;
+            var modProvidesVideoLinks = (GetVideoPool()?.Count ?? 0) > 0;
             if (settings != null && !modProvidesVideoLinks)
             {
                 if (App.Settings?.Current?.IsBambiMode == true)
@@ -729,7 +982,7 @@ Example responses with REAL video names:
         /// without hardcoding one title. Falls back to a neutral phrase when the mod ships no pool,
         /// so a sentence never ends up naming a fake, un-linkable title.
         /// </summary>
-        private static string FillVideoPlaceholders(string text)
+        private string FillVideoPlaceholders(string text)
         {
             const string token = "{{VIDEO}}";
             if (string.IsNullOrEmpty(text) || !text.Contains(token)) return text;
