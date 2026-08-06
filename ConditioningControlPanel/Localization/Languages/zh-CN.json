@@ -1609,6 +1609,8 @@
   "profile_customize_sub": "横幅、强调色、佩戴的称号、最多四项置顶成就，以及你的衣橱。所有查看你资料的人都能看到。",
   "profile_customize_banner": "横幅",
   "profile_customize_banner_hint": "主卡片背后的美术图。",
+  "profile_customize_avatar": "头像",
+  "profile_customize_avatar_hint": "未共享 Discord 头像时显示 - 一个由你定制风格的无面主体。",
   "profile_customize_accent": "强调色",
   "profile_customize_accent_hint": "为卡片边缘、光晕和栏目标题上色。你的 OG 金环保持金色。",
   "profile_customize_title_section": "佩戴的称号",

@@ -909,6 +909,8 @@
   "profile_customize_sub": "배너, 강조색, 착용 칭호, 최대 4개의 고정 업적, 그리고 워드로브. 프로필을 보는 모든 사람에게 표시됩니다.",
   "profile_customize_banner": "배너",
   "profile_customize_banner_hint": "히어로 카드 뒤에 깔리는 아트입니다.",
+  "profile_customize_avatar": "아바타",
+  "profile_customize_avatar_hint": "Discord 사진을 공유하지 않을 때 표시됩니다 - 취향대로 꾸민 익명의 피험체.",
   "profile_customize_accent": "강조색",
   "profile_customize_accent_hint": "카드 테두리와 광채, 열 제목에 색이 입혀집니다. OG 링은 금색 그대로입니다.",
   "profile_customize_title_section": "착용 칭호",

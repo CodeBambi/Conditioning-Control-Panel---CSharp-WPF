@@ -23,9 +23,44 @@ public class ProfileCosmeticsSanitizeTests
     // sits in a card corner, and the two sets are validated separately.
     private static readonly HashSet<string> Decos = new() { "bambi_silk_bow", "circe_visor" };
     private static readonly HashSet<string> Charms = new() { "bambi_lollipop", "sissy_heel" };
+    private static readonly HashSet<string> Avatars = new() { "avatar_bambi_1", "avatar_circe_3" };
 
     private static ProfileCosmetics Clean(ProfileCosmetics? raw, HashSet<string>? unlocked = null)
-        => ProfileCosmetics.Sanitize(raw, Banners, Achievements, unlocked, Decos, Charms);
+        => ProfileCosmetics.Sanitize(raw, Banners, Achievements, unlocked, Decos, Charms, Avatars);
+
+    [Fact]
+    public void KnownPresetAvatarSurvives()
+        => Assert.Equal("avatar_circe_3", Clean(new ProfileCosmetics { AvatarId = "avatar_circe_3" }).AvatarId);
+
+    [Fact]
+    public void UnknownPresetAvatarDegradesToNone()
+        => Assert.Null(Clean(new ProfileCosmetics { AvatarId = "avatar_from_a_newer_build" }).AvatarId);
+
+    [Fact]
+    public void PresetAvatarIsNotValidatedWhenNoPoolIsSupplied()
+        => Assert.Equal("anything",
+            ProfileCosmetics.Sanitize(new ProfileCosmetics { AvatarId = "anything" }).AvatarId);
+
+    [Fact]
+    public void PresetAvatarCountsAsEquipped()
+        => Assert.False(Clean(new ProfileCosmetics { AvatarId = "avatar_bambi_1" }).IsEmpty);
+
+    [Fact]
+    public void PreAvatarPayloadsSerializeWithoutTheField()
+    {
+        // NullValueHandling.Ignore: a loadout saved before the preset-avatar feature must keep
+        // serializing byte-identically, or every idle sync would rewrite settings.json.
+        var clean = Clean(new ProfileCosmetics { BannerId = "program_kept" });
+        Assert.DoesNotContain("avatar_id", JsonConvert.SerializeObject(clean));
+    }
+
+    [Fact]
+    public void PresetAvatarRoundTripsThroughJson()
+    {
+        var json = JsonConvert.SerializeObject(Clean(new ProfileCosmetics { AvatarId = "avatar_bambi_1" }));
+        var back = JsonConvert.DeserializeObject<ProfileCosmetics>(json);
+        Assert.Equal("avatar_bambi_1", back!.AvatarId);
+    }
 
     [Fact]
     public void NullInputIsAnEmptyLoadout()

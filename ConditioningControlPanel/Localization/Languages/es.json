@@ -909,6 +909,8 @@
   "profile_customize_sub": "Banner, acento, un título llevado, hasta cuatro logros fijados y tu vestuario. Todo el que vea tu perfil los verá.",
   "profile_customize_banner": "Banner",
   "profile_customize_banner_hint": "El arte detrás de tu tarjeta principal.",
+  "profile_customize_avatar": "Avatar",
+  "profile_customize_avatar_hint": "Se muestra cuando no compartes tu foto de Discord: un sujeto anónimo, a tu estilo.",
   "profile_customize_accent": "Acento",
   "profile_customize_accent_hint": "Tiñe el borde, el brillo y los encabezados de columna de tu tarjeta. Tu anillo OG sigue siendo dorado.",
   "profile_customize_title_section": "Título llevado",

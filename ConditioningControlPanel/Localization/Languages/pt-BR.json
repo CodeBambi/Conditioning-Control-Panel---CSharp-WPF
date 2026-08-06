@@ -909,6 +909,8 @@
   "profile_customize_sub": "Banner, acento, um título usado, até quatro conquistas fixadas e seu guarda-roupa. Todo mundo que vê seu perfil enxerga isso.",
   "profile_customize_banner": "Banner",
   "profile_customize_banner_hint": "A arte atrás do seu cartão principal.",
+  "profile_customize_avatar": "Avatar",
+  "profile_customize_avatar_hint": "Exibido quando você não compartilha sua foto do Discord - um sujeito anônimo, do seu jeito.",
   "profile_customize_accent": "Acento",
   "profile_customize_accent_hint": "Tinge a borda, o brilho e os títulos das colunas do seu cartão. Seu anel OG continua dourado.",
   "profile_customize_title_section": "Título usado",

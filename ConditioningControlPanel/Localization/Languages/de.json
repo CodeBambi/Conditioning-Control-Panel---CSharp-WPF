@@ -910,6 +910,8 @@
   "profile_customize_sub": "Banner, Akzent, ein getragener Titel, bis zu vier angeheftete Freischaltungen und deine Garderobe. Jeder, der dein Profil ansieht, sieht sie.",
   "profile_customize_banner": "Banner",
   "profile_customize_banner_hint": "Die Grafik hinter deiner Heldenkarte.",
+  "profile_customize_avatar": "Avatar",
+  "profile_customize_avatar_hint": "Wird angezeigt, wenn du dein Discord-Bild nicht teilst - ein anonymes Subjekt, in deinem Stil.",
   "profile_customize_accent": "Akzent",
   "profile_customize_accent_hint": "Färbt Rand, Leuchten und Spaltenüberschriften deiner Karte. Dein OG-Ring bleibt golden.",
   "profile_customize_title_section": "Getragener Titel",

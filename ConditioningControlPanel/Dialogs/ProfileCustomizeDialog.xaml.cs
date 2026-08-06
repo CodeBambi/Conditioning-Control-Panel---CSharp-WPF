@@ -30,6 +30,7 @@ namespace ConditioningControlPanel
         private readonly ImageSource? _editorAvatar;
 
         private readonly Dictionary<string, Border> _bannerTiles = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, Border> _avatarTiles = new(StringComparer.Ordinal);
         private readonly Dictionary<string, Border> _accentTiles = new(StringComparer.Ordinal);
         private readonly Dictionary<string, Border> _titleRows = new(StringComparer.Ordinal);
         private readonly Dictionary<string, Border> _pinTiles = new(StringComparer.Ordinal);
@@ -70,6 +71,7 @@ namespace ConditioningControlPanel
                 .ToList();
 
             BuildBanners();
+            BuildAvatars();
             BuildAccents();
             BuildTitles();
             BuildPins();
@@ -151,6 +153,69 @@ namespace ConditioningControlPanel
         {
             _draft.BannerId = key == NoneKey ? null : key;
             foreach (var (id, tile) in _bannerTiles)
+            {
+                var on = id == key;
+                tile.BorderBrush = on ? SelectedBorder : IdleBorder;
+            }
+        }
+
+        // ============================== preset avatar ==============================
+
+        private void BuildAvatars()
+        {
+            AvatarHost.Children.Add(BuildAvatarTile(
+                NoneKey, Loc.Get("profile_customize_none"), null));
+
+            foreach (var preset in CosmeticsCatalog.AvatarPresets)
+            {
+                // Same rule as banners: a preset whose art will not load is not offered at all.
+                var image = CosmeticsCatalog.GetAvatarImage(preset.Id);
+                if (image == null) continue;
+                AvatarHost.Children.Add(BuildAvatarTile(preset.Id, preset.Name, image));
+            }
+
+            SelectAvatar(_draft.AvatarId ?? NoneKey);
+        }
+
+        private Border BuildAvatarTile(string key, string label, ImageSource? art)
+        {
+            var circle = new Border
+            {
+                Width = 56,
+                Height = 56,
+                CornerRadius = new CornerRadius(28),
+                Background = art != null
+                    ? (Brush)new ImageBrush(art) { Stretch = Stretch.UniformToFill }
+                    : TileBg,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                IsHitTestVisible = false
+            };
+            if (circle.Background.CanFreeze) circle.Background.Freeze();
+
+            var tile = new Border
+            {
+                Width = 64,
+                Height = 64,
+                Margin = new Thickness(0, 0, 8, 8),
+                CornerRadius = new CornerRadius(32),
+                Background = Brushes.Transparent,
+                BorderBrush = IdleBorder,
+                BorderThickness = new Thickness(2),
+                Cursor = Cursors.Hand,
+                ToolTip = label,
+                Child = circle
+            };
+            tile.MouseLeftButtonUp += (_, _) => SelectAvatar(key);
+
+            _avatarTiles[key] = tile;
+            return tile;
+        }
+
+        private void SelectAvatar(string key)
+        {
+            _draft.AvatarId = key == NoneKey ? null : key;
+            foreach (var (id, tile) in _avatarTiles)
             {
                 var on = id == key;
                 tile.BorderBrush = on ? SelectedBorder : IdleBorder;
