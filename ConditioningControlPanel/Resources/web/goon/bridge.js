@@ -40,7 +40,7 @@ export const PROTOCOL = 1;
  * the title screen prints it under the fineprint, so ONE GLANCE at either
  * device answers the question. Format: r<round>-<yyyymmdd>[letter].
  */
-export const GOON_BUILD = 'r16-20260806';
+export const GOON_BUILD = 'r17-20260806';
 
 const win = (typeof window !== 'undefined') ? window : null;
 const webview = (win && win.chrome && win.chrome.webview) ? win.chrome.webview : null;
