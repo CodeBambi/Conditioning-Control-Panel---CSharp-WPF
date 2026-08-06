@@ -158,13 +158,16 @@ namespace ConditioningControlPanel.Services.GoonGame
 
                     await SendAsync(ctx, local, token).ConfigureAwait(false);
 
-                    var peer = await _results.WaitAsync(roundNo, GoonRoundConsts.PeerResultTimeoutMs, token).ConfigureAwait(false);
-                    if (peer == null)
+                    var raw = await _results.WaitAsync(roundNo, GoonRoundConsts.PeerResultTimeoutMs, token).ConfigureAwait(false);
+                    if (raw == null)
                     {
                         App.Logger?.Warning("[GG] sudden death: no peer result for round {Round} within {Ms}ms", roundNo, GoonRoundConsts.PeerResultTimeoutMs);
                         RaiseAborted("peer_result_timeout");
                         return;
                     }
+                    // Clean on INGEST, once, so everything downstream — judge, verdict UI, outcome
+                    // event — sees the same sane numbers. `raw` is not used again past this line.
+                    var peer = SanitizePeerResult(kind, raw);
 
                     var verdict = GoonRoundJudge.Decide(kind, local, peer);
                     NetScore += verdict switch
@@ -267,6 +270,53 @@ namespace ConditioningControlPanel.Services.GoonGame
                     try { _cts?.Cancel(); } catch (ObjectDisposedException) { }
                     break;
             }
+        }
+
+        /// <summary>
+        /// The peer's RoundResultMsg, made safe to judge (2026-08-06).
+        /// <para>
+        /// GoonRoundJudge.Decide compares THEIR numbers against OURS with &lt; and &gt; and nothing
+        /// else — it has no opinion about sign or plausibility, and it must not grow one, because it
+        /// has to stay a pure antisymmetric function of two results. So the untrusted half is cleaned
+        /// up HERE, on ingest, before it is judged, shown or emitted: a peer reporting ReactionMs = -5
+        /// would otherwise beat every human alive, and ElapsedMs = -1 wins a quick draw the same way.
+        /// </para><para>
+        /// Suspect is RECOMPUTED rather than read: it is self-reported, it gates nothing, and a cheat
+        /// would simply send false — so the flag that reaches the recap is OUR verdict on THEIR
+        /// claimed number, which is the only version of it that means anything.
+        /// </para>
+        /// MIRROR: sanitizePeerRoundResult() in Resources/web/goon/core/suddenDeath.js.
+        /// </summary>
+        internal static RoundResultMsg SanitizePeerResult(GoonRoundKind kind, RoundResultMsg peer)
+        {
+            if (peer == null) return peer!;
+
+            // Per-kind range for Progress, which is a different quantity in every round (see the
+            // RoundResultMsg doc comment): attention percent, bubbles popped, mistakes typed,
+            // false-start flag. Anything unknown falls back to the non-negative-integer floor.
+            int progressMax = kind switch
+            {
+                GoonRoundKind.StaringContest => 100,
+                GoonRoundKind.BubbleRace => GoonRoundConsts.BubbleMaxCount,
+                GoonRoundKind.ReactionDuel => 1,
+                _ => int.MaxValue,
+            };
+
+            // ReactionDuelSpec.MaxResponseMs IS this constant, and the runner does not hold the spec
+            // — the round owns it and returns only the measurement.
+            int? reactionMs = peer.ReactionMs.HasValue
+                ? Math.Clamp(peer.ReactionMs.Value, 0, GoonRoundConsts.ReactionMaxResponseMs)
+                : null;
+
+            return new RoundResultMsg
+            {
+                RoundNo = Math.Max(0, peer.RoundNo),
+                Completed = peer.Completed,
+                ElapsedMs = Math.Max(0, peer.ElapsedMs),
+                ReactionMs = reactionMs,
+                Suspect = reactionMs.HasValue && reactionMs.Value < GoonConsts.SuspectReactionMs,
+                Progress = Math.Clamp(peer.Progress, 0, progressMax),
+            };
         }
 
         // -------------------------------------------------------- scheduling
@@ -605,6 +655,11 @@ namespace ConditioningControlPanel.Services.GoonGame
     /// <summary>
     /// Pure round judgement. Called with the same two results on both machines (arguments swapped),
     /// so it MUST be antisymmetric: Decide(k, a, b) == Win exactly when Decide(k, b, a) == Loss.
+    /// <para>
+    /// IT TRUSTS ITS ARGUMENTS. Peer results are cleaned by GoonSuddenDeathRunner.SanitizePeerResult
+    /// on ingest; do not add clamping in here, or the two calls (one per machine, arguments swapped)
+    /// stop being the same function.
+    /// </para>
     /// </summary>
     public static class GoonRoundJudge
     {

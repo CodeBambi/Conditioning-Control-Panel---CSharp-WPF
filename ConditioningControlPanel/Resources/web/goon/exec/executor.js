@@ -46,7 +46,7 @@
  * flips html[data-gg-fx] idle -> warm -> hot and hardens the HUD plates.
  * ==========================================================================*/
 
-import { GoonElement, GoonPayloadKind, enumName } from '../core/contracts.js';
+import { GoonElement, GoonPayloadKind, PAYLOAD_ELEMENT, enumName } from '../core/contracts.js';
 import { localMonotonicMs } from '../core/clock.js';
 
 import * as defaultLayers from './layers.js';
@@ -62,17 +62,11 @@ import { createBrainDrain } from './brainDrain.js';
 import { createBouncingText } from './bouncingText.js';
 import { createSpiral } from './spiral.js';
 
-/** Which element renders a given payload kind. Frozen: the wire codes are frozen. */
-export const PAYLOAD_ELEMENT = Object.freeze({
-  [GoonPayloadKind.FlashBurst]: GoonElement.Flashes,
-  [GoonPayloadKind.SubliminalStorm]: GoonElement.Subliminals,
-  [GoonPayloadKind.BubbleSwarm]: GoonElement.Bubbles,
-  [GoonPayloadKind.Video]: GoonElement.Videos,
-  [GoonPayloadKind.LockCard]: GoonElement.LockCards,
-  [GoonPayloadKind.ToyPattern]: GoonElement.ToyPatterns,
-  [GoonPayloadKind.BrainDrain]: GoonElement.BrainDrain,
-  [GoonPayloadKind.Spiral]: GoonElement.Spiral,
-});
+/* Which element renders a given payload kind. THE TABLE MOVED to core/contracts.js on 2026-08-06
+   and is re-exported here unchanged, because core/match.js's agreement gate now reads it too and
+   core/ may not import exec/ (node-import-safe: no DOM at import). Same object, one truth — a
+   renderer that runs a kind and a gate that admits it can no longer disagree about the element. */
+export { PAYLOAD_ELEMENT };
 
 const MAX_SCHEDULE_LEAD_MS = 190000;   // > MAX_PAYLOAD_DURATION_MS; a sane wire guard
 

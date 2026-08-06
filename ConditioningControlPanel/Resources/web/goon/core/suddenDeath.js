@@ -69,8 +69,8 @@ import {
 } from './contracts.js';
 import { GoonRng, combineSeeds, newSeedContribution } from './rng.js';
 import {
-  GoonRoundConsts, GoonRoundVerdict, createEmitter, deferred, delay, isAbortError, nullRoundInputs,
-  nullRoundPresenter, present, signalAsync, waitUntilMatchMs,
+  GoonRoundConsts, GoonRoundVerdict, INT_MAX, createEmitter, deferred, delay, isAbortError,
+  nullRoundInputs, nullRoundPresenter, present, signalAsync, waitUntilMatchMs,
 } from './rounds/model.js';
 import * as quickDraw from './rounds/quickDraw.js';
 import * as staringContest from './rounds/staringContest.js';
@@ -143,8 +143,70 @@ const verdictHigher = (mine, theirs) =>
   mine > theirs ? GoonRoundVerdict.Win : mine < theirs ? GoonRoundVerdict.Loss : GoonRoundVerdict.Draw;
 
 /**
+ * The peer's round_result, made safe to judge (2026-08-06).
+ *
+ * GoonRoundJudge.decide compares THEIR numbers against OURS with `<` and `>` and nothing else — it
+ * has no opinion about sign, type or plausibility, and it should not grow one, because it must stay
+ * a pure antisymmetric function of two results. So the untrusted half is cleaned up HERE, on
+ * ingest, before it is judged, shown or emitted: a peer that reports `reaction_ms: -5` would
+ * otherwise beat every human alive, and `elapsed_ms: -1` wins a quick draw the same way.
+ *
+ * `suspect` is RECOMPUTED rather than read. It is self-reported (rounds/reactionDuel.js sets it on
+ * its own measurement), it gates nothing, and a cheat would simply send false — so the flag that
+ * reaches the recap is now OUR verdict on THEIR claimed number, which is the only version of it
+ * that means anything.
+ *
+ * Sudden death is DETACHED today (no runner is assigned in boot.js / soloDriver.js), so this is
+ * hardening for the day the ladder comes back rather than a live hole. Kept deliberately small.
+ *
+ * MIRROR: GoonSuddenDeathRunner.SanitizePeerResult in Services/GoonGame/GoonSuddenDeath.cs.
+ *
+ * @param {number} kind GoonRoundKind the round was actually run as
+ * @param {object} peer raw round_result off the wire
+ * @returns {object} a fresh round_result — the input is never mutated
+ */
+export function sanitizePeerRoundResult(kind, peer) {
+  if (!peer) return peer;
+
+  const int = (v, lo, hi) => {
+    const n = typeof v === 'number' ? v : (typeof v === 'string' ? Number(v) : NaN);
+    if (!Number.isFinite(n)) return lo;
+    const t = Math.trunc(n);
+    return t < lo ? lo : t > hi ? hi : t;
+  };
+
+  // Per-kind range for `progress`, which is a different quantity in every round (see the
+  // RoundResultMsg doc comment): attention percent, bubbles popped, mistakes typed, false-start
+  // flag. Anything unknown falls back to the non-negative-integer floor.
+  const progressMax = kind === GoonRoundKind.StaringContest ? 100
+    : kind === GoonRoundKind.BubbleRace ? GoonRoundConsts.BubbleMaxCount
+      : kind === GoonRoundKind.ReactionDuel ? 1
+        : INT_MAX;
+
+  // spec.maxResponseMs IS this constant (rounds/reactionDuel.js buildSpec), and the runner does
+  // not hold the spec — the round owns it and returns only the measurement.
+  const reactionRaw = peer.reaction_ms;
+  const reactionMs = (reactionRaw === null || reactionRaw === undefined)
+    ? null : int(reactionRaw, 0, GoonRoundConsts.ReactionMaxResponseMs);
+
+  return makeRoundResult({
+    v: peer.v,
+    round_no: int(peer.round_no, 0, INT_MAX),
+    completed: peer.completed === true,
+    elapsed_ms: int(peer.elapsed_ms, 0, INT_MAX),
+    reaction_ms: reactionMs,
+    suspect: reactionMs !== null && reactionMs < GoonConsts.SuspectReactionMs,
+    progress: int(peer.progress, 0, progressMax),
+  });
+}
+
+/**
  * Pure round judgement. Called with the same two results on both machines (arguments swapped), so
  * it MUST be antisymmetric: decide(k, a, b) === Win exactly when decide(k, b, a) === Loss.
+ *
+ * IT TRUSTS ITS ARGUMENTS. Peer results are cleaned by sanitizePeerRoundResult() on ingest, above;
+ * do not add clamping in here, or the two calls (one per machine, arguments swapped) stop being
+ * the same function.
  */
 export const GoonRoundJudge = Object.freeze({
   decide(kind, mine, theirs) {
@@ -380,12 +442,15 @@ export class GoonSuddenDeathRunner {
 
         await this._send(ctx, local, token);
 
-        const peer = await this._results.wait(roundNo, GoonRoundConsts.PeerResultTimeoutMs, token);
-        if (peer == null) {
+        const raw = await this._results.wait(roundNo, GoonRoundConsts.PeerResultTimeoutMs, token);
+        if (raw == null) {
           this._warn(`sudden death: no peer result for round ${roundNo} within ${GoonRoundConsts.PeerResultTimeoutMs}ms`);
           this._raiseAborted('peer_result_timeout');
           return;
         }
+        // Clean on INGEST, once, so everything downstream — judge, verdict UI, outcome event —
+        // sees the same sane numbers. `raw` is not used again past this line on purpose.
+        const peer = sanitizePeerRoundResult(kind, raw);
 
         const verdict = GoonRoundJudge.decide(kind, local, peer);
         this._netScore += verdict === GoonRoundVerdict.Win ? 1 : verdict === GoonRoundVerdict.Loss ? -1 : 0;

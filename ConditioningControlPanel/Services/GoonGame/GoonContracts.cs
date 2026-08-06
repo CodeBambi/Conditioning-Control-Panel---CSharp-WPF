@@ -145,6 +145,26 @@ namespace ConditioningControlPanel.Services.GoonGame
             GoonPayloadKind.Spiral => 2,
             _ => int.MaxValue,
         };
+
+        /// <summary>
+        /// Which ELEMENT a payload kind lands as. Both sides of the mapping are frozen wire codes.
+        /// Null = a kind we have no element for (a newer peer's kind 8): the agreement gate reads
+        /// that as "not a draft-toggleable element" and leaves it to the checks that do know about
+        /// it — CostOf, above, is the unknown-kind guard and runs first.
+        /// MIRROR: PAYLOAD_ELEMENT in Resources/web/goon/core/contracts.js.
+        /// </summary>
+        public static GoonElement? ElementFor(GoonPayloadKind kind) => kind switch
+        {
+            GoonPayloadKind.FlashBurst => GoonElement.Flashes,
+            GoonPayloadKind.SubliminalStorm => GoonElement.Subliminals,
+            GoonPayloadKind.BubbleSwarm => GoonElement.Bubbles,
+            GoonPayloadKind.Video => GoonElement.Videos,
+            GoonPayloadKind.LockCard => GoonElement.LockCards,
+            GoonPayloadKind.ToyPattern => GoonElement.ToyPatterns,
+            GoonPayloadKind.BrainDrain => GoonElement.BrainDrain,
+            GoonPayloadKind.Spiral => GoonElement.Spiral,
+            _ => null,
+        };
     }
 
     // -------------------------------------------------------------- transport

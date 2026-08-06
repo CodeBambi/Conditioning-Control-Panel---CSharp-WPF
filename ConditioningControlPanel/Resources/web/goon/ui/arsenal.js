@@ -10,7 +10,8 @@
  *   ready      full colour + a ×N stack badge; the rarest one you hold glows
  *   cooling    conic sweep + the shared "next payload in {n}s" readout
  *   used       brain drain only, once per match: struck through
- *   filtered   hatched, "they can't receive this" (kind outside the peer caps)
+ *   filtered   hatched, "they can't receive this" (kind outside the peer caps, OR an element one
+ *              of you switched off on the agreement sheet — the engine rejects those on arrival)
  *   hidden     the kind is outside OUR OWN caps — the slot never renders
  *
  * THERE IS NO "TOO POOR" STATE, AND NO COST PIPS (owner, 2026-08-05: "we still
@@ -44,7 +45,8 @@
  * Node-import-safe: no DOM at import, only inside mountArsenal().
  * ==========================================================================*/
 
-import { GoonConsts, GoonMatchPhase, GoonPayloadKind, costOf } from '../core/contracts.js';
+import { GoonConsts, GoonMatchPhase, GoonPayloadKind, PAYLOAD_ELEMENT, costOf } from '../core/contracts.js';
+import { ALWAYS_ON_ELEMENT } from '../core/draft.js';
 import { GoonPayloadRateLimiter, GoonReceiptStatus } from '../core/scoring.js';
 import { localMonotonicMs } from '../core/clock.js';
 import { dressGhost } from './throwPreview.js';
@@ -319,9 +321,37 @@ export function mountArsenal({
      engine and still rides the state tick; this file no longer has an opinion
      about it, and re-adding a reader here would be re-adding the gate. */
 
+  /**
+   * Will this land on their monitor at all? TWO questions, not one (2026-08-06):
+   *
+   *   1. CAPS — can their client run the kind? (Static, settled at hello.)
+   *   2. THE AGREEMENT — is the element still in the shared pool, or did one of you switch it off
+   *      on the draft sheet? The engine now REJECTS an inbound payload whose element the receiver
+   *      switched off (core/match.js _handleInboundPayload), so a tile that only consulted the
+   *      caps was offering a throw that was guaranteed to bounce. "filtered / they can't receive
+   *      this" is exactly the right word for it, and the affordance should say so before the
+   *      throw, not after the receipt.
+   *
+   * The shared pool is used here rather than their sheet alone because this is a SENDER-side
+   * courtesy: if either of you switched it off it is not part of this match. The receiver's own
+   * sheet remains the authority over there, which is where it belongs.
+   *
+   * BUBBLES ARE EXEMPT for the reason they are exempt in the engine: the always-on baseline is
+   * never in an allowed set, so testing it against the pool would filter a kind the receiver
+   * happily renders. (No bubble tile exists today — see ARSENAL_ITEMS — so this is the rule being
+   * written where it belongs rather than a live case.) A pool we cannot see yet (pre-draft, or a
+   * fake match in a test) filters nothing.
+   */
   function peerCanTake(kind) {
     const list = match && match.availablePayloadKinds;
-    return !Array.isArray(list) || list.includes(kind);
+    if (Array.isArray(list) && !list.includes(kind)) return false;
+
+    const element = PAYLOAD_ELEMENT[kind];
+    if (element === undefined || element === ALWAYS_ON_ELEMENT) return true;
+
+    const pool = match && match.sharedElementPool;
+    if (!Array.isArray(pool) || pool.length === 0) return true;
+    return pool.includes(element);
   }
 
   function isLive() {

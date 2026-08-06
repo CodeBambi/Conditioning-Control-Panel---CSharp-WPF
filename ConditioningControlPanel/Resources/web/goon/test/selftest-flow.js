@@ -2099,5 +2099,167 @@ function mountRecap(result) {
     'and armDrop knows nothing about practice: the mode lives in boot, the slot logic does not');
 }
 
+/* ==========================================================================
+ * 6. THE AGREEMENT GATES THE THROWABLES (2026-08-06)
+ *
+ * The draft screen promises "everything is on. switch off what you will not
+ * take — you both get whatever is left". Until this gate existed it governed
+ * exactly ONE thing: buildRamp's self-inflicted schedule. The inbound payload
+ * gate tested the STATIC entitlement list built once in boot.js and never the
+ * sheet, so switching Videos off, signing, and then being thrown a video opened
+ * one on your monitor anyway.
+ *
+ * Two halves, and the second is the one that is easy to get wrong: the gate
+ * reads OUR OWN allowed set (a receiver is the authority over its own screen),
+ * and it applies only to elements that ACTUALLY HAD A TOGGLE. Bubbles is the
+ * always-on baseline and is in nobody's allowed set, so gating naively on
+ * membership would reject BubbleSwarm — a frozen wire code this client still
+ * renders for any peer that still throws one.
+ * ==========================================================================*/
+{
+  const { GoonElement, GoonPayloadKind, makePayload } = await import('../core/contracts.js');
+  const { GoonReceiptStatus } = await import('../core/scoring.js');
+  const { PoolV1, defaultAllowed } = await import('../core/draft.js');
+
+  /** A seat parked in Live with the sheet we hand it. Nothing else reaches the gate. */
+  function liveSeat(allowed) {
+    const pair = createLoopbackPair(loopbackOptions({ latencyMs: 0, jitterMs: 0, guestClockSkewMs: 0, logger: quiet }));
+    const m = new GoonMatchService(pair.guest, false, { logger: quiet, tag: 'GG:gate' });
+    m._availableDraftPool = PoolV1.slice();
+    m._localAllowed = (allowed || defaultAllowed(PoolV1)).slice();
+    m._remoteAllowed = defaultAllowed(PoolV1);
+    m._phase = GoonMatchPhase.Live;
+    const seen = { accepted: [], rejected: [] };
+    m.onPayloadAccepted((e) => seen.accepted.push(e.payload));
+    m.onPayloadRejected((r) => seen.rejected.push(r));
+    return { m, pair, seen };
+  }
+  const lands = (seat, kind) => {
+    seat.m._handleInboundPayload(makePayload({ id: 'in1', kind, duration_ms: 5000 }));
+    return { ok: seat.seen.accepted.length === 1, receipt: seat.seen.rejected[0] || null };
+  };
+  const close = (seat) => { seat.m.dispose(); seat.pair.dispose(); };
+
+  // ---- the sheet says no
+  const noVideo = liveSeat(defaultAllowed(PoolV1).filter((e) => e !== GoonElement.Videos));
+  const videoIn = lands(noVideo, GoonPayloadKind.Video);
+  ok(videoIn.ok === false,
+    'THE FIX: a payload whose element the receiver switched off on the agreement sheet never lands');
+  ok(!!videoIn.receipt && videoIn.receipt.status === GoonReceiptStatus.RejectedFiltered,
+    'and the thrower gets an honest rejected_filtered receipt, not silence',
+    videoIn.receipt ? String(videoIn.receipt.status) : 'none');
+  close(noVideo);
+
+  // ---- …and it is that element only: the rest of the sheet still works
+  const stillOn = liveSeat(defaultAllowed(PoolV1).filter((e) => e !== GoonElement.Videos));
+  ok(lands(stillOn, GoonPayloadKind.FlashBurst).ok === true,
+    'an element that is still switched ON is admitted exactly as before');
+  close(stillOn);
+
+  // ---- the always-on baseline is exempt
+  const bubbles = liveSeat(null);
+  ok(!defaultAllowed(PoolV1).includes(GoonElement.Bubbles),
+    'Bubbles is in NO allowed set — it is the always-on baseline, never toggled, never rolled');
+  ok(lands(bubbles, GoonPayloadKind.BubbleSwarm).ok === true,
+    'so BubbleSwarm must still land: gating it on the sheet would reject a kind we happily render');
+  close(bubbles);
+
+  // ---- the receiver's sheet, not the intersection: their toggle cannot open ours
+  const theirsOnly = liveSeat(defaultAllowed(PoolV1).filter((e) => e !== GoonElement.LockCards));
+  theirsOnly.m._remoteAllowed = defaultAllowed(PoolV1);      // they left everything on
+  ok(lands(theirsOnly, GoonPayloadKind.LockCard).ok === false,
+    'the gate reads OUR sheet: a sender who left it on cannot put it back on our screen');
+  close(theirsOnly);
+
+  // ---- and the C# engine says the same thing in the same place
+  const csGate = read('../../../Services/GoonGame/GoonMatchService.cs');
+  ok(/ElementFor\(payload\.Kind\)/.test(csGate) && /IsDraftToggleable\(/.test(csGate)
+    && /_localAllowed\.Contains\(/.test(csGate),
+    'GoonMatchService.HandleInboundPayload carries the same gate — the two engines stay in step');
+}
+
+/* ==========================================================================
+ * 7. A PEER CANNOT END YOUR MATCH AND RECORD YOU THE LOSER (2026-08-06)
+ *
+ * _handleRemoteResult's adopt branch ran on `!this._ended` with no phase test
+ * and countsForLedger hard-coded true, so a frame sent five seconds into Live —
+ * `{"t":"result","end_reason":1,"winner_is_host":<not me>}` — ended the
+ * victim's match instantly and wrote them a loss. It was a grief-stop too: end
+ * anybody's match, any time.
+ *
+ * The branch is NOT dead code, which is why the fix is a rule and not a
+ * deletion: PEER MERCY arrives exactly this way — they tap out, they end, and
+ * they send a result in which THEY are the loser, which we must adopt.
+ * ==========================================================================*/
+{
+  const { makeResult } = await import('../core/contracts.js');
+
+  function liveSeat() {
+    const pair = createLoopbackPair(loopbackOptions({ latencyMs: 0, jitterMs: 0, guestClockSkewMs: 0, logger: quiet }));
+    const m = new GoonMatchService(pair.guest, false, { logger: quiet, tag: 'GG:result' });
+    m._phase = GoonMatchPhase.Live;
+    return { m, pair };
+  }
+  const close = (seat) => { seat.m.dispose(); seat.pair.dispose(); };
+
+  // ---- 7a. the attack: mid-Live, "you lost"
+  const victim = liveSeat();
+  victim.m._handleRemoteResult(makeResult({
+    end_reason: GoonEndReason.SuddenDeathLoss,
+    winner_is_host: !victim.m.isHost,          // they claim the win, i.e. WE lost
+    host_score: 9, guest_score: 2,
+  }));
+  ok(victim.m.phase === GoonMatchPhase.Live,
+    'THE FIX: a peer claiming we lost while our side is still running does not end the match',
+    String(victim.m.phase));
+  ok(victim.m.result === null, 'and nothing is written — no loss, no ledger row');
+  close(victim);
+
+  // ---- 7b. …while the legitimate case it sits on top of still works
+  const mercied = liveSeat();
+  mercied.m._handleRemoteResult(makeResult({
+    end_reason: GoonEndReason.Mercy,
+    winner_is_host: mercied.m.isHost,          // they concede: WE are the winner
+    host_score: 3, guest_score: 40,
+  }));
+  ok(mercied.m.phase === GoonMatchPhase.Recap, 'PEER MERCY IS STILL ADOPTED — they tapped out, we end',
+    String(mercied.m.phase));
+  ok(!!mercied.m.result && mercied.m.result.endReason === GoonEndReason.Mercy,
+    'as a mercy', String(mercied.m.result && mercied.m.result.endReason));
+  ok(!!mercied.m.result && mercied.m.result.localWon === true, 'with the concession recorded our way');
+  close(mercied);
+
+  // ---- 7c. a result before there is a match to end
+  const early = liveSeat();
+  early.m._phase = GoonMatchPhase.Draft;
+  early.m._handleRemoteResult(makeResult({ end_reason: GoonEndReason.Mercy, winner_is_host: early.m.isHost }));
+  ok(early.m.phase === GoonMatchPhase.Draft && early.m.result === null,
+    'a result frame outside Live/SuddenDeath/Recap is logged and ignored', String(early.m.phase));
+  close(early);
+
+  // ---- 7d. the adopted scores are their claim, clamped
+  const scored = liveSeat();                    // guest seat: the HOST half is theirs to report
+  scored.m._handleRemoteResult(makeResult({
+    end_reason: GoonEndReason.Mercy, winner_is_host: scored.m.isHost, host_score: -50, guest_score: 7,
+  }));
+  ok(!!scored.m.result && scored.m.result.hostScore === 0,
+    'a negative score off the wire clamps to 0', String(scored.m.result && scored.m.result.hostScore));
+  scored.m._handleRemoteResult(makeResult({
+    end_reason: GoonEndReason.Mercy, winner_is_host: scored.m.isHost, host_score: 1e12, guest_score: 7,
+  }));
+  ok(!!scored.m.result && scored.m.result.hostScore === 1000000,
+    'and an absurd one clamps to the ceiling instead of landing on the recap',
+    String(scored.m.result && scored.m.result.hostScore));
+  close(scored);
+
+  // ---- and the C# mirror carries both gates
+  const csResult = read('../../../Services/GoonGame/GoonMatchService.cs');
+  ok(/GoonMatchPhase\.Live or GoonMatchPhase\.SuddenDeath or GoonMatchPhase\.Recap/.test(csResult),
+    'GoonMatchService.HandleRemoteResult has the same phase gate');
+  ok(/REFUSED a result that declares us the loser/.test(csResult),
+    'and the same refusal of a peer-claimed local loss');
+  ok(/ClampReportedScore\(remote\.(Guest|Host)Score\)/.test(csResult), 'and the same score clamp');
+}
+
 console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);
 process.exit(failures === 0 ? 0 : 1);

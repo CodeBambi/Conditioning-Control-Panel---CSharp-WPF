@@ -3,7 +3,12 @@
 
 import { GoonRng, combineSeeds, saltSeed, seedFromAny, seedToString } from '../core/rng.js';
 import { serialize, serializeForSend, parse, wireByteLength, MAX_WIRE_BYTES } from '../core/wire.js';
-import { makeMatchStart, makePayload, makeTick, makeRound, costOf, GoonElement, GoonPayloadKind, GoonConsts } from '../core/contracts.js';
+import {
+  makeMatchStart, makePayload, makeTick, makeRound, costOf, GoonElement, GoonPayloadKind,
+  GoonRoundKind, GoonConsts, PAYLOAD_ELEMENT,
+} from '../core/contracts.js';
+import { sanitizePeerRoundResult } from '../core/suddenDeath.js';
+import { GoonRoundConsts, INT_MAX } from '../core/rounds/model.js';
 import {
   ALWAYS_ON_ELEMENT, GoonCueAction, MAX_MATCH_RISK_TIER, MIN_ALLOWED_ELEMENTS, PoolV1, TogglePool,
   buildRamp, defaultAllowed, isValidAllowed, isValidSharedPool, matchRiskTier, normalizeAllowed,
@@ -194,6 +199,66 @@ const quiet = { info() {}, warn() {}, error() {}, log() {} };
   ok(isValidSharedPool([GoonElement.Spiral, GoonElement.Videos]).ok, 'a two-element one is fine');
   ok(isValidAllowed([]).error === isValidAllowed([]).error.toLowerCase(),
     'engine refusals stay lowercase', isValidAllowed([]).error);
+}
+
+// ------------------------------------- payload -> element, the table the agreement gate reads
+// It moved out of exec/executor.js on 2026-08-06 because core/match.js's agreement gate needs it
+// and core/ may not import exec/. Both sides of every entry are FROZEN wire codes; a renumber or a
+// re-point has to fail here rather than at the far end of a duel.
+{
+  ok(PAYLOAD_ELEMENT[GoonPayloadKind.Video] === GoonElement.Videos, 'Video -> Videos');
+  ok(PAYLOAD_ELEMENT[GoonPayloadKind.BubbleSwarm] === GoonElement.Bubbles, 'BubbleSwarm -> Bubbles');
+  ok(PAYLOAD_ELEMENT[GoonPayloadKind.Spiral] === GoonElement.Spiral, 'Spiral -> Spiral');
+  ok(PAYLOAD_ELEMENT[GoonPayloadKind.BrainDrain] === GoonElement.BrainDrain, 'BrainDrain -> BrainDrain');
+  const kinds = Object.values(GoonPayloadKind);
+  ok(kinds.every((k) => PAYLOAD_ELEMENT[k] !== undefined), 'every payload kind maps to an element',
+    String(kinds.length));
+  ok(PAYLOAD_ELEMENT[99] === undefined,
+    'and a kind we have never heard of maps to nothing — the gate reads that as "not toggleable"');
+  // (that exec/executor.js re-exports this very object is checked in selftest-exec.js, which
+  // already owns the renderer graph — importing it here would drag exec/ into a core-only suite)
+}
+
+// -------------------------- sudden death: the peer's round result is cleaned on INGEST (0806)
+// GoonRoundJudge.decide compares their numbers to ours with < and > and nothing else, so a peer
+// reporting reaction_ms:-5 would beat every human alive. The ladder is DETACHED today; this is the
+// clamp that has to be in place when it comes back.
+{
+  const raw = {
+    round_no: 3, completed: true, elapsed_ms: -1, reaction_ms: -5, suspect: false, progress: 4000,
+  };
+  const duel = sanitizePeerRoundResult(GoonRoundKind.ReactionDuel, raw);
+  ok(duel.elapsed_ms === 0, 'a negative elapsed_ms clamps to 0', String(duel.elapsed_ms));
+  ok(duel.reaction_ms === 0, 'and a negative reaction_ms with it', String(duel.reaction_ms));
+  ok(duel.progress === 1, "the duel's progress is a false-start flag, so it clamps to 0..1",
+    String(duel.progress));
+  ok(duel.suspect === true,
+    'suspect is RECOMPUTED from their claimed number, not read off their flag (they sent false)');
+  ok(raw.elapsed_ms === -1, 'and the frame we were handed is never mutated', String(raw.elapsed_ms));
+
+  const slow = sanitizePeerRoundResult(GoonRoundKind.ReactionDuel,
+    { round_no: 1, completed: true, elapsed_ms: 5000, reaction_ms: 900000, suspect: true });
+  ok(slow.reaction_ms === GoonRoundConsts.ReactionMaxResponseMs,
+    'a reaction beyond the response window clamps to it', String(slow.reaction_ms));
+  ok(slow.suspect === false, 'and a slow one is not suspect however they badged it');
+
+  const race = sanitizePeerRoundResult(GoonRoundKind.BubbleRace,
+    { round_no: 2, completed: 'yes', elapsed_ms: 1e30, progress: 1e9 });
+  ok(race.completed === false, "completed is `=== true`, so a truthy string is not a claim to have won");
+  ok(race.progress === GoonRoundConsts.BubbleMaxCount, 'bubbles popped cannot exceed the biggest race',
+    String(race.progress));
+  ok(Number.isInteger(race.elapsed_ms) && race.elapsed_ms === INT_MAX,
+    'elapsed_ms stays inside the int field the C# side reads it into', String(race.elapsed_ms));
+
+  const staring = sanitizePeerRoundResult(GoonRoundKind.StaringContest,
+    { round_no: 1, completed: true, elapsed_ms: 20000, progress: 5000 });
+  ok(staring.progress === 100, 'average attention is a percent, so it clamps to 100', String(staring.progress));
+
+  const junk = sanitizePeerRoundResult(GoonRoundKind.QuickDrawLockCard,
+    { round_no: NaN, completed: true, elapsed_ms: 'fast', reaction_ms: undefined, progress: null });
+  ok(junk.elapsed_ms === 0 && junk.round_no === 0 && junk.progress === 0,
+    'anything that is not a finite number reads as the floor, exactly as an absent field does');
+  ok(junk.reaction_ms === null, 'and an absent reaction stays absent rather than becoming 0');
 }
 
 // ------------------------------------------------------ the rolled ramp + always-on bubbles

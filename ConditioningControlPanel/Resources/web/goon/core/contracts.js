@@ -268,6 +268,32 @@ export function costOf(kind) {
   return c === undefined ? Infinity : c;
 }
 
+/**
+ * Which ELEMENT a payload kind lands as. Frozen, because both sides of it are frozen wire codes.
+ *
+ * IT LIVES HERE, not in exec/executor.js where it used to be the only copy, because the AGREEMENT
+ * GATE reads it (core/match.js _handleInboundPayload) and core/ must stay node-import-safe —
+ * importing the executor would drag the whole renderer tree, and the DOM with it, into the engine.
+ * exec/executor.js re-exports this object so the renderer fan-out and the gate can never disagree
+ * about what a kind turns into; ui/announcer.js keeps a hand-written mirror for its own copy deck.
+ *
+ * A kind with NO entry (a newer peer's kind 8) maps to undefined, which the gate reads as "not a
+ * draft-toggleable element" and lets through to the checks that do know about it. The unknown-kind
+ * guard is costOf's job, above, and it runs first.
+ *
+ * MIRROR: GoonConsts.ElementFor(GoonPayloadKind) in Services/GoonGame/GoonContracts.cs.
+ */
+export const PAYLOAD_ELEMENT = Object.freeze({
+  [GoonPayloadKind.FlashBurst]: GoonElement.Flashes,
+  [GoonPayloadKind.SubliminalStorm]: GoonElement.Subliminals,
+  [GoonPayloadKind.BubbleSwarm]: GoonElement.Bubbles,
+  [GoonPayloadKind.Video]: GoonElement.Videos,
+  [GoonPayloadKind.LockCard]: GoonElement.LockCards,
+  [GoonPayloadKind.ToyPattern]: GoonElement.ToyPatterns,
+  [GoonPayloadKind.BrainDrain]: GoonElement.BrainDrain,
+  [GoonPayloadKind.Spiral]: GoonElement.Spiral,
+});
+
 // ------------------------------------------------------------------ factories
 
 /**

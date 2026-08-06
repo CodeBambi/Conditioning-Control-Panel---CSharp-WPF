@@ -537,6 +537,44 @@ function makeFakeMatch() {
   ars.unmount();
 }
 
+/* --- 2b-ii-b. …and so does the AGREEMENT (2026-08-06) ---------------------
+ * peerCanTake() used to ask one question — can their client RUN the kind? The
+ * engine now rejects an inbound payload whose element the RECEIVER switched off
+ * on the draft sheet (core/match.js _handleInboundPayload), so a tile that only
+ * consulted the caps was offering a throw that was guaranteed to bounce off the
+ * far side with a rejected_filtered receipt. "they can't receive this" is
+ * exactly the right words for it; it just has to be said before the throw.  */
+{
+  const match = makeFakeMatch();
+  // Caps say yes to everything. The sheet is where Videos died.
+  match.sharedElementPool = [
+    GoonElement.Flashes, GoonElement.Subliminals, GoonElement.LockCards,
+    GoonElement.ToyPatterns, GoonElement.BrainDrain, GoonElement.Spiral,
+  ];
+  const ars = arsenalMod.mountArsenal({
+    leftHost: document.createElement('div'),
+    rightHost: document.createElement('div'),
+    receiptsHost: document.createElement('div'),
+    match,
+  });
+  ars.armDrop('video');
+  ars.armDrop('flash');
+  ok(ars.stateOf('video') === 'filtered',
+    'a kind whose ELEMENT is off the agreed pool reads filtered even with the stack in hand',
+    String(ars.stateOf('video')));
+  ok(ars.stateOf('flash') === 'ready', 'while an agreed one is ready as ever', String(ars.stateOf('flash')));
+  ok(ars.droppable().every((c) => c.id !== 'video'), 'and it is not worth dropping either');
+
+  // A pool we cannot see yet (pre-draft, or a match object that never grew the getter) must filter
+  // NOTHING — an affordance that goes dark because the engine has not spoken yet is a worse lie
+  // than the one being fixed.
+  match.sharedElementPool = [];
+  match._emit('phase', GoonMatchPhase.Live);          // the repaint the engine would have caused
+  ok(ars.stateOf('video') === 'ready', 'an empty/absent pool filters nothing at all',
+    String(ars.stateOf('video')));
+  ars.unmount();
+}
+
 /* --- 2b-iii. ui/drops.js: the HEAT economy ---------------------------------
  * The flat "12% per unit of worth" coin flip was replaced on 2026-08-04 by a
  * heat gauge: pops bank heat, the chance ramps with the fill, a landed drop

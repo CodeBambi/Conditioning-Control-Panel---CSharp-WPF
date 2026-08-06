@@ -43,7 +43,7 @@
  * Node-import-safe: no DOM at import, only inside mountAnnouncer().
  * ==========================================================================*/
 
-import { GoonElement, GoonMatchPhase, GoonPayloadKind } from '../core/contracts.js';
+import { GoonElement, GoonMatchPhase, PAYLOAD_ELEMENT } from '../core/contracts.js';
 import { GoonCueAction } from '../core/draft.js';
 import { localMonotonicMs } from '../core/clock.js';
 import { S } from './strings.js';
@@ -75,17 +75,13 @@ export const ANNOUNCE_LEAD_BEATS_DEDUPE = ANNOUNCE_LEAD_MS > ANNOUNCE_DEDUPE_MS;
 /** Never announced. Bubbles are the always-on baseline — see the header. */
 export const ANNOUNCE_SKIP_ELEMENTS = Object.freeze([GoonElement.Bubbles]);
 
-/** exec/executor.js PAYLOAD_ELEMENT, mirrored as a literal so ui/ never imports exec/. */
-export const PAYLOAD_ANNOUNCE_ELEMENT = Object.freeze({
-  [GoonPayloadKind.FlashBurst]: GoonElement.Flashes,
-  [GoonPayloadKind.SubliminalStorm]: GoonElement.Subliminals,
-  [GoonPayloadKind.BubbleSwarm]: GoonElement.Bubbles,
-  [GoonPayloadKind.Video]: GoonElement.Videos,
-  [GoonPayloadKind.LockCard]: GoonElement.LockCards,
-  [GoonPayloadKind.ToyPattern]: GoonElement.ToyPatterns,
-  [GoonPayloadKind.BrainDrain]: GoonElement.BrainDrain,
-  [GoonPayloadKind.Spiral]: GoonElement.Spiral,
-});
+/**
+ * Which element a payload announces as. This WAS a hand-written mirror of exec/executor.js's
+ * table, because ui/ never imports exec/; since 2026-08-06 the table lives in core/contracts.js
+ * (core/match.js's agreement gate reads it too), so the mirror is gone and this is an alias onto
+ * the one table. The name stays — it is what the suite and mountAnnouncer already say.
+ */
+export const PAYLOAD_ANNOUNCE_ELEMENT = PAYLOAD_ELEMENT;
 
 /** The little mark in front of the words. Same vocabulary as ui/hud.js's rail chips. */
 export const ANNOUNCE_GLYPH = Object.freeze({
