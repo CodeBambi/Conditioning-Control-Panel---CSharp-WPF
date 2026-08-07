@@ -1711,16 +1711,22 @@ namespace ConditioningControlPanel
                         bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
                         bitmap.EndInit();
                         DiscordTab.ProfileViewerAvatar.ImageSource = bitmap;
+                        SetProfilePictureLoad(ProfilePictureLoad.Loaded);
                     }
                     catch (Exception ex)
                     {
                         App.Logger?.Warning(ex, "Failed to load profile avatar");
                         DiscordTab.ProfileViewerAvatar.ImageSource = null;
+                        SetProfilePictureLoad(ProfilePictureLoad.None);
                     }
                 }
                 else
                 {
+                    // Nothing to show (not logged in, or ShareProfilePicture off). This path is
+                    // fully synchronous, so the empty slot is final - the preset avatar may take
+                    // it, and with no preset equipped the card keeps its blank circle.
                     DiscordTab.ProfileViewerAvatar.ImageSource = null;
+                    SetProfilePictureLoad(ProfilePictureLoad.None);
                 }
             }
 
@@ -1933,11 +1939,17 @@ namespace ConditioningControlPanel
             // (own card gets local values immediately in the isOwnProfile branch further down).
             ApplyProfileIdentityBadges(false, null, false);
 
-            // Avatar - clear previous, will be loaded async
+            // Avatar - clear previous, will be loaded async by the /user/lookup round-trip below.
+            // The slot is marked PENDING for exactly that window: cosmetics are applied
+            // synchronously at the bottom of this method, and an empty bubble that a load is still
+            // on its way to fill is NOT free for the preset avatar to claim (#847). When there is
+            // no name to look up nothing is coming, so the empty slot is final instead.
+            var avatarLookupPending = !string.IsNullOrEmpty(entry.DisplayName);
             if (DiscordTab.ProfileViewerAvatar != null)
             {
                 DiscordTab.ProfileViewerAvatar.ImageSource = null;
             }
+            SetProfilePictureLoad(avatarLookupPending ? ProfilePictureLoad.Pending : ProfilePictureLoad.None);
 
             // Name
             if (DiscordTab.TxtProfileViewerName != null)
@@ -1957,9 +1969,9 @@ namespace ConditioningControlPanel
                         entry.IsOnline ? "#43B581" : "#747F8D"));
 
             // Trigger async lookup to get fresh online status and avatar
-            if (!string.IsNullOrEmpty(entry.DisplayName))
+            if (avatarLookupPending)
             {
-                _ = RefreshProfileViewerAsync(entry.DisplayName);
+                _ = RefreshProfileViewerAsync(entry.DisplayName!);
             }
 
             // Discord button (only if they have it and allow DMs)
@@ -2170,7 +2182,11 @@ namespace ConditioningControlPanel
             try
             {
                 var lookup = await App.Leaderboard?.LookupUserAsync(displayName);
-                if (lookup == null) return;
+                if (lookup == null)
+                {
+                    await Dispatcher.InvokeAsync(() => ResolveProfilePictureUnavailable(displayName));
+                    return;
+                }
 
                 // Update on UI thread
                 await Dispatcher.InvokeAsync(() =>
@@ -2222,17 +2238,23 @@ namespace ConditioningControlPanel
                                 bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
                                 bitmap.EndInit();
                                 DiscordTab.ProfileViewerAvatar.ImageSource = bitmap;
+                                // The picture landed: it evicts any preset painted while the slot
+                                // was still empty, and the cosmetics re-applied below leave it be.
+                                SetProfilePictureLoad(ProfilePictureLoad.Loaded);
                             }
                             catch (Exception ex)
                             {
                                 App.Logger?.Warning(ex, "Failed to load profile avatar from {Url}", avatarUrl);
                                 DiscordTab.ProfileViewerAvatar.ImageSource = null;
+                                SetProfilePictureLoad(ProfilePictureLoad.None);
                             }
                         }
                         else
                         {
-                            // No avatar URL - clear any previous image
+                            // No avatar URL - clear any previous image. The lookup is back, so this
+                            // is a definitive "no picture" and the preset avatar may take the slot.
                             DiscordTab.ProfileViewerAvatar.ImageSource = null;
+                            SetProfilePictureLoad(ProfilePictureLoad.None);
                         }
                     }
 
@@ -2279,7 +2301,38 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to refresh profile viewer for {Name}", displayName);
+                try
+                {
+                    await Dispatcher.InvokeAsync(() => ResolveProfilePictureUnavailable(displayName));
+                }
+                catch { /* shutting down - nothing left to repaint */ }
             }
+        }
+
+        /// <summary>
+        /// Closes out a picture load that came back with nothing - a lookup that returned null or
+        /// threw. Without it the slot would sit <see cref="ProfilePictureLoad.Pending"/> forever and
+        /// the preset avatar (or the blank circle) could never take it, so a user whose lookup fails
+        /// would be stuck with whatever the previous card left behind.
+        ///
+        /// Guarded by the same "are we still showing this user" check as the success path: a card
+        /// the viewer has already navigated away from owns nothing on screen.
+        /// </summary>
+        private void ResolveProfilePictureUnavailable(string displayName)
+        {
+            try
+            {
+                if (DiscordTab?.TxtProfileViewerName?.Text != displayName) return;
+
+                if (DiscordTab.ProfileViewerAvatar != null)
+                    DiscordTab.ProfileViewerAvatar.ImageSource = null;
+                SetProfilePictureLoad(ProfilePictureLoad.None);
+
+                // Repaint so the now-free slot gets what it should have had all along.
+                if (_profileViewingSelf) ApplyOwnProfileCosmetics();
+                else ApplyViewedProfileCosmetics(null);
+            }
+            catch (Exception ex) { App.Logger?.Debug("ResolveProfilePictureUnavailable: {E}", ex.Message); }
         }
 
         private System.Windows.Media.Imaging.BitmapImage? LoadPatreonBadgeImage(int tier)
