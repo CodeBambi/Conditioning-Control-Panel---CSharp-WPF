@@ -4099,6 +4099,22 @@ namespace ConditioningControlPanel.Models
             set { _activePersonalityPresetId = value ?? PersonalityPresets.BambiSpriteId; OnPropertyChanged(); }
         }
 
+        private DateTime? _personaVoiceFenceUtc;
+        /// <summary>
+        /// UTC moment of the most recent personality-preset selection. Assistant-authored chat
+        /// history from BEFORE this moment is fenced off the WIRE (see
+        /// <c>PromptAssembler.FenceHistoryToPersona</c>): her own old-voice replies are the
+        /// strongest few-shot signal a small model has, and 1,600 tokens of them out-shout any
+        /// changed persona paragraph — the switch "took" in the prompt but not in what she said
+        /// (owner repro, 2026-08-07). Persisted so a restored session.json stays fenced across
+        /// launches. The stored history and the bubbles the user sees are untouched.
+        /// </summary>
+        public DateTime? PersonaVoiceFenceUtc
+        {
+            get => _personaVoiceFenceUtc;
+            set { _personaVoiceFenceUtc = value; OnPropertyChanged(); }
+        }
+
         private List<PersonalityPreset> _userPersonalityPresets = new();
         /// <summary>
         /// User-created personality presets (customizations or copies of built-ins).

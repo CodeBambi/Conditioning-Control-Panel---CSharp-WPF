@@ -146,11 +146,45 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         public const string SummaryInstruction =
             "Summarise what happened above in at most three sentences. Plain prose, no quotes, no lists.";
 
+        /// <summary>
+        /// Ceiling, in conservatively-estimated REAL tokens (<see cref="ConservativeRealTokens"/>),
+        /// on the whole request this assembler will emit.
+        ///
+        /// <para>The cloud model behind the proxy is a 4,096-token-context model
+        /// (gryphe/mythomax-l2-13b), and OpenRouter enables its "middle-out" context compression BY
+        /// DEFAULT on every endpoint with ≤8k context. When a request lands near or over the
+        /// window, that plugin silently guts the MIDDLE of the prompt — production receipts from
+        /// 2026-08-07 show calls that shipped ~2,900-3,400 real tokens being billed for only
+        /// ~1,545-1,690 prompt tokens, i.e. roughly half of every system prompt (persona rules,
+        /// media rules, OUTPUT RULES, safety floor) never reached the model, while the old-voice
+        /// chat history at the end survived — which is why switching personality presets changed
+        /// nothing the user could hear. The client-side defense is to never build a request big
+        /// enough for the compressor to fire: 4,096 context − 350 worst-case completion
+        /// (ChatWithEffects) − ~350 margin for chat-template overhead and estimator error.</para>
+        ///
+        /// <para>Only HISTORY is shed to meet this (oldest first, newest turn always kept); the
+        /// system prompt is never touched here, exactly like the char-cap path in
+        /// <see cref="Compose"/>. Local models are covered too: Ollama's default context is the
+        /// same 4k or smaller and it truncates overflow just as silently.</para>
+        /// </summary>
+        public const int ContextFitTokenBudget = 3400;
+
+        /// <summary>
+        /// Deliberately pessimistic real-token estimate (chars/3). The brain's budgeting estimator
+        /// (<see cref="ChatSession.ApproxTokens"/>, chars/4) tracks provider billing, but Llama-2
+        /// tokenizes this prompt's prose+URL mix at ~3.0-3.7 chars/token — measured 3.75 with
+        /// cl100k on the exact wire payload, and Llama's 32k vocab is strictly less efficient.
+        /// A fit check against a 4k window must overestimate, never underestimate.
+        /// </summary>
+        internal static int ConservativeRealTokens(string? text) =>
+            string.IsNullOrEmpty(text) ? 0 : text!.Length / 3;
+
         private readonly IMemoryStore _memory;
         private readonly RecentRecommendations _recommendations;
         private readonly Func<string> _systemPromptProvider;
         private readonly Func<DateTime> _localClock;
         private readonly Func<IReadOnlyList<(string Title, string Url)>> _linkPool;
+        private readonly Func<DateTime?> _personaFence;
 
         /// <param name="systemPromptProvider">
         /// Injectable so tests (and any future prefix source) can supply a prefix without standing up
@@ -161,9 +195,13 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// <param name="linkPool">The sanctioned link catalogue the wire-history hygiene pass
         /// rewrites against; injectable for tests, defaults to
         /// <see cref="Companion.CompanionLinkIndex.CurrentEntries"/>.</param>
+        /// <param name="personaFence">The persona-switch fence moment
+        /// (<see cref="Models.AppSettings.PersonaVoiceFenceUtc"/>); injectable for tests. Null
+        /// (no value) means no fence.</param>
         public PromptAssembler(IMemoryStore memory, RecentRecommendations recommendations,
             Func<string>? systemPromptProvider = null, Func<DateTime>? localClock = null,
-            Func<IReadOnlyList<(string Title, string Url)>>? linkPool = null)
+            Func<IReadOnlyList<(string Title, string Url)>>? linkPool = null,
+            Func<DateTime?>? personaFence = null)
         {
             // Deliberately NOT `?? new MemoryStore()`. The production MemoryStore constructor is not
             // inert — it loads memory.json, starts a MemorySignalWriter and registers a shutdown
@@ -175,6 +213,13 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             _systemPromptProvider = systemPromptProvider ?? DefaultSystemPrompt;
             _localClock = localClock ?? (() => DateTime.Now);
             _linkPool = linkPool ?? DefaultLinkPool;
+            _personaFence = personaFence ?? DefaultPersonaFence;
+        }
+
+        private static DateTime? DefaultPersonaFence()
+        {
+            try { return App.Settings?.Current?.PersonaVoiceFenceUtc; }
+            catch { return null; }
         }
 
         private static IReadOnlyList<(string Title, string Url)> DefaultLinkPool()
@@ -206,6 +251,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
             var spec = purpose == AiPurpose.Chat ? ChatWindowSpec.Chat : ChatWindowSpec.Ambient;
             var window = session?.BuildWindow(spec) ?? Array.Empty<CompanionTurn>();
+            window = FenceHistoryToPersona(window);
 
             var prefix = _systemPromptProvider() ?? string.Empty;
             var tail = BuildTail(purpose, window);
@@ -219,12 +265,93 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
             var messages = new List<ChatMessage>(window.Count + 1) { ChatMessage.System(systemPrompt) };
             messages.AddRange(ChatSession.ToMessages(SanitizeAssistantHistory(window)));
+            ShedHistoryToContextFit(messages);
 
             App.Logger?.Debug(
                 "[AI-PROMPT] purpose={Purpose} prefix_tok~{PrefixTokens} tail_tok~{TailTokens} window={Window}",
                 purpose, ChatSession.ApproxTokens(prefix), ChatSession.ApproxTokens(tail), window.Count);
 
             return new PromptRequest(systemPrompt, messages);
+        }
+
+        /// <summary>
+        /// Drops assistant-authored turns from BEFORE the most recent personality-preset selection
+        /// (<see cref="Models.AppSettings.PersonaVoiceFenceUtc"/>) — wire-only, like
+        /// <see cref="SanitizeAssistantHistory"/>; the stored session and the visible bubbles keep
+        /// everything.
+        ///
+        /// <para>Root cause 2026-08-07 (part 2): a restored ~100-turn session in the previous
+        /// voice out-few-shots any changed persona paragraph — the model imitates its own recent
+        /// replies far harder than it obeys a ~135-token description, so a persona switch changed
+        /// the prompt but not what she said. User turns are kept (they are the user's own words
+        /// and the model needs the conversational thread), and <see cref="TurnKind.BarkEcho"/>
+        /// lines are kept (they are her scripted recorded voice, true regardless of preset — and
+        /// dropping them would break the "never contradict what you said aloud" rule).</para>
+        /// </summary>
+        internal IReadOnlyList<CompanionTurn> FenceHistoryToPersona(IReadOnlyList<CompanionTurn> window)
+        {
+            if (window == null || window.Count == 0) return window ?? Array.Empty<CompanionTurn>();
+
+            DateTime? fence;
+            try { fence = _personaFence(); }
+            catch { return window; }
+            if (fence == null) return window;
+
+            var kept = new List<CompanionTurn>(window.Count);
+            int dropped = 0;
+            foreach (var turn in window)
+            {
+                if (turn.Kind is (TurnKind.AssistantChat or TurnKind.AmbientReply) && turn.Utc < fence.Value)
+                {
+                    dropped++;
+                    continue;
+                }
+                kept.Add(turn);
+            }
+
+            if (dropped == 0) return window;
+            App.Logger?.Information(
+                "[AI-PROMPT] persona fence dropped {Dropped} pre-switch assistant turn(s) from the wire window",
+                dropped);
+            return kept;
+        }
+
+        /// <summary>
+        /// Final belt: sheds the OLDEST history messages until the whole request fits
+        /// <see cref="ContextFitTokenBudget"/> under the pessimistic
+        /// <see cref="ConservativeRealTokens"/> estimate. The system message (index 0) and the
+        /// newest message are never shed. See <see cref="ContextFitTokenBudget"/> for why this
+        /// exists — a request that brushes the model's real 4k window gets HALF its prompt
+        /// silently cut in transit, which is strictly worse than arriving with less history.
+        /// </summary>
+        internal static void ShedHistoryToContextFit(List<ChatMessage> messages)
+        {
+            if (messages == null || messages.Count == 0) return;
+
+            int Estimate() => messages.Sum(m => ConservativeRealTokens(m.Content));
+
+            int before = messages.Count;
+            // Index 1 is the oldest history message; keep at least the system message + newest.
+            while (messages.Count > 2 && Estimate() > ContextFitTokenBudget)
+                messages.RemoveAt(1);
+
+            if (messages.Count != before)
+            {
+                App.Logger?.Information(
+                    "[AI-PROMPT] context-fit shed {Shed} oldest history message(s) ({Before}→{After}) to stay under ~{Budget} real tokens",
+                    before - messages.Count, before, messages.Count, ContextFitTokenBudget);
+            }
+
+            if (Estimate() > ContextFitTokenBudget)
+            {
+                // Nothing left to shed: the system prompt alone brushes the model's window. The
+                // provider-side compressor may fire and gut it from the middle — this line is the
+                // only client-side witness. Shrink the preset / knowledge base / media list.
+                App.Logger?.Warning(
+                    "[AI-PROMPT] request still ~{Tokens} est. real tokens after shedding all history " +
+                    "(budget {Budget}) — the system prompt alone risks provider-side middle-out truncation",
+                    Estimate(), ContextFitTokenBudget);
+            }
         }
 
         /// <summary>

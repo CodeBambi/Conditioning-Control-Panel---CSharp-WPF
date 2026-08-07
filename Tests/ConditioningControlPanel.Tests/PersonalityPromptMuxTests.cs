@@ -144,6 +144,24 @@ public class PersonalityPromptMuxTests : IDisposable
     }
 
     [Fact]
+    public void PickingAPreset_StampsThePersonaVoiceFence()
+    {
+        // The fence is what takes the OLD voice's few-shot off the wire (PersonaWireFidelityTests);
+        // this pins the producer side: every successful preset selection — including re-selecting
+        // the current one, which is the user re-asserting "this voice, now" — stamps it.
+        Assert.Null(_settings.PersonaVoiceFenceUtc);
+
+        var before = DateTime.UtcNow;
+        Assert.True(App.Personality!.SetActivePreset(PersonalityPresets.GentleTrainerId));
+        Assert.NotNull(_settings.PersonaVoiceFenceUtc);
+        Assert.InRange(_settings.PersonaVoiceFenceUtc!.Value, before, DateTime.UtcNow);
+
+        var first = _settings.PersonaVoiceFenceUtc;
+        Assert.True(App.Personality.SetActivePreset(PersonalityPresets.GentleTrainerId));
+        Assert.True(_settings.PersonaVoiceFenceUtc >= first);
+    }
+
+    [Fact]
     public void PickingAPresetThatDoesNotExist_LeavesTheCustomPromptAlone()
     {
         ActivateCommunityPrompt();

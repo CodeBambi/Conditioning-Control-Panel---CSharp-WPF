@@ -143,6 +143,15 @@ namespace ConditioningControlPanel.Services
                 // the chip row and the quick menu confirm a switch that never reached the model.
                 var cleared = CommunityPromptService.ClearCustomPromptOverride(App.Settings.Current);
 
+                // ...and it has to win over the chat HISTORY. Her own recent replies are the
+                // strongest few-shot signal a small model has; with a restored ~100-turn session
+                // in the previous voice, the persona paragraph changed but the voice never did
+                // (owner repro, 2026-08-07). Fencing here (deliberately also on a re-select of
+                // the SAME preset — clicking it again re-asserts "this voice, now") drops
+                // assistant-authored turns older than this moment from the wire window only:
+                // the persisted session and the visible bubbles keep the full history.
+                App.Settings.Current.PersonaVoiceFenceUtc = DateTime.UtcNow;
+
                 App.Settings.Save();
 
                 if (cleared)
