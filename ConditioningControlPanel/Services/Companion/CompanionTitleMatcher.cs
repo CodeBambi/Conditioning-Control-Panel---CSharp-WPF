@@ -32,8 +32,12 @@ namespace ConditioningControlPanel.Services.Companion
         /// a two-word quote is as likely to be prose ("good girl") as a title.</summary>
         internal const int MinSpanLength = 8;
 
+        // DOUBLE quotes only. Straight and curly single quotes doubled as apostrophes in
+        // contractions — "It's … It's" extracted the garbage span between two apostrophes
+        // (live: ' from PlatinumPuppets. It') and search-linked it. Single-quoted titles are
+        // rare enough to lose; contractions are in every second sentence.
         private static readonly Regex QuotedSpan = new(
-            "[\"\u201C\u2018']([^\"\u201C\u201D\u2018\u2019'\\n]{3,80})[\"\u201D\u2019']",
+            "[\"“]([^\"“”\\n]{3,80})[\"”]",
             RegexOptions.Compiled);
 
         // A run of 2+ Title-Cased/numeric words (optionally joined by "-"): how an unquoted
@@ -110,10 +114,12 @@ namespace ConditioningControlPanel.Services.Companion
         /// </summary>
         internal static string BuildSearchUrl(string title)
         {
+            // HT's search is path-based: /search/<dash-slug>/ — the query-string form 404s
+            // (verified live 2026-08-07: /search/?q=sissy → 404, /search/sissy-training/ → 200).
             var slug = Regex.Replace(title.ToLowerInvariant(), @"[^a-z0-9]+", " ").Trim();
             slug = Regex.Replace(slug, @"[\s\d]+$", "").Trim(); // drop trailing episode digits
-            if (slug.Length == 0) slug = title.Trim();
-            return "https://hypnotube.com/search/?q=" + Uri.EscapeDataString(slug);
+            if (slug.Length == 0) slug = "hypno";
+            return "https://hypnotube.com/search/" + slug.Replace(' ', '-') + "/";
         }
 
         /// <summary>

@@ -85,12 +85,22 @@ public class CompanionTitleMatcherTests
 
     // ── search fallback ─────────────────────────────────────────────────────────────────
     [Fact]
-    public void SearchUrlDropsEpisodeDigitsAndEscapes()
+    public void SearchUrlIsPathBasedDashSlugWithoutEpisodeDigits()
     {
-        var url = CompanionTitleMatcher.BuildSearchUrl("Bimbo Fun 1-10");
-        Assert.StartsWith("https://hypnotube.com/search/?q=", url);
-        Assert.Contains("bimbo%20fun", url);
-        Assert.DoesNotContain("10", url);
+        // /search/?q= 404s on HT; the path form is the real one (verified live 2026-08-07).
+        Assert.Equal("https://hypnotube.com/search/bimbo-fun/",
+            CompanionTitleMatcher.BuildSearchUrl("Bimbo Fun 1-10"));
+    }
+
+    [Fact]
+    public void ApostrophesInContractionsAreNotQuoteDelimiters()
+    {
+        // Live bug: "It's … from PlatinumPuppets. It's …" extracted the garbage between two
+        // apostrophes as a "quoted title" and search-linked it.
+        var text = "It's a special video from PlatinumPuppets. It's perfect for you~";
+        var spans = CompanionTitleMatcher.CandidateSpans(text);
+        Assert.DoesNotContain(spans,
+            s => text.Substring(s.Start, s.Length).Contains("from PlatinumPuppets. It"));
     }
 
     [Fact]
