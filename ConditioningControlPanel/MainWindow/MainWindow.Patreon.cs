@@ -874,6 +874,7 @@ namespace ConditioningControlPanel
             // actions"), so there is nothing to seed for them here.
             // "Muted" is now its own flag, not the inverse of the enable (AppSettings.SubAudioMuted).
             CompanionTab.ChkMuteWhispersCompanion.IsChecked = settings.SubAudioMuted;
+            CompanionTab.ChkVoiceLinesCompanion.IsChecked = settings.CompanionVoiceLinesMuted;
             CompanionTab.SliderIdleIntervalCompanion.Value = settings.IdleGiggleIntervalSeconds;
             CompanionTab.TxtIdleIntervalCompanion.Text = $"{settings.IdleGiggleIntervalSeconds}s";
             CompanionTab.SliderBubbleDurationCompanion.Value = settings.BubbleDurationSeconds;
@@ -1644,6 +1645,20 @@ namespace ConditioningControlPanel
             var isPaused = checkbox?.IsChecked == true;
             await SetBrowserPaused(isPaused);
             _avatarTubeWindow?.SetBrowserPaused(isPaused);
+        }
+
+        // #846: mute only the spoken voicelines - the bubble, its text and the giggle cues stay.
+        // Read at the single playback choke point (AvatarTubeWindow.Speech ShowGiggle), so it
+        // covers barks, autonomy lines and voice-command responses alike.
+        internal void ChkVoiceLines_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var checkbox = sender as CheckBox;
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.CompanionVoiceLinesMuted = checkbox?.IsChecked == true;
+                App.Settings.Save();
+            }
         }
 
         private async Task SetBrowserPaused(bool isPaused)

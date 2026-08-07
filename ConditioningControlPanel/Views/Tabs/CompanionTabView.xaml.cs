@@ -102,6 +102,7 @@ namespace ConditioningControlPanel.Views.Tabs
         internal TextBlock TxtCameraShortcutLabel => _vm.Shelf.Behavior.TxtCameraShortcutLabel;
         internal CheckBox ChkMuteWhispersCompanion => _vm.Shelf.Behavior.ChkMuteWhispersCompanion;
         internal CheckBox ChkPauseBrowserCompanion => _vm.Shelf.Behavior.ChkPauseBrowserCompanion;
+        internal CheckBox ChkVoiceLinesCompanion => _vm.Shelf.Behavior.ChkVoiceLinesCompanion;
 
         // ---- Z8 · TRIGGERS & PHRASES ----
         internal CheckBox ChkTriggerModeCompanion => _vm.Shelf.Triggers.ChkTriggerModeCompanion;

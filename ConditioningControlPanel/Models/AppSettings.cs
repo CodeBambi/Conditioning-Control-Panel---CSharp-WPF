@@ -3649,6 +3649,19 @@ namespace ConditioningControlPanel.Models
             set { _bubbleDurationSeconds = Math.Clamp(value, 1.0, 10.0); OnPropertyChanged(); }
         }
 
+        private bool _companionVoiceLinesMuted = false;
+        /// <summary>
+        /// Mute only the companion's spoken voicelines (#846): the bubble, its text, and the
+        /// giggle/bubble sound cues all stay — the pre-recorded VO alone goes quiet. Distinct
+        /// from AvatarMuted (which silences her outright) and from MasterVolume==0.
+        /// </summary>
+        [JsonProperty]
+        public bool CompanionVoiceLinesMuted
+        {
+            get => _companionVoiceLinesMuted;
+            set { _companionVoiceLinesMuted = value; OnPropertyChanged(); }
+        }
+
         // Persisted avatar-tube (companion window) placement (#669). Restored on startup so a
         // detached, dragged, or rescaled companion comes back where the user left it. Left/Top use
         // NaN as the "unset" sentinel (no saved position yet -> fall back to the default anchor).

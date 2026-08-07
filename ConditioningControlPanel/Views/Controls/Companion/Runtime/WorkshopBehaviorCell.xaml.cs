@@ -40,5 +40,10 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         {
             if (Window.GetWindow(this) is MainWindow mw) mw.ChkPauseBrowser_Changed(sender, e);
         }
+
+        private void ChkVoiceLines_Changed(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.ChkVoiceLines_Changed(sender, e);
+        }
     }
 }

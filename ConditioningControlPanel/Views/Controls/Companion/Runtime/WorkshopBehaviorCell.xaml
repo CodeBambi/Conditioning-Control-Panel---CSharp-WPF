@@ -89,7 +89,7 @@
                       HorizontalAlignment="Right" VerticalAlignment="Center"
                       Checked="ChkMuteWhispers_Changed" Unchecked="ChkMuteWhispers_Changed"/>
         </Grid>
-        <Grid>
+        <Grid Margin="0,0,0,6">
             <StackPanel Margin="0,0,44,0">
                 <TextBlock Text="{loc:Str label_pause_browser}" Style="{StaticResource CmpCellLabelStyle}"/>
                 <TextBlock Text="{loc:Str label_pause_embedded_browser_audio}" Style="{StaticResource CmpCellHintStyle}"/>
@@ -97,6 +97,18 @@
             <CheckBox x:Name="ChkPauseBrowserCompanion" x:FieldModifier="internal" Style="{DynamicResource ToggleStyle}"
                       HorizontalAlignment="Right" VerticalAlignment="Center"
                       Checked="ChkPauseBrowser_Changed" Unchecked="ChkPauseBrowser_Changed"/>
+        </Grid>
+
+        <!-- #846: spoken VO only — bubbles, text and giggle cues stay on. Same checked=suppress
+             polarity as its two neighbors. -->
+        <Grid>
+            <StackPanel Margin="0,0,44,0">
+                <TextBlock Text="{loc:Str label_mute_voice_lines}" Style="{StaticResource CmpCellLabelStyle}"/>
+                <TextBlock Text="{loc:Str label_mute_voice_lines_hint}" Style="{StaticResource CmpCellHintStyle}"/>
+            </StackPanel>
+            <CheckBox x:Name="ChkVoiceLinesCompanion" x:FieldModifier="internal" Style="{DynamicResource ToggleStyle}"
+                      HorizontalAlignment="Right" VerticalAlignment="Center"
+                      Checked="ChkVoiceLines_Changed" Unchecked="ChkVoiceLines_Changed"/>
         </Grid>
     </StackPanel>
 </UserControl>

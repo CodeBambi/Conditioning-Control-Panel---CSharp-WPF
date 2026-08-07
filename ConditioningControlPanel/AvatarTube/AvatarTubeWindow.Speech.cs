@@ -490,8 +490,16 @@ namespace ConditioningControlPanel
                     {
                         // Custom phrase audio overrides default sounds. Bark voicelines play through the
                         // companion-voice path (MasterVolume-gated), not the SubAudio-gated phrase path.
+                        // #846: "Mute Voice Lines" silences ONLY the spoken VO — the bubble keeps its
+                        // sound cue via the fallback, so she still reads as present. This is the single
+                        // choke point every voiced line funnels through (barks, autonomy, voice commands).
                         if (barkVoice)
-                            PlayBarkVoice(phraseAudioPath);
+                        {
+                            if (App.Settings?.Current?.CompanionVoiceLinesMuted == true)
+                                PlayFallbackBubbleSound();
+                            else
+                                PlayBarkVoice(phraseAudioPath);
+                        }
                         else
                             PlayPhraseAudio(phraseAudioPath);
                     }
