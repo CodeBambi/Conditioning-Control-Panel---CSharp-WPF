@@ -713,6 +713,12 @@ namespace ConditioningControlPanel.Services
                             var session = sessions[i];
                             var processId = (int)session.GetProcessID;
 
+                            // Never write a stored volume onto our own session: the file maps
+                            // PIDs from the PREVIOUS run, and a recycled PID landing on us would
+                            // stamp a foreign app's volume onto our own audio at startup. The
+                            // live-duck sweeps have always had this guard; this path didn't.
+                            if (processId == Environment.ProcessId || processId == 0) continue;
+
                             if (savedVolumes.TryGetValue(processId, out var originalVolume))
                             {
                                 session.SimpleAudioVolume.Volume = originalVolume;
@@ -973,7 +979,7 @@ namespace ConditioningControlPanel.Services
                         if (processId == currentProcessId || processId == 0) continue;
 
                         // Skip WebView2 processes if setting is enabled (for BambiCloud audio)
-                        if (excludeWebView2 && webViewPids.Contains(processId))
+                        if (excludeWebView2 && IsWebView2Pid(processId, webViewPids))
                             continue;
 
                         var currentVolume = session.SimpleAudioVolume.Volume;
@@ -1008,7 +1014,31 @@ namespace ConditioningControlPanel.Services
             // Save state for crash recovery
             SaveDuckingState();
 
-            App.Logger?.Debug("Ducked {Count} audio sessions by {Amount}%", ducked, strength);
+            // Information, not Debug: user-submitted logs must show what got ducked — the
+            // browser-engine self-duck (silent video 2-3s in) was undiagnosable from reports
+            // while this and the rescan line hid below the Information floor.
+            App.Logger?.Information("Ducked {Count} audio sessions by {Amount}%", ducked, strength);
+        }
+
+        /// <summary>
+        /// Cache-first WebView2 test with a name-resolve fallback for PIDs born after the cache
+        /// was filled. Chromium spawns its audio-service utility process lazily — only once a
+        /// page actually starts producing sound (~1.5-2s in) — so during the 30s cache window a
+        /// brand-new audio process was invisible to the set, and the 2.5s rescan then ducked the
+        /// app's OWN browser-engine video audio ("mandatory/startup video goes silent after 2-3
+        /// seconds"). A positive match is added to the cached set so each PID resolves once.
+        /// Runs only on the sweep worker, like everything else that touches the cache.
+        /// </summary>
+        private bool IsWebView2Pid(int processId, HashSet<int> webViewPids)
+        {
+            if (webViewPids.Contains(processId)) return true;
+            var name = TryGetProcessName(processId);
+            if (name.IndexOf("webview2", StringComparison.OrdinalIgnoreCase) < 0) return false;
+            lock (_lockObj) { _webView2Pids.Add(processId); }
+            webViewPids.Add(processId);
+            App.Logger?.Information("[Ducking] Excluded late-spawned WebView2 audio process {Pid} ({Name})",
+                processId, name);
+            return true;
         }
 
         /// <summary>
@@ -1427,6 +1457,7 @@ namespace ConditioningControlPanel.Services
             var webViewPids = excludeWebView2 ? RefreshWebView2Pids() : new HashSet<int>();
 
             int newlyDucked = 0;
+            var duckedNames = new List<string>();
             using (var scope = CollectRenderSessions())
             {
                 var sessions = scope.Sessions;
@@ -1438,7 +1469,7 @@ namespace ConditioningControlPanel.Services
                         var processId = (int)session.GetProcessID;
 
                         if (processId == currentProcessId || processId == 0) continue;
-                        if (excludeWebView2 && webViewPids.Contains(processId)) continue;
+                        if (excludeWebView2 && IsWebView2Pid(processId, webViewPids)) continue;
 
                         var currentVolume = session.SimpleAudioVolume.Volume;
                         // Skip sessions already at 0 — most likely they're sessions we ducked in a
@@ -1458,6 +1489,7 @@ namespace ConditioningControlPanel.Services
                         var newVolume = currentVolume * (1.0f - amount);
                         session.SimpleAudioVolume.Volume = Math.Max(0.0f, newVolume);
                         newlyDucked++;
+                        duckedNames.Add($"{name}:{processId}");
                     }
                     catch { /* session may have ended */ }
                 }
@@ -1465,7 +1497,10 @@ namespace ConditioningControlPanel.Services
 
             if (newlyDucked > 0)
             {
-                App.Logger?.Debug("[Ducking] Rescan ducked {Count} new session(s)", newlyDucked);
+                // Information + names: this line is the proof/refutation of a self-duck in a
+                // user's bug-report log — at Debug it never made it into a report.
+                App.Logger?.Information("[Ducking] Rescan ducked {Count} new session(s): {Names}",
+                    newlyDucked, string.Join(", ", duckedNames));
                 SaveDuckingState();
             }
         }
