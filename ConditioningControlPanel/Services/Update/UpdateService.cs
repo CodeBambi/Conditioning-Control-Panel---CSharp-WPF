@@ -101,6 +101,7 @@ namespace ConditioningControlPanel.Services
 - Performance: heavy overlay combos (pink filter + spiral + bubbles + subliminals) no longer choke the app - overlays now only redraw when something actually changed
 - Personality presets: switching presets always takes effect now, even if an imported personality file was active - and hand-edited custom prompts actually reach her (if she suddenly sounds different, check your custom prompt toggle in the editor)
 - Personality files: the four preset personalities (Strict Domme, Soft Hypnotist, Elegant Mistress, Chaotic Gremlin) now actually ship with the app - the companion personality picker opens right on them
+- Personas, the real fix: the AI provider was silently cutting the MIDDLE out of long prompts - deleting her personality while keeping her old chat voice. That compression is now off, requests are kept inside her real memory window, and switching persona fences off her old voice so she can't imitate it
 - Profile: Discord avatars no longer get replaced by a blank-subject bust while they load
 - Privacy: the hidden-apps list in 'What she can see' is now clearly titled - those chips are what she can NEVER see
 - Mod manager: a real MOD MANAGER button next to the mod selector - no more hunting for the tiny gear
