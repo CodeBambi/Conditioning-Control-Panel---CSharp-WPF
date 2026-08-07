@@ -464,9 +464,12 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 if (noted.Count == 0)
                 {
                     int banned = 0;
-                    foreach (var (start, length) in Services.Companion.CompanionTitleMatcher.CandidateSpans(text))
+                    foreach (var (start, length, quoted) in Services.Companion.CompanionTitleMatcher.CandidateSpans(text))
                     {
                         if (banned >= 2) break;
+                        // Quoted only: every observed invented title was quoted, and unquoted
+                        // Title-Case runs are too often ordinary prose to feed into the prompt.
+                        if (!quoted) continue;
                         if (length < Services.Companion.CompanionTitleMatcher.MinSpanLength || length > 60) continue;
                         var span = text.Substring(start, length).Replace('\n', ' ').Replace('\r', ' ').Trim();
                         if (span.Length == 0) continue;

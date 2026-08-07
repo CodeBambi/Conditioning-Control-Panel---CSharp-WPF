@@ -1092,8 +1092,9 @@ namespace ConditioningControlPanel
             // NOTHING becomes a site-search link (one per bubble, only in video-ish context) so
             // the user always gets a working affordance instead of a title they must retype.
             var tableEntries = linkTable.Select(kvp => (Title: kvp.Key, Url: kvp.Value)).ToList();
-            bool searchFallbackUsed = false;
-            foreach (var (spanStart, spanLength) in Services.Companion.CompanionTitleMatcher.CandidateSpans(processedText))
+            var candidateSpans = Services.Companion.CompanionTitleMatcher.CandidateSpans(processedText);
+            var fallbackCandidates = new List<(int Start, int Length, bool Quoted)>();
+            foreach (var (spanStart, spanLength, quoted) in candidateSpans)
             {
                 if (spanLength < Services.Companion.CompanionTitleMatcher.MinSpanLength) continue;
                 bool overlapsExisting = linkPositions.Any(lp =>
@@ -1107,14 +1108,24 @@ namespace ConditioningControlPanel
                     linkPositions.Add((spanStart, spanLength, fuzzy.Value.Title, fuzzy.Value.Url));
                     App.Logger?.Information("Fuzzy-linked video: '{Span}' -> '{Title}'", span, fuzzy.Value.Title);
                 }
-                else if (!searchFallbackUsed
-                         && Services.Companion.CompanionTitleMatcher.LooksLikeVideoContext(processedText, spanStart))
+                else
                 {
-                    linkPositions.Add((spanStart, spanLength, span,
-                        Services.Companion.CompanionTitleMatcher.BuildSearchUrl(span)));
-                    searchFallbackUsed = true;
-                    App.Logger?.Information("Search-linked unknown video title: '{Span}'", span);
+                    fallbackCandidates.Add((spanStart, spanLength, quoted));
                 }
+            }
+
+            // One search fallback per bubble, QUOTED spans first — an incidental Title-Case run
+            // early in the sentence must not steal the slot from the actual quoted title.
+            foreach (var (spanStart, spanLength, _) in fallbackCandidates
+                         .OrderByDescending(c => c.Quoted).ThenBy(c => c.Start))
+            {
+                if (!Services.Companion.CompanionTitleMatcher.LooksLikeVideoContext(processedText, spanStart))
+                    continue;
+                var span = processedText.Substring(spanStart, spanLength);
+                linkPositions.Add((spanStart, spanLength, span,
+                    Services.Companion.CompanionTitleMatcher.BuildSearchUrl(span)));
+                App.Logger?.Information("Search-linked unknown video title: '{Span}'", span);
+                break;
             }
 
             // Also detect raw URLs in the text (the AI sometimes outputs full URLs from the link pool)
@@ -1235,7 +1246,15 @@ namespace ConditioningControlPanel
                 App.BrowserMedia?.ReplaceSession(
                     Services.Browser.BrowserMediaService.MediaOwner.AvatarLink, takeover: true);
 
-                if (mainWindow?.NavigateToUrlInBrowser(url, autoPlayFullscreen: true) == true)
+                // HT search links are POST-gated (a plain GET shows their error page): for the
+                // embedded browser, swap in the self-submitting searchgate form. The external
+                // fallback below keeps the original https URL — it can't POST, but HT prefills
+                // the search box from the path, so the user is one Enter away.
+                var navUrl = url;
+                if (Services.Companion.CompanionTitleMatcher.TryBuildSearchGatePostUrl(url, out var postNav))
+                    navUrl = postNav;
+
+                if (mainWindow?.NavigateToUrlInBrowser(navUrl, autoPlayFullscreen: true) == true)
                 {
                     App.Logger?.Information("Speech bubble link routed to embedded browser: {Url}", url);
                 }

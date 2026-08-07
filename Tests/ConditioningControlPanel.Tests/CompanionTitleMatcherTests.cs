@@ -114,4 +114,33 @@ public class CompanionTitleMatcherTests
         var idx2 = videoish.IndexOf("good girl energy");
         Assert.True(CompanionTitleMatcher.LooksLikeVideoContext(videoish, idx2));
     }
+
+    [Theory]
+    [InlineData("Try \"Bimbo Fun 1-3\" from someone.")]
+    [InlineData("How about \"Bimbo Love - Nonstop Compilation 1-3\"?")]
+    [InlineData("Here's a video called \"Sissy Fucked Hard\".")]
+    public void SuggestionPhrasingsPassTheContextGate(string text)
+    {
+        // Live misses: she leads with "Try X" / "How about X", which contained no media noun.
+        var span = CompanionTitleMatcher.CandidateSpans(text).First(s => s.Quoted);
+        Assert.True(CompanionTitleMatcher.LooksLikeVideoContext(text, span.Start));
+    }
+
+    [Fact]
+    public void SearchLinksTransformIntoSearchGatePost()
+    {
+        // HT search is POST-gated; the click handler swaps the display URL for a
+        // self-submitting form so the embedded browser lands on real results.
+        var ok = CompanionTitleMatcher.TryBuildSearchGatePostUrl(
+            "https://hypnotube.com/search/bimbo-fun/", out var nav);
+        Assert.True(ok);
+        Assert.StartsWith("data:text/html", nav);
+        var decoded = System.Uri.UnescapeDataString(nav);
+        Assert.Contains("searchgate.php", decoded);
+        Assert.Contains("value=\"bimbo fun\"", decoded);
+
+        Assert.False(CompanionTitleMatcher.TryBuildSearchGatePostUrl(
+            "https://hypnotube.com/video/sissy-dreams-3-701.html", out var untouched));
+        Assert.Equal("https://hypnotube.com/video/sissy-dreams-3-701.html", untouched);
+    }
 }

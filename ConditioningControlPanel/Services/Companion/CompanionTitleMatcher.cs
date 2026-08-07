@@ -49,22 +49,23 @@ namespace ConditioningControlPanel.Services.Companion
 
         /// <summary>
         /// Spans of <paramref name="text"/> that plausibly contain a video title: quoted spans
-        /// first (the model usually quotes titles), then unquoted Title-Case runs. Ordered by
-        /// position; overlapping runs inside an already-yielded quote are skipped.
+        /// (the model quotes nearly every title it names — flagged so callers can prefer them),
+        /// plus unquoted Title-Case runs. Ordered by position; runs overlapping an
+        /// already-yielded quote are skipped.
         /// </summary>
-        internal static List<(int Start, int Length)> CandidateSpans(string text)
+        internal static List<(int Start, int Length, bool Quoted)> CandidateSpans(string text)
         {
-            var spans = new List<(int Start, int Length)>();
+            var spans = new List<(int Start, int Length, bool Quoted)>();
             if (string.IsNullOrWhiteSpace(text)) return spans;
 
             foreach (Match m in QuotedSpan.Matches(text))
-                spans.Add((m.Groups[1].Index, m.Groups[1].Length));
+                spans.Add((m.Groups[1].Index, m.Groups[1].Length, true));
 
             foreach (Match m in TitleCaseRun.Matches(text))
             {
                 if (m.Length < MinSpanLength) continue;
                 bool inside = spans.Any(s => m.Index < s.Start + s.Length && m.Index + m.Length > s.Start);
-                if (!inside) spans.Add((m.Index, m.Length));
+                if (!inside) spans.Add((m.Index, m.Length, false));
             }
 
             spans.Sort((a, b) => a.Start.CompareTo(b.Start));
@@ -112,14 +113,43 @@ namespace ConditioningControlPanel.Services.Companion
         /// typing the title in the search bar". A working search beats dead text; the numbered
         /// episode tail is dropped because invented episode numbers poison the search.
         /// </summary>
+        internal const string SearchUrlPrefix = "https://hypnotube.com/search/";
+
         internal static string BuildSearchUrl(string title)
         {
-            // HT's search is path-based: /search/<dash-slug>/ — the query-string form 404s
-            // (verified live 2026-08-07: /search/?q=sissy → 404, /search/sissy-training/ → 200).
+            // The dash-slug path renders HT's search page with the query prefilled, which is
+            // the best a bare GET can do — their search is POST-gated (see
+            // TryBuildSearchGatePostUrl, which the click handler uses to get REAL results in
+            // the embedded browser; this URL is the display/external-fallback form).
             var slug = Regex.Replace(title.ToLowerInvariant(), @"[^a-z0-9]+", " ").Trim();
             slug = Regex.Replace(slug, @"[\s\d]+$", "").Trim(); // drop trailing episode digits
             if (slug.Length == 0) slug = "hypno";
-            return "https://hypnotube.com/search/" + slug.Replace(' ', '-') + "/";
+            return SearchUrlPrefix + slug.Replace(' ', '-') + "/";
+        }
+
+        /// <summary>
+        /// HT's search cannot be deep-linked: /search/<c>anything</c>/ shows "Search error"
+        /// unless the session was primed by a POST to searchgate.php (verified live 2026-08-07:
+        /// POST+cookies → 20 results, any bare GET → error banner). For clicks the app itself
+        /// handles, transform the search link into a data:-URL page whose only job is to submit
+        /// that POST — the embedded browser then lands on real results exactly as if the user
+        /// had typed the query into HT's own box. Returns false for non-search URLs.
+        /// </summary>
+        internal static bool TryBuildSearchGatePostUrl(string url, out string navigateUrl)
+        {
+            navigateUrl = url;
+            if (string.IsNullOrEmpty(url) ||
+                !url.StartsWith(SearchUrlPrefix, StringComparison.OrdinalIgnoreCase)) return false;
+            var slug = url.Substring(SearchUrlPrefix.Length).Trim('/');
+            if (slug.Length == 0 || slug.Contains('/')) return false; // deeper paths are not ours
+
+            var query = System.Net.WebUtility.HtmlEncode(Uri.UnescapeDataString(slug).Replace('-', ' '));
+            var html =
+                "<!doctype html><body><form id=f method=post action=\"https://hypnotube.com/searchgate.php\">" +
+                $"<input type=hidden name=q value=\"{query}\"><input type=hidden name=type value=\"videos\">" +
+                "</form><script>document.getElementById('f').submit()</script></body>";
+            navigateUrl = "data:text/html;charset=utf-8," + Uri.EscapeDataString(html);
+            return true;
         }
 
         /// <summary>
@@ -128,9 +158,12 @@ namespace ConditioningControlPanel.Services.Companion
         /// </summary>
         internal static bool LooksLikeVideoContext(string text, int spanStart)
         {
+            // Suggestion verbs included: live testing showed her leading with "Try \"X\"" and
+            // "How about \"X\"" — neither contains a media noun, and the fallback never armed.
             int from = Math.Max(0, spanStart - 60);
             var before = text.Substring(from, spanStart - from);
-            return Regex.IsMatch(before, @"\b(watch|video|clip|session|train|queue|play|loop|file)\w*\b",
+            return Regex.IsMatch(before,
+                @"\b(watch|video|clip|session|train|queue|play|loop|file|try|called|check|recommend|suggest|about)\w*\b",
                 RegexOptions.IgnoreCase);
         }
     }

@@ -88,7 +88,7 @@ namespace ConditioningControlPanel.Services.Companion
             // Fuzzy fallback: a near-miss of a real title ("Bambi TikTok Mix 1-8" for
             // "Bambi TikTok 1-8") still deserves its chip.
             var pool = entries.Select(e => (e.Title, e.Url)).ToList();
-            foreach (var (start, length) in CompanionTitleMatcher.CandidateSpans(text))
+            foreach (var (start, length, _) in CompanionTitleMatcher.CandidateSpans(text))
             {
                 if (length < CompanionTitleMatcher.MinSpanLength) continue;
                 var fuzzy = CompanionTitleMatcher.BestFuzzy(text.Substring(start, length), pool);
