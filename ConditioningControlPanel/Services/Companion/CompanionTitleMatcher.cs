@@ -21,12 +21,18 @@ namespace ConditioningControlPanel.Services.Companion
     internal static class CompanionTitleMatcher
     {
         /// <summary>
-        /// Minimum Jaccard similarity (on normalized token sets) for a fuzzy hit. 0.72 accepts
-        /// one inserted/dropped word on a 6-token title but rejects sibling episodes
-        /// ("Bimbo Fun 1-10" vs "Bimbo Fun 1-3" scores 0.6) — those fall through to the search
-        /// fallback rather than silently linking the wrong video.
+        /// Minimum Jaccard similarity (on normalized token sets) for a confident fuzzy hit:
+        /// 0.72 accepts one inserted/dropped word on a 6-token title.
         /// </summary>
         internal const double FuzzyThreshold = 0.72;
+
+        /// <summary>
+        /// The rewrite floor: an invented title at least this close to a pool entry gets
+        /// REWRITTEN to it (owner decision 2026-08-07: the pool is deliberately curated, so an
+        /// off-pool suggestion becomes the nearest real video rather than a door out of the
+        /// curation). Below this the title stays plain text and only the anti-repeat ban sees it.
+        /// </summary>
+        internal const double RewriteThreshold = 0.4;
 
         /// <summary>Candidate spans shorter than this are never fuzzy-matched or search-linked —
         /// a two-word quote is as likely to be prose ("good girl") as a title.</summary>
@@ -78,7 +84,7 @@ namespace ConditioningControlPanel.Services.Companion
         /// "approximately" right about — exact matching already covers it).
         /// </summary>
         internal static (string Title, string Url)? BestFuzzy(
-            string span, IEnumerable<(string Title, string Url)> entries)
+            string span, IEnumerable<(string Title, string Url)> entries, double threshold = FuzzyThreshold)
         {
             var spanTokens = Tokens(span);
             if (spanTokens.Count < 2) return null;
@@ -95,7 +101,7 @@ namespace ConditioningControlPanel.Services.Companion
                 double score = (double)inter / union;
                 if (score > bestScore) { bestScore = score; best = e; }
             }
-            return bestScore >= FuzzyThreshold ? best : null;
+            return bestScore >= threshold ? best : null;
         }
 
         /// <summary>Lowercased alphanumeric token set ("Bambi TikTok Mix 1-8" → bambi, tiktok, mix, 1, 8).</summary>
@@ -113,43 +119,41 @@ namespace ConditioningControlPanel.Services.Companion
         /// typing the title in the search bar". A working search beats dead text; the numbered
         /// episode tail is dropped because invented episode numbers poison the search.
         /// </summary>
-        internal const string SearchUrlPrefix = "https://hypnotube.com/search/";
-
-        internal static string BuildSearchUrl(string title)
-        {
-            // The dash-slug path renders HT's search page with the query prefilled, which is
-            // the best a bare GET can do — their search is POST-gated (see
-            // TryBuildSearchGatePostUrl, which the click handler uses to get REAL results in
-            // the embedded browser; this URL is the display/external-fallback form).
-            var slug = Regex.Replace(title.ToLowerInvariant(), @"[^a-z0-9]+", " ").Trim();
-            slug = Regex.Replace(slug, @"[\s\d]+$", "").Trim(); // drop trailing episode digits
-            if (slug.Length == 0) slug = "hypno";
-            return SearchUrlPrefix + slug.Replace(' ', '-') + "/";
-        }
-
         /// <summary>
-        /// HT's search cannot be deep-linked: /search/<c>anything</c>/ shows "Search error"
-        /// unless the session was primed by a POST to searchgate.php (verified live 2026-08-07:
-        /// POST+cookies → 20 results, any bare GET → error banner). For clicks the app itself
-        /// handles, transform the search link into a data:-URL page whose only job is to submit
-        /// that POST — the embedded browser then lands on real results exactly as if the user
-        /// had typed the query into HT's own box. Returns false for non-search URLs.
+        /// Rewrites off-pool quoted titles in <paramref name="text"/> to the nearest real pool
+        /// entry (≥ <see cref="RewriteThreshold"/>). Runs at the BRAIN level, before the reply
+        /// is stored: the bubble, the Her Room chip, the chat history and — critically — her
+        /// own persisted few-shot history then all carry real, linkable titles, which is what
+        /// breaks the invented-title imitation loop (it also self-heals across mod switches,
+        /// where stored history full of the OLD mod's titles was steering the new mod's chat).
+        /// Search links were deliberately dropped (owner decision): an unmatched title stays
+        /// plain text and is handled by the anti-repeat ban alone.
         /// </summary>
-        internal static bool TryBuildSearchGatePostUrl(string url, out string navigateUrl)
+        internal static string RewriteOffPoolTitles(
+            string text, IReadOnlyList<(string Title, string Url)> pool, out int rewritten)
         {
-            navigateUrl = url;
-            if (string.IsNullOrEmpty(url) ||
-                !url.StartsWith(SearchUrlPrefix, StringComparison.OrdinalIgnoreCase)) return false;
-            var slug = url.Substring(SearchUrlPrefix.Length).Trim('/');
-            if (slug.Length == 0 || slug.Contains('/')) return false; // deeper paths are not ours
+            rewritten = 0;
+            if (string.IsNullOrWhiteSpace(text) || pool.Count == 0) return text;
 
-            var query = System.Net.WebUtility.HtmlEncode(Uri.UnescapeDataString(slug).Replace('-', ' '));
-            var html =
-                "<!doctype html><body><form id=f method=post action=\"https://hypnotube.com/searchgate.php\">" +
-                $"<input type=hidden name=q value=\"{query}\"><input type=hidden name=type value=\"videos\">" +
-                "</form><script>document.getElementById('f').submit()</script></body>";
-            navigateUrl = "data:text/html;charset=utf-8," + Uri.EscapeDataString(html);
-            return true;
+            var spans = CandidateSpans(text);
+            // Back-to-front so replacements don't shift the indices of spans not yet visited.
+            for (int i = spans.Count - 1; i >= 0; i--)
+            {
+                var (start, length, quoted) = spans[i];
+                if (!quoted || length < MinSpanLength || length > 80) continue;
+                if (!LooksLikeVideoContext(text, start)) continue;
+
+                var span = text.Substring(start, length);
+                // Already a real title (exact, case-insensitive)? Leave it — it links as-is.
+                if (pool.Any(e => string.Equals(e.Title, span.Trim(), StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                var match = BestFuzzy(span, pool, RewriteThreshold);
+                if (match == null) continue;
+                text = text.Substring(0, start) + match.Value.Title + text.Substring(start + length);
+                rewritten++;
+            }
+            return text;
         }
 
         /// <summary>

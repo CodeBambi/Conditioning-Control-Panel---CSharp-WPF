@@ -256,6 +256,31 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Rewrites quoted off-pool video titles to the nearest real pool entry — see
+        /// <see cref="Companion.CompanionTitleMatcher.RewriteOffPoolTitles"/> for the why.
+        /// Injectable pool for tests; defaults to the sanctioned catalogue.
+        /// </summary>
+        internal static string RewriteOffPoolTitles(
+            string? text, IReadOnlyList<(string Title, string Url)>? pool = null)
+        {
+            if (string.IsNullOrEmpty(text)) return text ?? string.Empty;
+            try
+            {
+                var entries = pool ?? Companion.CompanionLinkIndex.CurrentEntries();
+                var result = Companion.CompanionTitleMatcher.RewriteOffPoolTitles(text, entries, out var rewritten);
+                if (rewritten > 0)
+                    App.Logger?.Information(
+                        "[AI-LINK] rewrote {Count} invented title(s) to the nearest pool video", rewritten);
+                return result;
+            }
+            catch (System.Exception ex)
+            {
+                App.Logger?.Debug("RewriteOffPoolTitles failed: {Error}", ex.Message);
+                return text;
+            }
+        }
+
+        /// <summary>
         /// Strip tokenizer artifacts and reasoning blocks. Whitespace is normalised but the text is
         /// otherwise left alone - callers layer their own product-specific sanitising on top.
         /// </summary>

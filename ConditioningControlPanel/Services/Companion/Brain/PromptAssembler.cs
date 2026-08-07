@@ -193,8 +193,13 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
             var prefix = _systemPromptProvider() ?? string.Empty;
             var tail = BuildTail(purpose, window);
-            var systemPrompt = Compose(prefix, tail, PurposeInstruction(purpose),
-                pinned: _recommendations.BuildExclusionLine());
+            // Pin BOTH anti-fixation lines through the hard-cap floor branch: with a fat preset
+            // the prefix alone busts the soft cap on every call, and losing vary+exclusion is
+            // how one invented title became the whole evening's suggestion (0807).
+            var pinnedLines = _recommendations.BuildExclusionLine();
+            if (purpose == AiPurpose.Chat || purpose == AiPurpose.Reaction)
+                pinnedLines = pinnedLines == null ? VaryPicksRule : pinnedLines + "\n" + VaryPicksRule;
+            var systemPrompt = Compose(prefix, tail, PurposeInstruction(purpose), pinned: pinnedLines);
 
             var messages = new List<ChatMessage>(window.Count + 1) { ChatMessage.System(systemPrompt) };
             messages.AddRange(ChatSession.ToMessages(window));

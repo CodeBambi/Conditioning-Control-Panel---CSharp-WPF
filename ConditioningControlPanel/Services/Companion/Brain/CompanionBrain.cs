@@ -255,6 +255,12 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 // the next turn to write another one.
                 chatText = AiTextHygiene.StripUnsanctionedLinks(chatText);
 
+                // Rewrite invented titles to the nearest real pool video BEFORE the turn is
+                // stored: the persisted history is the model's few-shot bait, so leaving her
+                // inventions in it is how one made-up title became a fixation (0807). Rewriting
+                // here heals bubble, chip, history and future prompts in one place.
+                chatText = AiTextHygiene.RewriteOffPoolTitles(chatText);
+
                 if (chatText.Length == 0)
                 {
                     // Nothing but sigil shell, or nothing but invented links. Either way there is no

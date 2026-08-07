@@ -85,14 +85,6 @@ public class CompanionTitleMatcherTests
 
     // ── search fallback ─────────────────────────────────────────────────────────────────
     [Fact]
-    public void SearchUrlIsPathBasedDashSlugWithoutEpisodeDigits()
-    {
-        // /search/?q= 404s on HT; the path form is the real one (verified live 2026-08-07).
-        Assert.Equal("https://hypnotube.com/search/bimbo-fun/",
-            CompanionTitleMatcher.BuildSearchUrl("Bimbo Fun 1-10"));
-    }
-
-    [Fact]
     public void ApostrophesInContractionsAreNotQuoteDelimiters()
     {
         // Live bug: "It's … from PlatinumPuppets. It's …" extracted the garbage between two
@@ -126,21 +118,63 @@ public class CompanionTitleMatcherTests
         Assert.True(CompanionTitleMatcher.LooksLikeVideoContext(text, span.Start));
     }
 
+    // ── the off-pool rewrite (owner decision: curation stays closed, no search links) ────
     [Fact]
-    public void SearchLinksTransformIntoSearchGatePost()
+    public void InventedTitleIsRewrittenToNearestPoolVideo()
     {
-        // HT search is POST-gated; the click handler swaps the display URL for a
-        // self-submitting form so the embedded browser lands on real results.
-        var ok = CompanionTitleMatcher.TryBuildSearchGatePostUrl(
-            "https://hypnotube.com/search/bimbo-fun/", out var nav);
-        Assert.True(ok);
-        Assert.StartsWith("data:text/html", nav);
-        var decoded = System.Uri.UnescapeDataString(nav);
-        Assert.Contains("searchgate.php", decoded);
-        Assert.Contains("value=\"bimbo fun\"", decoded);
+        var text = "Try \"Bambi TikTok Mix 1-8 - Nonstop Edit\" tonight, it's perfect~";
+        var result = CompanionTitleMatcher.RewriteOffPoolTitles(text, Pool, out var n);
+        Assert.Equal(1, n);
+        Assert.Contains("\"Bambi TikTok 1-8 - Nonstop Edit\"", result);
+        Assert.DoesNotContain("Mix", result);
+    }
 
-        Assert.False(CompanionTitleMatcher.TryBuildSearchGatePostUrl(
-            "https://hypnotube.com/video/sissy-dreams-3-701.html", out var untouched));
-        Assert.Equal("https://hypnotube.com/video/sissy-dreams-3-701.html", untouched);
+    [Fact]
+    public void SiblingEpisodeRewritesToTheRealOne()
+    {
+        // 0.5 similarity: below the confident-link floor, above the rewrite floor - the
+        // curation-closed answer is the nearest real episode.
+        var text = "Here's a video called \"Sissy Dreams 7\" for you.";
+        var result = CompanionTitleMatcher.RewriteOffPoolTitles(text, Pool, out var n);
+        Assert.Equal(1, n);
+        Assert.Contains("\"Sissy Dreams 3\"", result);
+    }
+
+    [Fact]
+    public void HopelessInventionStaysPlainText()
+    {
+        var text = "How about \"Bimbo Love - Nonstop Compilation 1-3\"?";
+        var result = CompanionTitleMatcher.RewriteOffPoolTitles(text, Pool, out var n);
+        Assert.Equal(0, n);
+        Assert.Equal(text, result);
+    }
+
+    [Fact]
+    public void ExactPoolTitleIsLeftUntouched()
+    {
+        var text = "Watch \"Sissy Dreams 3\" right now.";
+        var result = CompanionTitleMatcher.RewriteOffPoolTitles(text, Pool, out var n);
+        Assert.Equal(0, n);
+        Assert.Equal(text, result);
+    }
+
+    [Fact]
+    public void QuotedProseOutsideVideoContextIsNotRewritten()
+    {
+        var text = "she whispered \"Bambi TikTok Mix 1-8 - Nonstop Edit\" in my ear";
+        var result = CompanionTitleMatcher.RewriteOffPoolTitles(text, Pool, out var n);
+        Assert.Equal(0, n);
+        Assert.Equal(text, result);
+    }
+
+    [Fact]
+    public void MultipleInventionsRewriteWithoutCorruptingOffsets()
+    {
+        var text = "Try \"Bambi TikTok Mix 1-8 - Nonstop Edit\" then watch \"Femdom Sissy Cocklust\" after~";
+        var result = CompanionTitleMatcher.RewriteOffPoolTitles(text, Pool, out var n);
+        Assert.Equal(2, n);
+        Assert.Contains("\"Bambi TikTok 1-8 - Nonstop Edit\"", result);
+        Assert.Contains("\"Femdom Enticed Sissy Cocklust\"", result);
+        Assert.EndsWith("after~", result);
     }
 }

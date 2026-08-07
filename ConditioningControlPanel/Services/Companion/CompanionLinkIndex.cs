@@ -97,6 +97,16 @@ namespace ConditioningControlPanel.Services.Companion
             return null;
         }
 
+        /// <summary>The sanctioned catalogue as (Title, Url) pairs, for the off-pool title
+        /// rewrite (AiTextHygiene.RewriteOffPoolTitles). Longest-first, same as matching.</summary>
+        internal static IReadOnlyList<(string Title, string Url)> CurrentEntries()
+        {
+            EnsureCurrent();
+            Entry[] entries;
+            lock (Gate) entries = _entries;
+            return entries.Select(e => (e.Title, e.Url)).ToList();
+        }
+
         /// <summary>Quoted = deliberately named: the char just outside either boundary is a quote.</summary>
         private static bool IsQuotedMention(string text, int start, int length)
         {
