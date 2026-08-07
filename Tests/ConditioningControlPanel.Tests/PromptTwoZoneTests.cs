@@ -279,6 +279,56 @@ public class PromptTwoZoneTests : IDisposable
     }
 
     [Fact]
+    public void BuildRequest_RewritesAssistantHistoryToThePool_OnTheWireOnly()
+    {
+        // Root cause 0807: session.json carried ~97 turns of invented titles, and the model
+        // imitated its own few-shot instead of the in-prompt pool list. The wire copy of every
+        // assistant turn must only ever demonstrate on-pool titles — while the stored session
+        // (what the user actually saw in bubbles) stays byte-identical.
+        var pool = new (string Title, string Url)[]
+        {
+            ("Bambi Bae", "https://example.test/bae"),
+            ("Naughty Bambi", "https://example.test/naughty"),
+        };
+        var assembler = new PromptAssembler(new InertMemoryStore(), new RecentRecommendations(),
+            () => "PREFIX", () => new DateTime(2026, 8, 7, 16, 0, 0), () => pool);
+
+        var session = new ChatSession();
+        session.Append(TurnKind.UserChat, "any video for me?");
+        session.Append(TurnKind.AssistantChat,
+            "Here's a video called \"Bimbo Love - Nonstop Compilation 1-3\" from Dvdhurytwuios. Enjoy!");
+        session.Append(TurnKind.UserChat, "another one?");
+
+        var request = assembler.BuildRequest(AiPurpose.Chat, session, "another one?");
+
+        var assistant = request.Messages.Single(m => m.Role == ChatMessage.RoleAssistant);
+        Assert.DoesNotContain("Bimbo Love", assistant.Content);
+        Assert.DoesNotContain("from Dvdhurytwuios", assistant.Content);
+        Assert.Contains(pool, e => assistant.Content.Contains("\"" + e.Title + "\""));
+
+        // Wire-only: the user's words and the STORED session are untouched.
+        Assert.Contains(request.Messages, m => m.Content.Contains("any video for me?"));
+        Assert.Contains(session.Turns, t => t.Text.Contains("Bimbo Love - Nonstop Compilation 1-3"));
+    }
+
+    [Fact]
+    public void BuildRequest_LeavesOnPoolAssistantHistoryByteIdentical()
+    {
+        var pool = new (string Title, string Url)[] { ("Bambi Bae", "https://example.test/bae") };
+        var assembler = new PromptAssembler(new InertMemoryStore(), new RecentRecommendations(),
+            () => "PREFIX", () => new DateTime(2026, 8, 7, 16, 0, 0), () => pool);
+
+        var session = new ChatSession();
+        session.Append(TurnKind.UserChat, "any video?");
+        const string clean = "Try \"Bambi Bae\" tonight~";
+        session.Append(TurnKind.AssistantChat, clean);
+        session.Append(TurnKind.UserChat, "ok");
+
+        var request = assembler.BuildRequest(AiPurpose.Chat, session, "ok");
+        Assert.Contains(request.Messages, m => m.Role == ChatMessage.RoleAssistant && m.Content == clean);
+    }
+
+    [Fact]
     public void Tail_EndsWithThePurposeInstruction()
     {
         var assembler = Assembler();

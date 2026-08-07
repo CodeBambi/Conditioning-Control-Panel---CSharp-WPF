@@ -177,4 +177,65 @@ public class CompanionTitleMatcherTests
         Assert.Contains("\"Femdom Enticed Sissy Cocklust\"", result);
         Assert.EndsWith("after~", result);
     }
+
+    // ── the wire-history variant (root cause 0807: her own stored inventions were the
+    //    few-shot bait that out-competed the in-prompt pool list, and sub-floor inventions
+    //    were immortal because nothing could rewrite them) ───────────────────────────────
+    [Fact]
+    public void ForPrompt_HopelessInventionIsSubstitutedWithARealPoolTitle()
+    {
+        // The exact live reply (2026-08-07 16:17): zero pool overlap, so the display rewrite
+        // leaves it — but on the wire it must become a real title or the model re-learns it.
+        var text = "Of course, my love! Here's a video called \"Bimbo Love - Nonstop Compilation 1-3\" from Dvdhurytwuios. Enjoy!";
+        var result = CompanionTitleMatcher.RewriteOffPoolTitlesForPrompt(text, Pool, out var n);
+
+        Assert.Equal(1, n);
+        Assert.DoesNotContain("Bimbo Love", result);
+        Assert.Contains(Pool, e => result.Contains("\"" + e.Title + "\""));
+    }
+
+    [Fact]
+    public void ForPrompt_UploaderAttributionIsStrippedWithTheInvention()
+    {
+        // "from Dvdhurytwuios" / "from PlatinumPuppets" is the other half of the taught
+        // pattern; leaving it in the wire history keeps teaching creator-attribution.
+        var text = "Here's a video called \"Bimbo Fun 1-10\" from Dvdhurytwuios. It's got everything you need.";
+        var result = CompanionTitleMatcher.RewriteOffPoolTitlesForPrompt(text, Pool, out var n);
+
+        Assert.Equal(1, n);
+        Assert.DoesNotContain("from Dvdhurytwuios", result);
+        Assert.Contains(". It's got everything you need.", result);
+    }
+
+    [Fact]
+    public void ForPrompt_IsDeterministic()
+    {
+        // string.GetHashCode is per-process randomised; the substitution must not be, or the
+        // same history renders different bytes call to call (and test to app).
+        var text = "How about \"Sissy Training - Nonstop Compilation\" from PlatinumPuppets?";
+        var a = CompanionTitleMatcher.RewriteOffPoolTitlesForPrompt(text, Pool, out _);
+        var b = CompanionTitleMatcher.RewriteOffPoolTitlesForPrompt(text, Pool, out _);
+        Assert.Equal(a, b);
+    }
+
+    [Fact]
+    public void ForPrompt_NearMissStillPrefersTheNearestTitle()
+    {
+        var text = "Try \"Bambi TikTok Mix 1-8 - Nonstop Edit\" tonight~";
+        var result = CompanionTitleMatcher.RewriteOffPoolTitlesForPrompt(text, Pool, out var n);
+        Assert.Equal(1, n);
+        Assert.Contains("\"Bambi TikTok 1-8 - Nonstop Edit\"", result);
+    }
+
+    [Fact]
+    public void ForPrompt_ExactPoolTitleAndPlainProseAreUntouched()
+    {
+        var exact = "Watch \"Sissy Dreams 3\" right now.";
+        Assert.Equal(exact, CompanionTitleMatcher.RewriteOffPoolTitlesForPrompt(exact, Pool, out var n1));
+        Assert.Equal(0, n1);
+
+        var prose = "she whispered \"Bimbo Love - Nonstop Compilation 1-3\" in my ear";
+        Assert.Equal(prose, CompanionTitleMatcher.RewriteOffPoolTitlesForPrompt(prose, Pool, out var n2));
+        Assert.Equal(0, n2);
+    }
 }

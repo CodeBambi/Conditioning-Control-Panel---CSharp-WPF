@@ -157,6 +157,80 @@ namespace ConditioningControlPanel.Services.Companion
         }
 
         /// <summary>
+        /// The WIRE-HISTORY variant of <see cref="RewriteOffPoolTitles"/>, for the model's own
+        /// past lines as they are put on the request. Root cause 0807: the chat window is
+        /// ~1600 tokens of her own replies, and once an invented title is in there it out-competes
+        /// the in-prompt pool list — a small model imitates its own few-shot far more reliably
+        /// than it follows a CRITICAL rule, so one hopeless invention ("Bimbo Love - Nonstop
+        /// Compilation 1-3", Jaccard ~0.2 to everything real) recycled itself for a full day and
+        /// survived a memory wipe via session.json. For DISPLAY the owner decision stands
+        /// (below <see cref="RewriteThreshold"/> stays plain text), but the wire copy is not
+        /// display: here a below-threshold invention is substituted with a deterministically
+        /// picked real pool title, and a trailing uploader attribution ("… from Dvdhurytwuios")
+        /// is stripped, so the few-shot the model reads only ever demonstrates on-pool behaviour.
+        /// Deterministic (FNV-1a over the span) so the same history renders the same bytes on
+        /// every call within a session.
+        /// </summary>
+        internal static string RewriteOffPoolTitlesForPrompt(
+            string text, IReadOnlyList<(string Title, string Url)> pool, out int changed)
+        {
+            changed = 0;
+            if (string.IsNullOrWhiteSpace(text) || pool.Count == 0) return text;
+
+            var spans = CandidateSpans(text);
+            // Back-to-front so replacements don't shift the indices of spans not yet visited.
+            for (int i = spans.Count - 1; i >= 0; i--)
+            {
+                var (start, length, quoted) = spans[i];
+                if (!quoted || length < MinSpanLength || length > 80) continue;
+                if (!LooksLikeVideoContext(text, start)) continue;
+
+                var span = text.Substring(start, length);
+                if (pool.Any(e => string.Equals(e.Title, span.Trim(), StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                var match = BestFuzzy(span, pool, RewriteThreshold);
+                var title = match.HasValue
+                    ? match.Value.Title
+                    : pool[(int)(StableHash(span) % (uint)pool.Count)].Title;
+
+                // The attribution tail is part of the same taught pattern ("X from PlatinumPuppets"),
+                // so it goes with the invented title. Only right after the closing quote of a span
+                // being rewritten — never over ordinary prose.
+                int afterSpan = start + length;
+                if (afterSpan < text.Length && "\"”".IndexOf(text[afterSpan]) >= 0)
+                {
+                    var m = AttributionTail.Match(text, afterSpan + 1);
+                    if (m.Success && m.Index == afterSpan + 1)
+                        text = text.Remove(m.Index, m.Length);
+                }
+
+                text = text.Substring(0, start) + title + text.Substring(start + length);
+                changed++;
+            }
+            return text;
+        }
+
+        // " from Dvdhurytwuios" / " by PlatinumPuppets" immediately after a rewritten span's
+        // closing quote. Anchored by the caller to that exact position.
+        private static readonly Regex AttributionTail = new(
+            @"\G\s+(?:from|by)\s+[A-Z][\w'-]*",
+            RegexOptions.Compiled);
+
+        /// <summary>FNV-1a over UTF-16 code units. <c>string.GetHashCode</c> is randomised per
+        /// process, which would make the substituted title flap between launches and between the
+        /// app and its tests.</summary>
+        internal static uint StableHash(string s)
+        {
+            unchecked
+            {
+                uint hash = 2166136261;
+                foreach (var c in s) { hash ^= c; hash *= 16777619; }
+                return hash;
+            }
+        }
+
+        /// <summary>
         /// True when the text around a span reads like a video suggestion — the gate that keeps
         /// the search fallback from linkifying ordinary quoted prose ("good girl").
         /// </summary>
