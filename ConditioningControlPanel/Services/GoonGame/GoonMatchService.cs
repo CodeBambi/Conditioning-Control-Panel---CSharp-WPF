@@ -33,9 +33,11 @@ using System.Windows.Threading;
 //  * Nothing in this file reads or writes PanicKeyEnabled / StrictLockEnabled or
 //    any lockdown/tray verb. GG's payload set (GoonPayloadKind) excludes them by
 //    construction — there is no code path to a banned verb.
-//  * The RECEIVER enforces the economy: burst/gap rate limit, charge cost against
-//    the opponent's last self-reported meter, one heavy per match, schedule buffer
-//    clamp and text cap — regardless of what the wire claims.
+//  * The RECEIVER enforces the economy: THE DRAFT AGREEMENT (an element this seat
+//    switched off is not throwable AT this seat, 2026-08-06 — the sheet governs the
+//    throwables, not just the ramp), burst/gap rate limit, charge cost against the
+//    opponent's last self-reported meter, one heavy per match, schedule buffer clamp
+//    and text cap — regardless of what the wire claims.
 // ============================================================================
 
 namespace ConditioningControlPanel.Services.GoonGame
@@ -50,6 +52,10 @@ namespace ConditioningControlPanel.Services.GoonGame
         private const int PayloadScheduleBufferMs = 1500;   // >= GoonConsts.MinScheduleBufferMs
         private const int NoCamCheckIntervalMs = 90000;     // interaction-check cadence (no-cam)
         private const int MaxPayloadDurationMs = 180000;
+        // Ceiling on a score the PEER reports for its own half. Deliberately far above anything
+        // reachable — the per-second rate tops out near 3 — because it is a sanity clamp on an
+        // untrusted number, not a balance rule. MIRROR: MAX_REPORTED_SCORE in core/match.js.
+        private const int MaxReportedScore = 1000000;
         private const int EmoteTextMaxChars = 60;
         private const int EmoteIconMaxChars = 8;
 
@@ -1105,6 +1111,29 @@ namespace ConditioningControlPanel.Services.GoonGame
                 RejectPayload(payload, GoonReceiptStatus.RejectedFiltered, "kind not in our advertised caps");
                 return;
             }
+            /* THE AGREEMENT, ON THE THROWABLES (2026-08-06). Until this check existed the draft
+               governed ONE thing — BuildRamp's self-inflicted schedule — and nothing else. The
+               agreement screen promises "everything is on. switch off what you will not take", and
+               yet switching Videos off and signing left the opponent free to open a video on this
+               seat, because the only element-shaped test down here was the STATIC caps list.
+               _localAllowed is OUR OWN sheet, deliberately, not SharedPool(): the intersection is
+               what the RAMP is rolled from, and a receiver is the authority on what it will take
+               regardless of what the sender left switched on at their end.
+               THE ALWAYS-ON EXEMPTION IS LOAD-BEARING: _localAllowed is DefaultAllowed(pool), i.e.
+               normalized, so it can never contain Bubbles (the always-on baseline, never toggled)
+               — testing every kind against it would reject BubbleSwarm outright, and kind 2 is a
+               frozen wire code an older or third-party client may still send and this client still
+               renders. Enforcement is therefore scoped to elements that ACTUALLY HAD A TOGGLE.
+               MIRROR: core/match.js _handleInboundPayload — narrowing one side and not the other
+               is how the two engines drift. */
+            var inboundElement = GoonConsts.ElementFor(payload.Kind);
+            if (inboundElement.HasValue && IsDraftToggleable(inboundElement.Value)
+                && !_localAllowed.Contains(inboundElement.Value))
+            {
+                RejectPayload(payload, GoonReceiptStatus.RejectedFiltered,
+                    $"{inboundElement.Value} is switched off on our agreement sheet");
+                return;
+            }
             if (payload.Kind == GoonPayloadKind.BrainDrain && _remoteHeavyUsed)
             {
                 RejectPayload(payload, GoonReceiptStatus.RejectedFiltered, "heavy already used");
@@ -1155,6 +1184,26 @@ namespace ConditioningControlPanel.Services.GoonGame
             try { handler(this, new GoonInboundPayloadEventArgs { Payload = payload, FireAtLocalMs = fireAtLocal }); }
             catch (Exception ex) { App.Logger?.Error(ex, "[GG] PayloadAccepted handler threw"); }
         }
+
+        /// <summary>
+        /// Was this element ever on the agreement screen for THIS pairing? Derived exactly the way
+        /// <c>_localAllowed</c> is seeded (TryEnterDraft: <c>GoonDraft.DefaultAllowed(AvailableDraftPool)</c>),
+        /// or the gate starts disagreeing with the sheet the player signed: DefaultAllowed drops the
+        /// always-on element, drops anything outside PoolV1, and falls back to the whole pool when the
+        /// caps intersection is empty — three behaviours a hand-rolled PoolV1.Contains would each get
+        /// wrong. MIRROR: core/match.js _isDraftToggleable.
+        /// </summary>
+        private bool IsDraftToggleable(GoonElement element)
+            => GoonDraft.DefaultAllowed(AvailableDraftPool).Contains(element);
+
+        /// <summary>
+        /// A score off the wire, made storable. The peer's half of the scoreboard is theirs to report
+        /// (each side is authoritative for its own half) and was taken verbatim until 2026-08-06 — so
+        /// a negative or an absurd number went straight onto the recap and into the ledger row. The
+        /// JSON layer already guarantees an int here; this is the RANGE half of the JS clamp.
+        /// MIRROR: clampReportedScore() in core/match.js.
+        /// </summary>
+        private static int ClampReportedScore(int score) => Math.Clamp(score, 0, MaxReportedScore);
 
         private void RejectPayload(PayloadMsg payload, string status, string reason)
         {
@@ -1383,21 +1432,56 @@ namespace ConditioningControlPanel.Services.GoonGame
             catch (Exception ex) { App.Logger?.Error(ex, "[GG] MatchEnded handler threw"); }
         }
 
+        /// <summary>
+        /// Their ResultMsg. TWO GATES BEFORE THE ADOPT BRANCH (2026-08-06), because that branch used
+        /// to be a remote kill switch: it ran on <c>!_ended</c> with no phase test and a hard-coded
+        /// countsForLedger=true, so a frame sent five seconds into Live ended the victim's match on
+        /// the spot and wrote them a loss.
+        /// <para>
+        /// 1. THE PHASE. A result is meaningless before a match exists; anything outside
+        /// Live/SuddenDeath/Recap is logged and dropped. Recap is in the list because that is where
+        /// the countersign handshake lives, and because a PRE-LIVE peer mercy puts us in Recap through
+        /// HandleRemoteMercy before their result frame lands behind it on the same ordered channel.
+        /// </para><para>
+        /// 2. WHO IT SAYS LOST. The branch is NOT dead code and must not become <c>if (_ended)</c>: it
+        /// is how PEER MERCY is honoured — they tap out, they end, they send a result in which THEY
+        /// are the loser, and we adopt it. What no honest client can produce is a result declaring US
+        /// the loser while OUR side is still running: our own loss is only ever resolved locally
+        /// (mercy, the abandon watchdog, sudden death). So we adopt a concession or a draw, and refuse
+        /// a claimed local loss — the match carries on, and if the peer then drops,
+        /// CheckOpponentFreshness records the abandon it always did.
+        /// </para>
+        /// MIRROR: core/match.js _handleRemoteResult — same two gates, same score clamp.
+        /// </summary>
         private void HandleRemoteResult(ResultMsg remote)
         {
+            if (Phase is not (GoonMatchPhase.Live or GoonMatchPhase.SuddenDeath or GoonMatchPhase.Recap))
+            {
+                App.Logger?.Warning("[GG] ignoring a result frame in phase {Phase} - no match to end", Phase);
+                return;
+            }
+
             if (!_ended)
             {
-                // Their end signal reached us before ours fired (lost MercyMsg, or a
-                // sudden-death exit resolved on their side first). Adopt their outcome.
+                // Their end signal reached us before ours fired (their mercy, or a sudden-death
+                // exit resolved on their side first).
                 bool localLost = remote.WinnerIsHost.HasValue && remote.WinnerIsHost.Value != IsHost;
-                EndMatch(remote.EndReason, localLost, countsForLedger: true);
+                if (localLost)
+                {
+                    App.Logger?.Warning("[GG] REFUSED a result that declares us the loser while our side "
+                        + "is still running - not ending, not recording");
+                    return;
+                }
+                EndMatch(remote.EndReason, localLost: false, countsForLedger: true);
             }
             var result = Result;
             if (result == null) return;
 
-            // Each side's own score is authoritative for its own half.
-            if (IsHost) result.GuestScore = remote.GuestScore;
-            else result.HostScore = remote.HostScore;
+            // Each side's own score is authoritative for its own half — and it is still THEIR
+            // number off an untrusted wire, so it is clamped to something a match can actually
+            // produce before it is stored, shown on the recap, or handed to the ledger.
+            if (IsHost) result.GuestScore = ClampReportedScore(remote.GuestScore);
+            else result.HostScore = ClampReportedScore(remote.HostScore);
 
             if (remote.Agree)
             {

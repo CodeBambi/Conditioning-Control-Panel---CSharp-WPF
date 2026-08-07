@@ -17,8 +17,10 @@
 //  * Mercy is available in EVERY phase and always ends the match locally, even if the wire is
 //    dead. Pre-Live it degrades to a clean cancel that never reaches the ledger.
 //  * No payload kind can touch panic/lockdown/tray/session state — no such message exists.
-//  * The RECEIVER enforces admission: burst/gap rate limit, one heavy per match, schedule-buffer
-//    clamp and text cap — regardless of what the wire claims.
+//  * The RECEIVER enforces admission: THE DRAFT AGREEMENT (an element this seat switched off is
+//    not throwable AT this seat, 2026-08-06 — the sheet governs the throwables, not just the
+//    ramp), burst/gap rate limit, one heavy per match, schedule-buffer clamp and text cap —
+//    regardless of what the wire claims.
 //    THE CHARGE CHECK IS NOT ON THAT LIST ANY MORE (owner, 2026-08-05: "we should remove the
 //    requirement entirely"). The receiver used to hold a sender to the charge count on their last
 //    state tick and reject anything dearer. Nothing gates on a balance now, on either side, so a
@@ -63,7 +65,7 @@
 
 import {
   GoonAttentionMode, GoonElement, GoonEndReason, GoonMatchPhase, GoonPayloadKind, GoonTransportState,
-  GoonConsts, clampWindowCount, costOf, enumName, isClockMessage,
+  GoonConsts, PAYLOAD_ELEMENT, clampWindowCount, costOf, enumName, isClockMessage,
   makeConsent, makeDraft, makeEmote, makeHello, makeMatchStart, makeMediaPrep, makeMercy,
   makePayloadReceipt, makeResult, makeTick, makePayload, makeVoice, peerSpeaksVoice, VOICE_SUBS,
 } from './contracts.js';
@@ -86,6 +88,10 @@ const DRAW_WINDOW_MS = 1500;
 const PAYLOAD_SCHEDULE_BUFFER_MS = 1500;   // >= GoonConsts.MinScheduleBufferMs
 const NO_CAM_CHECK_INTERVAL_MS = 90000;
 const MAX_PAYLOAD_DURATION_MS = 180000;
+/* Ceiling on a score the PEER reports for its own half. Deliberately far above anything reachable
+   — the per-second rate tops out near 3 (risk x attention), so even a 24-hour sitting lands around
+   265k — because this is a sanity clamp on an untrusted number, not a balance rule. */
+const MAX_REPORTED_SCORE = 1000000;
 
 /** Freshness of the opponent's state ticks. */
 export const GoonConnectionHealth = Object.freeze({ Fresh: 0, Wobbly: 1, Dead: 2 });
@@ -146,6 +152,21 @@ export class GoonMatchResult {
 // ------------------------------------------------------------------ small helpers
 
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+/**
+ * A score off the wire, made storable. The peer's half of the scoreboard is THEIRS to report (each
+ * side is authoritative for its own half) and was taken verbatim until 2026-08-06 — so `"guest
+ * score: NaN"`, a negative, or 1e308 went straight onto the recap and into the ledger row.
+ * Anything that is not a finite number reads 0, exactly as an absent field does.
+ *
+ * MIRROR: GoonMatchService.ClampReportedScore(int) — which only needs the range half, the wire
+ * type having already been enforced by the C# DTO.
+ */
+function clampReportedScore(v) {
+  const n = typeof v === 'number' ? v : (typeof v === 'string' ? Number(v) : NaN);
+  if (!Number.isFinite(n)) return 0;
+  return clamp(Math.trunc(n), 0, MAX_REPORTED_SCORE);
+}
 
 /** C# Math.Round(double) is banker's rounding. */
 function roundHalfToEven(x) {
@@ -1568,6 +1589,29 @@ export class GoonMatchService {
       this._rejectPayload(payload, GoonReceiptStatus.RejectedFiltered, 'kind not in our advertised caps');
       return;
     }
+    /* THE AGREEMENT, ON THE THROWABLES (2026-08-06). Until this check existed the draft governed
+       ONE thing — buildRamp's self-inflicted schedule — and nothing else. The agreement screen
+       says "everything is on. switch off what you will not take — you both get whatever is left"
+       (ui/strings.js), and yet switching Videos off and signing left an opponent free to open a
+       video on your monitor, because the only element-shaped test down here was the STATIC caps
+       list built once in boot.js. A promise the receiver made to itself was being kept by nobody.
+       `_localAllowed` is OUR OWN sheet, deliberately, not sharedPool(): the intersection is what
+       the RAMP is rolled from, and a receiver is the authority on what it will take regardless of
+       what the sender left switched on at their end.
+       THE ALWAYS-ON EXEMPTION IS LOAD-BEARING. `_localAllowed` is defaultAllowed(pool), which is
+       normalizeAllowed()'d — it can never contain Bubbles (the always-on baseline, never toggled,
+       never rolled) and never contains an element outside the caps intersection. Testing every
+       kind against it would therefore reject BubbleSwarm outright: kind 2 is not throwable from
+       our own arsenal any more, but it is a frozen wire code an older or third-party client may
+       still send and exec/bubbles.js still renders it. So enforcement is scoped to elements that
+       ACTUALLY HAD A TOGGLE — the same set `_localAllowed` was seeded from. */
+    const inboundElement = PAYLOAD_ELEMENT[payload.kind];
+    if (inboundElement !== undefined && this._isDraftToggleable(inboundElement)
+      && !this._localAllowed.includes(inboundElement)) {
+      this._rejectPayload(payload, GoonReceiptStatus.RejectedFiltered,
+        `${enumName(GoonElement, inboundElement)} is switched off on our agreement sheet`);
+      return;
+    }
     if (payload.kind === GoonPayloadKind.BrainDrain && this._remoteHeavyUsed) {
       this._rejectPayload(payload, GoonReceiptStatus.RejectedFiltered, 'heavy already used');
       return;
@@ -1612,6 +1656,21 @@ export class GoonMatchService {
 
     this._ev.payloadAccepted.emit({ payload, fireAtLocalMs },
       (e) => this._error(`payloadAccepted handler threw: ${(e && e.stack) || e}`));
+  }
+
+  /**
+   * Was this element ever on the agreement screen for THIS pairing?
+   *
+   * The answer has to be derived exactly the way `_localAllowed` was seeded (`_tryEnterDraft`:
+   * defaultAllowed(this._availableDraftPool)), or the gate above starts disagreeing with the
+   * sheet the player actually signed: defaultAllowed() drops the always-on element, drops
+   * anything outside PoolV1, and falls back to the whole pool when the caps intersection is
+   * empty — three behaviours a hand-rolled `PoolV1.includes(e)` would each get wrong.
+   *
+   * MIRROR: GoonMatchService.IsDraftToggleable(GoonElement).
+   */
+  _isDraftToggleable(element) {
+    return defaultAllowed(this._availableDraftPool).includes(element);
   }
 
   _rejectPayload(payload, status, reason) {
@@ -1859,20 +1918,57 @@ export class GoonMatchService {
     this._ev.matchEnded.emit(result, (e) => this._error(`matchEnded handler threw: ${(e && e.stack) || e}`));
   }
 
+  /**
+   * Their `result`. TWO GATES BEFORE THE ADOPT BRANCH (2026-08-06), because that branch used to be
+   * a remote kill switch: it ran on `!this._ended` with no phase test and a hard-coded
+   * countsForLedger=true, so a frame sent five seconds into Live — `{"t":"result","end_reason":1,
+   * "winner_is_host":<not me>}` — ended the victim's match on the spot and wrote them a loss.
+   *
+   *   1. THE PHASE. A result is meaningless before a match exists; anything outside
+   *      Live/SuddenDeath/Recap is logged and dropped. (Recap is in the list because that is where
+   *      the countersign handshake lives, and because a PRE-LIVE peer mercy puts us in Recap
+   *      through _handleRemoteMercy before their result frame lands behind it on the same ordered
+   *      channel.)
+   *   2. WHO IT SAYS LOST. The branch is NOT dead code and must not be turned into
+   *      `if (this._ended)`: it is how PEER MERCY is honoured — they tap out, they end, they send
+   *      a result in which THEY are the loser, and we adopt it. What no honest client can produce
+   *      is a result declaring US the loser while OUR side is still running: our own loss is only
+   *      ever resolved locally (mercy, the abandon watchdog, sudden death). So we adopt a
+   *      concession or a draw, and refuse a claimed local loss — the match simply carries on, and
+   *      if the peer then drops, _checkOpponentFreshness records the abandon it always did.
+   *      Sudden death is DETACHED today (no runner is assigned in boot.js / soloDriver.js), so
+   *      there is no legitimate path at all for the peer to resolve our loss; the rule is written
+   *      so it still reads correctly if the round ladder comes back.
+   *
+   * MIRROR: GoonMatchService.HandleRemoteResult — same two gates, same score clamp.
+   */
   _handleRemoteResult(remote) {
+    if (this._phase !== GoonMatchPhase.Live && this._phase !== GoonMatchPhase.SuddenDeath
+      && this._phase !== GoonMatchPhase.Recap) {
+      this._warn(`ignoring a result frame in phase ${this._phase} - no match to end`);
+      return;
+    }
+
     if (!this._ended) {
-      // Their end signal reached us before ours fired (lost mercy, or a sudden-death exit resolved
-      // on their side first). Adopt their outcome.
+      // Their end signal reached us before ours fired (their mercy, or a sudden-death exit
+      // resolved on their side first).
       const localLost = remote.winner_is_host !== null && remote.winner_is_host !== undefined
         && remote.winner_is_host !== this._isHost;
-      this._endMatch(remote.end_reason, localLost, true);
+      if (localLost) {
+        this._warn('REFUSED a result that declares us the loser while our side is still running - '
+          + 'not ending, not recording');
+        return;
+      }
+      this._endMatch(remote.end_reason, false, true);
     }
     const result = this._result;
     if (!result) return;
 
-    // Each side's own score is authoritative for its own half.
-    if (this._isHost) result.guestScore = remote.guest_score;
-    else result.hostScore = remote.host_score;
+    // Each side's own score is authoritative for its own half — and it is still THEIR NUMBER off
+    // an untrusted wire, so it is clamped to something a match can actually produce before it is
+    // stored, shown on the recap, or handed to the ledger.
+    if (this._isHost) result.guestScore = clampReportedScore(remote.guest_score);
+    else result.hostScore = clampReportedScore(remote.host_score);
 
     if (remote.agree) {
       result.agreed = true;

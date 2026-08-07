@@ -382,6 +382,14 @@ async function main() {
     let mapped = 0;
     for (const k of kinds) if (PAYLOAD_ELEMENT[k] !== undefined) mapped++;
     ok(mapped === kinds.length, 'every payload kind maps to an element', `${mapped}/${kinds.length}`);
+
+    // The table MOVED to core/contracts.js on 2026-08-06 (core/match.js's agreement gate reads it,
+    // and core/ may not import exec/). This file's export is now a re-export, and it has to stay
+    // the SAME OBJECT: a copy is how the renderer that runs a kind and the gate that admits it
+    // start disagreeing about which element it is.
+    const core = await import('../core/contracts.js');
+    ok(core.PAYLOAD_ELEMENT === PAYLOAD_ELEMENT,
+      'exec/executor.js re-exports core/contracts.js PAYLOAD_ELEMENT — one table, not a copy');
   }
 
   // ------------------------------------------------------- detach settles a run
