@@ -62,8 +62,10 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public AwarenessIntensity Intensity
         {
             get => _intensity;
-            set => Set(ref _intensity, value);
+            set { if (Set(ref _intensity, value)) Raise(nameof(DialHint)); }
         }
+
+        public string DialHint => AwarenessDialCopy.HintFor(_intensity);
 
         public bool IsEverythingAvailable { get; init; }
         public string WireLine { get; init; } = "[ fun · Chrome · 22m ]";

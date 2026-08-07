@@ -119,6 +119,9 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         /// <summary>Train 2 has landed: all three stops are real.</summary>
         public bool IsEverythingAvailable => true;
 
+        /// <summary>What the selected stop does, in one line. See <see cref="AwarenessDialCopy"/>.</summary>
+        public string DialHint => AwarenessDialCopy.HintFor(_intensity);
+
         /// <summary>Train 2 has landed: there is no promise block under the wire any more.</summary>
         public bool IsDormant => false;
 
@@ -282,6 +285,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
                     ? AwarenessIntensity.Everything
                     : AwarenessIntensity.BroadStrokes);
             Raise(nameof(Intensity));
+            Raise(nameof(DialHint));
 
             IsWireLive = on && !paused;
             WireLine = BuildWireLine(on, paused);
@@ -559,26 +563,24 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         }, "awareness clear allow");
 
         /// <summary>
-        /// The deny-list editor. Reuses <c>TextEditorDialog</c> — the same list editor the trigger
-        /// phrases use — rather than growing a second one, and writes back through the settings setter
-        /// so every entry is sanitised on the way in.
+        /// The deny-list editor. Uses <see cref="AwarenessAppPickerDialog"/> rather than the phrase-pool
+        /// editor these two lists used to share: the picker states what a tick means in this list's
+        /// direction, marks the shipped guards, and asks before one is dropped.
         /// </summary>
         private void EditDenyList() => _ctx.WithWindow(window =>
         {
             var settings = App.Settings?.Current;
             if (settings == null) return;
 
-            var seed = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-            foreach (var entry in AwarenessPrivacyRules.EffectiveDenyList(settings)) seed[entry] = true;
-            foreach (var chip in _seen) seed.TryAdd(chip.Label.ToLowerInvariant(), false);
-
-            var dialog = new TextEditorDialog(Loc.Get("companion_awareness_deny_editor_title"), seed)
+            var listed = AwarenessPrivacyRules.EffectiveDenyList(settings);
+            var dialog = new AwarenessAppPickerDialog(
+                AwarenessListKind.Deny, listed, AwarenessAppCandidates.Gather(listed))
             {
                 Owner = window
             };
-            if (dialog.ShowDialog() != true || dialog.ResultData == null) return;
+            if (dialog.ShowDialog() != true || dialog.Result == null) return;
 
-            settings.AwarenessDenyList = dialog.ResultData.Where(kv => kv.Value).Select(kv => kv.Key).ToList();
+            settings.AwarenessDenyList = dialog.Result;
             settings.AwarenessDenySeeded = true;
             App.Settings?.Save();
 
@@ -588,26 +590,23 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         });
 
         /// <summary>
-        /// The per-app title allow editor. Same dialog, same sanitising, opposite meaning: every app
-        /// ticked here may have its page title carried, and everything else keeps titles on this PC.
+        /// The per-app title allow editor. Same picker, opposite meaning: every app ticked here may
+        /// have its page title carried, and everything else keeps titles on this PC.
         /// </summary>
         private void EditTitleAllowList() => _ctx.WithWindow(window =>
         {
             var settings = App.Settings?.Current;
             if (settings == null) return;
 
-            var seed = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-            foreach (var entry in settings.AwarenessTitleAllowList ?? new List<string>()) seed[entry] = true;
-            foreach (var chip in _seen) seed.TryAdd(chip.Label.ToLowerInvariant(), false);
-
-            var dialog = new TextEditorDialog(Loc.Get("companion_awareness_allow_editor_title"), seed)
+            var listed = settings.AwarenessTitleAllowList ?? new List<string>();
+            var dialog = new AwarenessAppPickerDialog(
+                AwarenessListKind.TitleAllow, listed, AwarenessAppCandidates.Gather(listed))
             {
                 Owner = window
             };
-            if (dialog.ShowDialog() != true || dialog.ResultData == null) return;
+            if (dialog.ShowDialog() != true || dialog.Result == null) return;
 
-            settings.AwarenessTitleAllowList =
-                dialog.ResultData.Where(kv => kv.Value).Select(kv => kv.Key).ToList();
+            settings.AwarenessTitleAllowList = dialog.Result;
             App.Settings?.Save();
 
             App.Logger?.Information("Awareness: page titles allowed for {Count} app(s)",

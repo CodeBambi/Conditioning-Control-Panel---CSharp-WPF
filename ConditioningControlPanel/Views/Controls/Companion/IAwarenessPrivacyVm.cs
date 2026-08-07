@@ -51,6 +51,16 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         /// <summary>Train 2 landed: the third stop is selectable.</summary>
         bool IsEverythingAvailable { get; }
 
+        /// <summary>
+        /// One line under the strip saying what the SELECTED stop actually does.
+        ///
+        /// <para>The dial moves exactly one thing — whether any app's page title may leave this PC —
+        /// and the strip alone never said so. A play-tester read "Everything" as "she can see
+        /// everything", pressed it, and got an app-picking dialog that made no sense against that
+        /// reading. The stop labels now name the axis and this line carries the consequence.</para>
+        /// </summary>
+        string DialHint { get; }
+
         /// <summary>The live frame, e.g. "[ fun · Chrome · 22m ]".</summary>
         string WireLine { get; }
         /// <summary>False renders the frame grayed with "[ her eyes are closed ]".</summary>

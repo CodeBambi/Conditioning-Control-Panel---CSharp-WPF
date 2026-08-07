@@ -168,8 +168,16 @@
                 </Border>
             </Grid>
 
-            <!-- ========== intensity dial ========== -->
-            <Border Style="{StaticResource CmpSegmentStripStyle}" Margin="0,13,0,12">
+            <!-- ========== intensity dial ==========
+                 The strip moves ONE thing: whether any app's page title may leave this PC. It used to
+                 sit here unlabelled, under a card headed "What she can see", with stops reading
+                 "Broad strokes" and "Everything" - so a play-tester read the third stop as "she sees
+                 everything", pressed it, and was handed an app-picking dialog that made no sense
+                 against that reading. The caption names the axis, the stop labels name their own
+                 content, and DialHint carries the consequence of whichever one is selected. -->
+            <TextBlock Text="{loc:Str companion_awareness_dial_head}" Style="{StaticResource CmpFaintTextStyle}"
+                       Margin="2,13,0,5"/>
+            <Border Style="{StaticResource CmpSegmentStripStyle}" Margin="0,0,0,6">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -204,6 +212,10 @@
                     </RadioButton>
                 </Grid>
             </Border>
+
+            <!-- what the SELECTED stop does. Tracks the dial, so it is never generic copy. -->
+            <TextBlock Text="{Binding DialHint}" Style="{StaticResource CmpFaintTextStyle}"
+                       TextWrapping="Wrap" Margin="2,0,0,12"/>
 
             <!-- ========== the wire view ========== -->
             <Border Style="{StaticResource CmpWireStyle}"
