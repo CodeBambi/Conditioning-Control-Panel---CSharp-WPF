@@ -20,7 +20,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.7.1";
+        public const string AppVersion = "6.7.2";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
@@ -84,6 +84,11 @@ namespace ConditioningControlPanel.Services
 
 🌍 LOCALIZATION
 - Massive backfill: 701 missing keys translated in 7 languages, plus 364 in Simplified Chinese
+
+🩹 v6.7.2 HOTFIX
+- Audio: mandatory and startup videos no longer go silent 2-3 seconds in - the ducking system was catching the app's own new video engine
+- For You feed: clips your PC can't decode now show a clear notice and swap themselves out instead of sitting as silent black tiles
+- Companion: new 'Mute Voice Lines' switch in Her Room - keep her bubbles and giggles, silence only the spoken lines
 
 Season: Airhead August";
 
