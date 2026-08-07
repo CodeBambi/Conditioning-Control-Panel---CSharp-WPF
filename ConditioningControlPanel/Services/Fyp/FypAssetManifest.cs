@@ -51,6 +51,15 @@ internal static class FypAssetManifest
             Collect(Path.Combine(root, "videos"), root, isVideo: true, entries, disabled);
             Collect(Path.Combine(root, "images"), root, isVideo: false, entries, disabled);
 
+            // Files the page repeatedly failed to decode (HEVC re-encodes Chromium can't play,
+            // corrupt downloads) stay out of the feed instead of rendering as dead tiles (#562).
+            // Logged so a "my feed is missing clips" report explains itself.
+            int failedOut = entries.RemoveAll(e => (meta.Get(e.Id)?.FailStrikes ?? 0) >= FypMetaStore.FailStrikeLimit);
+            if (failedOut > 0)
+                App.Logger?.Information(
+                    "FypAssetManifest: excluded {N} asset(s) that repeatedly failed to load/decode (fyp_meta.json FailStrikes)",
+                    failedOut);
+
             if (entries.Count > MaxEntries)
             {
                 // partial Fisher-Yates, then truncate (DtrhAssetManifest precedent)

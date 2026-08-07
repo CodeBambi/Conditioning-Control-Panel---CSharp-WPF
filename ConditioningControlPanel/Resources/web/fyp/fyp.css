@@ -68,6 +68,22 @@ html, body {
   filter: blur(4px) brightness(0.75);
 }
 
+/* a media element that refused to decode/load — visible instead of silent black (#562).
+   pointer-events off so drag/chevrons keep working over it. */
+.surface .media-fail {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+  background: rgba(18, 10, 26, 0.6);
+  pointer-events: none;
+}
+
 /* audible-tile cue — an overlay (not a shadow on .tile) so it paints ABOVE the
    video/img; purely visual, never in the way of the drag gesture */
 .audio-ring {

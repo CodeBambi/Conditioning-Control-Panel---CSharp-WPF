@@ -48,6 +48,7 @@ let settings = {
 let feed = null;
 const pages = new Map();      // compKey -> page object
 const audioFocus = new Map(); // compKey -> tileIndex
+const reportedMediaErrors = new Set(); // asset ids already reported this session (#562)
 let activeIdx = 0;
 let booted = false;
 // The intro gate: false until the user presses DIVE IN. While it is false the feed has
@@ -103,6 +104,13 @@ const pageCtx = {
     if (meta.durationMs != null) asset.durationMs = meta.durationMs;
     if (meta.width != null) { asset.width = meta.width; asset.height = meta.height; }
     feed.noteAssetMeta();
+  },
+  onMediaError(asset, detail) {
+    // Once per asset per session: the host logs it (Warning) and strikes the id in
+    // fyp_meta.json — two strikes and the manifest stops serving the file (#562).
+    if (reportedMediaErrors.has(asset.id)) return;
+    reportedMediaErrors.add(asset.id);
+    post({ type: 'media-error', id: asset.id, code: detail?.code ?? 0, message: detail?.message || '' });
   },
   report(segIdKey, dwellMs, clipLenMs) {
     stats.recordView(segIdKey, dwellMs, clipLenMs);

@@ -183,6 +183,17 @@ internal static class FypHostService
                 _meta?.Update((string?)o["id"], (long?)o["durationMs"], (int?)o["width"], (int?)o["height"]);
                 break;
             }
+            case "media-error":
+            {
+                // Warning so it lands in user bug reports — the "black tiles" class of report
+                // (#562) was undiagnosable with the page swallowing errors client-side.
+                // MediaError codes: 2 = network/fetch, 3 = decode failed, 4 = format not
+                // supported (HEVC in Chromium reads as 3 or 4; LibVLC plays the same file).
+                App.Logger?.Warning("[FYP] media-error for {Id}: code={Code} {Message}",
+                    (string?)o["id"], (int?)o["code"] ?? 0, (string?)o["message"] ?? "");
+                _meta?.RecordFailure((string?)o["id"]);
+                break;
+            }
             case "clip-viewed":
             {
                 if (!AllowClipXp()) break;

@@ -17,8 +17,20 @@ const DRAG_RESISTANCE = 0.7;  // finger-follow while dragging
 const COMMIT_DIST = 64;       // px to commit a swap
 const COMMIT_VELOCITY = 0.8;  // px/ms
 const ERROR_ADVANCE_MS = 1200; // never machine-gun a broken pack
+const MAX_ERROR_SWAPS = 3;     // per mounted slot; then the visible fail state stays
 const MORPH_FADE_OUT_MS = 220;
 const MORPH_FADE_IN_MS = 260;
+
+/** Visible failure state (#562): a tile that can't decode used to sit silent black —
+ *  indistinguishable from "still loading" — forever. pointer-events stays off so the
+ *  drag/chevron gestures keep working over it. */
+function markFailed(el, cut) {
+  if (el.querySelector('.media-fail')) return;
+  const note = document.createElement('div');
+  note.className = 'media-fail';
+  note.textContent = '⚠ ' + (cut.asset.filename || 'clip') + " couldn't load (unsupported format?)";
+  el.appendChild(note);
+}
 
 /**
  * One live media surface for a cut. Returns { el, stop(), setMuted(), setAutoAdvance() }.
@@ -116,10 +128,13 @@ function createVideoSurface(cut, ctx) {
     // A corrupt file never reaches timeupdate; without this an auto-advancing
     // feed parks on a black tile forever. Delay so a broken pack pages <=1/s.
     closeDwell();
+    markFailed(el, cut);
     if (autoAdvance && ctx.advances && errTimer == null) {
       errTimer = setTimeout(() => { errTimer = null; advance(); }, ERROR_ADVANCE_MS);
     }
-    ctx.onError?.(cut);
+    // MediaError code travels to the host log: 3 = decode failed, 4 = format not
+    // supported (the HEVC signature Chromium can't play while LibVLC can).
+    ctx.onError?.(cut, { code: video.error?.code ?? 0, message: video.error?.message || '' });
   });
 
   function advance() {
@@ -175,6 +190,13 @@ function createGifSurface(cut, ctx) {
       metaSent = true;
       ctx.onAssetMeta(cut.asset, { width: img.naturalWidth, height: img.naturalHeight });
     }
+  });
+
+  // GIFs had NO error listener at all — a broken image sat as the bare browser
+  // glyph with nothing reported anywhere (#562).
+  img.addEventListener('error', () => {
+    markFailed(el, cut);
+    ctx.onError?.(cut, { code: 0, message: 'image failed to load' });
   });
 
   function arm(on) {
@@ -244,6 +266,28 @@ function createTileSlot(page, tileIndex, ctx) {
   let tile = null;      // current tile model (rect/audio/blur/fit)
   let mountGen = 0;     // bumps on mount/unmount so a mid-slide teardown can't
                         // resurrect a surface on a dead slot (morph vs. slide race)
+  let errorSwaps = 0;   // capped self-heal swaps for this mount (see scheduleErrorSwap)
+  let errSwapTimer = null;
+
+  /** A failed tile swaps itself for a fresh pick instead of sitting dead (#562).
+   *  Under auto-advance the advancing tile already pages away on its own error
+   *  timer; every other case (manual browsing — the DEFAULT, autoAdvance is off —
+   *  and non-advancing tiles) self-heals here. Capped so a mostly-broken library
+   *  settles into visible fail states rather than swap-looping. */
+  function scheduleErrorSwap() {
+    if (ctx.isAutoAdvance() && tile?.advances) return;
+    if (errorSwaps >= MAX_ERROR_SWAPS || errSwapTimer != null) return;
+    errSwapTimer = setTimeout(() => {
+      errSwapTimer = null;
+      if (!surface || sliding || !tile) return;
+      errorSwaps++;
+      commit('next');
+    }, ERROR_ADVANCE_MS);
+  }
+
+  function clearErrorSwap() {
+    if (errSwapTimer != null) { clearTimeout(errSwapTimer); errSwapTimer = null; }
+  }
 
   function applyRect(t) {
     slot.style.left = (t.rect.x * 100) + '%';
@@ -258,7 +302,10 @@ function createTileSlot(page, tileIndex, ctx) {
       advances: t.advances,
       autoAdvance: ctx.isAutoAdvance(),
       onEnded: () => ctx.onAdvance(),
-      onError: () => {},
+      onError: (cut, detail) => {
+        ctx.onMediaError?.(cut.asset, detail);
+        scheduleErrorSwap();
+      },
       onAssetMeta: ctx.onAssetMeta,
       report: ctx.report,
     };
@@ -267,6 +314,8 @@ function createTileSlot(page, tileIndex, ctx) {
   function mount(t) {
     mountGen++;
     tile = t;
+    errorSwaps = 0;
+    clearErrorSwap();
     applyRect(t);
     if (surface) { surface.stop(); surface = null; }
     const s = createSurface({ ...t.cut, fit: t.fit }, surfaceCtx(t));
@@ -278,6 +327,7 @@ function createTileSlot(page, tileIndex, ctx) {
 
   function unmount() {
     mountGen++;
+    clearErrorSwap();
     if (surface) { surface.stop(); surface = null; }
     tile = null;
   }
@@ -459,6 +509,7 @@ export function createPage(comp, ctx) {
       onSwap: (idx, dir) => ctx.onSwap(comp.key, idx, dir),
       onTapAudio: (idx) => { ctx.onTapAudio(comp.key, idx); applyAudio(); },
       onAssetMeta: ctx.onAssetMeta,
+      onMediaError: ctx.onMediaError,
       report: ctx.report,
       applyAudio,
     };
