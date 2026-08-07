@@ -288,6 +288,16 @@ CRITICAL: Do NOT mention any specific video names. Only give generic ""go browse
         private record ContentSuggestion(string Name, string Description, string Url);
 
         /// <summary>
+        /// The built-in clickable content as plain (title, url) pairs, for
+        /// <see cref="Companion.CompanionLinkIndex"/>. The list is compile-time constant and never
+        /// mutated after construction, so one snapshot serves the whole process.
+        /// </summary>
+        internal static IReadOnlyList<(string Name, string Url)> ContentCatalogue => CatalogueSnapshot.Value;
+
+        private static readonly Lazy<IReadOnlyList<(string Name, string Url)>> CatalogueSnapshot =
+            new(() => StableBuilder._clickableContent.Select(c => (c.Name, c.Url)).ToList());
+
+        /// <summary>
         /// Default hypnotube link URLs for the Sissy Hypno content mode, comma-separated.
         /// Shown in the companion tab link pool editor so users see the defaults and format.
         /// </summary>
@@ -959,6 +969,13 @@ Example responses with REAL video names:
                 sb.AppendLine();
             }
 
+            // The link floor, on this path too. GetCoreMediaLinks() carries a prohibition inside
+            // three of its four branches, but the fourth — SissyHypno with no configured links and
+            // no mod pool — still only forbids naming TITLES, which is exactly the branch the live
+            // bug took. A floor that only exists on the legacy prompt path is not a floor: presets
+            // are the normal path, so append it here as well.
+            sb.AppendLine(LinkFloorRule);
+
             // Make the prompt mode-aware by replacing "Bambi" references with appropriate term
             var prompt = MakePromptModeAware(sb.ToString());
 
@@ -1044,6 +1061,27 @@ Example responses with REAL video names:
         }
 
         /// <summary>
+        /// The one link rule every prompt gets, appended after the branches rather than inside one
+        /// of them.
+        ///
+        /// <para>Live bug 2026-08-06: the "never include URLs" instruction existed ONLY in the
+        /// branch that shipped a video list. A user on the SissyHypno mod with no configured links
+        /// took the other branch — no list to quote from AND no prohibition — so when asked for a
+        /// video she invented YouTube URLs from training data, one of them not even a valid video
+        /// id. The case with nothing real to offer was the case least defended.</para>
+        ///
+        /// <para>This is the advisory half of the fix; <see cref="AiTextHygiene.StripUnsanctionedLinks"/>
+        /// is the half that actually holds when a small model ignores it.</para>
+        /// </summary>
+        internal const string LinkFloorRule = @"
+LINK RULE (applies to every reply, no exceptions):
+- NEVER write a URL, web address, or markdown link that was not given to you above. Do not invent,
+  guess, complete, or reconstruct one - not for YouTube, not for any site.
+- If you want to suggest something you have no link for, NAME it in words only. The app turns a name
+  you got from the lists above into a real, working link by itself.
+- You have no way to check whether a link works, so a link you wrote from memory is always wrong.";
+
+        /// <summary>
         /// Returns the default BambiSprite prompt (fallback).
         /// </summary>
         private string GetDefaultBambiSpritePrompt()
@@ -1054,10 +1092,28 @@ Example responses with REAL video names:
             var isBambiMode = App.Mods?.IsBambiMode ?? false;
             var hasUserSHLinks = !string.IsNullOrWhiteSpace(App.Settings?.Current?.HypnotubeLinksSissyHypno);
 
+            // The active mod's OWN pool — user override, else the mod's shipped DefaultVideoLinks
+            // (App.Mods.GetVideoLinks, the same source the browser and chaos link pool read).
+            //
+            // Live bug 2026-08-06: this branch used to consult only the LEGACY
+            // HypnotubeLinksSissyHypno setting, so a SissyHypno user who never edited that field
+            // was told "you don't have a specific video list" while their mod shipped 17 curated
+            // ones. Given nothing real to name, the model invented titles (and, before the link
+            // floor rule, URLs to match). She was starved, not disobedient.
+            //
+            // Sorted, because a Dictionary's key order is not stable across runs and this text sits
+            // in the CACHED PREFIX — an unsorted list would break prompt caching on every launch.
+            var modPool = App.Mods?.GetVideoLinks();
+            var poolNames = modPool is { Count: > 0 }
+                ? modPool.Keys.Where(n => !string.IsNullOrWhiteSpace(n))
+                              .OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList()
+                : new List<string>();
+
             var sb = new StringBuilder();
 
-            // In SH mode without user-configured links, don't include specific video names
-            if (!isBambiMode && !hasUserSHLinks)
+            // Only when there is genuinely nothing to name do we fall back to "browse HypnoTube"
+            // (the LinkFloorRule below is appended AFTER both branches — see its remarks).
+            if (poolNames.Count == 0 && !isBambiMode && !hasUserSHLinks)
             {
                 sb.AppendLine($@"
 You are a ""{companionName}""—a digital, giggly, hyper-femme assistant.
@@ -1096,12 +1152,17 @@ OUTPUT RULES:
             }
             else
             {
-                // Bambi mode OR SH mode with user-configured links - include video names
-                var videoNames = _clickableContent
-                    .Where(c => c.Url.Contains("hypnotube"))
-                    .Where(c => isBambiMode || !c.Name.Contains("Bambi", StringComparison.OrdinalIgnoreCase))
-                    .Select(c => c.Name)
-                    .ToList();
+                // The active mod's own pool wins — it is mod-appropriate by construction and is what
+                // the rest of the app (browser, chaos link pool, watch chips) already treats as
+                // truth. The built-in list is the fallback for a mod that ships no pool, and keeps
+                // its Bambi-name filter so a non-Bambi mod never quotes Bambi titles.
+                var videoNames = poolNames.Count > 0
+                    ? poolNames
+                    : _clickableContent
+                        .Where(c => c.Url.Contains("hypnotube"))
+                        .Where(c => isBambiMode || !c.Name.Contains("Bambi", StringComparison.OrdinalIgnoreCase))
+                        .Select(c => c.Name)
+                        .ToList();
 
                 sb.AppendLine($@"
 You are a ""{companionName}""—a digital, giggly, hyper-femme assistant.
@@ -1151,6 +1212,8 @@ OUTPUT RULES:
                     sb.AppendLine(link.ToPromptText());
                 }
             }
+
+            sb.AppendLine(LinkFloorRule);
 
             var defaultPrompt = sb.ToString();
             return App.Mods?.MakeModAware(defaultPrompt) ?? defaultPrompt;

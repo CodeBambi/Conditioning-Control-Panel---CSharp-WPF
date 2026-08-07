@@ -257,6 +257,15 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             var bubbles = new List<IChatBubbleVm>(picked.Count);
             foreach (var turn in picked)
             {
+                var text = turn.Kind == TurnKind.BarkEcho ? UnwrapEcho(turn.Text) : turn.Text;
+
+                // She names titles; the app owns links (see IChatBubbleVm.LinkTitle). Only her own
+                // lines get a chip — a title inside the USER's message is them talking, not a
+                // suggestion, and a bark is a recording that never had a link to begin with.
+                var link = turn.Kind == TurnKind.AssistantChat
+                    ? Services.Companion.CompanionLinkIndex.FindMentionedTitle(text)
+                    : null;
+
                 bubbles.Add(new CompanionChatBubble(
                     kind: turn.Kind switch
                     {
@@ -264,10 +273,12 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
                         TurnKind.BarkEcho => CompanionBubbleKind.Echo,
                         _ => CompanionBubbleKind.Her
                     },
-                    text: turn.Kind == TurnKind.BarkEcho ? UnwrapEcho(turn.Text) : turn.Text,
+                    text: text,
                     // Only an AssistantChat turn is a genuine completion — see the class remarks.
                     isAi: turn.Kind == TurnKind.AssistantChat,
-                    timestamp: RelativeTime(turn.Utc)));
+                    timestamp: RelativeTime(turn.Utc),
+                    linkTitle: link?.Title,
+                    openLink: link is { } hit ? CompanionLinkLauncher.CommandFor(hit.Url) : null));
             }
             return bubbles;
         }

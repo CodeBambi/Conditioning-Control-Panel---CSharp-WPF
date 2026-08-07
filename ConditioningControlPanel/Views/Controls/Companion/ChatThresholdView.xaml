@@ -59,8 +59,18 @@
                       ToolTip="{Binding Timestamp}">
                     <Border x:Name="Bubble" Style="{StaticResource CmpBubbleHerStyle}"
                             HorizontalAlignment="Stretch">
-                        <TextBlock x:Name="BubbleText" Text="{Binding Text}"
-                                   Style="{StaticResource CmpBubbleTextStyle}"/>
+                        <StackPanel>
+                            <TextBlock x:Name="BubbleText" Text="{Binding Text}"
+                                       Style="{StaticResource CmpBubbleTextStyle}"/>
+
+                            <!-- She names a title; the app owns the link. Collapsed unless the
+                                 title she named resolves to something we can actually open, so an
+                                 ordinary line keeps exactly the layout it had. -->
+                            <Button x:Name="WatchChip" Style="{StaticResource CmpWatchChipStyle}"
+                                    Command="{Binding OpenLinkCommand}"
+                                    Content="{Binding LinkTitle}"
+                                    Visibility="{Binding LinkTitle, Converter={StaticResource CmpHasContentToVis}}"/>
+                        </StackPanel>
                     </Border>
 
                     <!-- her signature rail. The CSS is a faint outline PLUS a solid 3px pink

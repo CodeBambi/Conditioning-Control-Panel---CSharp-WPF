@@ -175,11 +175,15 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                 if (!Enum.TryParse<TurnKind>(t.Kind, ignoreCase: true, out var kind)) continue;
                 if (kind is not (TurnKind.UserChat or TurnKind.AssistantChat)) continue;
 
-                // Replies persisted before the 0806 sigil fix carry «... said aloud: "..."» shells;
-                // heal them on the way in so old files stop re-teaching the model the pattern.
-                var text = kind == TurnKind.AssistantChat
-                    ? Services.AiTextHygiene.UnwrapSpokenSigil(t.Text)
-                    : t.Text;
+                // Replies persisted before the 0806 fixes carry «... said aloud: "..."» shells and
+                // invented URLs; heal both on the way in so an old file stops re-teaching the model
+                // the patterns. A turn that was nothing but shell, or nothing but links, is dropped.
+                var text = t.Text;
+                if (kind == TurnKind.AssistantChat)
+                {
+                    text = Services.AiTextHygiene.UnwrapSpokenSigil(text);
+                    text = Services.AiTextHygiene.StripUnsanctionedLinks(text);
+                }
                 if (text.Length == 0) continue;
 
                 result.Add(CompanionTurn.Create(kind, text, t.Mood,

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
 namespace ConditioningControlPanel.Services
@@ -138,6 +139,120 @@ namespace ConditioningControlPanel.Services
             }
 
             return current;
+        }
+
+        // A URL as a model writes one. Guillemets and quotes are excluded so a link inside a sigil
+        // or a quoted phrase ends where the punctuation does; the trailing-punctuation trim below
+        // handles the sentence period that would otherwise ride along.
+        private static readonly Regex AnyUrl = new(
+            @"(?:https?://|www\.)[^\s<>""«»]+",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        /// <summary>
+        /// Sentence spans, delimiters kept, so dropping one leaves the rest reading normally.
+        ///
+        /// <para>Hand-written rather than a regex because a URL is full of sentence punctuation:
+        /// "hypnotube.com/naughty-bambi-109749.html" splits into four "sentences" under any
+        /// pattern that treats '.' as a terminator. Terminators inside a URL span are skipped, so
+        /// the link stays whole and travels with the sentence that carried it.</para>
+        /// </summary>
+        private static List<(int Start, int Length)> SplitSentences(string text, List<Match> urls)
+        {
+            var spans = new List<(int, int)>();
+            var start = 0;
+
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (InsideAny(urls, i)) continue;
+
+                var ch = text[i];
+                if (ch != '.' && ch != '!' && ch != '?' && ch != '\n') continue;
+
+                // Absorb the rest of the run ("!!!", "?!") plus the whitespace before the next one.
+                var end = i + 1;
+                while (end < text.Length && !InsideAny(urls, end) &&
+                       (text[end] == '.' || text[end] == '!' || text[end] == '?' || text[end] == '\n')) end++;
+                while (end < text.Length && text[end] == ' ') end++;
+
+                spans.Add((start, end - start));
+                start = end;
+                i = end - 1;
+            }
+
+            if (start < text.Length) spans.Add((start, text.Length - start));
+            return spans;
+        }
+
+        private static bool InsideAny(List<Match> urls, int index)
+        {
+            foreach (var m in urls)
+                if (index >= m.Index && index < m.Index + m.Length) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Removes links the app never gave her, along with the sentence that carried them.
+        ///
+        /// <para>Live bug 2026-08-06: asked for a video while her mod had no configured links, she
+        /// answered with invented YouTube URLs - plausible-looking, unvetted, and one of them not
+        /// even a valid video id. With Train 1's multi-turn window her own fabricated link is then
+        /// in context for the next turn, so "give me another one" copied the pattern and drifted
+        /// further off-brand. The prompt now forbids this (<see cref="BambiSprite.LinkFloorRule"/>),
+        /// but prompt rules are advisory for a small model, so this is the part that holds.</para>
+        ///
+        /// <para>The WHOLE SENTENCE goes, not just the URL. Two reasons: "Click here:" left dangling
+        /// reads worse than a clean cut, and the model frequently glues the next word onto the link
+        /// ("...K60cLet's get moving"), which no URL-shaped pattern can split correctly. An
+        /// all-links reply therefore strips to empty, and the caller falls back to a canned line
+        /// exactly as it does for a refusal.</para>
+        /// </summary>
+        /// <param name="isSanctioned">
+        /// Answers "did we give her this link?" - defaults to
+        /// <see cref="Companion.CompanionLinkIndex.IsSanctioned"/>. Injectable so the rule is
+        /// testable without app settings.
+        /// </param>
+        internal static string StripUnsanctionedLinks(string? text, System.Func<string, bool>? isSanctioned = null)
+        {
+            if (string.IsNullOrEmpty(text)) return text ?? string.Empty;
+
+            // Overwhelmingly the common case: no link at all, no work, no allocation.
+            if (text.IndexOf("http", System.StringComparison.OrdinalIgnoreCase) < 0 &&
+                text.IndexOf("www.", System.StringComparison.OrdinalIgnoreCase) < 0)
+                return text;
+
+            var sanctioned = isSanctioned ?? Companion.CompanionLinkIndex.IsSanctioned;
+
+            var urls = new List<Match>();
+            foreach (Match m in AnyUrl.Matches(text)) urls.Add(m);
+            if (urls.Count == 0) return text;
+
+            var kept = new System.Text.StringBuilder(text.Length);
+            var droppedSentences = 0;
+
+            foreach (var (start, length) in SplitSentences(text, urls))
+            {
+                if (length == 0) continue;
+
+                var carriesStrayLink = false;
+                foreach (var url in urls)
+                {
+                    // Does this sentence contain the link?
+                    if (url.Index < start || url.Index >= start + length) continue;
+                    if (sanctioned(url.Value.TrimEnd('.', ',', ')', ']', '!', '?', ';', ':', '"', '\''))) continue;
+                    carriesStrayLink = true;
+                    break;
+                }
+
+                if (carriesStrayLink) { droppedSentences++; continue; }
+                kept.Append(text, start, length);
+            }
+
+            if (droppedSentences == 0) return text;
+
+            var result = Regex.Replace(kept.ToString(), @"\s{2,}", " ").Trim();
+            App.Logger?.Information(
+                "[AI-LINK] dropped {Count} sentence(s) carrying a link the app never issued", droppedSentences);
+            return result;
         }
 
         /// <summary>
