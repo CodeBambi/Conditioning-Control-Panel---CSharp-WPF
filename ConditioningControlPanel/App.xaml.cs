@@ -2887,6 +2887,11 @@ namespace ConditioningControlPanel
                 // Brief delay to let app load before checking updates
                 await Task.Delay(500);
 
+                // Did the previous run's silent install actually land? A rolled-back Inno install
+                // relaunches us on the OLD version with no error shown, so this is the only place
+                // the user ever learns the update failed (#849).
+                await ReportFailedUpdateAttemptAsync();
+
                 Logger?.Information("Background update check starting...");
                 var updateInfo = await Update.CheckForUpdatesAsync();
                 Logger?.Information("Background update check completed, IsNewer={IsNewer}", updateInfo?.IsNewer);
@@ -2980,6 +2985,37 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Consumes the marker left by the previous run's update attempt and, if the install did
+        /// not take, tells the user once and points them at the manual download.
+        /// </summary>
+        private static async Task ReportFailedUpdateAttemptAsync()
+        {
+            try
+            {
+                var outcome = UpdateService.ConsumePendingUpdateOutcome();
+                if (outcome == null || outcome.Succeeded) return;
+
+                // Don't stack on top of the What's New / startup dialogs.
+                for (int i = 0; i < 60 && ConditioningControlPanel.MainWindow.IsStartupDialogShowing; i++)
+                {
+                    await Task.Delay(500);
+                }
+
+                Application.Current?.Dispatcher.Invoke(() =>
+                {
+                    OfferManualUpdateDownload(
+                        Current?.MainWindow,
+                        Loc.Get("title_update_failed"),
+                        Loc.GetF("msg_update_install_failed", outcome.Version, UpdateService.AppVersion));
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "Failed to report previous update attempt");
+            }
+        }
+
+        /// <summary>
         /// True when a REAL haptic provider (Lovense and/or Buttplug) is enabled in the v2
         /// per-provider config. Mock on its own never justifies an auto-connect: it is the value the
         /// legacy <c>Provider</c> enum defaults to, so treating it as a provider choice would make
@@ -3059,6 +3095,8 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
+                    // "Later"/dismiss: don't re-offer this version for 24h (a manual check still forces it).
+                    UpdateService.SetSkippedUpdateVersion(updateInfo.Version);
                     IsUpdateDialogActive = false;
                 }
             }
@@ -3156,7 +3194,15 @@ namespace ConditioningControlPanel
                     if (result == MessageBoxResult.Yes)
                     {
                         Logger?.Information("Starting silent update for Inno Setup installation");
-                        Update.RunInstallerSilentlyAndExit(installerPath);
+                        if (!Update.RunInstallerSilentlyAndExit(installerPath))
+                        {
+                            // Helper never launched (UAC declined) - we're still alive on the old build.
+                            RestoreHiddenWindows();
+                            OfferManualUpdateDownload(
+                                owner,
+                                Loc.Get("title_update_not_installed"),
+                                Loc.Get("msg_update_permission_declined"));
+                        }
                     }
                     else
                     {
@@ -3223,6 +3269,33 @@ namespace ConditioningControlPanel
                     Update.DownloadProgressChanged -= progressHandler;
                 }
                 IsUpdateDialogActive = false;
+            }
+        }
+
+        /// <summary>
+        /// Tells the user an automatic update did not install and offers the releases page so they
+        /// can install it by hand. Without this, a failed silent install is invisible and the user
+        /// stays stranded on the old version forever (#849).
+        /// </summary>
+        private static void OfferManualUpdateDownload(Window? owner, string title, string message)
+        {
+            try
+            {
+                var result = owner != null && owner.IsLoaded
+                    ? MessageBox.Show(owner, message, title, MessageBoxButton.YesNo, MessageBoxImage.Warning)
+                    : MessageBox.Show(message, title, MessageBoxButton.YesNo, MessageBoxImage.Warning);
+
+                if (result != MessageBoxResult.Yes) return;
+
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = UpdateService.ReleasesPageUrl,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "Failed to show manual update download prompt");
             }
         }
 
@@ -3295,6 +3368,8 @@ namespace ConditioningControlPanel
                     }
                     else
                     {
+                        // "Later"/dismiss: don't re-offer this version for 24h.
+                        UpdateService.SetSkippedUpdateVersion(updateInfo.Version);
                         IsUpdateDialogActive = false;
                     }
                     return true;

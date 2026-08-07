@@ -101,6 +101,27 @@ Season: Airhead August";
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
 
+        /// <summary>
+        /// Manual-download fallback shown whenever an automatic install could not complete.
+        /// </summary>
+        public const string ReleasesPageUrl = "https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/latest";
+
+        /// <summary>
+        /// How long a skip marker suppresses re-offering the same version. The marker is written
+        /// when the user dismisses the update dialog and when an install attempt failed, so this
+        /// is the "don't pester me again" window in both cases.
+        /// </summary>
+        private const double SkipMarkerLifetimeHours = 24;
+
+        /// <summary>
+        /// An attempt marker older than this is stale (app wasn't restarted for days) and is
+        /// cleaned up silently instead of raising a confusing after-the-fact failure dialog.
+        /// </summary>
+        private const double AttemptMarkerReportWindowDays = 7;
+
+        /// <summary>Exit code slot for "the helper never recorded one".</summary>
+        internal const int UnknownExitCode = -1;
+
         private AppUpdateInfo? _latestUpdate;
         private bool _disposed;
 
@@ -169,9 +190,28 @@ Season: Airhead August";
         }
 
         /// <summary>
-        /// Whether the app was installed via the installer (has registry entry)
+        /// Whether the app was installed via the installer. The registry entry is the primary
+        /// signal, but it lives in HKCU: an install run under a different (elevated) account writes
+        /// it to that account's hive, which would silently disable updates forever. Inno's
+        /// uninstaller sitting next to our exe is the account-independent fallback.
         /// </summary>
-        public static bool IsInstalledViaInstaller => GetInstalledPath() != null;
+        public static bool IsInstalledViaInstaller
+        {
+            get
+            {
+                if (GetInstalledPath() != null) return true;
+
+                try
+                {
+                    var exeDir = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName);
+                    return !string.IsNullOrEmpty(exeDir) && File.Exists(Path.Combine(exeDir, "unins000.exe"));
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+        }
 
         public UpdateService()
         {
@@ -215,8 +255,10 @@ Season: Airhead August";
                     return null;
                 }
 
-                // Loop-prevention: if a recent update attempt didn't take, suppress the
-                // same version for up to 24h so we don't pester the user every launch.
+                // Loop-prevention: if the user dismissed this version, or an install attempt for it
+                // didn't take, suppress it for 24h so we don't pester them every launch. The marker
+                // must therefore survive the whole 24h — clearing it earlier made the window below
+                // unreachable and the skip logic a no-op (#849).
                 var skippedVersion = GetSkippedUpdateVersion();
                 if (!string.IsNullOrEmpty(skippedVersion))
                 {
@@ -227,10 +269,10 @@ Season: Airhead August";
                         ClearSkippedUpdateVersion();
                         skippedVersion = null;
                     }
-                    else if (skipAge.TotalMinutes > 5)
+                    else if (skipAge.TotalHours >= SkipMarkerLifetimeHours)
                     {
-                        App.Logger?.Information("Skip marker for {Version} is {Minutes:F1} minutes old, clearing it",
-                            skippedVersion, skipAge.TotalMinutes);
+                        App.Logger?.Information("Skip marker for {Version} is {Hours:F1}h old (>= {Limit}h), clearing it",
+                            skippedVersion, skipAge.TotalHours, SkipMarkerLifetimeHours);
                         ClearSkippedUpdateVersion();
                         skippedVersion = null;
                     }
@@ -245,19 +287,13 @@ Season: Airhead August";
                     return null;
                 }
 
+                // The marker was already aged out above, so anything still here is inside the window.
                 if (githubUpdate.IsNewer && !string.IsNullOrEmpty(skippedVersion) && skippedVersion == githubUpdate.Version)
                 {
                     var hoursSinceSkip = (DateTime.Now - GetSkippedUpdateTime()).TotalHours;
-                    if (hoursSinceSkip < 24)
-                    {
-                        App.Logger?.Warning("Skipping update to {Version} — attempted {Hours:F1}h ago but app still on old version. Retry after 24h.",
-                            githubUpdate.Version, hoursSinceSkip);
-                        githubUpdate.IsNewer = false;
-                    }
-                    else
-                    {
-                        ClearSkippedUpdateVersion();
-                    }
+                    App.Logger?.Information("Suppressing update to {Version} — skipped/attempted {Hours:F1}h ago. Re-offering after {Limit}h.",
+                        githubUpdate.Version, hoursSinceSkip, SkipMarkerLifetimeHours);
+                    githubUpdate.IsNewer = false;
                 }
 
                 _latestUpdate = githubUpdate;
@@ -315,14 +351,21 @@ Season: Airhead August";
             return DateTime.MinValue;
         }
 
-        private static void SetSkippedUpdateVersion(string version)
+        /// <summary>
+        /// Suppresses re-offering <paramref name="version"/> for 24h. Called when the user dismisses
+        /// the update dialog and when an install attempt for that version failed.
+        /// </summary>
+        public static void SetSkippedUpdateVersion(string version)
         {
+            if (string.IsNullOrWhiteSpace(version)) return;
+
             try
             {
                 var skipFile = GetSkipFilePath();
                 Directory.CreateDirectory(Path.GetDirectoryName(skipFile)!);
                 File.WriteAllText(skipFile, version);
-                App.Logger?.Information("Marked update to {Version} as pending - will track if it succeeds", version);
+                App.Logger?.Information("Marked update to {Version} as skipped - will not re-offer for {Hours}h",
+                    version, SkipMarkerLifetimeHours);
             }
             catch (Exception ex)
             {
@@ -342,6 +385,134 @@ Season: Airhead August";
                 }
             }
             catch { }
+        }
+
+        /// <summary>
+        /// Result of a silent update attempt made by the previous run, read back on startup.
+        /// </summary>
+        public sealed class PendingUpdateOutcome
+        {
+            /// <summary>Version the previous run tried to install.</summary>
+            public string Version { get; init; } = "";
+
+            /// <summary>Inno Setup exit code, or <see cref="UnknownExitCode"/> if the helper never recorded one.</summary>
+            public int ExitCode { get; init; } = UnknownExitCode;
+
+            /// <summary>True only when the installer reported success AND we are actually running the new build.</summary>
+            public bool Succeeded { get; init; }
+        }
+
+        private static string GetAttemptFilePath() => Path.Combine(App.UserDataPath, "update_attempt.txt");
+
+        private static string GetAttemptResultFilePath() => Path.Combine(App.UserDataPath, "update_result.txt");
+
+        /// <summary>
+        /// Records that we are about to hand <paramref name="version"/> to the installer. The marker
+        /// is read back on the next launch to tell a real upgrade from a silent rollback.
+        /// </summary>
+        private static void SetPendingUpdateAttempt(string version)
+        {
+            try
+            {
+                var attemptFile = GetAttemptFilePath();
+                Directory.CreateDirectory(Path.GetDirectoryName(attemptFile)!);
+                try { File.Delete(GetAttemptResultFilePath()); } catch { }
+                File.WriteAllText(attemptFile, version);
+                App.Logger?.Information("Recorded pending update attempt for {Version}", version);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to write update attempt marker");
+            }
+        }
+
+        private static void ClearPendingUpdateAttempt()
+        {
+            try { File.Delete(GetAttemptFilePath()); } catch { }
+            try { File.Delete(GetAttemptResultFilePath()); } catch { }
+        }
+
+        /// <summary>
+        /// Decides whether a finished install attempt actually landed. Inno Setup returns 0 for
+        /// success, 2 for user-cancelled and anything else for failure; a rolled-back install can
+        /// still leave us on the old build, so the version has to agree with the exit code.
+        /// </summary>
+        internal static bool DidUpdateSucceed(string attemptedVersion, string currentVersion, int exitCode)
+        {
+            if (exitCode != 0 && exitCode != UnknownExitCode)
+                return false;
+
+            if (!Version.TryParse(attemptedVersion, out var attempted) ||
+                !Version.TryParse(currentVersion, out var current))
+            {
+                // Unparseable versions: trust the exit code alone rather than nagging blindly.
+                return exitCode == 0;
+            }
+
+            return current >= attempted;
+        }
+
+        /// <summary>
+        /// Reads back the previous run's install attempt and clears the marker. Returns null when no
+        /// attempt was pending (or it was too old to be worth reporting). On failure the version is
+        /// also written to the skip marker so we stop retrying the same broken install every launch.
+        /// </summary>
+        public static PendingUpdateOutcome? ConsumePendingUpdateOutcome()
+        {
+            try
+            {
+                var attemptFile = GetAttemptFilePath();
+                if (!File.Exists(attemptFile))
+                    return null;
+
+                var version = File.ReadAllLines(attemptFile).FirstOrDefault()?.Trim() ?? "";
+                var age = DateTime.Now - File.GetLastWriteTime(attemptFile);
+
+                var exitCode = UnknownExitCode;
+                try
+                {
+                    var resultFile = GetAttemptResultFilePath();
+                    if (File.Exists(resultFile))
+                    {
+                        var raw = File.ReadAllLines(resultFile).FirstOrDefault()?.Trim();
+                        if (int.TryParse(raw, out var parsed)) exitCode = parsed;
+                    }
+                }
+                catch { }
+
+                ClearPendingUpdateAttempt();
+
+                if (string.IsNullOrEmpty(version))
+                    return null;
+
+                var succeeded = DidUpdateSucceed(version, AppVersion, exitCode);
+
+                if (succeeded)
+                {
+                    App.Logger?.Information("Previous update to {Version} completed (installer exit={Code})", version, exitCode);
+                    ClearSkippedUpdateVersion();
+                    return new PendingUpdateOutcome { Version = version, ExitCode = exitCode, Succeeded = true };
+                }
+
+                App.Logger?.Error("Update to {Version} did not install (installer exit={Code}, still running {Current})",
+                    version, exitCode, AppVersion);
+
+                // Stop the silent retry loop: don't re-offer this version for 24h.
+                SetSkippedUpdateVersion(version);
+
+                if (age.TotalDays > AttemptMarkerReportWindowDays)
+                {
+                    App.Logger?.Information("Update attempt marker is {Days:F1} days old, not reporting to the user", age.TotalDays);
+                    return null;
+                }
+
+                return new PendingUpdateOutcome { Version = version, ExitCode = exitCode, Succeeded = false };
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to read pending update outcome");
+                return null;
+            }
         }
 
         /// <summary>
@@ -544,8 +715,10 @@ Season: Airhead August";
         /// <summary>
         /// Runs the downloaded Inno Setup installer silently to update in place.
         /// Uses the current install path from registry to upgrade without user interaction.
+        /// Returns false when the helper could not be launched (e.g. the user declined the UAC
+        /// prompt) — the app is then still running and the caller must surface that.
         /// </summary>
-        public void RunInstallerSilentlyAndExit(string installerPath)
+        public bool RunInstallerSilentlyAndExit(string installerPath)
         {
             if (!File.Exists(installerPath))
             {
@@ -592,36 +765,110 @@ Season: Airhead August";
             var logPath = Path.Combine(
                 App.UserDataPath, "logs", "update-helper.log");
 
-            var helperPath = WriteUpdateHelperScript(installerPath, installPath, pid, appExe, logPath);
+            // installer.iss is PrivilegesRequired=lowest with the override only offered via a
+            // *dialog* — which /SILENT can never show. So a Program Files install gets a
+            // non-elevated setup that fails, rolls back, and /SUPPRESSMSGBOXES hides it (#849).
+            // Elevate the helper (not the installer) so the UAC prompt appears now, while the app
+            // is still on screen and we can detect a decline; the installer then inherits the
+            // elevated token and the wait-for-exit handoff is unchanged.
+            var needsElevation = NeedsElevationToInstall(installPath);
 
-            App.Logger?.Information("Launching update helper: {Helper} (pid={Pid}, appExe={AppExe}, log={Log})",
-                helperPath, pid, appExe, logPath);
+            var helperPath = WriteUpdateHelperScript(
+                installerPath, installPath, pid, appExe, logPath, GetAttemptResultFilePath(), needsElevation);
 
-            // Run the .cmd via cmd.exe (a batch file is not a PE, so UseShellExecute=false
-            // requires an explicit interpreter). CreateNoWindow keeps it fully hidden; the
+            App.Logger?.Information("Launching update helper: {Helper} (pid={Pid}, appExe={AppExe}, elevate={Elevate}, log={Log})",
+                helperPath, pid, appExe, needsElevation, logPath);
+
+            // Run the .cmd via cmd.exe (a batch file is not a PE, so it needs an explicit
+            // interpreter). WindowStyle=Hidden keeps the console off screen in both modes; the
             // helper survives our exit because a WPF app doesn't job-object its children.
             var startInfo = new ProcessStartInfo
             {
                 FileName = "cmd.exe",
                 Arguments = $"/c \"{helperPath}\"",
-                UseShellExecute = false,
-                CreateNoWindow = true,
                 WindowStyle = ProcessWindowStyle.Hidden,
             };
 
-            Process.Start(startInfo);
+            if (needsElevation)
+            {
+                // Verb requires ShellExecute; CreateNoWindow is ignored in that mode.
+                startInfo.UseShellExecute = true;
+                startInfo.Verb = "runas";
+            }
+            else
+            {
+                startInfo.UseShellExecute = false;
+                startInfo.CreateNoWindow = true;
+            }
+
+            // Written before launch so the next startup can tell a real upgrade from a rollback.
+            SetPendingUpdateAttempt(_latestUpdate?.Version ?? "");
+
+            try
+            {
+                Process.Start(startInfo);
+            }
+            catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+            {
+                // ERROR_CANCELLED — user dismissed the UAC prompt. Stay alive on the old version.
+                App.Logger?.Warning("Update cancelled: the elevation prompt was declined");
+                ClearPendingUpdateAttempt();
+                SetSkippedUpdateVersion(_latestUpdate?.Version ?? "");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to launch update helper");
+                ClearPendingUpdateAttempt();
+                SetSkippedUpdateVersion(_latestUpdate?.Version ?? "");
+                return false;
+            }
 
             // Exit the current application so the helper's wait-for-exit can proceed.
             App.Logger?.Information("Exiting application for silent update (helper will install + relaunch)...");
             Application.Current.Shutdown();
+            return true;
+        }
+
+        /// <summary>
+        /// True when the install directory cannot be written by the current token, i.e. the silent
+        /// installer needs admin rights. Per-user installs stay prompt-free.
+        /// </summary>
+        private static bool NeedsElevationToInstall(string? installPath)
+        {
+            if (string.IsNullOrEmpty(installPath)) return false;
+
+            try
+            {
+                if (!Directory.Exists(installPath)) return false;
+
+                var probe = Path.Combine(installPath, $".ccp-write-probe-{Guid.NewGuid():N}.tmp");
+                using (File.Create(probe, 1, FileOptions.DeleteOnClose)) { }
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return true;
+            }
+            catch (IOException)
+            {
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Could not probe install dir writability, assuming elevation is needed");
+                return true;
+            }
         }
 
         /// <summary>
         /// Writes the external update helper batch script and returns its path. The script waits
-        /// for this process (pid) to exit, runs the installer silently, then relaunches appExe.
+        /// for this process (pid) to exit, runs the installer silently, records the installer's exit
+        /// code to resultPath, then relaunches appExe.
         /// Values are baked in as literals (no positional-arg parsing) so paths with spaces are safe.
         /// </summary>
-        private static string WriteUpdateHelperScript(string installerPath, string? installPath, int pid, string appExe, string logPath)
+        private static string WriteUpdateHelperScript(string installerPath, string? installPath, int pid,
+            string appExe, string logPath, string resultPath, bool elevated)
         {
             var helperDir = Path.GetDirectoryName(installerPath) ?? Path.GetTempPath();
             var helperPath = Path.Combine(helperDir, "update-helper.cmd");
@@ -633,6 +880,13 @@ Season: Airhead August";
             // and guarantees the new files land where we'll relaunch from.
             var dirArg = string.IsNullOrEmpty(installPath) ? "" : $" /DIR=\"{installPath}\"";
 
+            // When the helper is elevated, a plain `start` would hand the app an admin token for the
+            // rest of the session. Going through the shell drops it back to the logged-on user's
+            // medium-integrity token, which is what every other launch of the app uses.
+            var relaunch = elevated
+                ? "start \"\" explorer.exe \"%APPEXE%\""
+                : "start \"\" \"%APPEXE%\"";
+
             var lines = new[]
             {
                 "@echo off",
@@ -640,7 +894,8 @@ Season: Airhead August";
                 $"set \"LOG={logPath}\"",
                 $"set \"APPEXE={appExe}\"",
                 $"set \"INSTALLER={installerPath}\"",
-                $"echo [update-helper] start pid={pid} > \"%LOG%\"",
+                $"set \"RESULT={resultPath}\"",
+                $"echo [update-helper] start pid={pid} elevated={(elevated ? 1 : 0)} > \"%LOG%\"",
                 // Wait for the old app to fully exit (release its exe lock). The PID filter is
                 // exact; `find` just detects whether a matching row was returned. Capped at ~30
                 // iterations (~1min) so a reused PID can never hang this forever.
@@ -659,9 +914,15 @@ Season: Airhead August";
                 "echo [update-helper] old app exited (tries=%tries%), running installer >> \"%LOG%\"",
                 $"\"%INSTALLER%\" /SILENT /SUPPRESSMSGBOXES /NORESTART{dirArg}",
                 "set RC=%errorlevel%",
-                "echo [update-helper] installer exit=%RC% >> \"%LOG%\"",
+                // Redirect FIRST: `echo %RC%>file` would parse a single-digit RC as a handle number.
+                ">\"%RESULT%\" echo %RC%",
+                "if \"%RC%\"==\"0\" (",
+                "  echo [update-helper] installer reported success >> \"%LOG%\"",
+                ") else (",
+                "  echo [update-helper] installer FAILED exit=%RC% >> \"%LOG%\"",
+                ")",
                 "echo [update-helper] relaunching app >> \"%LOG%\"",
-                "start \"\" \"%APPEXE%\"",
+                relaunch,
                 "echo [update-helper] done >> \"%LOG%\"",
                 "endlocal",
             };
