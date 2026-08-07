@@ -719,21 +719,26 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         });
 
         /// <summary>
-        /// Pauses her for an hour, or lifts a running pause. The pause is a hard drop in the privacy
-        /// layer, and the legacy poll is stopped as well so nothing observes while it runs.
+        /// Pauses her for an hour, or lifts a running pause.
+        ///
+        /// <para><b>The pause is a CHECK, never a shutdown.</b> This used to call
+        /// <c>App.WindowAwareness.Stop()</c> on the way in, which tore down the 1.5s poll timer and
+        /// the v2 observer with it. <see cref="AwarenessPause"/> expires on its own after the hour -
+        /// but nothing ever started the service again, so she stayed silent until the app was
+        /// relaunched. Worse, once the hour lapsed <see cref="AwarenessPause.IsPaused"/> read false,
+        /// so the button relabelled itself back to "pause her for an hour" and pressing it PAUSED
+        /// AGAIN. There was no route back to running short of a restart.</para>
+        ///
+        /// <para>Both pipelines now test the pause on every tick instead - v2 through
+        /// <see cref="AwarenessPrivacyRules.Evaluate"/>'s <see cref="AwarenessDropReason.Paused"/>
+        /// hard drop, legacy through the guard at the top of <c>WindowAwarenessService.OnPollTick</c>
+        /// - so the hour simply ends and she comes back. Nothing here has to remember to undo
+        /// anything, which is the only version of this that cannot strand her.</para>
         /// </summary>
         private void TogglePause() => CompanionRuntimeContext.Guarded(() =>
         {
-            if (AwarenessPause.IsPaused())
-            {
-                AwarenessPause.Resume();
-                if (App.Settings?.Current?.AwarenessModeEnabled == true) App.WindowAwareness?.Start();
-            }
-            else
-            {
-                AwarenessPause.Pause(AwarenessPause.DefaultDuration);
-                App.WindowAwareness?.Stop();
-            }
+            if (AwarenessPause.IsPaused()) AwarenessPause.Resume();
+            else AwarenessPause.Pause(AwarenessPause.DefaultDuration);
 
             Sync();
         }, "awareness pause");

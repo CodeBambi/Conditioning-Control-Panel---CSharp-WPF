@@ -520,7 +520,14 @@ namespace ConditioningControlPanel.Services
             // Fire the StillOnActivity event if we're still on the same activity. Under v2 the whole
             // {1, 5, 10}-minute nag is replaced by cumulative-dwell LongHaul milestones (doc 02 §4.4),
             // so the event is suppressed alongside ActivityChanged.
-            if (!V2OwnsReactions && _currentCategory != ActivityCategory.Unknown && _currentCategory != ActivityCategory.Idle)
+            //
+            // The pause is tested here as well as in OnPollTick because this timer reschedules itself
+            // and speaks WITHOUT going through the poll. While the pause was enforced by stopping the
+            // service that did not matter - Stop() disposed this timer too. Now that a pause only
+            // gates the readers, an unguarded milestone would let her nag straight through it, which
+            // is the exact promise the pause button makes.
+            if (!V2OwnsReactions && !Services.Awareness.AwarenessPause.IsPaused() &&
+                _currentCategory != ActivityCategory.Unknown && _currentCategory != ActivityCategory.Idle)
             {
                 if (IsCategoryEnabled(_currentCategory))
                 {
@@ -542,6 +549,27 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
+                // "Not right now." Tested BEFORE the window title is read, so a pause observes
+                // nothing rather than observing and discarding.
+                //
+                // This guard is what lets the pause be a CHECK instead of a shutdown. The privacy
+                // panel used to enforce it by calling Stop(), which tore down this timer and left
+                // nothing to start it again when the hour lapsed, so she never came back.
+                // AwarenessPause expires on its own, so simply returning here means the hour ends and
+                // she resumes.
+                //
+                // It also makes AwarenessPause's own summary true. That summary says it is read "from
+                // the poll, from the panel and from the legacy service"; in fact
+                // AwarenessPrivacyRules.Evaluate was the only enforcement point and it is v2-only, so
+                // on the legacy pipeline a pause did nothing at all beyond stopping the timer.
+                if (Services.Awareness.AwarenessPause.IsPaused())
+                {
+                    // Keep the idle clock fresh while paused, or the first tick after the hour would
+                    // find IdleThresholdMinutes already banked and announce her as idle on return.
+                    _lastActivityChange = DateTime.Now;
+                    return;
+                }
+
                 var windowTitle = GetActiveWindowTitle();
 
                 // Debug: Log what we're seeing
