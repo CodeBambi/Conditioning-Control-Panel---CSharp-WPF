@@ -3736,6 +3736,7 @@
   "companion_awareness_add_deny": "+ アプリを追加…",
   "companion_awareness_allow_per_app": "アプリごとに許可…",
   "companion_awareness_deny_banking": "銀行 ✓",
+  "companion_awareness_deny_head": "always hidden from her — no reaction, no counter, nothing sent:",
   "companion_awareness_deny_dormant": "+ アプリを隠す機能はTrain 2から",
   "companion_awareness_deny_email": "メール ✓",
   "companion_awareness_deny_passwords": "パスワード管理 ✓",

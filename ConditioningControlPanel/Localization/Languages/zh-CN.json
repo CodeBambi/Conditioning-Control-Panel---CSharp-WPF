@@ -4203,6 +4203,7 @@
   "companion_awareness_add_deny": "+ 添加应用…",
   "companion_awareness_allow_per_app": "按应用允许…",
   "companion_awareness_deny_banking": "银行 ✓",
+  "companion_awareness_deny_head": "always hidden from her — no reaction, no counter, nothing sent:",
   "companion_awareness_deny_dormant": "+ 对她隐藏应用将随 Train 2 到来",
   "companion_awareness_deny_email": "邮箱 ✓",
   "companion_awareness_deny_passwords": "密码管理器 ✓",
