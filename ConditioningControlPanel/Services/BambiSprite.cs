@@ -824,17 +824,34 @@ Example responses with REAL video names:
             // base personality, spicier vibe. Falls back to standard Personality if the
             // preset has no slut variant (e.g., presets that are already explicit).
             var slutMode = App.Settings?.Current?.SlutModeEnabled == true;
-            var personalityText = slutMode && !string.IsNullOrWhiteSpace(settings.SlutModePersonality)
-                ? settings.SlutModePersonality
-                : settings.Personality;
+            var usingSlutVariant = slutMode && !string.IsNullOrWhiteSpace(settings.SlutModePersonality);
+            var personalityText = usingSlutVariant ? settings.SlutModePersonality : settings.Personality;
             if (!string.IsNullOrWhiteSpace(personalityText))
             {
                 sb.AppendLine(personalityText);
                 sb.AppendLine();
             }
 
-            // Add explicit reaction rules
-            if (!string.IsNullOrWhiteSpace(settings.ExplicitReaction))
+            // Add explicit reaction rules.
+            //
+            // ExplicitReaction answers exactly one question: "what do you do when they bring up
+            // sex?". Every NON-explicit preset answers it with a deflection — the stock default's
+            // [FEIGNED INNOCENCE PROTOCOL] ("you wont engage in sex roleplay, just gracefully change
+            // topic to training"), Gentle Trainer's and Bimbo Cow's [GENTLE DEFLECTION], and so on.
+            //
+            // Once the user has flipped Slut Mode on AND this preset ships a SlutModePersonality,
+            // the personality block three lines above has already answered that question the other
+            // way. Emitting the tame answer as well shipped a prompt that said "engage fully" and
+            // "FLUSTERED DENIAL, change the subject" a paragraph apart — and the deflection is the
+            // more specific rule ("IF User mentions 'cock', 'cum', 'sex': ..."), so it is the one
+            // the model followed. The user's opted-in, acknowledgement-gated spice toggle then had
+            // no visible effect at all.
+            //
+            // This drops ONLY the stale non-explicit variant of a persona section the user has
+            // already switched away from. It touches no moderation control: SafetyComposer's
+            // preamble and floor still wrap the result, ModerationGuard still runs on the wire, and
+            // ExplicitContentGate still gates the toggle that gets us here.
+            if (!usingSlutVariant && !string.IsNullOrWhiteSpace(settings.ExplicitReaction))
             {
                 sb.AppendLine(settings.ExplicitReaction);
                 sb.AppendLine();
