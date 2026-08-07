@@ -507,6 +507,14 @@ namespace ConditioningControlPanel.Services.AIService
                     }
 
                     var first = choices[0];
+                    if (first.TryGetProperty("finish_reason", out var fr)
+                        && fr.ValueKind == JsonValueKind.String
+                        && string.Equals(fr.GetString(), "length", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Truncation was invisible in logs until the guillotined effects
+                        // envelope leaked as raw JSON in the bubble - make it loud.
+                        App.Logger?.Warning("[AI] reply truncated at the token cap (finish_reason=length) - parser salvage will run");
+                    }
                     if (!first.TryGetProperty("message", out var message) ||
                         !message.TryGetProperty("content", out var contentElement))
                     {

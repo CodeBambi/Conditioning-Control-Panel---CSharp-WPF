@@ -88,6 +88,7 @@ namespace ConditioningControlPanel.Services
 🩹 v6.7.2 HOTFIX
 - Audio: mandatory and startup videos no longer go silent 2-3 seconds in - the ducking system was catching the app's own new video engine
 - For You feed: clips your PC can't decode now show a clear notice and swap themselves out instead of sitting as silent black tiles
+- AI companion: replies with effects no longer get cut off - and raw JSON can never leak into her speech bubble again
 - Companion: new 'Mute Voice Lines' switch in Her Room - keep her bubbles and giggles, silence only the spoken lines
 
 Season: Airhead August";

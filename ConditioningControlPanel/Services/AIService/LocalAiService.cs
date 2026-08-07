@@ -973,6 +973,15 @@ namespace ConditioningControlPanel.Services.AIService
             try
             {
                 using var doc = JsonDocument.Parse(body);
+                // Truncation was completely invisible in logs: nothing anywhere read the
+                // done/finish reason, so a guillotined effects envelope looked identical to
+                // a complete reply until it leaked as raw JSON in the bubble.
+                if (doc.RootElement.TryGetProperty("done_reason", out var dr)
+                    && dr.ValueKind == JsonValueKind.String
+                    && string.Equals(dr.GetString(), "length", StringComparison.OrdinalIgnoreCase))
+                {
+                    App.Logger?.Warning("[AI] Ollama reply truncated at the token cap (done_reason=length) - parser salvage will run");
+                }
                 if (doc.RootElement.TryGetProperty("message", out var msg) &&
                     msg.TryGetProperty("content", out var c))
                 {

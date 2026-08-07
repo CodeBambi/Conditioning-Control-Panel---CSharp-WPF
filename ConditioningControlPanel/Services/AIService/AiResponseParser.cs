@@ -33,7 +33,46 @@ namespace ConditioningControlPanel.Services.AIService
                 return standardResult;
             }
 
-            return ParseMixedFormat(response);
+            var mixed = ParseMixedFormat(response);
+
+            // Last-resort salvage: a truncated effects envelope that defeated every repair
+            // above must NEVER reach the bubble as raw JSON (beebee 2026-08-07: the token cap
+            // cut the envelope mid-string, before any '}' existed, and the raw text leaked).
+            // Lift the "response" string - the only part the user should see - and drop the
+            // unparseable effects; if even that fails, the canned fallback beats the leak.
+            if (LooksLikeEnvelopeLeak(mixed.CleanText))
+            {
+                var lifted = TryLiftResponseField(mixed.CleanText!);
+                mixed.CleanText = !string.IsNullOrWhiteSpace(lifted)
+                    ? SanitizeResponse(lifted)
+                    : _fallbackProvider();
+            }
+            return mixed;
+        }
+
+        private static bool LooksLikeEnvelopeLeak(string? text)
+        {
+            if (string.IsNullOrEmpty(text)) return false;
+            var t = text.TrimStart();
+            return t.StartsWith("{") && t.Contains("\"response\"");
+        }
+
+        private static string? TryLiftResponseField(string text)
+        {
+            // Captures up to the closing quote OR the end of a guillotined string.
+            var m = Regex.Match(text, @"""response""\s*:\s*""((?:[^""\\]|\\.)*)");
+            if (!m.Success) return null;
+            var raw = m.Groups[1].Value;
+            try
+            {
+                return JsonDocument.Parse("\"" + raw + "\"").RootElement.GetString();
+            }
+            catch
+            {
+                // Dangling escape at the cut point - unescape the common pairs by hand.
+                return raw.Replace("\\\"", "\"").Replace("\\n", "\n").Replace("\\r", "\r")
+                          .Replace("\\t", "\t").Replace("\\\\", "\\");
+            }
         }
 
         private string ExtractFromMarkdownBlocks(string text)
@@ -79,13 +118,15 @@ namespace ConditioningControlPanel.Services.AIService
         private string ExtractOuterJsonObject(string text)
         {
             var firstBrace = text.IndexOf('{');
+            if (firstBrace == -1) return text;
             var lastBrace = text.LastIndexOf('}');
-            if (firstBrace != -1 && lastBrace > firstBrace)
-            {
-                var json = text.Substring(firstBrace, lastBrace - firstBrace + 1);
-                return BalanceBraces(json);
-            }
-            return text;
+            // A truncated envelope usually loses EVERY closing brace (the guillotine lands
+            // mid-string). Repair from the first '{' to the end instead of giving up - the
+            // old early-return here was how raw JSON reached the bubble.
+            var json = lastBrace > firstBrace
+                ? text.Substring(firstBrace, lastBrace - firstBrace + 1)
+                : text.Substring(firstBrace);
+            return BalanceBraces(json);
         }
 
         private void ExtractEffects(JsonElement root, List<AiCommandData> commands)
@@ -225,6 +266,10 @@ namespace ConditioningControlPanel.Services.AIService
                 repaired.Append(c);
             }
             json = repaired.ToString();
+
+            // Truncation almost always cuts inside a string literal - close it, or the
+            // brace/bracket balancing below repairs the structure around unparseable JSON.
+            if (inQuotes) json += '"';
 
             json = Regex.Replace(json, @"([{,]\s*)([a-zA-Z0-9_]+)(\s*:)", "$1\"$2\"$3");
             json = Regex.Replace(json, @"""(.*?)""", m => m.Value.Replace("\r", "\\r").Replace("\n", "\\n"), RegexOptions.Singleline);

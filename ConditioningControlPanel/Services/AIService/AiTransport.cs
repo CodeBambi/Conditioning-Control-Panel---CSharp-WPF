@@ -74,6 +74,16 @@ namespace ConditioningControlPanel.Services.AIService
         public static AiCallOptions Chat { get; } =
             new() { Purpose = AiPurpose.Chat, MaxTokens = 100, Temperature = 0.7, Interactive = true };
 
+        /// <summary>
+        /// Chat while the effects envelope is on (AllowAiToControlEffects): the JSON
+        /// scaffolding plus one effect already costs ~80-110 tokens, so the 100-token prose
+        /// cap guillotined the envelope mid-string and raw JSON leaked into the bubble
+        /// (beebee, 2026-08-07). 350 fits several effects; providers still clamp to their
+        /// own ceilings (Ollama 512, cloud hard-cap - which never sends the envelope anyway).
+        /// </summary>
+        public static AiCallOptions ChatWithEffects { get; } =
+            new() { Purpose = AiPurpose.Chat, MaxTokens = 350, Temperature = 0.7, Interactive = true };
+
         /// <summary>Ambient defaults: cheapest tier, non-interactive, short reply.</summary>
         public static AiCallOptions Reaction { get; } =
             new() { Purpose = AiPurpose.Reaction, MaxTokens = 60, Temperature = 0.8, Interactive = false };

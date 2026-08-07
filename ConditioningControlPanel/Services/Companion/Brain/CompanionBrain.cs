@@ -217,8 +217,14 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             try
             {
                 var request = _assembler.BuildRequest(AiPurpose.Chat, Session, input);
+                // The effects envelope is not prose: JSON scaffolding + effects blow through
+                // the 100-token chat cap and get guillotined mid-string. Size the budget to
+                // what we asked the model to produce. See AiCallOptions.ChatWithEffects.
+                var effectsOn = App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects == true;
                 var result = await _transport
-                    .SendAsync(request.Messages, AiCallOptions.Chat, cancellationToken)
+                    .SendAsync(request.Messages,
+                        effectsOn ? AiCallOptions.ChatWithEffects : AiCallOptions.Chat,
+                        cancellationToken)
                     .ConfigureAwait(false);
 
                 if (result.Refusal != null)
