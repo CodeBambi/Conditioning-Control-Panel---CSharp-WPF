@@ -20,13 +20,19 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.7.0";
+        public const string AppVersion = "6.7.1";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
         public const string CurrentPatchNotes = @"v6.7 - ¯\_( ͡° ͜ʖ ͡°)_/¯
+
+🧠 AI COMPANION - HER ROOM
+- The Companion tab is now Her Room - her own space, redesigned from the ground up
+- A new brain: she remembers more, stays in character, and actually holds a conversation
+- Awareness: opt-in, she can notice what you're doing on your PC and react to it
+- You hold the leash: a plain-words dial for what leaves your PC (nothing / app names / + page titles), a proper app picker, incognito detection, and a one-hour pause button
 
 📱 FOR YOU FEED - ON DESKTOP
 - The mobile mosaic reel arrives on desktop - an endless For You feed of conditioning clips, right in the app
@@ -36,7 +42,7 @@ namespace ConditioningControlPanel.Services
 
 🎮 GOON GAME - 1v1 DUELS
 - Duel another player in real time: throw media payloads, build heat, survive sudden death
-- Send your own photos, videos and GIFs - P2P, free for every seat, up to 64MB per video
+- Send your own photos, videos and GIFs in P2P, up to 64MB per video - sending your own media is a supporter perk, every seat still receives and duels in full
 - 10-second voice notes with opt-in consent and push-to-talk (V key on desktop)
 - Invite anyone with a share link - no account needed to join, Discord rich presence included
 - Privacy by design: received partner media is ephemeral and never outlives the match
@@ -51,8 +57,10 @@ namespace ConditioningControlPanel.Services
 - Spotlight shelf, dedicated backdrop, and a peek at what is coming next
 
 🪪 PROFILE REDESIGN
-- Your profile is now a Trainer Card - rebuilt from the ground up with per-mod scene banners
+- Your profile is now a Trainer Card - rebuilt from the ground up
+- 12 hand-made scene banners, 3 per mod, sized exactly for the card
 - Wardrobe: 60 new adornments to dress your card, with a full editor and click-to-pin
+- Earn it to wear it: select wardrobe pieces, guild avatars and badges unlock through achievements
 - 12 preset 'blank subject' avatars, 3 per mod, if you'd rather stay faceless
 - New privacy dialog: you decide exactly what the leaderboard sees
 
@@ -63,6 +71,8 @@ namespace ConditioningControlPanel.Services
 - Modular installer: ~1.1 GB moved into downloadable content packs - way smaller download
 
 🔧 BUG FIXES
+- Content packs: a wedged pack download now heals itself on next launch
+- Profile: portrait display fixes and player-tag cleanup
 - Programs: spoken mantras credit correctly, session bubble rate fixed, every task shows a how-to line
 - Assets: deselection honored everywhere, chaos overlays and Graded Intake included (#762 #798 #619)
 - Video: blurred background fits the true aspect ratio (#786)
