@@ -74,16 +74,48 @@ namespace ConditioningControlPanel
         /// <summary>
         /// The preset image THIS method last put into the avatar bubble. Lets a later apply tell
         /// "slot holds our preset" apart from "slot holds a real Discord picture" - a real picture
-        /// always wins and is never overwritten or cleared from here.
+        /// always wins and is never overwritten or cleared from here. Cleared by
+        /// <see cref="SetProfilePictureLoad"/>, because every load-path write to the bubble
+        /// replaces whatever was in the slot and so ends any claim we had on it.
         /// </summary>
         private ImageSource? _appliedPresetAvatar;
 
         /// <summary>
+        /// Where the real profile picture stands for the card currently on screen. Set by the load
+        /// paths in MainWindow.Browser.cs; read only by <see cref="ApplyProfileAvatarPreset"/>.
+        /// </summary>
+        private ProfilePictureLoad _profilePictureLoad = ProfilePictureLoad.None;
+
+        /// <summary>
+        /// Records what the profile-picture load path just wrote into the avatar bubble. Call it
+        /// immediately AFTER writing <c>ProfileViewerAvatar.ImageSource</c>, never before - the two
+        /// are one update, and the preset avatar reads them together.
+        /// </summary>
+        internal void SetProfilePictureLoad(ProfilePictureLoad load)
+        {
+            // The load path owns the slot the moment it writes it, so any preset we had painted
+            // there is gone. Dropping the claim here is what lets a picture that lands late beat a
+            // preset that was applied while the slot looked empty (#847).
+            _appliedPresetAvatar = null;
+            _profilePictureLoad = load;
+        }
+
+        /// <summary>
         /// Preset avatar for the bubble (resolution order: shared Discord picture, then preset,
-        /// then blank circle). Every card render sets the bubble's ImageSource from the picture
-        /// BEFORE cosmetics are applied, so at this point: a non-null image that is not ours is a
-        /// real picture (leave it), and null or our own previous preset means the slot is ours to
-        /// fill, swap, or clear.
+        /// then blank circle). The picture and the preset share ONE slot, and the contract is
+        /// tri-state, not "is it null":
+        ///
+        /// <list type="bullet">
+        /// <item>the slot holds our own previous preset - ours to swap or clear;</item>
+        /// <item>the slot holds anything else - a real picture, left alone;</item>
+        /// <item>the slot is empty - ours ONLY when the picture load has definitively finished
+        /// with nothing (no avatar, sharing off, lookup failed). While the load is
+        /// <see cref="ProfilePictureLoad.Pending"/> the empty circle belongs to it.</item>
+        /// </list>
+        ///
+        /// The last clause is bug #847: DisplayProfileEntry empties the bubble and starts an async
+        /// /user/lookup, then applies cosmetics synchronously - so on that path "empty" means "not
+        /// here yet", and a null check alone painted a preset bust over everyone's Discord avatar.
         /// </summary>
         private void ApplyProfileAvatarPreset(string? avatarId)
         {
@@ -93,9 +125,10 @@ namespace ConditioningControlPanel
                 if (bubble == null) return;
 
                 var current = bubble.ImageSource;
-                var slotIsOurs = current == null ||
-                                 (_appliedPresetAvatar != null && ReferenceEquals(current, _appliedPresetAvatar));
-                if (!slotIsOurs) return;
+                var slotHoldsOurPreset = _appliedPresetAvatar != null &&
+                                         ReferenceEquals(current, _appliedPresetAvatar);
+                if (!ProfileAvatarSlot.PresetMayClaim(slotHoldsOurPreset, current != null, _profilePictureLoad))
+                    return;
 
                 var art = CosmeticsCatalog.GetAvatarImage(avatarId);
                 bubble.ImageSource = art;
@@ -434,6 +467,39 @@ namespace ConditioningControlPanel
                 _pinCapNoticeTimer.Start();
             }
             catch (Exception ex) { App.Logger?.Debug("FlashPinCapNotice: {E}", ex.Message); }
+        }
+    }
+
+    /// <summary>
+    /// Where the real profile picture stands for the card on screen. The preset avatar and the
+    /// picture share one slot, so "no picture" and "no picture YET" have to be distinguishable -
+    /// an empty bubble on its own means neither (#847).
+    /// </summary>
+    internal enum ProfilePictureLoad
+    {
+        /// <summary>A load is in flight; the empty slot belongs to it and nothing else may take it.</summary>
+        Pending,
+        /// <summary>A real picture is in the slot.</summary>
+        Loaded,
+        /// <summary>The load finished with nothing: no avatar, sharing off, or a lookup that failed.</summary>
+        None
+    }
+
+    /// <summary>
+    /// The avatar slot's claim rule, kept as a pure function so it can be reasoned about (and
+    /// tested) without standing a Window up. See MainWindow.ApplyProfileAvatarPreset.
+    /// </summary>
+    internal static class ProfileAvatarSlot
+    {
+        /// <summary>Whether the preset avatar may write the shared avatar slot right now.</summary>
+        internal static bool PresetMayClaim(bool slotHoldsOurPreset, bool slotHasPicture, ProfilePictureLoad load)
+        {
+            // Already ours: swapping one preset for another, or clearing back to the blank circle.
+            if (slotHoldsOurPreset) return true;
+            // Someone's real picture is in there. It always wins.
+            if (slotHasPicture) return false;
+            // Empty - but only a load that has DEFINITIVELY come back with nothing hands it over.
+            return load == ProfilePictureLoad.None;
         }
     }
 }
