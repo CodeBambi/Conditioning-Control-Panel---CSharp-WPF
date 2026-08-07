@@ -693,41 +693,16 @@
              The redesigned Achievements grid. AchievementTile above is KEPT and still in use
              (the profile Trainer Card showcase renders it), so nothing here reuses that key.
 
-             The drawer is a bottom-anchored Border clipped to its own MaxHeight: 26px shows the
-             reward STRIP (a silhouette + "Reward" + lock/tick), and hover / keyboard focus /
-             a click (IsChecked, so touch and click-to-pin work too) opens it to 144px to reveal
-             the body. Reveal is MaxHeight rather than a transform so the card never grows past
-             its 4px margin into its neighbours.
-
-             The named parts (DrawerStrip / DrawerBody) live INSIDE the template, so code-behind
-             reaches them with Template.FindName after ApplyTemplate - see
-             MainWindow.AchievementsTab.cs / EnsureDrawerParts. -->
-
-        <Storyboard x:Key="AchvDrawerOpen">
-            <DoubleAnimation Storyboard.TargetName="Drawer"
-                             Storyboard.TargetProperty="MaxHeight"
-                             To="144" Duration="0:0:0.20"
-                             EasingFunction="{StaticResource FxEaseOut}"/>
-            <!-- The body fades a beat behind the slide, so the text is not readable mid-travel. -->
-            <DoubleAnimation Storyboard.TargetName="DrawerBody"
-                             Storyboard.TargetProperty="Opacity"
-                             To="1" BeginTime="0:0:0.06" Duration="0:0:0.15"/>
-        </Storyboard>
-
-        <Storyboard x:Key="AchvDrawerClose">
-            <DoubleAnimation Storyboard.TargetName="DrawerBody"
-                             Storyboard.TargetProperty="Opacity"
-                             To="0" Duration="0:0:0.10"/>
-            <DoubleAnimation Storyboard.TargetName="Drawer"
-                             Storyboard.TargetProperty="MaxHeight"
-                             To="26" Duration="0:0:0.20"
-                             EasingFunction="{StaticResource FxEaseOut}"/>
-        </Storyboard>
+             Everything the card knows is on its face - no hover drawer. Top to bottom: hero art,
+             name, one info line (requirement while locked, flavor once earned), and a full-width
+             reward band pinned to the bottom edge (RewardBand below - code-behind fills it).
+             Cards are fixed-size and laid out by a WrapPanel, so gutters stay constant at any
+             window width instead of UniformGrid stretching them apart. -->
 
         <Style x:Key="AchievementCard" TargetType="ToggleButton">
-            <Setter Property="Width" Value="168"/>
-            <Setter Property="Height" Value="212"/>
-            <Setter Property="Margin" Value="4"/>
+            <Setter Property="Width" Value="210"/>
+            <Setter Property="Height" Value="306"/>
+            <Setter Property="Margin" Value="5"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Focusable" Value="True"/>
             <Setter Property="IsTabStop" Value="True"/>
@@ -739,22 +714,12 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
-                        <Border Background="{TemplateBinding Background}"
+                        <Border x:Name="Chrome" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="15" ClipToBounds="True">
                             <Grid>
-                                <ContentPresenter Margin="5"/>
-                                <Border x:Name="Drawer" VerticalAlignment="Bottom" Panel.ZIndex="2"
-                                        MaxHeight="26" ClipToBounds="True"
-                                        Background="#F2252542" CornerRadius="0,0,15,15"
-                                        BorderThickness="0,1,0,0"
-                                        BorderBrush="{DynamicResource GlassBorderBrush}">
-                                    <StackPanel>
-                                        <Grid x:Name="DrawerStrip" Height="26"/>
-                                        <StackPanel x:Name="DrawerBody" Height="118" Opacity="0"/>
-                                    </StackPanel>
-                                </Border>
+                                <ContentPresenter/>
                                 <Border x:Name="FocusRing" CornerRadius="15" BorderThickness="2"
                                         BorderBrush="{DynamicResource PinkBrush}" Opacity="0"
                                         IsHitTestVisible="False" Panel.ZIndex="3"/>
@@ -762,91 +727,11 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Trigger.EnterActions>
-                                    <BeginStoryboard Storyboard="{StaticResource AchvDrawerOpen}"/>
-                                </Trigger.EnterActions>
+                                <Setter TargetName="Chrome" Property="BorderBrush"
+                                        Value="{DynamicResource PinkBrush}"/>
                             </Trigger>
                             <Trigger Property="IsKeyboardFocusWithin" Value="True">
                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1"/>
-                                <Trigger.EnterActions>
-                                    <BeginStoryboard Storyboard="{StaticResource AchvDrawerOpen}"/>
-                                </Trigger.EnterActions>
-                            </Trigger>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Trigger.EnterActions>
-                                    <BeginStoryboard Storyboard="{StaticResource AchvDrawerOpen}"/>
-                                </Trigger.EnterActions>
-                            </Trigger>
-                            <!-- Closing is the only case that needs all three to agree: a card
-                                 pinned open (IsChecked) must not close when the pointer leaves. -->
-                            <MultiTrigger>
-                                <MultiTrigger.Conditions>
-                                    <Condition Property="IsMouseOver" Value="False"/>
-                                    <Condition Property="IsKeyboardFocusWithin" Value="False"/>
-                                    <Condition Property="IsChecked" Value="False"/>
-                                </MultiTrigger.Conditions>
-                                <MultiTrigger.EnterActions>
-                                    <BeginStoryboard Storyboard="{StaticResource AchvDrawerClose}"/>
-                                </MultiTrigger.EnterActions>
-                            </MultiTrigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- Same card with the reveal made instant (MotionLevel.Off / reduced-motion users).
-             Plain Setters, not a zero-length storyboard: a Timeline is a Freezable and cannot take
-             a DynamicResource duration, so "same storyboard, different clock" is not expressible. -->
-        <Style x:Key="AchievementCardNoMotion" TargetType="ToggleButton">
-            <Setter Property="Width" Value="168"/>
-            <Setter Property="Height" Value="212"/>
-            <Setter Property="Margin" Value="4"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Focusable" Value="True"/>
-            <Setter Property="IsTabStop" Value="True"/>
-            <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-            <Setter Property="VerticalContentAlignment" Value="Stretch"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ToggleButton">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="15" ClipToBounds="True">
-                            <Grid>
-                                <ContentPresenter Margin="5"/>
-                                <Border x:Name="Drawer" VerticalAlignment="Bottom" Panel.ZIndex="2"
-                                        MaxHeight="26" ClipToBounds="True"
-                                        Background="#F2252542" CornerRadius="0,0,15,15"
-                                        BorderThickness="0,1,0,0"
-                                        BorderBrush="{DynamicResource GlassBorderBrush}">
-                                    <StackPanel>
-                                        <Grid x:Name="DrawerStrip" Height="26"/>
-                                        <StackPanel x:Name="DrawerBody" Height="118" Opacity="0"/>
-                                    </StackPanel>
-                                </Border>
-                                <Border x:Name="FocusRing" CornerRadius="15" BorderThickness="2"
-                                        BorderBrush="{DynamicResource PinkBrush}" Opacity="0"
-                                        IsHitTestVisible="False" Panel.ZIndex="3"/>
-                            </Grid>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Drawer" Property="MaxHeight" Value="144"/>
-                                <Setter TargetName="DrawerBody" Property="Opacity" Value="1"/>
-                            </Trigger>
-                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                <Setter TargetName="Drawer" Property="MaxHeight" Value="144"/>
-                                <Setter TargetName="DrawerBody" Property="Opacity" Value="1"/>
-                                <Setter TargetName="FocusRing" Property="Opacity" Value="1"/>
-                            </Trigger>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Drawer" Property="MaxHeight" Value="144"/>
-                                <Setter TargetName="DrawerBody" Property="Opacity" Value="1"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
