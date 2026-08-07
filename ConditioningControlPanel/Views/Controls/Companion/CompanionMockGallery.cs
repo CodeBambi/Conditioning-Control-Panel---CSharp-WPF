@@ -59,6 +59,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion
                 ["awareness.live"] = () => MockAwarenessPrivacyVm.Live(),
                 ["awareness.dormant"] = () => MockAwarenessPrivacyVm.Dormant(),
                 ["awareness.eyesClosed"] = () => MockAwarenessPrivacyVm.EyesClosed(),
+                ["awareness.paused"] = () => MockAwarenessPrivacyVm.Paused(),
 
                 // Z6 attention
                 ["attention.plenty"] = () => MockAttentionGaugeVm.Plenty(),

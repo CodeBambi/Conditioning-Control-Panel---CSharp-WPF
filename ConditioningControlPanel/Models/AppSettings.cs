@@ -3733,6 +3733,168 @@ namespace ConditioningControlPanel.Models
             set { _awarenessCooldownMaxSeconds = value <= 0 ? 0 : Math.Clamp(value, 10, 600); OnPropertyChanged(); }
         }
 
+        // ---------- Awareness v2 (Train 2, "She notices") ----------
+
+        private bool _useAwarenessV2 = true;
+        /// <summary>
+        /// Train 2 kill switch. True runs the v2 pipeline: <c>AwarenessObserver</c> with a dwell gate,
+        /// the persisted <c>ActivityLedger</c> behind her callbacks, worthiness scoring, and one shared
+        /// arbiter so a bark and an LLM quip can no longer both fire on the same window change.
+        ///
+        /// <para>False restores today's behaviour end to end — the legacy <c>WindowAwarenessService</c>
+        /// poll, its cooldown helpers and the AvatarTube reaction path — with no ledger written and no
+        /// v2 setting on this page having any effect.</para>
+        ///
+        /// <para>Not a privacy control. Recording is governed by <see cref="AwarenessModeEnabled"/> +
+        /// <see cref="AwarenessConsentGiven"/>, the deny list and the adult-recording toggle, on both
+        /// paths.</para>
+        /// </summary>
+        [JsonProperty]
+        public bool UseAwarenessV2
+        {
+            get => _useAwarenessV2;
+            set { _useAwarenessV2 = value; OnPropertyChanged(); }
+        }
+
+        private Services.Awareness.AwarenessIntensity _awarenessIntensity = Services.Awareness.AwarenessIntensity.Chatty;
+        /// <summary>
+        /// How talkative she is about what you are doing — the one dial that replaces the cooldown
+        /// slider, the cooldown-max slider and the (dead) per-category toggles. Maps internally to a
+        /// line budget per hour, the worthiness threshold and whether the Rare tier is armed
+        /// (<c>AwarenessIntensityProfile</c>). Off silences awareness lines without losing any settings.
+        /// </summary>
+        [JsonProperty]
+        public Services.Awareness.AwarenessIntensity AwarenessIntensity
+        {
+            get => _awarenessIntensity;
+            set { _awarenessIntensity = value; OnPropertyChanged(); }
+        }
+
+        private List<string> _awarenessDenyList = new();
+        /// <summary>
+        /// Apps she must never see: matched as case-insensitive substrings against the resolved app id
+        /// and display name. A deny-listed app produces no frame, no ledger entry and no reaction —
+        /// ever.
+        ///
+        /// <para>Ships EMPTY. The privacy package seeds the recommended defaults (password managers,
+        /// banking, mail clients, health portals) so the seeding is visible and editable rather than
+        /// invisible and hard-coded. Entries are sanitised on the way in: length-capped, lowercased,
+        /// wildcard characters removed, and anything that would collapse to "match everything"
+        /// dropped.</para>
+        /// </summary>
+        [JsonProperty]
+        public List<string> AwarenessDenyList
+        {
+            get => _awarenessDenyList;
+            set { _awarenessDenyList = Services.Awareness.AwarenessText.SanitizeRuleList(value); OnPropertyChanged(); }
+        }
+
+        private List<string> _awarenessTitleAllowList = new();
+        /// <summary>
+        /// The only apps whose page/tab title may be included in what she is told —
+        /// <c>ContextFrame.PageTitleSanitized</c> stays null for everything else.
+        ///
+        /// <para>Ships EMPTY, which inverts today's behaviour: page titles currently go to the cloud
+        /// for every app. Same sanitising as the deny list, and for the same reason — an entry that
+        /// silently meant "every app" here would leak titles rather than merely over-mute.</para>
+        /// </summary>
+        [JsonProperty]
+        public List<string> AwarenessTitleAllowList
+        {
+            get => _awarenessTitleAllowList;
+            set { _awarenessTitleAllowList = Services.Awareness.AwarenessText.SanitizeRuleList(value); OnPropertyChanged(); }
+        }
+
+        private int _awarenessRetentionDays = 30;
+        /// <summary>
+        /// How many days of activity counters the local ledger keeps (7-90, default 30). Pruning runs
+        /// when the observer starts and on every day rollover — never only when a page is opened.
+        /// </summary>
+        [JsonProperty]
+        public int AwarenessRetentionDays
+        {
+            get => _awarenessRetentionDays;
+            set { _awarenessRetentionDays = Math.Clamp(value, 7, 90); OnPropertyChanged(); }
+        }
+
+        private bool _awarenessAdultReactionsEnabled = true;
+        /// <summary>
+        /// Whether she reacts at all to the adult-content cluster (doc 02 §6.1: on by default — it is
+        /// the app's whole theme and the funniest material). Off means those frames are scored and
+        /// recorded but never spoken about.
+        ///
+        /// <para>Independent of what crosses the wire: for that cluster only the cluster id is ever
+        /// sent, never the site name or the title, regardless of this toggle or any allow list.</para>
+        /// </summary>
+        [JsonProperty]
+        public bool AwarenessAdultReactionsEnabled
+        {
+            get => _awarenessAdultReactionsEnabled;
+            set { _awarenessAdultReactionsEnabled = value; OnPropertyChanged(); }
+        }
+
+        private bool _awarenessAdultRecordingEnabled = true;
+        /// <summary>
+        /// Whether adult-cluster visits are written to the local ledger at all. Off means no counters,
+        /// no streaks and no callbacks for that cluster — and those entries are the first thing the
+        /// privacy panel's wipe button clears when it is on.
+        /// </summary>
+        [JsonProperty]
+        public bool AwarenessAdultRecordingEnabled
+        {
+            get => _awarenessAdultRecordingEnabled;
+            set { _awarenessAdultRecordingEnabled = value; OnPropertyChanged(); }
+        }
+
+        private bool _awarenessConsentShownV2 = false;
+        /// <summary>
+        /// Whether the plain-language awareness consent dialog has been shown and accepted at least once
+        /// (doc 02 §6.3). False means the next attempt to open her eyes raises the dialog instead of
+        /// switching silently; true means the toggle is one click, as it is for every other setting.
+        ///
+        /// <para>Separate from <see cref="AwarenessConsentGiven"/> on purpose:
+        /// <c>AwarenessConsentGiven</c> is the live "is she allowed to watch" flag and follows the
+        /// toggle, while this records that the explanation was actually read once. Upgraders who had the
+        /// feature on before v2 land here as false and get the dialog the first time they touch it,
+        /// which is the whole point — they never saw one.</para>
+        /// </summary>
+        [JsonProperty]
+        public bool AwarenessConsentShownV2
+        {
+            get => _awarenessConsentShownV2;
+            set { _awarenessConsentShownV2 = value; OnPropertyChanged(); }
+        }
+
+        private bool _awarenessDenySeeded = false;
+        /// <summary>
+        /// Whether the recommended deny groups (password managers, banking, email titles) have been
+        /// written into <see cref="AwarenessDenyList"/>. Set by
+        /// <c>AwarenessPrivacyRules.EnsureSeeded</c>, which runs once, from the consent flow.
+        ///
+        /// <para>Until it is true the privacy layer applies those groups anyway, so protection never
+        /// depends on start-up ordering. After it is true the user's list is authoritative: removing a
+        /// seeded chip removes the rule, and nothing puts it back.</para>
+        /// </summary>
+        [JsonProperty]
+        public bool AwarenessDenySeeded
+        {
+            get => _awarenessDenySeeded;
+            set { _awarenessDenySeeded = value; OnPropertyChanged(); }
+        }
+
+        private bool _awarenessIntensityMigrated = false;
+        /// <summary>
+        /// Whether <see cref="AwarenessReactionCooldownSeconds"/> has been mapped onto
+        /// <see cref="AwarenessIntensity"/> (<c>AwarenessIntensityMigration</c>). Once only — a second
+        /// run would overwrite whatever the user picked on the dial afterwards.
+        /// </summary>
+        [JsonProperty]
+        public bool AwarenessIntensityMigrated
+        {
+            get => _awarenessIntensityMigrated;
+            set { _awarenessIntensityMigrated = value; OnPropertyChanged(); }
+        }
+
         private Dictionary<string, bool> _companionSectionOpen = new();
         /// <summary>
         /// Remembered open/collapsed state of the Companion tab's accordion sections, keyed by

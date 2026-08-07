@@ -37,6 +37,7 @@
     <cmp:CompanionEmptyToVisibilityConverter x:Key="CmpEmptyToVis" Invert="True"/>
     <cmp:CompanionBoolToOpacityConverter x:Key="CmpBoolToOpacity"/>
     <cmp:CompanionEnumEqualsConverter x:Key="CmpEnumEquals"/>
+    <cmp:CompanionIntEqualsConverter x:Key="CmpIntEquals"/>
     <cmp:CompanionEnumToVisibilityConverter x:Key="CmpEnumToVis"/>
     <cmp:CompanionEnumToVisibilityConverter x:Key="CmpEnumToVisInverse" Invert="True"/>
     <!-- WPF cannot draw COLR/CPAL colour fonts; every emoji glyph goes through the Twemoji

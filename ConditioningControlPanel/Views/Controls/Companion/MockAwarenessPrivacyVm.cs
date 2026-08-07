@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Windows.Input;
 using ConditioningControlPanel.Localization;
@@ -11,6 +12,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion
     {
         private AwarenessIntensity _intensity = AwarenessIntensity.BroadStrokes;
         private bool _allowPageTitles;
+        private bool _isJsonExpanded;
+        private int _retentionDays = 30;
 
         /// <summary>Parameterless ctor for <c>d:DesignInstance IsDesignTimeCreatable=True</c>.</summary>
         public MockAwarenessPrivacyVm()
@@ -21,8 +24,28 @@ namespace ConditioningControlPanel.Views.Controls.Companion
                 new CompanionDenyChip(Loc.Get("companion_awareness_deny_banking")),
                 new CompanionDenyChip(Loc.Get("companion_awareness_deny_email"))
             };
+            TitleAllowList = Array.Empty<IDenyChipVm>();
+            SeenApps = new IAwarenessAppChipVm[]
+            {
+                new AwarenessAppChip("Chrome", Loc.Get("companion_awareness_seen_tip")),
+                new AwarenessAppChip("Discord", Loc.Get("companion_awareness_seen_tip")),
+                new AwarenessAppChip("Steam", Loc.Get("companion_awareness_seen_tip"))
+            };
+            KnownApps = new IAwarenessAppChipVm[]
+            {
+                new AwarenessAppChip("YouTube", Loc.Get("companion_awareness_forget_tip")),
+                new AwarenessAppChip("Discord", Loc.Get("companion_awareness_forget_tip"))
+            };
+
             AddDenyCommand = CompanionRelayCommand.NoOp("awareness.addDeny");
             AllowPerAppCommand = CompanionRelayCommand.NoOp("awareness.allowPerApp");
+            ToggleJsonCommand = new CompanionRelayCommand(() =>
+            {
+                CompanionRelayCommand.Note("awareness.toggleJson");
+                IsJsonExpanded = !IsJsonExpanded;
+            });
+            PauseCommand = CompanionRelayCommand.NoOp("awareness.pause");
+            WipeCommand = CompanionRelayCommand.NoOp("awareness.wipe");
             FineTuningCommand = new CompanionRelayCommand(() =>
             {
                 CompanionRelayCommand.Note("awareness.fineTuning");
@@ -32,15 +55,30 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         /// <summary>
         /// Set by <see cref="MockCompanionRoomVm"/> so "fine-tuning ↓" lands on the Workshop's
-        /// awareness pigeonhole, which is where the cooldown sliders live. Null standalone.
+        /// awareness pigeonhole, which is where the intensity dial lives. Null standalone.
         /// </summary>
         public ICompanionRoomNavigator? Navigator { get; set; }
 
         public AwarenessIntensity Intensity
         {
             get => _intensity;
-            set => Set(ref _intensity, value);
+            set { if (Set(ref _intensity, value)) Raise(nameof(DialHint)); }
         }
+
+        public string DialHint => AwarenessDialCopy.HintFor(_intensity);
+
+        /// <summary>Init-only so the gallery can exhibit the legacy-pipeline warning state.</summary>
+        public bool IsLegacyPipeline { get; init; }
+
+        public string IncognitoCopy => Loc.Get(IsLegacyPipeline
+            ? "companion_awareness_incognito_legacy"
+            : "companion_awareness_incognito");
+
+        public string LegacyHead => Loc.Get("companion_awareness_legacy_head");
+        public string LegacyBody => Loc.Get("companion_awareness_legacy_body");
+        public string LegacyAction => Loc.Get("companion_awareness_legacy_action");
+
+        public ICommand ReviewConsentCommand { get; init; } = new CompanionRelayCommand(() => { });
 
         public bool IsEverythingAvailable { get; init; }
         public string WireLine { get; init; } = "[ fun · Chrome · 22m ]";
@@ -51,9 +89,34 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             Loc.Get("companion_awareness_dormant_copy");
         public bool IsDormant { get; init; }
 
+        public string WireJson { get; init; } =
+            "{\n  \"v\": 1,\n  \"cluster\": \"site_video\",\n  \"app\": \"YouTube\",\n" +
+            "  \"visits_today\": 4,\n  \"minutes_today\": 45,\n  \"dwell\": \"15-30m\"\n}";
+        public bool HasWireJson => !string.IsNullOrWhiteSpace(WireJson);
+        public string WireJsonEmptyCopy { get; init; } =
+            Loc.Get("companion_awareness_wire_json_empty");
+
+        public bool IsJsonExpanded
+        {
+            get => _isJsonExpanded;
+            set { if (Set(ref _isJsonExpanded, value)) Raise(nameof(JsonToggleLabel)); }
+        }
+
+        public string JsonToggleLabel => Loc.Get(IsJsonExpanded
+            ? "companion_awareness_wire_json_hide"
+            : "companion_awareness_wire_json_show");
+
         public IReadOnlyList<IDenyChipVm> DenyList { get; init; }
-        public string AddDenyLabel { get; init; } =
-            Loc.Get("companion_awareness_add_deny");
+        public string AddDenyLabel { get; init; } = Loc.Get("companion_awareness_add_deny");
+
+        public IReadOnlyList<IDenyChipVm> TitleAllowList { get; init; }
+        public string TitleAllowLabel { get; init; } = Loc.Get("companion_awareness_allow_label");
+
+        public IReadOnlyList<IAwarenessAppChipVm> SeenApps { get; init; }
+        public string SeenAppsLabel { get; init; } = Loc.Get("companion_awareness_seen_label");
+
+        public IReadOnlyList<IAwarenessAppChipVm> KnownApps { get; init; }
+        public string KnownAppsLabel { get; init; } = Loc.Get("companion_awareness_known_label");
 
         public bool AllowPageTitles
         {
@@ -64,9 +127,27 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         public string PageTitlesLabel { get; init; } =
             Loc.Get("companion_awareness_page_titles_hidden");
 
+        public int RetentionDays
+        {
+            get => _retentionDays;
+            set { if (Set(ref _retentionDays, value)) Raise(nameof(RetentionLabel)); }
+        }
+
+        public string RetentionLabel => Loc.GetF("companion_awareness_retention_fmt", RetentionDays);
+
+        public bool IsPaused { get; init; }
+        public string PauseLabel => Loc.Get(IsPaused
+            ? "companion_awareness_pause_resume"
+            : "companion_awareness_pause");
+
+        public string WipeLabel { get; init; } = Loc.Get("companion_awareness_wipe");
+
         public ICommand AddDenyCommand { get; }
         public ICommand AllowPerAppCommand { get; }
         public ICommand FineTuningCommand { get; }
+        public ICommand ToggleJsonCommand { get; }
+        public ICommand PauseCommand { get; }
+        public ICommand WipeCommand { get; }
 
         // ------------------------------- state exhibits -------------------------------
 
@@ -85,7 +166,8 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             IsEverythingAvailable = false,
             IsDormant = true,
             IsWireLive = false,
-            WireLine = "[ her eyes are closed ]"
+            WireLine = "[ her eyes are closed ]",
+            WireJson = string.Empty
         };
 
         /// <summary>Dial at Off — her eyes are closed, and the wire says exactly that.</summary>
@@ -94,7 +176,18 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             IsEverythingAvailable = true,
             IsWireLive = false,
             WireLine = Loc.Get("companion_awareness_wire_closed"),
+            WireJson = string.Empty,
             Intensity = AwarenessIntensity.Off
+        };
+
+        /// <summary>Paused for an hour: she is on, and looking at nothing.</summary>
+        public static MockAwarenessPrivacyVm Paused() => new()
+        {
+            IsEverythingAvailable = true,
+            IsWireLive = false,
+            IsPaused = true,
+            WireLine = Loc.Get("companion_awareness_wire_paused"),
+            WireJson = string.Empty
         };
     }
 }

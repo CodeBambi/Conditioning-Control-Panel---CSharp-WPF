@@ -55,6 +55,13 @@ namespace ConditioningControlPanel
                 if (Application.Current?.Dispatcher?.HasShutdownStarted ?? true)
                     return;
 
+                // Awareness v2: the arbiter is the only mouth. This handler and BarkService's
+                // ActivityChanged subscription are the two that can currently both fire on one window
+                // change (doc 02 §1.5); under v2 neither self-fires and the arbiter drives delivery
+                // back through SpeakAwarenessLine below. With v2 off or unwired, unchanged.
+                if (Services.Awareness.AwarenessV2Routing.IsActive)
+                    return;
+
                 // Don't trigger during startup cooldown (let greeting show first)
                 if ((DateTime.Now - _startupTime).TotalSeconds < StartupCooldownSeconds)
                     return;
@@ -167,6 +174,11 @@ namespace ConditioningControlPanel
                 if (Application.Current?.Dispatcher?.HasShutdownStarted ?? true)
                     return;
 
+                // Awareness v2 owns still-on moments too — they arrive as Milestone frames from the
+                // ledger's cumulative dwell, which is what replaced the retiring {1,5,10} timer.
+                if (Services.Awareness.AwarenessV2Routing.IsActive)
+                    return;
+
                 // Don't trigger during startup cooldown (let greeting show first)
                 if ((DateTime.Now - _startupTime).TotalSeconds < StartupCooldownSeconds)
                     return;
@@ -257,6 +269,44 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "OnStillOnActivity handler failed");
+            }
+        }
+
+        /// <summary>
+        /// Awareness v2's delivery entry point. Called by the arbiter (via
+        /// <c>AvatarAwarenessSpeaker</c>) once — and only once — per frame, after the cooldown ledger,
+        /// the budget, the floors, the staleness check and moderation have all said yes.
+        ///
+        /// <para>It deliberately holds no gates of its own. Every one that used to live in
+        /// <see cref="OnActivityChanged"/> now lives in the arbiter, where it is shared with the bark
+        /// system and can be tested; a second copy here would be the two-mouths bug in miniature.</para>
+        ///
+        /// <para><paramref name="doubleBounce"/> is the Rare-tier fanfare: scarcity only reads as
+        /// scarcity if the rare thing looks different from the common one (doc 02 §3.2).</para>
+        /// </summary>
+        public void SpeakAwarenessLine(string text, bool doubleBounce)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return;
+            if (!Dispatcher.CheckAccess())
+            {
+                // Normal, never Loaded: Loaded-priority work is starved in this app.
+                Dispatcher.BeginInvoke(DispatcherPriority.Normal,
+                    new Action(() => SpeakAwarenessLine(text, doubleBounce)));
+                return;
+            }
+
+            try
+            {
+                if (Application.Current?.Dispatcher?.HasShutdownStarted ?? true) return;
+
+                if (doubleBounce) PlayDoubleBounce();
+                GigglePriority(text, aiGenerated: true);
+
+                App.Logger?.Debug("Awareness v2 line delivered (rare={Rare}): {Text}", doubleBounce, text);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "SpeakAwarenessLine failed");
             }
         }
 

@@ -15,17 +15,43 @@ namespace ConditioningControlPanel.Views.Controls.Companion
     /// </summary>
     public partial class AwarenessPrivacyView : UserControl
     {
+        /// <summary>
+        /// How often the wire view re-reads while the card is on screen. Matches the observer's own
+        /// poll: a trust surface that lags the thing it is describing is a trust surface that is wrong,
+        /// and anything faster would be redrawing between the observer's own ticks.
+        /// </summary>
+        public static readonly TimeSpan RefreshInterval = TimeSpan.FromMilliseconds(1500);
+
         private Storyboard? _blink;
         private bool _introPlayed;
         private IAwarenessPrivacyVm? _observed;
+        private DispatcherTimer? _refresh;
 
         public AwarenessPrivacyView()
         {
             InitializeComponent();
+            WipeConfirm = new MemoryForgetConfirm();
             Loaded += OnLoaded;
-            DataContextChanged += (_, e) => Observe(e.NewValue as IAwarenessPrivacyVm);
-            Unloaded += (_, _) => { StopCursorBlink(); Observe(null); };
+            DataContextChanged += (_, e) =>
+            {
+                Observe(e.NewValue as IAwarenessPrivacyVm);
+                WipeConfirm.Bind((e.NewValue as IAwarenessPrivacyVm)?.WipeCommand);
+            };
+            Unloaded += (_, _) =>
+            {
+                StopCursorBlink();
+                StopRefresh();
+                WipeConfirm.Disarm();
+                Observe(null);
+            };
         }
+
+        /// <summary>
+        /// The wipe's two-step, in the same inline shape the memory diary uses: the destructive command
+        /// runs only from <c>ConfirmCommand</c>, only while armed, and re-binding always disarms. This
+        /// erases everything she has noticed, so it may never be one click.
+        /// </summary>
+        public MemoryForgetConfirm WipeConfirm { get; }
 
         /// <summary>Convenience for hosts that hand in a viewmodel rather than setting DataContext.</summary>
         public IAwarenessPrivacyVm? ViewModel
@@ -38,12 +64,57 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         {
             if (!IsLoaded) return;
             Observe(ViewModel);
+            WipeConfirm.Bind(ViewModel?.WipeCommand);
+            StartRefresh();
             // Normal, never Loaded — DispatcherPriority.Loaded is starved in this app.
             Dispatcher.BeginInvoke(new Action(() =>
             {
                 SyncCursorBlink();
                 if (!_introPlayed) { _introPlayed = true; PlayIntro(); }
             }), DispatcherPriority.Normal);
+        }
+
+        /// <summary>
+        /// Arms the wire view's refresh while the card is on screen. Idempotent, and deliberately
+        /// visible-only: this is a readout, not a scheduler, and nothing about awareness's own
+        /// lifecycle — recording, pruning, reacting — depends on it ticking.
+        /// </summary>
+        public void StartRefresh()
+        {
+            if (_refresh != null) return;
+
+            var dispatcher = Application.Current?.Dispatcher ?? Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+
+            _refresh = new DispatcherTimer(DispatcherPriority.Normal, dispatcher) { Interval = RefreshInterval };
+            _refresh.Tick += OnRefreshTick;
+            _refresh.Start();
+        }
+
+        /// <summary>Disarms the refresh. Safe to call when it was never started.</summary>
+        public void StopRefresh()
+        {
+            if (_refresh == null) return;
+            _refresh.Stop();
+            _refresh.Tick -= OnRefreshTick;
+            _refresh = null;
+        }
+
+        private void OnRefreshTick(object? sender, EventArgs e)
+        {
+            try
+            {
+                if (Application.Current?.Dispatcher?.HasShutdownStarted == true) { StopRefresh(); return; }
+                if (!IsLoaded) { StopRefresh(); return; }
+
+                // The runtime viewmodel is the only one with anything to re-read; the mocks are static
+                // exhibits and asking them to sync would be a no-op with an interface change attached.
+                (DataContext as Runtime.AwarenessPrivacyRuntimeVm)?.Sync();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Awareness panel refresh failed: {E}", ex.Message);
+            }
         }
 
         /// <summary>

@@ -371,6 +371,16 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             IsSeeded = seeded;
         }
 
+        /// <summary>
+        /// A chip that really lifts a rule. The mocks keep the no-op ctor above; the wired-up privacy
+        /// panel hands in the command that rewrites the list, because a ✕ on a privacy control that
+        /// removes nothing is the worst affordance on the card.
+        /// </summary>
+        public CompanionDenyChip(string label, bool seeded, ICommand remove) : this(label, seeded)
+        {
+            if (remove != null) RemoveCommand = remove;
+        }
+
         public string Label { get; init; }
         public bool IsSeeded { get; init; }
         public ICommand RemoveCommand { get; }

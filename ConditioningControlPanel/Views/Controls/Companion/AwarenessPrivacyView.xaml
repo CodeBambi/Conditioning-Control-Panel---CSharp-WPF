@@ -6,7 +6,7 @@
              xmlns:local="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
-             d:DesignWidth="430" d:DesignHeight="360"
+             d:DesignWidth="430" d:DesignHeight="620"
              d:DataContext="{d:DesignInstance Type=local:MockAwarenessPrivacyVm, IsDesignTimeCreatable=True}">
 
     <!-- ================================================================
@@ -18,20 +18,27 @@
              enum with a per-stop ConverterParameter, so the strip needs
              no code-behind at all.
            · The wire view is the trust element: a monospace chip showing
-             EXACTLY the projected ContextFrame. Off/free shows it grayed
-             saying "[ her eyes are closed ]" rather than vanishing.
+             EXACTLY the projected ContextFrame, with the real cloud JSON
+             one click underneath. Off/paused shows it grayed saying
+             "[ her eyes are closed ]" rather than vanishing.
            · Deny chips ship seeded (password managers, banking, email)
              and each one can be lifted again — the ✕ is hover-revealed
              and, until then, not hit-testable, because an invisible
              control that removes a privacy guard is a trap.
+           · Seen-app chips are the zero-typing path INTO the deny list;
+             known-app chips are the zero-typing path OUT of the ledger.
+             Apps, never titles — a chip listing a page title would put
+             the thing this card keeps local into a screenshot.
            · Incognito is a hard drop and says so in fixed copy.
            · Page titles default OFF — the inverted default made visible,
              and the label goes pink while they are hidden.
+           · The undo row is not settings: retention, pause and the wipe
+             are the answer to "what do you have on me", so they live on
+             the card rather than three screens away.
 
-         Pre-Train 2: the third stop is present but not selectable (the
-         first two bridge today's single toggle) and the dormant promise
-         block replaces the live caption. Small TRAIN 2 microtag, never
-         the word TODO.
+         Pre-Train 2 (the mock gallery's dormant exhibit) keeps the third
+         stop unselectable and swaps the JSON block for the promise
+         block. Small TRAIN 2 microtag, never the word TODO.
          ================================================================ -->
 
     <UserControl.Resources>
@@ -86,6 +93,52 @@
                     </Trigger>
                 </DataTemplate.Triggers>
             </DataTemplate>
+
+            <!-- the allow-list chip: same shape, its own remove tooltip, because "stop hiding this"
+                 and "stop sending this app's titles" are opposite promises -->
+            <DataTemplate x:Key="CmpAllowChipTemplate">
+                <Border x:Name="ChipBd" Style="{StaticResource CmpDenyChipStyle}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding Label}" Style="{StaticResource CmpDenyChipTextStyle}"
+                                   VerticalAlignment="Center"/>
+                        <Button x:Name="RemoveBtn" Content="✕" Style="{StaticResource CmpZ5ChipCloseStyle}"
+                                Command="{Binding RemoveCommand}"
+                                ToolTip="{loc:Str companion_awareness_allow_remove_tip}"/>
+                    </StackPanel>
+                </Border>
+                <DataTemplate.Triggers>
+                    <Trigger SourceName="ChipBd" Property="IsMouseOver" Value="True">
+                        <Setter TargetName="RemoveBtn" Property="Opacity" Value="1"/>
+                        <Setter TargetName="RemoveBtn" Property="IsHitTestVisible" Value="True"/>
+                    </Trigger>
+                </DataTemplate.Triggers>
+            </DataTemplate>
+
+            <!-- a one-click app chip (seen apps, known apps): the whole chip IS the button -->
+            <DataTemplate x:Key="CmpAppChipTemplate">
+                <Button Command="{Binding ActionCommand}" ToolTip="{Binding ActionTip}"
+                        Cursor="Hand" Background="Transparent" BorderThickness="0"
+                        FontSize="10.5" Padding="11,4,11,4" Margin="0,0,5,5"
+                        Foreground="{StaticResource CmpMutedBrush}">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bd" Background="#0EFFFFFF" local:CompanionCapsule.IsCapsule="True"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter VerticalAlignment="Center"
+                                                  TextBlock.Foreground="{TemplateBinding Foreground}"
+                                                  TextBlock.FontSize="{TemplateBinding FontSize}"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+                                    <Setter TargetName="Bd" Property="Background" Value="#1AFFFFFF"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                    <TextBlock Text="{Binding Label}"/>
+                </Button>
+            </DataTemplate>
         </ResourceDictionary>
     </UserControl.Resources>
 
@@ -104,13 +157,51 @@
                            Source="{Binding Source='👁', Converter={StaticResource CmpEmojiToImage}}"/>
                     <TextBlock Text="{loc:Str companion_awareness_title}" Style="{StaticResource CmpSectionTitleStyle}"/>
                 </StackPanel>
-                <Border Grid.Column="2" Style="{StaticResource CmpTrainTagStyle}">
+                <!-- live once Train 2 landed; the bridge exhibit still wears the train tag -->
+                <Border Grid.Column="2" Style="{StaticResource CmpTrainTagLiveStyle}"
+                        Visibility="{Binding IsDormant, Converter={StaticResource CmpBoolToVisInverse}}">
+                    <TextBlock Text="{loc:Str companion_tag_live}" Style="{StaticResource CmpTrainTagLiveTextStyle}"/>
+                </Border>
+                <Border Grid.Column="2" Style="{StaticResource CmpTrainTagStyle}"
+                        Visibility="{Binding IsDormant, Converter={StaticResource CmpBoolToVis}}">
                     <TextBlock Text="{loc:Str companion_tag_train2}" Style="{StaticResource CmpTrainTagTextStyle}"/>
                 </Border>
             </Grid>
 
-            <!-- ========== intensity dial ========== -->
-            <Border Style="{StaticResource CmpSegmentStripStyle}" Margin="0,13,0,12">
+            <!-- ========== the legacy-pipeline warning ==========
+                 Everything below this band describes the v2 privacy layer. The legacy poll starts on
+                 two flags where the observer needs four, so declining the v2 consent dialog (or
+                 dropping the kill switch) leaves her watching with NONE of it: no incognito drop, no
+                 deny list, no title allow list. The card used to render those promises as fact in
+                 exactly that state. -->
+            <Border Margin="0,13,0,0" Padding="12,10,12,11" CornerRadius="9"
+                    Background="#332A1A1A" BorderBrush="#FF6B6B" BorderThickness="1"
+                    Visibility="{Binding IsLegacyPipeline, Converter={StaticResource CmpBoolToVis}}">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                        <TextBlock Text="⚠️" FontSize="11" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding LegacyHead}" Foreground="#FF6B6B" FontSize="11.5"
+                                   FontWeight="Bold" VerticalAlignment="Center" Margin="5,0,0,0"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding LegacyBody}" Style="{StaticResource CmpFaintTextStyle}"
+                               TextWrapping="Wrap" Margin="0,0,0,7"/>
+                    <Button Content="{Binding LegacyAction}" Command="{Binding ReviewConsentCommand}"
+                            Style="{StaticResource CmpLinkButtonStyle}" HorizontalAlignment="Left"
+                            Padding="0,2,0,2"/>
+                </StackPanel>
+            </Border>
+
+            <!-- ========== intensity dial ==========
+                 The strip moves ONE thing: whether any app's page title may leave this PC. It used to
+                 sit here unlabelled, under a card headed "What she can see", with stops reading
+                 "Broad strokes" and "Everything" - so a play-tester read the third stop as "she sees
+                 everything", pressed it, and was handed an app-picking dialog that made no sense
+                 against that reading. The caption names the axis, the stop labels name their own
+                 content, and DialHint carries the consequence of whichever one is selected. -->
+            <TextBlock Text="{loc:Str companion_awareness_dial_head}" Style="{StaticResource CmpFaintTextStyle}"
+                       Margin="2,13,0,5"/>
+            <Border Style="{StaticResource CmpSegmentStripStyle}" Margin="0,0,0,6">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -146,6 +237,10 @@
                 </Grid>
             </Border>
 
+            <!-- what the SELECTED stop does. Tracks the dial, so it is never generic copy. -->
+            <TextBlock Text="{Binding DialHint}" Style="{StaticResource CmpFaintTextStyle}"
+                       TextWrapping="Wrap" Margin="2,0,0,12"/>
+
             <!-- ========== the wire view ========== -->
             <Border Style="{StaticResource CmpWireStyle}"
                     Opacity="{Binding IsWireLive, Converter={StaticResource CmpBoolToOpacity},
@@ -164,7 +259,28 @@
             <TextBlock Text="{Binding WireCaption}" Style="{StaticResource CmpWireCaptionStyle}"
                        Visibility="{Binding IsDormant, Converter={StaticResource CmpBoolToVisInverse}}"/>
 
-            <!-- ========== dormant promise (pre-Train 2) ========== -->
+            <!-- ========== the exact bytes ========== -->
+            <StackPanel Margin="0,4,0,10"
+                        Visibility="{Binding IsDormant, Converter={StaticResource CmpBoolToVisInverse}}">
+                <Button Content="{Binding JsonToggleLabel}" Command="{Binding ToggleJsonCommand}"
+                        Style="{StaticResource CmpLinkButtonStyle}" HorizontalAlignment="Left"
+                        Padding="0,2,0,2"/>
+                <Border Margin="0,6,0,0" Padding="10,8,10,8" CornerRadius="7" Background="#14000000"
+                        Visibility="{Binding IsJsonExpanded, Converter={StaticResource CmpBoolToVis}}">
+                    <StackPanel>
+                        <ScrollViewer MaxHeight="180" HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollBarVisibility="Auto"
+                                      Visibility="{Binding HasWireJson, Converter={StaticResource CmpBoolToVis}}">
+                            <TextBlock Text="{Binding WireJson}" FontFamily="Consolas" FontSize="10.5"
+                                       Foreground="{StaticResource CmpDimBrush}"/>
+                        </ScrollViewer>
+                        <TextBlock Text="{Binding WireJsonEmptyCopy}" Style="{StaticResource CmpFaintTextStyle}"
+                                   Visibility="{Binding HasWireJson, Converter={StaticResource CmpBoolToVisInverse}}"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- ========== dormant promise (pre-Train 2 exhibit) ========== -->
             <Grid Margin="0,6,0,12"
                   Visibility="{Binding IsDormant, Converter={StaticResource CmpBoolToVis}}">
                 <Border x:Name="DormantHost" Style="{StaticResource CmpDormantBlockStyle}">
@@ -221,8 +337,21 @@
                 </Button>
             </Grid>
 
-            <TextBlock Text="{loc:Str companion_awareness_incognito}" Style="{StaticResource CmpFaintTextStyle}"
-                       Margin="2,4,0,11"/>
+            <!-- seen apps: one click hides one of them, no typing -->
+            <StackPanel Margin="0,6,0,0"
+                        Visibility="{Binding SeenApps, Converter={StaticResource CmpHasContentToVis}}">
+                <TextBlock Text="{Binding SeenAppsLabel}" Style="{StaticResource CmpFaintTextStyle}" Margin="2,0,0,4"/>
+                <ItemsControl ItemsSource="{Binding SeenApps}" ItemTemplate="{StaticResource CmpAppChipTemplate}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </StackPanel>
+
+            <!-- Bound, not a fixed loc string: the incognito hard-drop is a v2 rule, so on the legacy
+                 pipeline "that one is not a setting" would be describing a guard that is not there. -->
+            <TextBlock Text="{Binding IncognitoCopy}" Style="{StaticResource CmpFaintTextStyle}"
+                       TextWrapping="Wrap" Margin="2,4,0,11"/>
 
             <!-- ========== page titles ========== -->
             <Grid>
@@ -232,9 +361,8 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <!-- Pre-Train 2 there is no setting behind this, so it reports the truth and
-                         cannot be flipped. A switch that snaps back is worse than one that is
-                         honestly unavailable — and this is the privacy card. -->
+                    <!-- Not a global switch: on asks WHICH app, off empties the list. The label
+                         reports the count, so a card showing "allowed" always says for how many. -->
                     <ToggleButton Style="{StaticResource CmpToggleSwitchStyle}" Margin="0,0,9,0"
                                   ToolTip="{Binding PageTitlesLabel}"
                                   ToolTipService.ShowOnDisabled="True"
@@ -261,6 +389,93 @@
                         HorizontalAlignment="Right" Padding="0,2,0,2"
                         Command="{Binding FineTuningCommand}"/>
             </Grid>
+
+            <StackPanel Margin="0,7,0,0"
+                        Visibility="{Binding TitleAllowList, Converter={StaticResource CmpHasContentToVis}}">
+                <TextBlock Text="{Binding TitleAllowLabel}" Style="{StaticResource CmpFaintTextStyle}" Margin="2,0,0,4"/>
+                <ItemsControl ItemsSource="{Binding TitleAllowList}" ItemTemplate="{StaticResource CmpAllowChipTemplate}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </StackPanel>
+
+            <!-- ========== the undo ========== -->
+            <Border Margin="0,13,0,0" Padding="12,10,12,12" CornerRadius="9" Background="#12FFFFFF"
+                    Visibility="{Binding IsDormant, Converter={StaticResource CmpBoolToVisInverse}}">
+                <StackPanel>
+                    <TextBlock Text="{loc:Str companion_awareness_undo_head}"
+                               Style="{StaticResource CmpFaintTextStyle}" Margin="0,0,0,7"/>
+
+                    <!-- apps she is counting, each one a forget button -->
+                    <StackPanel Visibility="{Binding KnownApps, Converter={StaticResource CmpHasContentToVis}}"
+                                Margin="0,0,0,6">
+                        <TextBlock Text="{Binding KnownAppsLabel}" Style="{StaticResource CmpFaintTextStyle}"
+                                   Margin="0,0,0,4"/>
+                        <ItemsControl ItemsSource="{Binding KnownApps}" ItemTemplate="{StaticResource CmpAppChipTemplate}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- retention: two stops, because a slider implies a precision nobody wants here -->
+                    <TextBlock Text="{Binding RetentionLabel}" Style="{StaticResource CmpFaintTextStyle}"
+                               Margin="0,0,0,4"/>
+                    <Border Style="{StaticResource CmpSegmentStripStyle}" HorizontalAlignment="Left"
+                            Margin="0,0,0,9">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <RadioButton Grid.Column="0" GroupName="CmpAwarenessRetention"
+                                         Content="{loc:Str companion_awareness_retention_7}"
+                                         Style="{StaticResource CmpSegmentStyle}" MinWidth="86"
+                                         IsChecked="{Binding RetentionDays, Mode=TwoWay,
+                                                     Converter={StaticResource CmpIntEquals}, ConverterParameter=7}"/>
+                            <RadioButton Grid.Column="1" GroupName="CmpAwarenessRetention"
+                                         Content="{loc:Str companion_awareness_retention_30}"
+                                         Style="{StaticResource CmpSegmentStyle}" MinWidth="86"
+                                         IsChecked="{Binding RetentionDays, Mode=TwoWay,
+                                                     Converter={StaticResource CmpIntEquals}, ConverterParameter=30}"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- pause + wipe. The wipe never fires from its own button: WipeConfirm is the
+                         same inline two-step the memory diary uses, so the tab is never blocked and
+                         the destructive command has exactly one path to it. -->
+                    <Grid Visibility="{Binding WipeConfirm.IsArmed,
+                                       RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource CmpBoolToVisInverse}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0" Content="{Binding PauseLabel}" Command="{Binding PauseCommand}"
+                                Style="{StaticResource CmpLinkButtonStyle}" Padding="0,2,0,2"/>
+                        <Button Grid.Column="1" Content="{Binding WipeLabel}"
+                                Command="{Binding WipeConfirm.ArmCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                Style="{StaticResource CmpLinkButtonStyle}" Padding="0,2,0,2"
+                                HorizontalAlignment="Right" Foreground="{StaticResource CmpDangerBrush}"/>
+                    </Grid>
+
+                    <StackPanel Visibility="{Binding WipeConfirm.IsArmed,
+                                             RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource CmpBoolToVis}}">
+                        <TextBlock Text="{loc:Str companion_awareness_wipe_confirm}"
+                                   Style="{StaticResource CmpFaintTextStyle}" TextWrapping="Wrap"
+                                   Margin="0,0,0,5"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="{loc:Str companion_awareness_wipe_yes}"
+                                    Command="{Binding WipeConfirm.ConfirmCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    Style="{StaticResource CmpLinkButtonStyle}" Padding="0,2,0,2"
+                                    Foreground="{StaticResource CmpDangerBrush}" Margin="0,0,14,0"/>
+                            <Button Content="{loc:Str companion_awareness_wipe_no}"
+                                    Command="{Binding WipeConfirm.CancelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    Style="{StaticResource CmpLinkButtonStyle}" Padding="0,2,0,2"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
         </StackPanel>
     </Border>
 </UserControl>

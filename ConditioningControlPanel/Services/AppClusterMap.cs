@@ -34,7 +34,30 @@ namespace ConditioningControlPanel.Services
         private static string FilePath =>
             Path.Combine(CompanionPhraseService.CompanionAudioFolder, FileName);
 
-        /// <summary>Load the external override once (if present). Falls back to embedded defaults on any error.</summary>
+        /// <summary>Largest override file that will be read at all. A mod file, not a database.</summary>
+        public const int MaxFileBytes = 256 * 1024;
+
+        /// <summary>
+        /// Cluster ids the awareness code branches on BY NAME and which therefore may never disappear
+        /// from the table, whatever an override says. Today that is the adult cluster, on which
+        /// <c>ContextFrame.IsAdultCluster</c>, the cloud projection's withholding branch, the day arc's
+        /// collapse, the title rules, <c>FrameDrop.AdultRecordingOff</c> and
+        /// <c>DndGate.AdultReactionsOff</c> all depend.
+        /// </summary>
+        public static readonly string[] RequiredClusterIds = { Awareness.AwarenessClusters.Adult };
+
+        /// <summary>
+        /// Load the external override once (if present) by MERGING it over the embedded defaults.
+        /// Falls back to embedded defaults on any error.
+        ///
+        /// <para><b>Merge, not replace.</b> This file is a documented extension point — the
+        /// creator-mod pipeline emits one — so a mod that adds three bespoke apps used to REPLACE the
+        /// entire table, taking <c>site_eh</c> with it. Nothing errored and nothing logged; the adult
+        /// cluster simply stopped existing, and with it every rule in Awareness v2 that keys off it, so
+        /// adult app ids and display names started crossing the wire. Anything the override does not
+        /// mention keeps its embedded value, and the required ids are re-injected if a well-formed
+        /// override happens to omit them.</para>
+        /// </summary>
         public static void EnsureLoaded()
         {
             if (_loaded) return;
@@ -43,20 +66,52 @@ namespace ConditioningControlPanel.Services
             {
                 var path = FilePath;
                 if (!File.Exists(path)) return; // keep embedded defaults
+
+                var size = new FileInfo(path).Length;
+                if (size > MaxFileBytes)
+                {
+                    App.Logger?.Warning("AppClusterMap: override is {Bytes} bytes (cap {Cap}) — using embedded defaults",
+                        size, MaxFileBytes);
+                    return;
+                }
+
                 var json = File.ReadAllText(path);
                 if (string.IsNullOrWhiteSpace(json)) return;
                 var root = JObject.Parse(json);
-                var clusters = ParseSection(root["clusters"] as JObject);
-                var apps = ParseSection(root["apps"] as JObject);
-                if (clusters.Count > 0) _clusters = clusters;
-                if (apps.Count > 0) _apps = apps;
+
+                _clusters = Merge(DefaultClusters, ParseSection(root["clusters"] as JObject));
+                _apps = Merge(DefaultApps, ParseSection(root["apps"] as JObject));
+
+                // Fail closed on the ids the privacy rules name: an override that drops one does not get
+                // to widen what leaves the machine.
+                foreach (var required in RequiredClusterIds)
+                {
+                    if (_clusters.ContainsKey(required)) continue;
+                    if (!DefaultClusters.TryGetValue(required, out var embedded)) continue;
+                    _clusters[required] = embedded;
+                    App.Logger?.Warning(
+                        "AppClusterMap: override omitted the '{Cluster}' cluster — re-injected the embedded terms",
+                        required);
+                }
+
                 App.Logger?.Information("AppClusterMap: loaded {Clusters} clusters, {Apps} bespoke apps from {Path}",
                     _clusters.Count, _apps.Count, path);
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "AppClusterMap: failed to load override — using embedded defaults");
+                _clusters = DefaultClusters;
+                _apps = DefaultApps;
             }
+        }
+
+        /// <summary>Override entries win per id; every id the override does not mention survives.</summary>
+        private static Dictionary<string, string[]> Merge(
+            Dictionary<string, string[]> embedded, Dictionary<string, string[]> overrides)
+        {
+            var merged = new Dictionary<string, string[]>(embedded, StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in overrides) merged[pair.Key] = pair.Value;
+            return merged;
         }
 
         private static Dictionary<string, string[]> ParseSection(JObject? section)

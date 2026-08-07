@@ -368,6 +368,15 @@ namespace ConditioningControlPanel
         public static Services.Moderation.IPromptValidator PromptValidator { get; private set; } = null!;
         public static Services.Moderation.IModerationCounter ModerationCounter { get; private set; } = null!;
         public static WindowAwarenessService WindowAwareness { get; private set; } = null!;
+
+        /// <summary>
+        /// Awareness v2's observer (Train 2): the dwell gate, the <c>ActivityLedger</c>, the worthiness
+        /// scorer and the one reaction arbiter. Null only if construction failed — every caller
+        /// null-checks and the legacy <see cref="WindowAwareness"/> pipeline carries on, which is also
+        /// exactly what the <c>UseAwarenessV2</c> kill switch selects.
+        /// </summary>
+        public static Services.Awareness.AwarenessObserver? Awareness { get; private set; }
+
         public static PatreonService Patreon { get; private set; } = null!;
         public static SubscribeStarService SubscribeStar { get; private set; } = null!;
         public static UpdateService Update { get; private set; } = null!;
@@ -1611,6 +1620,119 @@ namespace ConditioningControlPanel
             }
 
             WindowAwareness = new WindowAwarenessService();
+
+            // Awareness v2 (Train 2). Built after Brain because the arbiter is the companion's one
+            // mouth and the memory seam is the brain's to fill later; started from
+            // WindowAwarenessService.Start(), which is the single on/off call site both the avatar tube
+            // and the Companion tab's awareness dial already use. Start() is also what loads and PRUNES
+            // the ledger, so retention is honoured whether or not any UI is ever opened.
+            try
+            {
+                var awarenessLedger = new Services.Awareness.ActivityLedger();
+
+                // ONE memory instance. The observer and the arbiter must share it, or the
+                // recent-reaction ban list splits across two rings and she repeats herself while both
+                // halves believe they are keeping her honest.
+                var awarenessMemory = new Services.Awareness.StubCompanionMemory();
+
+                // ONE scorer, for the same reason there is one arbiter. The arbiter is the ONLY thing
+                // that calls WorthinessScorer.RegisterDelivery, so handing it a different instance from
+                // the observer's leaves the whole silence budget inert: the floating threshold never
+                // rises after a delivered line and the per-app repetition penalty is permanently 0.0,
+                // which pins the score's threshold at the intensity baseline forever (doc 02 §3.4/§4.1).
+                var awarenessScorer = new Services.Awareness.WorthinessScorer();
+
+                // ONE arbiter. It is the single cooldown ledger every awareness line, bark and
+                // keyword-triggered comment passes through, which is the whole "one character, one
+                // mouth" guarantee — a second instance would be a second mouth with its own cooldowns.
+                // The staleness check asks "what is in front of the user NOW". The observer already
+                // resolved that on its last poll, so the speaker reads it from there instead of
+                // re-reading the foreground window and re-running AppClusterMap.Classify — one
+                // classification, and the answer it compares against is the same one the frame was
+                // built from. Deferred through a closure because the observer does not exist yet.
+                Services.Awareness.AwarenessObserver? observerRef = null;
+                var arbiter = new Services.Awareness.ReactionArbiter(
+                    cooldowns: null,
+                    scorer: awarenessScorer,
+                    localClock: null,
+                    speaker: new Services.Awareness.AvatarAwarenessSpeaker(
+                        currentAppId: () => observerRef?.CurrentAppId),
+                    lineSource: new Services.Awareness.BrainAwarenessLineSource(),
+                    memory: awarenessMemory);
+
+                Awareness = new Services.Awareness.AwarenessObserver(
+                    awarenessLedger,
+                    awarenessScorer,
+                    arbiter,
+                    awarenessMemory);
+                observerRef = Awareness;
+
+                // The trust surface's seam: the privacy panel renders the real last frame and erases
+                // the real ledger through these. Set before anything can cut a frame.
+                Services.Awareness.AwarenessLive.Ledger = awarenessLedger;
+                Services.Awareness.AwarenessLive.Memory = awarenessMemory;
+                Services.Awareness.AwarenessLive.ResetObserverState = Awareness.ResetTransientState;
+
+                // The in-RAM pacing half of the erasure. The ledger and the memory are files; the
+                // cooldown ledger's per-app last-spoke map and the scorer's repetition counters are
+                // not, and both are keyed by the app ids a wipe or a per-app forget just erased.
+                Services.Awareness.AwarenessLive.ResetPacingState = () =>
+                {
+                    arbiter.Cooldowns.Reset();
+                    awarenessScorer.Reset();
+                };
+                Services.Awareness.AwarenessLive.ForgetPacingState = id =>
+                {
+                    arbiter.Cooldowns.Forget(id);
+                    awarenessScorer.Forget(id);
+                };
+
+                // Retention does NOT depend on the feature being switched on. Every other pruning path
+                // hangs off the observer's Start(), which returns early when awareness is off — so a
+                // user who ran awareness for three weeks and then turned it off kept those three weeks
+                // on disk forever, while the consent dialog and the settings notice both promise the
+                // counts are deleted after the retention period. This sweep runs on every launch,
+                // creates nothing when there is no file, and is a no-op once the ledger is live.
+                try { awarenessLedger.PruneOnDisk(); }
+                catch (Exception pruneEx) { Logger?.Warning(pruneEx, "ActivityLedger: startup retention sweep failed"); }
+
+                // The two one-time initialisers used to hang off the consent dialog's accept path,
+                // which an upgrader with awareness already on never reaches. Run them here so the
+                // shipped deny groups are materialised and the pacing dial is migrated for every
+                // profile, whether or not the dialog is ever raised. Both are idempotent.
+                try
+                {
+                    var awarenessSettings = Settings?.Current;
+                    bool wrote = Services.Awareness.AwarenessPrivacyRules.EnsureSeeded(awarenessSettings);
+                    wrote |= Services.Awareness.AwarenessIntensityMigration.EnsureMigrated(awarenessSettings);
+                    if (wrote) Settings?.Save();
+                }
+                catch (Exception seedEx) { Logger?.Warning(seedEx, "Awareness: deny-group seed / intensity migration failed"); }
+
+                // Engages v2: suppresses the legacy awareness mouth (BarkService's awareness-gated
+                // rules, the tube's legacy reaction handlers) and lets the keyword engine register its
+                // lines against the one cooldown ledger. Without this call BOTH mouths stay in their
+                // v1 state and nothing in v2 speaks — the flag alone is not the switch.
+                Services.Awareness.AwarenessV2Routing.Attach(arbiter);
+
+                Logger?.Information("AwarenessObserver constructed (v2 enabled={Enabled})",
+                    Services.Awareness.AwarenessObserver.IsEnabled);
+            }
+            catch (Exception ex)
+            {
+                // An observer that will not build must not take the app down: the legacy awareness
+                // pipeline is still there and still works. Detach so the legacy mouth is not left
+                // suppressed by a half-built v2 that can never speak.
+                Awareness = null;
+                try { Services.Awareness.AwarenessV2Routing.Detach(); } catch { }
+                Services.Awareness.AwarenessLive.Ledger = null;
+                Services.Awareness.AwarenessLive.Memory = null;
+                Services.Awareness.AwarenessLive.ResetObserverState = null;
+                Services.Awareness.AwarenessLive.ResetPacingState = null;
+                Services.Awareness.AwarenessLive.ForgetPacingState = null;
+                Logger?.Error(ex, "AwarenessObserver: initialization failed, falling back to legacy awareness");
+            }
+
             Patreon = new PatreonService();
             SubscribeStar = new SubscribeStarService();
             // The weekly intake pass is a free-tier amenity, so its state depends on entitlement -
@@ -3707,6 +3829,14 @@ Application State:
             MindWipe?.Dispose();
             BrainDrain?.Dispose();
             Achievements?.Dispose();
+            // Before WindowAwareness: its Dispose runs Stop(), which also stops the observer — and the
+            // observer's own Stop is what closes the open visit and flushes the ledger to disk.
+            // Detach first so nothing can route a line into a half-disposed arbiter on the way down.
+            try { Services.Awareness.AwarenessV2Routing.Detach(); } catch { }
+            Awareness?.Dispose();
+            Services.Awareness.AwarenessLive.ResetObserverState = null;
+            Services.Awareness.AwarenessLive.Ledger = null;
+            Services.Awareness.AwarenessLive.Memory = null;
             WindowAwareness?.Dispose();
             // Before Ai: Dispose flushes the conversation to companion/session.json and unhooks the
             // bark echo, and it must not race the transport being torn down underneath it.
