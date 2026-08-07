@@ -64,8 +64,12 @@ public abstract class BaseLayer : IWpfLayer
 
     public virtual void Update(TimeSpan delta) { }
 
-    /// <summary>Default true: repaint every active frame. Slow/static layers (spiral, pink tint)
-    /// override this with real change-tracking to throttle the fullscreen surface re-raster (#550).</summary>
+    /// <summary>Default true: repaint every active frame. Every layer in the app overrides this
+    /// with real change-tracking; the default is only a safe fallback for a NEW layer, and it is
+    /// far from free. The engine folds dirt per SURFACE, so one permanently-dirty layer re-rasters
+    /// the whole shared surface - fullscreen pink tint and spiral included - at the display's
+    /// refresh rate (#853: that is exactly how the #550 throttle got defeated once bubbles or
+    /// subliminals joined the stack).</summary>
     public virtual bool Dirty => true;
 
     public virtual void ClearDirty() { }

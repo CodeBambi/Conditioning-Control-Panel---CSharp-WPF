@@ -91,6 +91,14 @@ public sealed class SubliminalLayer : BaseLayer
 
     private readonly List<Item> _items = new();
     private readonly object _sync = new();
+
+    // #853: a card is STATIC for its whole hold - only the 50ms fade ramps and a change of top
+    // card move a pixel. Tracked as (drawn item, quantized alpha) so a queued subliminal stops
+    // forcing the shared surface (pink tint + spiral with it) to re-raster at refresh rate.
+    // volatile: Flash/Clear are callable from any thread, the engine reads this on the UI thread.
+    private volatile bool _dirty = true;
+    private Item? _lastDrawn;      // UI thread (Update) only
+    private int _lastAlpha = -1;
     // Reused paints, only touched under _sync (no per-frame allocations).
     private readonly SKPaint _bgPaint = new();
     private readonly SKPaint _textPaint = new()
@@ -157,6 +165,7 @@ public sealed class SubliminalLayer : BaseLayer
                 item.BaselineOffsetPx[i] = -(ascent + descent) / 2f;
             }
             _items.Add(item);
+            _dirty = true;        // new top card: paint it on the very next tick
         }
         SetActive(true);
     }
@@ -164,9 +173,12 @@ public sealed class SubliminalLayer : BaseLayer
     /// <summary>Drop every live card (service Stop / mid-run flag flip). Safe from any thread.</summary>
     public void Clear()
     {
-        lock (_sync) { _items.Clear(); }
+        lock (_sync) { _items.Clear(); _dirty = true; }
         SetActive(false);
     }
+
+    public override bool Dirty => _dirty;
+    public override void ClearDirty() => _dirty = false;
 
     /// <summary>
     /// Padded virtual-desktop px rects of the currently DRAWN text (the most recent card, the
@@ -209,6 +221,22 @@ public sealed class SubliminalLayer : BaseLayer
                 if (_items[i].Remaining <= TimeSpan.Zero)
                     _items.RemoveAt(i);
             }
+
+            // #853: derive dirt from what Render will actually DRAW - the most recent card and its
+            // quantized alpha - rather than from "time passed". Through the hold the envelope is
+            // flat at 1.0, so the alpha byte doesn't move and the surface is left alone; the fades
+            // and any card swap still repaint. Comparing state (not signalling events) is what
+            // makes a stuck-clean card impossible: a missed edge self-heals on the next tick.
+            var top = _items.Count > 0 ? _items[^1] : null;
+            int alpha = top == null ? -1
+                : (int)Math.Clamp(top.TargetOpacity * top.Envelope() * 255, 0, 255);
+            if (!ReferenceEquals(top, _lastDrawn) || alpha != _lastAlpha)
+            {
+                _lastDrawn = top;
+                _lastAlpha = alpha;
+                _dirty = true;
+            }
+
             if (_items.Count == 0)
                 SetActive(false);
         }

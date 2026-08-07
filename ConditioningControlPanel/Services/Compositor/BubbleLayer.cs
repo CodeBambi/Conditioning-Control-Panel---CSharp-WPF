@@ -102,9 +102,25 @@ public sealed class BubbleLayer : BaseLayer
         return cache;
     }
 
+    // #853: honest dirt. BubbleService steps the whole field on its OWN ~30fps gate (STEP_MS)
+    // off the composition clock, so at 60/144Hz MOST engine ticks see byte-identical item state -
+    // and repainting them re-rastered the entire shared surface (fullscreen pink tint + spiral
+    // included) for nothing. Bubble.SyncLayerItem is the single funnel that writes the dynamic
+    // fields, so it marks here and the engine presents at the field's real cadence.
+    // UI thread only, like every other member of this class (see the Threading note above).
+    private bool _dirty = true;
+
+    public override bool Dirty => _dirty;
+    public override void ClearDirty() => _dirty = false;
+
+    /// <summary>A live bubble's draw state just changed (Bubble.SyncLayerItem's per-step copy).
+    /// UI thread.</summary>
+    public void MarkDirty() => _dirty = true;
+
     public BubbleItem Add(BubbleItem item)
     {
         _items.Add(item);
+        _dirty = true;
         SetActive(true);
         return item;
     }
@@ -114,11 +130,13 @@ public sealed class BubbleLayer : BaseLayer
         item.ReleaseTeaseFrames();
         item.ReleaseEffectCaches();
         _items.Remove(item);
+        _dirty = true;      // the survivors must be repainted without this one
         if (_items.Count == 0) SetActive(false);
     }
 
     public void Clear()
     {
+        _dirty = true;
         foreach (var it in _items)
         {
             it.ReleaseTeaseFrames();
