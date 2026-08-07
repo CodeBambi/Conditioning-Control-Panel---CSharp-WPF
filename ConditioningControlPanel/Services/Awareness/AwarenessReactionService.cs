@@ -180,6 +180,13 @@ namespace ConditioningControlPanel.Services.Awareness
         /// <para>Runs the same hygiene every other reply path runs first — reasoning blocks, tokenizer
         /// artifacts, echoed context tags and the bark-echo sigil — because a small model imitating the
         /// prompt's own scaffolding is a live failure mode, not a hypothetical one.</para>
+        ///
+        /// <para>That includes <see cref="AiTextHygiene.StripUnsanctionedLinks"/>. This leg
+        /// deliberately routes around <c>CompanionBrain</c>, where the chat path's strip lives, so it
+        /// inherited none of it — and the speech bubble renders a bare URL as a CLICKABLE hyperlink
+        /// whose display text is derived from the URL itself, so a hallucinated link arrives looking
+        /// like a curated title. The awareness prompt carries no media catalogue at all, so every URL
+        /// on this path is invented by construction and the strip can never eat a legitimate one.</para>
         /// </summary>
         internal static AwarenessReaction Parse(string? raw)
         {
@@ -202,6 +209,22 @@ namespace ConditioningControlPanel.Services.Awareness
                 }
 
                 line ??= text;
+            }
+
+            // Per-field rather than over the whole reply, so the LINE:/CALLBACK: structure survives:
+            // the strip drops the whole sentence carrying an unsanctioned URL, which over the raw
+            // blob could take a "CALLBACK:" prefix with it. An emptied field falls back to null so
+            // the callback-only path below still applies, and a reply that was nothing but an
+            // invented link ends as silence — the right outcome for a line nobody can trust.
+            if (line != null)
+            {
+                line = AiTextHygiene.StripUnsanctionedLinks(line);
+                if (line.Length == 0) line = null;
+            }
+            if (callback != null)
+            {
+                callback = AiTextHygiene.StripUnsanctionedLinks(callback);
+                if (callback.Length == 0) callback = null;
             }
 
             if (line == null)

@@ -211,6 +211,48 @@ public class AwarenessReactionParseTests
         Assert.Contains("Sleepy Bimbo Loop 4", transport.LastMessages!.Last().Content);
     }
 
+    // ===================== invented links =====================
+
+    /// <summary>
+    /// Merge defect (2026-08-07): the invented-link strip was installed at every model-to-user seam
+    /// that existed at the time, all of which run through CompanionBrain. This leg deliberately
+    /// routes around the brain, so it inherited none of it - and the speech bubble turns a bare URL
+    /// into a CLICKABLE hyperlink whose text is derived from the URL, so a hallucinated link arrives
+    /// looking like a curated title. The awareness prompt ships no media catalogue, so nothing here
+    /// is ever legitimately sanctioned.
+    /// </summary>
+    [Fact]
+    public void AnInventedLinkNeverSurvivesIntoAnAwarenessLine()
+    {
+        var reaction = AwarenessReactionService.Parse(
+            "bored of that one? mine's better - https://hypnotube.com/deep-bambi-drop-88421.html");
+
+        // The sentence carrying the link goes; the question before it is still hers to say.
+        Assert.DoesNotContain("hypnotube.com", reaction.Line);
+        Assert.DoesNotContain("http", reaction.Line);
+        Assert.Equal("bored of that one?", reaction.Line);
+    }
+
+    [Fact]
+    public void TheCallbackVariantIsStrippedToo_AndAnAllLinkReplyBecomesSilence()
+    {
+        var reaction = AwarenessReactionService.Parse(
+            "https://youtu.be/9d7WKQwz7qCcM\nCALLBACK: saw you on www.youtube.com/watch?v=abcdefghijk earlier");
+
+        // Both fields were nothing but invented links, so there is nothing trustworthy left to say.
+        // None() carries an empty Line rather than null, and the reason must not read "callback-only".
+        Assert.Equal(string.Empty, reaction.Line);
+        Assert.Null(reaction.Callback);
+        Assert.Equal("no-line", reaction.Reason);
+    }
+
+    [Fact]
+    public void AnOrdinaryLineIsUntouched()
+    {
+        var reaction = AwarenessReactionService.Parse("third time on Amazon today~");
+        Assert.Equal("third time on Amazon today~", reaction.Line);
+    }
+
     // ===================== helpers =====================
 
     private static ContextFrame Frame() => new()
