@@ -137,8 +137,16 @@ namespace ConditioningControlPanel.Services
             if (App.Settings?.Current != null)
             {
                 App.Settings.Current.ActivePersonalityPresetId = presetId;
+
+                // Picking a preset is the user saying "this one, now" — so it has to win over any
+                // community/asset/hand-edited prompt still holding the single wire slot, otherwise
+                // the chip row and the quick menu confirm a switch that never reached the model.
+                var cleared = CommunityPromptService.ClearCustomPromptOverride(App.Settings.Current);
+
                 App.Settings.Save();
 
+                if (cleared)
+                    App.Logger?.Information("PersonalityService: Preset {Id} took over from the active custom prompt", presetId);
                 App.Logger?.Information("PersonalityService: Switched to preset: {Name} ({Id})", preset.Name, presetId);
                 PersonalityChanged?.Invoke(this, preset);
                 return true;

@@ -418,6 +418,12 @@ namespace ConditioningControlPanel
                         App.Settings?.Current?.SetCompanionPromptId(companionIndex, prompt.Id);
                         App.Settings?.Save();
 
+                        // Assigning to the companion who is already active never goes through
+                        // SwitchCompanion (it early-returns on old == new), so activate here or the
+                        // dialog below confirms a personality that never reached the model.
+                        if (App.Companion?.ActiveCompanion == companionId)
+                            App.Companion.ApplyCompanionPrompt(companionId);
+
                         // Update UI
                         UpdateCompanionPromptLabels();
 

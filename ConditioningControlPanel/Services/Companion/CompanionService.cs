@@ -436,9 +436,11 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Applies the prompt assigned to a companion (if any).
-        /// Called automatically when switching companions.
+        /// Called automatically when switching companions, and directly by the Companion tab when a
+        /// prompt is assigned to whoever is ALREADY active — <see cref="SwitchCompanion"/> early-returns
+        /// on old == new, so that assignment would otherwise never reach the wire.
         /// </summary>
-        private void ApplyCompanionPrompt(CompanionId companion)
+        public void ApplyCompanionPrompt(CompanionId companion)
         {
             try
             {

@@ -396,6 +396,33 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Takes the custom/community prompt off the wire so the active preset owns it again.
+        /// Clears BOTH halves of the override: <c>UseCustomPrompt</c> is what the prompt mux reads
+        /// (<see cref="BambiSprite.UsesCustomPrompt"/>), and <c>ActiveCommunityPromptId</c> is what
+        /// the Companion tab's readout reads — leaving either behind is a UI that disagrees with the
+        /// wire. Static so the preset path can call it before <c>App.CommunityPrompts</c> exists;
+        /// a null service must never leave a stale override standing. Returns true if anything moved.
+        /// The prompt TEXT is deliberately kept, so re-ticking "use custom prompt" restores the edits.
+        /// </summary>
+        public static bool ClearCustomPromptOverride(AppSettings? settings)
+        {
+            if (settings == null) return false;
+
+            var changed = false;
+            if (settings.ActiveCommunityPromptId != null)
+            {
+                settings.ActiveCommunityPromptId = null;
+                changed = true;
+            }
+            if (settings.CompanionPrompt?.UseCustomPrompt == true)
+            {
+                settings.CompanionPrompt.UseCustomPrompt = false;
+                changed = true;
+            }
+            return changed;
+        }
+
+        /// <summary>
         /// Deactivates the current community prompt, reverting to defaults.
         /// </summary>
         public void DeactivatePrompt()
@@ -403,8 +430,7 @@ namespace ConditioningControlPanel.Services
             var settings = App.Settings?.Current;
             if (settings == null) return;
 
-            settings.ActiveCommunityPromptId = null;
-            // Don't reset CompanionPrompt - let user keep their custom settings if they have any
+            ClearCustomPromptOverride(settings);
             App.Settings?.Save();
 
             App.Logger?.Information("Deactivated community prompt, using default/custom settings");

@@ -683,12 +683,22 @@ Example responses with REAL video names:
         /// </summary>
         internal static IReadOnlyList<string> StableMediaTitles() => StableBuilder.PoolTitles().ToList();
 
+        /// <summary>
+        /// Which of the two personality systems owns the wire prompt. <c>UseCustomPrompt</c> alone
+        /// decides it: a hand-edited prompt (the Companion tab's editor) never gets an
+        /// <c>ActiveCommunityPromptId</c>, so also requiring one here silently discarded the user's
+        /// edits and shipped the preset instead. What keeps the single flag coherent is the other
+        /// half of the pair — <see cref="PersonalityService.SetActivePreset"/> clears the flag, so
+        /// picking a preset really does take the custom/community prompt off the wire.
+        /// </summary>
+        internal static bool UsesCustomPrompt(Models.AppSettings? settings)
+            => settings?.CompanionPrompt?.UseCustomPrompt == true;
+
         internal static PrefixInputs CaptureFingerprintInputs()
         {
             var s = App.Settings?.Current;
             var companionPrompt = s?.CompanionPrompt;
-            var useCustom = companionPrompt?.UseCustomPrompt == true &&
-                            !string.IsNullOrEmpty(s?.ActiveCommunityPromptId);
+            var useCustom = UsesCustomPrompt(s);
 
             // The sections that actually get baked in: the community prompt when one is assigned,
             // otherwise the active preset's. Hashing the TEXT (not just the id) is what makes an edit
@@ -788,15 +798,15 @@ Example responses with REAL video names:
             // never persisted, never editable, never visible to the user.
             string assembled;
 
-            // Check for active community prompt (assigned via prite/companion)
+            // Check for an active custom prompt: a community/asset prompt assigned via the
+            // Companion tab, or one hand-edited in the prompt editor (which carries no id).
             var companionPrompt = App.Settings?.Current?.CompanionPrompt;
-            if (companionPrompt?.UseCustomPrompt == true &&
-                !string.IsNullOrEmpty(App.Settings?.Current?.ActiveCommunityPromptId))
+            if (UsesCustomPrompt(App.Settings?.Current))
             {
                 // Build a temporary preset wrapper so we can reuse BuildPromptFromPreset
                 var communityPreset = new Models.PersonalityPreset
                 {
-                    Id = App.Settings!.Current!.ActiveCommunityPromptId!,
+                    Id = App.Settings?.Current?.ActiveCommunityPromptId ?? "custom",
                     Name = "Community Prompt",
                     PromptSettings = companionPrompt
                 };

@@ -1170,7 +1170,9 @@ namespace ConditioningControlPanel
                 {
                     if (App.Settings?.Current?.CompanionPrompt != null)
                     {
-                        App.Settings.Current.CompanionPrompt.UseCustomPrompt = false;
+                        // Both halves, or the Companion tab keeps reading back "Custom: <name>"
+                        // off the orphaned ActiveCommunityPromptId.
+                        Services.CommunityPromptService.ClearCustomPromptOverride(App.Settings.Current);
                         App.Settings.Save();
                         UpdateQuickMenuState();
                         Giggle(Loc.Get("avatar_back_to_presets"));
