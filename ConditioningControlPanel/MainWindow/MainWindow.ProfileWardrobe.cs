@@ -136,15 +136,16 @@ namespace ConditioningControlPanel
 
                     var anchors = WardrobeCatalog.DefaultCharmAnchors;
                     var anchor = i < anchors.Count ? anchors[i] : anchors[0];
-                    var cx = (t?.X ?? anchor.X) * width;
-                    var cy = (t?.Y ?? anchor.Y) * height;
-                    var scale = t?.Scale ?? 0.8;
-                    var size = Math.Max(12, WardrobeCatalog.CharmBaseHeightFraction * height * scale);
+
+                    // Shared with the wardrobe editor's stage (WardrobeStageGeometry.CharmRect),
+                    // so the preview and the card cannot drift apart again.
+                    var (left, top, size) = WardrobeStageGeometry.CharmRect(
+                        width, height, t?.X ?? anchor.X, t?.Y ?? anchor.Y, t?.Scale ?? 0.8);
 
                     slot.Width = size;
                     slot.Height = size;
-                    Canvas.SetLeft(slot, cx - size / 2);
-                    Canvas.SetTop(slot, cy - size / 2);
+                    Canvas.SetLeft(slot, left);
+                    Canvas.SetTop(slot, top);
 
                     if (t != null && (t.Flip || Math.Abs(t.Rotation) > 0.05))
                     {

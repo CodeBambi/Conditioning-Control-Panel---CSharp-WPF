@@ -16,11 +16,17 @@
          by the Customize dialog: which items are worn stays the Customize
          dialog's job; where and how they sit on the card is decided here.
 
-         The stage is a to-scale mock of the hero card, and its geometry
-         constants are the SAME constants the live renderer uses
-         (WardrobeCatalog.CharmBaseHeightFraction / DefaultCharmAnchors /
-         AvatarCircleRatio), so what is arranged here is exactly what every
-         viewer of the profile reconstructs from the synced fractions.
+         The stage is a to-scale mock of the hero card: its size is the LIVE
+         card's own width/height scaled down to fit (WardrobeStageGeometry),
+         and every sprite is placed by the very functions the live renderer
+         calls. It used to be a fixed 640x240 box, which is a card shape
+         nobody has - charm fractions and the banner crop both read completely
+         differently on the real full-width strip.
+
+         Aspect ratio is load-bearing here: charm placement is a fraction of
+         card width and height, so a viewer whose window is a different width
+         sees a different composition. The stage can only be honest about the
+         wearer's own card.
 
          All sprites are built in code - same converter-free rule as the
          Customize dialog's tiles.
@@ -64,7 +70,10 @@
                            HorizontalAlignment="Center" VerticalAlignment="Center"
                            Visibility="Collapsed" TextWrapping="Wrap"/>
 
-                <!-- the card mock; fixed 640x240 stage, centred -->
+                <!-- The card mock. Width/Height are set in code to the LIVE hero card's aspect
+                     ratio (WardrobeStageGeometry.ForCard) - a fixed 640x240 box previewed a card
+                     shape nobody has, and every charm fraction and banner crop read differently
+                     on the real strip. The values here are only the design-time placeholder. -->
                 <Border x:Name="StageFrame" Grid.Row="1" Width="640" Height="240"
                         HorizontalAlignment="Center" VerticalAlignment="Center"
                         CornerRadius="14" ClipToBounds="True"

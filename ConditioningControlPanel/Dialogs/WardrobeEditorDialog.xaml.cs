@@ -23,10 +23,14 @@ namespace ConditioningControlPanel
     /// </summary>
     public partial class WardrobeEditorDialog : Window
     {
-        private const double AvatarSize = 104;
-        private const double AvatarLeft = 28;
+        /// <summary>The stage box the card mock is fitted into, at the card's own aspect ratio.</summary>
+        private const double StageMaxWidth = 660;
+        private const double StageMaxHeight = 250;
 
-        private static double DecoCanvas => AvatarSize / WardrobeCatalog.AvatarCircleRatio;
+        /// <summary>The live card, scaled down. Every number on the stage comes from this.</summary>
+        private readonly WardrobeStageGeometry.Stage _stage;
+
+        private double DecoCanvas => _stage.AvatarSize / WardrobeCatalog.AvatarCircleRatio;
 
         private sealed class Sprite
         {
@@ -54,9 +58,17 @@ namespace ConditioningControlPanel
         private static readonly Brush ChipOn = Frozen("#335EC8F2");
         private static readonly Brush ChipOnBorder = Frozen("#5EC8F2");
 
-        public WardrobeEditorDialog(ProfileCosmetics draft, ImageSource? avatar)
+        /// <param name="cardWidth">The live hero card's ActualWidth, or 0 when it has not been
+        /// measured yet - the stage falls back to a typical windowed hero in that case.</param>
+        /// <param name="cardHeight">The live hero card's ActualHeight, same rule.</param>
+        public WardrobeEditorDialog(ProfileCosmetics draft, ImageSource? avatar,
+                                    double cardWidth = 0, double cardHeight = 0)
         {
             InitializeComponent();
+
+            _stage = WardrobeStageGeometry.ForCard(cardWidth, cardHeight, StageMaxWidth, StageMaxHeight);
+            StageFrame.Width = _stage.Width;
+            StageFrame.Height = _stage.Height;
 
             _draft = draft ?? new ProfileCosmetics();
             _snapshotDeco = _draft.DecoTransform?.Clone();
@@ -88,17 +100,20 @@ namespace ConditioningControlPanel
                 var banner = CosmeticsCatalog.GetBannerImage(_draft.BannerId);
                 if (banner != null)
                 {
+                    // Stretch AND alignment must match MainWindow.ApplyProfileBanner exactly: the
+                    // hero crops UniformToFill from the TOP, and a centred crop here previewed a
+                    // different slice of every banner.
                     var brush = new ImageBrush(banner)
                     {
                         Stretch = Stretch.UniformToFill,
                         AlignmentX = AlignmentX.Center,
-                        AlignmentY = AlignmentY.Center
+                        AlignmentY = AlignmentY.Top
                     };
                     if (brush.CanFreeze) brush.Freeze();
                     StageBanner.Background = brush;
                 }
 
-                // The avatar bubble: same 104px circle + pink ring as the hero.
+                // The avatar bubble: the hero's 104px circle + pink ring, at stage scale.
                 var avatarBrush = avatar != null
                     ? (Brush)new ImageBrush(avatar) { Stretch = Stretch.UniformToFill }
                     : new LinearGradientBrush(
@@ -108,16 +123,16 @@ namespace ConditioningControlPanel
 
                 var bubble = new Border
                 {
-                    Width = AvatarSize,
-                    Height = AvatarSize,
-                    CornerRadius = new CornerRadius(AvatarSize / 2),
+                    Width = _stage.AvatarSize,
+                    Height = _stage.AvatarSize,
+                    CornerRadius = new CornerRadius(_stage.AvatarSize / 2),
                     BorderBrush = Frozen("#FF69B4"),
-                    BorderThickness = new Thickness(3),
+                    BorderThickness = new Thickness(Math.Max(1, 3 * _stage.Scale)),
                     Background = avatarBrush,
                     IsHitTestVisible = false
                 };
-                Canvas.SetLeft(bubble, AvatarLeft);
-                Canvas.SetTop(bubble, (240 - AvatarSize) / 2);
+                Canvas.SetLeft(bubble, _stage.AvatarLeft);
+                Canvas.SetTop(bubble, _stage.AvatarTop);
                 Stage.Children.Add(bubble);
             }
             catch (Exception ex) { App.Logger?.Debug("WardrobeEditor backdrop: {E}", ex.Message); }
@@ -217,7 +232,8 @@ namespace ConditioningControlPanel
         /// </summary>
         private void LayoutSprites()
         {
-            const double stageW = 640, stageH = 240;
+            var stageW = _stage.Width;
+            var stageH = _stage.Height;
 
             foreach (var sprite in _sprites)
             {
@@ -225,11 +241,10 @@ namespace ConditioningControlPanel
 
                 if (sprite.IsDeco)
                 {
-                    var canvas = DecoCanvas;
+                    var (left, top, canvas) = WardrobeStageGeometry.DecorationRect(
+                        _stage.AvatarSize, _stage.AvatarLeft, _stage.AvatarTop);
                     sprite.Image.Width = canvas;
                     sprite.Image.Height = canvas;
-                    var left = AvatarLeft + AvatarSize / 2 - canvas / 2;
-                    var top = stageH / 2 - canvas / 2;
                     Canvas.SetLeft(sprite.Image, left);
                     Canvas.SetTop(sprite.Image, top);
 
@@ -249,18 +264,16 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
-                    // Mirrors MainWindow.LayoutProfileCharms exactly.
+                    // Literally the same call MainWindow.LayoutProfileCharms makes.
                     var anchors = WardrobeCatalog.DefaultCharmAnchors;
                     var anchor = sprite.CharmSlot < anchors.Count ? anchors[sprite.CharmSlot] : anchors[0];
-                    var cx = (t?.X ?? anchor.X) * stageW;
-                    var cy = (t?.Y ?? anchor.Y) * stageH;
-                    var scale = t?.Scale ?? 0.8;
-                    var size = Math.Max(12, WardrobeCatalog.CharmBaseHeightFraction * stageH * scale);
+                    var (left, top, size) = WardrobeStageGeometry.CharmRect(
+                        stageW, stageH, t?.X ?? anchor.X, t?.Y ?? anchor.Y, t?.Scale ?? 0.8);
 
                     sprite.Image.Width = size;
                     sprite.Image.Height = size;
-                    Canvas.SetLeft(sprite.Image, cx - size / 2);
-                    Canvas.SetTop(sprite.Image, cy - size / 2);
+                    Canvas.SetLeft(sprite.Image, left);
+                    Canvas.SetTop(sprite.Image, top);
 
                     if (t != null && (t.Flip || Math.Abs(t.Rotation) > 0.05))
                     {
@@ -346,8 +359,8 @@ namespace ConditioningControlPanel
             }
             else
             {
-                t.X = Math.Clamp(_dragStartValue.X + dx / 640d, 0, 1);
-                t.Y = Math.Clamp(_dragStartValue.Y + dy / 240d, 0, 1);
+                t.X = Math.Clamp(_dragStartValue.X + dx / _stage.Width, 0, 1);
+                t.Y = Math.Clamp(_dragStartValue.Y + dy / _stage.Height, 0, 1);
             }
 
             LayoutSprites();

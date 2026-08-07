@@ -34,7 +34,9 @@
         </Border>
 
         <!-- Decoration layer. Sized/centred in code from AvatarSize; Fill because
-             the canvas is square and must map onto the avatar exactly. -->
+             the canvas is square and must map onto the avatar exactly. The negative
+             margin that keeps WPF from layout-clipping it to the avatar box is set
+             in code beside the size (see ApplySize). -->
         <Image x:Name="DecoLayer" Stretch="Fill" Visibility="Collapsed"
                IsHitTestVisible="False" SnapsToDevicePixels="True"
                HorizontalAlignment="Center" VerticalAlignment="Center"/>
