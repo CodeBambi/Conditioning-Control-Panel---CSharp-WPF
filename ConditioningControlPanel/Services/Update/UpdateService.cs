@@ -20,7 +20,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.7.3";
+        public const string AppVersion = "6.7.4";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
@@ -95,6 +95,14 @@ namespace ConditioningControlPanel.Services
 - Achievements: full art-forward redesign of the tab - big card art, no more drawer, no more dead space
 - AI companion: video suggestions fixed for real - she only names videos from your actual list now, suggestions are clickable links, and near-miss titles snap to the right video
 - Companion: killed the loop that had her inventing titles and fake creators - her own chat history was teaching her bad habits, and it now self-corrects
+
+🩹 v6.7.4 HOTFIX
+- Updates: fixed the silent update failure - the installer now asks for admin rights when it needs them, checks the install actually landed, and tells you (with a download link) when it didn't. If updates kept 'running' but nothing changed, this was you
+- Performance: heavy overlay combos (pink filter + spiral + bubbles + subliminals) no longer choke the app - overlays now only redraw when something actually changed
+- Personality presets: switching presets always takes effect now, even if an imported personality file was active - and hand-edited custom prompts actually reach her (if she suddenly sounds different, check your custom prompt toggle in the editor)
+- Profile: Discord avatars no longer get replaced by a blank-subject bust while they load
+- Privacy: the hidden-apps list in 'What she can see' is now clearly titled - those chips are what she can NEVER see
+- Mod manager: a real MOD MANAGER button next to the mod selector - no more hunting for the tiny gear
 
 Season: Airhead August";
 
