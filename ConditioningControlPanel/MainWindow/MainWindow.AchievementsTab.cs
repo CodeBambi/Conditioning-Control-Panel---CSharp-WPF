@@ -30,21 +30,21 @@ namespace ConditioningControlPanel
 {
     // Achievements tab: reward cards, counts, filters, and season recap.
     //
-    // The redesign in one paragraph: an achievement is no longer a blurred badge with a tooltip,
-    // it is a CARD with a reward drawer. The drawer's 26px strip always shows what the achievement
-    // pays out - a flat cut-out of the wardrobe item you have not earned yet, or the item in full
-    // colour once you have - and hover / focus / click slides it open to name the item and say how
-    // to get it. Everything about the locked state is deliberately shape-without-colour: you can
-    // see there IS a bow, you cannot see whose it is.
+    // The redesign in one paragraph: everything an achievement has to say is on the card FACE.
+    // Hero art dominates, the info line says how to earn it (locked) or the flavor (earned), and
+    // a full-width reward band at the bottom shows what the achievement pays out - a flat cut-out
+    // of the wardrobe item you have not earned yet, or the item in full colour with a glow once
+    // you have. No hover drawer: hover only tilts the badge and warms the border. Everything
+    // about the locked state is deliberately shape-without-colour: you can see there IS a bow,
+    // you cannot see whose it is.
     public partial class MainWindow
     {
         #region Achievements Tab
 
         // ---- tuning ---------------------------------------------------------------------
 
-        private const double AchvBadgePx = 96;      // badge art on the card face
-        private const double AchvStripIconPx = 16;  // reward icon in the always-visible strip
-        private const double AchvBodyIconPx = 56;   // reward art in the opened drawer
+        private const double AchvBadgePx = 150;     // hero art on the card face
+        private const double AchvRewardIconPx = 40; // reward art in the bottom band
 
         private static readonly SolidColorBrush AchvMutedBrush = FrozenBrush(0x9A, 0x93, 0xB8);
         private static readonly SolidColorBrush AchvDimBrush = FrozenBrush(0x80, 0x79, 0xA3);
@@ -61,13 +61,11 @@ namespace ConditioningControlPanel
             public ToggleButton Card = null!;
             public Image Badge = null!;
             public TextBlock NameText = null!;
+            /// <summary>Requirement while locked, flavor once earned.</summary>
+            public TextBlock InfoText = null!;
+            /// <summary>The bottom band's content host; rebuilt whole on unlock-state changes.</summary>
+            public Grid RewardBand = null!;
             public Services.WardrobeItem? Reward;
-            /// <summary>Template part, resolved on Loaded. Null until then.</summary>
-            public Grid? Strip;
-            /// <summary>Template part, resolved on Loaded. Null until then.</summary>
-            public StackPanel? Body;
-            /// <summary>The body is built on FIRST open, never at populate time.</summary>
-            public bool BodyBuilt;
         }
 
         private readonly Dictionary<string, ToggleButton> _achievementCards = new(StringComparer.Ordinal);
@@ -214,10 +212,7 @@ namespace ConditioningControlPanel
 
             BuildAchievementRewardMap();
 
-            // Re-read the motion setting on every populate: the card style IS the reveal, so a
-            // user who turned motion off mid-session gets instant drawers on the next build.
-            var styleKey = MotionFx.AllowTransitions ? "AchievementCard" : "AchievementCardNoMotion";
-            var cardStyle = TryFindResource(styleKey) as Style;
+            var cardStyle = TryFindResource("AchievementCard") as Style;
 
             foreach (var kvp in Models.Achievement.All)
             {
@@ -276,20 +271,17 @@ namespace ConditioningControlPanel
             {
                 Style = cardStyle,
                 Tag = achievement.Id,
-                // The drawer is the card's whole point; a pinned-open card must not read as a
-                // pressed button, so nothing else keys off IsChecked.
                 IsChecked = false,
             };
 
-            // -- badge art. Its own host so the holo-foil tilt has something to rotate that is
-            //    NOT the card (rotating the card would fight the drawer's slide).
+            // -- hero art. Its own host so the holo-foil tilt has something to rotate that is
+            //    NOT the card (rotating the card would drag the reward band along).
             var badgeHost = new Grid
             {
                 Width = AchvBadgePx,
                 Height = AchvBadgePx,
                 HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(0, 6, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
             };
             var image = new Image
             {
@@ -303,25 +295,64 @@ namespace ConditioningControlPanel
 
             var nameText = new TextBlock
             {
-                FontSize = 12,
+                FontSize = 13,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = Brushes.White,
                 TextAlignment = TextAlignment.Center,
                 TextWrapping = TextWrapping.Wrap,
                 TextTrimming = TextTrimming.CharacterEllipsis,
+                // Pinned line height so the height cap cuts on a line boundary, never mid-glyph.
+                LineHeight = 17,
                 MaxHeight = 34,
-                Margin = new Thickness(6, 6, 6, 0),
+                Margin = new Thickness(10, 6, 10, 0),
                 VerticalAlignment = VerticalAlignment.Top,
                 Text = unlocked ? AchName(achievement) : LocOr("achv_card_locked_name", "???"),
             };
 
+            // Requirement while locked, flavor once earned - the line that used to hide in the
+            // drawer, now spent on the dead zone between name and band.
+            var infoText = new TextBlock
+            {
+                FontSize = 11,
+                Foreground = AchvDimBrush,
+                TextAlignment = TextAlignment.Center,
+                TextWrapping = TextWrapping.Wrap,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                // Pinned line height: exactly three lines, cut on a boundary, never mid-glyph.
+                LineHeight = 14,
+                MaxHeight = 42,
+                Margin = new Thickness(12, 4, 12, 4),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+
+            var band = new Grid();
+
+            // Rows: hero art / name / info (absorbs all slack) / reward band on the bottom edge.
             var content = new Grid();
+            content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(AchvBadgePx + 14) });
             content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
             Grid.SetRow(badgeHost, 0);
             Grid.SetRow(nameText, 1);
+            Grid.SetRow(infoText, 2);
+
+            var bandChrome = new Border
+            {
+                Height = 56,
+                Background = FrozenBrush(0xF2, 0x25, 0x25, 0x42),
+                BorderBrush = AchvRuleBrush,
+                BorderThickness = new Thickness(0, 1, 0, 0),
+                CornerRadius = new CornerRadius(0, 0, 14, 14),
+                Child = band,
+            };
+            Grid.SetRow(bandChrome, 3);
+
             content.Children.Add(badgeHost);
             content.Children.Add(nameText);
+            content.Children.Add(infoText);
+            content.Children.Add(bandChrome);
             card.Content = content;
 
             var parts = new AchievementCardParts
@@ -330,6 +361,8 @@ namespace ConditioningControlPanel
                 Card = card,
                 Badge = image,
                 NameText = nameText,
+                InfoText = infoText,
+                RewardBand = band,
                 Reward = reward,
             };
 
@@ -337,6 +370,8 @@ namespace ConditioningControlPanel
             _achievementCards[achievement.Id] = card;
             _achievementCardParts[card] = parts;
 
+            ApplyAchievementInfoText(parts, unlocked);
+            BuildRewardBand(parts);
             ApplyAchievementCardTooltip(parts, unlocked);
 
             // The card carries the transforms the entrance stagger and the unlock reveal need;
@@ -344,116 +379,116 @@ namespace ConditioningControlPanel
             EnsureCardTransforms(card);
             PrepareAchievementTileFx(card, unlocked, badgeHost);
 
-            // Strip content is cheap and always visible, so it is built as soon as the template
-            // exists. The BODY is not - see the one-shot handlers below.
-            card.Loaded += AchievementCard_Loaded;
-            card.MouseEnter += AchievementCard_FirstOpen;
-            card.GotKeyboardFocus += AchievementCard_FirstOpen;
-            card.Checked += AchievementCard_FirstOpen;
-
             return card;
         }
 
-        private void AchievementCard_Loaded(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (sender is ToggleButton card) EnsureDrawerParts(card);
-            }
-            catch (Exception ex) { App.Logger?.Debug("AchievementCard_Loaded: {E}", ex.Message); }
-        }
+        // ============================== card content ==============================
 
-        /// <summary>One-shot: the first hover / focus / click builds the drawer body.</summary>
-        private void AchievementCard_FirstOpen(object sender, RoutedEventArgs e)
+        /// <summary>Locked: how to earn it. Earned: the flavor line (or the equip nudge when the
+        /// achievement pays out an item).</summary>
+        private void ApplyAchievementInfoText(AchievementCardParts parts, bool unlocked)
         {
-            try
+            var infoText = parts.InfoText;
+            if (!unlocked)
             {
-                if (sender is not ToggleButton card) return;
-                card.MouseEnter -= AchievementCard_FirstOpen;
-                card.GotKeyboardFocus -= AchievementCard_FirstOpen;
-                card.Checked -= AchievementCard_FirstOpen;
-                EnsureDrawerBody(card);
+                infoText.Text = AchReq(parts.Achievement);
+                infoText.FontStyle = FontStyles.Normal;
+                infoText.Foreground = AchvDimBrush;
             }
-            catch (Exception ex) { App.Logger?.Debug("AchievementCard_FirstOpen: {E}", ex.Message); }
+            else
+            {
+                infoText.Text = AchFlavor(parts.Achievement);
+                infoText.FontStyle = FontStyles.Italic;
+                infoText.Foreground = AchvMutedBrush;
+            }
         }
 
         /// <summary>
-        /// Resolves DrawerStrip / DrawerBody. They live inside the card's ControlTemplate, so they
-        /// are NOT reachable from the logical tree or from the ToggleButton's own Content - the only
-        /// way in is Template.FindName against the templated parent, and the template has to have
-        /// been applied first. Idempotent: the strip is built exactly once.
+        /// The always-visible bottom band: [reward art] "Reward" + item name ...... [lock / tick].
+        /// Locked rewards are a flat silhouette and a "???" name - the shape, not the goods.
         /// </summary>
-        private void EnsureDrawerParts(ToggleButton card)
+        private void BuildRewardBand(AchievementCardParts parts)
         {
-            if (card == null) return;
-            if (!_achievementCardParts.TryGetValue(card, out var parts)) return;
-            if (parts.Strip != null) return;
+            var band = parts.RewardBand;
+            band.Children.Clear();
+            band.ColumnDefinitions.Clear();
 
-            try
-            {
-                card.ApplyTemplate();
-                var template = card.Template;
-                if (template == null) return;
-                parts.Strip = template.FindName("DrawerStrip", card) as Grid;
-                parts.Body = template.FindName("DrawerBody", card) as StackPanel;
-                if (parts.Strip != null) BuildDrawerStrip(parts);
-            }
-            catch (Exception ex) { App.Logger?.Debug("EnsureDrawerParts: {E}", ex.Message); }
-        }
+            var achievement = parts.Achievement;
+            var reward = parts.Reward;
+            var unlocked = IsAchievementUnlocked(achievement.Id);
 
-        private void EnsureDrawerBody(ToggleButton card)
-        {
-            EnsureDrawerParts(card);
-            if (!_achievementCardParts.TryGetValue(card, out var parts)) return;
-            if (parts.BodyBuilt || parts.Body == null) return;
-            parts.BodyBuilt = true;
-            BuildDrawerBody(parts);
-        }
-
-        // ============================== drawer content ==============================
-
-        /// <summary>
-        /// The always-visible 26px strip: [reward icon] "Reward" ............ [lock / tick].
-        /// Locked rewards are a flat silhouette - the shape, not the goods.
-        /// </summary>
-        private void BuildDrawerStrip(AchievementCardParts parts)
-        {
-            var strip = parts.Strip;
-            if (strip == null) return;
-
-            strip.Children.Clear();
-            strip.ColumnDefinitions.Clear();
-
-            var unlocked = IsAchievementUnlocked(parts.Achievement.Id);
-
-            var row = new Grid { Margin = new Thickness(8, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
+            var row = new Grid { Margin = new Thickness(10, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            var icon = BuildRewardIcon(parts, AchvStripIconPx, unlocked, glow: null)
-                       ?? CategoryGlyphBox(parts.Achievement, AchvStripIconPx, 12, 0.4);
+            // 1. the goods (or the shape of them). Earned items glow - the band is the payoff.
+            var icon = BuildRewardIcon(parts, AchvRewardIconPx, unlocked,
+                                       glow: unlocked ? null : TryFindResource("PinkBrush") as Brush)
+                       ?? CategoryGlyphBox(achievement, AchvRewardIconPx, 22, 0.3);
+            if (unlocked && reward != null && icon is Image art)
+            {
+                art.Effect = new DropShadowEffect
+                {
+                    Color = Color.FromRgb(0xFF, 0x69, 0xB4),
+                    BlurRadius = 12,
+                    ShadowDepth = 0,
+                    Opacity = 0.55,
+                };
+            }
             icon.VerticalAlignment = VerticalAlignment.Center;
             Grid.SetColumn(icon, 0);
             row.Children.Add(icon);
 
-            var label = new TextBlock
+            // 2. "Reward" over the item's name. Registry names are plain English proper nouns and
+            //    are NEVER localized (same rule the wardrobe picker follows); a locked item's name
+            //    stays "???".
+            var textStack = new StackPanel
+            {
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(8, 0, 6, 0),
+            };
+            textStack.Children.Add(new TextBlock
             {
                 Text = LocOr("achv_reward_header", "Reward"),
-                FontSize = 10,
-                Foreground = AchvMutedBrush,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(6, 0, 0, 0),
+                FontSize = 9.5,
+                Foreground = AchvDimBrush,
                 TextTrimming = TextTrimming.CharacterEllipsis,
-            };
-            Grid.SetColumn(label, 1);
-            row.Children.Add(label);
+            });
+            string rewardName;
+            Brush rewardNameBrush;
+            if (reward == null)
+            {
+                rewardName = LocOr("achv_reward_none", "No wardrobe reward");
+                rewardNameBrush = AchvDimBrush;
+            }
+            else if (unlocked)
+            {
+                rewardName = reward.Name;
+                rewardNameBrush = Brushes.White;
+            }
+            else
+            {
+                rewardName = LocOr("achv_card_locked_name", "???");
+                rewardNameBrush = AchvMutedBrush;
+            }
+            textStack.Children.Add(new TextBlock
+            {
+                Text = rewardName,
+                FontSize = 11.5,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = rewardNameBrush,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+            });
+            Grid.SetColumn(textStack, 1);
+            row.Children.Add(textStack);
 
+            // 3. the state
             FrameworkElement state = unlocked
                 ? new TextBlock
                 {
                     Text = "✓",
-                    FontSize = 12,
+                    FontSize = 16,
                     FontWeight = FontWeights.Bold,
                     Foreground = AchvTickBrush,
                     VerticalAlignment = VerticalAlignment.Center,
@@ -461,119 +496,14 @@ namespace ConditioningControlPanel
                 : new EmojiTextBlock
                 {
                     Text = "🔒",
-                    FontSize = 10,
+                    FontSize = 13,
                     Foreground = AchvMutedBrush,
                     VerticalAlignment = VerticalAlignment.Center,
                 };
             Grid.SetColumn(state, 2);
             row.Children.Add(state);
 
-            strip.Children.Add(row);
-        }
-
-        /// <summary>
-        /// The revealed body: big reward art, the item's (plain English) name, a rule, then either
-        /// how to earn it or the payoff line.
-        /// </summary>
-        private void BuildDrawerBody(AchievementCardParts parts)
-        {
-            var body = parts.Body;
-            if (body == null) return;
-
-            body.Children.Clear();
-
-            var achievement = parts.Achievement;
-            var reward = parts.Reward;
-            var unlocked = IsAchievementUnlocked(achievement.Id);
-
-            var stack = new StackPanel { Margin = new Thickness(8, 2, 8, 0) };
-
-            // 1. the goods (or the shape of them)
-            var hero = BuildRewardIcon(parts, AchvBodyIconPx, unlocked,
-                                       glow: unlocked ? null : TryFindResource("PinkBrush") as Brush)
-                       ?? CategoryGlyphBox(achievement, AchvBodyIconPx, 34, 0.25);
-            hero.HorizontalAlignment = HorizontalAlignment.Center;
-            stack.Children.Add(hero);
-
-            // 2. what it is called. Registry names are plain English proper nouns and are NEVER
-            //    localized (same rule the wardrobe picker follows).
-            var titleRow = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 2, 0, 0),
-            };
-            titleRow.Children.Add(new TextBlock
-            {
-                Text = reward != null ? reward.Name : LocOr("achv_reward_none", "No wardrobe reward"),
-                FontSize = 11,
-                Foreground = reward != null ? Brushes.White : AchvMutedBrush,
-                TextAlignment = TextAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                MaxWidth = 130,
-                VerticalAlignment = VerticalAlignment.Center,
-            });
-
-            // Patron-exclusive AND still locked: say so here rather than let the drawer imply the
-            // item is one quest away. Sits beside the name so it costs no vertical budget.
-            if (achievement.IsExclusive && !unlocked)
-            {
-                titleRow.Children.Add(new Border
-                {
-                    CornerRadius = new CornerRadius(7),
-                    Background = FrozenBrush(0x33, 0xFF, 0x42, 0x4D),
-                    Padding = new Thickness(5, 1, 5, 1),
-                    Margin = new Thickness(5, 0, 0, 0),
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Child = new TextBlock
-                    {
-                        Text = LocOr("achv_reward_patron", "Patron"),
-                        FontSize = 9,
-                        FontWeight = FontWeights.SemiBold,
-                        Foreground = AchvMutedBrush,
-                    },
-                });
-            }
-            stack.Children.Add(titleRow);
-
-            // 3. the rule
-            stack.Children.Add(new Border
-            {
-                Height = 1,
-                Background = AchvRuleBrush,
-                Margin = new Thickness(0, 3, 0, 3),
-            });
-
-            // 4. how to earn it / the payoff
-            var footer = new TextBlock
-            {
-                FontSize = 11,
-                Foreground = AchvDimBrush,
-                TextWrapping = TextWrapping.Wrap,
-                TextAlignment = TextAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                // 34 rather than the drafted 48: the drawer body is a fixed 118px and clips
-                // silently, and 56 art + name + rule already spends 82 of it.
-                MaxHeight = 34,
-            };
-            if (!unlocked)
-            {
-                footer.Text = AchReq(achievement);
-            }
-            else if (reward != null)
-            {
-                footer.Text = LocOr("achv_reward_unlocked", "Earned - equip it from your profile.");
-                footer.Foreground = AchvMutedBrush;
-            }
-            else
-            {
-                footer.Text = AchFlavor(achievement);
-                footer.FontStyle = FontStyles.Italic;
-                footer.Foreground = AchvMutedBrush;
-            }
-            stack.Children.Add(footer);
-
-            body.Children.Add(stack);
+            band.Children.Add(row);
         }
 
         /// <summary>
@@ -756,10 +686,9 @@ namespace ConditioningControlPanel
                 // A card that just unlocked starts offering the hover tilt (and one that was
                 // somehow re-locked stops).
                 SetAchievementTileUnlocked(card, isUnlocked);
+                ApplyAchievementInfoText(parts, isUnlocked);
+                BuildRewardBand(parts);
                 ApplyAchievementCardTooltip(parts, isUnlocked);
-
-                if (parts.Strip != null) BuildDrawerStrip(parts);
-                if (parts.BodyBuilt) BuildDrawerBody(parts);
             }
             catch (Exception ex) { App.Logger?.Debug("RefreshAchievementTile: {E}", ex.Message); }
 
@@ -825,15 +754,13 @@ namespace ConditioningControlPanel
             }
             parts.Card.ToolTip = tip;
 
-            // Screen readers get the same two facts as the drawer, without the drawer.
+            // Screen readers get the same two facts as the card face.
             AutomationProperties.SetName(parts.Card, unlocked
                 ? LocFmtOr("achv_automation_unlocked", "{0}, unlocked. Reward: {1}.",
                            AchName(achievement),
                            rewardName ?? LocOr("achv_reward_none", "No item"))
                 : LocFmtOr("achv_automation_locked", "Locked achievement. {0}. Reward locked.",
                            AchReq(achievement)));
-            AutomationProperties.SetHelpText(parts.Card,
-                LocOr("achv_expand_hint", "Hover or focus this card to see its reward."));
         }
 
         private static bool IsAchievementUnlocked(string? achievementId)

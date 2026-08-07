@@ -20,9 +20,10 @@
                 <!-- Filter chips (populated in code-behind: All / Unlocked / Locked / Rewards) -->
                 <WrapPanel x:Name="AchievementFilters" x:FieldModifier="internal" Margin="0,0,0,8"/>
 
-                <!-- Achievement Grid (populated in code-behind) -->
-                <UniformGrid x:Name="AchievementGrid" x:FieldModifier="internal" Columns="5" Margin="0,5">
-                </UniformGrid>
+                <!-- Achievement Grid (populated in code-behind). WrapPanel, not UniformGrid:
+                     cards are fixed-size, so the panel must not stretch the gutters with them. -->
+                <WrapPanel x:Name="AchievementGrid" x:FieldModifier="internal" Margin="0,5">
+                </WrapPanel>
 
                 <TextBlock x:Name="TxtAchievementCount" x:FieldModifier="internal" Text="{loc:Str label_0_25_achievements_unlocked}" Foreground="#888888" FontSize="14"
                            HorizontalAlignment="Center" Margin="0,15,0,0"/>
@@ -43,8 +44,8 @@
 
                 <Grid Margin="0,5,0,0">
                     <StackPanel>
-                        <UniformGrid x:Name="PatronAchievementGrid" x:FieldModifier="internal" Columns="5" Margin="0,5">
-                        </UniformGrid>
+                        <WrapPanel x:Name="PatronAchievementGrid" x:FieldModifier="internal" Margin="0,5">
+                        </WrapPanel>
                         <TextBlock x:Name="TxtPatronAchievementCount" x:FieldModifier="internal" Foreground="#888888" FontSize="14"
                                    HorizontalAlignment="Center" Margin="0,15,0,0"/>
                     </StackPanel>
