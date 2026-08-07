@@ -3741,6 +3741,7 @@
   "companion_awareness_add_deny": "+ ajouter une app…",
   "companion_awareness_allow_per_app": "autoriser par app…",
   "companion_awareness_deny_banking": "banque ✓",
+  "companion_awareness_deny_head": "always hidden from her — no reaction, no counter, nothing sent:",
   "companion_awareness_deny_dormant": "+ lui cacher des apps arrive avec Train 2",
   "companion_awareness_deny_email": "e-mail ✓",
   "companion_awareness_deny_passwords": "gestionnaires de mots de passe ✓",

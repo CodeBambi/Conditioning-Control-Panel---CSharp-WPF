@@ -3739,6 +3739,7 @@
   "companion_awareness_add_deny": "+ добавить приложение…",
   "companion_awareness_allow_per_app": "разрешить по приложениям…",
   "companion_awareness_deny_banking": "банки ✓",
+  "companion_awareness_deny_head": "always hidden from her — no reaction, no counter, nothing sent:",
   "companion_awareness_deny_dormant": "+ прятать от неё приложения можно будет с Train 2",
   "companion_awareness_deny_email": "почта ✓",
   "companion_awareness_deny_passwords": "менеджеры паролей ✓",

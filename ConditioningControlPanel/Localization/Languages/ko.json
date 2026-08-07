@@ -3739,6 +3739,7 @@
   "companion_awareness_add_deny": "+ 앱 추가…",
   "companion_awareness_allow_per_app": "앱별로 허용…",
   "companion_awareness_deny_banking": "뱅킹 ✓",
+  "companion_awareness_deny_head": "always hidden from her — no reaction, no counter, nothing sent:",
   "companion_awareness_deny_dormant": "+ 앱 숨기기는 Train 2에서 시작돼요",
   "companion_awareness_deny_email": "이메일 ✓",
   "companion_awareness_deny_passwords": "비밀번호 관리자 ✓",

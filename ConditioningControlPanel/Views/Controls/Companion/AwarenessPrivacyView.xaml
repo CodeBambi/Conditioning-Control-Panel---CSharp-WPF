@@ -301,7 +301,12 @@
                 <Rectangle Style="{StaticResource CmpDashedOutlineStyle}"/>
             </Grid>
 
-            <!-- ========== deny list ========== -->
+            <!-- ========== deny list ==========
+                 The heading is load-bearing: without it these chips sit under a card titled
+                 "What she can see" and read as the ONLY things she can see — the exact
+                 opposite of what they are. -->
+            <TextBlock Text="{loc:Str companion_awareness_deny_head}"
+                       Style="{StaticResource CmpFaintTextStyle}" Margin="2,0,0,4"/>
             <ItemsControl ItemsSource="{Binding DenyList}" ItemTemplate="{StaticResource CmpDenyChipTemplate}"
                           Margin="0,0,0,4">
                 <ItemsControl.ItemsPanel>
