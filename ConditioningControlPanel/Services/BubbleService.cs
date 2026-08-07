@@ -2601,6 +2601,11 @@ internal class Bubble
         if (_shieldRing != null) it.ShieldOpacity = (float)_shieldRing.Opacity;
         if (_prismGhost != null) it.PrismOpacity = (float)_prismGhost.Opacity;
         if (_hintEl != null) it.HintOpacity = _hintEl.Visibility == Visibility.Visible ? (float)_hintEl.Opacity : 0f;
+
+        // #853: this is the ONLY writer of the draw item's dynamic fields, so it is also where the
+        // compositor learns the field moved. Without it the layer would report clean and the engine
+        // would skip the surface re-raster (the field steps at ~30fps, the engine ticks at refresh).
+        s_layer?.MarkDirty();
     }
 
     /// <summary>The box grown by <paramref name="expand"/> about its centre — the reach of its pop burst.</summary>

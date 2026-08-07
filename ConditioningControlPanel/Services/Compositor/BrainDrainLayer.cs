@@ -74,6 +74,13 @@ public sealed class BrainDrainLayer : BaseLayer
     private TimeSpan _sinceDriftCheck;
     private System.Drawing.Rectangle[] _requestedScreens = Array.Empty<System.Drawing.Rectangle>();
 
+    // #853: honest dirt. Only two things can change this layer's pixels - a NEW frame off the pump
+    // (30fps, 60 on high refresh) or an intensity/pulse push - while the engine ticks at the
+    // display's refresh rate. Everything else was a fullscreen upscale of the same image.
+    // UI thread only (Update/Start/SetIntensity/Pulse all run there).
+    private bool _dirty = true;
+    private int _lastSeenFrames = -1;
+
     public BrainDrainLayer(CompositorEngine engine) : base(engine) { }
 
     public override int ZIndex => CompositorLayers.BrainDrain;
@@ -99,6 +106,8 @@ public sealed class BrainDrainLayer : BaseLayer
         _sinceDriftCheck = TimeSpan.Zero;   // just targeted - no immediate drift check
         _pump = new BrainDrainCapturePump(_downscale, _captureInterval, melt,
                                           _requestedScreens, Sigma, _meltAmplitude);
+        _lastSeenFrames = -1;   // fresh pump: its counter restarts at 0, so never match a stale one
+        _dirty = true;
         SetActive(true);
     }
 
@@ -137,6 +146,7 @@ public sealed class BrainDrainLayer : BaseLayer
         // (Subtle retune 2026-07-31; the original 2 + i*0.12 read as "basically illegible".)
         // Clamped at the legacy 200 ceiling (amp 10) so a runaway value cannot eat the frame.
         _meltAmplitude = (float)((1.0 + Math.Clamp(intensity, 0, 200) * 0.045) * 4.0 / Math.Max(1, _downscale));
+        _dirty = true;      // draw alpha moved: repaint even if the pump has no new frame yet
         _pump?.SetBlur(Sigma, _meltAmplitude);
     }
 
@@ -149,6 +159,7 @@ public sealed class BrainDrainLayer : BaseLayer
     {
         _sourceRadius = boostedIntensity * RadiusScale / Math.Max(1, _downscale);
         _drawAlpha = 255;
+        _dirty = true;      // the slam must land on this frame, not on the pump's next one
         _pump?.SetBlur(Sigma, _meltAmplitude);
     }
 
@@ -164,13 +175,24 @@ public sealed class BrainDrainLayer : BaseLayer
 
     public override void OnDeactivated() => ReleaseCaptures();
 
+    public override bool Dirty => _dirty;
+    public override void ClearDirty() => _dirty = false;
+
     /// <summary>
     /// UI thread, once per engine tick. All this does now is re-target the pump when the display
-    /// topology drifts - the capture itself is the pump thread's job and the melt phase is its wall
-    /// clock. Cheap enough that it can never be what a hang report is pointing at.
+    /// topology drifts (plus the cheap dirty gate below) - the capture itself is the pump thread's
+    /// job and the melt phase is its wall clock. Cheap enough that it can never be what a hang
+    /// report is pointing at.
     /// </summary>
     public override void Update(TimeSpan delta)
     {
+        // #853: a repeat of the frame already on screen is not a repaint. Compare the pump's
+        // publish counter rather than signalling from the capture thread - a stalled pump then
+        // simply holds its last frame (the documented behaviour) instead of going stuck-clean,
+        // and it re-dirties by itself the moment capture resumes.
+        int published = _pump?.FramesPublished ?? _lastSeenFrames;
+        if (published != _lastSeenFrames) { _lastSeenFrames = published; _dirty = true; }
+
         _sinceDriftCheck += delta;
         if (_sinceDriftCheck < DriftCheckInterval) return;
         _sinceDriftCheck = TimeSpan.Zero;

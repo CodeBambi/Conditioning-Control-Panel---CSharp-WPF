@@ -55,6 +55,13 @@ public sealed class FlashLayer : BaseLayer
         internal SKMaskFilter? BlurCache;    // rebuilt only when the quantized sigma changes
         internal float BlurCacheSigma = -1f;
 
+        // #853 dirty tracking: the values this item was last DRAWN from. A flash holding at full
+        // opacity on a still image has none of them rewritten by the heartbeat, so the layer can
+        // report clean and stop re-rastering the whole shared surface behind it.
+        internal double LastOpacity = double.NaN;
+        internal int LastFrameIndex = -1;
+        internal double LastDwellScale = double.NaN;
+
         internal void ReleaseFrames()
         {
             var frames = Frames;
@@ -102,6 +109,7 @@ public sealed class FlashLayer : BaseLayer
             LuckyPulse = luckyPulse
         };
         _items.Add(item);
+        _dirty = true;
         SetActive(true);
         return item;
     }
@@ -111,6 +119,7 @@ public sealed class FlashLayer : BaseLayer
     {
         item.ReleaseFrames();
         _items.Remove(item);
+        _dirty = true;      // the survivors must be repainted without this one
         if (_items.Count == 0) SetActive(false);
     }
 
@@ -118,13 +127,41 @@ public sealed class FlashLayer : BaseLayer
     {
         foreach (var item in _items) item.ReleaseFrames();
         _items.Clear();
+        _dirty = true;
         SetActive(false);
     }
+
+    // #853: honest dirt. FlashService's heartbeat only WRITES these fields while a flash is fading
+    // or stepping GIF frames - a still image holding at full opacity writes nothing, yet the layer
+    // used to force a full re-raster of the shared surface every frame it was up.
+    // UI thread only, like every other member (see the class Threading note).
+    private bool _dirty = true;
+
+    public override bool Dirty => _dirty;
+    public override void ClearDirty() => _dirty = false;
 
     public override void Update(TimeSpan delta)
     {
         for (int i = 0; i < _items.Count; i++)
-            _items[i].ElapsedSec += delta.TotalSeconds;
+        {
+            var item = _items[i];
+            item.ElapsedSec += delta.TotalSeconds;
+
+            // Compare against what was last drawn instead of having FlashService announce its
+            // writes: a missed call site there would be a STUCK-CLEAN (visually frozen) flash,
+            // whereas a state compare self-heals on the next tick. A lucky pulse animates its
+            // glow off ElapsedSec every frame, so it is legitimately dirty throughout.
+            if ((item.HasGlow && item.LuckyPulse)
+                || item.Opacity != item.LastOpacity
+                || item.FrameIndex != item.LastFrameIndex
+                || item.DwellScale != item.LastDwellScale)
+            {
+                item.LastOpacity = item.Opacity;
+                item.LastFrameIndex = item.FrameIndex;
+                item.LastDwellScale = item.DwellScale;
+                _dirty = true;
+            }
+        }
     }
 
     public override void Render(SKCanvas canvas, SKRectI boundsPx, double dpiScale, TimeSpan elapsed)

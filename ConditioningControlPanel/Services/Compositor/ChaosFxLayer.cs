@@ -316,6 +316,12 @@ public sealed class ChaosFxLayer : BaseLayer
 
     // ---- engine tick ----
 
+    /// <summary>Always dirty while active, and honestly so (#853): every live particle integrates
+    /// its position and fades, every bolt re-jitters, every ripple front expands and the cursor
+    /// halo breathes - there is no static state here to gate on. What keeps this off the surface
+    /// is <see cref="Update"/> dropping the layer to INACTIVE the instant the field empties.</summary>
+    public override bool Dirty => true;
+
     public override void Update(TimeSpan delta)
     {
         float dt = (float)delta.TotalSeconds;

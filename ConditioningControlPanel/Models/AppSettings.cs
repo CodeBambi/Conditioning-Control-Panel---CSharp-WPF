@@ -2720,9 +2720,13 @@ namespace ConditioningControlPanel.Models
         /// Concurrent fullscreen layered windows were the root cause of the session-lag /
         /// mouse-stutter cluster; this is the WPF twin of the Avalonia port's compositor and the
         /// end-state renderer. Was reverted to OFF once (2026-07-13, #550: unthrottled software
-        /// SKElement raster saturated the UI thread) — since fixed by dirty-gated invalidation,
-        /// so the compositor is the blessed path going forward. A Settings-tab toggle
-        /// ("Unified overlay renderer") lets users fall back to the legacy per-effect windows.</summary>
+        /// SKElement raster saturated the UI thread); the fix is off-thread present plus
+        /// dirty-gated invalidation, which only became effective for a STACK of concurrent effects
+        /// in #853 — until then every layer but pink/spiral inherited a permanently-true Dirty, and
+        /// the engine folds dirt per SURFACE, so one bubble re-rastered the fullscreen tint+spiral
+        /// with it at refresh rate. It still does when the field is genuinely animating: per-layer
+        /// damage rects are the next step. A Settings-tab toggle ("Unified overlay renderer") lets
+        /// users fall back to the legacy per-effect windows.</summary>
         public bool UnifiedOverlayHost
         {
             get => _unifiedOverlayHost;
