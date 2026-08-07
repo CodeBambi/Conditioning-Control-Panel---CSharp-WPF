@@ -160,6 +160,27 @@ public class AwarenessLedgerTests : IDisposable
 
     // ===================== minutes, weeks, buckets =====================
 
+    /// <summary>
+    /// The ledger is driven by a 1.5s poll, not by whole seconds. Every other test in this file
+    /// advances the clock in round numbers, where truncation is invisible - so the accrual loop
+    /// credited (int)1.5 == 1 second per tick and discarded the remaining half, under-counting real
+    /// screen time by a third and persisting the shortfall as fact.
+    /// </summary>
+    [Fact]
+    public void Accrual_AtTheRealPollCadence_KeepsTheSubSecondRemainder()
+    {
+        var ledger = NewLedger();
+        var start = Monday9Am;
+        ledger.NoteFocus("youtube", "site_video", ActivityCategory.Media, start);
+
+        // Exactly one hour of wall time, delivered the way AwarenessObserver delivers it.
+        var pollTicks = TimeSpan.FromMilliseconds(1500).Ticks;
+        for (int i = 1; i <= 2400; i++) ledger.Heartbeat(start.AddTicks(pollTicks * i));
+
+        // Truncating every tick credited 2400 x 1s = 40 minutes for a real hour.
+        Assert.Equal(60, ledger.Snapshot("youtube", start.AddHours(1)).MinutesToday);
+    }
+
     [Fact]
     public void MinutesToday_AccrueWhileFocused()
     {

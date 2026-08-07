@@ -876,17 +876,36 @@ namespace ConditioningControlPanel.Services.Awareness
                 return;
             }
 
+            // Advance by the seconds actually CREDITED and keep the sub-second remainder for the
+            // next tick. The old code credited (int)(sliceEnd - cursor) but then set the segment
+            // start to `at`, discarding the fraction every time - and the driver is a 1.5s poll
+            // (AwarenessObserver.PollInterval), so (int)1.5 == 1 threw away a third of every tick.
+            // An hour of screen time was recorded as forty minutes, and every number derived from
+            // it - MinutesToday, buckets, longest dwell, the night histogram, the long-haul
+            // milestones - inherited the same shortfall and was persisted as fact. The unit tests
+            // missed it because they drive the clock in whole seconds, where the bug is invisible.
             var cursor = _segmentStart;
-            while (cursor < at)
+            while (true)
             {
                 var nextHour = cursor.Date.AddHours(cursor.Hour + 1);
                 var sliceEnd = nextHour < at ? nextHour : at;
                 int seconds = (int)(sliceEnd - cursor).TotalSeconds;
-                if (seconds > 0) AddSliceLocked(_currentAppId, _currentCluster, cursor, seconds);
-                cursor = sliceEnd;
+
+                if (seconds > 0)
+                {
+                    AddSliceLocked(_currentAppId, _currentCluster, cursor, seconds);
+                    cursor = cursor.AddSeconds(seconds);
+                    continue;
+                }
+
+                // Under a second left. If it is the tail of an hour, step over the boundary so the
+                // next slice is attributed to the right hour (costing well under a second, once an
+                // hour). Otherwise stop and carry the remainder into the next tick.
+                if (sliceEnd < at) { cursor = sliceEnd; continue; }
+                break;
             }
 
-            _segmentStart = at;
+            _segmentStart = cursor;
         }
 
         private void AddSliceLocked(string appId, string? cluster, DateTime sliceStart, int seconds)
