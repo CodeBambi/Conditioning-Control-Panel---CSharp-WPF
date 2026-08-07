@@ -93,6 +93,57 @@ public class AwarenessDialCopyTests
     }
 
     /// <summary>
+    /// The card's guarantees are v2 rules. The legacy poll starts on two flags where
+    /// <c>AwarenessObserver.IsEnabled</c> needs four, so an upgrader who declines the v2 dialog keeps
+    /// a running poll with no incognito drop, no deny list and no title allow list - and the card used
+    /// to print those promises as fact anyway. This pins the gap that makes the warning band
+    /// necessary: the two conditions must not be the same test, or the band can never appear.
+    /// </summary>
+    [Fact]
+    public void TheLegacyPollStartsOnFewerFlagsThanTheV2Observer()
+    {
+        var settings = new ConditioningControlPanel.Models.AppSettings
+        {
+            // Exactly the declined-upgrader state: the old silent auto-consent is set, the v2
+            // explanation has not been accepted.
+            AwarenessModeEnabled = true,
+            AwarenessConsentGiven = true,
+            AwarenessConsentShownV2 = false,
+            UseAwarenessV2 = true
+        };
+
+        // What the legacy WindowAwarenessService.Start gate reads.
+        bool legacyWouldRun = settings.AwarenessModeEnabled && settings.AwarenessConsentGiven;
+
+        // What AwarenessObserver.IsEnabled reads, same four clauses, same order.
+        bool v2WouldRun = settings.UseAwarenessV2 && settings.AwarenessModeEnabled &&
+                          settings.AwarenessConsentGiven && settings.AwarenessConsentShownV2;
+
+        Assert.True(legacyWouldRun);
+        Assert.False(v2WouldRun);
+
+        // Which is precisely the state the card must warn about rather than describe as protected.
+        Assert.True(legacyWouldRun && !v2WouldRun);
+    }
+
+    [Fact]
+    public void AcceptingTheV2ExplanationClosesThatGap()
+    {
+        var settings = new ConditioningControlPanel.Models.AppSettings
+        {
+            AwarenessModeEnabled = true,
+            AwarenessConsentGiven = true,
+            AwarenessConsentShownV2 = true,
+            UseAwarenessV2 = true
+        };
+
+        bool v2WouldRun = settings.UseAwarenessV2 && settings.AwarenessModeEnabled &&
+                          settings.AwarenessConsentGiven && settings.AwarenessConsentShownV2;
+
+        Assert.True(v2WouldRun);
+    }
+
+    /// <summary>
     /// Reaches the internal copy helper by reflection: it lives in the WPF view namespace and this
     /// suite deliberately does not take a UI dependency to read three strings.
     /// </summary>

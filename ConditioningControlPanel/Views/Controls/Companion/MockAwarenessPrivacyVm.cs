@@ -67,6 +67,19 @@ namespace ConditioningControlPanel.Views.Controls.Companion
 
         public string DialHint => AwarenessDialCopy.HintFor(_intensity);
 
+        /// <summary>Init-only so the gallery can exhibit the legacy-pipeline warning state.</summary>
+        public bool IsLegacyPipeline { get; init; }
+
+        public string IncognitoCopy => Loc.Get(IsLegacyPipeline
+            ? "companion_awareness_incognito_legacy"
+            : "companion_awareness_incognito");
+
+        public string LegacyHead => Loc.Get("companion_awareness_legacy_head");
+        public string LegacyBody => Loc.Get("companion_awareness_legacy_body");
+        public string LegacyAction => Loc.Get("companion_awareness_legacy_action");
+
+        public ICommand ReviewConsentCommand { get; init; } = new CompanionRelayCommand(() => { });
+
         public bool IsEverythingAvailable { get; init; }
         public string WireLine { get; init; } = "[ fun · Chrome · 22m ]";
         public bool IsWireLive { get; init; } = true;

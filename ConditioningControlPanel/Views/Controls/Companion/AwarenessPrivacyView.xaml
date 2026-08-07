@@ -168,6 +168,30 @@
                 </Border>
             </Grid>
 
+            <!-- ========== the legacy-pipeline warning ==========
+                 Everything below this band describes the v2 privacy layer. The legacy poll starts on
+                 two flags where the observer needs four, so declining the v2 consent dialog (or
+                 dropping the kill switch) leaves her watching with NONE of it: no incognito drop, no
+                 deny list, no title allow list. The card used to render those promises as fact in
+                 exactly that state. -->
+            <Border Margin="0,13,0,0" Padding="12,10,12,11" CornerRadius="9"
+                    Background="#332A1A1A" BorderBrush="#FF6B6B" BorderThickness="1"
+                    Visibility="{Binding IsLegacyPipeline, Converter={StaticResource CmpBoolToVis}}">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                        <TextBlock Text="⚠️" FontSize="11" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding LegacyHead}" Foreground="#FF6B6B" FontSize="11.5"
+                                   FontWeight="Bold" VerticalAlignment="Center" Margin="5,0,0,0"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding LegacyBody}" Style="{StaticResource CmpFaintTextStyle}"
+                               TextWrapping="Wrap" Margin="0,0,0,7"/>
+                    <Button Content="{Binding LegacyAction}" Command="{Binding ReviewConsentCommand}"
+                            Style="{StaticResource CmpLinkButtonStyle}" HorizontalAlignment="Left"
+                            Padding="0,2,0,2"/>
+                </StackPanel>
+            </Border>
+
             <!-- ========== intensity dial ==========
                  The strip moves ONE thing: whether any app's page title may leave this PC. It used to
                  sit here unlabelled, under a card headed "What she can see", with stops reading
@@ -324,7 +348,9 @@
                 </ItemsControl>
             </StackPanel>
 
-            <TextBlock Text="{loc:Str companion_awareness_incognito}" Style="{StaticResource CmpFaintTextStyle}"
+            <!-- Bound, not a fixed loc string: the incognito hard-drop is a v2 rule, so on the legacy
+                 pipeline "that one is not a setting" would be describing a guard that is not there. -->
+            <TextBlock Text="{Binding IncognitoCopy}" Style="{StaticResource CmpFaintTextStyle}"
                        TextWrapping="Wrap" Margin="2,4,0,11"/>
 
             <!-- ========== page titles ========== -->

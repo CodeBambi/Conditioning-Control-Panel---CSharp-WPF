@@ -61,6 +61,24 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         /// </summary>
         string DialHint { get; }
 
+        /// <summary>
+        /// True when she is watching through the OLD pipeline, which has none of this card's
+        /// protections. Drives a warning band and swaps the incognito, wire-caption and wire-line
+        /// copy for accurate versions, because a privacy card that overstates its coverage is worse
+        /// than no card at all.
+        /// </summary>
+        bool IsLegacyPipeline { get; }
+
+        /// <summary>The incognito sentence, correct for whichever pipeline is actually running.</summary>
+        string IncognitoCopy { get; }
+
+        string LegacyHead { get; }
+        string LegacyBody { get; }
+        string LegacyAction { get; }
+
+        /// <summary>Re-offers the v2 consent explanation so the protections can be switched on.</summary>
+        ICommand ReviewConsentCommand { get; }
+
         /// <summary>The live frame, e.g. "[ fun · Chrome · 22m ]".</summary>
         string WireLine { get; }
         /// <summary>False renders the frame grayed with "[ her eyes are closed ]".</summary>

@@ -58,12 +58,14 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         private bool _isWireLive;
         private bool _isJsonExpanded;
         private bool _isPaused;
+        private bool _isLegacyPipeline;
         private int _retentionDays = 30;
 
         public AwarenessPrivacyRuntimeVm(CompanionRuntimeContext ctx)
         {
             _ctx = ctx;
 
+            ReviewConsentCommand = new CompanionRelayCommand(ReviewV2Consent);
             AddDenyCommand = new CompanionRelayCommand(EditDenyList);
             AllowPerAppCommand = new CompanionRelayCommand(EditTitleAllowList);
             ToggleJsonCommand = new CompanionRelayCommand(() => IsJsonExpanded = !IsJsonExpanded);
@@ -125,6 +127,36 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         /// <summary>Train 2 has landed: there is no promise block under the wire any more.</summary>
         public bool IsDormant => false;
 
+        /// <summary>
+        /// True when she is watching but the v2 privacy layer is NOT the thing doing it, so every
+        /// promise printed on this card is currently false.
+        ///
+        /// <para><b>How a user gets here.</b> <see cref="AwarenessObserver.IsEnabled"/> needs four
+        /// flags; the legacy <c>WindowAwarenessService.Start</c> needs only two of them
+        /// (<c>AwarenessModeEnabled</c> + <c>AwarenessConsentGiven</c>). So an upgrader who had
+        /// awareness on before v2 and then DECLINED the v2 consent dialog - or anyone with the
+        /// <c>UseAwarenessV2</c> kill switch down - keeps a running 1.5s poll on the old pipeline.
+        /// That pipeline predates the privacy layer: no incognito drop, no deny list, no title allow
+        /// list. Meanwhile <see cref="Sync"/> reads awareness as simply "on" and the card renders the
+        /// incognito guarantee, the "titles stay on your PC" caption and the deny chips as fact.</para>
+        ///
+        /// <para>A privacy card that overstates its protection is worse than no card, so this drives a
+        /// warning band and swaps the three claims for accurate ones. It is deliberately computed from
+        /// the same <c>IsEnabled</c> the observer gates on rather than from the settings flags
+        /// directly - a second reading of the same four flags is how the card and the engine would
+        /// drift apart again.</para>
+        /// </summary>
+        public bool IsLegacyPipeline => _isLegacyPipeline;
+
+        /// <summary>The incognito line, told straight for whichever pipeline is actually running.</summary>
+        public string IncognitoCopy => Loc.Get(_isLegacyPipeline
+            ? "companion_awareness_incognito_legacy"
+            : "companion_awareness_incognito");
+
+        public string LegacyHead => Loc.Get("companion_awareness_legacy_head");
+        public string LegacyBody => Loc.Get("companion_awareness_legacy_body");
+        public string LegacyAction => Loc.Get("companion_awareness_legacy_action");
+
         // =====================================================================================
         //  the wire
         // =====================================================================================
@@ -137,7 +169,15 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             private set => Set(ref _isWireLive, value);
         }
 
-        public string WireCaption => Loc.Get("companion_awareness_wire_caption");
+        /// <summary>
+        /// "this exact line is what she gets" is only true when the projection is the thing producing
+        /// it. On the legacy pipeline nothing writes <c>AwarenessLive.LastFrame</c>, so the wire would
+        /// sit on "[ nothing yet ]" while she is demonstrably talking about your screen - a caption
+        /// promising completeness over an empty readout is the most misleading state on the card.
+        /// </summary>
+        public string WireCaption => Loc.Get(_isLegacyPipeline
+            ? "companion_awareness_wire_caption_legacy"
+            : "companion_awareness_wire_caption");
         public string DormantCopy => Loc.Get("companion_awareness_dormant_copy");
 
         public string WireJson
@@ -254,6 +294,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
 
         public ICommand AddDenyCommand { get; }
         public ICommand AllowPerAppCommand { get; }
+        public ICommand ReviewConsentCommand { get; }
         public ICommand FineTuningCommand { get; }
         public ICommand ToggleJsonCommand { get; }
         public ICommand PauseCommand { get; }
@@ -275,6 +316,15 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             bool paused = AwarenessPause.IsPaused();
 
             IsPaused = paused;
+
+            // She is watching, but not through the v2 privacy layer: the legacy poll needs only two
+            // of IsEnabled's four flags, so declining the v2 dialog (or dropping the kill switch)
+            // leaves it running with none of this card's guarantees behind it.
+            _isLegacyPipeline = on && !AwarenessObserver.IsEnabled;
+            Raise(nameof(IsLegacyPipeline));
+            Raise(nameof(IncognitoCopy));
+            Raise(nameof(WireCaption));
+
             _retentionDays = settings?.AwarenessRetentionDays ?? 30;
             Raise(nameof(RetentionDays));
             Raise(nameof(RetentionLabel));
@@ -287,9 +337,11 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             Raise(nameof(Intensity));
             Raise(nameof(DialHint));
 
-            IsWireLive = on && !paused;
-            WireLine = BuildWireLine(on, paused);
-            WireJson = BuildWireJson(on);
+            // The legacy pipeline never writes LastFrame, so the wire is not a live readout there and
+            // must not be styled as one.
+            IsWireLive = on && !paused && !_isLegacyPipeline;
+            WireLine = BuildWireLine(on, paused, _isLegacyPipeline);
+            WireJson = _isLegacyPipeline ? string.Empty : BuildWireJson(on);
 
             RebuildDeny(settings);
             RebuildAllow(settings);
@@ -340,10 +392,15 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         /// true, so this renders a strict subset of the projection and never a field the projection
         /// does not contain.</para>
         /// </summary>
-        private static string BuildWireLine(bool on, bool paused)
+        private static string BuildWireLine(bool on, bool paused, bool legacy)
         {
             if (!on) return Loc.Get("companion_awareness_wire_closed");
             if (paused) return Loc.Get("companion_awareness_wire_paused");
+
+            // Not "[ nothing yet ]": on the legacy pipeline nothing is ever written here, and an
+            // empty readout beside a live companion reads as "she is sending nothing", which is the
+            // opposite of what is happening.
+            if (legacy) return Loc.Get("companion_awareness_wire_legacy");
 
             var frame = AwarenessLive.LastFrame;
             if (frame == null) return Loc.Get("companion_awareness_wire_idle");
@@ -623,6 +680,43 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             AwarenessLive.Forget(appId);
             Sync();
         }, "awareness forget app");
+
+        /// <summary>
+        /// Re-offers the v2 consent explanation from the warning band, so someone who declined once
+        /// (or was never asked, because the kill switch was down) has a way back to the protections
+        /// without hunting for a toggle.
+        ///
+        /// <para><c>MainWindow.EnsureAwarenessV2Consent</c> deliberately asks at most once per session,
+        /// which is right for an unprompted interruption and wrong for a button whose entire label is
+        /// "review and turn them on". This calls the dialog directly for that reason.</para>
+        ///
+        /// <para>Accepting is not enough on its own: the observer refused to start while consent was
+        /// missing, so the on/off call site is bounced to engage v2 now rather than next launch. The
+        /// kill switch is NOT flipped here - if someone deliberately turned v2 off in settings, a
+        /// consent dialog is not the place to silently turn it back on, so the band stays up and says
+        /// so.</para>
+        /// </summary>
+        private void ReviewV2Consent() => _ctx.WithWindow(window =>
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            if (!AwarenessConsentDialog.EnsureConsent(window, settings))
+            {
+                App.Logger?.Information("Awareness: v2 consent declined again from the privacy card");
+                Sync();
+                return;
+            }
+
+            try
+            {
+                App.WindowAwareness?.Stop();
+                App.WindowAwareness?.Start();
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Awareness: restart after v2 consent failed"); }
+
+            Sync();
+        });
 
         /// <summary>
         /// Pauses her for an hour, or lifts a running pause. The pause is a hard drop in the privacy
