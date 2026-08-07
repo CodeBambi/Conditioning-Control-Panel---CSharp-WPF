@@ -1084,6 +1084,39 @@ namespace ConditioningControlPanel
                 }
             }
 
+            // Pass 3 — fuzzy recovery. The prompt tells her to say a title VERBATIM, but measured
+            // in a real session ~87% of her suggestions were near-misses ("Bambi TikTok Mix 1-8"
+            // for the pool key "Bambi TikTok 1-8") or outright inventions, and the exact pass
+            // above leaves all of them as dead text. Quoted / Title-Case spans that didn't match
+            // exactly get a token-overlap match against the same table; a span that matches
+            // NOTHING becomes a site-search link (one per bubble, only in video-ish context) so
+            // the user always gets a working affordance instead of a title they must retype.
+            var tableEntries = linkTable.Select(kvp => (Title: kvp.Key, Url: kvp.Value)).ToList();
+            bool searchFallbackUsed = false;
+            foreach (var (spanStart, spanLength) in Services.Companion.CompanionTitleMatcher.CandidateSpans(processedText))
+            {
+                if (spanLength < Services.Companion.CompanionTitleMatcher.MinSpanLength) continue;
+                bool overlapsExisting = linkPositions.Any(lp =>
+                    spanStart < lp.start + lp.length && spanStart + spanLength > lp.start);
+                if (overlapsExisting) continue;
+
+                var span = processedText.Substring(spanStart, spanLength);
+                var fuzzy = Services.Companion.CompanionTitleMatcher.BestFuzzy(span, tableEntries);
+                if (fuzzy != null)
+                {
+                    linkPositions.Add((spanStart, spanLength, fuzzy.Value.Title, fuzzy.Value.Url));
+                    App.Logger?.Information("Fuzzy-linked video: '{Span}' -> '{Title}'", span, fuzzy.Value.Title);
+                }
+                else if (!searchFallbackUsed
+                         && Services.Companion.CompanionTitleMatcher.LooksLikeVideoContext(processedText, spanStart))
+                {
+                    linkPositions.Add((spanStart, spanLength, span,
+                        Services.Companion.CompanionTitleMatcher.BuildSearchUrl(span)));
+                    searchFallbackUsed = true;
+                    App.Logger?.Information("Search-linked unknown video title: '{Span}'", span);
+                }
+            }
+
             // Also detect raw URLs in the text (the AI sometimes outputs full URLs from the link pool)
             var urlRegex = new Regex(@"https?://[^\s,""'<>]+", RegexOptions.IgnoreCase);
             foreach (Match match in urlRegex.Matches(text))

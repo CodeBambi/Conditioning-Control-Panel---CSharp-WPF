@@ -17,6 +17,10 @@ namespace ConditioningControlPanel.Services
         // 1. KNOWLEDGE BASE (The "Lore")
         // ==========================================
 
+        /// <summary>Sentinel for the media-links block, substituted after the mod word-replacement
+        /// passes so pool titles reach the model un-rewritten (see the call site).</summary>
+        private const string MediaLinksToken = "{{MEDIA_LINKS}}";
+
         // Core video/audio links that should ALWAYS be included in prompts
         // These exact names match AvatarTubeWindow.KnownVideoLinks for clickable links
         private string GetCoreMediaLinks()
@@ -884,8 +888,13 @@ Example responses with REAL video names:
                 sb.AppendLine();
             }
 
-            // Always append core media links so videos/audio are always clickable
-            sb.AppendLine(GetCoreMediaLinks());
+            // Always append core media links so videos/audio are always clickable. Via a sentinel,
+            // not inline: MakeModAware below does blind string.Replace over the whole prompt
+            // ("Bambi" → "babe" on sissyhypno), which rewrote pool TITLES inside this block into
+            // strings that exist in no link table — the model then faithfully suggested un-linkable
+            // titles by construction. Same trick {{VIDEO}} already uses; substituted after the
+            // replacement passes so the titles the model sees are the exact linkable keys.
+            sb.AppendLine(MediaLinksToken);
             sb.AppendLine();
 
             // Append GLOBAL knowledge base links (shared across all personalities)
@@ -998,6 +1007,9 @@ Example responses with REAL video names:
 
             // Apply mod text replacements (e.g. "Bambi" → "Unit" for drone mod)
             prompt = App.Mods?.MakeModAware(prompt) ?? prompt;
+
+            // Substitute the media-links block AFTER the replacement passes — see MediaLinksToken.
+            prompt = prompt.Replace(MediaLinksToken, GetCoreMediaLinks());
 
             // Fill {{VIDEO}} example placeholders with REAL, varied titles from the active mod's
             // pool. Done LAST — after mod text-replacement — so sampled titles aren't corrupted

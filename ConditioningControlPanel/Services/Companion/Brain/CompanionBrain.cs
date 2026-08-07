@@ -428,8 +428,10 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// the only anti-fixation left is one line of prose. Train 1 also newly puts her own previous
         /// replies into the window, which is the exact condition that produced the fixation bug.</para>
         ///
-        /// <para>Titles come from our own list, never from the model, so nothing user- or
-        /// model-authored can reach the prompt through this path.</para>
+        /// <para>Recognised titles come from our own list. When the reply named NOTHING we
+        /// recognise, its quoted spans are noted instead — model-authored, so they are length-
+        /// capped and newline-stripped before they can reach the exclusion line (without this,
+        /// invented titles were exempt from the ban and became the fixation loop).</para>
         /// </summary>
         internal void NoteRecommendedTitles(string? replyText)
         {
@@ -450,6 +452,28 @@ namespace ConditioningControlPanel.Services.Companion.Brain
                     if (noted.Any(n => n.IndexOf(title, StringComparison.OrdinalIgnoreCase) >= 0)) continue;
                     noted.Add(title);
                     Recommendations.Note(title);
+                }
+
+                // She invents titles more often than she lands real ones — and an invented title
+                // was never noted, so the exclusion line never listed it and she repeated it
+                // forever (observed 2026-08-07: three invented titles said 3x each; the two real
+                // ones once each). Ban what she SAID, not just what we recognised. These strings
+                // are model-authored and flow into future prompts via the exclusion line, so they
+                // are bounded hard: quoted spans only, length-capped, newlines stripped, two per
+                // reply.
+                if (noted.Count == 0)
+                {
+                    int banned = 0;
+                    foreach (var (start, length) in Services.Companion.CompanionTitleMatcher.CandidateSpans(text))
+                    {
+                        if (banned >= 2) break;
+                        if (length < Services.Companion.CompanionTitleMatcher.MinSpanLength || length > 60) continue;
+                        var span = text.Substring(start, length).Replace('\n', ' ').Replace('\r', ' ').Trim();
+                        if (span.Length == 0) continue;
+                        Recommendations.Note(span);
+                        noted.Add(span);
+                        banned++;
+                    }
                 }
 
                 if (noted.Count > 0)

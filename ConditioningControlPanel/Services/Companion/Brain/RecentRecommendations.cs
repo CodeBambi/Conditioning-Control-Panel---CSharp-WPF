@@ -18,8 +18,10 @@ namespace ConditioningControlPanel.Services.Companion.Brain
     /// </summary>
     public sealed class RecentRecommendations
     {
-        /// <summary>How many titles are remembered. Older ones fall off the back.</summary>
-        public const int MaxTracked = 6;
+        /// <summary>How many titles are remembered. Older ones fall off the back. 6 was a
+        /// shallow ban against a 13-19 title pool — and invented titles now consume slots too,
+        /// so the list needs the headroom.</summary>
+        public const int MaxTracked = 12;
 
         /// <summary>How long a suggestion stays "recent".</summary>
         public static readonly TimeSpan Ttl = TimeSpan.FromHours(24);

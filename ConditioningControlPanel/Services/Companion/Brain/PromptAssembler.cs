@@ -104,6 +104,11 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// </summary>
         public const int SystemMessageCharCeiling = 9000;
 
+        /// <summary>The proxy's actual reject threshold (input_too_large above this). The 9000
+        /// ceiling is our soft budget; the gap between them is what lets a pinned anti-repeat
+        /// line survive on prompts whose prefix alone busts the soft cap.</summary>
+        public const int ProxyHardRejectCap = 9900;
+
         /// <summary>
         /// The anti-repeat rule ambient calls carry. Together with
         /// <see cref="RecentRecommendations"/> this is what lets ambient calls hold history at all —
@@ -188,7 +193,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
             var prefix = _systemPromptProvider() ?? string.Empty;
             var tail = BuildTail(purpose, window);
-            var systemPrompt = Compose(prefix, tail, PurposeInstruction(purpose));
+            var systemPrompt = Compose(prefix, tail, PurposeInstruction(purpose),
+                pinned: _recommendations.BuildExclusionLine());
 
             var messages = new List<ChatMessage>(window.Count + 1) { ChatMessage.System(systemPrompt) };
             messages.AddRange(ChatSession.ToMessages(window));
@@ -211,7 +217,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// floor, and trimming it to satisfy a length cap would be trading a compliance control for a
         /// cost control.</para>
         /// </summary>
-        internal static string Compose(string prefix, string tail, string instruction)
+        internal static string Compose(string prefix, string tail, string instruction, string? pinned = null)
         {
             prefix ??= string.Empty;
             tail ??= string.Empty;
@@ -227,6 +233,15 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             {
                 // Even the minimum tail doesn't fit. Send the prefix plus just the instruction —
                 // dropping the instruction entirely would leave the call with no purpose at all.
+                // The pinned line (the anti-repeat exclusion set) rides along when the hard proxy
+                // reject cap still has room for it: a fat preset used to strip the exclusion on
+                // EVERY call, which turned the anti-fixation system off exactly for the users
+                // with the biggest prompts.
+                if (!string.IsNullOrEmpty(pinned) &&
+                    prefix.Length + floor.Length + pinned!.Length + 3 <= ProxyHardRejectCap)
+                {
+                    floor = TailHeader + "\n" + pinned + "\n" + instruction;
+                }
                 App.Logger?.Warning(
                     "[AI-PROMPT] system prompt over the {Ceiling}-char proxy cap (prefix={Prefix} chars) — tail reduced to the purpose instruction",
                     SystemMessageCharCeiling, prefix.Length);
@@ -268,12 +283,17 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             var instruction = PurposeInstruction(purpose);
             var lines = new List<string>();
 
-            lines.Add(TimeOfDayLine(_localClock()));
-
+            // Anti-fixation lines FIRST: Compose sheds tail lines from the end, and the budget
+            // loop below drops whatever no longer fits — with these after the time-of-day line
+            // they were the first casualties of a fat prompt, which is exactly when the model
+            // needs them most (observed 2026-08-07: four chat calls ran with no exclusion set
+            // and no vary rule, and the same invented titles came back all day).
             var exclusion = _recommendations.BuildExclusionLine();
             if (exclusion != null) lines.Add(exclusion);
 
             if (purpose == AiPurpose.Chat || purpose == AiPurpose.Reaction) lines.Add(VaryPicksRule);
+
+            lines.Add(TimeOfDayLine(_localClock()));
 
             if (window != null && window.Any(t => t.Kind == TurnKind.BarkEcho)) lines.Add(SpokenAloudRule);
 
