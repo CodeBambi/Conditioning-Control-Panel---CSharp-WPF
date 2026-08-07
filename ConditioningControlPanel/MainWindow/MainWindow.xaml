@@ -265,12 +265,40 @@
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
+                        <!-- Accent capsule, not a bare glyph: the old 22px muted gear was the
+                             single most-asked "where is it?" control in the app. Gear + caption
+                             live inside the template so one hit area covers both.
+                             Height 28 is free vertical room - the Row 1 tab buttons in column 1
+                             are already Height 32, so this cannot grow the header row.
+                             LineHeight/BlockLineHeight pins each line so the 28px never clips. -->
                         <Button x:Name="BtnManageMods" Click="BtnManageMods_Click"
                                 ToolTip="{loc:Str tooltip_manage_mods}"
-                                Margin="4,0,0,0" Width="22" Height="22"
+                                Margin="5,0,0,0" Height="28" VerticalAlignment="Center"
                                 Background="Transparent" BorderThickness="0" Cursor="Hand">
-                            <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="11"
-                                       Foreground="{DynamicResource TextMutedBrush}"/>
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="capsule" CornerRadius="4" Padding="7,1"
+                                            Background="{DynamicResource TransparentPink20Brush}"
+                                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                                                       Foreground="{DynamicResource PinkBrush}"
+                                                       HorizontalAlignment="Center"
+                                                       LineHeight="15" LineStackingStrategy="BlockLineHeight"/>
+                                            <TextBlock Text="{loc:Str label_mod_manager}" FontSize="8" FontWeight="Bold"
+                                                       Foreground="{DynamicResource PinkBrush}"
+                                                       HorizontalAlignment="Center"
+                                                       LineHeight="9" LineStackingStrategy="BlockLineHeight"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="capsule" Property="Background"
+                                                    Value="{DynamicResource TransparentPink40Brush}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
                         </Button>
                     </StackPanel>
                     <TextBlock x:Name="TxtPlayerTitle" Text="{loc:Str label_basic_subject}" Foreground="{DynamicResource PinkBrush}"
