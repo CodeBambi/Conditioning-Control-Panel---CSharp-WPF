@@ -30,15 +30,16 @@ public class RecentRecommendationsTests
     }
 
     [Fact]
-    public void Note_KeepsOnlyTheLastSix()
+    public void Note_KeepsOnlyMaxTracked()
     {
         var recs = new RecentRecommendations();
-        for (int i = 1; i <= 9; i++) recs.Note($"video {i}");
+        int overfill = RecentRecommendations.MaxTracked + 3;
+        for (int i = 1; i <= overfill; i++) recs.Note($"video {i}");
 
         var current = recs.Current();
         Assert.Equal(RecentRecommendations.MaxTracked, current.Count);
-        Assert.Equal(6, current.Count);
-        Assert.Equal("video 9", current[0]);
+        Assert.Equal($"video {overfill}", current[0]);
+        Assert.DoesNotContain("video 1", current);
         Assert.DoesNotContain("video 3", current);
     }
 

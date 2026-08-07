@@ -29,9 +29,14 @@ namespace ConditioningControlPanel.Services.Companion
     internal static class CompanionLinkIndex
     {
         /// <summary>A title short enough to appear inside ordinary prose by accident is not a
-        /// reliable mention. "Overload" (8) is a real catalogue entry; matching it inside "sensory
-        /// overload" would attach a video to a sentence that never suggested one.</summary>
+        /// reliable BARE mention. "Overload" (8) is a real catalogue entry; matching it inside
+        /// "sensory overload" would attach a video to a sentence that never suggested one. Short
+        /// titles still match when QUOTED ("watch \"Overload\"") — quoting is the deliberate-
+        /// mention signal, so the length gate no longer disables them outright.</summary>
         internal const int MinimumTitleLength = 10;
+
+        /// <summary>Shortest title indexed at all. Below this even a quoted match is noise.</summary>
+        internal const int AbsoluteMinimumTitleLength = 4;
 
         private static readonly object Gate = new();
         private static string? _fingerprint;
@@ -52,12 +57,15 @@ namespace ConditioningControlPanel.Services.Companion
         {
             if (string.IsNullOrWhiteSpace(url)) return false;
             EnsureCurrent();
-            lock (Gate) return _urls.Contains(Trim(url));
+            lock (Gate) return _urls.Contains(Canonicalize(url));
         }
 
         /// <summary>
         /// Finds the catalogue title mentioned in <paramref name="text"/>, longest first so
-        /// "Bambi TikTok - In Beat" wins over a shorter title contained inside it. Returns null when
+        /// "Bambi TikTok - In Beat" wins over a shorter title contained inside it. Short titles
+        /// (under <see cref="MinimumTitleLength"/>) only match when quoted. When no exact mention
+        /// exists, falls back to a fuzzy token match on quoted/Title-Case spans — the model
+        /// paraphrases pool titles far more often than it lands them verbatim. Returns null when
         /// nothing is named — the common case, and it must stay cheap.
         /// </summary>
         internal static Entry? FindMentionedTitle(string? text)
@@ -71,9 +79,42 @@ namespace ConditioningControlPanel.Services.Companion
             foreach (var entry in entries)          // pre-sorted longest-first
             {
                 var at = text.IndexOf(entry.Title, StringComparison.OrdinalIgnoreCase);
-                if (at >= 0 && IsWholeMention(text, at, entry.Title.Length)) return entry;
+                if (at < 0 || !IsWholeMention(text, at, entry.Title.Length)) continue;
+                if (entry.Title.Length < MinimumTitleLength && !IsQuotedMention(text, at, entry.Title.Length))
+                    continue;
+                return entry;
+            }
+
+            // Fuzzy fallback: a near-miss of a real title ("Bambi TikTok Mix 1-8" for
+            // "Bambi TikTok 1-8") still deserves its chip.
+            var pool = entries.Select(e => (e.Title, e.Url)).ToList();
+            foreach (var (start, length, _) in CompanionTitleMatcher.CandidateSpans(text))
+            {
+                if (length < CompanionTitleMatcher.MinSpanLength) continue;
+                var fuzzy = CompanionTitleMatcher.BestFuzzy(text.Substring(start, length), pool);
+                if (fuzzy != null) return new Entry(fuzzy.Value.Title, fuzzy.Value.Url);
             }
             return null;
+        }
+
+        /// <summary>The sanctioned catalogue as (Title, Url) pairs, for the off-pool title
+        /// rewrite (AiTextHygiene.RewriteOffPoolTitles). Longest-first, same as matching.</summary>
+        internal static IReadOnlyList<(string Title, string Url)> CurrentEntries()
+        {
+            EnsureCurrent();
+            Entry[] entries;
+            lock (Gate) entries = _entries;
+            return entries.Select(e => (e.Title, e.Url)).ToList();
+        }
+
+        /// <summary>Quoted = deliberately named: the char just outside either boundary is a quote.</summary>
+        private static bool IsQuotedMention(string text, int start, int length)
+        {
+            const string Quotes = "\"“”‘’'";
+            bool before = start > 0 && Quotes.IndexOf(text[start - 1]) >= 0;
+            var end = start + length;
+            bool after = end < text.Length && Quotes.IndexOf(text[end]) >= 0;
+            return before && after;
         }
 
         /// <summary>
@@ -89,6 +130,26 @@ namespace ConditioningControlPanel.Services.Companion
         }
 
         private static string Trim(string url) => url.Trim().TrimEnd('.', ',', ')', ']', '!', '?', ';', ':', '"', '\'');
+
+        /// <summary>
+        /// Canonical comparison form: scheme differences (http/https), a "www." prefix, host
+        /// case, and a trailing slash are all the SAME link — a model echoing a pool URL rarely
+        /// reproduces it byte-exact, and the strip deletes the whole sentence on a miss, so a
+        /// legitimate suggestion used to die over "https vs http". Query strings are kept: on
+        /// tube sites they select the video.
+        /// </summary>
+        private static string Canonicalize(string url)
+        {
+            var trimmed = Trim(url);
+            if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var u) ||
+                (u.Scheme != Uri.UriSchemeHttp && u.Scheme != Uri.UriSchemeHttps))
+                return trimmed.ToLowerInvariant();
+
+            var host = u.Host.ToLowerInvariant();
+            if (host.StartsWith("www.", StringComparison.Ordinal)) host = host[4..];
+            var path = u.AbsolutePath.TrimEnd('/');
+            return host + path.ToLowerInvariant() + u.Query.ToLowerInvariant();
+        }
 
         private static void EnsureCurrent()
         {
@@ -144,9 +205,11 @@ namespace ConditioningControlPanel.Services.Companion
         private static void Add(List<Entry> entries, HashSet<string> urls, string? title, string? url)
         {
             if (string.IsNullOrWhiteSpace(url)) return;
-            urls.Add(Trim(url));
+            urls.Add(Canonicalize(url));
 
-            if (string.IsNullOrWhiteSpace(title) || title.Trim().Length < MinimumTitleLength) return;
+            // Short titles are indexed too — FindMentionedTitle demands a QUOTED mention for
+            // them, so "Overload"/"Fixation" can finally chip without prose false-positives.
+            if (string.IsNullOrWhiteSpace(title) || title.Trim().Length < AbsoluteMinimumTitleLength) return;
             entries.Add(new Entry(title.Trim(), url.Trim()));
         }
 
@@ -160,8 +223,12 @@ namespace ConditioningControlPanel.Services.Companion
         {
             var sb = new System.Text.StringBuilder("mod:").Append(App.Mods?.ActiveModId ?? "none");
 
+            // Contents, not Count: renaming a row or swapping a URL in place used to leave a
+            // stale index that stripped the just-edited link as unsanctioned.
             var pool = App.Mods?.GetVideoLinks();
             sb.Append("|pool:").Append(pool?.Count ?? 0);
+            if (pool != null)
+                foreach (var kvp in pool) sb.Append('|').Append(kvp.Key).Append('#').Append(kvp.Value);
 
             var kb = App.Settings?.Current?.GlobalKnowledgeBaseLinks;
             sb.Append("|kb:").Append(kb?.Count ?? 0);

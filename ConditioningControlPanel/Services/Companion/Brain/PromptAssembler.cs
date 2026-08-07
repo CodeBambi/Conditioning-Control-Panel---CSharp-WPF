@@ -104,6 +104,11 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// </summary>
         public const int SystemMessageCharCeiling = 9000;
 
+        /// <summary>The proxy's actual reject threshold (input_too_large above this). The 9000
+        /// ceiling is our soft budget; the gap between them is what lets a pinned anti-repeat
+        /// line survive on prompts whose prefix alone busts the soft cap.</summary>
+        public const int ProxyHardRejectCap = 9900;
+
         /// <summary>
         /// The anti-repeat rule ambient calls carry. Together with
         /// <see cref="RecentRecommendations"/> this is what lets ambient calls hold history at all —
@@ -145,6 +150,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         private readonly RecentRecommendations _recommendations;
         private readonly Func<string> _systemPromptProvider;
         private readonly Func<DateTime> _localClock;
+        private readonly Func<IReadOnlyList<(string Title, string Url)>> _linkPool;
 
         /// <param name="systemPromptProvider">
         /// Injectable so tests (and any future prefix source) can supply a prefix without standing up
@@ -152,8 +158,12 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// two-zone prefix.
         /// </param>
         /// <param name="localClock">Local wall clock, injectable for the time-of-day line's tests.</param>
+        /// <param name="linkPool">The sanctioned link catalogue the wire-history hygiene pass
+        /// rewrites against; injectable for tests, defaults to
+        /// <see cref="Companion.CompanionLinkIndex.CurrentEntries"/>.</param>
         public PromptAssembler(IMemoryStore memory, RecentRecommendations recommendations,
-            Func<string>? systemPromptProvider = null, Func<DateTime>? localClock = null)
+            Func<string>? systemPromptProvider = null, Func<DateTime>? localClock = null,
+            Func<IReadOnlyList<(string Title, string Url)>>? linkPool = null)
         {
             // Deliberately NOT `?? new MemoryStore()`. The production MemoryStore constructor is not
             // inert — it loads memory.json, starts a MemorySignalWriter and registers a shutdown
@@ -164,6 +174,17 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             _recommendations = recommendations ?? new RecentRecommendations();
             _systemPromptProvider = systemPromptProvider ?? DefaultSystemPrompt;
             _localClock = localClock ?? (() => DateTime.Now);
+            _linkPool = linkPool ?? DefaultLinkPool;
+        }
+
+        private static IReadOnlyList<(string Title, string Url)> DefaultLinkPool()
+        {
+            try { return Companion.CompanionLinkIndex.CurrentEntries(); }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("PromptAssembler: link pool unavailable: {Error}", ex.Message);
+                return Array.Empty<(string, string)>();
+            }
         }
 
         private static string DefaultSystemPrompt()
@@ -188,16 +209,80 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
             var prefix = _systemPromptProvider() ?? string.Empty;
             var tail = BuildTail(purpose, window);
-            var systemPrompt = Compose(prefix, tail, PurposeInstruction(purpose));
+            // Pin BOTH anti-fixation lines through the hard-cap floor branch: with a fat preset
+            // the prefix alone busts the soft cap on every call, and losing vary+exclusion is
+            // how one invented title became the whole evening's suggestion (0807).
+            var pinnedLines = _recommendations.BuildExclusionLine();
+            if (purpose == AiPurpose.Chat || purpose == AiPurpose.Reaction)
+                pinnedLines = pinnedLines == null ? VaryPicksRule : pinnedLines + "\n" + VaryPicksRule;
+            var systemPrompt = Compose(prefix, tail, PurposeInstruction(purpose), pinned: pinnedLines);
 
             var messages = new List<ChatMessage>(window.Count + 1) { ChatMessage.System(systemPrompt) };
-            messages.AddRange(ChatSession.ToMessages(window));
+            messages.AddRange(ChatSession.ToMessages(SanitizeAssistantHistory(window)));
 
             App.Logger?.Debug(
                 "[AI-PROMPT] purpose={Purpose} prefix_tok~{PrefixTokens} tail_tok~{TailTokens} window={Window}",
                 purpose, ChatSession.ApproxTokens(prefix), ChatSession.ApproxTokens(tail), window.Count);
 
             return new PromptRequest(systemPrompt, messages);
+        }
+
+        /// <summary>
+        /// Few-shot hygiene for the WIRE copy of the history window: every assistant-authored
+        /// dialogue line has off-pool video titles rewritten to real pool entries
+        /// (<see cref="Services.Companion.CompanionTitleMatcher.RewriteOffPoolTitlesForPrompt"/>)
+        /// before it is put on the request.
+        ///
+        /// <para>Root cause 0807: her own past lines are the strongest signal a small model has —
+        /// a session.json carrying ~97 turns of invented titles out-competed the verbatim pool
+        /// list in the prefix for a whole day, and the store-level rewrite cannot touch inventions
+        /// below the fuzzy floor, so the poison was self-renewing. This pass is wire-only: the
+        /// stored history and the bubbles the user actually saw are untouched, it simply stops the
+        /// model from ever SEEING itself get away with an off-pool title.</para>
+        ///
+        /// <para>Bark echoes are scripted (on-pool by construction) and user turns are the user's
+        /// own words; neither is touched. Any failure degrades to the unsanitized window — a
+        /// hygiene pass must never take chat down.</para>
+        /// </summary>
+        internal IReadOnlyList<CompanionTurn> SanitizeAssistantHistory(IReadOnlyList<CompanionTurn> window)
+        {
+            if (window == null || window.Count == 0) return window ?? Array.Empty<CompanionTurn>();
+
+            try
+            {
+                IReadOnlyList<(string Title, string Url)>? pool = null;
+                List<CompanionTurn>? sanitized = null;
+                int changedTitles = 0, changedTurns = 0;
+
+                for (int i = 0; i < window.Count; i++)
+                {
+                    var turn = window[i];
+                    if (turn.Kind is not (TurnKind.AssistantChat or TurnKind.AmbientReply)) continue;
+
+                    pool ??= _linkPool() ?? Array.Empty<(string, string)>();
+                    if (pool.Count == 0) return window;
+
+                    var text = Services.Companion.CompanionTitleMatcher
+                        .RewriteOffPoolTitlesForPrompt(turn.Text, pool, out var changed);
+                    if (changed == 0) continue;
+
+                    sanitized ??= new List<CompanionTurn>(window);
+                    sanitized[i] = turn with { Text = text };
+                    changedTitles += changed;
+                    changedTurns++;
+                }
+
+                if (sanitized == null) return window;
+                App.Logger?.Information(
+                    "[AI-LINK] wire history hygiene rewrote {Count} off-pool title(s) across {Turns} turn(s)",
+                    changedTitles, changedTurns);
+                return sanitized;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("PromptAssembler: history hygiene failed: {Error}", ex.Message);
+                return window;
+            }
         }
 
         /// <summary>
@@ -211,7 +296,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         /// floor, and trimming it to satisfy a length cap would be trading a compliance control for a
         /// cost control.</para>
         /// </summary>
-        internal static string Compose(string prefix, string tail, string instruction)
+        internal static string Compose(string prefix, string tail, string instruction, string? pinned = null)
         {
             prefix ??= string.Empty;
             tail ??= string.Empty;
@@ -227,6 +312,15 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             {
                 // Even the minimum tail doesn't fit. Send the prefix plus just the instruction —
                 // dropping the instruction entirely would leave the call with no purpose at all.
+                // The pinned line (the anti-repeat exclusion set) rides along when the hard proxy
+                // reject cap still has room for it: a fat preset used to strip the exclusion on
+                // EVERY call, which turned the anti-fixation system off exactly for the users
+                // with the biggest prompts.
+                if (!string.IsNullOrEmpty(pinned) &&
+                    prefix.Length + floor.Length + pinned!.Length + 3 <= ProxyHardRejectCap)
+                {
+                    floor = TailHeader + "\n" + pinned + "\n" + instruction;
+                }
                 App.Logger?.Warning(
                     "[AI-PROMPT] system prompt over the {Ceiling}-char proxy cap (prefix={Prefix} chars) — tail reduced to the purpose instruction",
                     SystemMessageCharCeiling, prefix.Length);
@@ -268,12 +362,17 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             var instruction = PurposeInstruction(purpose);
             var lines = new List<string>();
 
-            lines.Add(TimeOfDayLine(_localClock()));
-
+            // Anti-fixation lines FIRST: Compose sheds tail lines from the end, and the budget
+            // loop below drops whatever no longer fits — with these after the time-of-day line
+            // they were the first casualties of a fat prompt, which is exactly when the model
+            // needs them most (observed 2026-08-07: four chat calls ran with no exclusion set
+            // and no vary rule, and the same invented titles came back all day).
             var exclusion = _recommendations.BuildExclusionLine();
             if (exclusion != null) lines.Add(exclusion);
 
             if (purpose == AiPurpose.Chat || purpose == AiPurpose.Reaction) lines.Add(VaryPicksRule);
+
+            lines.Add(TimeOfDayLine(_localClock()));
 
             if (window != null && window.Any(t => t.Kind == TurnKind.BarkEcho)) lines.Add(SpokenAloudRule);
 

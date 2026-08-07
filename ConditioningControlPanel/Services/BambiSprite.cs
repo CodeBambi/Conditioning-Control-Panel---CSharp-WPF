@@ -17,6 +17,10 @@ namespace ConditioningControlPanel.Services
         // 1. KNOWLEDGE BASE (The "Lore")
         // ==========================================
 
+        /// <summary>Sentinel for the media-links block, substituted after the mod word-replacement
+        /// passes so pool titles reach the model un-rewritten (see the call site).</summary>
+        private const string MediaLinksToken = "{{MEDIA_LINKS}}";
+
         // Core video/audio links that should ALWAYS be included in prompts
         // These exact names match AvatarTubeWindow.KnownVideoLinks for clickable links
         private string GetCoreMediaLinks()
@@ -63,11 +67,11 @@ NEVER invent URLs. NEVER suggest audio by any name that isn't on this page — t
 ==== VIDEOS (the ONLY videos you can recommend — say the EXACT title, the app auto-links) ====
 " + bambiVideoTitles + @"
 
-CRITICAL: Recommend ONLY titles copied VERBATIM from the list directly above. NEVER invent, rename, extend, shorten, or guess a title — do NOT turn the user's words into a title. A title that isn't on the list word-for-word will NOT become a link and frustrates the user. If you're unsure, pick any one title from the list and copy it character-for-character. When the user asks for ""another one,"" choose a DIFFERENT exact title from the list.
+CRITICAL: Recommend ONLY titles copied VERBATIM from the list directly above. NEVER invent, rename, extend, shorten, or guess a title — do NOT turn the user's words into a title. A title that isn't on the list word-for-word will NOT become a link and frustrates the user. If you're unsure, pick any one title from the list and copy it character-for-character. When the user asks for ""another one,"" choose a DIFFERENT exact title from the list. Never attribute a video to an uploader, channel or creator (never say a video is ""from"" someone) — say the title alone.
 
 DO NOT name old Bambi Sleep audio files (Bambi IQ Lock, Bambi Body Lock, Rapid Induction, Bubble Induction, Bambi Cockslut, Bambi Takeover, Bambi Awakens, Bambi Named and Drained, Bambi Uniformed, etc.) — those are obsolete here, they have no link, and recommending them frustrates the user. When the user wants audio, use a Programming playlist instead. ""Bambi IQ Lock"" → say [IQ Programming]. ""Bambi Cockslut"" → say [Cockslut Programming]. Etc.
 
-Creator to recommend: PlatinumPuppets";
+If asked who makes this content, credit the creator PlatinumPuppets — but still only ever name the exact titles and playlists listed above; never invent a title ""by"" them or anyone else.";
             }
 
             // Mod-aware video knowledge: a themed mod (e.g. Locked) that ships its own
@@ -85,7 +89,7 @@ Creator to recommend: PlatinumPuppets";
                 App.Logger?.Debug("BambiSprite: mod video-link block active with {Count} titles", modVideoLinks.Count);
                 return $@"
 --- VIDEO LINKS (the ONLY videos you may name) ---
-When you suggest a video, copy its title EXACTLY from this list, word for word, and say it naturally — the app turns it into a clickable link. Do NOT output URLs. NEVER invent a title or name anything not on this list. If nothing fits, don't name a video at all.
+When you suggest a video, copy its title EXACTLY from this list, word for word, and say it naturally — the app turns it into a clickable link. Do NOT output URLs. NEVER invent a title or name anything not on this list. Never attribute a video to an uploader or creator (never say it is ""from"" someone) — say the title alone. If nothing fits, don't name a video at all.
 {titleLines}";
             }
 
@@ -270,8 +274,10 @@ CRITICAL: Do NOT mention any specific video names. Only give generic ""go browse
         {
             "The 20 Days Challenge (playlists for total transformation)",
             "Day 1 through Day 7 (The 1h Long Form Sessions)",
-            // Clarified: PlatinumPuppets is a CREATOR
-            "Any file by the creator 'PlatinumPuppets' (The gold standard channel)"
+            // Clarified: PlatinumPuppets is a CREATOR — credit them when asked, but never
+            // invent titles "by" them (that phrasing taught the model to fabricate
+            // "<made-up title> from PlatinumPuppets" recommendations, observed 0807).
+            "PlatinumPuppets (the gold-standard creator — credit them if asked, but only recommend exact listed titles)"
         };
 
         private readonly List<string> _officialClassics = new List<string>
@@ -884,8 +890,13 @@ Example responses with REAL video names:
                 sb.AppendLine();
             }
 
-            // Always append core media links so videos/audio are always clickable
-            sb.AppendLine(GetCoreMediaLinks());
+            // Always append core media links so videos/audio are always clickable. Via a sentinel,
+            // not inline: MakeModAware below does blind string.Replace over the whole prompt
+            // ("Bambi" → "babe" on sissyhypno), which rewrote pool TITLES inside this block into
+            // strings that exist in no link table — the model then faithfully suggested un-linkable
+            // titles by construction. Same trick {{VIDEO}} already uses; substituted after the
+            // replacement passes so the titles the model sees are the exact linkable keys.
+            sb.AppendLine(MediaLinksToken);
             sb.AppendLine();
 
             // Append GLOBAL knowledge base links (shared across all personalities)
@@ -998,6 +1009,9 @@ Example responses with REAL video names:
 
             // Apply mod text replacements (e.g. "Bambi" → "Unit" for drone mod)
             prompt = App.Mods?.MakeModAware(prompt) ?? prompt;
+
+            // Substitute the media-links block AFTER the replacement passes — see MediaLinksToken.
+            prompt = prompt.Replace(MediaLinksToken, GetCoreMediaLinks());
 
             // Fill {{VIDEO}} example placeholders with REAL, varied titles from the active mod's
             // pool. Done LAST — after mod text-replacement — so sampled titles aren't corrupted
