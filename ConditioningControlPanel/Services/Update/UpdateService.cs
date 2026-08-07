@@ -20,7 +20,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.7.2";
+        public const string AppVersion = "6.7.3";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
@@ -90,6 +90,11 @@ namespace ConditioningControlPanel.Services
 - For You feed: clips your PC can't decode now show a clear notice and swap themselves out instead of sitting as silent black tiles
 - AI companion: replies with effects no longer get cut off - and raw JSON can never leak into her speech bubble again
 - Companion: new 'Mute Voice Lines' switch in Her Room - keep her bubbles and giggles, silence only the spoken lines
+
+🩹 v6.7.3 HOTFIX
+- Achievements: full art-forward redesign of the tab - big card art, no more drawer, no more dead space
+- AI companion: video suggestions fixed for real - she only names videos from your actual list now, suggestions are clickable links, and near-miss titles snap to the right video
+- Companion: killed the loop that had her inventing titles and fake creators - her own chat history was teaching her bad habits, and it now self-corrects
 
 Season: Airhead August";
 
