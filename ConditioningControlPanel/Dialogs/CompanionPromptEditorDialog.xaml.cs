@@ -198,6 +198,12 @@ namespace ConditioningControlPanel
             settings.ContextReactions = TxtContextReactions.Text;
             settings.OutputRules = TxtOutputRules.Text;
 
+            // Un-ticking "use custom prompt" here is the same intent as the quick menu's
+            // "Disable custom prompt": drop the community id too, or the Companion tab keeps
+            // reporting "Custom: <name>" off an override that is no longer on the wire.
+            if (!settings.UseCustomPrompt)
+                Services.CommunityPromptService.ClearCustomPromptOverride(App.Settings.Current);
+
             // Save global knowledge base links
             SaveKnowledgeLinks();
 

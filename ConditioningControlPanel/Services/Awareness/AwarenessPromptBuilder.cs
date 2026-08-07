@@ -422,10 +422,7 @@ Output only those lines: no quotes, no name label, no brackets, no stage directi
             try
             {
                 var settings = App.Settings?.Current;
-                var companionPrompt = settings?.CompanionPrompt;
-                bool useCustom = companionPrompt?.UseCustomPrompt == true &&
-                                 !string.IsNullOrEmpty(settings?.ActiveCommunityPromptId);
-                if (useCustom) return companionPrompt?.Personality;
+                if (BambiSprite.UsesCustomPrompt(settings)) return settings?.CompanionPrompt?.Personality;
                 return App.Personality?.GetActivePreset()?.PromptSettings?.Personality;
             }
             catch (Exception ex)
