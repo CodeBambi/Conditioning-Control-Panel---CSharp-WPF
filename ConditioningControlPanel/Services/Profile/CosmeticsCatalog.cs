@@ -66,10 +66,13 @@ namespace ConditioningControlPanel.Services
     /// Two hard rules, both learned the hard way in this codebase:
     ///   * A missing or broken asset returns null and the card falls back to its Phase 1 gradient.
     ///     Nothing here throws at a caller - a cosmetic can never cost someone their profile.
-    ///   * Banner art is pack:// <c>Resource</c> (already shipped and listed in the csproj:
-    ///     <c>Resources\programs\*.png</c>, <c>Resources\features\*.png</c>, and the two tier
-    ///     images). The Phase 3 wardrobe PNGs are Content loaded off disk instead - do not mix
-    ///     the two loading paths.
+    ///   * Banner art is pack:// <c>Resource</c> (listed in the csproj as
+    ///     <c>Resources\banners\*.png</c>). The Phase 3 wardrobe PNGs are Content loaded off disk
+    ///     instead - do not mix the two loading paths.
+    ///   * An id this build no longer ships (the program/mood/feature/tier banners offered before
+    ///     the pool was cut down to the twelve mod scenes) simply falls out of
+    ///     <see cref="BannerIds"/>, and <see cref="ProfileCosmetics.Sanitize"/> nulls it. Anyone
+    ///     still wearing one lands back on the hero's default gradient - no throw, no blank card.
     /// </summary>
     public static class CosmeticsCatalog
     {
@@ -78,18 +81,16 @@ namespace ConditioningControlPanel.Services
         private static readonly Dictionary<string, ImageSource?> _thumbCache = new(StringComparer.Ordinal);
 
         /// <summary>
-        /// Decode cap for the banner painted on the hero card. The card's banner strip is roughly
-        /// 1400x180 and every source is scaled to fill it, so decoding the originals at full size
-        /// only buys memory: the six program plates are 2800x113 (1.3MB each) and the mood/feature
-        /// art is 1376x768 / 1024x1024 (4MB each). 1024 keeps the strip crisp at 200% DPI and
-        /// caps the whole pool at roughly a third of what it cost before.
+        /// Decode cap for the banner painted on the hero card. Every source is scaled to fill a
+        /// strip roughly 1400px wide, so decoding the 2400x620 originals at full size only buys
+        /// memory (6MB each). 1024 keeps the strip crisp at 200% DPI for a quarter of the cost.
         /// </summary>
         private const int BannerDecodePixels = 1024;
 
         /// <summary>
         /// Decode cap for the Customize dialog's picker tiles, which render at 128x52. The dialog
-        /// builds ALL 19 tiles the moment it is constructed, so without a separate small cache one
-        /// visit to Customize pinned ~42MB of full-resolution bitmaps for the process lifetime.
+        /// builds EVERY tile the moment it is constructed, so without a separate small cache one
+        /// visit to Customize pinned tens of MB of full-resolution bitmaps for the process lifetime.
         /// </summary>
         private const int BannerThumbnailPixels = 256;
 
@@ -104,32 +105,9 @@ namespace ConditioningControlPanel.Services
             new("gradient_bloom",  "Bloom",  "Gradients", null, ("#5A1B3D", "#8A2B63", "#2A1230")),
             new("gradient_drone",  "Drone",  "Gradients", null, ("#0E2A38", "#164A5E", "#0A1622")),
 
-            // --- Training Programs art (Resources\programs\*.png, Resource) ---
-            new("program_default",      "Conditioning",   "Programs", "Resources/programs/banner_default.png"),
-            new("program_firmware",     "Firmware",       "Programs", "Resources/programs/banner_firmware_install.png"),
-            new("program_first_week",   "First Week",     "Programs", "Resources/programs/banner_first_week.png"),
-            new("program_kept",         "Kept",           "Programs", "Resources/programs/banner_kept.png"),
-            new("program_presentation", "Presentation",   "Programs", "Resources/programs/banner_presentation.png"),
-            new("program_takeover",     "The Takeover",   "Programs", "Resources/programs/banner_the_takeover.png"),
-
-            // --- day-mood plates (same folder) ---
-            new("mood_deep",  "Deep",  "Moods", "Resources/programs/hero_deep.png"),
-            new("mood_drift", "Drift", "Moods", "Resources/programs/hero_drift.png"),
-            new("mood_focus", "Focus", "Moods", "Resources/programs/hero_focus.png"),
-            new("mood_pink",  "Pink",  "Moods", "Resources/programs/hero_pink.png"),
-
-            // --- feature art (Resources\features\*.png, Resource) ---
-            new("feature_spiral",     "Spiral",      "Features", "Resources/features/spiral_overlay.png"),
-            new("feature_pink",       "Pink Filter", "Features", "Resources/features/Pink_filter.png"),
-            new("feature_braindrain", "Brain Drain", "Features", "Resources/features/brain_drain.png"),
-            new("feature_goon",       "Goon Game",   "Features", "Resources/features/goon_game.png"),
-
-            // --- tier art (unlock gating is deliberately out of scope for this build) ---
-            new("tier_pink_filter",   "Subject",     "Patron", "Resources/Pink filter.webp"),
-            new("tier_prime_subject", "Prime",       "Patron", "Resources/prime subject.webp"),
-
             // --- per-mod scene banners (Resources\banners\*.png, Resource; owner-approved
-            //     2026-08-06 one-shot set, pre-cropped to the 3:1 hero band) ---
+            //     one-shot set, authored at 2400x620 for the hero band - see the note above
+            //     BannerDecodePixels for how they are framed and why) ---
             new("bambi_neon_den",  "Neon Den",        "Bambi",       "Resources/banners/bambi_neon_den.png"),
             new("bambi_arcade",    "Claw Machine",    "Bambi",       "Resources/banners/bambi_arcade.png"),
             new("bambi_diner",     "Milkshake Diner", "Bambi",       "Resources/banners/bambi_diner.png"),

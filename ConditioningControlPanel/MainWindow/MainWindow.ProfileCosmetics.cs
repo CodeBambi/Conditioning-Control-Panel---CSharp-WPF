@@ -112,8 +112,14 @@ namespace ConditioningControlPanel
         /// Painted as an <see cref="ImageBrush"/> on a Border rather than assigned to an Image:
         /// the hero lives in a StackPanel inside a ScrollViewer, where an unconstrained
         /// UniformToFill Image reports its own aspect as DesiredSize and drives the card height
-        /// (13 of the 19 shipped banners stretched the card past a full screen). A brush paints
-        /// into the arranged bounds and contributes nothing to measure.
+        /// (most of the banners shipped before this pool stretched the card past a full screen).
+        /// A brush paints into the arranged bounds and contributes nothing to measure.
+        ///
+        /// The vertical alignment is Top, not Center, and the art is authored for it: the twelve
+        /// scenes are 2400x620 with every subject in the upper portion and the bottom of the frame
+        /// left as plain floor and falloff. The band is always shorter than 620 scales to, so
+        /// UniformToFill crops - and Top means it only ever crops the deliberately empty bottom,
+        /// never the subject. Flipping this back to Center silently cuts the top off all twelve.
         /// </summary>
         private void ApplyProfileBanner(string? bannerId)
         {
@@ -134,7 +140,10 @@ namespace ConditioningControlPanel
                     Stretch = Stretch.UniformToFill,
                     AlignmentX = AlignmentX.Center,
                     // Top-anchored: banner art tends to put its subject in the upper
-                    // half, and a center crop on the wide hero band cut it off.
+                    // half, and a center crop on the wide hero band cut it off. The
+                    // 2400x620 plates are composed against this anchor - their bottom
+                    // third is deliberately plain falloff - so flipping it back to
+                    // Center would crop every one of them at both ends.
                     AlignmentY = AlignmentY.Top
                 };
                 if (brush.CanFreeze) brush.Freeze();
