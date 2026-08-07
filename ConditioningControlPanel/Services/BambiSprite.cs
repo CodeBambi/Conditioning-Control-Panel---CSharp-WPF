@@ -846,6 +846,12 @@ Example responses with REAL video names:
             {
                 sb.AppendLine(personalityText);
                 sb.AppendLine();
+                // The chat window rides along as few-shot, and a small model imitates its own
+                // recent replies harder than it obeys a changed persona paragraph - so a user who
+                // switches persona mid-conversation hears the old voice indefinitely. Countered
+                // here, in the never-trimmed first zone, not in the tail.
+                sb.AppendLine("CURRENT PERSONA OVERRIDES HISTORY: if earlier replies in this conversation are in a different voice or persona, that persona is gone. Do not imitate their style, tone or pet phrases. Every new reply is fully in the CURRENT persona described above.");
+                sb.AppendLine();
             }
 
             // Add explicit reaction rules.
