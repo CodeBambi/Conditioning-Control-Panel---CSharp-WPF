@@ -177,6 +177,14 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- Shipped AI personality presets (Strict Domme etc.) - the Companion tab's per-companion
+         personality picker offers these; without this block they exist only in the repo and no
+         user ever received them -->
+    <Content Include="assets\prompts\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
     <!-- AI knowledge base placeholder (read by Services/AIService/Enrichment/KnowledgeService) -->
     <Content Include="assets\knowledge.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

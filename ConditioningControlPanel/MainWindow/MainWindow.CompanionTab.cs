@@ -399,11 +399,19 @@ namespace ConditioningControlPanel
                 DefaultExt = ".json"
             };
 
-            // Check for prompts folder
+            // Open on the user's own prompts folder when they made one, else on the shipped
+            // presets (assets\prompts, Strict Domme etc.) - before 6.7.4 only the user folder was
+            // checked, and since it never exists the picker opened nowhere useful.
             var promptsFolder = System.IO.Path.Combine(App.EffectiveAssetsPath, "prompts");
-            if (System.IO.Directory.Exists(promptsFolder))
+            var shippedPrompts = System.IO.Path.Combine(AppContext.BaseDirectory, "assets", "prompts");
+            if (System.IO.Directory.Exists(promptsFolder) &&
+                System.IO.Directory.EnumerateFiles(promptsFolder, "*.json").Any())
             {
                 dialog.InitialDirectory = promptsFolder;
+            }
+            else if (System.IO.Directory.Exists(shippedPrompts))
+            {
+                dialog.InitialDirectory = shippedPrompts;
             }
 
             if (dialog.ShowDialog() == true)
