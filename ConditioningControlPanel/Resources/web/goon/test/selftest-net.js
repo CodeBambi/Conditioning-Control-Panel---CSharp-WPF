@@ -1653,6 +1653,214 @@ async function testCodecs() {
     'every DOM lookup in codecs.js is guarded — net/mediaChannel.js imports it and must stay node-safe');
 }
 
+/* ========================================== 16. creds: the allowlist and the un-persisted token
+ *
+ * THE BUG THIS PINS (2026-08-06). `?server=` was adopted verbatim and BOTH it and
+ * `?token=` were written into goon.prefs forever, so
+ * `…/goon-beta/?join=ABC123&server=https://evil.tld` POSTed the visitor's
+ * account-wide auth token to a stranger on the first /join — and kept doing it on
+ * every launch afterwards, link or no link. An invite link is attacker-controlled
+ * input by definition, so: the base must be on an allowlist, the token is
+ * session-only, and a browser already poisoned by the old build heals on load.
+ * ============================================================================ */
+async function testCredHandling() {
+  const bridge = await import('../bridge.js');
+  const { safeServerBase, defaultServerBase } = bridge;
+
+  /* --- a) the allowlist, as a pure function ---------------------------------- */
+  {
+    // Refusals log one line; capture instead of spraying the suite output.
+    const realLog = console.log;
+    const lines = [];
+    console.log = (...a) => lines.push(a.join(' '));
+    try {
+      ok(safeServerBase('https://codebambi-proxy.vercel.app') === 'https://codebambi-proxy.vercel.app',
+        'the production base is accepted verbatim — the value defaultServerBase() itself returns');
+      ok(safeServerBase('http://localhost:8787') === 'http://localhost:8787',
+        'a loopback dev base is accepted, on any port');
+      ok(safeServerBase('http://127.0.0.1:3000/api') === 'http://127.0.0.1:3000/api',
+        'and so is 127.0.0.1 — same machine, same trust');
+      ok(safeServerBase('https://localhost:8443') === 'https://localhost:8443',
+        'either scheme on loopback: a local proxy is a local proxy');
+
+      const before = lines.length;
+      ok(safeServerBase('') === defaultServerBase() && lines.length === before,
+        'NO candidate is not a refusal — it falls back silently, and "" stays a legal outcome');
+      ok(safeServerBase(undefined) === defaultServerBase() && lines.length === before,
+        'and neither is an absent one');
+
+      for (const evil of [
+        'https://evil.tld',
+        'https://codebambi-proxy.vercel.app.evil.tld',       // suffix trick
+        'https://evil.tld/codebambi-proxy.vercel.app',       // path trick
+        'http://evil.tld',
+        'javascript:fetch(1)',
+        'not a url at all',
+        '//evil.tld',                                        // protocol-relative: not parseable alone
+      ]) {
+        const n0 = lines.length;
+        ok(safeServerBase(evil) === defaultServerBase(),
+          'an attacker base is refused and falls back: ' + evil);
+        ok(lines.length === n0 + 1 && lines[lines.length - 1].indexOf(evil.slice(0, 30)) > 0,
+          'and exactly one log line NAMES what was refused: ' + evil);
+      }
+
+      // The fallback is a real base, not always '': on the public deployment a
+      // refusal must still leave the page talking to the right server.
+      const realLoc = globalThis.location;
+      globalThis.location = { hostname: 'cclabs.app', search: '' };
+      try {
+        ok(safeServerBase('https://evil.tld') === 'https://codebambi-proxy.vercel.app',
+          'on cclabs.app a refusal falls back to the production base, not to "no server"');
+      } finally {
+        if (realLoc === undefined) delete globalThis.location; else globalThis.location = realLoc;
+      }
+    } finally { console.log = realLog; }
+  }
+
+  /* --- b) a whole standalone boot, in a fake browser --------------------------
+   * bridge.js captures `window` at import, so each case needs its OWN module
+   * instance: a `?query` on the specifier is what busts node's module cache.
+   * -------------------------------------------------------------------------- */
+  let bootSeq = 0;
+  async function bootBridge(href, stored, opts = {}) {
+    const store = new Map();
+    if (stored) store.set('goon.prefs', JSON.stringify(stored));
+    let writes = 0;
+    const w = {
+      localStorage: {
+        getItem: (k) => (store.has(k) ? store.get(k) : null),
+        setItem: (k, v) => { writes++; store.set(k, String(v)); },
+      },
+      // A location real enough for defaultServerBase (hostname) and the strip (href).
+      location: {
+        href,
+        get search() { return new URL(w.location.href).search; },
+        get hostname() { return new URL(w.location.href).hostname; },
+        get origin() { return new URL(w.location.href).origin; },
+        get pathname() { return new URL(w.location.href).pathname; },
+      },
+      history: {
+        calls: [],
+        replaceState(_s, _t, url) { this.calls.push(url); w.location.href = new URL(url, href).href; },
+      },
+    };
+    if (opts.hosted) w.chrome = { webview: { addEventListener() {}, postMessage() {} } };
+    const realWin = globalThis.window;
+    const realDoc = globalThis.document;
+    const realLoc = globalThis.location;
+    const realLog = console.log;
+    const logs = [];
+    globalThis.window = w;
+    globalThis.document = {};
+    globalThis.location = w.location;
+    console.log = (...a) => logs.push(a.join(' '));
+    let mod = null;
+    let init = null;
+    try {
+      mod = await import('../bridge.js?boot=' + (++bootSeq));
+      await sleep(5);                                   // the deferred synthesis tick
+      // on() replays the pre-buffered frame, which is how we read the init the
+      // page would have booted from.
+      try { mod.on('init', (m) => { init = m; }); } catch (_e) { /* hosted: none synthesized */ }
+    } finally {
+      console.log = realLog;
+      if (realWin === undefined) delete globalThis.window; else globalThis.window = realWin;
+      if (realDoc === undefined) delete globalThis.document; else globalThis.document = realDoc;
+      if (realLoc === undefined) delete globalThis.location; else globalThis.location = realLoc;
+    }
+    return { mod, w, init, logs, writes, prefs: JSON.parse(store.get('goon.prefs') || '{}') };
+  }
+
+  // The attack, end to end.
+  {
+    const r = await bootBridge(
+      'https://cclabs.app/goon-beta/?join=ABC123&server=https://evil.tld&token=SECRET&uid=u_x&name=Phone');
+    ok(r.prefs.authToken === undefined,
+      'THE TOKEN IS NEVER PERSISTED — nothing named authToken survives in goon.prefs', JSON.stringify(r.prefs));
+    ok(r.prefs.serverBase === undefined,
+      'and a refused base is not persisted either, so the poisoning cannot outlive the link');
+    ok(r.prefs.unifiedId === 'u_x' && r.prefs.name === 'Phone',
+      'settings still stick: uid and name are how a pinned page comes back as the same player');
+    ok(!!r.init && r.init.net.serverBase === 'https://codebambi-proxy.vercel.app',
+      'the boot frame points at the real server, not the attacker one',
+      r.init && r.init.net.serverBase);
+    ok(!!r.init && r.init.net.authToken === 'SECRET',
+      'THE PHONE FLOW STILL WORKS — ?token= reaches this session, it just does not outlive it');
+    const u = new URL(r.w.location.href);
+    ok(u.searchParams.get('token') === null,
+      'the credential is out of the address bar (screenshots, history, Referer)', r.w.location.href);
+    ok(u.searchParams.get('server') === null, 'and so is the refused base — a reload cannot retry the attack');
+    ok(u.searchParams.get('join') === 'ABC123',
+      'while ?join= is left for ui/inviteLink.js consumeJoinCode — one owner per param');
+    ok(u.searchParams.get('uid') === 'u_x' && u.searchParams.get('name') === 'Phone',
+      'and the non-secrets stay in the URL');
+    ok(r.w.history.calls.length === 1, 'exactly one replaceState', String(r.w.history.calls.length));
+  }
+
+  // The heal: a browser that already ran the vulnerable build.
+  {
+    const r = await bootBridge('https://cclabs.app/goon-beta/', {
+      authToken: 'STOLEN', serverBase: 'https://evil.tld', unifiedId: 'u_old', debug: true, name: 'Old',
+    });
+    ok(r.prefs.authToken === undefined && r.prefs.serverBase === undefined,
+      'a PRE-POISONED blob is purged on load — ignoring it would leave the credential live in storage',
+      JSON.stringify(r.prefs));
+    ok(r.prefs.unifiedId === 'u_old' && r.prefs.debug === true && r.prefs.name === 'Old',
+      'and only the doomed keys go: the purge is surgical, not a wipe');
+    ok(!!r.init && r.init.net.authToken === '' && r.init.net.serverBase === 'https://codebambi-proxy.vercel.app',
+      'the frame built from that blob carries no token and a safe base');
+    ok(!!r.init && r.init.prefs && r.init.prefs.authToken === undefined,
+      'and the blob echoed to the page in the init frame is clean too');
+  }
+
+  // The dev path, unharmed.
+  {
+    const r = await bootBridge('http://localhost:5173/?server=http://localhost:8787&token=TK&uid=u_dev');
+    ok(r.prefs.serverBase === 'http://localhost:8787',
+      'an allowlisted (loopback) base IS remembered — the dev convenience survives the fix');
+    ok(r.prefs.authToken === undefined, 'the token still is not');
+    ok(!!r.init && r.init.net.serverBase === 'http://localhost:8787' && r.init.net.authToken === 'TK',
+      'and the session boots against it with the token in hand');
+  }
+
+  // A bare dev launch stays serverless — the playground default, untouched.
+  {
+    const r = await bootBridge('http://localhost:5173/?solo=1');
+    ok(!!r.init && r.init.net.serverBase === '',
+      '"" is still a legal serverBase: no link, no pref, no cclabs.app = the serverless playground');
+    ok(r.w.history.calls.length === 0 && r.writes === 0,
+      'and a launch with nothing to adopt writes neither storage nor history');
+  }
+
+  // HOSTED IS UNTOUCHED: no synthesis, no storage write, no URL rewrite.
+  {
+    const r = await bootBridge('https://ccp.game/goon/index.html?token=SECRET&server=https://evil.tld',
+      { authToken: 'HOSTED-BLOB' }, { hosted: true });
+    ok(r.mod.isHosted === true, 'the fake WebView2 host is detected as hosted');
+    ok(r.init === null, 'nothing is synthesized hosted — the C# init frame is the only one');
+    ok(r.writes === 0 && r.prefs.authToken === 'HOSTED-BLOB',
+      'and hosted writes NO prefs at all (savePrefs and purgePrefKeys are both no-ops there)');
+    ok(r.w.history.calls.length === 0, 'nor does it touch the address bar');
+    ok(r.mod.purgePrefKeys(['authToken']) === false, 'purgePrefKeys reports "nothing done" hosted');
+  }
+
+  /* --- c) the shape, pinned at source ---------------------------------------- */
+  {
+    const src = readSource('../bridge.js');
+    ok(/export function safeServerBase\(/.test(src), 'the allowlist is ONE exported named function');
+    ok(/export function purgePrefKeys\(/.test(src),
+      'and deletion is its own verb — savePrefs merges, so it can never remove a key');
+    ok(!/authToken:\s*q\.get\('token'\)\s*\|\|\s*prefs\.authToken/.test(src),
+      'standaloneInit no longer reads a token out of prefs');
+    ok(!/keep\.authToken\s*=/.test(src),
+      'and the adoption block no longer writes one — gone, not commented out beside it');
+    ok(/serverBase:\s*safeServerBase\(/.test(src),
+      'every serverBase that reaches the net config goes through the allowlist');
+    ok(/history\.replaceState/.test(src), 'and the credential is taken back out of the address bar');
+  }
+}
+
 // ============================================================ run
 const main = async () => {
   await testSignaling();
@@ -1670,6 +1878,7 @@ const main = async () => {
   await testSelfDuel();
   await testBetaGates();
   await testCodecs();
+  await testCredHandling();
 
   console.log(failures === 0 ? `PASS — ${n} checks` : `FAILED — ${failures}/${n} checks`);
   process.exit(failures === 0 ? 0 : 1);

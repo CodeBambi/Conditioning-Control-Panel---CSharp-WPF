@@ -334,15 +334,17 @@ let routerMod = null;
   }
 
   {
-    // THE PHONE CLIENT'S CREDENTIALS SURVIVE. bridge.js has already adopted
-    // ?server/&token/&uid into localStorage, but a player who pinned this page
-    // still deserves them in the URL — only `join` is transient.
+    // THIS FUNCTION TOUCHES ONE PARAM AND NO OTHER — that is the whole check.
+    // The credentials ARE erased, but by bridge.js, which strips `?token=` (and a
+    // `?server=` its allowlist refused) on EVERY standalone launch, link or no
+    // link. Moving that job in here would only protect players who arrived by
+    // invite, which is the wrong half of them.
     const w = fakeWin('https://cclabs.app/goon-beta/?server=https%3A%2F%2Fs.dev&join=ABC123&token=tk&uid=u_abc12345#x');
     stripJoinParam(w);
     const u = new URL(w.location.href);
     ok(u.searchParams.get('join') === null, 'join is removed');
-    ok(u.searchParams.get('server') === 'https://s.dev', 'server survives', String(u.searchParams.get('server')));
-    ok(u.searchParams.get('token') === 'tk', 'token survives');
+    ok(u.searchParams.get('server') === 'https://s.dev', 'server is left to bridge.js', String(u.searchParams.get('server')));
+    ok(u.searchParams.get('token') === 'tk', 'so is the token — one param per owner');
     ok(u.searchParams.get('uid') === 'u_abc12345', 'uid survives');
     ok(u.hash === '#x', 'the fragment survives', u.hash);
   }

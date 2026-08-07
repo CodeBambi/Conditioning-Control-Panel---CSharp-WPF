@@ -40,7 +40,7 @@ export const PROTOCOL = 1;
  * the title screen prints it under the fineprint, so ONE GLANCE at either
  * device answers the question. Format: r<round>-<yyyymmdd>[letter].
  */
-export const GOON_BUILD = 'r15-20260805';
+export const GOON_BUILD = 'r17-20260806';
 
 const win = (typeof window !== 'undefined') ? window : null;
 const webview = (win && win.chrome && win.chrome.webview) ? win.chrome.webview : null;
@@ -229,6 +229,71 @@ export function savePrefs(partial) {
   } catch (_e) { /* storage may be unavailable */ }
 }
 
+/**
+ * DELETE keys from the stored blob — the other half of savePrefs, and the only
+ * way to take something back out of it.
+ *
+ * savePrefs MERGES (Object.assign), so `savePrefs({authToken: undefined})` writes
+ * the key straight back; there is no value you can pass it that means "forget
+ * this". That matters because a key we merely stop writing is still sitting in
+ * every browser that ever ran the old build: an auth token adopted from a
+ * `?token=` link is live until the account rotates it. Purging is not tidiness,
+ * it is the fix. No-op hosted (savePrefs is too) and never writes when there was
+ * nothing to remove, so a clean blob is not rewritten on every launch.
+ *
+ * @param {string[]} keys
+ * @returns {boolean} true when something was actually removed
+ */
+export function purgePrefKeys(keys) {
+  if (isHosted) return false;
+  try {
+    const cur = readPrefs();
+    let touched = false;
+    for (const k of (keys || [])) {
+      if (Object.prototype.hasOwnProperty.call(cur, k)) { delete cur[k]; touched = true; }
+    }
+    if (touched) win.localStorage.setItem('goon.prefs', JSON.stringify(cur));
+    return touched;
+  } catch (_e) { return false; }
+}
+
+/**
+ * Take named params back out of the address bar, in place — the credential half
+ * of what ui/inviteLink.js stripJoinParam does for `?join=`.
+ *
+ * Deliberately NOT imported from there: ui/inviteLink.js imports net/signaling.js
+ * which imports THIS module, and a cycle running through bridge's module body is
+ * precisely the silent-white-page failure HARD RULE 1 exists to prevent. Twelve
+ * lines of duplication beats an import cycle in the one file that must never
+ * throw at load.
+ *
+ * @param {string[]} names
+ * @returns {boolean} true when the URL was rewritten
+ */
+function stripUrlParams(names) {
+  try {
+    if (!win || !win.location || !win.history || typeof win.history.replaceState !== 'function') return false;
+    const href = String(win.location.href || '');
+    if (!href) return false;
+    const url = new URL(href);
+    let touched = false;
+    for (const k of (names || [])) {
+      if (url.searchParams.has(k)) { url.searchParams.delete(k); touched = true; }
+    }
+    if (!touched) return false;
+    const qs = url.searchParams.toString();
+    // replaceState, not pushState: the entry is CORRECTED, so a back button
+    // cannot walk the player onto the version that still carried the token.
+    win.history.replaceState(null, '', url.pathname + (qs ? '?' + qs : '') + (url.hash || ''));
+    return true;
+  } catch (_e) {
+    // A sandboxed frame, a file: URL, a browser that refuses replaceState. The
+    // token is still session-only and still unpersisted — this leg is the extra
+    // mile, not the fix.
+    return false;
+  }
+}
+
 function numOr(v, d) { const n = parseFloat(v); return isFinite(n) ? n : d; }
 
 /**
@@ -247,10 +312,71 @@ export function defaultServerBase() {
   } catch (_e) { return ''; }
 }
 
+/**
+ * THE ONLY ORIGINS A LINK MAY POINT THIS PAGE AT.
+ *
+ * WHY THERE IS A LIST AT ALL: `?server=` used to be adopted verbatim, so
+ * `…/goon-beta/?join=ABC123&server=https://evil.tld` sent the visitor's
+ * account-wide auth token to a stranger's host on the very first `/join` — and,
+ * because it was written into goon.prefs, on every launch after that too. A
+ * shareable invite link is by definition attacker-controlled input; the base it
+ * names has to be one of ours or none at all.
+ *
+ * Loopback is on the list for the dev path only (any port, http or https — a
+ * local proxy is a local proxy). It is not a hole: to abuse it an attacker needs
+ * a server already running on the victim's own machine.
+ */
+const ALLOWED_SERVER_ORIGINS = ['https://codebambi-proxy.vercel.app'];
+const LOOPBACK_HOSTS = ['localhost', '127.0.0.1'];
+
+/** The predicate behind safeServerBase — no logging, no fallback, just yes/no. */
+function serverBaseAllowed(candidate) {
+  let u = null;
+  try { u = new URL(String(candidate)); } catch (_e) { return false; }   // not even a URL
+  const scheme = String(u.protocol || '').toLowerCase();
+  const host = String(u.hostname || '').toLowerCase();
+  if (LOOPBACK_HOSTS.indexOf(host) >= 0) return scheme === 'http:' || scheme === 'https:';
+  return ALLOWED_SERVER_ORIGINS.indexOf(String(u.origin || '').toLowerCase()) >= 0;
+}
+
+/**
+ * A candidate API base -> the base we will actually talk to.
+ *
+ * An allowlisted candidate comes back as given. ANYTHING ELSE — an unknown
+ * origin, a `javascript:`/`data:` string, a fragment that does not parse — is
+ * refused and replaced by defaultServerBase(), with one log line naming what was
+ * refused so a dev who mistyped their tunnel URL is not left staring at a page
+ * that silently talks to the wrong place.
+ *
+ * `''` IS A LEGITIMATE ANSWER, not a failure: defaultServerBase() returns it off
+ * cclabs.app on purpose (the serverless dev playground is keyed off "no server
+ * anywhere"). An absent candidate is therefore not a refusal and is not logged —
+ * the log line means "somebody tried", and it should stay that rare.
+ *
+ * Applied to BOTH the querystring value and any serverBase already sitting in
+ * prefs, so a browser poisoned by the old build heals on its next load.
+ * Exported for tests.
+ */
+export function safeServerBase(candidate) {
+  const raw = String(candidate == null ? '' : candidate).trim();
+  if (!raw) return defaultServerBase();
+  if (serverBaseAllowed(raw)) return raw;
+  const fallback = defaultServerBase();
+  log('serverBase refused: "' + raw.slice(0, 120) + '" is not an allowed origin — using '
+    + (fallback || '(none)'));
+  return fallback;
+}
+
 /** Build the fake `init` a standalone browser boots from. Exported for tests. */
 export function standaloneInit() {
   const q = new URLSearchParams((typeof location !== 'undefined' && location.search) || '');
   const prefs = readPrefs();
+  /* A CREDENTIAL NEVER COMES OUT OF STORAGE. The blob is echoed to the page in
+   * the init frame below (`prefs`), so an old poisoned blob would keep handing a
+   * token around even after the purge stopped writing new ones. Dropped from our
+   * copy here as well as from localStorage down in the adoption block — one of
+   * these two is belt, the other is braces, and this is a credential. */
+  if (prefs && prefs.authToken !== undefined) delete prefs.authToken;
   const profile = q.get('profile') || prefs.profile || 'p2p';
   const name = q.get('name') || prefs.name || 'Solo';
   /* A REAL ACCOUNT ID, or ''. `?uid=` now, or one an earlier launch adopted into prefs. The
@@ -325,8 +451,18 @@ export function standaloneInit() {
       skewMs: numOr(q.get('skew'), numOr(prefs.skewMs, 0)),
     },
     net: {
-      serverBase: q.get('server') || prefs.serverBase || defaultServerBase(),
-      authToken: q.get('token') || prefs.authToken || '',
+      // BOTH legs go through the allowlist — the `?server=` a link just handed
+      // us AND a serverBase an earlier launch wrote down (which the old build
+      // would have adopted from any link at all).
+      serverBase: safeServerBase(q.get('server') || prefs.serverBase || ''),
+      /* SESSION-ONLY, and that is the whole point. `?token=` still works — the
+       * phone-link flow carries `?uid=&token=` and this is the one path that can
+       * turn a browser into that account — but the value stops here: it lives in
+       * bridge's module state via configureNet, is never written to goon.prefs,
+       * and is taken back out of the address bar once read. A tab that reloads
+       * without the query is anonymous, which is the correct answer for a page
+       * that has no way to prove who reopened it. */
+      authToken: q.get('token') || '',
       viaHost: false,
     },
     prefs,
@@ -339,14 +475,27 @@ if (!isHosted && typeof document !== 'undefined') {
   // anything that lands early is pre-buffered anyway.
   Promise.resolve().then(() => {
     try {
-      // Creds handed on the querystring are adopted into prefs so a later bare-URL
-      // launch (or a home-screen pin that dropped the query) still boots with them.
-      // Explicit params always win over stored ones inside standaloneInit itself.
+      /* SETTINGS ARE ADOPTED; CREDENTIALS ARE SPENT.
+       *
+       * `?uid=`, `?name=` and `?debug=` are remembered, so a bare-URL reload or a
+       * home-screen pin that dropped the query still comes back as the same
+       * player with the same surfaces. `?server=` is remembered ONLY when it is
+       * on the allowlist. `?token=` is remembered NEVER: an account-wide auth
+       * token in localStorage is a credential with no expiry sitting in the one
+       * place every future page load (and every XSS) can read, and the old build
+       * would take one from any link that offered it. It is used for this session
+       * and then it is gone — see the `net` block in standaloneInit.
+       *
+       * The same pass HEALS a browser that already ran the old build: whatever it
+       * stored is purged here, not merely ignored, because "ignored" leaves the
+       * token live in storage forever. */
+      let stripAfterInit = [];
       try {
         const q = new URLSearchParams(location.search || '');
         const keep = {};
-        if (q.get('server')) keep.serverBase = q.get('server');
-        if (q.get('token')) keep.authToken = q.get('token');
+        const rawServer = String(q.get('server') || '').trim();
+        const serverKept = !!rawServer && serverBaseAllowed(rawServer);
+        if (serverKept) keep.serverBase = rawServer;
         if (q.get('uid')) keep.unifiedId = q.get('uid');
         if (q.get('name')) keep.name = q.get('name');
         // `?debug=1` sticks: a phone that reloads (or was pinned to the home
@@ -354,8 +503,28 @@ if (!isHosted && typeof document !== 'undefined') {
         // just happened. `?debug=0` is how it comes back off.
         if (q.has('debug')) keep.debug = /^(1|true|on|yes)$/i.test(q.get('debug') || '1');
         if (Object.keys(keep).length) savePrefs(keep);
+
+        // The heal: a token from any earlier build, and a base that would no
+        // longer be accepted from a link, both leave storage now.
+        const stored = readPrefs();
+        const doomed = [];
+        if (Object.prototype.hasOwnProperty.call(stored, 'authToken')) doomed.push('authToken');
+        if (stored.serverBase && !serverBaseAllowed(String(stored.serverBase).trim())) doomed.push('serverBase');
+        if (doomed.length) purgePrefKeys(doomed);
+
+        // And out of the address bar, so the token cannot ride along in a
+        // screenshot, a pasted "here's the link", a Referer header or the
+        // browser's own history. A REFUSED `?server=` goes too — leaving it
+        // there only invites a reload to try the attack again.
+        if (q.has('token')) stripAfterInit.push('token');
+        if (rawServer && !serverKept) stripAfterInit.push('server');
       } catch (_e) { /* prefs are a convenience, never load-bearing */ }
-      dispatch(standaloneInit());
+      /* ORDER IS LOAD-BEARING: standaloneInit reads `?token=` off location.search,
+       * so the frame is built BEFORE the address bar is edited. Strip first and
+       * the phone-link flow boots signed out. */
+      const init = standaloneInit();
+      if (stripAfterInit.length) stripUrlParams(stripAfterInit);
+      dispatch(init);
       dispatch({ type: 'manifest', images: [], videos: [], skipped: 0, truncated: false });
     } catch (e) {
       if (typeof console !== 'undefined') console.error('[goon] standalone init failed', e);

@@ -17,7 +17,8 @@
  *   1. NOTHING at module import touches document/window/localStorage — this file
  *      is swept by the node import test like every other module.
  *   2. It never loads unless asked: `?debug=1`. Standalone the answer is
- *      remembered in `goon.prefs` (bridge.js persists it next to server/token),
+ *      remembered in `goon.prefs` (bridge.js persists it beside uid/name — the
+ *      auth token is deliberately NOT in there, see bridge.js safeServerBase),
  *      so a reload — or a home-screen pin that dropped the query — keeps it on.
  *      HOSTED IT IS ALWAYS EXPLICIT: a WebView2 session must never grow a debug
  *      strip because a browser tab once had one.
