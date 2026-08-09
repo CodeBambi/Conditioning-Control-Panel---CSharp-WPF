@@ -118,6 +118,57 @@ public sealed class ChaosGifCascadeOverlay : Window
         get { try { var a = _active; return a != null && (a._spawning || a._fallers.Count > 0); } catch { return false; } }
     }
 
+    /// <summary>
+    /// #871: run <paramref name="action"/> as soon as the rain stops, instead of throwing away work
+    /// that must not run mid-cascade. Fires straight away when nothing is raining; otherwise polls the
+    /// UI dispatcher twice a second and gives up (calling <paramref name="onExpired"/>) if the cascade
+    /// is still in flight after <paramref name="maxWait"/>, so nothing can be held forever.
+    /// The freeze guard is unchanged by this — the action still never runs while IsRaining is true.
+    /// </summary>
+    public static void RunWhenClear(Action action, TimeSpan maxWait, string tag, Action? onExpired = null)
+    {
+        if (action == null) return;
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+
+        if (!IsRaining)
+        {
+            try { action(); }
+            catch (Exception ex) { App.Logger?.Debug("GifCascade.RunWhenClear({Tag}) immediate: {E}", tag, ex.Message); }
+            return;
+        }
+
+        var deadline = DateTime.UtcNow + maxWait;
+        var timer = new DispatcherTimer(DispatcherPriority.Background, dispatcher)
+        {
+            Interval = TimeSpan.FromMilliseconds(500)
+        };
+        timer.Tick += (_, _) =>
+        {
+            try
+            {
+                if (IsRaining && DateTime.UtcNow < deadline) return;   // still raining, still within the window
+                timer.Stop();
+                if (IsRaining)
+                {
+                    App.Logger?.Information("GifCascade: deferred {Tag} expired - still raining after {Sec:F0}s", tag, maxWait.TotalSeconds);
+                    onExpired?.Invoke();
+                    return;
+                }
+                App.Logger?.Information("GifCascade: cascade cleared - firing deferred {Tag}", tag);
+                action();
+            }
+            catch (Exception ex)
+            {
+                try { timer.Stop(); } catch { }
+                try { onExpired?.Invoke(); } catch { }
+                App.Logger?.Debug("GifCascade.RunWhenClear({Tag}): {E}", tag, ex.Message);
+            }
+        };
+        timer.Start();
+        App.Logger?.Information("GifCascade: deferring {Tag} until the cascade clears", tag);
+    }
+
     private readonly Canvas _canvas;
     private List<string> _files = new();
     private double _gifSize = 200;

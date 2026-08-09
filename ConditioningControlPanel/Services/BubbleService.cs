@@ -1094,6 +1094,31 @@ public class BubbleService : IDisposable
             return;
         }
 
+        // Chaos gif rain in flight: a fullscreen video / browser takeover opening over a falling
+        // cascade is the proven UI-thread killer, the same reason VideoService refuses to open one.
+        // This path had no cascade awareness at all (#871) — the video payload got as far as
+        // VideoService and was silently eaten there, the HT-link payload fired into the rain. Hold
+        // the payload instead: the user popped a bubble to earn it, so it runs once the rain stops.
+        if (heavy && ChaosGifCascadeOverlay.IsRaining)
+        {
+            App.Logger?.Information("Bubble: deferring {Kind} pop — chaos gif cascade in flight", payload.Kind);
+            ChaosGifCascadeOverlay.RunWhenClear(
+                () =>
+                {
+                    // Re-check the one-takeover-at-a-time gate: the cascade may have outlived
+                    // whatever else started playing in the meantime.
+                    if (App.Video?.IsPlaying == true)
+                    {
+                        App.Logger?.Information("Bubble: dropped deferred {Kind} pop — a video is playing now", payload.Kind);
+                        return;
+                    }
+                    FireAndLogPayload(payload);
+                },
+                TimeSpan.FromSeconds(90),
+                $"bubble {payload.Kind} payload");
+            return;
+        }
+
         if (heavy)
         {
             // Let the click return first; the payload opens a fullscreen window either way.

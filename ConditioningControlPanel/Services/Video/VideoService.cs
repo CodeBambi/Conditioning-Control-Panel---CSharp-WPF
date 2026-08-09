@@ -1470,6 +1470,36 @@ namespace ConditioningControlPanel.Services
         /// TakeoverVideosStrict setting here instead of the old "flip the global setting off
         /// for 3 seconds" hack, which made concurrently-scheduled videos come up non-strict.
         /// </param>
+        /// <summary>True while a trigger is parked waiting for a chaos gif cascade to finish (#871).
+        /// One pending replay at a time — a cascade that swallows several triggers replays one video,
+        /// not a backlog of them.</summary>
+        private bool _cascadeDeferPending;
+
+        /// <summary>Longest a trigger will wait out a cascade before it is given up on. Cascades are
+        /// seconds long; anything past this is a stuck overlay and the stale video is not worth firing.</summary>
+        private static readonly TimeSpan CascadeDeferMaxWait = TimeSpan.FromSeconds(90);
+
+        /// <summary>#871: hold a trigger the gif-cascade guard refused and replay it once the rain stops.</summary>
+        private void DeferTriggerPastCascade(bool silentIfEmpty, bool? strictOverride)
+        {
+            if (_cascadeDeferPending)
+            {
+                App.Logger?.Information("VideoService: cascade replay already pending - trigger coalesced");
+                return;
+            }
+
+            _cascadeDeferPending = true;
+            ChaosGifCascadeOverlay.RunWhenClear(
+                () =>
+                {
+                    _cascadeDeferPending = false;
+                    TriggerVideo(silentIfEmpty, strictOverride);
+                },
+                CascadeDeferMaxWait,
+                "mandatory video",
+                onExpired: () => _cascadeDeferPending = false);
+        }
+
         public void TriggerVideo(bool silentIfEmpty = false, bool? strictOverride = null)
         {
             App.Logger?.Information("VideoService: TriggerVideo called");
@@ -1496,21 +1526,24 @@ namespace ConditioningControlPanel.Services
             }
 
             // Chaos gif rain in flight: a mandatory video opening over a falling cascade is the
-            // proven UI-thread killer (AppHangB1 2026-06-10). Drop the trigger outright — never
-            // queue it. Chaos's own video bubbles are already gated upstream while the rain
-            // falls, so this only ever drops ambient/scheduler triggers.
+            // proven UI-thread killer (AppHangB1 2026-06-10), so it must not open NOW. It used to
+            // be dropped outright, which silently ate videos the user had popped a bubble to earn
+            // (#871) — bubble payloads reach this method too, the old "already gated upstream"
+            // note was wrong. Instead the trigger is held and replayed once the rain stops.
             if (ChaosGifCascadeOverlay.IsRaining)
             {
-                App.Logger?.Information("VideoService: TriggerVideo dropped - chaos gif cascade in flight");
+                App.Logger?.Information("VideoService: TriggerVideo deferred - chaos gif cascade in flight");
                 // When this trigger was DEQUEUED, the queue already claimed the Video slot for
-                // us — dropping without releasing would block every interaction for the
-                // 5-minute stuck window. Safe on non-dequeue paths: current==Video with no
-                // video playing only happens right after a dequeue.
+                // us — holding it across the cascade would block every interaction for the
+                // 5-minute stuck window, so release it and let the replay re-enter the queue
+                // normally. Safe on non-dequeue paths: current==Video with no video playing
+                // only happens right after a dequeue.
                 if (!_videoPlaying &&
                     App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.Video)
                 {
                     App.InteractionQueue.Complete(InteractionQueueService.InteractionType.Video);
                 }
+                DeferTriggerPastCascade(silentIfEmpty, strictOverride);
                 return;
             }
 
