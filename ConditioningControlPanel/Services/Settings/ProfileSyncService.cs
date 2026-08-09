@@ -2448,7 +2448,16 @@ namespace ConditioningControlPanel.Services
                     if (response.StatusCode == HttpStatusCode.Unauthorized)
                     {
                         App.Logger?.Warning("Skill purchase failed: auth token invalid/missing after recovery attempt");
-                        return (false, "Your session has expired. Please log in again from Settings to purchase enhancements.");
+                        // Point at a sign-in the user can actually reach. Settings' "Log In" button
+                        // (SettingsTabView BtnUnifiedLogin) is COLLAPSED whenever a UnifiedId is
+                        // cached — which is exactly the state an expired session leaves behind — so
+                        // the old wording sent people to an empty panel. The Premium tab's login
+                        // card (PatreonTabView, also surfaced in the dashboard's App Info & Data
+                        // panel) is always present. The tab NAME is pulled from the same loc key the
+                        // nav button renders, so the instruction matches what the user is looking
+                        // at in their language. (#879)
+                        var premiumTabName = Localization.Loc.Get("tab_exclusives");
+                        return (false, $"Your session has expired. Open the ⭐ {premiumTabName} tab and sign in again to purchase enhancements.");
                     }
 
                     string errorMsg;
