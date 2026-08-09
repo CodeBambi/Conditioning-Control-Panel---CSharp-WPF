@@ -25,6 +25,35 @@ namespace ConditioningControlPanel.Services
         private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";
         private const int HeartbeatIntervalSeconds = 120; // Send heartbeat every 2 minutes
 
+        /// <summary>
+        /// Total (cumulative) XP below which a profile is indistinguishable from fresh defaults.
+        /// Same number the boot defaults-guard in <see cref="SyncProfileAsync"/> uses, so "looks
+        /// like defaults" means one thing everywhere.
+        /// </summary>
+        public const double MeaningfulProgressXp = 100;
+
+        /// <summary>
+        /// Does a profile the SERVER handed us look like an empty/uninitialized record rather than
+        /// a real account? Used only in the anti-cheat clamp branches, where local is already far
+        /// ahead of the server: true means "do not clamp, keep local".
+        ///
+        /// #865: this used to additionally require no achievements, no unlocked skills AND
+        /// <c>skill_points == 0</c>. Every one of those is an unrelated field, and any single
+        /// non-zero one flipped the answer to "the server record is real" — so a user whose server
+        /// row had been emptied of level/XP but still carried, say, a banked skill point or one
+        /// achievement failed the test and got CLAMPED to Level 1 / 0 XP. The clamp writes local
+        /// settings, the next launch reads them back, and the server row never changes, so it
+        /// repeated on EVERY launch: the every-launch progression reset.
+        ///
+        /// The only two fields that can say "this account has progressed" are level and XP, so
+        /// they are the only two consulted. A profile with a meaningful level or meaningful XP is
+        /// never uninitialized; a Level&lt;=1, &lt;100 XP record always is, whatever else rides
+        /// along with it. Being wrong in this direction costs nothing: local is kept and the next
+        /// successful sync pushes it back up. Being wrong the other way destroys the account.
+        /// </summary>
+        public static bool ServerProfileLooksUninitialized(int serverLevel, double serverTotalXp)
+            => serverLevel <= 1 && serverTotalXp < MeaningfulProgressXp;
+
         private readonly HttpClient _httpClient;
         private DispatcherTimer? _heartbeatTimer;
         private bool _disposed;
@@ -659,7 +688,7 @@ namespace ConditioningControlPanel.Services
                 // Guard: if local data looks like fresh defaults (Level 1, near-zero XP) and we
                 // haven't completed a round-trip load yet this session, skip sending XP/level.
                 // This prevents a settings reset (update crash, corruption) from zeroing the server.
-                if (!_hasLoadedProfile && settings.PlayerLevel <= 1 && totalXp < 100)
+                if (!_hasLoadedProfile && settings.PlayerLevel <= 1 && totalXp < MeaningfulProgressXp)
                 {
                     App.Logger?.Warning("Sync blocked — local looks like defaults (Level {Level}, XP {Xp}) and profile not yet loaded. Waiting for LoadProfileAsync.",
                         settings.PlayerLevel, (int)totalXp);
@@ -1111,20 +1140,17 @@ namespace ConditioningControlPanel.Services
                                 // "server clamped a real inflated profile" from "server returned an
                                 // uninitialized/empty record" (e.g. a broken Discord link so the
                                 // account resolves to a pristine profile, or a failed server read).
-                                // The latter looks like Level<=1, 0 XP, no achievements, no skills,
-                                // no points — nothing a genuinely progressed user could have. Clamping
-                                // to that resets the player to Level 1 on EVERY sync (repeat data loss).
+                                // The latter looks like Level<=1 with no meaningful XP — nothing a
+                                // genuinely progressed user could have. Clamping to that resets the
+                                // player to Level 1 on EVERY sync (repeat data loss, #865). See
+                                // ServerProfileLooksUninitialized for why only level/XP count here.
                                 bool serverLooksUninitialized =
-                                    v2Result.User.Level <= 1 &&
-                                    v2Result.User.Xp == 0 &&
-                                    (v2Result.User.Achievements == null || v2Result.User.Achievements.Count == 0) &&
-                                    (v2Result.UnlockedSkills == null || v2Result.UnlockedSkills.Count == 0) &&
-                                    (v2Result.SkillPoints ?? 0) == 0;
+                                    ServerProfileLooksUninitialized(v2Result.User.Level, serverTotalXp);
 
                                 if (serverLooksUninitialized)
                                 {
-                                    App.Logger?.Warning("[Anti-cheat] V2 Sync DEFENDED: server profile looks uninitialized (Level {SL}, 0 XP, no achievements/skills/points) but local has progress (Level {LL}, {LX} XP). Refusing to clamp — likely a failed/empty server read or broken account link, not an exploit. Local kept.",
-                                        v2Result.User.Level, settings.PlayerLevel, localTotalXp);
+                                    App.Logger?.Warning("[Anti-cheat] V2 Sync DEFENDED: server profile looks uninitialized (Level {SL}, {SX} XP) but local has progress (Level {LL}, {LX} XP). Refusing to clamp — likely a failed/empty server read or broken account link, not an exploit. Local kept.",
+                                        v2Result.User.Level, serverTotalXp, settings.PlayerLevel, localTotalXp);
                                     // Keep local values; a later good sync (or admin action) reconciles.
                                 }
                                 else
@@ -1393,19 +1419,18 @@ namespace ConditioningControlPanel.Services
                 // Local is suspiciously higher than cloud — would normally adopt cloud to prevent file-edit exploits.
                 // BUT: distinguish "real cloud says you're ahead of yourself" from "cloud read fell through to an
                 // uninitialized record" (e.g. V2 sync rate-limited, V1 fallback returns empty defaults for a
-                // V2-native user). The latter looks like Level=1, Xp=0, no achievements, no skills — a pristine
-                // record that no real progressed user could have. Treat that as a misload and keep local.
+                // V2-native user). The latter looks like Level<=1 with no meaningful XP — a pristine record
+                // that no real progressed user could have. Treat that as a misload and keep local.
+                // #865: the achievements/skills/skill-points clauses that used to be ANDed in here made a
+                // single stray non-zero field read as "the cloud record is real", and the clamp below then
+                // reset the player on every launch. Same predicate as the V2 path now.
                 bool looksUninitialized =
-                    cloudProfile.Level <= 1 &&
-                    cloudProfile.Xp == 0 &&
-                    (cloudProfile.Achievements == null || cloudProfile.Achievements.Count == 0) &&
-                    (cloudProfile.UnlockedSkills == null || cloudProfile.UnlockedSkills.Count == 0) &&
-                    (cloudProfile.SkillPoints ?? 0) == 0;
+                    ServerProfileLooksUninitialized(cloudProfile.Level, cloudTotalXp);
 
                 if (looksUninitialized)
                 {
-                    App.Logger?.Warning("[Anti-cheat] DEFENDED: cloud profile looks uninitialized (Level 1, 0 XP, no achievements/skills) but local has progress (Level {LocalLevel}, {LocalXP} XP). Refusing to clobber — likely a failed/empty cloud read, not an exploit. Local kept.",
-                        settings.PlayerLevel, (int)localTotalXp);
+                    App.Logger?.Warning("[Anti-cheat] DEFENDED: cloud profile looks uninitialized (Level {CloudLevel}, {CloudXP} XP) but local has progress (Level {LocalLevel}, {LocalXP} XP). Refusing to clobber — likely a failed/empty cloud read, not an exploit. Local kept.",
+                        cloudProfile.Level, (int)cloudTotalXp, settings.PlayerLevel, (int)localTotalXp);
                     // Fall through without modifying settings — keep local values.
                 }
                 else
