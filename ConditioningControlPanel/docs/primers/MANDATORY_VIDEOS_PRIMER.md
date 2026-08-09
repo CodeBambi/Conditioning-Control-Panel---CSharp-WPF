@@ -323,6 +323,13 @@ videos drivable by the same effect engine the standalone Deeper player uses. Flo
 4. On `VideoEnded` → `Unbind` (`:136`); clears the driving flag, unloads. **Panic/`CloseAll` does NOT
    raise `VideoEnded`**, so the panic path calls `ForceUnbind()` (`:134`) or active overlays keep
    dispatching after the video is gone (#364).
+   **Teardown ordering vs. completion credit:** `CloseAll` clears `_browserActive` and nulls
+   `_primaryMediaPlayer` *before* `Cleanup` raises `VideoEnded`, so by the time `EnhancementEngine.Stop`
+   runs neither engine is live. `GetPrimaryDurationSeconds` therefore falls back to the last known
+   `_duration` — without it the engine's duration-less completion fallback (`EnhancementEngine.cs:454`)
+   would fire `PlaybackCompleted` for **any** run past 60s, crediting a Deeper completion on skip,
+   panic and attention-fail (#874). `_duration` survives teardown by design: only the `PlayVideo`
+   prologue and the browser→LibVLC handoff reset it.
 
 `SeekPrimary`/`PausePrimary`/`PlayPrimary` (`:254/275/285`) mirror the operation to **every** screen's
 player so a Deeper blink/rewind doesn't desync the monitors (#527).

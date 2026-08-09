@@ -389,14 +389,29 @@ namespace ConditioningControlPanel.Services
         /// Duration of the current primary clip in seconds, or 0 if unknown — whichever engine owns
         /// it. A browser session reports the page's <c>meta</c> duration (0 until it arrives, and for
         /// streams that never learn it); a LibVLC session reports the primary player's Length. (#874)
+        ///
+        /// After teardown BOTH engines are gone (CloseAll clears <c>_browserActive</c> and nulls
+        /// <c>_primaryMediaPlayer</c> before Cleanup raises <c>VideoEnded</c>), so the last known
+        /// <c>_duration</c> answers instead of 0. That ordering is load-bearing for Deeper: the
+        /// EnhancementEngine's duration-less completion fallback credits PlaybackCompleted for any run
+        /// past 60s when this returns 0, which on skip / panic / attention-fail is FALSE credit for a
+        /// video the user did not finish. <c>_duration</c> survives teardown by design — only the
+        /// PlayVideo prologue and the browser→LibVLC handoff reset it — so it is the honest answer.
         /// </summary>
         public double GetPrimaryDurationSeconds()
         {
             try
             {
-                if (_browserActive) return _duration > 0 ? _duration : 0;
-                var len = _primaryMediaPlayer?.Length ?? 0;
-                return len > 0 ? len / 1000.0 : 0;
+                // A live LibVLC player is the freshest source; a browser session has none by design.
+                if (!_browserActive)
+                {
+                    var len = _primaryMediaPlayer?.Length ?? 0;
+                    if (len > 0) return len / 1000.0;
+                }
+                // Browser session, or no live engine at all: the last duration this service was told
+                // about (page `meta` / LengthChanged / MediaOpened). Still 0 for a genuinely
+                // duration-less clip — the one case the engine's fallback completion is meant for.
+                return _duration > 0 ? _duration : 0;
             }
             catch { return 0; }
         }
