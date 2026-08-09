@@ -104,10 +104,19 @@ namespace ConditioningControlPanel
                 UpdateDirectoryListingStatus();
                 _ = RunOptInChainAsync();
 
-                // Listen for controller connection changes
+                // Listen for controller connection changes. The -= before every += is not
+                // decoration: any enable path that reaches here without StopRemoteControl having
+                // run (e.g. the service ended the session itself and OnRemoteSessionEnded merely
+                // unticked the box) would otherwise stack a second copy of every handler on the
+                // multicast list, one more per cycle. Removing a delegate that isn't subscribed
+                // is a documented no-op, so this is idempotent and kills the whole bug class.
+                App.RemoteControl.ControllerConnectedChanged -= OnRemoteControllerChanged;
                 App.RemoteControl.ControllerConnectedChanged += OnRemoteControllerChanged;
+                App.RemoteControl.ControllerIdleChanged -= OnRemoteControllerIdleChanged;
                 App.RemoteControl.ControllerIdleChanged += OnRemoteControllerIdleChanged;
+                App.RemoteControl.CommandReceived -= OnRemoteCommandReceived;
                 App.RemoteControl.CommandReceived += OnRemoteCommandReceived;
+                App.RemoteControl.SessionEnded -= OnRemoteSessionEnded;
                 App.RemoteControl.SessionEnded += OnRemoteSessionEnded;
 
                 // Wire up session callbacks for remote status
@@ -908,6 +917,19 @@ namespace ConditioningControlPanel
             {
                 HideRemoteControlOverlay();
                 UpdateStartButtonForRemoteControl(false);
+                // Unticking under _isLoading deliberately suppresses ChkRemoteControlEnabled_Changed
+                // (it early-returns on _isLoading), so StopRemoteControl never runs on this path and
+                // used to leave all four handlers attached — a fresh set stacked on top on the next
+                // enable, once per expiry cycle. Detach them here so the steady state is clean.
+                // Unsubscribing from inside SessionEnded's own invocation is safe: the runtime
+                // iterates a snapshot of the invocation list.
+                if (App.RemoteControl != null)
+                {
+                    App.RemoteControl.ControllerConnectedChanged -= OnRemoteControllerChanged;
+                    App.RemoteControl.ControllerIdleChanged -= OnRemoteControllerIdleChanged;
+                    App.RemoteControl.CommandReceived -= OnRemoteCommandReceived;
+                    App.RemoteControl.SessionEnded -= OnRemoteSessionEnded;
+                }
                 _isLoading = true;
                 RemoteControlTab.ChkRemoteControlEnabled.IsChecked = false;
                 _isLoading = false;
