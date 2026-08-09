@@ -172,9 +172,13 @@ All of the following stay in VideoService (C#-side) and must fire for browser se
 - [ ] `PausePrimary`/`PlayPrimary`/`SeekPrimary` map to messages (voice commands,
       DtRH); `GetCurrentPlaybackTimeMs` + `PrimaryPlaybackTimeMsChanged` fed from
       `time` messages (FunScript haptics + Deeper time source keep working).
-- [ ] `PrimaryMediaPlayer` stays **null** during browser sessions — Deeper's
-      enhancement bridge simply won't attach (documented Stage-1 gap; the null path
-      already exists and must not throw).
+- [x] `PrimaryMediaPlayer` stays **null** during browser sessions, but Deeper's
+      enhancement bridge attaches anyway (#874): `VideoServiceTimeSource` reads the
+      engine-agnostic surface (`GetPrimaryDurationSeconds`, `IsPrimaryMediaPlaying`,
+      `BrowserVideoAspect` from the page `meta` size), and the bridge's guard only
+      refuses when NEITHER engine has a clock (the MediaElement fallback window).
+      The original Stage-1 gap — bridge silently refusing every mp4/m4v/webm while
+      the browser engine was default — shipped 6.7.0→6.7.4 and is closed.
 - [ ] `SessionSwitch` (lock) + `PowerModeChanged` (suspend) force-clean unchanged.
 - [ ] Teardown generation guard applies to browser session continuations too.
 - [ ] `VideoMetadataCache` backfill: write duration from the page `meta` message so

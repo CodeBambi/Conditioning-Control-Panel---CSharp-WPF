@@ -293,14 +293,21 @@ block at `VideoService.cs:55–110`.
 videos drivable by the same effect engine the standalone Deeper player uses. Flow:
 
 1. On `VideoStarted` (UI thread), `BindForCurrentVideo` (`:46`): bail unless `VideoEnhanceIfPossible`;
-   `EnhancementResolver.ResolveForLocalMedia(LastVideoPath)`; if no `PrimaryMediaPlayer` (MediaElement
-   fallback) log-and-bail; load the `.ccpenh.json` into its **own** `EnhancementHostService`; build a
-   `VideoServiceTimeSource` and `Bind` it (attach/detach lambdas capture *this* source so a fast next
-   video can't stale-detach the new one).
+   `EnhancementResolver.ResolveForLocalMedia(LastVideoPath)`; if there is NO playback clock at all —
+   no `PrimaryMediaPlayer` **and** no browser session (i.e. the MediaElement fallback) — log-and-bail
+   (#874: browser sessions bind like LibVLC ones; the old `PrimaryMediaPlayer == null` bail kept every
+   browser-routed mp4/m4v/webm enhancement silently dead 6.7.0→6.7.4); load the `.ccpenh.json` into
+   its **own** `EnhancementHostService`; build a `VideoServiceTimeSource` and `Bind` it (attach/detach
+   lambdas capture *this* source so a fast next video can't stale-detach the new one).
 2. It calls `_video.SetEnhancementDriving(true)` so the safety timer switches to stall-watch mode (§6).
 3. `VideoServiceTimeSource` exposes time/seek/pause/play + `GetVideoRect` (contain-fit rect for gaze
-   rules, `:105`) + SAR-corrected aspect. It marshals LibVLC-thread `TimeChanged` to the UI thread
-   (`:47`) because the engine mutates band/fired-state from the UI tick and webcam handlers.
+   rules, `:105`) + SAR-corrected aspect. Engine-agnostic (#874): duration, playing-state and aspect
+   read `VideoService.GetPrimaryDurationSeconds` / `IsPrimaryMediaPlaying` / `BrowserVideoAspect`, so
+   the same source drives both engines (browser aspect comes from the page `meta` frame size; the page
+   renders `#fg` contain-fit full-window, the same geometry `FitContain` models). It marshals
+   LibVLC-thread `TimeChanged` to the UI thread (`:47`) because the engine mutates band/fired-state
+   from the UI tick and webcam handlers (browser `time` messages already arrive on the UI thread and
+   pass straight through the same marshal).
 4. On `VideoEnded` → `Unbind` (`:136`); clears the driving flag, unloads. **Panic/`CloseAll` does NOT
    raise `VideoEnded`**, so the panic path calls `ForceUnbind()` (`:134`) or active overlays keep
    dispatching after the video is gone (#364).
