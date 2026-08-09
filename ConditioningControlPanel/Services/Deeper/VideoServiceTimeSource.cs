@@ -7,6 +7,10 @@ namespace ConditioningControlPanel.Services.Deeper
     /// <summary>
     /// Adapts <see cref="VideoService"/>'s primary-monitor playback to the
     /// generic <see cref="IPlaybackTimeSource"/> the EnhancementEngine consumes.
+    /// Engine-agnostic (#874): everything reads VideoService's shared control
+    /// surface, which answers for BOTH the LibVLC and the browser (WebView2)
+    /// engine — time/seek/pause/play were already routed, and duration, playing
+    /// state and aspect now are too.
     ///
     /// Subscribes lazily — call <see cref="Attach"/> when starting an engine,
     /// <see cref="Detach"/> when stopping. Multiple sources can be attached to
@@ -18,9 +22,9 @@ namespace ConditioningControlPanel.Services.Deeper
         private bool _attached;
 
         // Display aspect ratio (w/h, SAR-corrected) of the playing video, cached
-        // once LibVLC reports a non-zero size. -1 = not known yet. The bridge
-        // builds a fresh time source per video, so this never goes stale across
-        // videos.
+        // once the engine reports a non-zero size (LibVLC track data, or the
+        // browser page's `meta` message). -1 = not known yet. The bridge builds
+        // a fresh time source per video, so this never goes stale across videos.
         private double _cachedAspect = -1;
 
         public event Action<double>? PlaybackTimeChanged;
@@ -79,24 +83,12 @@ namespace ConditioningControlPanel.Services.Deeper
             return ms < 0 ? 0 : ms / 1000.0;
         }
 
-        public double GetDurationSeconds()
-        {
-            try
-            {
-                var len = _video.PrimaryMediaPlayer?.Length ?? 0;
-                return len > 0 ? len / 1000.0 : 0;
-            }
-            catch { return 0; }
-        }
+        // Duration and playing-state go through VideoService's engine-agnostic surface: a browser
+        // session has no PrimaryMediaPlayer by design, and reading it here is what kept every mp4
+        // enhancement dead while the browser engine was the default (#874).
+        public double GetDurationSeconds() => _video.GetPrimaryDurationSeconds();
 
-        public bool IsPlaying
-        {
-            get
-            {
-                try { return _video.PrimaryMediaPlayer?.IsPlaying ?? false; }
-                catch { return false; }
-            }
-        }
+        public bool IsPlaying => _video.IsPrimaryMediaPlaying;
 
         public void Seek(double seconds) => _video.SeekPrimary((long)Math.Max(0, seconds * 1000));
         public void Pause() => _video.PausePrimary();
@@ -169,6 +161,16 @@ namespace ConditioningControlPanel.Services.Deeper
             if (_cachedAspect > 0) return _cachedAspect;
             try
             {
+                // Browser session: the page's `meta` message carries the frame size, and the page
+                // renders the video contain-fit over the full window — the same geometry FitContain
+                // models. 0 until meta arrives, so GetVideoRect falls back to the full rect. (#874)
+                var browserAspect = _video.BrowserVideoAspect;
+                if (browserAspect > 0)
+                {
+                    _cachedAspect = browserAspect;
+                    return _cachedAspect;
+                }
+
                 var mp = _video.PrimaryMediaPlayer;
                 if (mp == null) return 0;
 
