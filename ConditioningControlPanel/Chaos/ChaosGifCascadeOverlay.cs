@@ -121,15 +121,26 @@ public sealed class ChaosGifCascadeOverlay : Window
     /// <summary>
     /// #871: run <paramref name="action"/> as soon as the rain stops, instead of throwing away work
     /// that must not run mid-cascade. Fires straight away when nothing is raining; otherwise polls the
-    /// UI dispatcher twice a second and gives up (calling <paramref name="onExpired"/>) if the cascade
-    /// is still in flight after <paramref name="maxWait"/>, so nothing can be held forever.
+    /// UI dispatcher twice a second and gives up if the cascade is still in flight after
+    /// <paramref name="maxWait"/>, so nothing can be held forever.
     /// The freeze guard is unchanged by this — the action still never runs while IsRaining is true.
+    ///
+    /// <para><paramref name="onExpired"/> is the UNCONDITIONAL give-up callback: it runs on every
+    /// path where <paramref name="action"/> will not, including the two "there is no dispatcher to
+    /// poll on" early returns (app shutting down / no Application). Callers latch a
+    /// "defer pending" flag before calling in, and a silent early return here would latch it
+    /// forever — so the give-up callback must never be skipped.</para>
     /// </summary>
     public static void RunWhenClear(Action action, TimeSpan maxWait, string tag, Action? onExpired = null)
     {
         if (action == null) return;
         var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+        if (dispatcher == null || dispatcher.HasShutdownStarted)
+        {
+            // No dispatcher to poll on, so the action can never run — release the caller's latch.
+            try { onExpired?.Invoke(); } catch { }
+            return;
+        }
 
         if (!IsRaining)
         {
@@ -139,7 +150,10 @@ public sealed class ChaosGifCascadeOverlay : Window
         }
 
         var deadline = DateTime.UtcNow + maxWait;
-        var timer = new DispatcherTimer(DispatcherPriority.Background, dispatcher)
+        // Normal, not Background: this project has a documented starvation issue where Background /
+        // Loaded priority work is starved out under load (and "under load" is exactly what a cascade
+        // in flight means), which would stall the poll that releases the deferred action.
+        var timer = new DispatcherTimer(DispatcherPriority.Normal, dispatcher)
         {
             Interval = TimeSpan.FromMilliseconds(500)
         };
