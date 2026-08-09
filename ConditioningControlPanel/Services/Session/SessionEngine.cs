@@ -433,6 +433,8 @@ namespace ConditioningControlPanel.Services
             App.Flash?.Stop();
             App.Subliminal?.Stop();
             App.Bubbles?.Stop();
+            // Scheduler only. A pause must NOT dismiss a card the user is mid-way through typing —
+            // that would walk through strict mode and forfeit the card's XP (#875).
             App.LockCard?.Stop();
             App.PopQuiz?.Stop();
             App.BubbleCount?.Stop();

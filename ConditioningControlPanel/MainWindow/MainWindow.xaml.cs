@@ -997,7 +997,7 @@ namespace ConditioningControlPanel
                 App.BubbleCount?.Stop();
                 App.MindWipe?.Stop();
                 App.BrainDrain?.Stop();
-                App.LockCard?.Stop();
+                App.LockCard?.Stop(dismissOpenCards: true);   // panic: the card on screen is the point
 
                 // Clear the settings flags so a running reconcile loop won't recreate them, then
                 // stop the windows directly — voice/Deeper start spiral & pink ad-hoc (no reconcile

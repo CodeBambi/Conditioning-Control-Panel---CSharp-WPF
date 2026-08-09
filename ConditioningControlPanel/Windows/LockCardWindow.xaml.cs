@@ -1088,8 +1088,15 @@ namespace ConditioningControlPanel
         /// post-completion auto-close). Windows are hidden and returned to the keep-alive pool rather
         /// than closed, so the next card reuses a pre-realized layered window instead of realizing a
         /// fresh one on the hot path — the fix for the #494 render-thread-deadlock freeze.
+        ///
+        /// Marshalled to the UI thread (matching ShowLockCard's convention), because DismissAll touches
+        /// WPF windows: off-thread it would still clear the visible set and stand the dead-man's switch
+        /// down while every Hide() threw into a per-window catch — cards left on screen, unclosable, and
+        /// silently so. All callers were UI-thread when this was written, but LockCardService.Stop is
+        /// now the funnel for panic and can be reached from anywhere. RunOnUISync executes inline when
+        /// already on the UI thread, so the common path is unchanged.
         /// </summary>
-        public static void ForceCloseAll() => DismissAll();
+        public static void ForceCloseAll() => Helpers.DispatcherHelper.RunOnUISync(DismissAll);
 
         private static void DismissAll()
         {

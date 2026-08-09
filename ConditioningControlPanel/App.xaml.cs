@@ -874,8 +874,9 @@ namespace ConditioningControlPanel
                 // Stop all visual overlays (spiral, pink filter, etc.)
                 Overlay?.Stop();
 
-                // Stop lock card and pop quiz if active
-                LockCard?.Stop();
+                // Stop lock card and pop quiz if active. Kill-everything path (panic + exit), so the
+                // card on screen goes too — see LockCardService.Stop(dismissOpenCards).
+                LockCard?.Stop(dismissOpenCards: true);
                 PopQuiz?.Stop();
 
                 // Stop mantra lab audio

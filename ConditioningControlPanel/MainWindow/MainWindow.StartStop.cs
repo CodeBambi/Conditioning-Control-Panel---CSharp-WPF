@@ -331,7 +331,7 @@ namespace ConditioningControlPanel
             // Stop other services
             App.Subliminal.Stop();
             App.Overlay.Stop();
-            App.LockCard.Stop();
+            App.LockCard.Stop();   // scheduler only — the visible card is dropped by ForceCloseAll below
             App.BubbleCount.Stop();
             App.MindWipe.Stop();
             App.BrainDrain.Stop();
