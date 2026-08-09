@@ -104,15 +104,19 @@ namespace ConditioningControlPanel.Services.Haptics
         {
             var handler = new HttpClientHandler
             {
-                // LAN-only target. Certificate errors are tolerated for loopback and for the
-                // *.lovense.club alias (which resolves to a private LAN address); everything
-                // else is validated normally.
+                // LAN-only target. Certificate errors are tolerated for loopback, for the
+                // *.lovense.club alias (which resolves to a private LAN address) and for a private
+                // LAN IP typed directly - Lovense Connect's certificate is issued for the alias, so
+                // reaching the phone at https://<ip>:30010 (the #858 fallback for networks where the
+                // alias cannot resolve) is always a name mismatch. Everything else, including any
+                // routable address, is validated normally.
                 ServerCertificateCustomValidationCallback = (msg, cert, chain, errors) =>
                 {
                     if (errors == System.Net.Security.SslPolicyErrors.None) return true;
                     var host = msg.RequestUri?.Host ?? "";
                     return IsLoopback(host) ||
-                           host.EndsWith(".lovense.club", StringComparison.OrdinalIgnoreCase);
+                           host.EndsWith(".lovense.club", StringComparison.OrdinalIgnoreCase) ||
+                           IsPrivateLanAddress(host);
                 }
             };
 
@@ -164,7 +168,11 @@ namespace ConditioningControlPanel.Services.Haptics
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Debug("Lovense: {Base} did not answer ({Reason})", candidate, ex.Message);
+                    // Information, not Debug (#858): "could not reach Lovense Remote" was the ONLY
+                    // thing a failed connect left behind, with every per-candidate reason invisible
+                    // at the default level - so nobody could tell a refused port from a TLS
+                    // rejection from a DNS failure on the alias.
+                    App.Logger?.Information("Lovense: {Base} did not answer ({Reason})", candidate, ex.Message);
                 }
             }
 
@@ -916,8 +924,14 @@ namespace ConditioningControlPanel.Services.Haptics
 
         /// <summary>
         /// Probe order, per the LAN cheat-sheet: the documented HTTPS alias first, then plain HTTP
-        /// (routers with DNS-rebinding protection break the alias), then whatever authority the
-        /// user literally typed if it adds anything new.
+        /// (routers with DNS-rebinding protection break the alias), then the Game Mode port on the
+        /// address itself, then whatever authority the user literally typed if it adds anything new.
+        ///
+        /// <para>#858: the phone's own <c>&lt;ip&gt;:30010</c> was never probed at all - only the
+        /// lovense.club alias carried that port - so a user whose network breaks the alias (DNS
+        /// rebinding protection, a DNS-filtering resolver, no internet at all) could never connect
+        /// no matter what they typed. Both schemes are tried there: Lovense Connect serves HTTPS on
+        /// 30010, some builds/relays answer plain HTTP.</para>
         /// </summary>
         internal static IReadOnlyList<string> BuildCandidateBases(string? configured)
         {
@@ -947,6 +961,8 @@ namespace ConditioningControlPanel.Services.Haptics
             {
                 Add($"https://{dotted.Replace('.', '-')}.lovense.club:30010");
                 Add($"http://{dotted}:20010");
+                Add($"https://{dotted}:30010");
+                Add($"http://{dotted}:30010");
             }
 
             Add(NormalizeAuthority(configured));
@@ -983,17 +999,41 @@ namespace ConditioningControlPanel.Services.Haptics
             return host.StartsWith("127.", StringComparison.Ordinal);
         }
 
-        /// <summary>Returns the scheme+host+port the user typed, but only when it carried its own
-        /// port (a bare host adds nothing beyond the two standard candidates).</summary>
+        /// <summary>True for an IPv4 literal on a private / link-local range - a device on the same
+        /// LAN, which is the only thing this provider ever talks to over a raw IP.</summary>
+        internal static bool IsPrivateLanAddress(string? host)
+        {
+            if (string.IsNullOrWhiteSpace(host)) return false;
+            if (!IPAddress.TryParse(host, out var ip)) return false;
+            if (IPAddress.IsLoopback(ip)) return true;
+            var b = ip.GetAddressBytes();
+            if (b.Length != 4) return false;
+            return b[0] == 10                                   // 10.0.0.0/8
+                || (b[0] == 172 && b[1] >= 16 && b[1] <= 31)    // 172.16.0.0/12
+                || (b[0] == 192 && b[1] == 168)                 // 192.168.0.0/16
+                || (b[0] == 169 && b[1] == 254);                // 169.254.0.0/16 link-local
+        }
+
+        /// <summary>
+        /// The scheme+host+port to probe for whatever the user literally typed, so their own input is
+        /// never thrown away. A bare host used to return null (#858) - "192.168.1.42" produced no
+        /// candidate of its own at all - and a typed scheme with no port produced a port 80/443 probe,
+        /// which on a LAN is a router admin page, not Lovense. Both now resolve to the Game Mode port
+        /// for the scheme: 20010 for http, 30010 for https.
+        /// </summary>
         private static string? NormalizeAuthority(string? raw)
         {
             if (string.IsNullOrWhiteSpace(raw)) return null;
             var s = raw.Trim();
             var hadScheme = s.Contains("://");
             if (!hadScheme) s = "http://" + s;
-            if (!Uri.TryCreate(s, UriKind.Absolute, out var u)) return null;
-            if (!hadScheme && u.IsDefaultPort) return null;
-            return u.GetLeftPart(UriPartial.Authority);
+            if (!Uri.TryCreate(s, UriKind.Absolute, out var u) || string.IsNullOrEmpty(u.Host)) return null;
+            if (!u.IsDefaultPort) return u.GetLeftPart(UriPartial.Authority);
+
+            // No port of their own: fill in the Game Mode port that goes with the scheme. The
+            // duplicate this often produces is dropped by the caller's dedupe.
+            var port = string.Equals(u.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ? 30010 : 20010;
+            return $"{u.Scheme}://{u.Host}:{port}";
         }
 
         // ==================================================================

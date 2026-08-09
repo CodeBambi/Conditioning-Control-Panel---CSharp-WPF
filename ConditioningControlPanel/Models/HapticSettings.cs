@@ -65,8 +65,12 @@ namespace ConditioningControlPanel.Models
         private VibrationMode _bouncingTextMode = VibrationMode.Pulse;
         private VibrationMode _blinkMode = VibrationMode.Pulse;
 
-        // Connection URLs - defaults shown in tooltip guide
-        private string _lovenseUrl = "http://192.168.1.1:30010";
+        // Connection URLs - defaults shown in tooltip guide.
+        // Lovense starts EMPTY on purpose (#858): 192.168.1.1 is the router, never a phone running
+        // Game Mode, so the old default made every un-configured install probe a bogus address and
+        // report "could not reach Lovense Remote" as though the user had typed something wrong.
+        // Empty also lets the setup wizard's placeholder do its job.
+        private string _lovenseUrl = "";
         private string _buttplugUrl = "ws://localhost:12345";
 
         public bool Enabled
