@@ -11,7 +11,14 @@
              d:DesignHeight="450" d:DesignWidth="800">
         <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="84"/>
+            <!-- #860: 84 of rail + 17 reserved for the rail's scrollbar. The chips used to
+                 be laid out against the full 84 and then squeezed by 17 the moment the
+                 ScrollViewer decided it needed a bar (short windows, or the Programs
+                 "Today" card taking a bite out of row 1) - a 25% width loss that cropped
+                 the chip art and wrapped the captions. The gutter is reserved here and the
+                 chip stack is pinned to its old width, so a scrollbar costs the chips
+                 nothing. Keep the two in sync: RailChipStackWidth = 84 - 5 - 2 - 8. -->
+            <ColumnDefinition Width="101"/>
             <ColumnDefinition Width="640"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
@@ -333,7 +340,12 @@
                      the rail ever outgrows the row again it scrolls instead of silently
                      eating a feature. It shows no chrome while everything fits. -->
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel x:Name="PremiumRailContent" x:FieldModifier="internal" Margin="4,6,4,6">
+                <!-- #860: fixed width + Center, so a scrollbar appearing shifts the chips
+                     but never narrows them. 69 = the width the chips had before the column
+                     reserved its scrollbar gutter (84 rail - 5 rail margin - 2 border
+                     - 8 stack margin). If the rail column width changes, change this too. -->
+                <StackPanel x:Name="PremiumRailContent" x:FieldModifier="internal" Margin="4,6,4,6"
+                            Width="69" HorizontalAlignment="Center">
                     <TextBlock Text="PREMIUM" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource SecondaryBrush}"
                                TextAlignment="Center" Margin="0,0,0,6"/>
                     <Button x:Name="ChipTakeover" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
