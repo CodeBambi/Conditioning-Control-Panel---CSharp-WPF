@@ -63,10 +63,10 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BrowserLoadingText_Click(sender, e);
         }
-        private void BrowserSiteToggle_Changed(object sender, RoutedEventArgs e)
+        private void BrowserSiteToggle_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
-                mw.BrowserSiteToggle_Changed(sender, e);
+                mw.BrowserSiteToggle_Click(sender, e);
         }
         private void BtnAttentionStyle_Click(object sender, RoutedEventArgs e)
         {

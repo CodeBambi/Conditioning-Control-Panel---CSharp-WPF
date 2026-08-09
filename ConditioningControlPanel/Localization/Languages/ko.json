@@ -3152,6 +3152,7 @@
   "browser_enhance_tooltip": "켜면, 저장된 강화와 일치하는 영상 페이지로 이동할 때 그 효과를 위에 얹어 재생해요.",
   "browser_show_bambicloud_label": "BambiCloud 표시",
   "browser_show_bambicloud_tooltip": "평소 BambiCloud를 숨기는 모드에서도 사이트 전환 버튼을 보여줘요. 모드의 기본 사이트는 그대로 선택돼 있고, BambiCloud로 전환할 수 있게만 해줘요.",
+  "browser_toast_offline_blocked": "오프라인 모드가 켜져 있어 브라우저가 연결되지 않습니다. 탐색하려면 설정에서 끄세요.",
   "browser_enhance_match_none": "이 페이지에 저장된 강화가 없어요.",
   "browser_enhance_match_off": "강화가 꺼져 있어요.",
   "browser_enhance_match_fmt": "강화 적용 중: {0}",

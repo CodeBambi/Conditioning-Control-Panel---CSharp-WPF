@@ -1507,8 +1507,14 @@
                         <!-- Site Toggle - inline -->
                         <Border Grid.Column="1" Background="{DynamicResource PanelAccentBrush}" CornerRadius="10" Padding="2" Margin="10,0,0,0" VerticalAlignment="Center">
                             <StackPanel Orientation="Horizontal">
+                                <!-- #867: Click, not Checked. A RadioButton raises Checked only when
+                                     it CHANGES, so clicking the site you are already on did nothing -
+                                     which is exactly what a user does to get back to the homepage
+                                     from a video page. Click fires either way. It also means code
+                                     that sets IsChecked (mod switch, external-link sync) no longer
+                                     triggers a navigation it did not ask for. -->
                                 <RadioButton x:Name="RbBambiCloud" x:FieldModifier="internal" Content="{loc:Str btn_bambicloud}" GroupName="BrowserSite"
-                                             IsChecked="True" Checked="BrowserSiteToggle_Changed"
+                                             IsChecked="True" Click="BrowserSiteToggle_Click"
                                              Foreground="{DynamicResource TextLightBrush}" FontSize="10" Cursor="Hand" Margin="2,1">
                                     <RadioButton.Template>
                                         <ControlTemplate TargetType="RadioButton">
@@ -1536,7 +1542,7 @@
                                 </RadioButton.Template>
                             </RadioButton>
                             <RadioButton x:Name="RbHypnoTube" x:FieldModifier="internal" Content="{loc:Str btn_hypnotube}" GroupName="BrowserSite"
-                                         Checked="BrowserSiteToggle_Changed"
+                                         Click="BrowserSiteToggle_Click"
                                          Foreground="{DynamicResource TextLightBrush}" FontSize="10" Cursor="Hand" Margin="2,1">
                                 <RadioButton.Template>
                                     <ControlTemplate TargetType="RadioButton">

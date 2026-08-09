@@ -3153,6 +3153,7 @@
   "browser_enhance_tooltip": "Quando ativado, ao navegar para uma página de vídeo que corresponda a um aprimoramento salvo, os efeitos dele tocam por cima.",
   "browser_show_bambicloud_label": "Mostrar BambiCloud",
   "browser_show_bambicloud_tooltip": "Revela o botão do site BambiCloud em mods que normalmente o escondem. O site padrão do mod continua selecionado; isso só deixa o BambiCloud disponível para trocar.",
+  "browser_toast_offline_blocked": "O Modo Offline está ativado, então o navegador continua desconectado. Desative-o nas Configurações para navegar.",
   "browser_enhance_match_none": "Nenhum aprimoramento salvo para esta página.",
   "browser_enhance_match_off": "Aprimoramentos desativados.",
   "browser_enhance_match_fmt": "Aprimorando: {0}",
