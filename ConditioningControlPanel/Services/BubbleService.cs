@@ -1105,7 +1105,20 @@ public class BubbleService : IDisposable
             ChaosGifCascadeOverlay.RunWhenClear(
                 () =>
                 {
-                    // Re-check the one-takeover-at-a-time gate: the cascade may have outlived
+                    // Re-assert the preconditions at FIRE time, not just at pop time — a 90s defer
+                    // easily outlives them.
+                    //
+                    // The service itself first: if bubbles were stopped (engine stop, panic, the
+                    // feature switched off) while the rain fell, the user is no longer in the mode
+                    // that earned this, and a fullscreen video/browser takeover arriving after the
+                    // stop is the exact "I turned it off and it still fired" complaint.
+                    if (!_isRunning && !_chaosActive)
+                    {
+                        App.Logger?.Information("Bubble: dropped deferred {Kind} pop — bubbles are no longer running", payload.Kind);
+                        return;
+                    }
+
+                    // Then the one-takeover-at-a-time gate: the cascade may have outlived
                     // whatever else started playing in the meantime.
                     if (App.Video?.IsPlaying == true)
                     {

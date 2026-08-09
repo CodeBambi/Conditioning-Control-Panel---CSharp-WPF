@@ -1776,7 +1776,12 @@ namespace ConditioningControlPanel
                 if (!s.FlashEnabled) App.Flash?.Stop();
                 if (!s.MandatoryVideosEnabled) App.Video?.Stop();
                 if (!s.SubliminalEnabled) App.Subliminal?.Stop();
-                if (!s.BubblesEnabled) App.Bubbles?.Stop();
+                // Bubbles are the one shared field here: a CHAOS run drives the SAME BubbleService,
+                // and BubbleService.Stop() ends with PopAllBubbles() over the shared list — so
+                // honouring the preset's ambient-bubbles flag mid-chaos would wipe the chaos run's
+                // own bubbles out from under it. The ambient flag is re-applied at the next start;
+                // chaos owns the field while it is running.
+                if (!s.BubblesEnabled && App.Chaos?.IsRunning != true) App.Bubbles?.Stop();
                 if (!s.BubbleCountEnabled) App.BubbleCount?.Stop();
                 if (!s.LockCardEnabled) App.LockCard?.Stop();
                 if (!s.BouncingTextEnabled) App.BouncingText?.Stop();
