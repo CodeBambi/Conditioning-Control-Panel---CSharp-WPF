@@ -300,6 +300,16 @@ namespace ConditioningControlPanel.Services
             if (App.Overlay != null)
                 App.Overlay.BypassLevelCheck = false;
 
+            // EnsureOverlayRunning() starts OverlayService on controller connect even when the
+            // subject has no engine of their own running. Nothing used to stop it again, so the
+            // service stayed IsRunning with a live 500 ms DispatcherTimer for the rest of the
+            // process, reacting to settings toggles with no engine behind them. Hand it back
+            // only when the subject isn't running an engine — if they are, the overlay belongs
+            // to them now and StopEngine will deal with it.
+            // (On the UI thread — Stop() disposes a DispatcherTimer and closes overlay windows.)
+            if (MainWindowRef?.IsEngineRunning != true)
+                DispatcherHelper.RunOnUISync(() => App.Overlay?.Stop());
+
             if (ControllerConnected)
             {
                 ControllerConnected = false;
