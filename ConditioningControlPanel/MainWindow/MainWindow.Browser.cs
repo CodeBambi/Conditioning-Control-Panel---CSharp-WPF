@@ -400,7 +400,7 @@ namespace ConditioningControlPanel
         /// bring-up that never completes falls through to the external browser rather than
         /// swallowing the click. Continuations resume on the dispatcher (UI thread).
         /// </summary>
-        private async System.Threading.Tasks.Task NavigateWhenBrowserReadyAsync(string url, bool autoPlayFullscreen)
+        private async System.Threading.Tasks.Task NavigateWhenBrowserReadyAsync(string url, bool autoPlayFullscreen, bool userInitiated)
         {
             // Surface the browser while it finishes coming up, exactly as the ready path does —
             // otherwise the click looks ignored for as long as the bring-up takes.
@@ -411,7 +411,9 @@ namespace ConditioningControlPanel
 
             if (_browser?.IsInitialized == true && _browser.WebView?.CoreWebView2 != null)
             {
-                NavigateToUrlInBrowser(url, autoPlayFullscreen);
+                // Carry userInitiated across the wait: offline mode can be switched on during the
+                // bring-up, and the re-entry decides the toast all over again.
+                NavigateToUrlInBrowser(url, autoPlayFullscreen, userInitiated);
                 return;
             }
 
@@ -539,15 +541,21 @@ namespace ConditioningControlPanel
         /// </summary>
         /// <param name="url">The URL to navigate to</param>
         /// <param name="autoPlayFullscreen">If true, auto-plays video and requests fullscreen on the video element</param>
+        /// <param name="userInitiated">
+        /// True when the navigation traces back to something the user just clicked (a speech-bubble
+        /// link, a companion link, a remote controller's explicit command) - those deserve the
+        /// offline toast, because otherwise the click reads as broken. False for navigation the app
+        /// decides on its own (Autonomy's fullscreen web video, a Chaos effect payload): the user
+        /// did not ask, so a toast there is just offline mode nagging in the background.
+        /// </param>
         /// <returns>True if navigation was initiated, false if browser unavailable</returns>
-        public bool NavigateToUrlInBrowser(string url, bool autoPlayFullscreen = false)
+        public bool NavigateToUrlInBrowser(string url, bool autoPlayFullscreen = false, bool userInitiated = true)
         {
-            // Block navigation in offline mode. #867: the caller here is usually a speech-bubble
-            // link, so the user clicked something and deserves to know why nothing opened.
+            // Block navigation in offline mode.
             if (App.Settings?.Current?.OfflineMode == true)
             {
                 App.Logger?.Debug("Browser navigation blocked in offline mode: {Url}", url);
-                NotifyBrowserBlockedOffline();
+                if (userInitiated) NotifyBrowserBlockedOffline();
                 return false;
             }
 
@@ -567,7 +575,7 @@ namespace ConditioningControlPanel
                     // set the moment CreateBrowserAsync returns, BrowserReady only fires once
                     // WebView_Loaded finishes). Re-initializing here would tear down an init that
                     // is still in flight, so wait it out and navigate when it lands.
-                    _ = NavigateWhenBrowserReadyAsync(url, autoPlayFullscreen);
+                    _ = NavigateWhenBrowserReadyAsync(url, autoPlayFullscreen, userInitiated);
                     return true;
                 }
                 if (_browserInitialized)
