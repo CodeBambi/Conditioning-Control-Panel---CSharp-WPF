@@ -36,9 +36,9 @@ public class GamificationBridge : IDisposable
     private const int DownTheRabbitHolePlays = 25;        // "play 25 enhancements"
     private const int OnRailsTriggerTypes = 5;            // "5+ distinct trigger types"
     private const int HandsFreeGazePops = 50;             // "pop 50 bubbles by gaze"
-    private const int HonorRollCategories = 3;            // "perfect 3 different categories"
-    private const int TeachersPetPasses = 25;             // "pass 25 quizzes"
-    private const int HeldBackFailStreak = 3;             // "fail 3 quizzes in a row"
+    private const int HonorRollCategories = 3;            // "top marks in 3 different categories"
+    private const int TeachersPetPasses = 25;             // "pass 25 graded runs"
+    private const int HeldBackFailStreak = 3;             // "fail 3 in a row" (classic quiz only)
 
     /// <summary>
     /// Wire up all subscriptions. Safe to call once; idempotent. Must run after the
@@ -84,7 +84,9 @@ public class GamificationBridge : IDisposable
             if (App.Catalogue != null)
                 App.Catalogue.SubmissionSucceeded += OnCatalogueSubmitted;
 
-            // ----- Quiz (patron: top_of_the_class, teachers_pet, honor_roll, held_back) -----
+            // ----- Graded runs (patron: top_of_the_class, teachers_pet, honor_roll, held_back) -----
+            // Raised by IntakeHostService on a completed Graded Intake, and still by QuizWindow
+            // for the classic quiz (whose launcher is hidden but whose handler is intact).
             QuizService.QuizCompleted += OnQuizCompleted;
 
             // ----- Local AI persistent memory (patron: she_remembers) -----
@@ -488,6 +490,21 @@ public class GamificationBridge : IDisposable
         catch (Exception ex) { App.Logger?.Warning(ex, "GamificationBridge: catalogue submit handler failed"); }
     }
 
+    /// <summary>
+    /// Graded-run results. Since 6.7.x the live source is a completed Graded Intake
+    /// (<c>IntakeHostService</c>) rather than the classic AI quiz, whose launcher is hidden —
+    /// which is why these four sat unobtainable (#870). The handler is source-agnostic on
+    /// purpose: it reads a grade and a category and does not care which surface produced them.
+    ///
+    /// <list type="bullet">
+    /// <item><c>teachers_pet</c> — <see cref="TeachersPetPasses"/> completed runs.</item>
+    /// <item><c>top_of_the_class</c> — one run graded at or above the top-marks bar (90%).</item>
+    /// <item><c>honor_roll</c> — top marks in <see cref="HonorRollCategories"/> distinct
+    /// categories; from the intake that is distinct niches, which follow the active mod.</item>
+    /// <item><c>held_back</c> — still fail-streak only. An intake has no fail state, so this can
+    /// only ever come from the classic quiz. Left as-is deliberately (product decision).</item>
+    /// </list>
+    /// </summary>
     private void OnQuizCompleted(object? sender, QuizCompletedEventArgs e)
     {
         try

@@ -42,6 +42,15 @@ namespace ConditioningControlPanel.Services.Quiz
 
         private const int Protocol = 1;
 
+        /// <summary>
+        /// "Top marks" bar for the graded-intake achievements (#870), as a percentage of the run's
+        /// compliance score. Deliberately NOT full marks and deliberately the same 90 the classic
+        /// quiz used (<c>QuizWindow.PerfectScorePercent</c>): a banded descent scores partly on
+        /// pacing, so 100% is not a thing a real run reaches and a 100% bar would leave these
+        /// achievements exactly as dead as the collapsed quiz launcher left them.
+        /// </summary>
+        private const double TopMarksPercent = 90.0;
+
         /// <summary>AI server proxy base. MUST match <c>AiService.ProxyBaseUrl</c> — the server's
         /// <c>POST /intake/ai</c> gate (Agent H) expects the same Patreon bearer the app already
         /// uses for <c>/ai/chat</c>. Kept as a local constant to avoid taking a dependency on the
@@ -384,6 +393,37 @@ namespace ConditioningControlPanel.Services.Quiz
             if (disp == null || disp.HasShutdownStarted) return;
             disp.BeginInvoke(() =>
             {
+                // EMIT hook for GamificationBridge's graded achievements (#870). The classic AI
+                // quiz launcher is Collapsed - Graded Intake replaced it - so QuizWindow's raise
+                // is unreachable for everyone and top_of_the_class / teachers_pet / honor_roll
+                // had no live source at all. The intake IS the graded run now, and it carries
+                // everything the bridge asks for: a grade (the run's compliance score,
+                // totalScore/maxScore, the same ratio the certificate prints) and a category
+                // (the niche the run was themed for). Reaching quiz-result at all is the pass -
+                // the page only emits it when a run genuinely finishes, and abort/crash paths
+                // emit nothing.
+                //
+                // held_back is deliberately left unwired (product decision): an intake has no
+                // fail state to be held back by, so `passed` is always true here and the bridge's
+                // fail streak is never incremented from this path.
+                //
+                // Inside the dispatcher block on purpose - an unlock can raise the achievement
+                // popup, which is UI.
+                try
+                {
+                    var pct = run.MaxScore > 0 ? run.TotalScore / run.MaxScore * 100.0 : 0.0;
+                    var niche = string.IsNullOrWhiteSpace(run.Niche)
+                        ? IntakeNiche.Fallback
+                        : run.Niche.Trim().ToLowerInvariant();
+
+                    QuizService.RaiseQuizCompleted(
+                        (int)Math.Round(run.TotalScore),
+                        passed: true,
+                        perfect: run.MaxScore > 0 && pct >= TopMarksPercent,
+                        category: niche);
+                }
+                catch (Exception ex) { App.Logger?.Debug("IntakeHostService: RaiseQuizCompleted failed: {E}", ex.Message); }
+
                 // Completing an intake earns XP (mirrors PopQuiz's 25-base): deeper descent and
                 // affirmed mantras pay more, capped so endless laps can't farm it.
                 try
