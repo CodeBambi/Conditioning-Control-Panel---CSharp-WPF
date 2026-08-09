@@ -549,8 +549,14 @@ namespace ConditioningControlPanel
                 var modWantsBambiCloud = App.Mods?.ShowBambiCloudOption() ?? true;
                 var showBambiCloud = modWantsBambiCloud || newValue;
                 SettingsTab.RbBambiCloud.Visibility = showBambiCloud ? Visibility.Visible : Visibility.Collapsed;
-                if (!modWantsBambiCloud && !newValue)
-                    SettingsTab.RbHypnoTube.IsChecked = true;
+
+                // The selection rule lives in ONE place. This used to be a third hand-rolled copy
+                // of it, and when the site radios moved from Checked to Click in #867 that copy
+                // quietly lost its navigation: setting RbHypnoTube.IsChecked used to navigate as
+                // a side effect, and afterwards it only moved the dot - leaving the radio on
+                // HypnoTube over the BambiCloud page the user had just hidden the button for.
+                // navigateIfChanged puts the navigation back, explicitly.
+                SyncSiteRadiosToActiveMod(navigateIfChanged: true);
 
                 RefreshBrowserLoadingText();
             }

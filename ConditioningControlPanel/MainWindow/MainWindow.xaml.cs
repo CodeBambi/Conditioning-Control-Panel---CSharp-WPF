@@ -1495,9 +1495,11 @@ namespace ConditioningControlPanel
             var showBambiCloud = modWantsBambiCloud || (App.Settings?.Current?.ForceShowBambiCloud ?? false);
             SettingsTab.RbBambiCloud.Visibility = showBambiCloud ? Visibility.Visible : Visibility.Collapsed;
 
-            // #867: select the site from the mod, always - not only when BambiCloud is hidden.
-            // The override reveals BambiCloud, it doesn't switch to it, and after an external
-            // link neither radio is selected at all. SyncSiteRadiosToActiveMod covers both.
+            // #867: select the site from the mod - not only when BambiCloud is hidden. The
+            // override reveals BambiCloud, it doesn't switch to it, and after an external link
+            // neither radio is selected at all. SyncSiteRadiosToActiveMod covers both, and it
+            // stands down while a live page owns the radios so RefreshBrowserLoadingText below
+            // keeps describing the site actually on screen.
             SyncSiteRadiosToActiveMod();
 
             RefreshBrowserLoadingText();
@@ -1778,9 +1780,11 @@ namespace ConditioningControlPanel
             var modWantsBambiCloud = App.Mods.ShowBambiCloudOption();
             var showBambiCloud = modWantsBambiCloud || (App.Settings?.Current?.ForceShowBambiCloud ?? false);
             SettingsTab.RbBambiCloud.Visibility = showBambiCloud ? Visibility.Visible : Visibility.Collapsed;
-            // #867: the selection follows the new mod's own site every time, not just when
-            // BambiCloud is hidden - otherwise a switch could leave the radio pointing at a
-            // site this mod never uses, and clicking it was the only way to find out.
+            // #867: the selection follows the new mod's own site, not just when BambiCloud is
+            // hidden - otherwise a switch could leave the radio pointing at a site this mod never
+            // uses, and clicking it was the only way to find out. It leaves the radios alone
+            // while they are reporting a live page; the !modWantsBambiCloud branch below is the
+            // one case that overrides that, and it navigates in the same breath.
             SyncSiteRadiosToActiveMod();
             if (!modWantsBambiCloud)
             {

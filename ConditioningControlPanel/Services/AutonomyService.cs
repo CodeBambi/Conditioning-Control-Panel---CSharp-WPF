@@ -1501,8 +1501,10 @@ namespace ConditioningControlPanel.Services
             // from "a long video is still playing", so it either released too early or relied on
             // a chain of generation counters to stay out of the way.
 
-            // Navigate to video with fullscreen autoplay
-            if (mainWindow.NavigateToUrlInBrowser(videoUrl, autoPlayFullscreen: true))
+            // Navigate to video with fullscreen autoplay. userInitiated: false - the companion
+            // decided this on her own, so an offline block must stay silent rather than pop a
+            // toast at a user who never clicked anything.
+            if (mainWindow.NavigateToUrlInBrowser(videoUrl, autoPlayFullscreen: true, userInitiated: false))
             {
                 App.Logger?.Information("AutonomyService: Web video navigation initiated for '{Name}'", videoName);
             }

@@ -11,14 +11,18 @@
              d:DesignHeight="450" d:DesignWidth="800">
         <Grid>
         <Grid.ColumnDefinitions>
-            <!-- #860: 84 of rail + 17 reserved for the rail's scrollbar. The chips used to
-                 be laid out against the full 84 and then squeezed by 17 the moment the
-                 ScrollViewer decided it needed a bar (short windows, or the Programs
-                 "Today" card taking a bite out of row 1) - a 25% width loss that cropped
-                 the chip art and wrapped the captions. The gutter is reserved here and the
-                 chip stack is pinned to its old width, so a scrollbar costs the chips
-                 nothing. Keep the two in sync: RailChipStackWidth = 84 - 5 - 2 - 8. -->
-            <ColumnDefinition Width="101"/>
+            <!-- #860: 84 of rail + 8 reserved for the rail's scrollbar. The chips used to be
+                 laid out against the full 84 and then squeezed the moment the ScrollViewer
+                 decided it needed a bar (short windows, or the Programs "Today" card taking a
+                 bite out of row 1), cropping the chip art and wrapping the captions. The gutter
+                 is reserved here and the chip stack is pinned to its old width, so a scrollbar
+                 costs the chips nothing.
+                 8, not the 17 of an OS scrollbar: Resources/Theme/MainWindow.xaml restyles
+                 every ScrollBar and sets Width=8 on the vertical one, so 17 over-reserved the
+                 gutter by 9 and pushed the whole settings grid right.
+                 Keep in sync with PremiumRailContent: 92 - 5 rail margin - 2 border
+                 - 8 scrollbar - 8 stack margin = 69. -->
+            <ColumnDefinition Width="92"/>
             <ColumnDefinition Width="640"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
@@ -343,7 +347,9 @@
                 <!-- #860: fixed width + Center, so a scrollbar appearing shifts the chips
                      but never narrows them. 69 = the width the chips had before the column
                      reserved its scrollbar gutter (84 rail - 5 rail margin - 2 border
-                     - 8 stack margin). If the rail column width changes, change this too. -->
+                     - 8 stack margin), and it is exactly what the 92px column leaves once
+                     the theme's 8px scrollbar takes its share. If the rail column width
+                     changes, change this too. -->
                 <StackPanel x:Name="PremiumRailContent" x:FieldModifier="internal" Margin="4,6,4,6"
                             Width="69" HorizontalAlignment="Center">
                     <TextBlock Text="PREMIUM" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource SecondaryBrush}"
