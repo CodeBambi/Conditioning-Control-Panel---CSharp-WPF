@@ -3886,6 +3886,7 @@
   "label_ai_custom_error": "自定义 AI 出错 - 请检查 Endpoint、模型和 API 密钥。",
   "browser_show_bambicloud_label": "显示 BambiCloud",
   "browser_show_bambicloud_tooltip": "在通常隐藏它的模组上显示 BambiCloud 站点开关。模组的默认站点仍保持选中，这只是让你可以切换到 BambiCloud。",
+  "browser_toast_offline_blocked": "离线模式已开启，浏览器保持断开。若要浏览，请在设置中关闭它。",
   "desc_remote_pairing_url": "无需安装任何应用 - 用手机浏览器打开 cclabs.app/remote 并输入此代码。",
 
   "guide_takeover_title": "运作方式",

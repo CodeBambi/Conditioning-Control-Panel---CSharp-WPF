@@ -11,7 +11,14 @@
              d:DesignHeight="450" d:DesignWidth="800">
         <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="84"/>
+            <!-- #860: 84 of rail + 17 reserved for the rail's scrollbar. The chips used to
+                 be laid out against the full 84 and then squeezed by 17 the moment the
+                 ScrollViewer decided it needed a bar (short windows, or the Programs
+                 "Today" card taking a bite out of row 1) - a 25% width loss that cropped
+                 the chip art and wrapped the captions. The gutter is reserved here and the
+                 chip stack is pinned to its old width, so a scrollbar costs the chips
+                 nothing. Keep the two in sync: RailChipStackWidth = 84 - 5 - 2 - 8. -->
+            <ColumnDefinition Width="101"/>
             <ColumnDefinition Width="640"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
@@ -333,7 +340,12 @@
                      the rail ever outgrows the row again it scrolls instead of silently
                      eating a feature. It shows no chrome while everything fits. -->
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel x:Name="PremiumRailContent" x:FieldModifier="internal" Margin="4,6,4,6">
+                <!-- #860: fixed width + Center, so a scrollbar appearing shifts the chips
+                     but never narrows them. 69 = the width the chips had before the column
+                     reserved its scrollbar gutter (84 rail - 5 rail margin - 2 border
+                     - 8 stack margin). If the rail column width changes, change this too. -->
+                <StackPanel x:Name="PremiumRailContent" x:FieldModifier="internal" Margin="4,6,4,6"
+                            Width="69" HorizontalAlignment="Center">
                     <TextBlock Text="PREMIUM" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource SecondaryBrush}"
                                TextAlignment="Center" Margin="0,0,0,6"/>
                     <Button x:Name="ChipTakeover" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
@@ -1045,26 +1057,10 @@
                             </StackPanel>
                         </Grid>
 
-                        <!-- Avoid Screen Center (#770) — keep flashes off the crosshair while gaming.
-                             This control lives ONLY here, never in FlashFeatureControl: a second
-                             surface with a mismatched slider range gets clamped on the SaveSettings
-                             round-trip (see the SliderImages warning above). -->
-                        <Border Background="#3D2D4D" CornerRadius="5" Padding="8,6" Margin="0,5,0,0"
-                                ToolTip="{loc:Str tooltip_keep_flash_images_out_of_a_square_in_the_midd}">
-                            <StackPanel>
-                                <Grid>
-                                    <StackPanel Orientation="Horizontal">
-                                        <CheckBox x:Name="ChkFlashAvoidCenter" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                                  Checked="ChkFlashAvoidCenter_Changed" Unchecked="ChkFlashAvoidCenter_Changed"/>
-                                        <helpers:EmojiTextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_avoid_screen_center}" Margin="6,0,0,0"/>
-                                    </StackPanel>
-                                    <TextBlock x:Name="TxtCenterExclusion" x:FieldModifier="internal" Style="{StaticResource ValueLabel}" Text="25%" HorizontalAlignment="Right"/>
-                                </Grid>
-                                <Slider x:Name="SliderCenterExclusion" x:FieldModifier="internal" Minimum="5" Maximum="60" Value="25" Margin="0,3,0,0"
-                                        IsEnabled="{Binding IsChecked, ElementName=ChkFlashAvoidCenter}"
-                                        ValueChanged="SliderCenterExclusion_Changed"/>
-                            </StackPanel>
-                        </Border>
+                        <!-- Avoid Screen Center (#770) moved to Features/FlashFeatureControl.xaml
+                             for #859: this host is Collapsed, so the copy that lived here was the
+                             feature's only UI and it was unreachable. Nothing may re-add it here -
+                             two bound surfaces for one setting is what the old note warned about. -->
 
                         <!-- Fade / Duration in two columns -->
                         <Grid Margin="0,2,0,0">
@@ -1511,8 +1507,14 @@
                         <!-- Site Toggle - inline -->
                         <Border Grid.Column="1" Background="{DynamicResource PanelAccentBrush}" CornerRadius="10" Padding="2" Margin="10,0,0,0" VerticalAlignment="Center">
                             <StackPanel Orientation="Horizontal">
+                                <!-- #867: Click, not Checked. A RadioButton raises Checked only when
+                                     it CHANGES, so clicking the site you are already on did nothing -
+                                     which is exactly what a user does to get back to the homepage
+                                     from a video page. Click fires either way. It also means code
+                                     that sets IsChecked (mod switch, external-link sync) no longer
+                                     triggers a navigation it did not ask for. -->
                                 <RadioButton x:Name="RbBambiCloud" x:FieldModifier="internal" Content="{loc:Str btn_bambicloud}" GroupName="BrowserSite"
-                                             IsChecked="True" Checked="BrowserSiteToggle_Changed"
+                                             IsChecked="True" Click="BrowserSiteToggle_Click"
                                              Foreground="{DynamicResource TextLightBrush}" FontSize="10" Cursor="Hand" Margin="2,1">
                                     <RadioButton.Template>
                                         <ControlTemplate TargetType="RadioButton">
@@ -1540,7 +1542,7 @@
                                 </RadioButton.Template>
                             </RadioButton>
                             <RadioButton x:Name="RbHypnoTube" x:FieldModifier="internal" Content="{loc:Str btn_hypnotube}" GroupName="BrowserSite"
-                                         Checked="BrowserSiteToggle_Changed"
+                                         Click="BrowserSiteToggle_Click"
                                          Foreground="{DynamicResource TextLightBrush}" FontSize="10" Cursor="Hand" Margin="2,1">
                                 <RadioButton.Template>
                                     <ControlTemplate TargetType="RadioButton">

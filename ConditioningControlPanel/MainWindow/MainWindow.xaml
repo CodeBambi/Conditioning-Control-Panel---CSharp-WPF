@@ -237,31 +237,65 @@
         <!-- Header Bar - Row 1 -->
         <Border Grid.Row="1" Background="{StaticResource PanelBgBrush}" Padding="15,8">
             <Grid>
+                <!-- #857: the tab strip owns an Auto column, the identity cluster owns the star.
+                     It used to be the other way round, so the Auto identity cluster took whatever
+                     it wanted and the right-aligned tab strip - measured against the leftovers -
+                     overflowed LEFT out of its own column, hiding Dashboard behind the mod
+                     switcher. Navigation is the one thing that must never be clipped, so it now
+                     sizes to content first and the identity cluster absorbs what is left. -->
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
                 <!-- Title + Player Title + App Name + Version -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- #860: a Grid, not a StackPanel, so this cluster can give width back.
+                     Column 1 (the player title) is the single elastic cell and carries the
+                     200px cap the TextBlock used to own on its own: with room to spare the
+                     level pill still hugs the title exactly as before, and when the window
+                     narrows the title ellipsizes instead of the cluster shouldering the tabs
+                     out of the header. HorizontalAlignment=Left keeps the cluster from
+                     spreading across the (now much wider) star column. -->
+                <Grid Grid.Column="0" HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*" MaxWidth="200"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
                     <!-- v6.0 Mod Switcher: ComboBox + gear button for management -->
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                        <!-- #860: MaxWidth caps a long mod name (creator mods name themselves)
+                             so the switcher can never shove the header around. The item template
+                             is a Grid rather than a StackPanel on purpose - a horizontal
+                             StackPanel measures its children against infinite width, so
+                             TextTrimming there would never fire and the name would hard-clip.
+                             In the drop-down the popup measures unconstrained, so items there
+                             still show their full name. -->
                         <ComboBox x:Name="ModSelectorCombo"
                                   Style="{StaticResource DarkComboBoxStyle}"
                                   ItemsSource="{Binding AvailableMods, RelativeSource={RelativeSource AncestorType=Window}}"
                                   SelectedValuePath="Id"
                                   SelectionChanged="ModSelectorCombo_SelectionChanged"
-                                  MinWidth="100" Height="22" VerticalAlignment="Center"
+                                  MinWidth="100" MaxWidth="150" Height="22" VerticalAlignment="Center"
                                   FontSize="11" FontWeight="SemiBold"
                                   ToolTip="{loc:Str tooltip_switch_mod}">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate>
-                                    <StackPanel Orientation="Horizontal">
-                                        <Border Width="8" Height="8" CornerRadius="4" Margin="0,0,8,0"
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Width="8" Height="8" CornerRadius="4" Margin="0,0,8,0"
                                                 Background="{Binding AccentBrush}" VerticalAlignment="Center"/>
-                                        <TextBlock Text="{Binding Name}" Foreground="White" VerticalAlignment="Center" FontSize="11"/>
-                                    </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{Binding Name}" Foreground="White"
+                                                   VerticalAlignment="Center" FontSize="11"
+                                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
+                                    </Grid>
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
@@ -273,11 +307,13 @@
                              LineHeight/BlockLineHeight pins each line so the 28px never clips. -->
                         <Button x:Name="BtnManageMods" Click="BtnManageMods_Click"
                                 ToolTip="{loc:Str tooltip_manage_mods}"
-                                Margin="5,0,0,0" Height="28" VerticalAlignment="Center"
+                                Margin="4,0,0,0" Height="28" VerticalAlignment="Center"
                                 Background="Transparent" BorderThickness="0" Cursor="Hand">
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
-                                    <Border x:Name="capsule" CornerRadius="4" Padding="7,1"
+                                    <!-- #857: padding trimmed 7->5 so the capsule costs the
+                                         header a few px less; the caption still drives the width. -->
+                                    <Border x:Name="capsule" CornerRadius="4" Padding="5,1"
                                             Background="{DynamicResource TransparentPink20Brush}"
                                             BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
                                         <StackPanel VerticalAlignment="Center">
@@ -301,7 +337,7 @@
                             </Button.Template>
                         </Button>
                     </StackPanel>
-                    <TextBlock x:Name="TxtPlayerTitle" Text="{loc:Str label_basic_subject}" Foreground="{DynamicResource PinkBrush}"
+                    <TextBlock Grid.Column="1" x:Name="TxtPlayerTitle" Text="{loc:Str label_basic_subject}" Foreground="{DynamicResource PinkBrush}"
                                FontSize="18" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0"
                                MaxWidth="200" TextTrimming="CharacterEllipsis"
                                ToolTip="{Binding ElementName=TxtPlayerTitle, Path=Text}">
@@ -309,13 +345,13 @@
                             <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="8" ShadowDepth="0" Opacity="0.6"/>
                         </TextBlock.Effect>
                     </TextBlock>
-                    <Border Background="{DynamicResource PinkBrush}" CornerRadius="12" Padding="10,4" Margin="0,0,20,0">
+                    <Border Grid.Column="2" Background="{DynamicResource PinkBrush}" CornerRadius="12" Padding="10,4" Margin="0,0,20,0">
                         <TextBlock x:Name="TxtLevel" Text="{loc:Str label_lvl_1}" Foreground="White" FontWeight="Bold" FontSize="12"/>
                     </Border>
-                    <TextBlock x:Name="TxtHeaderVersion" Text="" Foreground="{DynamicResource PinkBrush}" FontSize="10" FontWeight="Normal"
+                    <TextBlock Grid.Column="3" x:Name="TxtHeaderVersion" Text="" Foreground="{DynamicResource PinkBrush}" FontSize="10" FontWeight="Normal"
                                VerticalAlignment="Bottom" Margin="4,0,0,3"/>
                     <!-- Streak Fire Icon (unlocked by Good Girl Streak skill) -->
-                    <Border x:Name="StreakFirePill" VerticalAlignment="Center"
+                    <Border Grid.Column="4" x:Name="StreakFirePill" VerticalAlignment="Center"
                             Margin="10,0,0,0" Visibility="Collapsed" CornerRadius="11" Padding="7,4"
                             Background="#1E1232" BorderBrush="#5C3D6E" BorderThickness="1"
                             ToolTip="{loc:Str tooltip_daily_login_streak_good_girl_streak_skill}">
@@ -336,7 +372,7 @@
                             </Viewbox>
                         </StackPanel>
                     </Border>
-                </StackPanel>
+                </Grid>
 
                 <!-- Row 1 Tab Buttons: Settings, Presets, Progression, Assets -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">

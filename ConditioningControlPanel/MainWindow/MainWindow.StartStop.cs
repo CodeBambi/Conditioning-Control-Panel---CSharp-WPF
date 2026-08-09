@@ -718,8 +718,7 @@ namespace ConditioningControlPanel
             s.ImageScale = (int)SettingsTab.SliderSize.Value;
             s.FlashOpacity = (int)SettingsTab.SliderOpacity.Value;
             s.FadeDuration = (int)SettingsTab.SliderFade.Value;
-            s.FlashAvoidCenter = SettingsTab.ChkFlashAvoidCenter.IsChecked ?? false;
-            s.FlashCenterExclusionPercent = (int)SettingsTab.SliderCenterExclusion.Value;
+            // #859: avoid-screen-center is owned by FlashFeatureControl - see MainWindow.Settings.cs.
 
             // Video settings
             s.MandatoryVideosEnabled = SettingsTab.ChkVideoEnabled.IsChecked ?? false;

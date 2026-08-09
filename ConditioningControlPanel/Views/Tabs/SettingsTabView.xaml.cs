@@ -63,10 +63,10 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BrowserLoadingText_Click(sender, e);
         }
-        private void BrowserSiteToggle_Changed(object sender, RoutedEventArgs e)
+        private void BrowserSiteToggle_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
-                mw.BrowserSiteToggle_Changed(sender, e);
+                mw.BrowserSiteToggle_Click(sender, e);
         }
         private void BtnAttentionStyle_Click(object sender, RoutedEventArgs e)
         {
@@ -371,11 +371,6 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkFlashAudio_Changed(sender, e);
         }
-        private void ChkFlashAvoidCenter_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkFlashAvoidCenter_Changed(sender, e);
-        }
         private void ChkFlashEnabled_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -538,11 +533,6 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.SliderPerMin_Changed(sender, e);
-        }
-        private void SliderCenterExclusion_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderCenterExclusion_Changed(sender, e);
         }
         private void SliderSize_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {

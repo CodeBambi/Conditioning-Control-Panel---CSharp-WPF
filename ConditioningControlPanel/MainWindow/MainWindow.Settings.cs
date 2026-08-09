@@ -54,10 +54,8 @@ namespace ConditioningControlPanel
             SettingsTab.ChkFlashAudio.IsChecked = s.FlashAudioEnabled;
             SettingsTab.SliderFlashDuration.IsEnabled = !s.FlashAudioEnabled;
             SettingsTab.SliderFlashDuration.Opacity = s.FlashAudioEnabled ? 0.5 : 1.0;
-            SettingsTab.ChkFlashAvoidCenter.IsChecked = s.FlashAvoidCenter;
-            SettingsTab.SliderCenterExclusion.Value = s.FlashCenterExclusionPercent;
-            SettingsTab.TxtCenterExclusion.Text = $"{s.FlashCenterExclusionPercent}%";
-            
+            // #859: avoid-screen-center now loads itself in FlashFeatureControl.
+
             // Set audio link state based on frequency
             _isLoading = false;
             UpdateAudioLinkState();
@@ -414,8 +412,9 @@ namespace ConditioningControlPanel
             s.ImageScale = (int)SettingsTab.SliderSize.Value;
             s.FlashOpacity = (int)SettingsTab.SliderOpacity.Value;
             s.FadeDuration = (int)SettingsTab.SliderFade.Value;
-            s.FlashAvoidCenter = SettingsTab.ChkFlashAvoidCenter.IsChecked ?? false;
-            s.FlashCenterExclusionPercent = (int)SettingsTab.SliderCenterExclusion.Value;
+            // #859: FlashAvoidCenter / FlashCenterExclusionPercent are NOT mirrored here any
+            // more. FlashFeatureControl is their only surface and writes them on change; a
+            // mirror here would silently overwrite the user's choice on every save.
 
             // Video
             s.MandatoryVideosEnabled = SettingsTab.ChkVideoEnabled.IsChecked ?? false;
