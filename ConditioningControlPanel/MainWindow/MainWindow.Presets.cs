@@ -1741,16 +1741,50 @@ namespace ConditioningControlPanel
 
             preset.ApplyTo(App.Settings.Current);
             App.Settings.Save();
-            
+
             _isLoading = true;
             LoadSettings();
             _isLoading = false;
-            
+
+            // Flags alone don't reach the live engine (#872).
+            ReconcileRunningServices();
+
             RefreshPresetsDropdown();
-            
+
             App.Logger?.Information("Loaded preset: {Name}", preset.Name);
             MessageBox.Show(Loc.GetF("msg_preset_0_loaded", preset.Name), Loc.Get("title_preset_loaded"),
                 MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        /// <summary>
+        /// #872: a preset writes the feature flags but nothing told the RUNNING services about it,
+        /// so a feature the preset switched off kept firing until the engine was restarted - the
+        /// bubble-count game the user watched appear after loading a preset that disables it.
+        /// Stops every service whose flag the preset cleared.
+        ///
+        /// Deliberately one-way: it never STARTS a service the preset turned on. The feature-card
+        /// quick toggles above only start a service on an explicit user click, and a preset load
+        /// should not conjure new effects onto the screen out of a settings change.
+        /// </summary>
+        private void ReconcileRunningServices()
+        {
+            var s = App.Settings?.Current;
+            if (s == null || !App.IsEngineRunning) return;
+
+            try
+            {
+                if (!s.FlashEnabled) App.Flash?.Stop();
+                if (!s.MandatoryVideosEnabled) App.Video?.Stop();
+                if (!s.SubliminalEnabled) App.Subliminal?.Stop();
+                if (!s.BubblesEnabled) App.Bubbles?.Stop();
+                if (!s.BubbleCountEnabled) App.BubbleCount?.Stop();
+                if (!s.LockCardEnabled) App.LockCard?.Stop();
+                if (!s.BouncingTextEnabled) App.BouncingText?.Stop();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Preset apply: reconciling running services failed");
+            }
         }
 
         internal void BtnLoadPreset_Click(object sender, RoutedEventArgs e)
