@@ -733,10 +733,26 @@ namespace ConditioningControlPanel
             TxtUserInput.Text = "";
             ToggleInputPanel();
 
+            // Which of the two send paths below this message takes. Decided ONCE, up front,
+            // so the EMIT hook and the actual call can't disagree if the kill switch flips
+            // between them.
+            var brain = App.Brain;
+            var routesThroughBrain =
+                App.Settings?.Current?.AiChatEnabled == true && App.Ai != null && App.Ai.IsAvailable
+                && Services.Companion.Brain.CompanionBrain.ShouldRoute(brain);
+
             // EMIT hook for GamificationBridge companion-chat achievements. Fired once
             // per genuine user send (past the cooldown gate, non-empty input), before
             // the moderation/AI path so it counts the attempt regardless of outcome.
-            App.Companion?.NotifyUserMessageSent();
+            //
+            // #877: CompanionBrain.ChatAsync now raises this itself, because it is the funnel
+            // EVERY chat surface (this box, Her Room) goes through and one call site could
+            // never speak for the others. So emit here ONLY for the paths that never reach it:
+            // the legacy stateless GetBambiReplyExAsync call and the no-AI preset-phrase
+            // branch. Emitting unconditionally would double-count every message sent from
+            // this box, which is worse than the bug it would be papering over.
+            if (!routesThroughBrain)
+                App.Companion?.NotifyUserMessageSent();
 
             // P2/H5: user input is NOT added to chat history yet. If the moderation
             // guard refuses below we throw the input away — the prohibited text must
@@ -761,8 +777,7 @@ namespace ConditioningControlPanel
                     // just local Ollama. The result shape is identical, so everything below —
                     // badge, refusal bubble, chat history — is untouched. UseCompanionBrain=false
                     // (or a brain that failed to construct) falls back to the legacy stateless call.
-                    var brain = App.Brain;
-                    var result = Services.Companion.Brain.CompanionBrain.ShouldRoute(brain)
+                    var result = routesThroughBrain
                         ? await brain!.ChatAsync(input)
                         : await App.Ai.GetBambiReplyExAsync(input);
 

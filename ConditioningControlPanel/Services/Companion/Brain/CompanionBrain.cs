@@ -214,6 +214,19 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             _isProcessing = true;
 
             var userTurn = Session.Append(TurnKind.UserChat, input);
+
+            // EMIT hook for the app's "the user just talked to her" signal (#877). It belongs
+            // HERE, in the funnel every chat surface goes through, not at one call site: the
+            // signal used to be raised only by the tube's legacy send handler, so Her Room's
+            // chat zone — and any future surface — never counted, and the companion-chat
+            // achievements sat at zero for anyone who chats from the room. Raised past the
+            // guards above (blank input, depth-1 queue refusal) so only a send that genuinely
+            // takes the gate counts, and at send time rather than after the reply so bark
+            // timing and MemorySignalWriter's relationship counter are unchanged. Call sites
+            // that do NOT reach here (legacy stateless path, no-AI preset path) still raise it
+            // themselves — see AvatarTubeWindow.SendChatMessageAsync.
+            try { App.Companion?.NotifyUserMessageSent(); }
+            catch (Exception ex) { App.Logger?.Debug("CompanionBrain: user-message signal failed: {Error}", ex.Message); }
             try
             {
                 var request = _assembler.BuildRequest(AiPurpose.Chat, Session, input);
