@@ -471,15 +471,14 @@
     text.style.fontSize = size + 'px';
     text.style.fontFamily = '"' + String(d.font || 'Segoe UI') + '","Segoe UI",Arial,sans-serif';
 
-    const out = document.createElement('span');
-    out.className = 'out';
-    out.textContent = label;      // textContent, never innerHTML: the trigger is user data
+    // One span, outlined by paint-order (see .attn-text .fill). The second,
+    // absolutely-positioned stroke-only span this used to build painted over
+    // the fill and ate the glyph interiors (#873).
     const fill = document.createElement('span');
     fill.className = 'fill';
-    fill.textContent = label;
+    fill.textContent = label;     // textContent, never innerHTML: the trigger is user data
     fill.style.color = d.textColor || '#FF1493';
 
-    text.appendChild(out);
     text.appendChild(fill);
     box.appendChild(text);
     el.appendChild(box);
