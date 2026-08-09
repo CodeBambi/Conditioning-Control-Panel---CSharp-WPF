@@ -349,16 +349,26 @@ public class GamificationBridge : IDisposable
 
     private void OnCompanionMessageSent(object? sender, EventArgs e)
     {
-        try
+        // Since #877 the signal is raised from inside CompanionBrain.ChatAsync, past an awaited
+        // semaphore — under gate contention that resumes on a threadpool thread, so this handler
+        // is no longer guaranteed to be on the UI thread. Marshal before touching progression
+        // state or the unlock/popup path (same reason as OnPersistentMemoryRecalled below).
+        // Marshalled HERE rather than at the emit so every other subscriber (barks,
+        // MemorySignalWriter) keeps its send-time ordering; RunOnUI runs inline when we are
+        // already on the UI thread, which is the common case.
+        DispatcherHelper.RunOnUI(() =>
         {
-            var p = Prog; if (p == null) return;
-            p.CompanionMessages++;
-            Ach?.MarkDirty();
-            Ach?.TryUnlock("pleased_to_meet_you");
-            if (p.CompanionMessages >= PillowTalkMessages)
-                Ach?.TryUnlock("pillow_talk");
-        }
-        catch (Exception ex) { App.Logger?.Warning(ex, "GamificationBridge: companion message handler failed"); }
+            try
+            {
+                var p = Prog; if (p == null) return;
+                p.CompanionMessages++;
+                Ach?.MarkDirty();
+                Ach?.TryUnlock("pleased_to_meet_you");
+                if (p.CompanionMessages >= PillowTalkMessages)
+                    Ach?.TryUnlock("pillow_talk");
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "GamificationBridge: companion message handler failed"); }
+        });
     }
 
     private void OnModChanged(object? sender, ModPackage mod)
