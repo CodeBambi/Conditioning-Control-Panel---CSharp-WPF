@@ -104,10 +104,19 @@ namespace ConditioningControlPanel
                 UpdateDirectoryListingStatus();
                 _ = RunOptInChainAsync();
 
-                // Listen for controller connection changes
+                // Listen for controller connection changes. The -= before every += is not
+                // decoration: any enable path that reaches here without StopRemoteControl having
+                // run (e.g. the service ended the session itself and OnRemoteSessionEnded merely
+                // unticked the box) would otherwise stack a second copy of every handler on the
+                // multicast list, one more per cycle. Removing a delegate that isn't subscribed
+                // is a documented no-op, so this is idempotent and kills the whole bug class.
+                App.RemoteControl.ControllerConnectedChanged -= OnRemoteControllerChanged;
                 App.RemoteControl.ControllerConnectedChanged += OnRemoteControllerChanged;
+                App.RemoteControl.ControllerIdleChanged -= OnRemoteControllerIdleChanged;
                 App.RemoteControl.ControllerIdleChanged += OnRemoteControllerIdleChanged;
+                App.RemoteControl.CommandReceived -= OnRemoteCommandReceived;
                 App.RemoteControl.CommandReceived += OnRemoteCommandReceived;
+                App.RemoteControl.SessionEnded -= OnRemoteSessionEnded;
                 App.RemoteControl.SessionEnded += OnRemoteSessionEnded;
 
                 // Wire up session callbacks for remote status
@@ -183,8 +192,11 @@ namespace ConditioningControlPanel
                 if (!ShowRemoteControlWaiver(newTier))
                     return;
 
-                // Unsubscribe before stopping so OnRemoteSessionEnded doesn't collapse the panel
+                // Unsubscribe before stopping so OnRemoteSessionEnded doesn't collapse the panel.
+                // ControllerIdleChanged has to come off too or the re-subscribe below stacks a
+                // second copy on the multicast list every time the tier is changed.
                 App.RemoteControl.ControllerConnectedChanged -= OnRemoteControllerChanged;
+                App.RemoteControl.ControllerIdleChanged -= OnRemoteControllerIdleChanged;
                 App.RemoteControl.CommandReceived -= OnRemoteCommandReceived;
                 App.RemoteControl.SessionEnded -= OnRemoteSessionEnded;
 
@@ -815,6 +827,9 @@ namespace ConditioningControlPanel
             if (App.RemoteControl != null)
             {
                 App.RemoteControl.ControllerConnectedChanged -= OnRemoteControllerChanged;
+                // Was never detached, so every enable/disable cycle left another live copy
+                // subscribed to the service and firing into this (now torn-down) tab UI.
+                App.RemoteControl.ControllerIdleChanged -= OnRemoteControllerIdleChanged;
                 App.RemoteControl.CommandReceived -= OnRemoteCommandReceived;
                 App.RemoteControl.SessionEnded -= OnRemoteSessionEnded;
                 await App.RemoteControl.StopSessionAsync();
@@ -863,17 +878,15 @@ namespace ConditioningControlPanel
 
                 if (connected)
                 {
-                    // Only stop the local session on the FIRST controller of this remote
-                    // session. On a takeover (controller A leaves, B joins), connected
-                    // briefly transitions true→false→true; without this guard, B's connect
-                    // would re-stop a session that A or the sub had running, even when
-                    // B hasn't sent any command yet (bug report #166).
-                    if (!_remoteSessionHasTakenLocal)
-                    {
-                        _remoteSessionHasTakenLocal = true;
-                        try { _sessionEngine?.StopSession(completed: false); } catch { }
-                    }
-
+                    // A controller joining must NOT kill the subject's scripted session
+                    // (#878). It used to call _sessionEngine.StopSession(completed: false)
+                    // here, which threw away the session's elapsed time and its bonus XP
+                    // the instant somebody connected — and the 120 s idle auto-disconnect
+                    // meant an idle controller could do it again on every reconnect.
+                    // The controller sees live session progress in the status push and has
+                    // explicit verbs (pause_session / stop_session / start_session /
+                    // trigger_panic) when it genuinely wants the floor. See the matching
+                    // comment in RemoteControlService's connect path.
                     ShowRemoteControlOverlay();
                     NotifyRemoteControllerJoined();
                 }
@@ -883,11 +896,6 @@ namespace ConditioningControlPanel
                 }
             });
         }
-
-        // Set true once the first controller of the active remote-control session has
-        // claimed control. Reset when the remote session ends so a future remote session
-        // re-applies the take-over-local-session step on its first controller.
-        private bool _remoteSessionHasTakenLocal;
 
         private void OnRemoteControllerIdleChanged(object? sender, EventArgs e)
         {
@@ -907,9 +915,21 @@ namespace ConditioningControlPanel
         {
             Dispatcher.Invoke(() =>
             {
-                _remoteSessionHasTakenLocal = false;
                 HideRemoteControlOverlay();
                 UpdateStartButtonForRemoteControl(false);
+                // Unticking under _isLoading deliberately suppresses ChkRemoteControlEnabled_Changed
+                // (it early-returns on _isLoading), so StopRemoteControl never runs on this path and
+                // used to leave all four handlers attached — a fresh set stacked on top on the next
+                // enable, once per expiry cycle. Detach them here so the steady state is clean.
+                // Unsubscribing from inside SessionEnded's own invocation is safe: the runtime
+                // iterates a snapshot of the invocation list.
+                if (App.RemoteControl != null)
+                {
+                    App.RemoteControl.ControllerConnectedChanged -= OnRemoteControllerChanged;
+                    App.RemoteControl.ControllerIdleChanged -= OnRemoteControllerIdleChanged;
+                    App.RemoteControl.CommandReceived -= OnRemoteCommandReceived;
+                    App.RemoteControl.SessionEnded -= OnRemoteSessionEnded;
+                }
                 _isLoading = true;
                 RemoteControlTab.ChkRemoteControlEnabled.IsChecked = false;
                 _isLoading = false;
@@ -1274,6 +1294,29 @@ namespace ConditioningControlPanel
             _isLoading = false;
         }
 
+        // The exact Session instance a remote controller started via `start_session`.
+        // Held by reference (never by id) so IsSessionRemoteStarted describes THIS run and
+        // not "some session with the same id" — every start site builds a fresh object.
+        private Models.Session? _remoteStartedSession;
+
+        /// <summary>
+        /// True only while the session the engine is running right now is the one a remote
+        /// controller started. False for a session the subject started locally (Sessions tab,
+        /// Programs tab, dashboard), and false when nothing is running.
+        /// <para>
+        /// #878 followup: RemoteControlService.StopAllRemoteEffects consults this before tearing
+        /// the subject's session down, so a remote session that merely *expires* (server 404,
+        /// 3× 401, or the subject unticking Remote Control) can no longer abandon a local run
+        /// and forfeit its bonus XP. The self-clearing reference comparison means no start/stop
+        /// path has to remember to reset a latch — the previous latch (#878's
+        /// _remoteSessionHasTakenLocal) leaked for exactly that reason.
+        /// </para>
+        /// </summary>
+        internal bool IsSessionRemoteStarted =>
+            _remoteStartedSession != null
+            && _sessionEngine?.IsRunning == true
+            && ReferenceEquals(_sessionEngine.CurrentSession, _remoteStartedSession);
+
         // Methods called by RemoteControlService for session commands
         internal async void StartSessionFromRemote(Models.Session session)
         {
@@ -1316,6 +1359,9 @@ namespace ConditioningControlPanel
                 }
 
                 App.IsSessionRunning = true;
+                // Mark the run as controller-owned BEFORE the await: the teardown that consults
+                // IsSessionRemoteStarted can fire from the poll timer at any point after this.
+                _remoteStartedSession = session;
                 await _sessionEngine.StartSessionAsync(session);
                 App.Logger?.Information("[RemoteControl] Session engine started successfully for: {Name}", session.Name);
             }

@@ -283,7 +283,6 @@ namespace ConditioningControlPanel.Services
             _controllerAutoDisconnected = false;
             _lastStatusPushUtc = DateTime.MinValue;
             _statusBackoffUntil = DateTime.MinValue;
-            _engineStoppedForController = false;
             _lastOptInTags = null;
             _lastOptInStatus = null;
             IsActive = false;
@@ -292,12 +291,24 @@ namespace ConditioningControlPanel.Services
             Tier = null;
             ControllerIdle = false;
 
-            // Stop all effects that were triggered by the remote controller
-            DispatcherHelper.RunOnUISync(() => StopAllRemoteEffects());
+            // Stop all effects that were triggered by the remote controller. force:false — the
+            // remote session ending is not a controller verb, so a session the SUBJECT started
+            // is left alone (#878 followup).
+            DispatcherHelper.RunOnUISync(() => StopAllRemoteEffects(force: false));
 
             // Reset overlay level bypass when remote session ends
             if (App.Overlay != null)
                 App.Overlay.BypassLevelCheck = false;
+
+            // EnsureOverlayRunning() starts OverlayService on controller connect even when the
+            // subject has no engine of their own running. Nothing used to stop it again, so the
+            // service stayed IsRunning with a live 500 ms DispatcherTimer for the rest of the
+            // process, reacting to settings toggles with no engine behind them. Hand it back
+            // only when the subject isn't running an engine — if they are, the overlay belongs
+            // to them now and StopEngine will deal with it.
+            // (On the UI thread — Stop() disposes a DispatcherTimer and closes overlay windows.)
+            if (MainWindowRef?.IsEngineRunning != true)
+                DispatcherHelper.RunOnUISync(() => App.Overlay?.Stop());
 
             if (ControllerConnected)
             {
@@ -333,10 +344,6 @@ namespace ConditioningControlPanel.Services
         // call would immediately bounce off the debounce gate.
         public bool IsWithinDebounceWindow =>
             (DateTime.UtcNow - _lastEmoteSentUtc).TotalMilliseconds < EmoteDebounceMs;
-        // Set true after the first controller of the active remote session caused the
-        // local engine to stop. Prevents a takeover (A leaves, B joins) from re-stopping
-        // an engine the second controller would otherwise inherit. Cleared in CleanupSession.
-        private bool _engineStoppedForController;
 
         private async Task PollForCommandsAsync()
         {
@@ -464,16 +471,18 @@ namespace ConditioningControlPanel.Services
                     ControllerConnected = connected;
                     if (connected)
                     {
-                        // Only stop the engine on the FIRST controller of this remote
-                        // session. Takeovers (controller A leaves, B joins) trigger this
-                        // branch again as a false→true transition; without the guard we'd
-                        // re-stop a session/engine that the previous controller or sub had
-                        // running, even when B sent no command (#166).
-                        if (MainWindowRef?.IsEngineRunning == true && !_engineStoppedForController)
-                        {
-                            _engineStoppedForController = true;
-                            MainWindowRef.StopEngine();
-                        }
+                        // A controller connecting does NOT tear the subject's own run down
+                        // (#878). Earlier builds stopped the local engine here so the
+                        // controller inherited a clean slate; that killed whatever the sub
+                        // had running and — because the 120 s idle auto-disconnect below
+                        // produces a genuine false→true→false→true cycle — re-ran the
+                        // teardown every couple of minutes for an idle controller.
+                        // Nothing in the dispatch table needs the engine down: every verb
+                        // calls its target service's entry point directly and works fine
+                        // alongside a running engine. "Taking over" is therefore an
+                        // explicit command (start_session, which stops any running session
+                        // itself; pause_session; stop_session; trigger_panic), never an
+                        // implicit side effect of connecting.
 
                         // Ensure overlay service is ready for remote commands
                         EnsureOverlayRunning();
@@ -767,11 +776,24 @@ namespace ConditioningControlPanel.Services
             return services;
         }
 
-        private void StopAllRemoteEffects()
+        /// <summary>
+        /// Tears down everything a controller could have started.
+        /// </summary>
+        /// <param name="force">
+        /// True only for <c>trigger_panic</c> — an explicit controller verb that means "stop
+        /// EVERYTHING", so it takes the subject's session down no matter who started it.
+        /// False for the CleanupSession path, where the remote session merely ended (server-side
+        /// expiry, 3× 401, or the subject unticking Remote Control). None of those is a
+        /// controller verb, so a session the subject started locally must survive them (#878
+        /// followup) — otherwise a 60-minute local run with Remote Control merely armed got
+        /// stopped, TrackSessionAbandoned'd and its bonus XP forfeited the moment the server
+        /// expired the unused remote session.
+        /// </param>
+        private void StopAllRemoteEffects(bool force)
         {
             try
             {
-                App.Logger?.Information("[RemoteControl] Stopping all remote effects");
+                App.Logger?.Information("[RemoteControl] Stopping all remote effects (force={Force})", force);
 
                 App.KillAllAudio();
 
@@ -835,8 +857,18 @@ namespace ConditioningControlPanel.Services
                 }
                 App.Overlay?.RefreshOverlays();
 
-                // Stop session engine and main engine if running
-                MainWindowRef?.StopSessionFromRemote();
+                // Stop session engine and main engine — but ONLY when the controller owns the
+                // run (it issued start_session) or this is a panic. A session the subject
+                // started for themselves is not the remote session's to end: see the `force`
+                // parameter docs above.
+                if (force || MainWindowRef?.IsSessionRemoteStarted == true)
+                {
+                    MainWindowRef?.StopSessionFromRemote();
+                }
+                else if (MainWindowRef?.IsEngineRunning == true)
+                {
+                    App.Logger?.Information("[RemoteControl] Leaving the subject's own session/engine running — the controller did not start it");
+                }
 
                 // Sync checkbox state and bring window to front
                 if (MainWindowRef != null)
@@ -854,47 +886,22 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Lighter cleanup for controller disconnect — stops remote-triggered effects
-        /// but preserves the user's engine and autonomy state.
-        /// </summary>
-        /// <summary>
         /// Runs when the controller disconnects (explicit or idle timeout). With the
-        /// opt-in "stop effects on disconnect" setting we tear remote effects down;
-        /// otherwise (the default continuity mode) we restore the local engine that
-        /// was force-stopped when the controller took over, so the sub's flashing /
-        /// autonomy(takeover) / haptics resume instead of staying dead (#294).
+        /// opt-in "stop effects on disconnect" setting we tear remote-triggered effects
+        /// down; otherwise (the default continuity mode) we leave everything exactly as
+        /// the controller left it.
+        /// <para>
+        /// Nothing is *restored* here any more. #294's "the sub is left dead after the
+        /// controller leaves" could only happen because the connect path force-stopped the
+        /// local engine; since #878 it never does, so there is no stopped engine to bring
+        /// back. Re-starting one here would also be actively wrong on the 120 s idle
+        /// timeout, which fires while the subject is simply sitting still.
+        /// </para>
         /// </summary>
         private void HandleControllerDisconnectCleanup()
         {
             if (App.Settings?.Current?.StopEffectsOnRemoteDisconnect == true)
                 StopRemoteTriggeredEffects();
-            else
-                RestoreEngineAfterControllerLeftIfNeeded();
-        }
-
-        /// <summary>
-        /// Restart the local engine iff WE stopped it when the controller took over
-        /// (<see cref="_engineStoppedForController"/>). Clearing the flag means a
-        /// later controller reconnect will correctly re-take-over the now-running
-        /// engine. Runs on the poll/UI thread, same context the connect path uses to
-        /// call StopEngine.
-        /// </summary>
-        private void RestoreEngineAfterControllerLeftIfNeeded()
-        {
-            if (!_engineStoppedForController) return;
-            _engineStoppedForController = false;
-            try
-            {
-                if (MainWindowRef != null && MainWindowRef.IsEngineRunning != true)
-                {
-                    App.Logger?.Information("[RemoteControl] Controller left — restoring the engine that was stopped on takeover (#294)");
-                    MainWindowRef.StartEngine();
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "[RemoteControl] Failed to restore engine after controller left");
-            }
         }
 
         private void StopRemoteTriggeredEffects()
@@ -1285,7 +1292,9 @@ namespace ConditioningControlPanel.Services
                             break;
 
                         case "trigger_panic":
-                            StopAllRemoteEffects();
+                            // Explicit "stop everything" verb — the one path that is allowed to
+                            // end a session the subject started for themselves.
+                            StopAllRemoteEffects(force: true);
                             break;
 
                         default:
