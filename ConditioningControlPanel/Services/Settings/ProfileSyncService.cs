@@ -25,6 +25,64 @@ namespace ConditioningControlPanel.Services
         private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";
         private const int HeartbeatIntervalSeconds = 120; // Send heartbeat every 2 minutes
 
+        /// <summary>
+        /// Total (cumulative) XP below which a profile is indistinguishable from fresh defaults.
+        /// Same number the boot defaults-guard in <see cref="SyncProfileAsync"/> uses, so "looks
+        /// like defaults" means one thing everywhere.
+        /// </summary>
+        public const double MeaningfulProgressXp = 100;
+
+        /// <summary>
+        /// Does a profile the SERVER handed us look like an empty/uninitialized record rather than
+        /// a real account? Used only in the anti-cheat clamp branches, where local is already far
+        /// ahead of the server: true means "do not clamp, keep local".
+        ///
+        /// #865: this used to additionally require no achievements, no unlocked skills AND
+        /// <c>skill_points == 0</c>. Every one of those is an unrelated field, and any single
+        /// non-zero one flipped the answer to "the server record is real" — so a user whose server
+        /// row had been emptied of level/XP but still carried, say, a banked skill point or one
+        /// achievement failed the test and got CLAMPED to Level 1 / 0 XP. The clamp writes local
+        /// settings, the next launch reads them back, and the server row never changes, so it
+        /// repeated on EVERY launch: the every-launch progression reset.
+        ///
+        /// The only two fields that can say "this account has progressed" are level and XP, so
+        /// they are the only two consulted. A profile with a meaningful level or meaningful XP is
+        /// never uninitialized; a Level&lt;=1, &lt;100 XP record always is, whatever else rides
+        /// along with it. Being wrong in this direction costs nothing: local is kept and the next
+        /// successful sync pushes it back up. Being wrong the other way destroys the account.
+        /// </summary>
+        public static bool ServerProfileLooksUninitialized(int serverLevel, double serverTotalXp)
+            => serverLevel <= 1 && serverTotalXp < MeaningfulProgressXp;
+
+        /// <summary>
+        /// Is this server record too empty for the anti-cheat CLAMP to adopt? Asked only at the
+        /// two clamp sites, where local is already 50-75k total XP AHEAD of the server.
+        ///
+        /// <see cref="ServerProfileLooksUninitialized"/> narrows #865 but does not close it. Its
+        /// XP floor is 100, so a server row emptied down to Level 1 with 150 XP reads as a "real"
+        /// record — and the clamp then resets a Level 40 local to Level 1 on EVERY launch, exactly
+        /// the original bug with one extra digit of survivorship.
+        ///
+        /// The clamp does not actually need to know whether the row is pristine. It needs to know
+        /// whether the row can plausibly be the truth for THIS account, and a Level 1 record never
+        /// can when the local profile is tens of thousands of XP ahead of it: no legitimate
+        /// server-side correction lands a progressed account back on Level 1. The server zeroes a
+        /// season through the explicit <c>level_reset</c> flag, which is handled on its own branch
+        /// well before this one — it does not do it by quietly answering "Level 1" to a sync.
+        ///
+        /// So the clamp refuses any level &lt;= 1 record whatever XP rides along with it. This
+        /// strictly subsumes <see cref="ServerProfileLooksUninitialized"/> (which also requires
+        /// level &lt;= 1); that predicate stays for its other callers and for the 100 XP floor it
+        /// shares with the boot defaults-guard.
+        ///
+        /// The residual cost is that a genuinely fresh Level 1 account cannot be clamped back down
+        /// over a hand-edited local file. That is the cheap direction to be wrong in: local is kept
+        /// and pushed, and the SERVER's own anti-cheat is what actually decides what the account is
+        /// worth. Being wrong the other way destroys a real account on every launch.
+        /// </summary>
+        public static bool ServerProfileTooEmptyToClampTo(int serverLevel)
+            => serverLevel <= 1;
+
         private readonly HttpClient _httpClient;
         private DispatcherTimer? _heartbeatTimer;
         private bool _disposed;
@@ -88,6 +146,89 @@ namespace ConditioningControlPanel.Services
         /// MainWindow should subscribe to this to refresh UI.
         /// </summary>
         public event EventHandler? ProfileLoaded;
+
+        /// <summary>
+        /// Repaint the header if this sync round-trip changed the level/XP on screen.
+        ///
+        /// <see cref="ProfileLoaded"/> used to be raised from <see cref="LoadProfileAsync"/> only,
+        /// but <see cref="SyncProfileAsync"/> ADOPTS server progression in four places - the
+        /// restore reconcile, the level_reset handler, the server-is-ahead branch and the
+        /// anti-cheat clamp - and none of them told anybody. The level pill, XP bar, rank title and
+        /// unlockables are written imperatively by MainWindow.UpdateLevelDisplay, not bound, so an
+        /// adoption mid-run left the whole header showing the pre-sync numbers until the next
+        /// restart: the "level/XP display is wrong after a purchase / sign-in" half of #879.
+        ///
+        /// Comparing a snapshot rather than flagging each write site means a future adopt path
+        /// cannot forget to opt in. A false positive (the user earned XP while the request was in
+        /// flight) costs one idempotent repaint.
+        /// </summary>
+        private void RaiseProfileLoadedIfProgressionChanged(Models.AppSettings? settings, int preLevel, double preLevelXp, string source)
+        {
+            try
+            {
+                if (settings == null) return;
+                if (settings.PlayerLevel == preLevel && Math.Abs(settings.PlayerXP - preLevelXp) < 0.01) return;
+
+                App.Logger?.Information("{Source}: progression changed Level {OldLevel} ({OldXp} XP) -> Level {NewLevel} ({NewXp} XP) — repainting header",
+                    source, preLevel, (int)preLevelXp, settings.PlayerLevel, (int)settings.PlayerXP);
+                RaiseProfileLoadedSafely(source);
+            }
+            catch (Exception ex)
+            {
+                // A subscriber throwing must never fail the sync that already succeeded.
+                App.Logger?.Warning(ex, "{Source}: ProfileLoaded notification failed", source);
+            }
+        }
+
+        /// <summary>
+        /// Raise <see cref="ProfileLoaded"/> without ever blocking the calling thread.
+        ///
+        /// The one subscriber, <c>MainWindow.OnProfileLoaded</c>, wraps its whole body in a
+        /// BLOCKING <c>Dispatcher.Invoke</c>. The exit path in <c>App.OnExit</c> runs the final
+        /// sync as <c>Task.Run(() =&gt; SyncProfileAsync()).Wait(2s)</c> ON the UI thread. Raising
+        /// the event inline from the pool thread therefore deadlocked every quit that adopted
+        /// server progression: the pool thread parked waiting for a dispatcher that was itself
+        /// parked inside <c>Wait</c>, the full two-second timeout burned on every such exit, and
+        /// the sync's <c>finally</c> — including <c>_syncGate.Release()</c> — never ran before
+        /// teardown.
+        ///
+        /// Marshalling with <c>BeginInvoke</c> keeps the event contract intact (subscribers still
+        /// run on the UI thread and may touch UI) while making the raise fire-and-forget, so the
+        /// sync can complete and unwind. Same shape as <see cref="NudgeSeasonRecap"/>: no
+        /// dispatcher, or one that has already begun shutting down, means there is no UI left to
+        /// repaint, so the notification is dropped rather than queued into a dead queue.
+        /// </summary>
+        private void RaiseProfileLoadedSafely(string source)
+        {
+            try
+            {
+                var handler = ProfileLoaded;
+                if (handler == null) return;
+
+                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted)
+                {
+                    App.Logger?.Debug("{Source}: ProfileLoaded not raised — no live dispatcher", source);
+                    return;
+                }
+
+                dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        handler(this, EventArgs.Empty);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "{Source}: ProfileLoaded subscriber threw", source);
+                    }
+                }));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "{Source}: ProfileLoaded could not be dispatched", source);
+            }
+        }
 
         public ProfileSyncService()
         {
@@ -178,14 +319,22 @@ namespace ConditioningControlPanel.Services
                         Encoding.UTF8, "application/json");
 
                     var v2Response = await _httpClient.SendAsync(v2Request);
-                    if (await HandleUnauthorizedAsync(v2Response))
+                    var recovered = await HandleUnauthorizedAsync(v2Response);
+                    if (v2Response.StatusCode == HttpStatusCode.Unauthorized && !recovered)
                     {
-                        // Recovery failed — stop heartbeat to avoid spamming 401s
-                        if (string.IsNullOrEmpty(App.Settings?.Current?.AuthToken))
-                        {
-                            App.Logger?.Warning("[Auth] Heartbeat: auth recovery failed, stopping heartbeat");
-                            StopHeartbeat();
-                        }
+                        // Recovery failed or is on cooldown. This used to be gated on
+                        // IsNullOrEmpty(AuthToken) as well, which made the whole block dead code:
+                        // HandleUnauthorizedAsync deliberately KEEPS the token on failure (see its
+                        // "Don't clear the auth token" comment), so the inner test could never pass
+                        // and the heartbeat carried on 401ing every 60s forever.
+                        //
+                        // The token still being present is not evidence that a further tick can
+                        // succeed — the server just rejected that exact token. Stop. Recovery is
+                        // not lost: any other endpoint that later recovers the session calls
+                        // StartHeartbeat() from inside HandleUnauthorizedAsync, and a sign-in
+                        // restarts it too.
+                        App.Logger?.Warning("[Auth] Heartbeat: auth recovery failed or on cooldown, stopping heartbeat");
+                        StopHeartbeat();
                     }
                     App.Logger?.Debug("V2 Heartbeat: {Status}", v2Response.StatusCode);
                     return;
@@ -250,7 +399,7 @@ namespace ConditioningControlPanel.Services
                     if (v2Success)
                     {
                         _hasLoadedProfile = true;
-                        ProfileLoaded?.Invoke(this, EventArgs.Empty);
+                        RaiseProfileLoadedSafely("V2 profile load");
                         return true;
                     }
 
@@ -267,7 +416,7 @@ namespace ConditioningControlPanel.Services
                     if (await TryHealDefaultsFromServerAsync(unifiedId!))
                     {
                         _hasLoadedProfile = true;
-                        ProfileLoaded?.Invoke(this, EventArgs.Empty);
+                        RaiseProfileLoadedSafely("V2 defaults heal");
                         return true;
                     }
 
@@ -351,7 +500,7 @@ namespace ConditioningControlPanel.Services
                 _hasLoadedProfile = true;
 
                 // Notify listeners (MainWindow) to refresh UI
-                ProfileLoaded?.Invoke(this, EventArgs.Empty);
+                RaiseProfileLoadedSafely("V1 profile load");
 
                 return true;
             }
@@ -595,6 +744,15 @@ namespace ConditioningControlPanel.Services
             }
 
             var syncSucceeded = false;
+
+            // Progression as it stood before this call could rewrite it, plus a label for the log
+            // line. Declared out here so the finally can compare against it on EVERY exit path —
+            // see the raise at the bottom of this method. Null until the snapshot is actually
+            // taken, which is the signal that nothing in this call could have adopted anything yet.
+            int? preSyncLevel = null;
+            double preSyncLevelXp = 0;
+            var raiseSource = "sync";
+
             try
             {
             // Client-side sync cooldown to match server-side enforcement
@@ -633,6 +791,13 @@ namespace ConditioningControlPanel.Services
                     return false;
                 }
 
+                // Snapshot the displayed progression BEFORE anything in this method can rewrite it
+                // (the restore reconcile below, the level_reset handler, the server-ahead adopt and
+                // the anti-cheat clamp all do). Compared again at the end to decide whether the
+                // header needs repainting — see RaiseProfileLoadedIfProgressionChanged (#879).
+                preSyncLevel = settings.PlayerLevel;
+                preSyncLevelXp = settings.PlayerXP;
+
                 // This session's settings came out of a rolling daily backup, so the level/XP/skills
                 // below may be up to three days stale and can predate a season rollover. Reconcile
                 // against the server BEFORE the push: the sync POST is the first server contact of
@@ -659,7 +824,7 @@ namespace ConditioningControlPanel.Services
                 // Guard: if local data looks like fresh defaults (Level 1, near-zero XP) and we
                 // haven't completed a round-trip load yet this session, skip sending XP/level.
                 // This prevents a settings reset (update crash, corruption) from zeroing the server.
-                if (!_hasLoadedProfile && settings.PlayerLevel <= 1 && totalXp < 100)
+                if (!_hasLoadedProfile && settings.PlayerLevel <= 1 && totalXp < MeaningfulProgressXp)
                 {
                     App.Logger?.Warning("Sync blocked — local looks like defaults (Level {Level}, XP {Xp}) and profile not yet loaded. Waiting for LoadProfileAsync.",
                         settings.PlayerLevel, (int)totalXp);
@@ -676,6 +841,7 @@ namespace ConditioningControlPanel.Services
                 var unifiedId = App.Settings?.Current?.UnifiedId;
                 if (!string.IsNullOrEmpty(unifiedId))
                 {
+                    raiseSource = "V2 sync";
                     var questProgress = App.Quests?.Progress;
                     var v2SyncData = new
                     {
@@ -1111,20 +1277,21 @@ namespace ConditioningControlPanel.Services
                                 // "server clamped a real inflated profile" from "server returned an
                                 // uninitialized/empty record" (e.g. a broken Discord link so the
                                 // account resolves to a pristine profile, or a failed server read).
-                                // The latter looks like Level<=1, 0 XP, no achievements, no skills,
-                                // no points — nothing a genuinely progressed user could have. Clamping
-                                // to that resets the player to Level 1 on EVERY sync (repeat data loss).
+                                // The latter looks like Level<=1 with no meaningful XP — nothing a
+                                // genuinely progressed user could have. Clamping to that resets the
+                                // player to Level 1 on EVERY sync (repeat data loss, #865).
+                                // The bar here is deliberately HIGHER than
+                                // ServerProfileLooksUninitialized: a Level 1 row is refused
+                                // whatever XP it carries, because no legitimate clamp puts an
+                                // account that is 75k XP ahead back on Level 1. See
+                                // ServerProfileTooEmptyToClampTo.
                                 bool serverLooksUninitialized =
-                                    v2Result.User.Level <= 1 &&
-                                    v2Result.User.Xp == 0 &&
-                                    (v2Result.User.Achievements == null || v2Result.User.Achievements.Count == 0) &&
-                                    (v2Result.UnlockedSkills == null || v2Result.UnlockedSkills.Count == 0) &&
-                                    (v2Result.SkillPoints ?? 0) == 0;
+                                    ServerProfileTooEmptyToClampTo(v2Result.User.Level);
 
                                 if (serverLooksUninitialized)
                                 {
-                                    App.Logger?.Warning("[Anti-cheat] V2 Sync DEFENDED: server profile looks uninitialized (Level {SL}, 0 XP, no achievements/skills/points) but local has progress (Level {LL}, {LX} XP). Refusing to clamp — likely a failed/empty server read or broken account link, not an exploit. Local kept.",
-                                        v2Result.User.Level, settings.PlayerLevel, localTotalXp);
+                                    App.Logger?.Warning("[Anti-cheat] V2 Sync DEFENDED: server profile is too empty to clamp to (Level {SL}, {SX} XP) but local has progress (Level {LL}, {LX} XP). Refusing to clamp — likely a failed/empty server read or broken account link, not an exploit. Local kept.",
+                                        v2Result.User.Level, serverTotalXp, settings.PlayerLevel, localTotalXp);
                                     // Keep local values; a later good sync (or admin action) reconciles.
                                 }
                                 else
@@ -1152,6 +1319,7 @@ namespace ConditioningControlPanel.Services
                 }
 
                 // Legacy sync for users without unified_id
+                raiseSource = "V1 sync";
                 var legacyQuestProgress = App.Quests?.Progress;
                 var syncData = new ProfileSyncData
                 {
@@ -1280,6 +1448,21 @@ namespace ConditioningControlPanel.Services
                     ConsecutiveSyncFailures++;
                     SyncHealthChanged?.Invoke(this, ConsecutiveSyncFailures);
                 }
+
+                // Repaint the header if ANY exit path from this call changed the displayed
+                // progression — not just the two success paths that used to raise explicitly.
+                //
+                // #879: ReconcileRestoredProfileAsync adopts server level/XP BEFORE the POST is
+                // even built. When that POST then 429s or fails — exactly the flaky-network case
+                // the reconcile exists for — the old code returned without telling anyone, so the
+                // level pill and XP bar kept showing the pre-adopt numbers until the next restart.
+                // Comparing the snapshot here catches every early return, every failure branch and
+                // the catch, and cannot be forgotten by a future exit path the way an explicit
+                // call at each site could. A null snapshot means we bailed before anything could
+                // have been adopted (offline, cooldown, no token, no settings).
+                if (preSyncLevel.HasValue)
+                    RaiseProfileLoadedIfProgressionChanged(App.Settings?.Current, preSyncLevel.Value, preSyncLevelXp, raiseSource);
+
                 _syncGate.Release();
             }
         }
@@ -1393,19 +1576,22 @@ namespace ConditioningControlPanel.Services
                 // Local is suspiciously higher than cloud — would normally adopt cloud to prevent file-edit exploits.
                 // BUT: distinguish "real cloud says you're ahead of yourself" from "cloud read fell through to an
                 // uninitialized record" (e.g. V2 sync rate-limited, V1 fallback returns empty defaults for a
-                // V2-native user). The latter looks like Level=1, Xp=0, no achievements, no skills — a pristine
-                // record that no real progressed user could have. Treat that as a misload and keep local.
+                // V2-native user). The latter looks like Level<=1 with no meaningful XP — a pristine record
+                // that no real progressed user could have. Treat that as a misload and keep local.
+                // #865: the achievements/skills/skill-points clauses that used to be ANDed in here made a
+                // single stray non-zero field read as "the cloud record is real", and the clamp below then
+                // reset the player on every launch. Same predicate as the V2 path now — and, like
+                // the V2 path, the clamp now refuses ANY Level<=1 record regardless of the XP it
+                // carries, because a row emptied to Level 1 / 150 XP would otherwise sail past the
+                // 100 XP floor and reset a Level 40 local every launch anyway. See
+                // ServerProfileTooEmptyToClampTo.
                 bool looksUninitialized =
-                    cloudProfile.Level <= 1 &&
-                    cloudProfile.Xp == 0 &&
-                    (cloudProfile.Achievements == null || cloudProfile.Achievements.Count == 0) &&
-                    (cloudProfile.UnlockedSkills == null || cloudProfile.UnlockedSkills.Count == 0) &&
-                    (cloudProfile.SkillPoints ?? 0) == 0;
+                    ServerProfileTooEmptyToClampTo(cloudProfile.Level);
 
                 if (looksUninitialized)
                 {
-                    App.Logger?.Warning("[Anti-cheat] DEFENDED: cloud profile looks uninitialized (Level 1, 0 XP, no achievements/skills) but local has progress (Level {LocalLevel}, {LocalXP} XP). Refusing to clobber — likely a failed/empty cloud read, not an exploit. Local kept.",
-                        settings.PlayerLevel, (int)localTotalXp);
+                    App.Logger?.Warning("[Anti-cheat] DEFENDED: cloud profile is too empty to clamp to (Level {CloudLevel}, {CloudXP} XP) but local has progress (Level {LocalLevel}, {LocalXP} XP). Refusing to clobber — likely a failed/empty cloud read, not an exploit. Local kept.",
+                        cloudProfile.Level, (int)cloudTotalXp, settings.PlayerLevel, (int)localTotalXp);
                     // Fall through without modifying settings — keep local values.
                 }
                 else
@@ -2359,7 +2545,10 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    // On 401, attempt auth recovery and retry once if token was restored
+                    // On 401, attempt auth recovery and retry once — but ONLY if the session was
+                    // genuinely recovered. HandleUnauthorizedAsync used to answer true for a failed
+                    // recovery too, so this retried the identical POST with the identical dead
+                    // token and burned a second round-trip to reach the same 401 (#879).
                     if (await HandleUnauthorizedAsync(response) && !string.IsNullOrEmpty(App.Settings?.Current?.AuthToken))
                     {
                         App.Logger?.Information("Skill purchase: retrying after auth token recovery");
@@ -2377,7 +2566,16 @@ namespace ConditioningControlPanel.Services
                     if (response.StatusCode == HttpStatusCode.Unauthorized)
                     {
                         App.Logger?.Warning("Skill purchase failed: auth token invalid/missing after recovery attempt");
-                        return (false, "Your session has expired. Please log in again from Settings to purchase enhancements.");
+                        // Point at a sign-in the user can actually reach. Settings' "Log In" button
+                        // (SettingsTabView BtnUnifiedLogin) is COLLAPSED whenever a UnifiedId is
+                        // cached — which is exactly the state an expired session leaves behind — so
+                        // the old wording sent people to an empty panel. The Premium tab's login
+                        // card (PatreonTabView, also surfaced in the dashboard's App Info & Data
+                        // panel) is always present. The tab NAME is pulled from the same loc key the
+                        // nav button renders, so the instruction matches what the user is looking
+                        // at in their language. (#879)
+                        var premiumTabName = Localization.Loc.Get("tab_exclusives");
+                        return (false, $"Your session has expired. Open the ⭐ {premiumTabName} tab and sign in again to purchase enhancements.");
                     }
 
                     string errorMsg;
@@ -2599,9 +2797,19 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Handles a 401 Unauthorized response. Attempts token recovery via restore-session
-        /// with a 5-minute cooldown between attempts. Token is preserved on failure.
-        /// Returns true if the response was a 401.
+        /// Handles a 401 Unauthorized response. Attempts token recovery via restore-session with a
+        /// 5-minute cooldown between attempts. The token is preserved on failure.
+        ///
+        /// Returns TRUE only when the session was actually recovered and it is safe to carry on
+        /// with the request that 401'd. It used to return true for any 401 - including "recovery
+        /// failed" and "still inside the cooldown, so recovery was never even attempted" - while
+        /// every caller reads the result as "recovered, proceed": the skill purchase retried the
+        /// POST with the same dead token, and the heartbeat's stop-on-failure branch keyed off the
+        /// same true. Failure and success have to be distinguishable (#879).
+        ///
+        /// Note the asymmetry: a non-401 response also returns false, because "there was nothing
+        /// to recover from" is likewise not "a session was recovered". Callers that need to know
+        /// whether the response WAS a 401 must check <c>response.StatusCode</c> themselves.
         /// </summary>
         private async Task<bool> HandleUnauthorizedAsync(HttpResponseMessage response)
         {
@@ -2626,7 +2834,7 @@ namespace ConditioningControlPanel.Services
             // Don't clear the auth token — it may still be valid for other endpoints or after
             // a transient server issue. The 5-minute cooldown prevents recovery spam.
             App.Logger?.Warning("[Auth] 401 — recovery failed or on cooldown, token kept for retry");
-            return true;
+            return false;
         }
 
         /// <summary>

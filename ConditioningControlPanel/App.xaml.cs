@@ -2722,6 +2722,26 @@ namespace ConditioningControlPanel
                         Logger?.Debug("Failed to parse restore-session auth token: {Error}", parseEx.Message);
                     }
                     Logger?.Information("Restored session validated successfully.");
+
+                    // ...and then actually USE the session we just validated. Only two places load
+                    // the cloud profile and start the heartbeat: InitializePatreonAndSyncAsync
+                    // (gated on Patreon.IsAuthenticated) and InitializeDiscordAsync (gated on
+                    // Discord.IsAuthenticated). A V2-only user - invite code, email login, or an
+                    // OAuth token that has since lapsed while the unified session stayed good -
+                    // satisfies neither, and this method is the ONLY startup path they take. So
+                    // their progression was never read back from the server on launch and they
+                    // never appeared online: their level/XP/skill points showed whatever the local
+                    // file happened to hold, which is the shape #865 reports. (We are past the
+                    // early returns for "a provider already authenticated" and "offline mode", so
+                    // there is no double-load to race here.) Re-checked rather than trusted from
+                    // before the round-trip: a provider can finish authenticating while this
+                    // request is in flight, and then it owns the load.
+                    if (ProfileSync != null && Patreon?.IsAuthenticated != true && Discord?.IsAuthenticated != true)
+                    {
+                        Logger?.Information("V2-only restored session — loading cloud profile...");
+                        await ProfileSync.LoadProfileAsync();
+                        ProfileSync.StartHeartbeat();
+                    }
                 }
                 else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                 {
