@@ -222,6 +222,13 @@ namespace ConditioningControlPanel
                 s.CurrentSeason = null;
                 s.PatreonTier = 0;
 
+                // This is the ONLY deliberate "yes, really zero me" surface in the app (logout,
+                // account switch, account deletion), so it is the one place allowed to void the
+                // server-confirmed XP watermark. Everything above just zeroed local progression;
+                // leaving the watermark standing would make the sync service refuse to push the
+                // new account's numbers as a regression of the old account's. (#865)
+                Services.ProfileSyncService.ClearXpWatermark(s, "explicit progression clear (logout / account switch)");
+
                 App.Settings.Save();
             }
 

@@ -83,6 +83,119 @@ namespace ConditioningControlPanel.Services
         public static bool ServerProfileTooEmptyToClampTo(int serverLevel)
             => serverLevel <= 1;
 
+        #region Server-confirmed XP watermark (#865 regression guard)
+
+        /// <summary>
+        /// The watermark that currently applies, or 0 when none does.
+        ///
+        /// A stored watermark only counts when it belongs to BOTH the account we are syncing and
+        /// the season we are in. Season scope matters because a rollover lowers seasonal XP on
+        /// purpose - an unscoped watermark would fight the rollover every launch, forever. Account
+        /// scope matters because two accounts sharing a machine have nothing to say about each
+        /// other's totals.
+        ///
+        /// V2 identities only. A legacy user has neither a unified_id nor a season key, so their
+        /// scope would be the pair ("", "") - which never changes, is therefore never voided by a
+        /// rollover, and is SHARED by every legacy account on the machine. See
+        /// <see cref="RecordAgreedServerXp"/> for why arming them was dropped rather than fixed.
+        /// </summary>
+        public static double ActiveXpWatermark(Models.AppSettings settings)
+        {
+            if (settings.LastConfirmedServerXp <= 0) return 0;
+
+            var account = settings.UnifiedId ?? string.Empty;
+            if (account.Length == 0) return 0;   // legacy/V1 identity - out of scope entirely
+            if (!string.Equals(settings.LastConfirmedServerXpAccount ?? string.Empty, account, StringComparison.Ordinal))
+                return 0;
+
+            var season = settings.CurrentSeason ?? string.Empty;
+            if (!string.Equals(settings.LastConfirmedServerXpSeason ?? string.Empty, season, StringComparison.Ordinal))
+                return 0;
+
+            return settings.LastConfirmedServerXp;
+        }
+
+        /// <summary>
+        /// Record the total this client and the server now AGREE on, for this (account, season).
+        ///
+        /// The watermark models the LAST AGREED figure, not "the highest the server ever said".
+        /// That distinction is the entire fix. The first draft only ever let the number rise, while
+        /// the send-guard enforced it as "the lowest the client may send" - two different things
+        /// wearing one field. So the moment a client legitimately adopted a LOWER server figure -
+        /// an anti-cheat correction, which is exactly what the clamp branch in
+        /// <see cref="SyncProfileAsync"/> does - the watermark stayed at the old high and every
+        /// subsequent sync failed the send-guard against it. Not just the XP: the guard sits before
+        /// the POST, so achievements, quests and cosmetics stopped going up too, "Cloud sync issue"
+        /// latched in the title bar, and because the watermark is persisted it survived restarts.
+        /// A guard that latches like that is worse than the regression it was written for.
+        ///
+        /// Setting it downward on agreement makes it self-healing: adopt, agree, carry on. It still
+        /// cannot be moved by a local calculation - every caller passes a figure that came out of a
+        /// server response - so a corrupted settings file still cannot talk it down.
+        ///
+        /// Agreement is decided here, once, rather than at each call site: we agree when this
+        /// client is NOT holding more than the server just reported. When it IS holding more it has
+        /// deliberately kept local (the clamp's defend branch, take-higher keeping a higher local),
+        /// which is a disagreement, and the previously agreed figure stands.
+        /// </summary>
+        /// <param name="serverTotalXp">Cumulative XP as the server just reported it.</param>
+        /// <param name="clientTotalXp">Cumulative XP this client holds AFTER reconciling.</param>
+        public static void RecordAgreedServerXp(Models.AppSettings settings, double serverTotalXp, double clientTotalXp, string site)
+        {
+            if (serverTotalXp < MeaningfulProgressXp) return;   // nothing worth defending
+
+            // V1/legacy users get no watermark at all - see ActiveXpWatermark. Arming one for them
+            // would create an ("", "") scope with no rollover escape: their seasonal reset has no
+            // season key to notice, so the send-guard would block their pushes with nothing but a
+            // manual logout to clear it.
+            if (string.IsNullOrEmpty(settings.UnifiedId))
+            {
+                App.Logger?.Debug("[XP watermark] {Site}: not arming — legacy identity has no account/season scope", site);
+                return;
+            }
+
+            if (clientTotalXp > serverTotalXp + 0.01)
+            {
+                App.Logger?.Debug("[XP watermark] {Site}: not recording {Sx} — this client kept a higher local total ({Cx}), so there is no agreement to record",
+                    site, (int)serverTotalXp, (int)clientTotalXp);
+                return;
+            }
+
+            var account = settings.UnifiedId!;
+            var season = settings.CurrentSeason ?? string.Empty;
+            var previous = ActiveXpWatermark(settings);
+
+            settings.LastConfirmedServerXpAccount = account;
+            settings.LastConfirmedServerXpSeason = season;
+            settings.LastConfirmedServerXp = serverTotalXp;
+
+            if (previous > 0 && serverTotalXp < previous)
+                App.Logger?.Information("[XP watermark] {Site}: LOWERED {Old} -> {New} — this client adopted the server's figure, so that is what both sides now agree on. The send-guard follows it down.",
+                    site, (int)previous, (int)serverTotalXp);
+            else
+                App.Logger?.Debug("[XP watermark] {Site}: set to {Xp} for account {Account} season {Season}",
+                    site, (int)serverTotalXp, account, season);
+        }
+
+        /// <summary>
+        /// Void the watermark. Called when the account's XP is legitimately allowed to fall: a
+        /// season rollover or an explicit logout/account switch (MainWindow.ClearProgressionData).
+        /// Without this the guard would block the very resets it is supposed to let through.
+        /// </summary>
+        public static void ClearXpWatermark(Models.AppSettings? settings, string reason)
+        {
+            if (settings == null) return;
+            if (settings.LastConfirmedServerXp <= 0 && settings.LastConfirmedServerXpAccount == null) return;
+
+            App.Logger?.Information("[XP watermark] cleared ({Reason}) - was {Xp} for season {Season}",
+                reason, (int)settings.LastConfirmedServerXp, settings.LastConfirmedServerXpSeason ?? "(none)");
+            settings.LastConfirmedServerXp = 0;
+            settings.LastConfirmedServerXpAccount = null;
+            settings.LastConfirmedServerXpSeason = null;
+        }
+
+        #endregion
+
         private readonly HttpClient _httpClient;
         private DispatcherTimer? _heartbeatTimer;
         private bool _disposed;
@@ -394,7 +507,20 @@ namespace ConditioningControlPanel.Services
                 var unifiedId = App.Settings?.Current?.UnifiedId;
                 if (!string.IsNullOrEmpty(unifiedId))
                 {
-                    App.Logger?.Information("V2 user — loading profile via V2 sync path");
+                    // READ BEFORE WRITE. SyncProfileAsync is a POST: it uploads local state and
+                    // only then reads the merged result back out of the response. That made LOAD a
+                    // write — the first thing a machine did on launch was tell the server what it
+                    // thought was true, which is precisely the wrong order when the local file is
+                    // the thing that might be wrong (#865). Fetch the server's own copy first and
+                    // adopt it (take-higher, so this can never LOWER a legitimate local), then push.
+                    if (!await ReadServerProfileBeforePushAsync(unifiedId!) &&
+                        ShouldSkipPushAfterFailedRead(App.Settings?.Current))
+                    {
+                        App.Logger?.Warning("Load blocked — the server profile could not be read AND this local profile looks emptied with no watermark to defend the push. Not asserting it upward; retrying on the next sync.");
+                        return false;
+                    }
+
+                    App.Logger?.Information("V2 user — pushing local state after the server read");
                     var v2Success = await SyncProfileAsync();
                     if (v2Success)
                     {
@@ -551,6 +677,166 @@ namespace ConditioningControlPanel.Services
         /// for any failure of the V2 sync — it no-ops when local already has progress or the
         /// server record is itself empty.
         /// </summary>
+        /// <summary>
+        /// READ-BEFORE-WRITE for the V2 load path (#865).
+        ///
+        /// <see cref="LoadProfileAsync"/> used to "load" a V2 profile by calling
+        /// <see cref="SyncProfileAsync"/>, which is a POST: local state went UP first and the
+        /// server's answer was only read out of the response afterwards. So the opening move of
+        /// every launch was an assertion, made by the party least entitled to make it — a settings
+        /// file that a crashed update, a half-restored backup or a corrupt write may have emptied.
+        /// The server's take-higher merge absorbs most of that, but "most" is not a guarantee, and
+        /// several down-merge paths on this side then reconcile TOWARD whatever came back.
+        ///
+        /// This does the GET first (<see cref="V2AuthService.GetUserProfileAsync"/>, no body, no
+        /// upload — it cannot change anything server-side) and adopts the result take-higher, so it
+        /// can raise a stale local profile but never lower a legitimate one. The push that follows
+        /// then starts from reconciled state.
+        ///
+        /// The adopt is written out here rather than reusing
+        /// <see cref="V2AuthService.ApplyUserDataToSettings"/>, which is a LOGIN-path routine and
+        /// unconditionally rewrites UnifiedId, UserDisplayName, IsSeason0Og, CurrentSeason,
+        /// HighestLevelEver, HasLinkedDiscord, HasLinkedPatreon and PatreonTier — and extends the
+        /// cached-premium window. Correct exactly once, at sign-in, against the login response.
+        /// Wrong on a path that runs on EVERY launch against a different, narrower projection:
+        /// - <c>display_name</c> is privacy-filtered by the server (nulled when it still equals the
+        ///   Patreon patron name), so this would blank UserDisplayName every launch for those users;
+        /// - the int fields on the DTO are non-nullable, so anything a future projection stops
+        ///   sending silently deserializes to 0 — HighestLevelEver=0 would manufacture a fresh #879
+        ///   and a missing unified_id would sign the user out;
+        /// - none of it is progression, which is the only thing this path has any business
+        ///   reconciling before a push.
+        ///
+        /// So: level/XP take-higher and the season key, nothing else. Identity, link state and tier
+        /// stay whatever sign-in and the sync response made them. (Verified against ccp-server
+        /// <c>proxy/server.js</c> GET /v2/user/profile: it does currently carry unified_id,
+        /// display_name, level, xp, current_season, highest_level_ever, is_season0_og, patreon_tier
+        /// and raw discord_id/patreon_id — but "currently carries" is not a contract this path
+        /// should be betting a user's identity on once per launch.)
+        ///
+        /// Deliberately NOT fatal in general: a failed read logs and returns false, and the caller
+        /// pushes anyway rather than stranding a flaky connection at zero cloud contact. The one
+        /// exception is the highest-risk shape — see the caller in <see cref="LoadProfileAsync"/>
+        /// and <see cref="ShouldSkipPushAfterFailedRead"/>.
+        /// </summary>
+        /// <summary>
+        /// The read-before-write GET failed. Should we abort the push too, or push anyway? (#865, B-5)
+        ///
+        /// Push-anyway is the general policy and stays that way: a user on a flaky connection must
+        /// not be locked out of cloud sync entirely, and the send-guard already refuses any push
+        /// below the last agreed total. But that guard needs an ARMED watermark, and there is one
+        /// launch where it has none — the first launch after upgrading into this code. That is also
+        /// the single highest-risk launch: read failed, so we know nothing about the server, and if
+        /// the local file is the emptied one, pushing it is exactly the #865 overwrite the
+        /// read-before-write was added to prevent.
+        ///
+        /// So the abort is narrowed to that intersection: no watermark in scope AND local looks
+        /// like defaults. It matches <see cref="ReconcileRestoredProfileAsync"/>'s policy for the
+        /// same reason — an unverifiable local profile is not something to assert upward — and it
+        /// costs nothing, because a profile at Level 1 with under 100 XP has nothing to sync that
+        /// the next successful round-trip will not carry.
+        ///
+        /// Note this is a strictly wider net than the existing <c>!_hasLoadedProfile</c> defaults
+        /// guard inside <see cref="SyncProfileAsync"/>: that one disarms itself for the rest of the
+        /// session after any successful round-trip, whereas an emptied file with a failed read is
+        /// dangerous on every attempt.
+        /// </summary>
+        private static bool ShouldSkipPushAfterFailedRead(Models.AppSettings? settings)
+        {
+            if (settings == null) return false;
+            if (ActiveXpWatermark(settings) > 0) return false;   // the send-guard can defend the push
+
+            var localTotalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
+            return settings.PlayerLevel <= 1 && localTotalXp < MeaningfulProgressXp;
+        }
+
+        private async Task<bool> ReadServerProfileBeforePushAsync(string unifiedId)
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null || string.IsNullOrEmpty(unifiedId)) return false;
+
+            try
+            {
+                var v2Auth = new V2AuthService();
+                var user = await v2Auth.GetUserProfileAsync(unifiedId);
+                if (user == null)
+                {
+                    App.Logger?.Warning("Read-before-write: server profile could not be read for {Id} — pushing local state unreconciled (the XP watermark still guards it).", unifiedId);
+                    return false;
+                }
+
+                var preLevel = settings.PlayerLevel;
+                var preLevelXp = settings.PlayerXP;
+                var localTotalXp = App.Progression?.GetTotalXP(preLevel, preLevelXp) ?? preLevelXp;
+
+                // The season key is the one non-progression field this path DOES touch, and only
+                // forward: a server answering with a stale key would otherwise walk the season
+                // backwards and re-arm the recap every launch.
+                var keepSeason = settings.CurrentSeason;
+                var seasonAdvances = Services.SeasonRecapService.ShouldAdoptServerSeason(user.CurrentSeason, keepSeason);
+
+                // Take-higher on level/XP, and nothing else — see the summary above for why this
+                // no longer routes through V2AuthService.ApplyUserDataToSettings.
+                var serverTotalXp = (double)user.Xp;
+                if (user.Level > 0 && serverTotalXp >= localTotalXp)
+                {
+                    settings.PlayerLevel = user.Level;
+                    settings.PlayerXP = App.Progression?.GetCurrentLevelXP(user.Level, serverTotalXp) ?? 0;
+                }
+
+                if (seasonAdvances)
+                {
+                    App.Logger?.Information("Read-before-write: season key advanced {Old} -> {New}",
+                        string.IsNullOrEmpty(keepSeason) ? "(none)" : keepSeason, user.CurrentSeason);
+                    settings.CurrentSeason = user.CurrentSeason;
+                    ClearXpWatermark(settings, "season rollover (read-before-write)");
+                    NudgeSeasonRecap();
+                }
+
+                // B-7: only record the watermark when the server's season is the one it will later
+                // be CHECKED under. When the server answers with an OLDER key we keep ours (above),
+                // so filing the server's total against our key would scope a foreign season's total
+                // to this one — and the send-guard would then measure this season's XP against last
+                // season's total.
+                var scopedSeason = settings.CurrentSeason ?? string.Empty;
+                if (string.Equals(user.CurrentSeason ?? string.Empty, scopedSeason, StringComparison.Ordinal))
+                {
+                    var clientTotalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
+                    RecordAgreedServerXp(settings, serverTotalXp, clientTotalXp, "read-before-write");
+                }
+                else
+                {
+                    App.Logger?.Debug("Read-before-write: server season {SS} is not the scope we sync under ({LS}) — not recording a watermark",
+                        string.IsNullOrEmpty(user.CurrentSeason) ? "(none)" : user.CurrentSeason,
+                        string.IsNullOrEmpty(scopedSeason) ? "(none)" : scopedSeason);
+                }
+
+                App.Settings?.Save();
+
+                var adopted = settings.PlayerLevel != preLevel || Math.Abs(settings.PlayerXP - preLevelXp) > 0.01;
+                if (adopted)
+                {
+                    App.Logger?.Information("Read-before-write: adopted the server profile BEFORE pushing — Level {LL} ({LX} XP) -> Level {SL} ({SX} XP).",
+                        preLevel, (int)localTotalXp, settings.PlayerLevel, user.Xp);
+                    // The header is written imperatively; without this it shows the pre-adopt
+                    // numbers until something else happens to repaint it (#879).
+                    RaiseProfileLoadedIfProgressionChanged(settings, preLevel, preLevelXp, "read-before-write");
+                }
+                else
+                {
+                    App.Logger?.Debug("Read-before-write: server profile (Level {SL}, {SX} XP) is not ahead of local (Level {LL}, {LX} XP) — nothing to adopt.",
+                        user.Level, user.Xp, preLevel, (int)localTotalXp);
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Read-before-write: server profile read failed — pushing local state unreconciled");
+                return false;
+            }
+        }
+
         private async Task<bool> TryHealDefaultsFromServerAsync(string unifiedId)
         {
             var settings = App.Settings?.Current;
@@ -828,6 +1114,31 @@ namespace ConditioningControlPanel.Services
                 {
                     App.Logger?.Warning("Sync blocked — local looks like defaults (Level {Level}, XP {Xp}) and profile not yet loaded. Waiting for LoadProfileAsync.",
                         settings.PlayerLevel, (int)totalXp);
+                    return false;
+                }
+
+                // XP regression guard (#865). The defaults-guard above only covers the case where
+                // local looks like a FRESH install and we have not loaded yet. It says nothing
+                // about a local file that lost half its progress, or about the second sync of a
+                // session after a bad adopt — both of which would happily push a lower number and
+                // ask the server to agree. The watermark is the last total the two sides AGREED
+                // on, so a payload below it cannot be right: refuse to send and say so loudly
+                // rather than talking the server down to a local mistake.
+                //
+                // "Last agreed", not "highest ever seen", is what makes this survivable. Every
+                // legitimate way for the number to fall moves the watermark with it: a season
+                // rollover and an admin level_reset clear it outright, an account switch puts it
+                // out of scope, and any adopt of a lower server figure re-records at that figure
+                // (RecordAgreedServerXp). So the guard can only ever block the one case it is for
+                // — a local total that fell with no server-side explanation — and it cannot latch,
+                // which matters because this check sits in front of the whole payload, not just
+                // the XP field.
+                var watermark = ActiveXpWatermark(settings);
+                if (watermark > 0 && totalXp < watermark)
+                {
+                    App.Logger?.Error("[XP watermark] Sync REFUSED — would push {Xp} XP, below the {Watermark} XP this client and the server last agreed on for this account this season (Level {Level}). This local profile has LOST progress; not asking the server to match it. Fix the local file or reset the account deliberately.",
+                        (int)totalXp, (int)watermark, settings.PlayerLevel);
+                    LastSyncError = "Sync refused: local XP is below the last server-agreed total";
                     return false;
                 }
 
@@ -1196,6 +1507,11 @@ namespace ConditioningControlPanel.Services
                             App.Logger?.Information("V2 Sync: season key advanced {Old} -> {New} (server-authoritative)",
                                 string.IsNullOrEmpty(settings.CurrentSeason) ? "(none)" : settings.CurrentSeason, serverSeason);
                             settings.CurrentSeason = serverSeason;
+
+                            // A rollover is the one moment seasonal XP is SUPPOSED to fall, so the
+                            // previous season's watermark stops applying here — before the
+                            // level_reset handler below, which is the thing that does the falling.
+                            ClearXpWatermark(settings, "season rollover");
                             App.Settings?.Save();
 
                             // Nudge the recap on the key change itself, not only on level_reset.
@@ -1205,9 +1521,37 @@ namespace ConditioningControlPanel.Services
                             NudgeSeasonRecap();
                         }
 
-                        // Handle level_reset — server admin reset all levels, force client to accept
+                        // Handle level_reset — server admin reset all levels, force client to accept.
+                        //
+                        // This condition used to also call !RefuseToZeroAConfirmedProfile(...), a
+                        // side-effecting check inlined into the `if`. Two things went wrong with
+                        // that. First, a mid-season admin reset IS a zeroing of a confirmed profile
+                        // — that is what an admin reset is — so the guard refused it, and refused
+                        // it permanently, because level_reset is one-shot: the server never sends it
+                        // again. Second, a refusal did not stop there; it fell through into the
+                        // `else if` clamp chain below, where the same zeroed row reads as
+                        // "uninitialized", local is kept, and the next push writes the pre-reset
+                        // profile back over the admin's work.
+                        //
+                        // An explicit level_reset is the server EXPLAINING the zeroing, which is
+                        // precisely what the watermark guard exists to distinguish from an
+                        // unexplained one. So it is adopted unconditionally and the watermark is
+                        // cleared to match (#865, B-2). No spoof guard is kept: forging this flag
+                        // means forging an authenticated sync response, and anyone who can do that
+                        // can set `xp` to whatever they like in the same body — the guard bought
+                        // nothing and cost a permanent, silent divergence from the server.
+                        //
+                        // What is left in this condition is a flag test and a null check — nothing
+                        // that can DECIDE anything. Any future guard belongs in an explicit
+                        // if/else INSIDE the branch, where a refusal stays a refusal instead of
+                        // falling through into the clamp chain below.
                         if (v2Result?.LevelReset == true && v2Result.User != null)
                         {
+                            // A reset is a licensed fall: the previously agreed total no longer
+                            // describes this account. Clear before adopting so the send-guard does
+                            // not block the very push that carries the reset upward.
+                            ClearXpWatermark(settings, "admin level_reset");
+
                             var serverLevel = v2Result.User.Level;
                             var serverXp = v2Result.User.Xp;
                             var serverLevelXp = App.Progression?.GetCurrentLevelXP(serverLevel, serverXp) ?? 0;
@@ -1307,6 +1651,26 @@ namespace ConditioningControlPanel.Services
                                     App.Settings?.Save();
                                 }
                             }
+                        }
+
+                        // Last, once the season key and every adopt above have settled: record what
+                        // the two sides now agree this account holds. The response is the server's
+                        // own account of it, which is what makes the watermark worth anything — a
+                        // corrupted local file cannot manufacture the figure. (#865)
+                        //
+                        // Passing the client's POST-reconcile total is what makes this "last
+                        // agreed" rather than "highest ever": where a branch above adopted the
+                        // server's number the two match and the watermark follows it, DOWN as well
+                        // as up (the anti-cheat clamp is the case that matters — the old monotonic
+                        // rule latched there and blocked every later sync). Where a branch above
+                        // deliberately KEPT a higher local — the clamp's defend branch — the totals
+                        // differ, RecordAgreedServerXp sees the disagreement and leaves the
+                        // previously agreed figure standing.
+                        if (v2Result?.User != null)
+                        {
+                            var agreedClientXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
+                            RecordAgreedServerXp(settings, v2Result.User.Xp, agreedClientXp, "V2 sync");
+                            App.Settings?.Save();
                         }
                     }
                     catch (Exception parseEx)
@@ -1585,6 +1949,8 @@ namespace ConditioningControlPanel.Services
                 // carries, because a row emptied to Level 1 / 150 XP would otherwise sail past the
                 // 100 XP floor and reset a Level 40 local every launch anyway. See
                 // ServerProfileTooEmptyToClampTo.
+                // (The watermark adds nothing here anyway: it is a V2-only mechanism, and this
+                // predicate already covers every empty-row shape it would have caught.)
                 bool looksUninitialized =
                     ServerProfileTooEmptyToClampTo(cloudProfile.Level);
 
@@ -1625,6 +1991,19 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("Local and cloud progress are equal: Level {Level}, Total XP {XP}",
                     settings.PlayerLevel, (int)localTotalXp);
             }
+
+            // The cloud just told us what it holds. Record it as the agreed figure — AFTER the
+            // branches above, so the client total passed in is the post-merge one and
+            // RecordAgreedServerXp can tell an adopt from a "kept local" (#865).
+            //
+            // B-4: this arms nothing for an actual V1/legacy user. They have no unified_id and no
+            // season key, so their scope would be ("", "") — never invalidated by a rollover,
+            // shared with every other legacy account on the machine, and with no escape but a
+            // manual logout if the send-guard ever caught them. RecordAgreedServerXp refuses them
+            // outright. The call stays because this method is also the V1 FALLBACK for a V2
+            // identity, and that user does have a scope worth arming.
+            var mergedClientTotalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
+            RecordAgreedServerXp(settings, cloudTotalXp, mergedClientTotalXp, "V1 merge");
 
             // Merge achievements
             if (cloudProfile.Achievements != null && achievements?.Progress != null)

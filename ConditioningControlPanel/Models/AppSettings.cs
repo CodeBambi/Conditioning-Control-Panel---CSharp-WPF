@@ -5060,6 +5060,47 @@ namespace ConditioningControlPanel.Models
             set { _highestLevelEver = Math.Max(0, value); OnPropertyChanged(); }
         }
 
+        #region Server-confirmed XP watermark (#865 regression guard)
+
+        // The highest CUMULATIVE XP the server itself has ever told us this account holds, and the
+        // season + account that figure belongs to. Written only from a server response — never from
+        // a local calculation — so it is a record of what the server agreed to, not of what this
+        // machine believes. ProfileSyncService uses it to refuse two things:
+        //   * SENDING a sync whose XP is below the watermark (a wiped local file must not talk the
+        //     server down to its own emptiness), and
+        //   * ADOPTING a response that zeroes a profile the server previously confirmed, unless the
+        //     user explicitly reset (logout/account switch) or the season legitimately rolled.
+        //
+        // Season-scoped because a season rollover lowers seasonal XP by design; an unscoped
+        // watermark would fight the rollover forever. Account-scoped because two accounts on one
+        // machine have nothing to say about each other.
+
+        private double _lastConfirmedServerXp = 0;
+        /// <summary>Highest cumulative XP the server has confirmed for <see cref="LastConfirmedServerXpAccount"/> during <see cref="LastConfirmedServerXpSeason"/>. 0 = no confirmation yet.</summary>
+        public double LastConfirmedServerXp
+        {
+            get => _lastConfirmedServerXp;
+            set { _lastConfirmedServerXp = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private string? _lastConfirmedServerXpAccount = null;
+        /// <summary>UnifiedId the watermark belongs to. A mismatch voids it (account switch).</summary>
+        public string? LastConfirmedServerXpAccount
+        {
+            get => _lastConfirmedServerXpAccount;
+            set { _lastConfirmedServerXpAccount = value; OnPropertyChanged(); }
+        }
+
+        private string? _lastConfirmedServerXpSeason = null;
+        /// <summary>Season key the watermark belongs to. A mismatch voids it (season rollover legitimately lowers XP).</summary>
+        public string? LastConfirmedServerXpSeason
+        {
+            get => _lastConfirmedServerXpSeason;
+            set { _lastConfirmedServerXpSeason = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Season Recap (local-only, per-device)
 
         // The Season Recap Card surfaces a snapshot of the just-ended season at rollover.
