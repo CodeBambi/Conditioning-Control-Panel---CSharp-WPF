@@ -120,8 +120,10 @@ public class GamificationBridge : IDisposable
             // Retroactive: the companion-chat counter was fed by exactly one call site (the
             // tube's legacy send handler), so every message that went through the modern brain
             // funnel — and everything ever typed in Her Room — counted for nothing (#877).
-            // Long-time chatters would have to start over from zero, so reconstruct the counter
-            // once from what the companion actually persisted.
+            // Long-time chatters would otherwise start over from zero, so put a BEST-EFFORT
+            // FLOOR under the counter once, from the little the companion happened to persist.
+            // It does not recover the true history (nothing on disk can) — see the method
+            // summary for exactly how far it reaches and what it cannot restore.
             BackfillCompanionChatCount();
 
             App.Logger?.Information("GamificationBridge started — achievement subscriptions wired");
@@ -245,28 +247,43 @@ public class GamificationBridge : IDisposable
     }
 
     /// <summary>
-    /// One-shot retroactive repair of <see cref="AchievementProgress.CompanionMessages"/> (#877).
+    /// One-shot BEST-EFFORT floor under <see cref="AchievementProgress.CompanionMessages"/> (#877).
+    /// This is not a reconstruction of the true history — that history was never written down, and
+    /// nothing on disk can recover it. Read the limits below before trusting the number.
     ///
-    /// <para>Two independent records of "the user talked to her" already exist on disk, and the
-    /// higher of them wins:</para>
+    /// <para>Two records of "the user talked to her" exist on disk, and the higher wins. NEITHER is
+    /// a full count:</para>
     /// <list type="bullet">
-    /// <item>the restored turn log — exact, but a rolling window
-    /// (<see cref="CompanionSessionStore.MaxPersistedTurns"/> caps it at 50 user turns), so it is
-    /// a FLOOR on the true count, never the whole history;</item>
-    /// <item><see cref="MemoryStore"/>'s per-mod relationship counters — uncapped and monotonic,
-    /// but only started accumulating when the brain shipped.</item>
+    /// <item>the restored turn log — exact for what it holds, but a rolling window
+    /// (<see cref="CompanionSessionStore.MaxPersistedTurns"/> keeps the last 100 turns, i.e. ~50
+    /// user turns), so it is a FLOOR, never the whole history;</item>
+    /// <item><see cref="MemoryStore"/>'s per-mod relationship counters — uncapped, but NOT an
+    /// independent source: <c>MemorySignalWriter</c> increments them from the very same
+    /// <c>CompanionService.UserMessageSent</c> event that fed <c>CompanionMessages</c>, and it only
+    /// started doing so when the brain shipped. So it under-counts by at least as much as the
+    /// counter it is meant to repair (relationship turns &lt;= CompanionMessages in practice), and
+    /// the <see cref="Math.Max"/> below almost always collapses to the turn-log floor.</item>
     /// </list>
+    ///
+    /// <para>Consequences, stated plainly so nobody re-derives them from a wrong comment:
+    /// the realistic ceiling of this backfill is the ~50-turn window, so
+    /// <c>pleased_to_meet_you</c> (1 message) does get restored for anyone who ever chatted, and
+    /// <c>pillow_talk</c> (<see cref="PillowTalkMessages"/>) will NOT be backfilled for anyone — it
+    /// accrues live from 6.7.5 onward now that <c>CompanionBrain.ChatAsync</c> raises the signal
+    /// for every surface. Long-time chatters are therefore still short of it, and that is a known,
+    /// accepted loss rather than something this method is failing to do.</para>
     ///
     /// <para>The counter is only ever raised, never lowered: a user who already earned messages the
     /// honest way cannot be demoted by a thinner record. Both sources are silent when the user has
     /// chat memory switched off, which is correct — that toggle exists precisely so those turns are
     /// not on disk to be counted.</para>
     ///
-    /// <para>Latched via <see cref="AchievementProgress.CompanionChatBackfilled"/>, and the latch is
-    /// only set once there was a brain to read: with the kill switch off (or a brain that failed to
-    /// construct) there is no evidence to gather, and burning the one-shot on that would leave the
-    /// user permanently un-backfilled. Running every launch instead of once is not an option —
-    /// the window source would drag the counter back down to ~50 forever.</para>
+    /// <para>Latched via <see cref="AchievementProgress.CompanionChatBackfilled"/>. The latch is set
+    /// only when there was a brain to read AND at least one of the two reads came back without
+    /// throwing: with the kill switch off, a brain that failed to construct, or both reads faulted,
+    /// there is no evidence at all, and burning the one-shot on that would leave the user
+    /// permanently un-backfilled. Running every launch instead of once is not an option — the
+    /// window source would drag the counter back down to ~50 forever.</para>
     /// </summary>
     private void BackfillCompanionChatCount()
     {
@@ -277,8 +294,17 @@ public class GamificationBridge : IDisposable
             var brain = App.Brain;
             if (brain == null) return; // no source yet — try again next launch
 
+            // Track whether we actually managed to LOOK. A read that throws is not evidence of
+            // "nothing to find" — if both fault we have seen nothing at all, and burning the
+            // one-shot latch on that would strand the user un-backfilled forever.
+            var readSomething = false;
+
             var restoredTurns = 0;
-            try { restoredTurns = brain.Session.Turns.Count(t => t != null && t.Kind == TurnKind.UserChat); }
+            try
+            {
+                restoredTurns = brain.Session.Turns.Count(t => t != null && t.Kind == TurnKind.UserChat);
+                readSomething = true;
+            }
             catch (Exception ex) { App.Logger?.Debug("GamificationBridge: turn-log backfill read failed: {Error}", ex.Message); }
 
             var relationshipTurns = 0;
@@ -286,8 +312,15 @@ public class GamificationBridge : IDisposable
             {
                 if (brain.Memory is MemoryStore store)
                     relationshipTurns = store.Relationships.Values.Sum(r => r?.ChatTurnsTotal ?? 0);
+                readSomething = true;   // a non-MemoryStore memory is a real answer: no such record
             }
             catch (Exception ex) { App.Logger?.Debug("GamificationBridge: relationship backfill read failed: {Error}", ex.Message); }
+
+            if (!readSomething)
+            {
+                App.Logger?.Debug("GamificationBridge: chat backfill saw no readable source — latch left unset");
+                return; // try again next launch
+            }
 
             p.CompanionChatBackfilled = true;
 
@@ -302,6 +335,10 @@ public class GamificationBridge : IDisposable
 
             Ach?.MarkDirty();
 
+            // pleased_to_meet_you (1 message) is the one this reliably restores. The pillow_talk
+            // check is kept only so a user whose counter was ALREADY at or past the bar isn't left
+            // holding an unlocked-but-unawarded achievement — the backfill itself cannot get anyone
+            // there (see the summary: the evidence ceiling is the ~50-turn window).
             if (p.CompanionMessages > 0)
                 Ach?.TryUnlock("pleased_to_meet_you");
             if (p.CompanionMessages >= PillowTalkMessages)
