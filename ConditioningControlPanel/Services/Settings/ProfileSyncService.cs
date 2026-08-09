@@ -494,7 +494,15 @@ namespace ConditioningControlPanel.Services
                 var unifiedId = App.Settings?.Current?.UnifiedId;
                 if (!string.IsNullOrEmpty(unifiedId))
                 {
-                    App.Logger?.Information("V2 user — loading profile via V2 sync path");
+                    // READ BEFORE WRITE. SyncProfileAsync is a POST: it uploads local state and
+                    // only then reads the merged result back out of the response. That made LOAD a
+                    // write — the first thing a machine did on launch was tell the server what it
+                    // thought was true, which is precisely the wrong order when the local file is
+                    // the thing that might be wrong (#865). Fetch the server's own copy first and
+                    // adopt it (take-higher, so this can never LOWER a legitimate local), then push.
+                    await ReadServerProfileBeforePushAsync(unifiedId!);
+
+                    App.Logger?.Information("V2 user — pushing local state after the server read");
                     var v2Success = await SyncProfileAsync();
                     if (v2Success)
                     {
@@ -651,6 +659,96 @@ namespace ConditioningControlPanel.Services
         /// for any failure of the V2 sync — it no-ops when local already has progress or the
         /// server record is itself empty.
         /// </summary>
+        /// <summary>
+        /// READ-BEFORE-WRITE for the V2 load path (#865).
+        ///
+        /// <see cref="LoadProfileAsync"/> used to "load" a V2 profile by calling
+        /// <see cref="SyncProfileAsync"/>, which is a POST: local state went UP first and the
+        /// server's answer was only read out of the response afterwards. So the opening move of
+        /// every launch was an assertion, made by the party least entitled to make it — a settings
+        /// file that a crashed update, a half-restored backup or a corrupt write may have emptied.
+        /// The server's take-higher merge absorbs most of that, but "most" is not a guarantee, and
+        /// several down-merge paths on this side then reconcile TOWARD whatever came back.
+        ///
+        /// This does the GET first (<see cref="V2AuthService.GetUserProfileAsync"/>, no body, no
+        /// upload — it cannot change anything server-side) and adopts the result through the same
+        /// take-higher <see cref="V2AuthService.ApplyUserDataToSettings"/> the login path uses, so
+        /// it can raise a stale local profile but never lower a legitimate one. The push that
+        /// follows then starts from reconciled state.
+        ///
+        /// Deliberately NOT fatal: a failed read logs and returns false, and the caller pushes
+        /// anyway. Blocking the sync on an unreadable server would strand a user with a flaky
+        /// connection at zero cloud contact; the watermark guard in <see cref="SyncProfileAsync"/>
+        /// is what protects the push itself.
+        /// </summary>
+        private async Task<bool> ReadServerProfileBeforePushAsync(string unifiedId)
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null || string.IsNullOrEmpty(unifiedId)) return false;
+
+            try
+            {
+                var v2Auth = new V2AuthService();
+                var user = await v2Auth.GetUserProfileAsync(unifiedId);
+                if (user == null)
+                {
+                    App.Logger?.Warning("Read-before-write: server profile could not be read for {Id} — pushing local state unreconciled (the XP watermark still guards it).", unifiedId);
+                    return false;
+                }
+
+                var preLevel = settings.PlayerLevel;
+                var preLevelXp = settings.PlayerXP;
+                var localTotalXp = App.Progression?.GetTotalXP(preLevel, preLevelXp) ?? preLevelXp;
+
+                // ApplyUserDataToSettings writes CurrentSeason unconditionally, which is fine on the
+                // login path it was written for but not here, where it runs every launch: a server
+                // that answers with a stale key would walk the season backwards and re-arm the
+                // recap. Adopt the key only when SeasonRecapService agrees it advanced; otherwise
+                // put ours back.
+                var keepSeason = settings.CurrentSeason;
+                var seasonAdvances = Services.SeasonRecapService.ShouldAdoptServerSeason(user.CurrentSeason, keepSeason);
+
+                v2Auth.ApplyUserDataToSettings(user);   // take-higher on level/XP; saves internally
+
+                if (!seasonAdvances && !string.Equals(settings.CurrentSeason, keepSeason, StringComparison.Ordinal))
+                {
+                    settings.CurrentSeason = keepSeason;
+                }
+                else if (seasonAdvances)
+                {
+                    App.Logger?.Information("Read-before-write: season key advanced {Old} -> {New}",
+                        string.IsNullOrEmpty(keepSeason) ? "(none)" : keepSeason, user.CurrentSeason);
+                    ClearXpWatermark(settings, "season rollover (read-before-write)");
+                    NudgeSeasonRecap();
+                }
+
+                RecordServerConfirmedXp(settings, user.Xp);
+                App.Settings?.Save();
+
+                var adopted = settings.PlayerLevel != preLevel || Math.Abs(settings.PlayerXP - preLevelXp) > 0.01;
+                if (adopted)
+                {
+                    App.Logger?.Information("Read-before-write: adopted the server profile BEFORE pushing — Level {LL} ({LX} XP) -> Level {SL} ({SX} XP).",
+                        preLevel, (int)localTotalXp, settings.PlayerLevel, user.Xp);
+                    // The header is written imperatively; without this it shows the pre-adopt
+                    // numbers until something else happens to repaint it (#879).
+                    RaiseProfileLoadedIfProgressionChanged(settings, preLevel, preLevelXp, "read-before-write");
+                }
+                else
+                {
+                    App.Logger?.Debug("Read-before-write: server profile (Level {SL}, {SX} XP) is not ahead of local (Level {LL}, {LX} XP) — nothing to adopt.",
+                        user.Level, user.Xp, preLevel, (int)localTotalXp);
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Read-before-write: server profile read failed — pushing local state unreconciled");
+                return false;
+            }
+        }
+
         private async Task<bool> TryHealDefaultsFromServerAsync(string unifiedId)
         {
             var settings = App.Settings?.Current;
