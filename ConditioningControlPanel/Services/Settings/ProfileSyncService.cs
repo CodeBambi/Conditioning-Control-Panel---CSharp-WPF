@@ -118,6 +118,38 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public event EventHandler? ProfileLoaded;
 
+        /// <summary>
+        /// Repaint the header if this sync round-trip changed the level/XP on screen.
+        ///
+        /// <see cref="ProfileLoaded"/> used to be raised from <see cref="LoadProfileAsync"/> only,
+        /// but <see cref="SyncProfileAsync"/> ADOPTS server progression in four places - the
+        /// restore reconcile, the level_reset handler, the server-is-ahead branch and the
+        /// anti-cheat clamp - and none of them told anybody. The level pill, XP bar, rank title and
+        /// unlockables are written imperatively by MainWindow.UpdateLevelDisplay, not bound, so an
+        /// adoption mid-run left the whole header showing the pre-sync numbers until the next
+        /// restart: the "level/XP display is wrong after a purchase / sign-in" half of #879.
+        ///
+        /// Comparing a snapshot rather than flagging each write site means a future adopt path
+        /// cannot forget to opt in. A false positive (the user earned XP while the request was in
+        /// flight) costs one idempotent repaint.
+        /// </summary>
+        private void RaiseProfileLoadedIfProgressionChanged(Models.AppSettings settings, int preLevel, double preLevelXp, string source)
+        {
+            try
+            {
+                if (settings.PlayerLevel == preLevel && Math.Abs(settings.PlayerXP - preLevelXp) < 0.01) return;
+
+                App.Logger?.Information("{Source}: progression changed Level {OldLevel} ({OldXp} XP) -> Level {NewLevel} ({NewXp} XP) — repainting header",
+                    source, preLevel, (int)preLevelXp, settings.PlayerLevel, (int)settings.PlayerXP);
+                ProfileLoaded?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                // A subscriber throwing must never fail the sync that already succeeded.
+                App.Logger?.Warning(ex, "{Source}: ProfileLoaded notification failed", source);
+            }
+        }
+
         public ProfileSyncService()
         {
             _httpClient = new HttpClient
@@ -662,6 +694,13 @@ namespace ConditioningControlPanel.Services
                     return false;
                 }
 
+                // Snapshot the displayed progression BEFORE anything in this method can rewrite it
+                // (the restore reconcile below, the level_reset handler, the server-ahead adopt and
+                // the anti-cheat clamp all do). Compared again at the end to decide whether the
+                // header needs repainting — see RaiseProfileLoadedIfProgressionChanged (#879).
+                var preSyncLevel = settings.PlayerLevel;
+                var preSyncLevelXp = settings.PlayerXP;
+
                 // This session's settings came out of a rolling daily backup, so the level/XP/skills
                 // below may be up to three days stale and can predate a season rollover. Reconcile
                 // against the server BEFORE the push: the sync POST is the first server contact of
@@ -1173,6 +1212,7 @@ namespace ConditioningControlPanel.Services
                         App.Logger?.Debug("V2 Sync: Could not parse server flags: {Error}", parseEx.Message);
                     }
 
+                    RaiseProfileLoadedIfProgressionChanged(settings, preSyncLevel, preSyncLevelXp, "V2 sync");
                     syncSucceeded = true;
                     return true;
                 }
@@ -1280,6 +1320,7 @@ namespace ConditioningControlPanel.Services
                     MergeCloudProfile(result.Profile);
                 }
 
+                RaiseProfileLoadedIfProgressionChanged(settings, preSyncLevel, preSyncLevelXp, "V1 sync");
                 syncSucceeded = true;
                 return true;
             }
