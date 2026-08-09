@@ -87,6 +87,15 @@ namespace ConditioningControlPanel.Services
 
         public void Stop()
         {
+            // #875: dismiss FIRST, before the not-running early-return. A card can be on screen with
+            // the scheduler stopped — every ad-hoc surface shows one that way (voice command, the
+            // dashboard Test button, Deeper, MantraLockScreenCommand, remote trigger_lock_card). The
+            // panic key reaches an ad-hoc card only through MainWindow.StopAdHocEffects -> this Stop(),
+            // so an early-return here made panic a silent no-op and left the user staring at a card
+            // nothing could close. ForceCloseAll is idempotent (empty visible set = no-op), so paying
+            // it on every Stop() costs nothing when no card is up.
+            try { LockCardWindow.ForceCloseAll(); } catch { }
+
             if (!_isRunning) return;
             _isRunning = false;
             
