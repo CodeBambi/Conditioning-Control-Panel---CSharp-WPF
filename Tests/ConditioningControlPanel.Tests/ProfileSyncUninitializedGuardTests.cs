@@ -27,6 +27,10 @@ public class ProfileSyncUninitializedGuardTests
     public void EmptyServerRecordIsUninitialized(int level, double xp)
         => Assert.True(ProfileSyncService.ServerProfileLooksUninitialized(level, xp));
 
+    // NOTE: "not uninitialized" is NOT the same as "safe for the clamp to adopt". The Level 1
+    // rows below are pinned here only for this predicate's own contract (and the shared 100 XP
+    // floor); the clamp sites refuse them anyway - see ServerProfileTooEmptyToClampTo further
+    // down, which is what closes #865 for real.
     [Theory]
     [InlineData(2, 0)]        // level says progression even with no XP echoed
     [InlineData(1, 100)]      // exactly at the floor - meaningful
@@ -55,5 +59,62 @@ public class ProfileSyncUninitializedGuardTests
         Assert.Equal(100d, ProfileSyncService.MeaningfulProgressXp);
         Assert.True(ProfileSyncService.ServerProfileLooksUninitialized(1, ProfileSyncService.MeaningfulProgressXp - 1));
         Assert.False(ProfileSyncService.ServerProfileLooksUninitialized(1, ProfileSyncService.MeaningfulProgressXp));
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // The CLAMP guard: stronger than "uninitialized", and the one the two clamp sites ask.
+    //
+    // ServerProfileLooksUninitialized narrows #865 but leaves a hole one digit wide. Its XP floor
+    // is 100, so a server row emptied down to Level 1 / 150 XP reads as a REAL record — and the
+    // clamp fires (local is 75,000 XP ahead), resetting a Level 40 player to Level 1. The server
+    // row never changes, so it repeats on every launch: #865 again, just with a survivor.
+    //
+    // The clamp sites now ask ServerProfileTooEmptyToClampTo, which refuses any Level<=1 record
+    // whatever XP rides along. Nothing legitimate lands a 75k-XP-ahead account back on Level 1;
+    // a real season zeroing arrives as the explicit level_reset flag on its own branch.
+    // ---------------------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(1, 150)]     // THE regression: old guard called this "real" and clamped
+    [InlineData(1, 5_000)]   // and it got worse the more XP the emptied row kept
+    [InlineData(1, 99_999)]
+    public void ALevelOneRowIsNeverClampedToHoweverMuchXpItCarries(int level, double xp)
+    {
+        // Pinned as a pair on purpose: the old predicate's answer is the bug, the new one is the
+        // fix. If someone ever routes the clamp back through the weaker test, this fails loudly.
+        Assert.False(ProfileSyncService.ServerProfileLooksUninitialized(level, xp));
+        Assert.True(ProfileSyncService.ServerProfileTooEmptyToClampTo(level));
+    }
+
+    [Theory]
+    [InlineData(0)]  // server omitted level entirely
+    [InlineData(1)]  // pristine, or emptied
+    public void AnEmptyOrPristineRowIsNeverClampedTo(int level)
+        => Assert.True(ProfileSyncService.ServerProfileTooEmptyToClampTo(level));
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(40)]
+    [InlineData(199)]
+    public void ARowWithARealLevelStaysClampable(int level)
+    {
+        // The clamp is not disabled — a genuine server-side correction (Level 40 local edited up
+        // to Level 90) still lands, because the server's record has a real level to clamp to.
+        Assert.False(ProfileSyncService.ServerProfileTooEmptyToClampTo(level));
+    }
+
+    [Fact]
+    public void TheClampGuardStrictlySubsumesTheUninitializedGuard()
+    {
+        // Every record the weaker predicate refuses, the clamp guard also refuses — the clamp
+        // sites lost no protection by switching over, they only gained the Level 1 / >=100 XP
+        // band. Stated as a property so a future edit to either predicate that breaks the
+        // containment shows up here rather than as a fresh #865 report.
+        foreach (var level in new[] { 0, 1, 2, 5, 40 })
+        foreach (var xp in new[] { 0d, 99d, 100d, 150d, 250_000d })
+        {
+            if (ProfileSyncService.ServerProfileLooksUninitialized(level, xp))
+                Assert.True(ProfileSyncService.ServerProfileTooEmptyToClampTo(level));
+        }
     }
 }
