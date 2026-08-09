@@ -83,6 +83,106 @@ namespace ConditioningControlPanel.Services
         public static bool ServerProfileTooEmptyToClampTo(int serverLevel)
             => serverLevel <= 1;
 
+        #region Server-confirmed XP watermark (#865 regression guard)
+
+        /// <summary>
+        /// The watermark that currently applies, or 0 when none does.
+        ///
+        /// A stored watermark only counts when it belongs to BOTH the account we are syncing and
+        /// the season we are in. Season scope matters because a rollover lowers seasonal XP on
+        /// purpose - an unscoped watermark would fight the rollover every launch, forever. Account
+        /// scope matters because two accounts sharing a machine have nothing to say about each
+        /// other's totals.
+        /// </summary>
+        public static double ActiveXpWatermark(Models.AppSettings settings)
+        {
+            if (settings.LastConfirmedServerXp <= 0) return 0;
+
+            var account = settings.UnifiedId ?? string.Empty;
+            if (!string.Equals(settings.LastConfirmedServerXpAccount ?? string.Empty, account, StringComparison.Ordinal))
+                return 0;
+
+            var season = settings.CurrentSeason ?? string.Empty;
+            if (!string.Equals(settings.LastConfirmedServerXpSeason ?? string.Empty, season, StringComparison.Ordinal))
+                return 0;
+
+            return settings.LastConfirmedServerXp;
+        }
+
+        /// <summary>
+        /// Record what the server just told us it holds. Only ever called with a figure that came
+        /// out of a server response, never with a local calculation - the whole value of the
+        /// watermark is that it is the server's own word, so a corrupt local file cannot raise it.
+        /// Monotonic within an (account, season) pair; re-scoped rather than merged when either
+        /// changes.
+        /// </summary>
+        public static void RecordServerConfirmedXp(Models.AppSettings settings, double serverTotalXp)
+        {
+            if (serverTotalXp < MeaningfulProgressXp) return;   // nothing worth defending
+
+            var account = settings.UnifiedId ?? string.Empty;
+            var season = settings.CurrentSeason ?? string.Empty;
+            var inScope = ActiveXpWatermark(settings) > 0;
+
+            if (!inScope)
+            {
+                settings.LastConfirmedServerXpAccount = account;
+                settings.LastConfirmedServerXpSeason = season;
+                settings.LastConfirmedServerXp = serverTotalXp;
+                App.Logger?.Debug("[XP watermark] set to {Xp} for account {Account} season {Season}", (int)serverTotalXp, account, season);
+                return;
+            }
+
+            if (serverTotalXp > settings.LastConfirmedServerXp)
+            {
+                settings.LastConfirmedServerXp = serverTotalXp;
+                App.Logger?.Debug("[XP watermark] raised to {Xp}", (int)serverTotalXp);
+            }
+        }
+
+        /// <summary>
+        /// Should we REFUSE to adopt a server profile because it would zero one the server itself
+        /// previously confirmed? Returns true (= refuse, and log loudly) only when all of:
+        /// a watermark is in scope for this account and season, and the incoming profile is empty
+        /// by <see cref="ServerProfileLooksUninitialized"/>.
+        ///
+        /// The escapes are deliberate and are all "the user, or an admin acting for them, asked for
+        /// this": a season rollover voids the watermark before the reset is applied (see the season
+        /// adopt in <see cref="SyncProfileAsync"/>), and logout/account-switch voids it in
+        /// MainWindow.ClearProgressionData. What is left is the case with no explanation at all -
+        /// the server handing back an empty record for an account it told us minutes ago was
+        /// Level 47 - and that is never something to write to disk.
+        /// </summary>
+        public static bool RefuseToZeroAConfirmedProfile(Models.AppSettings settings, int serverLevel, double serverTotalXp, string site)
+        {
+            var watermark = ActiveXpWatermark(settings);
+            if (watermark <= 0) return false;
+            if (!ServerProfileLooksUninitialized(serverLevel, serverTotalXp)) return false;
+
+            App.Logger?.Error("[XP watermark] {Site} REFUSED — the server returned an empty profile (Level {SL}, {SX} XP) for an account it confirmed at {Watermark} XP this same season, and nothing has reset it. Keeping local (Level {LL}). If this is a real reset, it will arrive with a season rollover or the user can log out.",
+                site, serverLevel, (int)serverTotalXp, (int)watermark, settings.PlayerLevel);
+            return true;
+        }
+
+        /// <summary>
+        /// Void the watermark. Called when the account's XP is legitimately allowed to fall: a
+        /// season rollover or an explicit logout/account switch (MainWindow.ClearProgressionData).
+        /// Without this the guard would block the very resets it is supposed to let through.
+        /// </summary>
+        public static void ClearXpWatermark(Models.AppSettings? settings, string reason)
+        {
+            if (settings == null) return;
+            if (settings.LastConfirmedServerXp <= 0 && settings.LastConfirmedServerXpAccount == null) return;
+
+            App.Logger?.Information("[XP watermark] cleared ({Reason}) - was {Xp} for season {Season}",
+                reason, (int)settings.LastConfirmedServerXp, settings.LastConfirmedServerXpSeason ?? "(none)");
+            settings.LastConfirmedServerXp = 0;
+            settings.LastConfirmedServerXpAccount = null;
+            settings.LastConfirmedServerXpSeason = null;
+        }
+
+        #endregion
+
         private readonly HttpClient _httpClient;
         private DispatcherTimer? _heartbeatTimer;
         private bool _disposed;
@@ -831,6 +931,24 @@ namespace ConditioningControlPanel.Services
                     return false;
                 }
 
+                // XP regression guard (#865). The defaults-guard above only covers the case where
+                // local looks like a FRESH install and we have not loaded yet. It says nothing
+                // about a local file that lost half its progress, or about the second sync of a
+                // session after a bad adopt — both of which would happily push a lower number and
+                // ask the server to agree. The watermark is the server's own last word on this
+                // account this season, so a payload below it cannot be right: refuse to send and
+                // say so loudly rather than talking the server down to a local mistake. Voided
+                // automatically on account switch and season rollover, so legitimate resets are
+                // untouched.
+                var watermark = ActiveXpWatermark(settings);
+                if (watermark > 0 && totalXp < watermark)
+                {
+                    App.Logger?.Error("[XP watermark] Sync REFUSED — would push {Xp} XP, below the {Watermark} XP the server last confirmed for this account this season (Level {Level}). This local profile has LOST progress; not asking the server to match it. Fix the local file or reset the account deliberately.",
+                        (int)totalXp, (int)watermark, settings.PlayerLevel);
+                    LastSyncError = "Sync refused: local XP is below the last server-confirmed total";
+                    return false;
+                }
+
                 App.Logger?.Information("Syncing profile - Level: {Level}, TotalXP: {Xp}, VideoMinutes: {VideoMin:F1}, LockCards: {LockCards}",
                     settings.PlayerLevel,
                     (int)totalXp,
@@ -1196,6 +1314,11 @@ namespace ConditioningControlPanel.Services
                             App.Logger?.Information("V2 Sync: season key advanced {Old} -> {New} (server-authoritative)",
                                 string.IsNullOrEmpty(settings.CurrentSeason) ? "(none)" : settings.CurrentSeason, serverSeason);
                             settings.CurrentSeason = serverSeason;
+
+                            // A rollover is the one moment seasonal XP is SUPPOSED to fall, so the
+                            // previous season's watermark stops applying here — before the
+                            // level_reset handler below, which is the thing that does the falling.
+                            ClearXpWatermark(settings, "season rollover");
                             App.Settings?.Save();
 
                             // Nudge the recap on the key change itself, not only on level_reset.
@@ -1206,7 +1329,8 @@ namespace ConditioningControlPanel.Services
                         }
 
                         // Handle level_reset — server admin reset all levels, force client to accept
-                        if (v2Result?.LevelReset == true && v2Result.User != null)
+                        if (v2Result?.LevelReset == true && v2Result.User != null &&
+                            !RefuseToZeroAConfirmedProfile(settings, v2Result.User.Level, v2Result.User.Xp, "level_reset"))
                         {
                             var serverLevel = v2Result.User.Level;
                             var serverXp = v2Result.User.Xp;
@@ -1307,6 +1431,16 @@ namespace ConditioningControlPanel.Services
                                     App.Settings?.Save();
                                 }
                             }
+                        }
+
+                        // Last, once the season key and any reset above have settled: remember what
+                        // the server said it holds. This response is the server's own account of
+                        // this account, which is exactly what the watermark is for — a figure a
+                        // corrupted local file cannot manufacture. (#865)
+                        if (v2Result?.User != null)
+                        {
+                            RecordServerConfirmedXp(settings, v2Result.User.Xp);
+                            App.Settings?.Save();
                         }
                     }
                     catch (Exception parseEx)
@@ -1552,6 +1686,10 @@ namespace ConditioningControlPanel.Services
             var localTotalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
             var cloudTotalXp = (double)cloudProfile.Xp;
 
+            // The cloud just told us what it holds — that is a server-confirmed figure, so it sets
+            // the XP watermark for this account/season the same way a V2 sync response does (#865).
+            RecordServerConfirmedXp(settings, cloudTotalXp);
+
             // Cloud is authoritative on startup. Allow a small grace delta for unsynced
             // progress from a crash, but reject suspiciously large local values (file edits).
             const double MAX_STARTUP_DELTA = 50000; // Max XP above cloud we trust from local
@@ -1585,6 +1723,8 @@ namespace ConditioningControlPanel.Services
                 // carries, because a row emptied to Level 1 / 150 XP would otherwise sail past the
                 // 100 XP floor and reset a Level 40 local every launch anyway. See
                 // ServerProfileTooEmptyToClampTo.
+                // (The watermark guard adds nothing here: RefuseToZeroAConfirmedProfile fires on a
+                // strict subset of what this predicate already covers, so V1 is defended either way.)
                 bool looksUninitialized =
                     ServerProfileTooEmptyToClampTo(cloudProfile.Level);
 
