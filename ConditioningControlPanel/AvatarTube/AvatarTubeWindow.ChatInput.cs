@@ -733,13 +733,16 @@ namespace ConditioningControlPanel
             TxtUserInput.Text = "";
             ToggleInputPanel();
 
-            // Which of the two send paths below this message takes. Decided ONCE, up front,
-            // so the EMIT hook and the actual call can't disagree if the kill switch flips
-            // between them.
+            // Which of the send paths below this message takes. Decided ONCE, up front, so the
+            // EMIT hook and the actual call can't disagree if the kill switch — or IsAvailable,
+            // which flips on provider/login state from another thread — changes between them.
+            // BOTH halves are cached: re-evaluating aiChatLive at the branch below would let the
+            // no-AI branch run after the hook already decided the brain would handle the emit.
             var brain = App.Brain;
+            var ai = App.Ai;
+            var aiChatLive = App.Settings?.Current?.AiChatEnabled == true && ai != null && ai.IsAvailable;
             var routesThroughBrain =
-                App.Settings?.Current?.AiChatEnabled == true && App.Ai != null && App.Ai.IsAvailable
-                && Services.Companion.Brain.CompanionBrain.ShouldRoute(brain);
+                aiChatLive && Services.Companion.Brain.CompanionBrain.ShouldRoute(brain);
 
             // EMIT hook for GamificationBridge companion-chat achievements. Fired once
             // per genuine user send (past the cooldown gate, non-empty input), before
@@ -759,7 +762,7 @@ namespace ConditioningControlPanel
             // not remain visible in the in-memory history view. AddToChatHistory is
             // called only after the AI call returns with a non-refusal result.
 
-            if (App.Settings?.Current?.AiChatEnabled == true && App.Ai != null && App.Ai.IsAvailable)
+            if (aiChatLive)
             {
                 try
                 {
@@ -779,7 +782,7 @@ namespace ConditioningControlPanel
                     // (or a brain that failed to construct) falls back to the legacy stateless call.
                     var result = routesThroughBrain
                         ? await brain!.ChatAsync(input)
-                        : await App.Ai.GetBambiReplyExAsync(input);
+                        : await ai!.GetBambiReplyExAsync(input);   // aiChatLive proved non-null
 
                     if (result.Refusal != null)
                     {
