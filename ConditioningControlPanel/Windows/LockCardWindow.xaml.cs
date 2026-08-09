@@ -361,8 +361,12 @@ namespace ConditioningControlPanel
 
             // Handle strict mode
             TxtStrict.Text = _strictMode ? Loc.Get("label_strict") : "";
-            // Esc always works now (even in strict mode) so always show the hint.
-            TxtEscHint.Text = Loc.Get("label_press_esc_to_close");
+            // #875: promise only the exit this card actually honours. A strict card with the panic key
+            // live swallows Esc, so name the panic key instead of telling the user to press a key that
+            // will do nothing; every other case (non-strict, or strict with no panic key) keeps Esc.
+            TxtEscHint.Text = EscClosesCard
+                ? Loc.Get("label_press_esc_to_close")
+                : Loc.GetF("label_strict_only_panic_key_closes", App.Settings?.Current?.PanicKey ?? "?");
 
             // Position on screen
             if (screen != null)
@@ -604,13 +608,25 @@ namespace ConditioningControlPanel
             if (_voiceMode) StartVoiceSolve();
         }
 
+        /// <summary>
+        /// #875: does Esc close THIS card? Non-strict cards: yes, Esc is the ordinary dismiss. Strict
+        /// cards: only when the panic key is switched off, because then Esc is the sole remaining exit
+        /// and strict mode must never become an inescapable trap (<see cref="Models.AppSettings.CheckDangerousCombinations"/>
+        /// warns about that combination rather than making it real). Settings unreadable ⇒ treat the
+        /// panic key as gone and keep Esc live: the failure mode has to fall open, not shut.
+        /// </summary>
+        private bool EscClosesCard =>
+            !_strictMode || App.Settings?.Current?.PanicKeyEnabled != true;
+
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
-            // Esc always closes the lock card, even in strict mode. Strict mode used to
-            // block Esc but that left the panic key (often "1") as the only way out —
-            // and "1" can collide with mantra characters, so the user was effectively
-            // trapped. Esc is a dedicated exit that won't ever be part of a mantra.
-            if (e.Key == Key.Escape && !_isCompleted)
+            // Esc closes the card unless strict mode is on AND the panic key is live to cover it
+            // (see EscClosesCard). The unconditional close that the 55f872086 file split left here
+            // voided strict mode outright: any card, however strict, died to a single Esc. Strict now
+            // means "type it out, or panic out" — and Half 1 of #875 (LockCardService.Stop force-closing
+            // above its not-running guard) is what makes that panic key work for an ad-hoc card, so the
+            // two fixes must ship together or strict cards become unescapable.
+            if (e.Key == Key.Escape && !_isCompleted && EscClosesCard)
             {
                 App.Logger?.Information("Lock Card closed via ESC (strict={Strict})", _strictMode);
                 CloseAllWindows();
@@ -627,7 +643,8 @@ namespace ConditioningControlPanel
             // below ever fired for the case it was written for (#734). The real block is
             // TxtInput_PreviewKeyDown; this just covers keys pressed while the input doesn't have focus
             // (voice mode, mirrors). Do NOT move the Esc branch above into a preview handler: it is the
-            // deliberate always-available exit the dead-man's switch depends on.
+            // deliberate exit the dead-man's switch depends on, and it has to stay on the bubbling
+            // handler so nothing upstream can swallow it (#875 gates WHEN it fires, never WHERE).
             if (IsBlockedInputGesture(e.Key, Keyboard.Modifiers))
             {
                 e.Handled = true;

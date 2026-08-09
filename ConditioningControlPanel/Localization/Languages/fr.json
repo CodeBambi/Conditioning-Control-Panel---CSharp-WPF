@@ -1559,6 +1559,7 @@
   "label_good_girl_2": "✨ Bonne fille ! ✨",
   "label_press_esc_to_close_if_allowed": "Appuie sur Échap pour fermer (si autorisé)",
   "label_press_esc_to_close": "Appuie sur Échap pour fermer",
+  "label_strict_only_panic_key_closes": "Verrouillage strict - seule la touche panique ({0}) ferme ceci",
   "label_input_synced_from_primary_monitor": "Saisie synchronisée depuis le moniteur principal",
   "label_text_6": "🎮",
   "label_text_7": "⭐",

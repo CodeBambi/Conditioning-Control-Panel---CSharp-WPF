@@ -1559,6 +1559,7 @@
   "label_good_girl_2": "✨ Braves Mädchen! ✨",
   "label_press_esc_to_close_if_allowed": "Drücke ESC zum Schließen (wenn erlaubt)",
   "label_press_esc_to_close": "Drücke ESC zum Schließen",
+  "label_strict_only_panic_key_closes": "Strikte Sperre - nur die Panik-Taste ({0}) schließt das",
   "label_input_synced_from_primary_monitor": "Eingabe vom Hauptmonitor synchronisiert",
   "label_text_6": "🎮",
   "label_text_7": "⭐",
