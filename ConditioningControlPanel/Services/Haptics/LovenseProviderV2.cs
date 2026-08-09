@@ -104,15 +104,21 @@ namespace ConditioningControlPanel.Services.Haptics
         {
             var handler = new HttpClientHandler
             {
-                // LAN-only target. Certificate errors are tolerated for loopback, for the
-                // *.lovense.club alias (which resolves to a private LAN address) and for a private
-                // LAN IP typed directly - Lovense Connect's certificate is issued for the alias, so
-                // reaching the phone at https://<ip>:30010 (the #858 fallback for networks where the
-                // alias cannot resolve) is always a name mismatch. Everything else, including any
-                // routable address, is validated normally.
+                // LAN-only target, and EXACTLY ONE defect is forgiven: a hostname mismatch, and only
+                // when the address we dialled is loopback, the *.lovense.club alias (which resolves
+                // to a private LAN address) or a private LAN IP typed directly. Lovense Connect
+                // serves the certificate issued for the *.lovense.club alias on the phone itself, so
+                // reaching it at https://<ip>:30010 (the #858 fallback for networks where the alias
+                // cannot resolve) presents a cert whose name never matches the IP we asked for.
+                //
+                // Everything else still fails: an untrusted/expired chain, a revoked cert, a missing
+                // cert, and any name mismatch that arrives BIT-ORed with a chain error - hence the
+                // exact equality rather than a HasFlag test. Any routable address is validated in
+                // full, name mismatch included.
                 ServerCertificateCustomValidationCallback = (msg, cert, chain, errors) =>
                 {
                     if (errors == System.Net.Security.SslPolicyErrors.None) return true;
+                    if (errors != System.Net.Security.SslPolicyErrors.RemoteCertificateNameMismatch) return false;
                     var host = msg.RequestUri?.Host ?? "";
                     return IsLoopback(host) ||
                            host.EndsWith(".lovense.club", StringComparison.OrdinalIgnoreCase) ||
