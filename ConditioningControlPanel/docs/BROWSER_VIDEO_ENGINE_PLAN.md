@@ -150,6 +150,11 @@ All of the following stay in VideoService (C#-side) and must fire for browser se
 - [ ] Safety timers (all C#-side, unchanged mechanisms): duration guillotine armed
       from the page `meta` message (was `LengthChanged`); 10-min fallback timer;
       `VideoMaxDurationSeconds` hard cap; `_enhancementDriving` stall-watch semantics.
+      The stall watch must read the engine-agnostic `GetCurrentPlaybackTimeMs()` and
+      must treat an **unknown** clock as no-progress, not as progress — otherwise the
+      force-close is unreachable for a browser session and a hung renderer (no
+      `ProcessFailed`, page watchdogs dead with it) holds the screen forever, because
+      arming the duration guillotine nulls the 10-min fallback timer (#874).
 - [ ] Attention checks: `SetupAttention`, the spawn schedule, the pass/fail tally, gaze
       (`GetGazeTargets`/`GazeClick`), the toy-button alternative and `EndCurrentVideo`'s
       pass/fail/XP/troll-replay/mercy logic are all unchanged. What changed is only the RENDERING:

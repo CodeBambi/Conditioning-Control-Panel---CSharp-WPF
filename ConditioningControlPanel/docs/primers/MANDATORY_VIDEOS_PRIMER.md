@@ -260,7 +260,13 @@ block at `VideoService.cs:55–110`.
    `StartSafetyTimer(duration)` (`:3159`, duration+5s) once the real length is known. If a Deeper
    enhancement is driving (`_enhancementDriving`), it switches from a one-shot guillotine to a
    **progress-based stall watch** (rechecks every 15s, force-ends only after 90s of zero progress) so a
-   loop/hold isn't cut (#536). `StartMaxLengthCapTimer` (`:3263`) separately enforces the user's
+   loop/hold isn't cut (#536). The stall watch reads `GetCurrentPlaybackTimeMs()`, so it works on
+   **both** engines, and an **unknown** clock (`-1`) counts as *no progress*, not as progress — reading
+   `_primaryMediaPlayer.Time` directly and treating `-1` as a fresh sample made the force-close
+   unreachable on the browser engine, where that player is null by design (#874). Note that once
+   `StartSafetyTimer` runs it **nulls the fallback timer**, so for an enhancement-driven clip this stall
+   watch is the *only* remaining guillotine — a hung WebView2 renderer raises no `ProcessFailed` and its
+   page-side watchdogs die with it. `StartMaxLengthCapTimer` (`:3263`) separately enforces the user's
    `VideoMaxDurationSeconds` as a wall-clock cap (the selection filter is best-effort, #584).
 2. **Vout (video-output) watchdog** — `StartVoutWatchdog` (`:3298`), a **threadpool** timer. If no
    video output exists `VoutGraceMs` (8s) after `Play()`, the screen is white regardless of decode

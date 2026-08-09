@@ -227,6 +227,9 @@ namespace ConditioningControlPanel.Services
         // bound the safety timer switches from a duration guillotine to a progress-based stall
         // watch (see StartSafetyTimer) so real playback isn't cut "after the original time is over".
         private volatile bool _enhancementDriving;
+        // Last KNOWN primary playback position seen by the stall watch (-1 = none seen yet). An
+        // unknown reading never overwrites it, so the watch keeps measuring against the real last
+        // position instead of treating "no clock" as a fresh sample (#874).
         private long _lastSafetyTimeMs = -1;
         private DateTime _lastSafetyProgressUtc = DateTime.MinValue;
         // Recheck cadence + no-progress grace used only while an enhancement is driving.
@@ -5210,7 +5213,10 @@ namespace ConditioningControlPanel.Services
         {
             _safetyTimer?.Stop();
 
-            // Stop the fallback timer since we now have accurate duration
+            // Stop the fallback timer since we now have accurate duration. NOTE: from here on this
+            // timer IS the only guillotine — while an enhancement drives the clip the tick below
+            // becomes a stall watch, and that stall watch is the sole thing standing between a wedged
+            // renderer/decoder and a fullscreen video that never goes away. Keep it reachable (#874).
             _fallbackSafetyTimer?.Stop();
             _fallbackSafetyTimer = null;
 
@@ -5246,12 +5252,25 @@ namespace ConditioningControlPanel.Services
 
                 if (_enhancementDriving)
                 {
-                    long curMs = -1;
-                    try { curMs = _primaryMediaPlayer?.Time ?? -1; } catch { curMs = -1; }
+                    // Engine-agnostic clock (#874). Reading _primaryMediaPlayer directly made this
+                    // branch blind on the browser engine, where that player is null BY DESIGN: curMs
+                    // was permanently -1, and the old "_lastSafetyTimeMs < 0" arm below read that as
+                    // PROGRESS on every 15s pass, so the force-close could never be reached. This is
+                    // the only guillotine left by then — StartSafetyTimer nulls the 10-minute fallback
+                    // timer the moment a duration is known — so a hung WebView2 renderer (no
+                    // ProcessFailed, page watchdog dead with it) held the screen forever.
+                    long curMs;
+                    try { curMs = GetCurrentPlaybackTimeMs(); } catch { curMs = -1; }
 
                     var now = DateTime.UtcNow;
-                    bool advancing = curMs >= 0 && curMs != _lastSafetyTimeMs;
-                    if (advancing || _lastSafetyTimeMs < 0)
+                    bool clockKnown = curMs >= 0;
+                    // Only a CHANGED, known position counts as progress. An unknown clock (-1) is not
+                    // progress: it leaves the last known position and the stall clock both standing, so
+                    // a clock that never reports still reaches the force-close after the grace window
+                    // instead of resetting it forever. The first known reading seeds the baseline for
+                    // free (_lastSafetyTimeMs starts at -1, so it never equals a real position).
+                    bool advancing = clockKnown && curMs != _lastSafetyTimeMs;
+                    if (advancing)
                     {
                         _lastSafetyTimeMs = curMs;
                         _lastSafetyProgressUtc = now;
@@ -5266,11 +5285,16 @@ namespace ConditioningControlPanel.Services
                     if ((now - _lastSafetyProgressUtc).TotalSeconds < EnhancementStallGraceSeconds)
                     {
                         SetSafetyInterval(EnhancementRecheckInterval);
-                        return; // paused (e.g. speak-hold) but within grace — not a wedge
+                        // Paused (e.g. speak-hold), or the clock has not reported a position yet
+                        // (pre-roll, a seek in flight) — within grace either way, so not a wedge.
+                        return;
                     }
 
                     _safetyTimer?.Stop();
-                    App.Logger?.Warning("VideoService: Enhancement-driven video stalled ~{Grace}s with no playback progress. Forcing cleanup.", EnhancementStallGraceSeconds);
+                    App.Logger?.Warning(
+                        "VideoService: Enhancement-driven video stalled ~{Grace}s with no playback progress ({Clock}). Forcing cleanup.",
+                        EnhancementStallGraceSeconds,
+                        clockKnown ? $"held at {curMs}ms" : "playback clock never reported a position");
                     Cleanup();
                     return;
                 }
