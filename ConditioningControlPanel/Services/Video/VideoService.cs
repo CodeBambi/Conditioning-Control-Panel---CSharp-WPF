@@ -383,6 +383,40 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Duration of the current primary clip in seconds, or 0 if unknown — whichever engine owns
+        /// it. A browser session reports the page's <c>meta</c> duration (0 until it arrives, and for
+        /// streams that never learn it); a LibVLC session reports the primary player's Length. (#874)
+        /// </summary>
+        public double GetPrimaryDurationSeconds()
+        {
+            try
+            {
+                if (_browserActive) return _duration > 0 ? _duration : 0;
+                var len = _primaryMediaPlayer?.Length ?? 0;
+                return len > 0 ? len / 1000.0 : 0;
+            }
+            catch { return 0; }
+        }
+
+        /// <summary>
+        /// Whether the primary clip is actually advancing, whichever engine owns it. The browser page
+        /// posts nothing while paused, so the browser answer is tracked on the host side: playing has
+        /// been confirmed, and neither a PausePrimary hold nor a grace pause is in force. (#874)
+        /// </summary>
+        public bool IsPrimaryMediaPlaying
+        {
+            get
+            {
+                try
+                {
+                    if (_browserActive) return _browserStartedFired && !_browserPaused && !_gracePaused;
+                    return _primaryMediaPlayer?.IsPlaying ?? false;
+                }
+                catch { return false; }
+            }
+        }
+
+        /// <summary>
         /// Seek the primary player to the given absolute time. No-op if no
         /// video is active or the player rejects the seek (LibVLC will silently
         /// ignore for non-seekable streams).
@@ -412,7 +446,9 @@ namespace ConditioningControlPanel.Services
         /// <summary>Pause every screen's player (kept in lockstep for multi-monitor). No-op if none.</summary>
         public void PausePrimary()
         {
-            if (_browserActive) _browser?.Pause();
+            // The pause edge is remembered because the page goes silent while paused — this flag is
+            // the only way IsPrimaryMediaPlaying can answer for a browser session. (#874)
+            if (_browserActive) { _browserPaused = true; _browser?.Pause(); }
             foreach (var p in SnapshotPlayers())
             {
                 try { p.SetPause(true); }
@@ -429,7 +465,7 @@ namespace ConditioningControlPanel.Services
             // _gracePaused BEFORE it calls this, so the legitimate resume is unaffected.
             if (_gracePaused) return;
 
-            if (_browserActive) _browser?.Resume();
+            if (_browserActive) { _browserPaused = false; _browser?.Resume(); }
             foreach (var p in SnapshotPlayers())
             {
                 try { p.SetPause(false); }
