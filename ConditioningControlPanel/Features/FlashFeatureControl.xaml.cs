@@ -52,6 +52,9 @@ namespace ConditioningControlPanel.Features
                 ChkFlashGazeLinger.IsChecked = s.FlashGazeLingerEnabled;
                 SliderFlashLingerMs.Value = s.FlashGazeLingerExtensionMs;
                 TxtFlashLingerMs.Text = $"{s.FlashGazeLingerExtensionMs} ms";
+                ChkFlashAvoidCenter.IsChecked = s.FlashAvoidCenter;
+                SliderCenterExclusion.Value = s.FlashCenterExclusionPercent;
+                TxtCenterExclusion.Text = $"{s.FlashCenterExclusionPercent}%";
             }
             finally { _isLoading = false; }
         }
@@ -70,7 +73,9 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.FlashSolidMode) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGazePopEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGazeLingerEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.FlashGazeLingerExtensionMs))
+                e.PropertyName == nameof(Models.AppSettings.FlashGazeLingerExtensionMs) ||
+                e.PropertyName == nameof(Models.AppSettings.FlashAvoidCenter) ||
+                e.PropertyName == nameof(Models.AppSettings.FlashCenterExclusionPercent))
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
             }
@@ -102,6 +107,38 @@ namespace ConditioningControlPanel.Features
             var v = (int)e.NewValue;
             TxtFlashLingerMs.Text = $"{v} ms";
             s.FlashGazeLingerExtensionMs = v;
+            App.Settings?.Save();
+        }
+
+        /// <summary>
+        /// #770/#859 — keeps flashes out of a centered square on every monitor so they never
+        /// cover a game's crosshair. Global user preference: sessions and presets never touch
+        /// it, and this control is its only UI surface.
+        /// </summary>
+        private void ChkFlashAvoidCenter_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var on = ChkFlashAvoidCenter.IsChecked ?? false;
+            s.FlashAvoidCenter = on;
+            App.Logger?.Information("Flash avoid-center toggled: {Enabled} ({Pct}%)",
+                on, s.FlashCenterExclusionPercent);
+            App.Settings?.Save();
+        }
+
+        /// <summary>
+        /// #770 — size of the centered no-flash square, as a % of the shorter monitor edge.
+        /// AppSettings clamps to 5-60; the slider carries the same range.
+        /// </summary>
+        private void SliderCenterExclusion_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var v = (int)e.NewValue;
+            TxtCenterExclusion.Text = $"{v}%";
+            s.FlashCenterExclusionPercent = v;
             App.Settings?.Save();
         }
 
