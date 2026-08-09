@@ -1558,6 +1558,7 @@
   "label_good_girl_2": "✨ 착한 소녀! ✨",
   "label_press_esc_to_close_if_allowed": "ESC를 눌러 닫기 (허용된 경우)",
   "label_press_esc_to_close": "ESC를 눌러 닫기",
+  "label_strict_only_panic_key_closes": "엄격 잠금 - 패닉 키({0})로만 닫을 수 있습니다",
   "label_input_synced_from_primary_monitor": "기본 모니터에서 입력 동기화됨",
   "label_text_6": "🎮",
   "label_text_7": "⭐",

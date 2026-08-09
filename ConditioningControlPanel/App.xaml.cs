@@ -413,6 +413,17 @@ namespace ConditioningControlPanel
         public static SkillTreeService SkillTree { get; private set; } = null!;
         public static KeywordTriggerService KeywordTriggers { get; private set; } = null!;
         public static KeywordTriggerPresetService KeywordPresets { get; private set; } = null!;
+        /// <summary>
+        /// The one WH_KEYBOARD_LL hook that carries the panic key — MainWindow owns it and registers
+        /// it here on creation (and clears it on dispose). Published so code that has to know whether
+        /// a panic escape REALLY exists can ask the hook instead of trusting
+        /// <c>PanicKeyEnabled</c>: <see cref="GlobalKeyboardHook.IsInstalled"/> is false when
+        /// SetWindowsHookEx failed, and Windows silently un-registers a low-level hook whose callback
+        /// overran LowLevelHooksTimeout with nothing to reinstall it (#616-#623). Deliberately NOT the
+        /// short-lived hooks other windows spin up for themselves (e.g. the chaos countdown) — only
+        /// this one is wired to <c>HandlePanicKeyPress</c>.
+        /// </summary>
+        public static GlobalKeyboardHook? PanicHook { get; internal set; }
         public static ScreenOcrService ScreenOcr { get; private set; } = null!;
         public static KeywordHighlightService? KeywordHighlight { get; private set; }
         public static ActivityTracker ActivityTracker { get; private set; } = null!;
@@ -874,8 +885,9 @@ namespace ConditioningControlPanel
                 // Stop all visual overlays (spiral, pink filter, etc.)
                 Overlay?.Stop();
 
-                // Stop lock card and pop quiz if active
-                LockCard?.Stop();
+                // Stop lock card and pop quiz if active. Kill-everything path (panic + exit), so the
+                // card on screen goes too — see LockCardService.Stop(dismissOpenCards).
+                LockCard?.Stop(dismissOpenCards: true);
                 PopQuiz?.Stop();
 
                 // Stop mantra lab audio

@@ -2515,6 +2515,7 @@
   "label_good_girl_2": "✨ Good girl! ✨",
   "label_press_esc_to_close_if_allowed": "Press ESC to close (if allowed)",
   "label_press_esc_to_close": "Press ESC to close",
+  "label_strict_only_panic_key_closes": "Strict lock - only the panic key ({0}) closes this",
   "label_input_synced_from_primary_monitor": "Input synced from primary monitor",
   "label_text_6": "🎮",
   "label_text_7": "⭐",

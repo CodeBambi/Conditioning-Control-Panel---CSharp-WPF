@@ -1558,6 +1558,7 @@
   "label_good_girl_2": "✨ ¡Buena chica! ✨",
   "label_press_esc_to_close_if_allowed": "Presiona ESC para cerrar (si está permitido)",
   "label_press_esc_to_close": "Presiona ESC para cerrar",
+  "label_strict_only_panic_key_closes": "Bloqueo estricto - solo la tecla de pánico ({0}) cierra esto",
   "label_input_synced_from_primary_monitor": "Entrada sincronizada desde el monitor principal",
   "label_text_6": "🎮",
   "label_text_7": "⭐",

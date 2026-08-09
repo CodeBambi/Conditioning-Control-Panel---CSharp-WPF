@@ -1558,6 +1558,7 @@
   "label_good_girl_2": "✨ えらいね！ ✨",
   "label_press_esc_to_close_if_allowed": "ESCで閉じる（許可されている場合）",
   "label_press_esc_to_close": "ESCで閉じる",
+  "label_strict_only_panic_key_closes": "厳格ロック - パニックキー（{0}）でのみ閉じられます",
   "label_input_synced_from_primary_monitor": "プライマリモニターから入力を同期",
   "label_text_6": "🎮",
   "label_text_7": "⭐",

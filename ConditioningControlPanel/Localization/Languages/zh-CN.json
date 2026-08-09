@@ -2289,6 +2289,7 @@
   "label_good_girl_2": "✨ 乖女孩！✨",
   "label_press_esc_to_close_if_allowed": "按 ESC 关闭（如果允许）",
   "label_press_esc_to_close": "按 ESC 关闭",
+  "label_strict_only_panic_key_closes": "严格锁定 - 只有紧急停止键（{0}）可以关闭",
   "label_input_synced_from_primary_monitor": "输入从主显示器同步",
   "label_text_6": "🎮",
   "label_text_7": "⭐",

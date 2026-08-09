@@ -1453,7 +1453,7 @@ namespace ConditioningControlPanel
                 App.BubbleCount?.Stop();
                 App.MindWipe?.Stop();
                 App.BrainDrain?.Stop();
-                App.LockCard?.Stop();
+                App.LockCard?.Stop(dismissOpenCards: true);   // remote panic == local panic
 
                 // Turn off overlays but keep the overlay service alive
                 // so the controller can turn them back on. Clear the settings flags first so a

@@ -834,7 +834,8 @@ namespace ConditioningControlPanel.Services
                 App.BubbleCount?.Stop();
                 App.MindWipe?.Stop();
                 App.BrainDrain?.Stop();
-                App.LockCard?.Stop();
+                App.LockCard?.Stop();   // scheduler only — ForceCloseAll below drops the visible card,
+                                        // deliberately after the queue reset (see the note there)
                 App.Wallpaper?.Deactivate();
 
                 // Reset the queue BEFORE the ForceCloseAll calls: a lock-card Complete fired
@@ -922,7 +923,7 @@ namespace ConditioningControlPanel.Services
                 App.BubbleCount?.Stop();
                 App.MindWipe?.Stop();
                 App.BrainDrain?.Stop();
-                App.LockCard?.Stop();
+                App.LockCard?.Stop();   // scheduler only — ForceCloseAll below drops the visible card
                 App.Wallpaper?.Deactivate();
 
                 // Reset BEFORE ForceCloseAll so a lock-card Complete can't dequeue a stale
