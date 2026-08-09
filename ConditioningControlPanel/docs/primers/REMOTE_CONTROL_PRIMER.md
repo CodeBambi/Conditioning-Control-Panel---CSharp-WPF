@@ -73,9 +73,15 @@ There is no direct peer connection. Three parties talk through the proxy:
   `DispatcherTimer` (`:151`). Raises `SessionStarted` (`:159`). Returns the session code (or `null` on
   failure).
 - **`StopSessionAsync`** (`:253`): POSTs `/v2/remote/stop` (best-effort) then `CleanupSession`.
-- **`CleanupSession`** (`:275`): stops the timer, resets all flags, **runs `StopAllRemoteEffects` on
-  the UI thread** (`:296`), clears `App.Overlay.BypassLevelCheck`, fires `ControllerConnectedChanged`
-  (if it was connected) + `SessionEnded`.
+- **`CleanupSession`** (`:275`): stops the timer, resets all flags, **runs
+  `StopAllRemoteEffects(force: false)` on the UI thread** (`:296`), clears
+  `App.Overlay.BypassLevelCheck`, **stops `App.Overlay` when the subject has no engine running**,
+  fires `ControllerConnectedChanged` (if it was connected) + `SessionEnded`.
+  - `force: false` is load-bearing. `CleanupSession` is reached by *expiry* — poll `404`, 3× `401`,
+    or the subject unticking Remote Control — none of which is a controller verb, so the subject's
+    own session must survive it. See §4c.
+  - The overlay stop is the counterpart to `EnsureOverlayRunning`: the connect path can start
+    `OverlayService` with no engine behind it, and nothing else would ever stop it.
 - **`Dispose`** (`:303`): stops the timer, disposes the `HttpClient`. Called first in `App` shutdown so
   no new effects queue during teardown.
 
@@ -179,18 +185,38 @@ string over the network and calls into another service. There is no per-command 
 | `enable_strict_lock` / `disable_strict_lock` | `Settings.StrictLockEnabled` (`:1244`/`:1252`) | |
 | `disable_panic` / `enable_panic` | `Settings.PanicKeyEnabled` (`:1260`/`:1268`) | Controller can disable the subject's ESC panic key. |
 | `trigger_wallpaper` / `stop_wallpaper` | `App.Wallpaper.Activate()/Shuffle()` / `.Deactivate()` (`:1276`/`:1283`) | |
-| `trigger_panic` | `StopAllRemoteEffects()` (`:1287`) | The "stop everything" verb (see §4c). |
+| `trigger_panic` | `StopAllRemoteEffects(force: true)` (`:1287`) | The "stop everything" verb — the **only** caller that passes `force` (see §4c). |
 | _unknown_ | logged as warning (`:1291`) | Silently ignored otherwise. |
 
-### 4c. Panic / stop-all fan-out (`StopAllRemoteEffects`, `:770`)
-Called by `trigger_panic` and by `CleanupSession`. Kills audio, cancels + re-arms Autonomy (careful
-dance to keep the toggle honest, `:787`), stops Haptics, Video (LibVLC **and** the WebView2 HypnoTube
-path via `StopBrowserVideoFromRemote`, `:807`), Flash, Subliminal, Bubbles, BouncingText, BubbleCount,
-MindWipe, BrainDrain, LockCard, Wallpaper; **resets `App.InteractionQueue` before** force-closing
-LockCard/BubbleCount windows (`:822`, ordering matters — #462); turns off overlays; stops the session
-engine (`StopSessionFromRemote`); restores the window from tray + shows the avatar. `StopRemoteTriggeredEffects`
-(`:900`) is the **lighter** variant used on controller disconnect when
+### 4c. Panic / stop-all fan-out (`StopAllRemoteEffects(bool force)`, `:770`)
+Called by `trigger_panic` (`force: true`) and by `CleanupSession` (`force: false`). Kills audio,
+cancels + re-arms Autonomy (careful dance to keep the toggle honest, `:787`), stops Haptics, Video
+(LibVLC **and** the WebView2 HypnoTube path via `StopBrowserVideoFromRemote`, `:807`), Flash,
+Subliminal, Bubbles, BouncingText, BubbleCount, MindWipe, BrainDrain, LockCard, Wallpaper; **resets
+`App.InteractionQueue` before** force-closing LockCard/BubbleCount windows (`:822`, ordering matters
+— #462); turns off overlays; restores the window from tray + shows the avatar.
+`StopRemoteTriggeredEffects` (`:900`) is the **lighter** variant used on controller disconnect when
 `StopEffectsOnRemoteDisconnect` is set.
+
+**The session/engine stop is conditional.** `StopSessionFromRemote()` runs only when
+`force || MainWindowRef.IsSessionRemoteStarted`:
+
+| Path | `force` | Session was started by | Session stopped? |
+|---|---|---|---|
+| `trigger_panic` | `true` | anyone (or nothing running) | **yes** — panic means stop everything |
+| expiry / 401×3 / untick (`CleanupSession`) | `false` | the **controller** (`start_session`) | **yes** |
+| expiry / 401×3 / untick (`CleanupSession`) | `false` | the **subject** (Sessions tab, Programs tab, dashboard) | **no** |
+| expiry / 401×3 / untick (`CleanupSession`) | `false` | nothing running | no-op |
+
+Everything else in the fan-out is unconditional in both modes. The narrow exemption exists because a
+subject who armed Remote Control mid-run and was never connected to used to lose the run — and its
+bonus XP, via `TrackSessionAbandoned` — the moment the server expired the idle remote session.
+
+`IsSessionRemoteStarted` (`MainWindow.RemoteControl.cs`) is **not a latch**: it reference-compares
+`_remoteStartedSession` (the exact `Session` instance handed to `StartSessionFromRemote`) against
+`_sessionEngine.CurrentSession`, so it self-clears when the engine stops or runs anything else. Keep
+it that way — the one-shot latches this replaced (`_remoteSessionHasTakenLocal`) leaked precisely
+because some path forgot to reset them (§10.7).
 
 ### 4d. Subsystem touchpoints beyond the dispatch table
 - **SessionEngine**: three callbacks wired by `WireRemoteSessionCallbacks` (`MainWindow.RemoteControl.cs:989`)
@@ -202,13 +228,18 @@ engine (`StopSessionFromRemote`); restores the window from tray + shows the avat
   running session's elapsed time + bonus XP and re-fired on every 120 s-idle → reconnect cycle.
   Taking the floor is now always an **explicit command**: `start_session` (which stops any running
   session itself, `MainWindow.RemoteControl.cs:1285`), `pause_session`, `stop_session`,
-  `trigger_panic`. Consequently `_engineStoppedForController`, `_remoteSessionHasTakenLocal` and
+  `trigger_panic`. The **end** of the remote session is likewise not a takeover — see the §4c truth
+  table; only a controller-started run goes down with it.
+  Consequently `_engineStoppedForController`, `_remoteSessionHasTakenLocal` and
   `RestoreEngineAfterControllerLeftIfNeeded` (#294's restore) are **gone** — with nothing
   force-stopping the engine there is nothing to restore, and restoring on the idle timeout would
   restart an engine the subject deliberately left off. `HandleControllerDisconnectCleanup` now only
   runs the opt-in `StopRemoteTriggeredEffects` branch.
-- **Overlay**: `EnsureOverlayRunning` (`:953`) sets `App.Overlay.BypassLevelCheck = true` so remote
-  pink/spiral work regardless of the subject's level; cleared on session end.
+- **Overlay**: `EnsureOverlayRunning` (`:953`) starts `OverlayService` if needed and sets
+  `App.Overlay.BypassLevelCheck = true` so remote pink/spiral work regardless of the subject's level.
+  `CleanupSession` clears the bypass **and stops the service again** unless the subject's own engine
+  is running (`MainWindow.IsEngineRunning`) — the connect path can start it with no engine behind it,
+  and a service left running holds a 500 ms `DispatcherTimer` for the process lifetime.
 - **Progression / quests**: only the quest hook (§4a). **No XP is awarded for remote commands
   themselves.**
 - **GamificationBridge**: subscribes to the service's `SessionStarted` event
@@ -341,7 +372,7 @@ A public opt-in matchmaking directory bolted onto Remote Control ("SP5 layer 3")
    **only the server decides which commands to enqueue for a given tier.** Trusting the tier for
    safety requires trusting the proxy.
 3. **`trigger_panic` (remote) does NOT call `TriggerPanicFromRemote`.** The remote panic verb runs
-   `StopAllRemoteEffects()` (`:1287`). `MainWindow.TriggerPanicFromRemote` (`:1381`) — despite the name
+   `StopAllRemoteEffects(force: true)` (`:1287`). `MainWindow.TriggerPanicFromRemote` (`:1381`) — despite the name
    — is actually invoked by the **local voice** panic command (`AutonomyService.VoiceCommands.cs:133`),
    not by any remote command. Misleading name; don't assume the remote path goes through it.
 4. **`MinimizeToTrayForRemote` (`:1439`) appears unused.** No caller found in the C# sources — likely
@@ -359,7 +390,9 @@ A public opt-in matchmaking directory bolted onto Remote Control ("SP5 layer 3")
    (the restore helper cleared one, so the next reconnect re-stopped the engine; `StopRemoteControl`
    unsubscribes `SessionEnded` before stopping, so the other never got cleared at all). **#878** cut
    the knot by removing the teardown instead of guarding it. Anything you add to the connect path
-   must be idempotent and non-destructive.
+   must be idempotent and non-destructive. The same rule now covers the **session-end** path: it is
+   reached by expiry and by the subject unticking the box, so it may only tear down what the
+   controller owns (§4c).
 8. **Controller-supplied text and URLs cross a trust boundary.** `trigger_custom_subliminal` puts
    arbitrary controller text on the subject's screens (capped/stripped inside `FlashSubliminalCustom`).
    `play_hypnotube` is the **only** command that hard-validates its input (`HtUrlHelper.IsEligibleHtUrl`,
@@ -371,6 +404,14 @@ A public opt-in matchmaking directory bolted onto Remote Control ("SP5 layer 3")
 10. **`CleanupSession` runs `StopAllRemoteEffects` on the UI thread synchronously** (`:296`,
     `RunOnUISync`). If you add expensive teardown, keep it UI-thread-safe and fast, or the session-stop
     click will hitch.
+11. **`OnRemoteSessionEnded` unticks the box under `_isLoading`, so `StopRemoteControl` never runs on
+    that path.** The untick is deliberate (`ChkRemoteControlEnabled_Changed` early-returns on
+    `_isLoading`, `:37`), but `StopRemoteControl` was the only place the four service handlers
+    (`ControllerConnectedChanged`, `ControllerIdleChanged`, `CommandReceived`, `SessionEnded`) were
+    detached — so every service-initiated end left them attached and the next enable stacked another
+    full set, one more per expiry cycle. Both ends are now defended: the subscription site does `-=`
+    before every `+=`, and `OnRemoteSessionEnded` detaches all four. **If you add a fifth event, wire
+    it into both places.**
 
 ---
 
