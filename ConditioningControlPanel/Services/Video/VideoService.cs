@@ -227,6 +227,9 @@ namespace ConditioningControlPanel.Services
         // bound the safety timer switches from a duration guillotine to a progress-based stall
         // watch (see StartSafetyTimer) so real playback isn't cut "after the original time is over".
         private volatile bool _enhancementDriving;
+        // Last KNOWN primary playback position seen by the stall watch (-1 = none seen yet). An
+        // unknown reading never overwrites it, so the watch keeps measuring against the real last
+        // position instead of treating "no clock" as a fresh sample (#874).
         private long _lastSafetyTimeMs = -1;
         private DateTime _lastSafetyProgressUtc = DateTime.MinValue;
         // Recheck cadence + no-progress grace used only while an enhancement is driving.
@@ -383,6 +386,57 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Duration of the current primary clip in seconds, or 0 if unknown — whichever engine owns
+        /// it. A browser session reports the page's <c>meta</c> duration (0 until it arrives, and for
+        /// streams that never learn it); a LibVLC session reports the primary player's Length. (#874)
+        ///
+        /// After teardown BOTH engines are gone (CloseAll clears <c>_browserActive</c> and nulls
+        /// <c>_primaryMediaPlayer</c> before Cleanup raises <c>VideoEnded</c>), so the last known
+        /// <c>_duration</c> answers instead of 0. That ordering is load-bearing for Deeper: the
+        /// EnhancementEngine's duration-less completion fallback credits PlaybackCompleted for any run
+        /// past 60s when this returns 0, which on skip / panic / attention-fail is FALSE credit for a
+        /// video the user did not finish. <c>_duration</c> survives teardown by design — only the
+        /// PlayVideo prologue and the browser→LibVLC handoff reset it — so it is the honest answer.
+        /// </summary>
+        public double GetPrimaryDurationSeconds()
+        {
+            try
+            {
+                // A live LibVLC player is the freshest source; a browser session has none by design.
+                if (!_browserActive)
+                {
+                    var len = _primaryMediaPlayer?.Length ?? 0;
+                    if (len > 0) return len / 1000.0;
+                }
+                // Browser session, or no live engine at all: the last duration this service was told
+                // about (page `meta` / LengthChanged / MediaOpened). Still 0 for a genuinely
+                // duration-less clip — the one case the engine's fallback completion is meant for.
+                return _duration > 0 ? _duration : 0;
+            }
+            catch { return 0; }
+        }
+
+        /// <summary>
+        /// Whether the primary clip is actually advancing, whichever engine owns it. The browser answer
+        /// is host-side bookkeeping: playing has been confirmed, and neither a PausePrimary hold nor a
+        /// grace pause is in force. <c>_browserPaused</c> follows the PausePrimary/PlayPrimary edges and
+        /// the `paused` flag the page stamps on every `time` post (a pause/seek/end forces a post WHILE
+        /// paused, so the arrival of a position never implies playback). (#874)
+        /// </summary>
+        public bool IsPrimaryMediaPlaying
+        {
+            get
+            {
+                try
+                {
+                    if (_browserActive) return _browserStartedFired && !_browserPaused && !_gracePaused;
+                    return _primaryMediaPlayer?.IsPlaying ?? false;
+                }
+                catch { return false; }
+            }
+        }
+
+        /// <summary>
         /// Seek the primary player to the given absolute time. No-op if no
         /// video is active or the player rejects the seek (LibVLC will silently
         /// ignore for non-seekable streams).
@@ -412,7 +466,9 @@ namespace ConditioningControlPanel.Services
         /// <summary>Pause every screen's player (kept in lockstep for multi-monitor). No-op if none.</summary>
         public void PausePrimary()
         {
-            if (_browserActive) _browser?.Pause();
+            // The pause edge is remembered because the page goes silent while paused — this flag is
+            // the only way IsPrimaryMediaPlaying can answer for a browser session. (#874)
+            if (_browserActive) { _browserPaused = true; _browser?.Pause(); }
             foreach (var p in SnapshotPlayers())
             {
                 try { p.SetPause(true); }
@@ -429,7 +485,7 @@ namespace ConditioningControlPanel.Services
             // _gracePaused BEFORE it calls this, so the legitimate resume is unaffected.
             if (_gracePaused) return;
 
-            if (_browserActive) _browser?.Resume();
+            if (_browserActive) { _browserPaused = false; _browser?.Resume(); }
             foreach (var p in SnapshotPlayers())
             {
                 try { p.SetPause(false); }
@@ -5254,7 +5310,10 @@ namespace ConditioningControlPanel.Services
         {
             _safetyTimer?.Stop();
 
-            // Stop the fallback timer since we now have accurate duration
+            // Stop the fallback timer since we now have accurate duration. NOTE: from here on this
+            // timer IS the only guillotine — while an enhancement drives the clip the tick below
+            // becomes a stall watch, and that stall watch is the sole thing standing between a wedged
+            // renderer/decoder and a fullscreen video that never goes away. Keep it reachable (#874).
             _fallbackSafetyTimer?.Stop();
             _fallbackSafetyTimer = null;
 
@@ -5290,12 +5349,25 @@ namespace ConditioningControlPanel.Services
 
                 if (_enhancementDriving)
                 {
-                    long curMs = -1;
-                    try { curMs = _primaryMediaPlayer?.Time ?? -1; } catch { curMs = -1; }
+                    // Engine-agnostic clock (#874). Reading _primaryMediaPlayer directly made this
+                    // branch blind on the browser engine, where that player is null BY DESIGN: curMs
+                    // was permanently -1, and the old "_lastSafetyTimeMs < 0" arm below read that as
+                    // PROGRESS on every 15s pass, so the force-close could never be reached. This is
+                    // the only guillotine left by then — StartSafetyTimer nulls the 10-minute fallback
+                    // timer the moment a duration is known — so a hung WebView2 renderer (no
+                    // ProcessFailed, page watchdog dead with it) held the screen forever.
+                    long curMs;
+                    try { curMs = GetCurrentPlaybackTimeMs(); } catch { curMs = -1; }
 
                     var now = DateTime.UtcNow;
-                    bool advancing = curMs >= 0 && curMs != _lastSafetyTimeMs;
-                    if (advancing || _lastSafetyTimeMs < 0)
+                    bool clockKnown = curMs >= 0;
+                    // Only a CHANGED, known position counts as progress. An unknown clock (-1) is not
+                    // progress: it leaves the last known position and the stall clock both standing, so
+                    // a clock that never reports still reaches the force-close after the grace window
+                    // instead of resetting it forever. The first known reading seeds the baseline for
+                    // free (_lastSafetyTimeMs starts at -1, so it never equals a real position).
+                    bool advancing = clockKnown && curMs != _lastSafetyTimeMs;
+                    if (advancing)
                     {
                         _lastSafetyTimeMs = curMs;
                         _lastSafetyProgressUtc = now;
@@ -5310,11 +5382,16 @@ namespace ConditioningControlPanel.Services
                     if ((now - _lastSafetyProgressUtc).TotalSeconds < EnhancementStallGraceSeconds)
                     {
                         SetSafetyInterval(EnhancementRecheckInterval);
-                        return; // paused (e.g. speak-hold) but within grace — not a wedge
+                        // Paused (e.g. speak-hold), or the clock has not reported a position yet
+                        // (pre-roll, a seek in flight) — within grace either way, so not a wedge.
+                        return;
                     }
 
                     _safetyTimer?.Stop();
-                    App.Logger?.Warning("VideoService: Enhancement-driven video stalled ~{Grace}s with no playback progress. Forcing cleanup.", EnhancementStallGraceSeconds);
+                    App.Logger?.Warning(
+                        "VideoService: Enhancement-driven video stalled ~{Grace}s with no playback progress ({Clock}). Forcing cleanup.",
+                        EnhancementStallGraceSeconds,
+                        clockKnown ? $"held at {curMs}ms" : "playback clock never reported a position");
                     Cleanup();
                     return;
                 }

@@ -150,6 +150,11 @@ All of the following stay in VideoService (C#-side) and must fire for browser se
 - [ ] Safety timers (all C#-side, unchanged mechanisms): duration guillotine armed
       from the page `meta` message (was `LengthChanged`); 10-min fallback timer;
       `VideoMaxDurationSeconds` hard cap; `_enhancementDriving` stall-watch semantics.
+      The stall watch must read the engine-agnostic `GetCurrentPlaybackTimeMs()` and
+      must treat an **unknown** clock as no-progress, not as progress — otherwise the
+      force-close is unreachable for a browser session and a hung renderer (no
+      `ProcessFailed`, page watchdogs dead with it) holds the screen forever, because
+      arming the duration guillotine nulls the 10-min fallback timer (#874).
 - [ ] Attention checks: `SetupAttention`, the spawn schedule, the pass/fail tally, gaze
       (`GetGazeTargets`/`GazeClick`), the toy-button alternative and `EndCurrentVideo`'s
       pass/fail/XP/troll-replay/mercy logic are all unchanged. What changed is only the RENDERING:
@@ -172,9 +177,16 @@ All of the following stay in VideoService (C#-side) and must fire for browser se
 - [ ] `PausePrimary`/`PlayPrimary`/`SeekPrimary` map to messages (voice commands,
       DtRH); `GetCurrentPlaybackTimeMs` + `PrimaryPlaybackTimeMsChanged` fed from
       `time` messages (FunScript haptics + Deeper time source keep working).
-- [ ] `PrimaryMediaPlayer` stays **null** during browser sessions — Deeper's
-      enhancement bridge simply won't attach (documented Stage-1 gap; the null path
-      already exists and must not throw).
+- [x] `PrimaryMediaPlayer` stays **null** during browser sessions, but Deeper's
+      enhancement bridge attaches anyway (#874): `VideoServiceTimeSource` reads the
+      engine-agnostic surface (`GetPrimaryDurationSeconds`, `IsPrimaryMediaPlaying`,
+      `BrowserVideoAspect` from the page `meta` size), and the bridge's guard only
+      refuses when NEITHER engine has a clock (the MediaElement fallback window).
+      The original Stage-1 gap — bridge silently refusing every mp4/m4v/webm while
+      the browser engine was default — shipped 6.7.0→6.7.4 and is closed.
+      A contract that surface carries: the page tags every `time` post with its own
+      `paused` flag, and the host reads pause state from THAT — pause/seek/end each
+      force a post *while* paused, so the arrival of a position never means "playing".
 - [ ] `SessionSwitch` (lock) + `PowerModeChanged` (suspend) force-clean unchanged.
 - [ ] Teardown generation guard applies to browser session continuations too.
 - [ ] `VideoMetadataCache` backfill: write duration from the page `meta` message so

@@ -260,7 +260,13 @@ block at `VideoService.cs:55–110`.
    `StartSafetyTimer(duration)` (`:3159`, duration+5s) once the real length is known. If a Deeper
    enhancement is driving (`_enhancementDriving`), it switches from a one-shot guillotine to a
    **progress-based stall watch** (rechecks every 15s, force-ends only after 90s of zero progress) so a
-   loop/hold isn't cut (#536). `StartMaxLengthCapTimer` (`:3263`) separately enforces the user's
+   loop/hold isn't cut (#536). The stall watch reads `GetCurrentPlaybackTimeMs()`, so it works on
+   **both** engines, and an **unknown** clock (`-1`) counts as *no progress*, not as progress — reading
+   `_primaryMediaPlayer.Time` directly and treating `-1` as a fresh sample made the force-close
+   unreachable on the browser engine, where that player is null by design (#874). Note that once
+   `StartSafetyTimer` runs it **nulls the fallback timer**, so for an enhancement-driven clip this stall
+   watch is the *only* remaining guillotine — a hung WebView2 renderer raises no `ProcessFailed` and its
+   page-side watchdogs die with it. `StartMaxLengthCapTimer` (`:3263`) separately enforces the user's
    `VideoMaxDurationSeconds` as a wall-clock cap (the selection filter is best-effort, #584).
 2. **Vout (video-output) watchdog** — `StartVoutWatchdog` (`:3298`), a **threadpool** timer. If no
    video output exists `VoutGraceMs` (8s) after `Play()`, the screen is white regardless of decode
@@ -293,17 +299,37 @@ block at `VideoService.cs:55–110`.
 videos drivable by the same effect engine the standalone Deeper player uses. Flow:
 
 1. On `VideoStarted` (UI thread), `BindForCurrentVideo` (`:46`): bail unless `VideoEnhanceIfPossible`;
-   `EnhancementResolver.ResolveForLocalMedia(LastVideoPath)`; if no `PrimaryMediaPlayer` (MediaElement
-   fallback) log-and-bail; load the `.ccpenh.json` into its **own** `EnhancementHostService`; build a
-   `VideoServiceTimeSource` and `Bind` it (attach/detach lambdas capture *this* source so a fast next
-   video can't stale-detach the new one).
+   `EnhancementResolver.ResolveForLocalMedia(LastVideoPath)`; if there is NO playback clock at all —
+   no `PrimaryMediaPlayer` **and** no browser session (i.e. the MediaElement fallback) — log-and-bail
+   (#874: browser sessions bind like LibVLC ones; the old `PrimaryMediaPlayer == null` bail kept every
+   browser-routed mp4/m4v/webm enhancement silently dead 6.7.0→6.7.4); load the `.ccpenh.json` into
+   its **own** `EnhancementHostService`; build a `VideoServiceTimeSource` and `Bind` it (attach/detach
+   lambdas capture *this* source so a fast next video can't stale-detach the new one).
 2. It calls `_video.SetEnhancementDriving(true)` so the safety timer switches to stall-watch mode (§6).
 3. `VideoServiceTimeSource` exposes time/seek/pause/play + `GetVideoRect` (contain-fit rect for gaze
-   rules, `:105`) + SAR-corrected aspect. It marshals LibVLC-thread `TimeChanged` to the UI thread
-   (`:47`) because the engine mutates band/fired-state from the UI tick and webcam handlers.
+   rules, `:105`) + SAR-corrected aspect. Engine-agnostic (#874): duration, playing-state and aspect
+   read `VideoService.GetPrimaryDurationSeconds` / `IsPrimaryMediaPlaying` / `BrowserVideoAspect`, so
+   the same source drives both engines (browser aspect comes from the page `meta` frame size; the page
+   renders `#fg` contain-fit full-window, the same geometry `FitContain` models). It marshals
+   LibVLC-thread `TimeChanged` to the UI thread (`:47`) because the engine mutates band/fired-state
+   from the UI tick and webcam handlers (browser `time` messages already arrive on the UI thread and
+   pass straight through the same marshal).
+   **Browser playing-state is never inferred from message arrival.** `doPause()`, the `seeked` handler
+   and the natural end all *force* a `time` post while the clip is paused, so the page stamps a
+   `paused` flag on every position and `OnBrowserTime` sets `_browserPaused` **from that field**
+   (absent ⇒ leave the `PausePrimary`/`PlayPrimary` edge alone; old cached page HTML). Clearing it on
+   any `time` message made a paused clip read as playing one message-hop after `PausePrimary` — which
+   is exactly the window Deeper's own speak-holds live in (#874).
 4. On `VideoEnded` → `Unbind` (`:136`); clears the driving flag, unloads. **Panic/`CloseAll` does NOT
    raise `VideoEnded`**, so the panic path calls `ForceUnbind()` (`:134`) or active overlays keep
    dispatching after the video is gone (#364).
+   **Teardown ordering vs. completion credit:** `CloseAll` clears `_browserActive` and nulls
+   `_primaryMediaPlayer` *before* `Cleanup` raises `VideoEnded`, so by the time `EnhancementEngine.Stop`
+   runs neither engine is live. `GetPrimaryDurationSeconds` therefore falls back to the last known
+   `_duration` — without it the engine's duration-less completion fallback (`EnhancementEngine.cs:454`)
+   would fire `PlaybackCompleted` for **any** run past 60s, crediting a Deeper completion on skip,
+   panic and attention-fail (#874). `_duration` survives teardown by design: only the `PlayVideo`
+   prologue and the browser→LibVLC handoff reset it.
 
 `SeekPrimary`/`PausePrimary`/`PlayPrimary` (`:254/275/285`) mirror the operation to **every** screen's
 player so a Deeper blink/rewind doesn't desync the monitors (#527).

@@ -33,6 +33,17 @@ namespace ConditioningControlPanel.Services
         private string? _browserPath;
         private bool _browserStrict;
         private long _browserTimeMs = -1;
+        /// <summary>Pause state of the session, the answer behind IsPrimaryMediaPlaying for a browser
+        /// clip. Set on the PausePrimary/PlayPrimary edges (grace pause and Deeper's SpeakPromptSession
+        /// both route through those) and then kept honest by the `paused` field the page stamps on
+        /// EVERY `time` post. It is not inferred from a message arriving: pause, seek and the natural
+        /// end all force a post while the clip is paused, so "a time message means it is playing" is
+        /// false and reading it that way made a paused video report as playing. (#874)</summary>
+        private volatile bool _browserPaused;
+        /// <summary>Display aspect (w/h) from the page's `meta` message, 0 until known. Read by
+        /// VideoServiceTimeSource.GetVideoAspect so Deeper gaze rules can compute the contain-fit
+        /// picture box for a browser session (the page renders #fg object-fit: contain). (#874)</summary>
+        private double _browserVideoAspect;
         /// <summary>Teardown generation captured when the session started - a late page message that
         /// belongs to a video the user already panicked away must not act (see _teardownGeneration).</summary>
         private int _browserGeneration;
@@ -51,6 +62,11 @@ namespace ConditioningControlPanel.Services
         /// duck sweep never lowers the app's OWN video audio (LibVLC audio is in-process and
         /// structurally un-duckable, so this is what keeps the two engines at parity).</summary>
         public bool IsBrowserSessionActive => _browserActive;
+
+        /// <summary>Aspect ratio (w/h) of the clip in the live browser session, or 0 when unknown /
+        /// no browser session. The page's video element is contain-fit over the full window, so this
+        /// plus the window rect yields the rendered picture box. (#874)</summary>
+        public double BrowserVideoAspect => _browserActive ? _browserVideoAspect : 0;
 
         private BrowserVideoEngine Browser
         {
@@ -94,6 +110,8 @@ namespace ConditioningControlPanel.Services
                 _browserPath = path;
                 _browserStrict = strict;
                 _browserTimeMs = -1;
+                _browserPaused = false;
+                _browserVideoAspect = 0;
                 _browserGeneration = _teardownGeneration;
                 _browserFallbackDone = false;
                 _browserStartedFired = false;
@@ -228,6 +246,8 @@ namespace ConditioningControlPanel.Services
 
             _browserActive = false;
             _browserTimeMs = -1;
+            _browserPaused = false;
+            _browserVideoAspect = 0;
 
             var browserWindows = engine.Windows.ToList();
             try { engine.StopSession(); }
@@ -340,6 +360,9 @@ namespace ConditioningControlPanel.Services
         private void OnBrowserMeta(long durationMs, int width, int height)
         {
             if (!BrowserEventIsCurrent()) return;
+            // Captured BEFORE the duration gate: a stream with unknown duration still knows its frame
+            // size, and Deeper's gaze rect only needs the aspect. (#874)
+            if (width > 0 && height > 0) _browserVideoAspect = (double)width / height;
             // 0 = the page cannot know the duration (some webm / fragmented mp4). Arming a
             // zero-length guillotine would kill the clip instantly; the 10-minute fallback timer
             // stays armed as the net, exactly as it does when LibVLC's LengthChanged never fires.
@@ -432,10 +455,17 @@ namespace ConditioningControlPanel.Services
             });
         }
 
-        private void OnBrowserTime(long ms)
+        private void OnBrowserTime(long ms, bool? paused)
         {
             if (!_browserActive) return;
             _browserTimeMs = ms;
+            // Take the pause state FROM the message, never from its mere arrival: doPause(), the
+            // 'seeked' handler and the natural end all force a post while the clip is paused, so
+            // blind-clearing here made IsPrimaryMediaPlaying report true one message-hop after
+            // PausePrimary — exactly the window Deeper's speak-holds live in (#874). null = older
+            // cached page HTML that predates the field; leave the PausePrimary/PlayPrimary edges
+            // to answer, which is the pre-#874 behaviour minus the blind clear.
+            if (paused.HasValue) _browserPaused = paused.Value;
             _lastWatchPositionMs = ms;   // watch-time crediting (#447), same field the LibVLC path feeds
             try { PrimaryPlaybackTimeMsChanged?.Invoke(ms); }
             catch (Exception ex) { App.Logger?.Debug("PrimaryPlaybackTimeMsChanged handler error: {Error}", ex.Message); }

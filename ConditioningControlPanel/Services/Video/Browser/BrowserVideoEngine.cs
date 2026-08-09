@@ -185,8 +185,12 @@ namespace ConditioningControlPanel.Services.Video.Browser
         /// <summary>First real <c>playing</c> event of the clip.</summary>
         public event Action? Playing;
 
-        /// <summary>~10 Hz playback position in ms. Nothing is posted while paused or ended.</summary>
-        public event Action<long>? Time;
+        /// <summary>~10 Hz playback position in ms, plus the page's own paused flag for that position.
+        /// The steady 10 Hz stream only runs while playing, but pause / seek / end FORCE a post, so the
+        /// flag is what tells those apart — never infer "playing" from the arrival of a message (#874).
+        /// null = the page did not report it (older cached page HTML); leave the host's own pause
+        /// bookkeeping alone in that case.</summary>
+        public event Action<long, bool?>? Time;
 
         /// <summary>Natural end of the clip.</summary>
         public event Action? Ended;
@@ -580,7 +584,9 @@ namespace ConditioningControlPanel.Services.Video.Browser
                         Playing?.Invoke();
                         break;
                     case "time":
-                        Time?.Invoke((long?)o["ms"] ?? 0);
+                        // `paused` is absent on older cached page HTML — pass null through rather than
+                        // defaulting to false, which would be the blind-clear this fixed (#874).
+                        Time?.Invoke((long?)o["ms"] ?? 0, (bool?)o["paused"]);
                         break;
                     case "ended":
                         StopFirstFrameWatch();
