@@ -88,10 +88,10 @@ The heartbeat. Guards against re-entrance (`_pollInProgress`, `:344`), POSTs `{u
   (`:379`). Otherwise increment `_consecutivePollFailures` and log.
 - **Recovery** (`:400`): on the first success after a backoff, restores the 5 s interval.
 - **Controller connection** (`:435`): reads `controller_connected` / `controller_idle` from the
-  response. On the **first** controller connect of the session, if the local engine is running it
-  **stops the engine** (`_engineStoppedForController` guard prevents a takeover re-stop, `:472`) and
-  ensures the overlay service is running (`EnsureOverlayRunning`, `:479`). On disconnect it runs
-  `HandleControllerDisconnectCleanup` (`:486`) and re-publishes the directory entry.
+  response. On connect it **only** ensures the overlay service is running (`EnsureOverlayRunning`).
+  It does **not** touch the local engine or the scripted session — that implicit teardown was removed
+  in **#878** (see §4d). On disconnect it runs `HandleControllerDisconnectCleanup` and re-publishes
+  the directory entry.
 - **Idle auto-disconnect** (`:506`): after `IdleAutoDisconnectSeconds` = **120 s** idle (`:322`), the
   client force-treats the controller as disconnected.
 - **Command execution** (`:534`): each element of the `commands` JArray → `ExecuteCommand(action,
@@ -196,10 +196,17 @@ engine (`StopSessionFromRemote`); restores the window from tray + shows the avat
 - **SessionEngine**: three callbacks wired by `WireRemoteSessionCallbacks` (`MainWindow.RemoteControl.cs:989`)
   — `GetAvailableSessionsCallback`, `GetSessionProgressCallback`, `FindSessionByIdCallback` — feed the
   controller the subject's session list + live progress via the status push.
-- **Engine takeover**: first controller connect **stops the running engine/session** both in the
-  service (`:472`) and in `OnRemoteControllerChanged` (`MainWindow.RemoteControl.cs:871`); on
-  controller-left the engine is optionally **restored** (`RestoreEngineAfterControllerLeftIfNeeded`,
-  `:882`, #294) unless `StopEffectsOnRemoteDisconnect`.
+- **Engine takeover — there isn't one (since #878).** A controller connecting leaves the subject's
+  engine *and* scripted session running; both the service connect path and
+  `OnRemoteControllerChanged` (`MainWindow.RemoteControl.cs`) used to stop them, which threw away a
+  running session's elapsed time + bonus XP and re-fired on every 120 s-idle → reconnect cycle.
+  Taking the floor is now always an **explicit command**: `start_session` (which stops any running
+  session itself, `MainWindow.RemoteControl.cs:1285`), `pause_session`, `stop_session`,
+  `trigger_panic`. Consequently `_engineStoppedForController`, `_remoteSessionHasTakenLocal` and
+  `RestoreEngineAfterControllerLeftIfNeeded` (#294's restore) are **gone** — with nothing
+  force-stopping the engine there is nothing to restore, and restoring on the idle timeout would
+  restart an engine the subject deliberately left off. `HandleControllerDisconnectCleanup` now only
+  runs the opt-in `StopRemoteTriggeredEffects` branch.
 - **Overlay**: `EnsureOverlayRunning` (`:953`) sets `App.Overlay.BypassLevelCheck = true` so remote
   pink/spiral work regardless of the subject's level; cleared on session end.
 - **Progression / quests**: only the quest hook (§4a). **No XP is awarded for remote commands
@@ -345,10 +352,14 @@ A public opt-in matchmaking directory bolted onto Remote Control ("SP5 layer 3")
 6. **PIN is intentionally in the URL hash fragment**, not a query param, so it stays out of server logs
    and Referer headers (`:1151` comment). It is also sent plaintext in the directory opt-in body — by
    design (same PIN already on-screen, `:172` comment). Keep both properties if you touch pairing.
-7. **The engine-takeover has a false→true→true trap.** A controller takeover (A leaves, B joins)
-   re-fires the connect transition; `_engineStoppedForController` (`:339`) and
-   `_remoteSessionHasTakenLocal` (`MainWindow.RemoteControl.cs:890`) guard against re-stopping a
-   session the previous controller had running (#166). Preserve these guards.
+7. **The connect transition fires more than once per remote session — never put teardown behind it.**
+   A takeover (A leaves, B joins) *and* every 120 s-idle auto-disconnect → reconnect cycle re-fire
+   `ControllerConnectedChanged` as false→true. #166 tried to survive that with one-shot latches
+   (`_engineStoppedForController`, `_remoteSessionHasTakenLocal`); the latches themselves then leaked
+   (the restore helper cleared one, so the next reconnect re-stopped the engine; `StopRemoteControl`
+   unsubscribes `SessionEnded` before stopping, so the other never got cleared at all). **#878** cut
+   the knot by removing the teardown instead of guarding it. Anything you add to the connect path
+   must be idempotent and non-destructive.
 8. **Controller-supplied text and URLs cross a trust boundary.** `trigger_custom_subliminal` puts
    arbitrary controller text on the subject's screens (capped/stripped inside `FlashSubliminalCustom`).
    `play_hypnotube` is the **only** command that hard-validates its input (`HtUrlHelper.IsEligibleHtUrl`,
