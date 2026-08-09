@@ -183,8 +183,11 @@ namespace ConditioningControlPanel
                 if (!ShowRemoteControlWaiver(newTier))
                     return;
 
-                // Unsubscribe before stopping so OnRemoteSessionEnded doesn't collapse the panel
+                // Unsubscribe before stopping so OnRemoteSessionEnded doesn't collapse the panel.
+                // ControllerIdleChanged has to come off too or the re-subscribe below stacks a
+                // second copy on the multicast list every time the tier is changed.
                 App.RemoteControl.ControllerConnectedChanged -= OnRemoteControllerChanged;
+                App.RemoteControl.ControllerIdleChanged -= OnRemoteControllerIdleChanged;
                 App.RemoteControl.CommandReceived -= OnRemoteCommandReceived;
                 App.RemoteControl.SessionEnded -= OnRemoteSessionEnded;
 
@@ -815,6 +818,9 @@ namespace ConditioningControlPanel
             if (App.RemoteControl != null)
             {
                 App.RemoteControl.ControllerConnectedChanged -= OnRemoteControllerChanged;
+                // Was never detached, so every enable/disable cycle left another live copy
+                // subscribed to the service and firing into this (now torn-down) tab UI.
+                App.RemoteControl.ControllerIdleChanged -= OnRemoteControllerIdleChanged;
                 App.RemoteControl.CommandReceived -= OnRemoteCommandReceived;
                 App.RemoteControl.SessionEnded -= OnRemoteSessionEnded;
                 await App.RemoteControl.StopSessionAsync();
@@ -863,17 +869,15 @@ namespace ConditioningControlPanel
 
                 if (connected)
                 {
-                    // Only stop the local session on the FIRST controller of this remote
-                    // session. On a takeover (controller A leaves, B joins), connected
-                    // briefly transitions true→false→true; without this guard, B's connect
-                    // would re-stop a session that A or the sub had running, even when
-                    // B hasn't sent any command yet (bug report #166).
-                    if (!_remoteSessionHasTakenLocal)
-                    {
-                        _remoteSessionHasTakenLocal = true;
-                        try { _sessionEngine?.StopSession(completed: false); } catch { }
-                    }
-
+                    // A controller joining must NOT kill the subject's scripted session
+                    // (#878). It used to call _sessionEngine.StopSession(completed: false)
+                    // here, which threw away the session's elapsed time and its bonus XP
+                    // the instant somebody connected — and the 120 s idle auto-disconnect
+                    // meant an idle controller could do it again on every reconnect.
+                    // The controller sees live session progress in the status push and has
+                    // explicit verbs (pause_session / stop_session / start_session /
+                    // trigger_panic) when it genuinely wants the floor. See the matching
+                    // comment in RemoteControlService's connect path.
                     ShowRemoteControlOverlay();
                     NotifyRemoteControllerJoined();
                 }
@@ -883,11 +887,6 @@ namespace ConditioningControlPanel
                 }
             });
         }
-
-        // Set true once the first controller of the active remote-control session has
-        // claimed control. Reset when the remote session ends so a future remote session
-        // re-applies the take-over-local-session step on its first controller.
-        private bool _remoteSessionHasTakenLocal;
 
         private void OnRemoteControllerIdleChanged(object? sender, EventArgs e)
         {
@@ -907,7 +906,6 @@ namespace ConditioningControlPanel
         {
             Dispatcher.Invoke(() =>
             {
-                _remoteSessionHasTakenLocal = false;
                 HideRemoteControlOverlay();
                 UpdateStartButtonForRemoteControl(false);
                 _isLoading = true;
