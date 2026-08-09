@@ -291,8 +291,10 @@ namespace ConditioningControlPanel.Services
             Tier = null;
             ControllerIdle = false;
 
-            // Stop all effects that were triggered by the remote controller
-            DispatcherHelper.RunOnUISync(() => StopAllRemoteEffects());
+            // Stop all effects that were triggered by the remote controller. force:false — the
+            // remote session ending is not a controller verb, so a session the SUBJECT started
+            // is left alone (#878 followup).
+            DispatcherHelper.RunOnUISync(() => StopAllRemoteEffects(force: false));
 
             // Reset overlay level bypass when remote session ends
             if (App.Overlay != null)
@@ -764,11 +766,24 @@ namespace ConditioningControlPanel.Services
             return services;
         }
 
-        private void StopAllRemoteEffects()
+        /// <summary>
+        /// Tears down everything a controller could have started.
+        /// </summary>
+        /// <param name="force">
+        /// True only for <c>trigger_panic</c> — an explicit controller verb that means "stop
+        /// EVERYTHING", so it takes the subject's session down no matter who started it.
+        /// False for the CleanupSession path, where the remote session merely ended (server-side
+        /// expiry, 3× 401, or the subject unticking Remote Control). None of those is a
+        /// controller verb, so a session the subject started locally must survive them (#878
+        /// followup) — otherwise a 60-minute local run with Remote Control merely armed got
+        /// stopped, TrackSessionAbandoned'd and its bonus XP forfeited the moment the server
+        /// expired the unused remote session.
+        /// </param>
+        private void StopAllRemoteEffects(bool force)
         {
             try
             {
-                App.Logger?.Information("[RemoteControl] Stopping all remote effects");
+                App.Logger?.Information("[RemoteControl] Stopping all remote effects (force={Force})", force);
 
                 App.KillAllAudio();
 
@@ -832,8 +847,18 @@ namespace ConditioningControlPanel.Services
                 }
                 App.Overlay?.RefreshOverlays();
 
-                // Stop session engine and main engine if running
-                MainWindowRef?.StopSessionFromRemote();
+                // Stop session engine and main engine — but ONLY when the controller owns the
+                // run (it issued start_session) or this is a panic. A session the subject
+                // started for themselves is not the remote session's to end: see the `force`
+                // parameter docs above.
+                if (force || MainWindowRef?.IsSessionRemoteStarted == true)
+                {
+                    MainWindowRef?.StopSessionFromRemote();
+                }
+                else if (MainWindowRef?.IsEngineRunning == true)
+                {
+                    App.Logger?.Information("[RemoteControl] Leaving the subject's own session/engine running — the controller did not start it");
+                }
 
                 // Sync checkbox state and bring window to front
                 if (MainWindowRef != null)
@@ -1257,7 +1282,9 @@ namespace ConditioningControlPanel.Services
                             break;
 
                         case "trigger_panic":
-                            StopAllRemoteEffects();
+                            // Explicit "stop everything" verb — the one path that is allowed to
+                            // end a session the subject started for themselves.
+                            StopAllRemoteEffects(force: true);
                             break;
 
                         default:

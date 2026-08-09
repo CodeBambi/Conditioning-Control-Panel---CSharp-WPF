@@ -1272,6 +1272,29 @@ namespace ConditioningControlPanel
             _isLoading = false;
         }
 
+        // The exact Session instance a remote controller started via `start_session`.
+        // Held by reference (never by id) so IsSessionRemoteStarted describes THIS run and
+        // not "some session with the same id" — every start site builds a fresh object.
+        private Models.Session? _remoteStartedSession;
+
+        /// <summary>
+        /// True only while the session the engine is running right now is the one a remote
+        /// controller started. False for a session the subject started locally (Sessions tab,
+        /// Programs tab, dashboard), and false when nothing is running.
+        /// <para>
+        /// #878 followup: RemoteControlService.StopAllRemoteEffects consults this before tearing
+        /// the subject's session down, so a remote session that merely *expires* (server 404,
+        /// 3× 401, or the subject unticking Remote Control) can no longer abandon a local run
+        /// and forfeit its bonus XP. The self-clearing reference comparison means no start/stop
+        /// path has to remember to reset a latch — the previous latch (#878's
+        /// _remoteSessionHasTakenLocal) leaked for exactly that reason.
+        /// </para>
+        /// </summary>
+        internal bool IsSessionRemoteStarted =>
+            _remoteStartedSession != null
+            && _sessionEngine?.IsRunning == true
+            && ReferenceEquals(_sessionEngine.CurrentSession, _remoteStartedSession);
+
         // Methods called by RemoteControlService for session commands
         internal async void StartSessionFromRemote(Models.Session session)
         {
@@ -1314,6 +1337,9 @@ namespace ConditioningControlPanel
                 }
 
                 App.IsSessionRunning = true;
+                // Mark the run as controller-owned BEFORE the await: the teardown that consults
+                // IsSessionRemoteStarted can fire from the poll timer at any point after this.
+                _remoteStartedSession = session;
                 await _sessionEngine.StartSessionAsync(session);
                 App.Logger?.Information("[RemoteControl] Session engine started successfully for: {Name}", session.Name);
             }

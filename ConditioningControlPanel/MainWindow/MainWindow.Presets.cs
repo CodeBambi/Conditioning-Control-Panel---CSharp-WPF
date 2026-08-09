@@ -1235,6 +1235,9 @@ namespace ConditioningControlPanel
         private void OnSessionCompleted(object? sender, SessionCompletedEventArgs e)
         {
             App.IsSessionRunning = false;
+            // Release the controller-owned-run marker (MainWindow.RemoteControl.cs). Hygiene only —
+            // IsSessionRemoteStarted already reads false once the engine stops.
+            _remoteStartedSession = null;
             Dispatcher.Invoke(() =>
             {
                 // Award XP. The completion dialog is shown from OnSessionLogReady,
@@ -1465,6 +1468,8 @@ namespace ConditioningControlPanel
         private void OnSessionStopped(object? sender, EventArgs e)
         {
             App.IsSessionRunning = false;
+            // See OnSessionCompleted — drop the reference to the controller-started run.
+            _remoteStartedSession = null;
 
             // Captured BEFORE the dispatcher work: SessionEngine nulls _currentSession at the end
             // of StopSession, and ProgramService clears its expected id when SessionCompleted
