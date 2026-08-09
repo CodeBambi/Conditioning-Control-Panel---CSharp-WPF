@@ -239,9 +239,11 @@ namespace ConditioningControlPanel.Services
                         Encoding.UTF8, "application/json");
 
                     var v2Response = await _httpClient.SendAsync(v2Request);
-                    if (await HandleUnauthorizedAsync(v2Response))
+                    var recovered = await HandleUnauthorizedAsync(v2Response);
+                    if (v2Response.StatusCode == HttpStatusCode.Unauthorized && !recovered)
                     {
-                        // Recovery failed — stop heartbeat to avoid spamming 401s
+                        // Recovery failed (or is on cooldown) — with no token left there is nothing
+                        // a further tick can do but re-401, so stop rather than spam the server.
                         if (string.IsNullOrEmpty(App.Settings?.Current?.AuthToken))
                         {
                             App.Logger?.Warning("[Auth] Heartbeat: auth recovery failed, stopping heartbeat");
@@ -2425,7 +2427,10 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    // On 401, attempt auth recovery and retry once if token was restored
+                    // On 401, attempt auth recovery and retry once — but ONLY if the session was
+                    // genuinely recovered. HandleUnauthorizedAsync used to answer true for a failed
+                    // recovery too, so this retried the identical POST with the identical dead
+                    // token and burned a second round-trip to reach the same 401 (#879).
                     if (await HandleUnauthorizedAsync(response) && !string.IsNullOrEmpty(App.Settings?.Current?.AuthToken))
                     {
                         App.Logger?.Information("Skill purchase: retrying after auth token recovery");
@@ -2665,9 +2670,19 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Handles a 401 Unauthorized response. Attempts token recovery via restore-session
-        /// with a 5-minute cooldown between attempts. Token is preserved on failure.
-        /// Returns true if the response was a 401.
+        /// Handles a 401 Unauthorized response. Attempts token recovery via restore-session with a
+        /// 5-minute cooldown between attempts. The token is preserved on failure.
+        ///
+        /// Returns TRUE only when the session was actually recovered and it is safe to carry on
+        /// with the request that 401'd. It used to return true for any 401 - including "recovery
+        /// failed" and "still inside the cooldown, so recovery was never even attempted" - while
+        /// every caller reads the result as "recovered, proceed": the skill purchase retried the
+        /// POST with the same dead token, and the heartbeat's stop-on-failure branch keyed off the
+        /// same true. Failure and success have to be distinguishable (#879).
+        ///
+        /// Note the asymmetry: a non-401 response also returns false, because "there was nothing
+        /// to recover from" is likewise not "a session was recovered". Callers that need to know
+        /// whether the response WAS a 401 must check <c>response.StatusCode</c> themselves.
         /// </summary>
         private async Task<bool> HandleUnauthorizedAsync(HttpResponseMessage response)
         {
@@ -2692,7 +2707,7 @@ namespace ConditioningControlPanel.Services
             // Don't clear the auth token — it may still be valid for other endpoints or after
             // a transient server issue. The 5-minute cooldown prevents recovery spam.
             App.Logger?.Warning("[Auth] 401 — recovery failed or on cooldown, token kept for retry");
-            return true;
+            return false;
         }
 
         /// <summary>
