@@ -497,7 +497,8 @@ namespace ConditioningControlPanel
 
                 if (!sessionActive && settings.RampLinkSpiralOpacity && _rampBaseValues.TryGetValue("SpiralOpacity", out var spiralBase))
                 {
-                    var newVal = (int)Math.Min(spiralBase * currentMult, 50);
+                    // Cap matches the spiral opacity slider's own max, raised 50 -> 100 in f56eaaf9c (#866).
+                    var newVal = (int)Math.Min(spiralBase * currentMult, 100);
                     ProgressionTab.SliderSpiralOpacity.Value = newVal;
                     ProgressionTab.TxtSpiralOpacity.Text = $"{newVal}%";
                     settings.SpiralOpacity = newVal;
@@ -717,8 +718,7 @@ namespace ConditioningControlPanel
             s.ImageScale = (int)SettingsTab.SliderSize.Value;
             s.FlashOpacity = (int)SettingsTab.SliderOpacity.Value;
             s.FadeDuration = (int)SettingsTab.SliderFade.Value;
-            s.FlashAvoidCenter = SettingsTab.ChkFlashAvoidCenter.IsChecked ?? false;
-            s.FlashCenterExclusionPercent = (int)SettingsTab.SliderCenterExclusion.Value;
+            // #859: avoid-screen-center is owned by FlashFeatureControl - see MainWindow.Settings.cs.
 
             // Video settings
             s.MandatoryVideosEnabled = SettingsTab.ChkVideoEnabled.IsChecked ?? false;

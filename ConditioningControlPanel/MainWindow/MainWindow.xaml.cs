@@ -76,7 +76,10 @@ namespace ConditioningControlPanel
         private bool _suppressModSelectorChange;
         private BrowserService? _browser;
         private bool _browserInitialized = false;
-        private bool _skipSiteToggleNavigation = false;
+        // _skipSiteToggleNavigation removed in #867: the site toggle handler moved from Checked
+        // to Click, so setting the radios in code no longer navigates and there is nothing left
+        // to suppress. A flag that is only cleared by the handler is a trap once the handler
+        // stops running - the next real click gets eaten instead.
         private Window? _browserPopoutWindow = null;
         private bool _isDualMonitorPlaybackActive = false;
         private bool _isBrowserFullscreen = false;
@@ -1492,11 +1495,12 @@ namespace ConditioningControlPanel
             var showBambiCloud = modWantsBambiCloud || (App.Settings?.Current?.ForceShowBambiCloud ?? false);
             SettingsTab.RbBambiCloud.Visibility = showBambiCloud ? Visibility.Visible : Visibility.Collapsed;
 
-            // Keep the mod's own default site (HypnoTube) selected when the button is
-            // only visible because of the user override — the override reveals BambiCloud,
-            // it doesn't switch to it.
-            if (!modWantsBambiCloud)
-                SettingsTab.RbHypnoTube.IsChecked = true;
+            // #867: select the site from the mod - not only when BambiCloud is hidden. The
+            // override reveals BambiCloud, it doesn't switch to it, and after an external link
+            // neither radio is selected at all. SyncSiteRadiosToActiveMod covers both, and it
+            // stands down while a live page owns the radios so RefreshBrowserLoadingText below
+            // keeps describing the site actually on screen.
+            SyncSiteRadiosToActiveMod();
 
             RefreshBrowserLoadingText();
         }
@@ -1776,11 +1780,16 @@ namespace ConditioningControlPanel
             var modWantsBambiCloud = App.Mods.ShowBambiCloudOption();
             var showBambiCloud = modWantsBambiCloud || (App.Settings?.Current?.ForceShowBambiCloud ?? false);
             SettingsTab.RbBambiCloud.Visibility = showBambiCloud ? Visibility.Visible : Visibility.Collapsed;
+            // #867: the selection follows the new mod's own site, not just when BambiCloud is
+            // hidden - otherwise a switch could leave the radio pointing at a site this mod never
+            // uses, and clicking it was the only way to find out. It leaves the radios alone
+            // while they are reporting a live page; the !modWantsBambiCloud branch below is the
+            // one case that overrides that, and it navigates in the same breath.
+            SyncSiteRadiosToActiveMod();
             if (!modWantsBambiCloud)
             {
-                // Mod doesn't want BambiCloud as its site: keep HypnoTube selected and
-                // navigate to the mod's default even if the override reveals the button.
-                SettingsTab.RbHypnoTube.IsChecked = true;
+                // Mod doesn't want BambiCloud as its site: navigate to the mod's default even
+                // if the override reveals the button.
                 if (_browser != null && _browserInitialized)
                 {
                     var url = App.Mods.GetDefaultBrowserUrl();

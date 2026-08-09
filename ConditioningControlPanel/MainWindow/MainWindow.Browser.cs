@@ -352,22 +352,20 @@ namespace ConditioningControlPanel
             }
 
             // Sync the radio button to the URL we just initialized to so the toggle UI
-            // matches the page. Suppress the toggle handler's homepage navigation since
-            // the WebView2 is already on its way to the right URL.
+            // matches the page. No suppression flag needed since #867: the toggle handler
+            // runs on Click, so moving the selection in code navigates nothing.
             var lowerUrl = url.ToLowerInvariant();
             if (lowerUrl.Contains("bambicloud.com"))
             {
-                _skipSiteToggleNavigation = true;
                 SettingsTab.RbBambiCloud.IsChecked = true;
             }
             else if (lowerUrl.Contains("hypnotube.com"))
             {
-                _skipSiteToggleNavigation = true;
                 SettingsTab.RbHypnoTube.IsChecked = true;
             }
             else
             {
-                // External URL — deselect both so re-clicking either fires Checked again
+                // External URL — neither site is current, so show neither as selected.
                 SettingsTab.RbBambiCloud.IsChecked = false;
                 SettingsTab.RbHypnoTube.IsChecked = false;
             }
@@ -402,7 +400,7 @@ namespace ConditioningControlPanel
         /// bring-up that never completes falls through to the external browser rather than
         /// swallowing the click. Continuations resume on the dispatcher (UI thread).
         /// </summary>
-        private async System.Threading.Tasks.Task NavigateWhenBrowserReadyAsync(string url, bool autoPlayFullscreen)
+        private async System.Threading.Tasks.Task NavigateWhenBrowserReadyAsync(string url, bool autoPlayFullscreen, bool userInitiated)
         {
             // Surface the browser while it finishes coming up, exactly as the ready path does —
             // otherwise the click looks ignored for as long as the bring-up takes.
@@ -413,7 +411,9 @@ namespace ConditioningControlPanel
 
             if (_browser?.IsInitialized == true && _browser.WebView?.CoreWebView2 != null)
             {
-                NavigateToUrlInBrowser(url, autoPlayFullscreen);
+                // Carry userInitiated across the wait: offline mode can be switched on during the
+                // bring-up, and the re-entry decides the toast all over again.
+                NavigateToUrlInBrowser(url, autoPlayFullscreen, userInitiated);
                 return;
             }
 
@@ -439,9 +439,106 @@ namespace ConditioningControlPanel
             }
         }
 
-        internal async void BrowserSiteToggle_Changed(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// #867 — offline mode used to swallow every browser action without a word, so the site
+        /// buttons, Pop Out and Reload all read as broken. Say what happened instead. Warning,
+        /// not Error: the user asked for offline mode, this is the setting doing its job.
+        /// </summary>
+        private void NotifyBrowserBlockedOffline()
+        {
+            App.Logger?.Debug("Browser action blocked by offline mode");
+            App.Notifications?.Show(Loc.Get("browser_toast_offline_blocked"),
+                NotificationType.Warning, TimeSpan.FromSeconds(6));
+        }
+
+        /// <summary>
+        /// True when the embedded browser is live and actually sitting on BambiCloud or HypnoTube.
+        /// That is the state in which the site radios are a READOUT of the page rather than a
+        /// preference, so moving them behind the user's back would make the UI lie.
+        /// </summary>
+        private bool IsBrowserShowingKnownSite()
+        {
+            try
+            {
+                if (!_browserInitialized || _browser == null) return false;
+                var current = _browser.GetCurrentUrl();
+                if (string.IsNullOrEmpty(current)) return false;
+                return current.Contains("bambicloud.com", StringComparison.OrdinalIgnoreCase)
+                    || current.Contains("hypnotube.com", StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                // Touching a crashed WebView2 throws. Unknown page = safe to sync.
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// #867 — points the site radios at the active mod's own site. A mod switch could leave
+        /// the selection on a site the new mod does not even show, or (after an external link
+        /// deselected both) on nothing at all, and the radios are the browser's only site UI.
+        /// </summary>
+        /// <param name="navigateIfChanged">
+        /// False (the default) keeps this selection-only, for callers that issue their own
+        /// navigation right after — a mod switch loads the mod's default URL itself, and a second
+        /// navigate from here would race it. True is for the caller that has no navigation of its
+        /// own (the "show BambiCloud everywhere" override being switched off while BambiCloud is
+        /// the page on screen): without it the radio says HypnoTube over a live BambiCloud page.
+        /// </param>
+        internal void SyncSiteRadiosToActiveMod(bool navigateIfChanged = false)
+        {
+            try
+            {
+                if (SettingsTab?.RbBambiCloud == null || SettingsTab.RbHypnoTube == null) return;
+
+                // ShowBambiCloudOption only says whether the button is OFFERED; the mod's own
+                // default URL says which site it uses. A mod that does not use BambiCloud must
+                // land on HypnoTube even when the "show everywhere" override reveals the button.
+                var modWantsBambiCloud = App.Mods?.ShowBambiCloudOption() ?? true;
+
+                // Never re-point the radios away from a page that is already on screen. Once the
+                // browser is on one of the two sites the radios report WHERE YOU ARE - both the
+                // user and RefreshBrowserLoadingText read them that way - so syncing a mod switch
+                // onto them would claim BambiCloud over a live HypnoTube page. The single
+                // exception is this sync's original purpose: a mod that HIDES BambiCloud may not
+                // be left sitting on it, and those callers navigate away immediately.
+                if (modWantsBambiCloud && IsBrowserShowingKnownSite()) return;
+
+                var defaultUrl = App.Mods?.GetDefaultBrowserUrl() ?? "https://bambicloud.com/";
+                var onBambiCloud = modWantsBambiCloud
+                    && defaultUrl.Contains("bambicloud.com", StringComparison.OrdinalIgnoreCase);
+
+                var target = onBambiCloud ? SettingsTab.RbBambiCloud : SettingsTab.RbHypnoTube;
+                var moved = target.IsChecked != true; // also true when an external link left both off
+                target.IsChecked = true;
+
+                // Offline mode is deliberately excluded: the browser has been parked on a blank
+                // page, and navigating it back to a site here would walk straight through the
+                // setting the user turned on.
+                if (moved && navigateIfChanged && App.Settings?.Current?.OfflineMode != true)
+                    NavigateBrowserToCurrentSiteHome();
+            }
+            catch (Exception ex) { App.Logger?.Debug("SyncSiteRadiosToActiveMod: {Error}", ex.Message); }
+        }
+
+        /// <summary>
+        /// #867 — the site radios' one entry point. Wired to Click rather than Checked so a
+        /// second click on the site you are already on still takes you back to its homepage,
+        /// and so code that moves the selection (mod switch, external-link sync) does not
+        /// navigate behind the user's back.
+        /// </summary>
+        internal async void BrowserSiteToggle_Click(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return; // Don't auto-load browser during XAML init
+
+            // Offline mode is checked FIRST. It used to sit below the lazy-init branch, so the
+            // very first click in offline mode still built a WebView2 and loaded the homepage -
+            // the one case the block exists to prevent. Say so instead of dying quietly (#867).
+            if (App.Settings?.Current?.OfflineMode == true)
+            {
+                NotifyBrowserBlockedOffline();
+                return;
+            }
 
             // Lazy-load browser on first toggle interaction. Pass the URL
             // matching the radio button the user just clicked — without an
@@ -457,16 +554,6 @@ namespace ConditioningControlPanel
                 return;
             }
             if (_browser == null) return;
-
-            // Block navigation in offline mode
-            if (App.Settings?.Current?.OfflineMode == true) return;
-
-            // Skip navigation if we're already navigating to a specific URL (from speech bubble link)
-            if (_skipSiteToggleNavigation)
-            {
-                _skipSiteToggleNavigation = false;
-                return;
-            }
 
             var isBambiCloud = SettingsTab.RbBambiCloud.IsChecked == true;
             var url = isBambiCloud
@@ -498,13 +585,21 @@ namespace ConditioningControlPanel
         /// </summary>
         /// <param name="url">The URL to navigate to</param>
         /// <param name="autoPlayFullscreen">If true, auto-plays video and requests fullscreen on the video element</param>
+        /// <param name="userInitiated">
+        /// True when the navigation traces back to something the user just clicked (a speech-bubble
+        /// link, a companion link, a remote controller's explicit command) - those deserve the
+        /// offline toast, because otherwise the click reads as broken. False for navigation the app
+        /// decides on its own (Autonomy's fullscreen web video, a Chaos effect payload): the user
+        /// did not ask, so a toast there is just offline mode nagging in the background.
+        /// </param>
         /// <returns>True if navigation was initiated, false if browser unavailable</returns>
-        public bool NavigateToUrlInBrowser(string url, bool autoPlayFullscreen = false)
+        public bool NavigateToUrlInBrowser(string url, bool autoPlayFullscreen = false, bool userInitiated = true)
         {
-            // Block navigation in offline mode
+            // Block navigation in offline mode.
             if (App.Settings?.Current?.OfflineMode == true)
             {
                 App.Logger?.Debug("Browser navigation blocked in offline mode: {Url}", url);
+                if (userInitiated) NotifyBrowserBlockedOffline();
                 return false;
             }
 
@@ -524,7 +619,7 @@ namespace ConditioningControlPanel
                     // set the moment CreateBrowserAsync returns, BrowserReady only fires once
                     // WebView_Loaded finishes). Re-initializing here would tear down an init that
                     // is still in flight, so wait it out and navigate when it lands.
-                    _ = NavigateWhenBrowserReadyAsync(url, autoPlayFullscreen);
+                    _ = NavigateWhenBrowserReadyAsync(url, autoPlayFullscreen, userInitiated);
                     return true;
                 }
                 if (_browserInitialized)
@@ -550,23 +645,21 @@ namespace ConditioningControlPanel
 
                 var lowerUrl = url.ToLowerInvariant();
 
-                // Switch to correct site tab based on URL
-                // Set flag to skip the homepage navigation in the toggle handler
+                // Switch to correct site tab based on URL. Since #867 the toggle handler runs on
+                // Click, so setting the selection here cannot kick off a second navigation and
+                // needs no suppression flag.
                 if (lowerUrl.Contains("bambicloud.com") && SettingsTab.RbBambiCloud.IsChecked != true)
                 {
-                    _skipSiteToggleNavigation = true;
                     SettingsTab.RbBambiCloud.IsChecked = true;
                 }
                 else if (lowerUrl.Contains("hypnotube.com") && SettingsTab.RbHypnoTube.IsChecked != true)
                 {
-                    _skipSiteToggleNavigation = true;
                     SettingsTab.RbHypnoTube.IsChecked = true;
                 }
                 else if (!lowerUrl.Contains("bambicloud.com") && !lowerUrl.Contains("hypnotube.com"))
                 {
-                    // External URL — deselect both radio buttons so clicking either one
-                    // fires a Checked event to navigate back (RadioButton.Checked only fires
-                    // on false→true transitions, so re-clicking an already-checked button does nothing)
+                    // External URL — neither site is current, so deselect both. Clicking either
+                    // one afterwards navigates back to it.
                     SettingsTab.RbBambiCloud.IsChecked = false;
                     SettingsTab.RbHypnoTube.IsChecked = false;
                 }
@@ -2422,8 +2515,12 @@ namespace ConditioningControlPanel
 
         internal async void BtnPopOutBrowser_Click(object sender, RoutedEventArgs e)
         {
-            // Block in offline mode
-            if (App.Settings?.Current?.OfflineMode == true) return;
+            // Block in offline mode (#867: with a toast - this used to be a dead button)
+            if (App.Settings?.Current?.OfflineMode == true)
+            {
+                NotifyBrowserBlockedOffline();
+                return;
+            }
 
             // Lazy-load browser on first pop-out
             if (!_browserInitialized)
@@ -2822,6 +2919,13 @@ namespace ConditioningControlPanel
         /// </summary>
         internal void BtnReloadBrowser_Click(object sender, RoutedEventArgs e)
         {
+            // Offline first (#867): below the lazy-init branch this check was unreachable on the
+            // first click, which both leaked past offline mode and made the button look dead.
+            if (App.Settings?.Current?.OfflineMode == true)
+            {
+                NotifyBrowserBlockedOffline();
+                return;
+            }
             if (!_browserInitialized)
             {
                 var initialUrl = SettingsTab.RbHypnoTube?.IsChecked == true
@@ -2830,7 +2934,6 @@ namespace ConditioningControlPanel
                 _ = InitializeBrowserAsync(initialUrl);
                 return;
             }
-            if (App.Settings?.Current?.OfflineMode == true) return;
             NavigateBrowserToCurrentSiteHome();
         }
 

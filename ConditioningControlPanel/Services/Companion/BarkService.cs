@@ -700,7 +700,32 @@ namespace ConditioningControlPanel.Services
             }
             // QuizCompleted is a STATIC event — must unsubscribe in Stop() to avoid a dangling handler.
             {
-                EventHandler<QuizCompletedEventArgs> h = (_, e) => Raise("QuizCompleted", c => c.Set("passed", e.Passed).Set("perfect", e.Perfect));
+                EventHandler<QuizCompletedEventArgs> h = (_, e) =>
+                {
+                    // TWO gates, both deliberate. The `quiz_done` pool is written for a run that
+                    // went WELL ("passed the quiz", "good girl, all correct", "aced it") and every
+                    // built-in mod declares it with cooldown 0, repeatable, and NO conditions — so
+                    // the only place the content can be matched to the outcome is here, in C#. Mod
+                    // manifests are content and third-party mods can't be patched, so the gate has
+                    // to live in the subscription layer.
+                    //
+                    // 1. CONTENT — since #870 the graded intake is a live raiser, and it reports
+                    //    passed:true for EVERY finished run (an intake has no fail state). Without
+                    //    a gate a 30%-compliance run gets told it aced it. Speak only for a run
+                    //    that genuinely earned the line: `perfect` (both surfaces set it at the
+                    //    same 90% top-marks bar) or a real pass — from the classic quiz `passed`
+                    //    IS the honest >= 60% bar it has always used.
+                    // 2. TIMING — while the intake host window is up the run is mid-outro, its own
+                    //    voiced ceremony. A bark there talks over it. Stay quiet and let the
+                    //    ceremony land; the run is still credited (the bridge's own subscription
+                    //    is separate and unaffected).
+                    //
+                    // Net effect: quiz_done is classic-quiz-only, which is what it was before #870
+                    // wired the intake into the same event.
+                    if (!e.Perfect && !e.Passed) return;
+                    if (Quiz.IntakeHostService.IsActive) return;
+                    Raise("QuizCompleted", c => c.Set("passed", e.Passed).Set("perfect", e.Perfect));
+                };
                 QuizService.QuizCompleted += h;
                 _unsubscribe.Add(() => QuizService.QuizCompleted -= h);
             }

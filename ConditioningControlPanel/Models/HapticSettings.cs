@@ -65,8 +65,22 @@ namespace ConditioningControlPanel.Models
         private VibrationMode _bouncingTextMode = VibrationMode.Pulse;
         private VibrationMode _blinkMode = VibrationMode.Pulse;
 
-        // Connection URLs - defaults shown in tooltip guide
-        private string _lovenseUrl = "http://192.168.1.1:30010";
+        // Connection URLs - defaults shown in tooltip guide.
+        // Lovense starts EMPTY on purpose (#858): 192.168.1.1 is the router, never a phone running
+        // Game Mode, so the old default made every un-configured install probe a bogus address and
+        // report "could not reach Lovense Remote" as though the user had typed something wrong.
+        // A fresh default alone only helps NEW installs - existing settings.json files still carry
+        // the old string, so <see cref="EnsureV2Migrated"/> clears it once (schema 3).
+        // An empty box is not a silent box: the setup wizard states the format in its own hint
+        // TextBlock under the field (wizard_lovense_ip_hint). There is no watermark/placeholder on
+        // TxtWizardLovenseIp itself - don't rely on one.
+        private string _lovenseUrl = "";
+
+        /// <summary>The pre-#858 shipped default: the router's admin address, never a phone running
+        /// Game Mode. Matched EXACTLY by the schema-3 migration so a user who deliberately typed
+        /// this (or anything else) is left alone.</summary>
+        internal const string LegacyLovenseRouterDefaultUrl = "http://192.168.1.1:30010";
+
         private string _buttplugUrl = "ws://localhost:12345";
 
         public bool Enabled
@@ -513,6 +527,29 @@ namespace ConditioningControlPanel.Models
                 // The FEATURE toggle (LuminanceSyncEnabled, default false) stays the real gate.
                 v2.Rule(HapticLayer.Luminance).Enabled = true;
                 v2.SchemaVersion = 2;
+            }
+
+            if (v2.SchemaVersion < 3)
+            {
+                // #858: the shipped default USED to be the router's own address, which never runs
+                // Game Mode. Removing it from the field initializer only fixed fresh installs -
+                // everyone who had already launched the app has the string persisted, so they keep
+                // probing a bogus host and keep being told "could not reach Lovense Remote". Clear
+                // it once, matching the old default EXACTLY so a deliberate entry is never touched.
+                if (string.Equals(_lovenseUrl, LegacyLovenseRouterDefaultUrl, StringComparison.Ordinal))
+                {
+                    _lovenseUrl = "";
+                    // Mirrors the clear into V2.Provider("lovense").Url via SyncLegacyToRouting.
+                    OnPropertyChanged(nameof(LovenseUrl));
+                }
+
+                // Schema 1 seeded the v2 provider row FROM the legacy value, so an upgrader can carry
+                // the old default there too - and that copy is what the v2 device manager reads.
+                var lovense = v2.Provider("lovense");
+                if (string.Equals(lovense.Url, LegacyLovenseRouterDefaultUrl, StringComparison.Ordinal))
+                    lovense.Url = "";
+
+                v2.SchemaVersion = 3;
             }
         }
 

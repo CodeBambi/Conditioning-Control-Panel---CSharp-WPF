@@ -919,6 +919,7 @@ namespace ConditioningControlPanel.Services.AIService
             };
             using var resp = await _http.SendAsync(req, cancellationToken);
             var body = await resp.Content.ReadAsStringAsync(cancellationToken);
+            if ((int)resp.StatusCode == 200) LogPromptEval(body, ComputeNumCtx(maxTokens));
             return ((int)resp.StatusCode, body);
         }
 
@@ -935,13 +936,18 @@ namespace ConditioningControlPanel.Services.AIService
         /// <c>AiCallOptions.Reaction</c> budgets an ambient quip at 60 tokens precisely so it stays a
         /// one-liner, and without the clamp Ollama uses the model's default num_predict — producing a
         /// multi-paragraph "reaction" that then rides in every later window. Both null (the legacy
-        /// one-shot path) omits the <c>options</c> object entirely, keeping that body byte-identical.
-        /// </para>
+        /// one-shot path) sends the context window alone.</para>
+        ///
+        /// <para><c>options.num_ctx</c> rides on EVERY body (#856). Without it Ollama applies its own
+        /// default context window — 2048 tokens on most builds — and silently drops the OLDEST part of
+        /// the prompt, which is the persona and the rules. The companion then answers as a generic
+        /// assistant with no sign of the loss anywhere. See <see cref="ComputeNumCtx"/>.</para>
         /// </summary>
         internal static string BuildChatPayload(string model,
             IEnumerable<(string role, string? content)> messages, int? maxTokens, double? temperature)
         {
             var wire = messages.Select(m => new { role = m.role, content = m.content ?? string.Empty }).ToArray();
+            var numCtx = ComputeNumCtx(maxTokens);
 
             if (maxTokens == null && temperature == null)
             {
@@ -950,7 +956,8 @@ namespace ConditioningControlPanel.Services.AIService
                     model = model,
                     messages = wire,
                     stream = false,
-                    think = false
+                    think = false,
+                    options = new { num_ctx = numCtx }
                 });
             }
 
@@ -963,9 +970,65 @@ namespace ConditioningControlPanel.Services.AIService
                 options = new
                 {
                     num_predict = maxTokens ?? -1,
-                    temperature = temperature ?? 0.8
+                    temperature = temperature ?? 0.8,
+                    num_ctx = numCtx
                 }
             });
+        }
+
+        /// <summary>
+        /// Extra tokens on top of the assembler's budget + the reply budget: the enrichment block,
+        /// the system prompt refresh and the tokenizer being coarser than the 4-chars-per-token
+        /// estimate the assembler sheds against all land here.
+        /// </summary>
+        private const int ContextWindowMargin = 1024;
+
+        /// <summary>
+        /// Floor on the requested window. Every model we support runs at least 8k, and a floor keeps a
+        /// short prompt from asking for a window so tight that one long user turn overflows it.
+        /// </summary>
+        private const int MinContextWindow = 8192;
+
+        /// <summary>
+        /// The <c>options.num_ctx</c> we ask Ollama for: everything the prompt assembler is allowed to
+        /// send (<see cref="Companion.Brain.PromptAssembler.ContextFitTokenBudget"/>) plus the reply
+        /// budget plus <see cref="ContextWindowMargin"/>, never below <see cref="MinContextWindow"/>.
+        /// Asking for more than the model was built with is harmless — Ollama clamps to the model's
+        /// own maximum — whereas asking for nothing gets the 2048 default that ate the persona (#856).
+        /// </summary>
+        internal static int ComputeNumCtx(int? maxTokens)
+        {
+            var reply = Math.Clamp(maxTokens ?? LocalMaxTokensHardCap, 1, LocalMaxTokensHardCap);
+            var needed = Companion.Brain.PromptAssembler.ContextFitTokenBudget + reply + ContextWindowMargin;
+            return Math.Max(MinContextWindow, needed);
+        }
+
+        /// <summary>
+        /// #856: surface how much prompt Ollama actually tokenized, next to the [AI-METER] line. A
+        /// <c>prompt_eval_count</c> sitting at the window is the signature of a truncated prompt, and
+        /// nothing used to report it, which is why the 2048 default went unnoticed for so long.
+        /// </summary>
+        private static void LogPromptEval(string body, int numCtx)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(body);
+                if (!doc.RootElement.TryGetProperty("prompt_eval_count", out var pe) ||
+                    !pe.TryGetInt32(out var promptTokens)) return;
+
+                if (promptTokens >= numCtx)
+                {
+                    App.Logger?.Warning(
+                        "[AI-METER] ollama prompt_eval_count={PromptTokens} num_ctx={NumCtx} - AT THE WINDOW, the prompt was truncated",
+                        promptTokens, numCtx);
+                }
+                else
+                {
+                    App.Logger?.Information("[AI-METER] ollama prompt_eval_count={PromptTokens} num_ctx={NumCtx}",
+                        promptTokens, numCtx);
+                }
+            }
+            catch { }
         }
 
         private static string ExtractContent(string body)
@@ -1016,7 +1079,9 @@ namespace ConditioningControlPanel.Services.AIService
                     messages = messages.Select(m => new { role = m.role, content = m.content ?? string.Empty }).ToArray(),
                     stream = false,
                     think = false,
-                    options = new { temperature }
+                    // num_ctx for the same reason the companion path sends it (#856): Ollama's own
+                    // default window is 2048 on most builds and quietly truncates anything longer.
+                    options = new { temperature, num_ctx = ComputeNumCtx(null) }
                 };
                 var json = JsonSerializer.Serialize(payload);
 
@@ -1032,6 +1097,7 @@ namespace ConditioningControlPanel.Services.AIService
                         (int)resp.StatusCode, host, model);
                     return null;
                 }
+                LogPromptEval(body, ComputeNumCtx(null));
 
                 // #739: think:false is requested above, but a model that ignores it (or a non-Ollama
                 // OpenAI-compatible host behind the same setting) still returns its scratchpad.

@@ -3145,6 +3145,7 @@
   "browser_enhance_tooltip": "オンにすると、保存済みエンハンスメントに一致する動画ページを開いたとき、その演出を重ねて再生します。",
   "browser_show_bambicloud_label": "BambiCloudを表示",
   "browser_show_bambicloud_tooltip": "通常はBambiCloudを隠しているmodでも、サイト切替を表示します。modの既定サイトは選ばれたままで、BambiCloudに切り替えられるようになるだけです。",
+  "browser_toast_offline_blocked": "オフラインモードが有効なため、ブラウザは接続されません。閲覧するには設定でオフにしてください。",
   "browser_enhance_match_none": "このページに対応する保存済みエンハンスメントはありません。",
   "browser_enhance_match_off": "エンハンスメントは無効です。",
   "browser_enhance_match_fmt": "エンハンス中：{0}",

@@ -174,6 +174,17 @@ public class AchievementProgress
     /// <summary>Messages the user has sent to the companion</summary>
     public int CompanionMessages { get; set; }
 
+    /// <summary>
+    /// One-shot latch for the #877 retroactive chat backfill. The companion-chat counter was
+    /// only ever fed by the tube's legacy send handler, so every message routed through the
+    /// modern brain funnel (and everything sent from Her Room) counted for nothing. On the
+    /// first launch after the fix, <see cref="Services.GamificationBridge"/> reconstructs the
+    /// counter from what the companion actually persisted and sets this. Persisted precisely
+    /// so it runs ONCE — the evidence it reads (the restored turn log) is a rolling window,
+    /// so re-running it every launch would flip the counter up and down forever.
+    /// </summary>
+    public bool CompanionChatBackfilled { get; set; }
+
     /// <summary>Quizzes passed (Phase 2)</summary>
     public int QuizzesPassed { get; set; }
 

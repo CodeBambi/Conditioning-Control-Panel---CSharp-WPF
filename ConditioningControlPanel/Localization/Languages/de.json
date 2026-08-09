@@ -3154,6 +3154,7 @@
   "browser_enhance_tooltip": "Wenn aktiviert, spielt eine Videoseite, die zu einem gespeicherten Enhancement passt, dessen Effekte darüber ab.",
   "browser_show_bambicloud_label": "BambiCloud anzeigen",
   "browser_show_bambicloud_tooltip": "Blendet den BambiCloud-Seitenschalter auch bei Mods ein, die ihn sonst verbergen. Die Standardseite des Mods bleibt ausgewählt; das macht BambiCloud nur zum Umschalten verfügbar.",
+  "browser_toast_offline_blocked": "Der Offline-Modus ist aktiv, daher bleibt der Browser getrennt. Schalte ihn in den Einstellungen aus, um zu surfen.",
   "browser_enhance_match_none": "Kein gespeichertes Enhancement für diese Seite.",
   "browser_enhance_match_off": "Enhancements deaktiviert.",
   "browser_enhance_match_fmt": "Enhancement aktiv: {0}",

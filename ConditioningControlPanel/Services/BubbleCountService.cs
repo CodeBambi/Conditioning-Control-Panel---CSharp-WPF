@@ -133,6 +133,18 @@ public class BubbleCountService : IDisposable
         }
         if (_isBusy) return; // Still prevent double-triggering
 
+        // The feature can be switched OFF between the moment a game was scheduled/queued and the
+        // moment it fires - loading a preset does exactly that (#872) - and nothing here re-read
+        // the flag, so a pending trigger still opened the game the user had just turned off.
+        // forceTest is the dashboard's own "play it now" button and stays exempt.
+        if (!forceTest && App.Settings?.Current?.BubbleCountEnabled != true)
+        {
+            App.Logger?.Information("BubbleCountService: game dropped - bubble count is disabled in settings");
+            if (App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.BubbleCount)
+                App.InteractionQueue.Complete(InteractionQueueService.InteractionType.BubbleCount);
+            return;
+        }
+
         // The post-poisoning hold-off (#766: poisoning at 22:05, a bubble-count video built on the
         // wreckage at 22:18, a dispatcher that never drained again) is evaluated AFTER the video is
         // picked - see the skip inside the continuation below. It has to be: with the browser engine

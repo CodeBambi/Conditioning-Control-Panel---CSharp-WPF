@@ -1362,6 +1362,12 @@ namespace ConditioningControlPanel.Services
             _fallbackSafetyTimer = null;
             StopWedgeWatchdog();
 
+            // Release any #871 cascade defer. The parked action re-checks _isRunning and bails on
+            // its own, but the LATCH must go too: left set, it makes every later trigger think a
+            // replay is already pending and coalesce into a defer that will never fire.
+            _cascadeDeferPending = false;
+            _cascadeDeferDeadlineUtc = DateTime.MinValue;
+
             try { Microsoft.Win32.SystemEvents.SessionSwitch -= OnSessionSwitch; }
             catch { }
             try { Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged; }
@@ -1458,6 +1464,77 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>True while a trigger is parked waiting for a chaos gif cascade to finish (#871).
+        /// One pending replay at a time — a cascade that swallows several triggers replays one video,
+        /// not a backlog of them. Cleared by <see cref="Stop"/> so a defer that outlived the service
+        /// cannot coalesce (and therefore swallow) every future trigger.</summary>
+        private bool _cascadeDeferPending;
+
+        /// <summary>Longest a trigger will wait out a cascade before it is given up on. Cascades are
+        /// seconds long; anything past this is a stuck overlay and the stale video is not worth firing.</summary>
+        private static readonly TimeSpan CascadeDeferMaxWait = TimeSpan.FromSeconds(90);
+
+        /// <summary>Absolute expiry of the CURRENT defer chain, set on its first defer.
+        /// <see cref="DateTime.MinValue"/> = no chain in flight.</summary>
+        private DateTime _cascadeDeferDeadlineUtc = DateTime.MinValue;
+
+        /// <summary>#871: hold a trigger the gif-cascade guard refused and replay it once the rain stops.</summary>
+        private void DeferTriggerPastCascade(bool silentIfEmpty, bool? strictOverride)
+        {
+            if (_cascadeDeferPending)
+            {
+                App.Logger?.Information("VideoService: cascade replay already pending - trigger coalesced");
+                return;
+            }
+
+            // The ceiling is measured from the FIRST defer of the chain, not per-hop. A replay that
+            // lands in a second cascade re-enters here, and a fresh CascadeDeferMaxWait each time
+            // would let back-to-back cascades hold one trigger far past the documented 90s.
+            var now = DateTime.UtcNow;
+            if (_cascadeDeferDeadlineUtc == DateTime.MinValue)
+                _cascadeDeferDeadlineUtc = now + CascadeDeferMaxWait;
+
+            var remaining = _cascadeDeferDeadlineUtc - now;
+            if (remaining <= TimeSpan.Zero)
+            {
+                App.Logger?.Information("VideoService: cascade replay dropped - past the {Sec:F0}s defer ceiling",
+                    CascadeDeferMaxWait.TotalSeconds);
+                _cascadeDeferDeadlineUtc = DateTime.MinValue;
+                return;
+            }
+
+            _cascadeDeferPending = true;
+            ChaosGifCascadeOverlay.RunWhenClear(
+                () =>
+                {
+                    _cascadeDeferPending = false;
+
+                    // Re-assert the preconditions at FIRE time. The defer can easily outlive the
+                    // thing that justified it — the engine stopped, the user turned mandatory
+                    // videos off — and replaying then pops a fullscreen video out of a feature
+                    // that is switched off. Same guard the scheduler uses (see ScheduleNext).
+                    if (!_isRunning || App.Settings?.Current?.MandatoryVideosEnabled != true)
+                    {
+                        App.Logger?.Information("VideoService: cascade replay abandoned - mandatory videos no longer running");
+                        _cascadeDeferDeadlineUtc = DateTime.MinValue;
+                        return;
+                    }
+
+                    TriggerVideo(silentIfEmpty, strictOverride);
+
+                    // TriggerVideo may have parked itself again (a new cascade). Only release the
+                    // ceiling when the chain really ended, so the re-defer above inherits it.
+                    if (!_cascadeDeferPending) _cascadeDeferDeadlineUtc = DateTime.MinValue;
+                },
+                remaining,
+                "mandatory video",
+                onExpired: () =>
+                {
+                    _cascadeDeferPending = false;
+                    _cascadeDeferDeadlineUtc = DateTime.MinValue;
+                });
+        }
+
         /// <param name="silentIfEmpty">
         /// When true, an empty videos folder is logged and ignored instead of popping the
         /// "no videos found" dialog. Used for the auto-played startup video (#333) so a user
@@ -1496,21 +1573,24 @@ namespace ConditioningControlPanel.Services
             }
 
             // Chaos gif rain in flight: a mandatory video opening over a falling cascade is the
-            // proven UI-thread killer (AppHangB1 2026-06-10). Drop the trigger outright — never
-            // queue it. Chaos's own video bubbles are already gated upstream while the rain
-            // falls, so this only ever drops ambient/scheduler triggers.
+            // proven UI-thread killer (AppHangB1 2026-06-10), so it must not open NOW. It used to
+            // be dropped outright, which silently ate videos the user had popped a bubble to earn
+            // (#871) — bubble payloads reach this method too, the old "already gated upstream"
+            // note was wrong. Instead the trigger is held and replayed once the rain stops.
             if (ChaosGifCascadeOverlay.IsRaining)
             {
-                App.Logger?.Information("VideoService: TriggerVideo dropped - chaos gif cascade in flight");
+                App.Logger?.Information("VideoService: TriggerVideo deferred - chaos gif cascade in flight");
                 // When this trigger was DEQUEUED, the queue already claimed the Video slot for
-                // us — dropping without releasing would block every interaction for the
-                // 5-minute stuck window. Safe on non-dequeue paths: current==Video with no
-                // video playing only happens right after a dequeue.
+                // us — holding it across the cascade would block every interaction for the
+                // 5-minute stuck window, so release it and let the replay re-enter the queue
+                // normally. Safe on non-dequeue paths: current==Video with no video playing
+                // only happens right after a dequeue.
                 if (!_videoPlaying &&
                     App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.Video)
                 {
                     App.InteractionQueue.Complete(InteractionQueueService.InteractionType.Video);
                 }
+                DeferTriggerPastCascade(silentIfEmpty, strictOverride);
                 return;
             }
 

@@ -733,17 +733,36 @@ namespace ConditioningControlPanel
             TxtUserInput.Text = "";
             ToggleInputPanel();
 
+            // Which of the send paths below this message takes. Decided ONCE, up front, so the
+            // EMIT hook and the actual call can't disagree if the kill switch — or IsAvailable,
+            // which flips on provider/login state from another thread — changes between them.
+            // BOTH halves are cached: re-evaluating aiChatLive at the branch below would let the
+            // no-AI branch run after the hook already decided the brain would handle the emit.
+            var brain = App.Brain;
+            var ai = App.Ai;
+            var aiChatLive = App.Settings?.Current?.AiChatEnabled == true && ai != null && ai.IsAvailable;
+            var routesThroughBrain =
+                aiChatLive && Services.Companion.Brain.CompanionBrain.ShouldRoute(brain);
+
             // EMIT hook for GamificationBridge companion-chat achievements. Fired once
             // per genuine user send (past the cooldown gate, non-empty input), before
             // the moderation/AI path so it counts the attempt regardless of outcome.
-            App.Companion?.NotifyUserMessageSent();
+            //
+            // #877: CompanionBrain.ChatAsync now raises this itself, because it is the funnel
+            // EVERY chat surface (this box, Her Room) goes through and one call site could
+            // never speak for the others. So emit here ONLY for the paths that never reach it:
+            // the legacy stateless GetBambiReplyExAsync call and the no-AI preset-phrase
+            // branch. Emitting unconditionally would double-count every message sent from
+            // this box, which is worse than the bug it would be papering over.
+            if (!routesThroughBrain)
+                App.Companion?.NotifyUserMessageSent();
 
             // P2/H5: user input is NOT added to chat history yet. If the moderation
             // guard refuses below we throw the input away — the prohibited text must
             // not remain visible in the in-memory history view. AddToChatHistory is
             // called only after the AI call returns with a non-refusal result.
 
-            if (App.Settings?.Current?.AiChatEnabled == true && App.Ai != null && App.Ai.IsAvailable)
+            if (aiChatLive)
             {
                 try
                 {
@@ -761,10 +780,9 @@ namespace ConditioningControlPanel
                     // just local Ollama. The result shape is identical, so everything below —
                     // badge, refusal bubble, chat history — is untouched. UseCompanionBrain=false
                     // (or a brain that failed to construct) falls back to the legacy stateless call.
-                    var brain = App.Brain;
-                    var result = Services.Companion.Brain.CompanionBrain.ShouldRoute(brain)
+                    var result = routesThroughBrain
                         ? await brain!.ChatAsync(input)
-                        : await App.Ai.GetBambiReplyExAsync(input);
+                        : await ai!.GetBambiReplyExAsync(input);   // aiChatLive proved non-null
 
                     if (result.Refusal != null)
                     {

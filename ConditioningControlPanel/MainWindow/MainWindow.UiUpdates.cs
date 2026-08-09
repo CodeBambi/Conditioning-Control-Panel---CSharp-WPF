@@ -798,15 +798,9 @@ namespace ConditioningControlPanel
             ApplySettingsLive();
         }
 
-        /// <summary>
-        /// #770 — size of the centered no-flash square, as a % of the shorter monitor edge.
-        /// </summary>
-        internal void SliderCenterExclusion_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || SettingsTab.TxtCenterExclusion == null) return;
-            SettingsTab.TxtCenterExclusion.Text = $"{(int)e.NewValue}%";
-            ApplySettingsLive();
-        }
+        // #859: SliderCenterExclusion_Changed moved to Features/FlashFeatureControl.xaml.cs
+        // together with the control itself. It writes the setting directly, so there is no
+        // longer a MainWindow relay - and no SaveSettings mirror to clamp it.
 
         internal void SliderFade_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
@@ -1241,20 +1235,8 @@ namespace ConditioningControlPanel
             App.Settings.Save();
         }
 
-        /// <summary>
-        /// #770 — keeps flashes out of a centered square on every monitor so they never cover a
-        /// game's crosshair. Global user preference: sessions and presets never touch it.
-        /// </summary>
-        internal void ChkFlashAvoidCenter_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            var isEnabled = SettingsTab.ChkFlashAvoidCenter.IsChecked ?? false;
-            App.Settings.Current.FlashAvoidCenter = isEnabled;
-            App.Logger?.Information("Flash avoid-center toggled: {Enabled} ({Pct}%)",
-                isEnabled, App.Settings.Current.FlashCenterExclusionPercent);
-            App.Settings.Save();
-        }
+        // #859: ChkFlashAvoidCenter_Changed moved to Features/FlashFeatureControl.xaml.cs
+        // together with the control itself.
 
         /// <summary>
         /// Toggles linked vs independent timing for hydra spawns~ 🔗✨
@@ -2885,6 +2867,27 @@ namespace ConditioningControlPanel
         /// Updates UI elements based on offline mode state.
         /// Disables/enables login buttons, browser, and updates banner.
         /// </summary>
+        /// <summary>
+        /// Greys a control out for offline mode and tells the user why.
+        ///
+        /// A disabled control raises no Click, so any offline guard living in its handler is dead
+        /// code - the tooltip is the only thing left that can explain the greyed-out button. WPF
+        /// also suppresses tooltips on disabled controls unless ToolTipService.ShowOnDisabled is
+        /// set, and a tooltip declared as {loc:Str} is a BINDING that a plain string assignment
+        /// would destroy for good, so the save/restore is delegated to
+        /// <see cref="Features.SessionLock.ApplyLockToolTip"/> rather than hand-rolled a second
+        /// time. Nothing in the Settings tab is SessionLock.Owned, so the two never contend for
+        /// the same saved slot.
+        /// </summary>
+        private static void SetOfflineDisabled(FrameworkElement? element, bool isOffline)
+        {
+            if (element == null) return;
+            element.IsEnabled = !isOffline;
+            element.Opacity = isOffline ? 0.5 : 1.0;
+            Features.SessionLock.ApplyLockToolTip(
+                element, isOffline, isOffline ? Loc.Get("tooltip_disabled_in_offline_mode") : null);
+        }
+
         private void UpdateOfflineModeUI(bool isOffline)
         {
             try
@@ -2933,22 +2936,14 @@ namespace ConditioningControlPanel
 
                 // === BROWSER SECTION ===
 
-                // Disable browser controls
-                if (SettingsTab.RbBambiCloud != null)
-                {
-                    SettingsTab.RbBambiCloud.IsEnabled = !isOffline;
-                    SettingsTab.RbBambiCloud.Opacity = isOffline ? 0.5 : 1.0;
-                }
-                if (SettingsTab.RbHypnoTube != null)
-                {
-                    SettingsTab.RbHypnoTube.IsEnabled = !isOffline;
-                    SettingsTab.RbHypnoTube.Opacity = isOffline ? 0.5 : 1.0;
-                }
-                if (SettingsTab.BtnPopOutBrowser != null)
-                {
-                    SettingsTab.BtnPopOutBrowser.IsEnabled = !isOffline;
-                    SettingsTab.BtnPopOutBrowser.Opacity = isOffline ? 0.5 : 1.0;
-                }
+                // Disable browser controls. These three are the ONLY offline tell they have:
+                // #867 gave the site radios and Pop Out an offline toast, but a disabled control
+                // raises no Click, so those handlers can never run and the toast was unreachable
+                // here. The tooltip is what actually reaches the user, exactly as it does for the
+                // login buttons above.
+                SetOfflineDisabled(SettingsTab.RbBambiCloud, isOffline);
+                SetOfflineDisabled(SettingsTab.RbHypnoTube, isOffline);
+                SetOfflineDisabled(SettingsTab.BtnPopOutBrowser, isOffline);
                 if (SettingsTab.TxtBrowserStatus != null)
                 {
                     SettingsTab.TxtBrowserStatus.Text = isOffline ? "● Offline" : "● Ready";

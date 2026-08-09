@@ -208,7 +208,9 @@ public sealed class HtLinkPayload : EffectPayload
                 if (App.BrowserMedia?.BeginTakeover(
                         Services.Browser.BrowserMediaService.MediaOwner.Chaos) == false)
                     return;
-                mw.NavigateToUrlInBrowser(url!, autoPlayFullscreen: true);
+                // userInitiated: false - a chaos payload fires on its own schedule, so an offline
+                // block here has no click to explain and must not toast.
+                mw.NavigateToUrlInBrowser(url!, autoPlayFullscreen: true, userInitiated: false);
             }
         }
         catch (Exception ex) { App.Logger?.Debug("HtLinkPayload: {E}", ex.Message); }
