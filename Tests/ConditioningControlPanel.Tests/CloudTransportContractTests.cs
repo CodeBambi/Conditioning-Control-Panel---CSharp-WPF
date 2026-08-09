@@ -4,6 +4,7 @@ using System.Text.Json;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.AIService;
+using ConditioningControlPanel.Services.Companion.Brain;
 using Xunit;
 
 namespace ConditioningControlPanel.Tests;
@@ -180,12 +181,36 @@ public class CloudTransportContractTests
     }
 
     [Fact]
-    public void TheLegacyLocalPayloadIsUnchanged_WhenNoBudgetIsGiven()
+    public void EveryLocalChatPayloadCarriesAContextWindow()
+    {
+        // #856: with no num_ctx Ollama applies its own default (2048 on most builds) and drops the
+        // OLDEST tokens - the persona and the rules - with no error anywhere. The window must cover
+        // everything PromptAssembler is allowed to send plus the reply budget.
+        foreach (var json in new[]
+                 {
+                     LocalAiService.BuildChatPayload("qwen3",
+                         new[] { ("user", (string?)"hi") }, maxTokens: null, temperature: null),
+                     LocalAiService.BuildChatPayload("qwen3",
+                         new[] { ("user", (string?)"hi") }, maxTokens: 60, temperature: 0.8)
+                 })
+        {
+            using var doc = JsonDocument.Parse(json);
+            var numCtx = doc.RootElement.GetProperty("options").GetProperty("num_ctx").GetInt32();
+            Assert.True(numCtx >= PromptAssembler.ContextFitTokenBudget + 60,
+                $"num_ctx {numCtx} does not cover the assembler's budget");
+            Assert.True(numCtx >= 8192, $"num_ctx {numCtx} is below the 8k floor");
+        }
+    }
+
+    [Fact]
+    public void TheLegacyLocalPayloadStillCarriesNoSamplingKnobs_WhenNoBudgetIsGiven()
     {
         var json = LocalAiService.BuildChatPayload("qwen3",
             new[] { ("user", (string?)"hi") }, maxTokens: null, temperature: null);
 
         using var doc = JsonDocument.Parse(json);
-        Assert.False(doc.RootElement.TryGetProperty("options", out _));
+        var options = doc.RootElement.GetProperty("options");
+        Assert.False(options.TryGetProperty("num_predict", out _));
+        Assert.False(options.TryGetProperty("temperature", out _));
     }
 }
