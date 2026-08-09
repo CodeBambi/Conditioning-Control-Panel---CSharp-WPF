@@ -334,6 +334,7 @@ namespace ConditioningControlPanel
 
             // Initialize global keyboard hook (only if panic key is enabled)
             _keyboardHook = new GlobalKeyboardHook();
+            App.PanicHook = _keyboardHook;   // #875: lock cards ask this whether a panic escape really exists
             _keyboardHook.KeyPressed += OnGlobalKeyPressed;
             _keyboardHook.KeyPressedWithVkCode += (key, vkCode) => App.KeywordTriggers?.OnKeyPressed(key, vkCode);
             App.KeywordTriggers?.SetSessionActiveCallback(() => _sessionEngine?.IsRunning == true);

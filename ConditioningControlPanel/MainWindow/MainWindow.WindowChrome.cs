@@ -241,6 +241,7 @@ namespace ConditioningControlPanel
                 }
 
                 _keyboardHook?.Dispose();
+                App.PanicHook = null;   // #875: a disposed hook must not read as a live panic escape
                 _trayIcon?.Dispose();
                 _browser?.Dispose();
                 _avatarTubeWindow?.CloseSafe();

@@ -237,7 +237,10 @@ namespace ConditioningControlPanel
         /// Every keyboard gesture that could put text into the box without typing it, or take text out
         /// of it: clipboard (Ctrl+C/V/X, Ctrl+Insert, Shift+Insert, Shift+Delete), select-all, and
         /// undo/redo. Pure so it can be unit-tested; used by both the input's preview handler and the
-        /// window-level backstop. Escape is deliberately NOT here — it is the always-available exit.
+        /// window-level backstop. Escape is deliberately NOT here: it is an exit, not a way to cheat
+        /// text into the box, so this gesture list has no say over it. Whether Esc actually closes the
+        /// card is decided once, in <c>Window_KeyDown</c> via <c>EscClosesCard</c> — a strict card with
+        /// a live panic escape swallows it, everything else honours it.
         /// </summary>
         internal static bool IsBlockedInputGesture(Key key, ModifierKeys mods)
         {
@@ -361,12 +364,7 @@ namespace ConditioningControlPanel
 
             // Handle strict mode
             TxtStrict.Text = _strictMode ? Loc.Get("label_strict") : "";
-            // #875: promise only the exit this card actually honours. A strict card with the panic key
-            // live swallows Esc, so name the panic key instead of telling the user to press a key that
-            // will do nothing; every other case (non-strict, or strict with no panic key) keeps Esc.
-            TxtEscHint.Text = EscClosesCard
-                ? Loc.Get("label_press_esc_to_close")
-                : Loc.GetF("label_strict_only_panic_key_closes", App.Settings?.Current?.PanicKey ?? "?");
+            RefreshEscHint();
 
             // Position on screen
             if (screen != null)
@@ -609,29 +607,72 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// #875: does Esc close THIS card? Non-strict cards: yes, Esc is the ordinary dismiss. Strict
-        /// cards: only when the panic key is switched off, because then Esc is the sole remaining exit
-        /// and strict mode must never become an inescapable trap (<see cref="Models.AppSettings.CheckDangerousCombinations"/>
-        /// warns about that combination rather than making it real). Settings unreadable ⇒ treat the
-        /// panic key as gone and keep Esc live: the failure mode has to fall open, not shut.
+        /// #875: is there a panic escape from this card RIGHT NOW? Not "is the panic key configured" —
+        /// the setting is only half of it. The panic key rides a WH_KEYBOARD_LL hook installed by
+        /// MainWindow, and that hook can be absent while the setting says yes: SetWindowsHookEx fails
+        /// under a hook quota or security software, and Windows silently un-registers a low-level hook
+        /// whose callback overran LowLevelHooksTimeout (~300ms) with nothing here ever reinstalling it
+        /// — the #616-#623 cluster. Lockdown already refuses to trust the setting for the same reason
+        /// (MainWindow.Lab.OnLockdownActivated checks IsInstalled after arming suppression), so the
+        /// lock card must not either: a dead hook plus a strict card gated Esc off, made the panic key
+        /// undeliverable, and left OnClosing cancelling Alt+F4 — no exit but Task Manager.
         /// </summary>
-        private bool EscClosesCard =>
-            !_strictMode || App.Settings?.Current?.PanicKeyEnabled != true;
+        private static bool PanicEscapeIsLive =>
+            App.Settings?.Current?.PanicKeyEnabled == true && App.PanicHook?.IsInstalled == true;
+
+        /// <summary>
+        /// #875: does Esc close THIS card? Non-strict cards: yes, Esc is the ordinary dismiss. Strict
+        /// cards: only while a panic escape is actually live (<see cref="PanicEscapeIsLive"/>), because
+        /// otherwise Esc is the sole remaining exit and strict mode must never become an inescapable
+        /// trap (<see cref="Models.AppSettings.CheckDangerousCombinations"/> warns about that
+        /// combination rather than making it real). Settings unreadable, or the hook gone ⇒ keep Esc
+        /// live: every failure mode here has to fall open, not shut.
+        /// </summary>
+        private bool EscClosesCard => !_strictMode || !PanicEscapeIsLive;
+
+        /// <summary>
+        /// #875: paint the bottom hint from the exit this card honours RIGHT NOW. A strict card with a
+        /// live panic escape swallows Esc, so it names the panic key rather than telling the user to
+        /// press a key that will do nothing; every other case (non-strict, no panic key, or a panic
+        /// hook that died) keeps the Esc promise. Re-run rather than snapshotted at Configure because
+        /// <see cref="EscClosesCard"/> is live — a controller can flip PanicKeyEnabled mid-card.
+        /// </summary>
+        private void RefreshEscHint()
+        {
+            if (TxtEscHint == null) return;
+            TxtEscHint.Text = EscClosesCard
+                ? Loc.Get("label_press_esc_to_close")
+                : Loc.GetF("label_strict_only_panic_key_closes", App.Settings?.Current?.PanicKey ?? "?");
+        }
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
-            // Esc closes the card unless strict mode is on AND the panic key is live to cover it
-            // (see EscClosesCard). The unconditional close that the 55f872086 file split left here
-            // voided strict mode outright: any card, however strict, died to a single Esc. Strict now
-            // means "type it out, or panic out" — and Half 1 of #875 (LockCardService.Stop force-closing
-            // above its not-running guard) is what makes that panic key work for an ad-hoc card, so the
-            // two fixes must ship together or strict cards become unescapable.
-            if (e.Key == Key.Escape && !_isCompleted && EscClosesCard)
+            // Esc closes the card unless strict mode is on AND a panic escape is genuinely live to
+            // cover it (see EscClosesCard / PanicEscapeIsLive). The unconditional close that the
+            // 55f872086 file split left here voided strict mode outright: any card, however strict,
+            // died to a single Esc. Strict now means "type it out, or panic out" — and Half 1 of #875
+            // (LockCardService.Stop force-closing above its not-running guard) is what makes that panic
+            // key work for an ad-hoc card, so the two fixes must ship together or strict cards become
+            // unescapable.
+            if (e.Key == Key.Escape && !_isCompleted)
             {
-                App.Logger?.Information("Lock Card closed via ESC (strict={Strict})", _strictMode);
-                CloseAllWindows();
+                if (EscClosesCard)
+                {
+                    App.Logger?.Information("Lock Card closed via ESC (strict={Strict})", _strictMode);
+                    CloseAllWindows();
+                }
+                else
+                {
+                    // Refused. The hint was painted at Configure but the gate is live, so the two can
+                    // disagree (a controller flipping PanicKeyEnabled, a hook Windows just dropped).
+                    // Repaint every card now that the user has told us they are looking for the exit.
+                    foreach (var w in new List<LockCardWindow>(_allWindows))
+                    {
+                        try { w.RefreshEscHint(); } catch { }
+                    }
+                }
             }
-            
+
             // Prevent Alt+F4 in strict mode
             if (_strictMode && e.Key == Key.System && e.SystemKey == Key.F4)
             {
