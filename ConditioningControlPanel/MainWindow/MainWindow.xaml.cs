@@ -803,6 +803,24 @@ namespace ConditioningControlPanel
         private void HandlePanicKeyPress()
         {
             VideoDiag.Log("PANIC", $"handling panic press (engineRunning={_isRunning}, uiStall={VideoDiag.UiStallMs}ms)");
+
+            // #875: an open lock card outranks every hand-off below, so it is answered FIRST. A lock
+            // card can coexist with a descent, the DtRH window or the feed — AutonomyService,
+            // RemoteControlService and MantraLockScreenCommand all show one with no guard against them
+            // — and the card is a fullscreen HWND_TOPMOST cover that steals focus from the game's own
+            // Esc ladder. With DtRH up the hand-off below returns unconditionally, so the panic key
+            // never reached StopAdHocEffects and the card had no exit at all: a permanent trap. The
+            // press is consumed here (like the video grace pause) and deliberately does NOT advance the
+            // press ladder, so it can never be the tap that exits the app.
+            // IsAnyOpen also covers a deferred show still pending; cancelling that is the right answer
+            // to panic too, and DismissAll clears both, so the next press falls through normally.
+            if (LockCardWindow.IsAnyOpen())
+            {
+                VideoDiag.Log("PANIC", "dismissing the open lock card (it outranks every hand-off)");
+                App.LockCard?.Stop(dismissOpenCards: true);
+                return;
+            }
+
             // A live Rabbit Hole descent owns the panic key: the chaos key hook pauses the
             // run (and a second press surfaces it). Without this hand-off a mid-run panic
             // fell into the "not running" branch below — where a second press EXITS the app.
