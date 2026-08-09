@@ -33,10 +33,12 @@ namespace ConditioningControlPanel.Services
         private string? _browserPath;
         private bool _browserStrict;
         private long _browserTimeMs = -1;
-        /// <summary>Host-side pause state for the session. The page posts no messages while paused,
-        /// so IsPrimaryMediaPlaying can only answer from the PausePrimary/PlayPrimary edges (grace
-        /// pause and Deeper's SpeakPromptSession both route through those). Self-heals to false on
-        /// every `time` tick — position only flows while the page is really playing. (#874)</summary>
+        /// <summary>Pause state of the session, the answer behind IsPrimaryMediaPlaying for a browser
+        /// clip. Set on the PausePrimary/PlayPrimary edges (grace pause and Deeper's SpeakPromptSession
+        /// both route through those) and then kept honest by the `paused` field the page stamps on
+        /// EVERY `time` post. It is not inferred from a message arriving: pause, seek and the natural
+        /// end all force a post while the clip is paused, so "a time message means it is playing" is
+        /// false and reading it that way made a paused video report as playing. (#874)</summary>
         private volatile bool _browserPaused;
         /// <summary>Display aspect (w/h) from the page's `meta` message, 0 until known. Read by
         /// VideoServiceTimeSource.GetVideoAspect so Deeper gaze rules can compute the contain-fit
@@ -453,11 +455,17 @@ namespace ConditioningControlPanel.Services
             });
         }
 
-        private void OnBrowserTime(long ms)
+        private void OnBrowserTime(long ms, bool? paused)
         {
             if (!_browserActive) return;
             _browserTimeMs = ms;
-            _browserPaused = false;      // position only flows while playing — heals a missed resume edge (#874)
+            // Take the pause state FROM the message, never from its mere arrival: doPause(), the
+            // 'seeked' handler and the natural end all force a post while the clip is paused, so
+            // blind-clearing here made IsPrimaryMediaPlaying report true one message-hop after
+            // PausePrimary — exactly the window Deeper's speak-holds live in (#874). null = older
+            // cached page HTML that predates the field; leave the PausePrimary/PlayPrimary edges
+            // to answer, which is the pre-#874 behaviour minus the blind clear.
+            if (paused.HasValue) _browserPaused = paused.Value;
             _lastWatchPositionMs = ms;   // watch-time crediting (#447), same field the LibVLC path feeds
             try { PrimaryPlaybackTimeMsChanged?.Invoke(ms); }
             catch (Exception ex) { App.Logger?.Debug("PrimaryPlaybackTimeMsChanged handler error: {Error}", ex.Message); }

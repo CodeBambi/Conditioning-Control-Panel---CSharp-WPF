@@ -314,6 +314,12 @@ videos drivable by the same effect engine the standalone Deeper player uses. Flo
    LibVLC-thread `TimeChanged` to the UI thread (`:47`) because the engine mutates band/fired-state
    from the UI tick and webcam handlers (browser `time` messages already arrive on the UI thread and
    pass straight through the same marshal).
+   **Browser playing-state is never inferred from message arrival.** `doPause()`, the `seeked` handler
+   and the natural end all *force* a `time` post while the clip is paused, so the page stamps a
+   `paused` flag on every position and `OnBrowserTime` sets `_browserPaused` **from that field**
+   (absent ⇒ leave the `PausePrimary`/`PlayPrimary` edge alone; old cached page HTML). Clearing it on
+   any `time` message made a paused clip read as playing one message-hop after `PausePrimary` — which
+   is exactly the window Deeper's own speak-holds live in (#874).
 4. On `VideoEnded` → `Unbind` (`:136`); clears the driving flag, unloads. **Panic/`CloseAll` does NOT
    raise `VideoEnded`**, so the panic path calls `ForceUnbind()` (`:134`) or active overlays keep
    dispatching after the video is gone (#364).

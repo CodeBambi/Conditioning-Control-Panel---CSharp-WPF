@@ -402,9 +402,11 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Whether the primary clip is actually advancing, whichever engine owns it. The browser page
-        /// posts nothing while paused, so the browser answer is tracked on the host side: playing has
-        /// been confirmed, and neither a PausePrimary hold nor a grace pause is in force. (#874)
+        /// Whether the primary clip is actually advancing, whichever engine owns it. The browser answer
+        /// is host-side bookkeeping: playing has been confirmed, and neither a PausePrimary hold nor a
+        /// grace pause is in force. <c>_browserPaused</c> follows the PausePrimary/PlayPrimary edges and
+        /// the `paused` flag the page stamps on every `time` post (a pause/seek/end forces a post WHILE
+        /// paused, so the arrival of a position never implies playback). (#874)
         /// </summary>
         public bool IsPrimaryMediaPlaying
         {

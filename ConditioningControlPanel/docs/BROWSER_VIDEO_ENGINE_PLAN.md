@@ -184,6 +184,9 @@ All of the following stay in VideoService (C#-side) and must fire for browser se
       refuses when NEITHER engine has a clock (the MediaElement fallback window).
       The original Stage-1 gap — bridge silently refusing every mp4/m4v/webm while
       the browser engine was default — shipped 6.7.0→6.7.4 and is closed.
+      A contract that surface carries: the page tags every `time` post with its own
+      `paused` flag, and the host reads pause state from THAT — pause/seek/end each
+      force a post *while* paused, so the arrival of a position never means "playing".
 - [ ] `SessionSwitch` (lock) + `PowerModeChanged` (suspend) force-clean unchanged.
 - [ ] Teardown generation guard applies to browser session continuations too.
 - [ ] `VideoMetadataCache` backfill: write duration from the page `meta` message so

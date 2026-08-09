@@ -225,7 +225,12 @@
     if (!force && ms === lastTimeMs) return;
     lastTimeMs = ms;
     lastTimePostAt = now;
-    post({ type: 'time', ms: ms });
+    // Every position carries the pause state with it. A forced post travels WHILE paused
+    // (doPause, 'seeked', 'ended'), so the host must never infer "a time message means the
+    // clip is playing" — that made IsPrimaryMediaPlaying report true one message-hop after
+    // the host paused, which broke Deeper's speak-holds. hostPaused covers a host-requested
+    // hold; fg.paused also covers a pause the page itself is sitting in. (#874)
+    post({ type: 'time', ms: ms, paused: !!(cur.hostPaused || fg.paused) });
   }
 
   // ---------- ticker: 10 Hz time + stall watchdogs + backdrop resync ----------
