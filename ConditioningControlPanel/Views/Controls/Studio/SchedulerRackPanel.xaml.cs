@@ -10,12 +10,17 @@ namespace ConditioningControlPanel.Views.Controls.Studio
     /// this panel adds the help "?" that only the dead ProgressionTab copy ever had.
     ///
     /// <para><b>Nothing here talks to a service.</b> The scheduler is driven entirely off
-    /// <c>App.Settings.Current</c>: <c>MainWindow.StartStop.cs:591 SchedulerTimer_Tick</c> polls
+    /// <c>App.Settings.Current</c>: <c>MainWindow.StartStop.cs SchedulerTimer_Tick</c> polls
     /// every 30s and starts/stops the engine. The one thing the old Save path did that no live
-    /// editor does is call <c>CheckSchedulerAfterSettingsChange()</c> (private on MainWindow,
-    /// MainWindow.Settings.cs:527) for an immediate check on enable - so enabling from here arms
-    /// within one poll tick instead of instantly. Reported rather than worked around: reaching
-    /// into a private MainWindow method from a rack panel would be worse than a 30s delay.</para>
+    /// editor does is call <c>CheckSchedulerAfterSettingsChange()</c> (private on MainWindow) for
+    /// an immediate check on enable - so enabling from here arms within one poll tick instead of
+    /// instantly. Reported rather than worked around: reaching into a private MainWindow method
+    /// from a rack panel would be worse than a 30s delay.</para>
+    ///
+    /// <para>PHASE 8 CONFIRMS THIS: the ghost tab's read-back is gone, so the rising-edge guard in
+    /// <c>MainWindow.SaveSettings</c> can no longer fire at all. If the instant arm is ever wanted
+    /// back, the kick belongs in <see cref="Features.SchedulerFeatureControl"/>, not in
+    /// SaveSettings.</para>
     /// </summary>
     public partial class SchedulerRackPanel : UserControl
     {
@@ -44,9 +49,10 @@ namespace ConditioningControlPanel.Views.Controls.Studio
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
-            // Same two lines MainWindow.Presets.cs:58 runs for the ProgressionTab twin.
-            // Attach is idempotent (it clears any previous popover first), so re-running it on a
-            // later Loaded - or after a language change - is free.
+            // Same two lines MainWindow's SetupHelpButtons used to run for the ProgressionTab twin
+            // (deleted in Phase 8, help button included - this is now the only "Scheduler" ? in
+            // the app). Attach is idempotent (it clears any previous popover first), so re-running
+            // it on a later Loaded - or after a language change - is free.
             try
             {
                 global::ConditioningControlPanel.Controls.HelpPopover.Attach(

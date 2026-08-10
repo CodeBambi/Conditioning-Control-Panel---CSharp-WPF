@@ -434,7 +434,6 @@ namespace ConditioningControlPanel
             finally { _isLoading = false; }
 
             UpdateAwarenessStatusIndicator(on);
-            UpdateKeywordTriggersButtonState();
             App.Settings?.Save();
         }
 
@@ -465,13 +464,8 @@ namespace ConditioningControlPanel
             else
                 App.ScreenOcr?.Stop();
 
-            // Mirror into the legacy Exclusives OCR checkbox so both screens agree.
-            if (PatreonTab.ChkScreenOcrEnabled != null && PatreonTab.ChkScreenOcrEnabled.IsChecked != on)
-            {
-                _isLoading = true;
-                try { PatreonTab.ChkScreenOcrEnabled.IsChecked = on; }
-                finally { _isLoading = false; }
-            }
+            // PHASE 8: the legacy Exclusives OCR checkbox this used to mirror into went with
+            // PatreonTabView. This toggle is the only editor of ScreenOcrEnabled now.
 
             // PHASE 5 (G3): this toggle is the master for the rescued scan-interval /
             // confirmation editors further down the page - show or hide them to match.
@@ -724,9 +718,8 @@ namespace ConditioningControlPanel
             settings.KeywordHighlightEnabled = AwarenessTab.ChkAwarenessHighlight?.IsChecked == true;
             App.Settings?.Save();
 
-            // Keep the Exclusives-tab mirror checkbox in sync so both UIs agree.
-            if (PatreonTab.ChkKeywordHighlightEnabled != null && PatreonTab.ChkKeywordHighlightEnabled.IsChecked != settings.KeywordHighlightEnabled)
-                PatreonTab.ChkKeywordHighlightEnabled.IsChecked = settings.KeywordHighlightEnabled;
+            // PHASE 8: the Exclusives-tab mirror checkbox went with PatreonTabView. This toggle is
+            // the only editor of KeywordHighlightEnabled now.
 
             // PHASE 5 (G3): this toggle is the master for the rescued highlight mode +
             // duration editors further down the page.
@@ -746,9 +739,8 @@ namespace ConditioningControlPanel
             // Flip display affinity on all existing overlay windows immediately.
             App.KeywordHighlight?.RefreshCaptureVisibility();
 
-            // Mirror the Exclusives-tab checkbox so both stay in agreement.
-            if (PatreonTab.ChkHighlightVisibleInCapture != null && PatreonTab.ChkHighlightVisibleInCapture.IsChecked != settings.OcrHighlightVisibleInCapture)
-                PatreonTab.ChkHighlightVisibleInCapture.IsChecked = settings.OcrHighlightVisibleInCapture;
+            // PHASE 8: the Exclusives-tab mirror checkbox went with PatreonTabView. This toggle is
+            // the only editor of OcrHighlightVisibleInCapture now.
         }
 
         internal void AwarenessHighlightSwatch_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)

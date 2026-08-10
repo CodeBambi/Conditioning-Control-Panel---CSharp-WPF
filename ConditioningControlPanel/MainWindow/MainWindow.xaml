@@ -1368,8 +1368,11 @@
         <views:PresetsTabView x:Name="PresetsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-        <!-- Progression Tab (Hidden by default) -->
-        <views:ProgressionTabView x:Name="ProgressionTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+        <!-- Progression Tab: DEMOLISHED (UX restructure, Phase 8). ProgressionTabView was a
+             permanently Collapsed ghost - no ShowTab case ever revealed it - whose 114 controls
+             were a second copy of the Studio rack's dose dials plus Scheduler/Ramp. The tab key
+             "progression" survives forever as a redirect onto Home (MainWindow.TabNavigation.cs)
+             because 54 bark rules per mod and the tutorial ladder still fire it. -->
 
 
         <!-- Quests Tab -->
@@ -1383,8 +1386,13 @@
         <views:CompanionTabView x:Name="CompanionTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-        <!-- Patreon Exclusives Tab -->
-        <views:PatreonTabView x:Name="PatreonTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+        <!-- Patreon Exclusives Tab: DEMOLISHED (UX restructure, Phase 8). PatreonTabView was a
+             permanently Collapsed ghost - ShowTab("patreon") early-returns into ShowAppInfoPopup()
+             and never revealed it. Its 7 account cards left in Phase 2 (Settings · Account,
+             Views/Controls/AppSettings/AccountSettingsSection.xaml) and its keyword/OCR editors in
+             Phase 5 (Awareness, Views/Controls/Companion/KeywordTriggersPanel.xaml). The tab key
+             "patreon" survives forever as a redirect (MainWindow.TabNavigation.cs) because
+             TutorialService still declares it. -->
 
 
         <!-- Profile Tab -->

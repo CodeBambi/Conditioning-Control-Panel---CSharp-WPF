@@ -287,7 +287,6 @@ namespace ConditioningControlPanel
             if (isEnabled && App.Settings?.Current?.HasLinkedDiscord != true)
             {
                 _isLoading = true;
-                ProgressionTab.ChkDiscordRichPresence.IsChecked = false;
                 SettingsTab.ChkQuickDiscordRichPresence.IsChecked = false;
                 if (DiscordTab.ChkDiscordTabRichPresence != null) DiscordTab.ChkDiscordTabRichPresence.IsChecked = false;
                 _isLoading = false;
@@ -296,9 +295,11 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            // Sync all checkboxes without re-entrancy
+            // Sync the surviving checkboxes without re-entrancy. Phase 8: the third copy
+            // (ProgressionTab.ChkDiscordRichPresence) died with the ghost tab; the two live
+            // surfaces are the Home quick toggle and the Profile tab's own switch. This handler
+            // stays - Views/Controls/ProfilePrivacyPanel.xaml binds it.
             _isLoading = true;
-            ProgressionTab.ChkDiscordRichPresence.IsChecked = isEnabled;
             SettingsTab.ChkQuickDiscordRichPresence.IsChecked = isEnabled;
             if (DiscordTab.ChkDiscordTabRichPresence != null) DiscordTab.ChkDiscordTabRichPresence.IsChecked = isEnabled;
             _isLoading = false;
@@ -420,10 +421,29 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// Phase 8: re-pointed, not deleted (audit ruling §1f).
+        ///
+        /// <para><b>Correction to that ruling, verified here:</b> the live Settings · Updates button
+        /// does NOT route to this method. <c>UpdatesSettingsSection.xaml</c> binds
+        /// <c>Click="BtnCheckUpdates_Click"</c> to that control's OWN private handler, which is
+        /// self-contained (<c>App.CheckForUpdatesManuallyAsync</c>). So with ProgressionTab's copy
+        /// deleted, this method currently has no binder at all.</para>
+        ///
+        /// <para>It is kept per the ruling rather than deleted, and re-aimed at
+        /// <c>AppSettingsTab.BtnCheckUpdates</c> so that if it is ever re-bound it paints the
+        /// "Checking…" affordance on the one surviving button instead of a deleted one. Note that
+        /// affordance has therefore never been visible to users - a pre-existing gap, not a Phase 8
+        /// regression. If it is wanted, add it to UpdatesSettingsSection's own handler.</para>
+        /// </summary>
         internal async void BtnCheckUpdates_Click(object sender, RoutedEventArgs e)
         {
-            ProgressionTab.BtnCheckUpdates.IsEnabled = false;
-            ProgressionTab.BtnCheckUpdates.Content = Loc.Get("btn_checking");
+            var btn = AppSettingsTab?.BtnCheckUpdates;
+            if (btn != null)
+            {
+                btn.IsEnabled = false;
+                btn.Content = Loc.Get("btn_checking");
+            }
 
             try
             {
@@ -431,8 +451,11 @@ namespace ConditioningControlPanel
             }
             finally
             {
-                ProgressionTab.BtnCheckUpdates.IsEnabled = true;
-                ProgressionTab.BtnCheckUpdates.Content = Loc.Get("btn_check_updates");
+                if (btn != null)
+                {
+                    btn.IsEnabled = true;
+                    btn.Content = Loc.Get("btn_check_updates");
+                }
             }
         }
 

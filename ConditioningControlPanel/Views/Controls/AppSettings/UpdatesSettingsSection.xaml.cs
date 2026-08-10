@@ -12,9 +12,13 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
     ///
     /// <para>The check button moved verbatim from <c>Features/AppInfoFeatureControl</c>, handler body
     /// included - it was always self-contained (<c>App.CheckForUpdatesManuallyAsync</c>), never a
-    /// MainWindow method, so nothing had to be re-pointed. Note that MainWindow also carries a
-    /// <c>BtnCheckUpdates_Click</c> bound to <c>ProgressionTab.BtnCheckUpdates</c>; that copy has
-    /// been unreachable for releases and Phase 8 deletes it with the tab.</para>
+    /// MainWindow method, so nothing had to be re-pointed. <b>THIS section's own private
+    /// <c>BtnCheckUpdates_Click</c> below is what the live button binds to.</b> MainWindow carries a
+    /// same-named handler which used to serve the ProgressionTab copy; Phase 8 deleted that button
+    /// and re-aimed the handler's "Checking…" affordance at <c>AppSettingsTab.BtnCheckUpdates</c>,
+    /// but nothing binds the MainWindow copy any more - it is kept, unbound, per the Phase 8 audit.
+    /// If the disabled/"Checking…" affordance is ever wanted on this button, add it HERE rather
+    /// than re-binding across the boundary.</para>
     /// </summary>
     public partial class UpdatesSettingsSection : UserControl
     {

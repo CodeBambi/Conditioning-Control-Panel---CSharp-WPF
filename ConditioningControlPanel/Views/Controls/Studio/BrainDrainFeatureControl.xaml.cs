@@ -115,7 +115,6 @@ namespace ConditioningControlPanel.Views.Controls.Studio
                 App.Logger?.Information("Brain Drain toggled: {Enabled}", isEnabled);
             }
 
-            MirrorToLegacyProgressionControls(s);
             App.Settings?.Save();
         }
 
@@ -135,7 +134,6 @@ namespace ConditioningControlPanel.Views.Controls.Studio
                 catch (Exception ex) { App.Logger?.Warning(ex, "Brain Drain UpdateSettings failed"); }
             }
 
-            MirrorToLegacyProgressionControls(s);
             App.Settings?.Save();
         }
 
@@ -161,46 +159,15 @@ namespace ConditioningControlPanel.Views.Controls.Studio
             }
 
             App.Logger?.Information("Brain Drain High Refresh toggled: {Enabled}", isHighRefresh);
-            MirrorToLegacyProgressionControls(s);
             App.Settings?.Save();
         }
 
-        /// <summary>
-        /// TEMPORARY, DIES WITH THE GHOST TAB (Phase 8).
-        ///
-        /// <c>MainWindow.SaveSettings()</c> still writes all three Brain Drain settings FROM the
-        /// dead ProgressionTab controls (<c>MainWindow/MainWindow.Settings.cs:504-506</c>), and it
-        /// runs on session start (<c>StartStop.cs:158</c>), on close, and from several settings
-        /// dialogs. Those controls are only ever filled at load time, so without this mirror every
-        /// change made here would be silently reverted the next time the user pressed Start —
-        /// the exact class of bug the Flash exclusion-box rescue avoided by having its legacy
-        /// round-trip deleted along with its old markup.
-        ///
-        /// Writing them back is safe: the ProgressionTab copies carry no Checked/ValueChanged
-        /// attributes at all, so nothing re-enters. When Phase 8 deletes ProgressionTabView it must
-        /// delete lines 504-506 of Settings.cs and this method together.
-        /// </summary>
-        private void MirrorToLegacyProgressionControls(Models.AppSettings s)
-        {
-            try
-            {
-                // App.MainWindowRef first, per App.xaml.cs:2025 — Application.Current.MainWindow
-                // is not reliably MainWindow, and Window.GetWindow(this) would return the pop-out
-                // FeaturePopupWindow when this panel is shown there instead of in the rack.
-                var mw = App.MainWindowRef ?? (Application.Current?.MainWindow as ConditioningControlPanel.MainWindow);
-                if (mw == null) return;
-                var prog = mw.ProgressionTab;
-                if (prog == null) return;
-
-                if (prog.ChkBrainDrainEnabled != null) prog.ChkBrainDrainEnabled.IsChecked = s.BrainDrainEnabled;
-                if (prog.SliderBrainDrainIntensity != null) prog.SliderBrainDrainIntensity.Value = s.BrainDrainIntensity;
-                if (prog.ChkBrainDrainHighRefresh != null) prog.ChkBrainDrainHighRefresh.IsChecked = s.BrainDrainHighRefresh;
-                if (prog.TxtBrainDrainIntensity != null) prog.TxtBrainDrainIntensity.Text = $"{s.BrainDrainIntensity}%";
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "[Studio] Brain Drain legacy mirror failed");
-            }
-        }
+        // PHASE 8 — MirrorToLegacyProgressionControls is GONE, exactly as its own doc-comment
+        // instructed. It existed for one reason: MainWindow.SaveSettings() read all three Brain
+        // Drain settings back out of the dead ProgressionTab checkboxes, and SaveSettings runs on
+        // session start, so an edit made here would have been reverted the next time the user
+        // pressed Start. Those reads were deleted in the same change (MainWindow.Settings.cs), and
+        // ProgressionTabView no longer exists. This panel's own writes at ChkEnable_Changed /
+        // SliderIntensity_Changed / ChkHighRefresh_Changed plus App.Settings.Save() are untouched.
     }
 }

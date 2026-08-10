@@ -58,6 +58,13 @@ namespace ConditioningControlPanel.Views.Tabs
             }
         }
 
+        // PHASE 8 (demolition): 41 shims left this file with LegacyDashboardHost and the Collapsed
+        // CardSystem tile - the whole Flash/Visuals/Video/Subliminal dial set, the ChkDualMon and
+        // performance twins, and CardSystem_Click. Nothing they reached was lost: the dials live on
+        // the Studio rack's *FeatureControl panels, the performance switches on
+        // Views/Controls/AppSettings/PerformanceSettingsSection, ChkDualMon on
+        // Features/SystemFeatureControl.ChkMultiMon, and the System popup on VelvetBtnSystem_Click
+        // below - which is now the ONLY caller of MainWindow.CardSystem_Click.
         private void BrowserLoadingText_Click(object sender, MouseButtonEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -68,11 +75,6 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BrowserSiteToggle_Click(sender, e);
         }
-        private void BtnAttentionStyle_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnAttentionStyle_Click(sender, e);
-        }
         // Phase 2: BtnAudioOutputRefresh_Click / BtnAudioLayers_Click moved with the Audio
         // section to Views/Controls/AppSettings/AudioSettingsSection.xaml.cs.
         // Phase 2: BtnClearStartupVideo_Click / BtnSelectStartupVideo_Click moved with the startup
@@ -81,26 +83,6 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnDiscord_Click(sender, e);
-        }
-        private void BtnManageAttention_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnManageAttention_Click(sender, e);
-        }
-        private void BtnManageMessages_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnManageMessages_Click(sender, e);
-        }
-        private void BtnOpenAssetsFolder_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnOpenAssetsFolder_Click(sender, e);
-        }
-        private void BtnPickAssetsFolder_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnPickAssetsFolder_Click(sender, e);
         }
         private void BtnPopOutBrowser_Click(object sender, RoutedEventArgs e)
         {
@@ -197,18 +179,8 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnReloadBrowser_Click(sender, e);
         }
-        private void BtnSubliminalSettings_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnSubliminalSettings_Click(sender, e);
-        }
         // Phase 2: BtnExportPhrases_Click / BtnImportPhrases_Click moved with the phrase-backup
         // card to Views/Controls/AppSettings/DataSettingsSection.xaml.cs.
-        private void BtnTestVideo_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnTestVideo_Click(sender, e);
-        }
         private void BtnUnifiedLogin_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -271,11 +243,6 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.CardSubliminal_Click(sender, e);
         }
-        private void CardSystem_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardSystem_Click(sender, e);
-        }
         private void CardVideo_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -286,109 +253,19 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.CardVisuals_Click(sender, e);
         }
-        private void ChkAudioWhispers_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkAudioWhispers_Changed(sender, e);
-        }
-        private void ChkAutoPerformance_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkAutoPerformance_Changed(sender, e);
-        }
-        private void ChkClickable_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkClickable_Changed(sender, e);
-        }
-        private void ChkCorruption_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkCorruption_Changed(sender, e);
-        }
         private void ChkDiscordRichPresence_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkDiscordRichPresence_Changed(sender, e);
         }
-        private void ChkDualMon_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkDualMon_Changed(sender, e);
-        }
         // Phase 2: ChkEnableDeeper_Changed moved with the Deeper master switch to
         // Views/Controls/AppSettings/GeneralSettingsSection.xaml.cs.
-        private void ChkFlashAudio_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkFlashAudio_Changed(sender, e);
-        }
-        private void ChkFlashEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkFlashEnabled_Changed(sender, e);
-        }
-        private void ChkFlashGlow_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkFlashGlow_Changed(sender, e);
-        }
-        private void ChkHydraLinked_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkHydraLinked_Changed(sender, e);
-        }
-        private void ChkMiniGameEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkMiniGameEnabled_Changed(sender, e);
-        }
         // BtnPanicKey_Click / ChkNoPanic_Changed left with their controls in Phase 2 — the panic
         // key is rebound and disabled in Settings → Devices now.
         // Phase 2: ChkOfflineMode_Changed moved with the offline toggle to
         // Views/Controls/AppSettings/DataSettingsSection.xaml.cs.
-        private void ChkPerformanceMode_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkPerformanceMode_Changed(sender, e);
-        }
-        private void CmbMotionLevel_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CmbMotionLevel_SelectionChanged(sender, e);
-        }
-        private void ChkRandomizeTargets_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkRandomizeTargets_Changed(sender, e);
-        }
         // Phase 2: ChkStartHidden_Click / ChkWinStart_Click moved with the startup group to
         // Views/Controls/AppSettings/GeneralSettingsSection.xaml.cs.
-        private void ChkStrictLock_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkStrictLock_Changed(sender, e);
-        }
-        private void ChkSubliminalEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkSubliminalEnabled_Changed(sender, e);
-        }
-        private void ChkVideoEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkVideoEnabled_Changed(sender, e);
-        }
-        private void ChkVideoHwDecode_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkVideoHwDecode_Changed(sender, e);
-        }
-        private void ChkUnifiedOverlay_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkUnifiedOverlay_Changed(sender, e);
-        }
         private void ImgLogo_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -404,81 +281,6 @@ namespace ConditioningControlPanel.Views.Tabs
         }
         // Phase 3: SliderAudioSyncLatency_Changed / SliderAudioSyncIntensity_Changed moved with
         // the audio-sync tuning panel to Views/Controls/AppSettings/AudioSettingsSection.xaml.cs.
-        private void SliderDuration_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderDuration_Changed(sender, e);
-        }
-        private void SliderFade_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderFade_Changed(sender, e);
-        }
-        private void SliderFlashDuration_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderFlashDuration_Changed(sender, e);
-        }
-        private void SliderFrames_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderFrames_Changed(sender, e);
-        }
-        private void SliderImages_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderImages_Changed(sender, e);
-        }
-        private void SliderMaxOnScreen_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderMaxOnScreen_Changed(sender, e);
-        }
-        private void SliderOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderOpacity_Changed(sender, e);
-        }
-        private void SliderPerHour_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderPerHour_Changed(sender, e);
-        }
-        private void SliderPerMin_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderPerMin_Changed(sender, e);
-        }
-        private void SliderSize_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderSize_Changed(sender, e);
-        }
-        private void SliderSubOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderSubOpacity_Changed(sender, e);
-        }
-        private void SliderSubPerMin_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderSubPerMin_Changed(sender, e);
-        }
-        private void SliderTargetSize_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderTargetSize_Changed(sender, e);
-        }
-        private void SliderTargets_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderTargets_Changed(sender, e);
-        }
-        private void SliderWhisperVol_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderWhisperVol_Changed(sender, e);
-        }
         private void ToggleEnhanceIfPossible_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

@@ -285,7 +285,9 @@ namespace ConditioningControlPanel
 
             // Set version dynamically from assembly
             var version = Services.UpdateService.GetCurrentVersion();
-            ProgressionTab.TxtVersion.Text = $"Version {version}";
+            // Phase 8: ProgressionTab.TxtVersion is gone. The two live version readouts seed
+            // themselves - Settings · Updates (UpdatesSettingsSection.xaml.cs) and the System
+            // popup's AppInfoFeatureControl - alongside the three chrome labels below.
             Title = $"Conditioning Control Panel v{version}";
             TxtTitleBarVersion.Text = $"Conditioning Control Panel v{version}";
             TxtHeaderVersion.Text = $"v{version}";
@@ -454,17 +456,23 @@ namespace ConditioningControlPanel
 
             // v6.0: fresh installs land on CCP Default (neutral baseline).
             // Content packs (docs/CONTENT_PACKS_PLAN.md §4 + §5): the mod media no longer ships in the
-            // installer, so the picker is back — for BOTH populations. First launch gets it below,
-            // before the tutorial; every ALREADY-Welcomed install gets it from the else branch,
-            // because the modular installer's [InstallDelete] sweep just took their bundled mod audio
-            // away and they would otherwise never be offered it back. ModPickerDialog.ShowIfNeeded
-            // owns the one-shot guards (ModPickerShown / IsFullInstall / null service), so it no-ops
-            // for everyone who should not see it — including every install that still has its
-            // bundled audio.
+            // installer, so the picker is back — for BOTH populations. First launch gets it as step 2
+            // of the wizard below, before the tour; every ALREADY-Welcomed install gets the standalone
+            // ModPickerDialog from the else branch, because the modular installer's [InstallDelete]
+            // sweep just took their bundled mod audio away and they would otherwise never be offered
+            // it back. The one-shot guards (ModPickerShown / ModPickerOfflineOffers / IsFullInstall /
+            // null service) are the SAME rules on both paths - the wizard's mod step reuses
+            // ModPickerDialog's own guard predicates rather than restating them - so each population
+            // is offered exactly once and nobody who should not see it does.
 
-            // Show welcome dialog on first launch, then start tutorial
-            // But delay tutorial if update dialog is being shown
-            if (WelcomeDialog.ShowIfNeeded())
+            // Phase 8: one screen instead of the gauntlet. FirstRunWizard.ShouldRunAndClaim reads
+            // (and latches) the same Welcomed flag WelcomeDialog.ShowIfNeeded did, at the same
+            // instant, so the else branch below - What's New, season recap, the upgrader's mod
+            // picker - is reached by exactly the same population as before. The wizard itself
+            // owns what used to be three separate modals: the welcome card, the first-run mod
+            // picker (ModPickerDialog.ShowIfNeeded's one-shot + offline guards included) and the
+            // "choose a content folder" MessageBox; StartTutorial is launched from its last step.
+            if (FirstRunWizard.ShouldRunAndClaim())
             {
                 Dispatcher.BeginInvoke(new Action(async () =>
                 {
@@ -475,23 +483,25 @@ namespace ConditioningControlPanel
                         await Task.Delay(500);
                     }
 
-                    // The spotlight overlay measures this window's controls, so it must not
-                    // start against a window that hasn't loaded yet (up to 10s).
+                    // The wizard's doors step and the spotlight overlay both measure this window's
+                    // controls, so neither may start against a window that hasn't loaded yet (up
+                    // to 10s). This is why the wizard opens here rather than in the constructor.
                     for (int i = 0; i < 20 && !IsLoaded; i++)
                     {
                         await Task.Delay(500);
                     }
 
-                    // Only start tutorial if update dialog is done
                     if (!App.IsUpdateDialogActive && IsLoaded)
                     {
-                        // Mod picker first: it is modal and the tutorial's spotlight overlay measures
-                        // THIS window's controls, so the two must never be on screen together. No-ops
-                        // on a full/dev install, when the pack service is missing, or after the
-                        // ModPickerShown flag is set.
-                        ModPickerDialog.ShowIfNeeded(this);
-
-                        StartTutorial();
+                        FirstRunWizard.Run(this);
+                    }
+                    else
+                    {
+                        // The waits above gave up (an update dialog still on screen after 30s, a
+                        // window that never loaded). Hand the flags back rather than spending a
+                        // first run nobody was shown - the next launch offers it properly.
+                        FirstRunWizard.HandBackFirstRun(
+                            App.IsUpdateDialogActive ? "update dialog still open" : "window never loaded");
                     }
                     // Normal, NOT Loaded: this app keeps the dispatcher busy enough (compositor
                     // host + avatar animations) that Loaded-priority items are starved and never
@@ -1599,9 +1609,8 @@ namespace ConditioningControlPanel
                     ("features/bouncing_text.png", SettingsTab.CardBouncingText),
                     ("features/Mind_Wipers.png", SettingsTab.CardMindWipe),
                     ("features/Bubble_count.png", SettingsTab.CardBubbleCount),
-                    // Phase 3: the Brain Drain tile. Same art the (dead) ProgressionTab rectangle
-                    // uses below — without this row the tile would keep base art after a mod
-                    // switch forever, which is exactly how ArtFyp got stranded.
+                    // Phase 3: the Brain Drain tile. Without this row the tile would keep base art
+                    // after a mod switch forever, which is exactly how ArtFyp got stranded.
                     ("features/brain_drain.png", SettingsTab.CardBrainDrain),
                 };
                 foreach (var (path, card) in cardMap)
@@ -1612,28 +1621,11 @@ namespace ConditioningControlPanel
                         card.Icon = image;
                 }
 
-                // Legacy progression tab rectangles
-                var featureMap = new (string resourcePath, System.Windows.Shapes.Rectangle? rect)[]
-                {
-                    ("features/spiral_overlay.png", ProgressionTab.SpiralFeatureImage),
-                    ("features/Pink_filter.png", ProgressionTab.PinkFilterFeatureImage),
-                    ("features/Bubble_pop.png", ProgressionTab.BubblePopFeatureImage),
-                    ("features/Phrase_Lock.png", ProgressionTab.LockCardFeatureImage),
-                    ("features/Bubble_count.png", ProgressionTab.BubbleCountFeatureImage),
-                    ("features/bouncing_text.png", ProgressionTab.BouncingTextFeatureImage),
-                    ("features/brain_drain.png", ProgressionTab.BrainDrainFeatureImage),
-                    ("features/Mind_Wipers.png", ProgressionTab.MindWipeFeatureImage),
-                };
-
-                foreach (var (path, rect) in featureMap)
-                {
-                    if (rect == null) continue;
-                    var image = ModResourceResolver.ResolveImage(path);
-                    if (image != null)
-                    {
-                        rect.Fill = new ImageBrush(image) { Stretch = Stretch.UniformToFill };
-                    }
-                }
+                // PHASE 8: the eight "legacy progression tab rectangles" rows are gone with
+                // ProgressionTabView. Mod art coverage is unchanged - cardMap above already
+                // carries all eight resource-relative paths, including features/brain_drain.png,
+                // so every one of those overrides still repaints on a mod switch. No art path was
+                // renamed or dropped (mod contract rule 2).
 
                 // Image elements in description cards + Video Haptic Sync card.
                 // Takeover image is mod-specific: BambiSleep uses "bambi takeover.png",
@@ -2434,14 +2426,14 @@ namespace ConditioningControlPanel
             // Initialize Avatar Tube Window
             InitializeAvatarTube();
 
-            // Initialize Discord Rich Presence checkboxes (both locations).
-            // Guard with _isLoading so the Changed handler doesn't fire the
-            // "Discord Not Linked" MessageBox during startup for users whose
-            // saved setting is enabled but who haven't linked Discord.
+            // Initialize the Discord Rich Presence checkbox. Guard with _isLoading so the Changed
+            // handler doesn't fire the "Discord Not Linked" MessageBox during startup for users
+            // whose saved setting is enabled but who haven't linked Discord.
+            // Phase 8: the dead ProgressionTab copy is gone; the live twins are the Home quick
+            // toggle here and DiscordTab.ChkDiscordTabRichPresence (seeded by UpdateDiscordUI).
             _isLoading = true;
             try
             {
-                ProgressionTab.ChkDiscordRichPresence.IsChecked = App.Settings.Current.DiscordRichPresenceEnabled;
                 SettingsTab.ChkQuickDiscordRichPresence.IsChecked = App.Settings.Current.DiscordRichPresenceEnabled;
             }
             finally { _isLoading = false; }

@@ -58,51 +58,16 @@ namespace ConditioningControlPanel
         {
             var s = App.Settings.Current;
 
-            // Flash
-            SettingsTab.ChkFlashEnabled.IsChecked = s.FlashEnabled;
-            SettingsTab.ChkClickable.IsChecked = s.FlashClickable;
-            SettingsTab.ChkCorruption.IsChecked = s.CorruptionMode;
-            SettingsTab.ChkHydraLinked.IsChecked = s.HydraLinkedTiming;
-            SettingsTab.ChkFlashGlow.IsChecked = s.FlashGlowEnabled;
-            SettingsTab.SliderPerMin.Value = s.FlashFrequency;
-            SettingsTab.SliderImages.Value = s.SimultaneousImages;
-            SettingsTab.SliderMaxOnScreen.Value = s.HydraLimit;
+            // PHASE 8: Flash, Visuals, Video/attention and Subliminal are NOT seeded here any more.
+            // Their editors are the Studio rack's FeatureControls (Features/*FeatureControl.xaml.cs),
+            // each of which calls its own LoadFromSettings() on Loaded and re-reads on
+            // AppSettings.PropertyChanged. The dead LegacyDashboardHost twins these lines filled were
+            // deleted with the host (Views/Tabs/SettingsTabView.xaml).
+            //
+            // DualMonitorEnabled went the same way: ChkDualMon was the Collapsed twin;
+            // Features/SystemFeatureControl.ChkMultiMon is the live editor, reachable from the
+            // "System" quick-toggle pill on Home.
 
-            // Visuals
-            SettingsTab.SliderSize.Value = s.ImageScale;
-            SettingsTab.SliderOpacity.Value = s.FlashOpacity;
-            SettingsTab.SliderFade.Value = s.FadeDuration;
-            SettingsTab.SliderFlashDuration.Value = s.FlashDuration;
-            SettingsTab.ChkFlashAudio.IsChecked = s.FlashAudioEnabled;
-            SettingsTab.SliderFlashDuration.IsEnabled = !s.FlashAudioEnabled;
-            SettingsTab.SliderFlashDuration.Opacity = s.FlashAudioEnabled ? 0.5 : 1.0;
-            // #859: avoid-screen-center now loads itself in FlashFeatureControl.
-
-            // Set audio link state based on frequency
-            _isLoading = false;
-            UpdateAudioLinkState();
-            _isLoading = true;
-
-            // Video
-            SettingsTab.ChkVideoEnabled.IsChecked = s.MandatoryVideosEnabled;
-            SettingsTab.SliderPerHour.Value = s.VideosPerHour;
-            SettingsTab.ChkStrictLock.IsChecked = s.StrictLockEnabled;
-            SettingsTab.ChkMiniGameEnabled.IsChecked = s.AttentionChecksEnabled;
-            SettingsTab.SliderTargets.Value = s.AttentionDensity;
-            SettingsTab.ChkRandomizeTargets.IsChecked = s.RandomizeAttentionTargets;
-            SettingsTab.SliderDuration.Value = s.AttentionLifespan;
-            SettingsTab.SliderTargetSize.Value = s.AttentionSize;
-
-            // Subliminals
-            SettingsTab.ChkSubliminalEnabled.IsChecked = s.SubliminalEnabled;
-            SettingsTab.SliderSubPerMin.Value = s.SubliminalFrequency;
-            SettingsTab.SliderFrames.Value = s.SubliminalDuration;
-            SettingsTab.SliderSubOpacity.Value = s.SubliminalOpacity;
-            SettingsTab.ChkAudioWhispers.IsChecked = s.SubAudioEnabled;
-            SettingsTab.SliderWhisperVol.Value = s.SubAudioVolume;
-
-            // System
-            SettingsTab.ChkDualMon.IsChecked = s.DualMonitorEnabled;
             // Startup group: Phase 2 moved these four out of the Collapsed LegacyDashboardHost into
             // Settings · General. Same x:Names, same round-trip, reachable at last.
             AppSettingsTab.ChkWinStart.IsChecked = s.RunOnStartup;
@@ -112,11 +77,9 @@ namespace ConditioningControlPanel
             AppSettingsTab.ChkNoPanic.IsChecked = !s.PanicKeyEnabled;
             // Offline mode lives on Settings · Data now (its System-popup twin is read-only).
             AppSettingsTab.ChkOfflineMode.IsChecked = s.OfflineMode;
-            if (SettingsTab.ChkPerformanceMode != null) SettingsTab.ChkPerformanceMode.IsChecked = s.PerformanceMode;
-            if (SettingsTab.ChkAutoPerformance != null) SettingsTab.ChkAutoPerformance.IsChecked = s.AutoPerformanceMode;
-            if (SettingsTab.CmbMotionLevel != null) SettingsTab.CmbMotionLevel.SelectedIndex = (int)s.MotionLevel;
-            if (SettingsTab.ChkVideoHwDecode != null) SettingsTab.ChkVideoHwDecode.IsChecked = s.VideoForceHardwareDecoding;
-            if (SettingsTab.ChkUnifiedOverlay != null) SettingsTab.ChkUnifiedOverlay.IsChecked = s.UnifiedOverlayHost;
+            // PHASE 8: the five LegacyDashboardHost performance twins are gone. Settings · Performance
+            // seeds its own controls (PerformanceSettingsSection.LoadFromSettings) and SaveSettings
+            // already reads only those, so there is nothing left to mirror here.
             // Phase 2: Settings · Notifications owns this toggle now (it was unreachable in the
             // collapsed LegacyDashboardHost). Same property, same round-trip, new home.
             if (AppSettingsTab?.ChkIntakeNudge != null) AppSettingsTab.ChkIntakeNudge.IsChecked = s.IntakeNudgeEnabled;
@@ -176,36 +139,12 @@ namespace ConditioningControlPanel
             AppSettingsTab.ChkExcludeBambiCloudDucking.IsChecked = s.ExcludeBambiCloudFromDucking;
             PopulateAudioOutputDevices();
 
-            // Progression
-            ProgressionTab.ChkSpiralEnabled.IsChecked = s.SpiralEnabled;
-            ProgressionTab.SliderSpiralOpacity.Value = s.SpiralOpacity;
-            ProgressionTab.ChkPinkFilterEnabled.IsChecked = s.PinkFilterEnabled;
-            ProgressionTab.SliderPinkOpacity.Value = s.PinkFilterOpacity;
-            ProgressionTab.ChkBubblesEnabled.IsChecked = s.BubblesEnabled;
-            ProgressionTab.SliderBubbleFreq.Value = s.BubblesFrequency;
-            ProgressionTab.SliderBubbleVolume.Value = s.BubblesVolume;
-            ProgressionTab.ChkLockCardEnabled.IsChecked = s.LockCardEnabled;
-            ProgressionTab.SliderLockCardFreq.Value = s.LockCardFrequency;
-            ProgressionTab.SliderLockCardRepeats.Value = s.LockCardRepeats;
-            ProgressionTab.ChkLockCardStrict.IsChecked = s.LockCardStrict;
-            ProgressionTab.ChkBubbleCountEnabled.IsChecked = s.BubbleCountEnabled;
-            ProgressionTab.ChkBubbleCountStrict.IsChecked = s.BubbleCountStrictLock;
-            ProgressionTab.SliderBubbleCountFreq.Value = s.BubbleCountFrequency;
-            ProgressionTab.TxtBubbleCountFreq.Text = s.BubbleCountFrequency.ToString();
-            ProgressionTab.CmbBubbleCountDifficulty.SelectedIndex = s.BubbleCountDifficulty;
-            ProgressionTab.ChkBouncingTextEnabled.IsChecked = s.BouncingTextEnabled;
-            ProgressionTab.ChkBouncingTextAlwaysOnTop.IsChecked = s.BouncingTextAlwaysOnTop;
-
-            // Mind Wipe
-            ProgressionTab.ChkMindWipeEnabled.IsChecked = s.MindWipeEnabled;
-            ProgressionTab.SliderMindWipeFreq.Value = s.MindWipeFrequency;
-            ProgressionTab.SliderMindWipeVolume.Value = s.MindWipeVolume;
-            ProgressionTab.ChkMindWipeLoop.IsChecked = s.MindWipeLoop;
-
-            // Brain Drain
-            ProgressionTab.ChkBrainDrainEnabled.IsChecked = s.BrainDrainEnabled;
-            ProgressionTab.SliderBrainDrainIntensity.Value = s.BrainDrainIntensity;
-            ProgressionTab.ChkBrainDrainHighRefresh.IsChecked = s.BrainDrainHighRefresh;
+            // PHASE 8: Spiral, Pink Filter, Bubble Pop, Lock Card, Bubble Count, Bouncing Text,
+            // Mind Wipe and Brain Drain are NOT seeded here any more. Their editors are the Studio
+            // rack's FeatureControls (Features/*FeatureControl.xaml.cs +
+            // Views/Controls/Studio/BrainDrainFeatureControl.xaml.cs), each of which calls its own
+            // LoadFromSettings() on Loaded and re-reads on AppSettings.PropertyChanged. The dead
+            // ProgressionTab twins these lines filled were deleted with the view.
 
             // Autonomy Mode
             BambiTakeoverTab.ChkAutonomyEnabled.IsChecked = s.AutonomyModeEnabled;
@@ -261,31 +200,11 @@ namespace ConditioningControlPanel
             BambiTakeoverTab.TxtAutonomyAnnounce.Text = $"{s.AutonomyAnnouncementChance}%";
             RefreshAutonomyVoiceHint(); // reflect any wake/PTT suppression in the surprise-mantras hint
 
-            // Bouncing Text Size (add if not already loaded above)
-            ProgressionTab.SliderBouncingTextSize.Value = s.BouncingTextSize;
-
-            // Scheduler
-            ProgressionTab.ChkSchedulerEnabled.IsChecked = s.SchedulerEnabled;
-            ProgressionTab.TxtStartTime.Text = s.SchedulerStartTime;
-            ProgressionTab.TxtEndTime.Text = s.SchedulerEndTime;
-            ProgressionTab.ChkMon.IsChecked = s.SchedulerMonday;
-            ProgressionTab.ChkTue.IsChecked = s.SchedulerTuesday;
-            ProgressionTab.ChkWed.IsChecked = s.SchedulerWednesday;
-            ProgressionTab.ChkThu.IsChecked = s.SchedulerThursday;
-            ProgressionTab.ChkFri.IsChecked = s.SchedulerFriday;
-            ProgressionTab.ChkSat.IsChecked = s.SchedulerSaturday;
-            ProgressionTab.ChkSun.IsChecked = s.SchedulerSunday;
-            ProgressionTab.ChkRampEnabled.IsChecked = s.IntensityRampEnabled;
-            ProgressionTab.SliderRampDuration.Value = s.RampDurationMinutes;
-            ProgressionTab.SliderMultiplier.Value = s.SchedulerMultiplier;
-            
-            // Ramp Links
-            ProgressionTab.ChkRampLinkFlash.IsChecked = s.RampLinkFlashOpacity;
-            ProgressionTab.ChkRampLinkSpiral.IsChecked = s.RampLinkSpiralOpacity;
-            ProgressionTab.ChkRampLinkPink.IsChecked = s.RampLinkPinkFilterOpacity;
-            ProgressionTab.ChkRampLinkMaster.IsChecked = s.RampLinkMasterAudio;
-            ProgressionTab.ChkRampLinkSubAudio.IsChecked = s.RampLinkSubliminalAudio;
-            ProgressionTab.ChkEndAtRamp.IsChecked = s.EndSessionOnRampComplete;
+            // PHASE 8: Scheduler and Intensity Ramp seed themselves too. SchedulerFeatureControl
+            // and IntensityRampFeatureControl (hosted by the Studio rack's SchedulerRackPanel /
+            // RampRackPanel) load on Loaded and re-read on PropertyChanged, and the rack copy is
+            // strictly richer than the deleted twin - it owns CmbRampCurve, which the ghost never
+            // had, so seeding the ghost here could only ever have clamped values.
 
             // Haptics — the whole tab loads itself now (MainWindow/MainWindow.Haptics.cs).
             // The 30-odd per-control assignments that used to live here died with the Phase E
@@ -301,19 +220,11 @@ namespace ConditioningControlPanel
             // refreshes the trigger list, so nothing is copied into the corpse's twins here any
             // more. Seeding a Collapsed twin would raise its ValueChanged, and those handlers now
             // read the live panel.
-            {
-                var hasKeywordAccess = KeywordTriggerService.HasAccess();
-
-                // The corpse's own start/stop + lock label are still wired to
-                // UpdateKeywordTriggersButtonState; the user-facing master is ChkAwarenessMaster.
-                if (PatreonTab.TxtKeywordTriggersLocked != null)
-                    PatreonTab.TxtKeywordTriggersLocked.Visibility = hasKeywordAccess ? Visibility.Collapsed : Visibility.Visible;
-                if (PatreonTab.BtnKeywordTriggersStartStop != null)
-                    PatreonTab.BtnKeywordTriggersStartStop.IsEnabled = hasKeywordAccess;
-
-                UpdateKeywordTriggersButtonState();
-                SyncKeywordRescuePanelUi();
-            }
+            // PHASE 8: the corpse's own lock label and start/stop button went with PatreonTabView,
+            // and UpdateKeywordTriggersButtonState with them. The user-facing master is
+            // AwarenessTab.ChkAwarenessMaster, and SyncKeywordRescuePanelUi seeds every rescued
+            // editor - including the access-gated visibilities - straight from settings.
+            SyncKeywordRescuePanelUi();
 
             // Discord Sharing Settings
             if (DiscordTab.ChkDiscordTabShowOnline != null) DiscordTab.ChkDiscordTabShowOnline.IsChecked = s.ShowOnlineStatus;
@@ -342,46 +253,18 @@ namespace ConditioningControlPanel
         /// </summary>
         private void UpdateSliderTexts()
         {
-            // Flash sliders
-            if (SettingsTab.TxtPerMin != null) SettingsTab.TxtPerMin.Text = ((int)SettingsTab.SliderPerMin.Value).ToString();
-            if (SettingsTab.TxtImages != null) SettingsTab.TxtImages.Text = ((int)SettingsTab.SliderImages.Value).ToString();
-            if (SettingsTab.TxtMaxOnScreen != null) SettingsTab.TxtMaxOnScreen.Text = ((int)SettingsTab.SliderMaxOnScreen.Value).ToString();
-            if (SettingsTab.TxtSize != null) SettingsTab.TxtSize.Text = $"{(int)SettingsTab.SliderSize.Value}%";
-            if (SettingsTab.TxtOpacity != null) SettingsTab.TxtOpacity.Text = $"{(int)SettingsTab.SliderOpacity.Value}%";
-            if (SettingsTab.TxtFade != null) SettingsTab.TxtFade.Text = $"{(int)SettingsTab.SliderFade.Value}%";
-            
-            // Video sliders
-            if (SettingsTab.TxtPerHour != null) SettingsTab.TxtPerHour.Text = ((int)SettingsTab.SliderPerHour.Value).ToString();
-            if (SettingsTab.TxtTargets != null) SettingsTab.TxtTargets.Text = ((int)SettingsTab.SliderTargets.Value).ToString();
-            if (SettingsTab.TxtDuration != null) SettingsTab.TxtDuration.Text = $"{(int)SettingsTab.SliderDuration.Value}s";
-            if (SettingsTab.TxtTargetSize != null) SettingsTab.TxtTargetSize.Text = $"{(int)SettingsTab.SliderTargetSize.Value}px";
-            
-            // Subliminal sliders
-            if (SettingsTab.TxtSubPerMin != null) SettingsTab.TxtSubPerMin.Text = ((int)SettingsTab.SliderSubPerMin.Value).ToString();
-            if (SettingsTab.TxtFrames != null) SettingsTab.TxtFrames.Text = ((int)SettingsTab.SliderFrames.Value).ToString();
-            if (SettingsTab.TxtSubOpacity != null) SettingsTab.TxtSubOpacity.Text = $"{(int)SettingsTab.SliderSubOpacity.Value}%";
-            if (SettingsTab.TxtWhisperVol != null) SettingsTab.TxtWhisperVol.Text = $"{(int)SettingsTab.SliderWhisperVol.Value}%";
-            
+            // PHASE 8: the 14 Flash / Video / Subliminal label mirrors are gone with
+            // LegacyDashboardHost. Every Studio rack panel writes its own value label inside
+            // LoadFromSettings(), before its _isLoading guard, so nothing is left to mirror.
+
             // Audio sliders (Settings door)
             if (AppSettingsTab.TxtMaster != null) AppSettingsTab.TxtMaster.Text = $"{(int)AppSettingsTab.SliderMaster.Value}%";
             if (AppSettingsTab.TxtVideoVolume != null) AppSettingsTab.TxtVideoVolume.Text = $"{(int)AppSettingsTab.SliderVideoVolume.Value}%";
             if (AppSettingsTab.TxtDuck != null) AppSettingsTab.TxtDuck.Text = $"{(int)AppSettingsTab.SliderDuck.Value}%";
             
-            // Progression sliders
-            if (ProgressionTab.TxtSpiralOpacity != null) ProgressionTab.TxtSpiralOpacity.Text = $"{(int)ProgressionTab.SliderSpiralOpacity.Value}%";
-            if (ProgressionTab.TxtPinkOpacity != null) ProgressionTab.TxtPinkOpacity.Text = $"{(int)ProgressionTab.SliderPinkOpacity.Value}%";
-            if (ProgressionTab.TxtBubbleFreq != null) ProgressionTab.TxtBubbleFreq.Text = ((int)ProgressionTab.SliderBubbleFreq.Value).ToString();
-            if (ProgressionTab.TxtBubbleVolume != null) ProgressionTab.TxtBubbleVolume.Text = $"{(int)ProgressionTab.SliderBubbleVolume.Value}%";
-            if (ProgressionTab.TxtLockCardFreq != null) ProgressionTab.TxtLockCardFreq.Text = ((int)ProgressionTab.SliderLockCardFreq.Value).ToString();
-            if (ProgressionTab.TxtLockCardRepeats != null) ProgressionTab.TxtLockCardRepeats.Text = $"{(int)ProgressionTab.SliderLockCardRepeats.Value}x";
-            if (ProgressionTab.TxtBouncingTextSize != null) ProgressionTab.TxtBouncingTextSize.Text = $"{(int)ProgressionTab.SliderBouncingTextSize.Value}%";
-            if (ProgressionTab.TxtMindWipeFreq != null) ProgressionTab.TxtMindWipeFreq.Text = $"{(int)ProgressionTab.SliderMindWipeFreq.Value}/h";
-            if (ProgressionTab.TxtMindWipeVolume != null) ProgressionTab.TxtMindWipeVolume.Text = $"{(int)ProgressionTab.SliderMindWipeVolume.Value}%";
-            if (ProgressionTab.TxtBrainDrainIntensity != null) ProgressionTab.TxtBrainDrainIntensity.Text = $"{(int)ProgressionTab.SliderBrainDrainIntensity.Value}%";
-            
-            // Scheduler sliders
-            if (ProgressionTab.TxtRampDuration != null) ProgressionTab.TxtRampDuration.Text = $"{(int)ProgressionTab.SliderRampDuration.Value} min";
-            if (ProgressionTab.TxtMultiplier != null) ProgressionTab.TxtMultiplier.Text = $"{ProgressionTab.SliderMultiplier.Value:F1}x";
+            // PHASE 8: the Progression/Scheduler label mirrors are gone with ProgressionTabView.
+            // Every rack panel writes its own value label inside LoadFromSettings(), before its
+            // _isLoading guard, so there is nothing left to mirror for those either.
 
             // Haptic slider labels are written by LoadHapticsSettingsToUi() and by the sliders'
             // own ValueChanged handlers (which update their label BEFORE the _isLoading guard),
@@ -390,65 +273,36 @@ namespace ConditioningControlPanel
 
         private void SaveSettings()
         {
-            // velvet-mosaic: feature popups write to App.Settings.Current on every edit,
-            // so the settings object is already the source of truth. The legacy dashboard
-            // controls (now inside SettingsTab.LegacyDashboardHost, Collapsed) can be stale. Re-sync
-            // them from settings before this method reads them, otherwise stale control
-            // values would clobber the popup changes.
-            var wasLoading = _isLoading;
-            _isLoading = true;
-            try { LoadSettings(); }
-            catch (Exception ex) { App.Logger?.Warning(ex, "SaveSettings: legacy control refresh failed"); }
-            finally { _isLoading = wasLoading; }
-
+            // PHASE 8: the `LoadSettings()` re-sync preamble that used to open this method is gone.
+            // Its ONLY purpose was to refresh the stale ghost twins (LegacyDashboardHost /
+            // ProgressionTabView) before the read-backs below consumed them - which is also what
+            // made those read-backs provable identity ops. Both halves died together; keeping the
+            // preamble would now cost a full LoadSettings (and every side effect it carries:
+            // UpdateSliderTexts, UpdateLevelDisplay, UpdateQuickDiscordUI, the autonomy auto-start)
+            // on every save, for nothing.
+            //
+            // Everything read below is a LIVE control on the Settings door, edited by the user and
+            // never stale. Nothing else may be added here that reads a control the user cannot see.
             var s = App.Settings.Current;
 
-            // Flash
-            s.FlashEnabled = SettingsTab.ChkFlashEnabled.IsChecked ?? true;
-            s.FlashClickable = SettingsTab.ChkClickable.IsChecked ?? true;
-            s.CorruptionMode = SettingsTab.ChkCorruption.IsChecked ?? false;
-            s.HydraLinkedTiming = SettingsTab.ChkHydraLinked.IsChecked ?? true;
-            s.FlashGlowEnabled = SettingsTab.ChkFlashGlow.IsChecked ?? true;
-            s.FlashFrequency = (int)SettingsTab.SliderPerMin.Value;
-            s.SimultaneousImages = (int)SettingsTab.SliderImages.Value;
-            s.HydraLimit = (int)SettingsTab.SliderMaxOnScreen.Value;
-
-            // Visuals
-            s.ImageScale = (int)SettingsTab.SliderSize.Value;
-            s.FlashOpacity = (int)SettingsTab.SliderOpacity.Value;
-            s.FadeDuration = (int)SettingsTab.SliderFade.Value;
-            // #859: FlashAvoidCenter / FlashCenterExclusionPercent are NOT mirrored here any
-            // more. FlashFeatureControl is their only surface and writes them on change; a
-            // mirror here would silently overwrite the user's choice on every save.
-
-            // Video
-            s.MandatoryVideosEnabled = SettingsTab.ChkVideoEnabled.IsChecked ?? false;
-            s.VideosPerHour = (int)SettingsTab.SliderPerHour.Value;
-            s.StrictLockEnabled = SettingsTab.ChkStrictLock.IsChecked ?? false;
-            s.AttentionChecksEnabled = SettingsTab.ChkMiniGameEnabled.IsChecked ?? false;
-            s.AttentionDensity = (int)SettingsTab.SliderTargets.Value;
-            s.RandomizeAttentionTargets = SettingsTab.ChkRandomizeTargets.IsChecked ?? false;
-            s.AttentionLifespan = (int)SettingsTab.SliderDuration.Value;
-            s.AttentionSize = (int)SettingsTab.SliderTargetSize.Value;
-
-            // Subliminals
-            s.SubliminalEnabled = SettingsTab.ChkSubliminalEnabled.IsChecked ?? false;
-            s.SubliminalFrequency = (int)SettingsTab.SliderSubPerMin.Value;
-            s.SubliminalDuration = (int)SettingsTab.SliderFrames.Value;
-            s.SubliminalOpacity = (int)SettingsTab.SliderSubOpacity.Value;
-            s.SubAudioEnabled = SettingsTab.ChkAudioWhispers.IsChecked ?? false;
-            s.SubAudioVolume = (int)SettingsTab.SliderWhisperVol.Value;
+            // PHASE 8: the 29 LegacyDashboardHost read-backs (Flash x8, Visuals x3, Video +
+            // attention x8, Subliminal x6, DualMonitorEnabled) are gone with the host. They were
+            // provably identity operations - SaveSettings used to open by calling LoadSettings(),
+            // so each `s.X = <ghost>.Y` was preceded in the same call by `<ghost>.Y = s.X` - except
+            // where a ghost slider's Min/Max clamped the value, which is exactly the hazard the
+            // range-matching comments in the deleted XAML were warding off. Every one of those
+            // properties now has a single live writer: the Studio rack's *FeatureControl panels,
+            // and Features/SystemFeatureControl.ChkMultiMon for DualMonitorEnabled.
 
             // System
-            s.DualMonitorEnabled = SettingsTab.ChkDualMon.IsChecked ?? true;
             s.RunOnStartup = AppSettingsTab.ChkWinStart.IsChecked ?? false;
             s.ForceVideoOnLaunch = AppSettingsTab.ChkVidLaunch.IsChecked ?? false;
             s.AutoStartEngine = AppSettingsTab.ChkAutoRun.IsChecked ?? false;
             s.StartMinimized = AppSettingsTab.ChkStartHidden.IsChecked ?? false;
             s.PanicKeyEnabled = !(AppSettingsTab.ChkNoPanic.IsChecked ?? false);
             s.OfflineMode = AppSettingsTab.ChkOfflineMode.IsChecked ?? false;
-            // Performance: read the LIVE Settings-door editors, not the LegacyDashboardHost twins
-            // (the twins survive until Phase 8, but nothing reads them any more).
+            // Performance: the LegacyDashboardHost twins were deleted in Phase 8, so these are the
+            // only editors left. One control, one writer.
             if (AppSettingsTab?.ChkPerformanceMode != null) s.PerformanceMode = AppSettingsTab.ChkPerformanceMode.IsChecked ?? false;
             if (AppSettingsTab?.ChkAutoPerformance != null) s.AutoPerformanceMode = AppSettingsTab.ChkAutoPerformance.IsChecked ?? true;
             if (AppSettingsTab?.CmbMotionLevel != null && AppSettingsTab.CmbMotionLevel.SelectedIndex >= 0)
@@ -468,37 +322,23 @@ namespace ConditioningControlPanel
             s.DuckingLevel = (int)AppSettingsTab.SliderDuck.Value;
             s.ExcludeBambiCloudFromDucking = AppSettingsTab.ChkExcludeBambiCloudDucking.IsChecked ?? true;
 
-            // Progression
-            s.SpiralEnabled = ProgressionTab.ChkSpiralEnabled.IsChecked ?? false;
-            s.SpiralOpacity = (int)ProgressionTab.SliderSpiralOpacity.Value;
-            s.PinkFilterEnabled = ProgressionTab.ChkPinkFilterEnabled.IsChecked ?? false;
-            s.PinkFilterOpacity = (int)ProgressionTab.SliderPinkOpacity.Value;
-            s.BubblesEnabled = ProgressionTab.ChkBubblesEnabled.IsChecked ?? false;
-            s.BubblesFrequency = (int)ProgressionTab.SliderBubbleFreq.Value;
-            s.LockCardEnabled = ProgressionTab.ChkLockCardEnabled.IsChecked ?? false;
-            s.LockCardFrequency = (int)ProgressionTab.SliderLockCardFreq.Value;
-            s.LockCardRepeats = (int)ProgressionTab.SliderLockCardRepeats.Value;
-            s.LockCardStrict = ProgressionTab.ChkLockCardStrict.IsChecked ?? false;
+            // PHASE 8: the 34 Progression/Brain-Drain/Scheduler/Ramp read-backs are gone with
+            // ProgressionTabView. They were provably identity operations - SaveSettings opens by
+            // calling LoadSettings(), so each `s.X = <ghost>.Y` was preceded in the same call by
+            // `<ghost>.Y = s.X` - except where a ghost slider's Min/Max clamped the value, which is
+            // exactly the hazard the range-matching comments in the deleted XAML were warding off.
+            // Every one of those 34 properties now has a single live writer in the Studio rack.
 
-            // Brain Drain
-            s.BrainDrainEnabled = ProgressionTab.ChkBrainDrainEnabled.IsChecked ?? false;
-            s.BrainDrainIntensity = (int)ProgressionTab.SliderBrainDrainIntensity.Value;
-            s.BrainDrainHighRefresh = ProgressionTab.ChkBrainDrainHighRefresh.IsChecked ?? false;
-
-            // Scheduler - track if settings changed
+            // Scheduler - track if settings changed.
+            // KEPT DELIBERATELY, THOUGH CURRENTLY UNREACHABLE (Phase 8 audit §4.2 / concern 7):
+            // s.SchedulerEnabled is written by SchedulerFeatureControl.ChkEnabled_Changed BEFORE
+            // this method runs, so the rising edge is already consumed and this branch no longer
+            // fires. The consequence is documented and accepted in
+            // Views/Controls/Studio/SchedulerRackPanel.xaml.cs: enabling the scheduler now arms
+            // within one 30s SchedulerTimer_Tick instead of instantly. The real fix is to move
+            // this kick into SchedulerFeatureControl, which is a Studio-owned change, not a
+            // demolition one - so the guard stays here rather than being silently dropped.
             var schedulerWasEnabled = s.SchedulerEnabled;
-            s.SchedulerEnabled = ProgressionTab.ChkSchedulerEnabled.IsChecked ?? false;
-            s.SchedulerStartTime = ProgressionTab.TxtStartTime.Text;
-            s.SchedulerEndTime = ProgressionTab.TxtEndTime.Text;
-            s.SchedulerMonday = ProgressionTab.ChkMon.IsChecked ?? true;
-            s.SchedulerTuesday = ProgressionTab.ChkTue.IsChecked ?? true;
-            s.SchedulerWednesday = ProgressionTab.ChkWed.IsChecked ?? true;
-            s.SchedulerThursday = ProgressionTab.ChkThu.IsChecked ?? true;
-            s.SchedulerFriday = ProgressionTab.ChkFri.IsChecked ?? true;
-            s.SchedulerSaturday = ProgressionTab.ChkSat.IsChecked ?? true;
-            s.SchedulerSunday = ProgressionTab.ChkSun.IsChecked ?? true;
-
-            // If scheduler was just enabled or settings changed, reset flags and check immediately
             if (s.SchedulerEnabled && !schedulerWasEnabled)
             {
                 _schedulerAutoStarted = false;
@@ -506,17 +346,6 @@ namespace ConditioningControlPanel
                 // Check scheduler immediately after save completes
                 Dispatcher.BeginInvoke(new Action(() => CheckSchedulerAfterSettingsChange()), System.Windows.Threading.DispatcherPriority.Background);
             }
-            s.IntensityRampEnabled = ProgressionTab.ChkRampEnabled.IsChecked ?? false;
-            s.RampDurationMinutes = (int)ProgressionTab.SliderRampDuration.Value;
-            s.SchedulerMultiplier = ProgressionTab.SliderMultiplier.Value;
-            
-            // Ramp Links
-            s.RampLinkFlashOpacity = ProgressionTab.ChkRampLinkFlash.IsChecked ?? false;
-            s.RampLinkSpiralOpacity = ProgressionTab.ChkRampLinkSpiral.IsChecked ?? false;
-            s.RampLinkPinkFilterOpacity = ProgressionTab.ChkRampLinkPink.IsChecked ?? false;
-            s.RampLinkMasterAudio = ProgressionTab.ChkRampLinkMaster.IsChecked ?? false;
-            s.RampLinkSubliminalAudio = ProgressionTab.ChkRampLinkSubAudio.IsChecked ?? false;
-            s.EndSessionOnRampComplete = ProgressionTab.ChkEndAtRamp.IsChecked ?? false;
 
             App.Settings.Save();
         }

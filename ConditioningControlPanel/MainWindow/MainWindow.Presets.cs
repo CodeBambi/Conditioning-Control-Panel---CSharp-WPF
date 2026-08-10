@@ -37,12 +37,18 @@ namespace ConditioningControlPanel
             // Set up rich tooltips for all help buttons
 
             // Settings tab
-            SetHelpContent(SettingsTab.HelpBtnFlash, "FlashImages");
-            SetHelpContent(SettingsTab.HelpBtnVisuals, "Visuals");
-            SetHelpContent(SettingsTab.HelpBtnVideo, "Video");
-            SetHelpContent(SettingsTab.HelpBtnMiniGame, "MiniGame");
-            SetHelpContent(SettingsTab.HelpBtnSubliminals, "Subliminals");
-            SetHelpContent(SettingsTab.HelpBtnSystem, "System");
+            // PHASE 8: HelpBtnFlash / Visuals / Video / MiniGame / Subliminals / System went with
+            // LegacyDashboardHost. "FlashImages", "Visuals", "Video" and "Subliminals" still have a
+            // "?" - the Home mosaic's FeatureCards render one from their HelpSectionId
+            // (Features/FeatureCard.xaml.cs attaches the same popover this method does).
+            //
+            // TWO TOPICS LOST THEIR ONLY BUTTON and are reported, not silently dropped:
+            //   "System"   - CardSystem carried HelpSectionId="System" and Phase 8 deleted that
+            //                tile; FeaturePopupWindow renders no "?", so the System popup the
+            //                quick-toggle pill opens has no help affordance.
+            //   "MiniGame" - HelpBtnMiniGame sat in the Video section's attention-check sub-panel;
+            //                Features/VideoFeatureControl declares no HelpSectionId.
+            // Both entries survive in HelpContentService, so restoring either is one attribute.
             SetHelpContent(SettingsTab.HelpBtnBrowser, "Browser");
             // Phase 2: the Audio section (and its help button) live on the Settings door now.
             SetHelpContent(AppSettingsTab.HelpBtnAudio, "Audio");
@@ -53,12 +59,11 @@ namespace ConditioningControlPanel
             SetHelpContent(PresetsTab.HelpBtnSessions, "Sessions");
             SetHelpContent(PresetsTab.HelpBtnSessionDetails, "SessionDetails");
 
-            // Progression tab
-            SetHelpContent(ProgressionTab.HelpBtnUnlockables, "Unlockables");
-            SetHelpContent(ProgressionTab.HelpBtnScheduler, "Scheduler");
-            SetHelpContent(ProgressionTab.HelpBtnRamp, "IntensityRamp");
-            SetHelpContent(ProgressionTab.HelpBtnCommunity, "Community");
-            SetHelpContent(ProgressionTab.HelpBtnAppInfo, "AppInfo");
+            // Progression tab: DEMOLISHED (Phase 8). Its five "?" buttons went with the view.
+            // "Scheduler" and "IntensityRamp" were rebuilt on the Studio rack panels, which attach
+            // their own popovers (SchedulerRackPanel.xaml.cs / RampRackPanel.xaml.cs). The
+            // "Unlockables", "Community" and "AppInfo" topics survive in HelpContentService but no
+            // longer have a "?" button anywhere - they were only ever reachable from the ghost tab.
 
             // Quests tab
             SetHelpContent(QuestsTab.HelpBtnQuests, "Quests");
@@ -85,9 +90,8 @@ namespace ConditioningControlPanel
             SetHelpContent(PlayTab.HelpBtnPlayGazeMinigame, "GazeMinigame");
             SetHelpContent(PlayTab.HelpBtnPlayFocusGaze, "FocusGaze");
             // PHASE 5 (G3): these two ? buttons moved with their editors onto the Awareness
-            // tab's custom-trigger drawer. The PatreonTab twins still exist (Phase 8 owns the
-            // demolition) but are permanently Collapsed, so attaching the popover there
-            // reached nobody.
+            // tab's custom-trigger drawer. PHASE 8 deleted the PatreonTab twins, so these are now
+            // the only "KeywordTriggers" / "ScreenOcr" popovers in the app.
             SetHelpContent(AwarenessTab.HelpBtnKeywordTriggers, "KeywordTriggers");
             SetHelpContent(AwarenessTab.HelpBtnScreenOcr, "ScreenOcr");
             SetHelpContent(RemoteControlTab.HelpBtnRemoteControl, "RemoteControl");
@@ -105,7 +109,9 @@ namespace ConditioningControlPanel
             SetHelpContent(CompanionTab.HelpBtnVideoLinks, "HypnotubeLinks");
             SetHelpContent(CompanionTab.HelpBtnCompanionSettings, "CompanionSettings");
             SetHelpContent(CompanionTab.HelpBtnQuickControls, "QuickControls");
-            SetHelpContent(PatreonTab.HelpBtnPatreon, "PatreonExclusives");
+            // PHASE 8: HelpBtnPatreon went with PatreonTabView. The "PatreonExclusives" topic stays
+            // in HelpContentService but has no "?" button - the Exclusives content it described is
+            // the Play door's Showcase shelf now, which carries its own per-card copy.
             SetHelpContent(CompanionTab.HelpBtnAiChat, "AiChat");
             SetHelpContent(CompanionTab.HelpBtnAwareness, "WindowAwareness");
             SetHelpContent(HapticsTab.HelpBtnHaptics, "Haptics");
@@ -837,16 +843,11 @@ namespace ConditioningControlPanel
                 else if (card == SettingsTab.CardMindWipe) { s.MindWipeEnabled = !s.MindWipeEnabled; }
                 else if (card == SettingsTab.CardBrainDrain)
                 {
-                    // Mirrors BrainDrainFeatureControl.ChkEnable_Changed exactly, INCLUDING the
-                    // legacy write-back: MainWindow.SaveSettings() still reads Brain Drain FROM
-                    // the dead ProgressionTab checkbox (MainWindow.Settings.cs:504) and runs on
-                    // session start, so a quick-toggle that skipped the mirror would be silently
-                    // reverted the next time the user pressed Start. Dies with the ghost tab in
-                    // Phase 8, together with that line and the panel's own mirror.
+                    // Mirrors BrainDrainFeatureControl.ChkEnable_Changed. The legacy write-back
+                    // into the ghost checkbox died in Phase 8 along with SaveSettings' read of it;
+                    // the panel now repaints off AppSettings.PropertyChanged like every sibling.
                     var on = s.BrainDrainEnabled = !s.BrainDrainEnabled;
                     if (running) { if (on) App.BrainDrain?.Start(); else App.BrainDrain?.Stop(); }
-                    if (ProgressionTab?.ChkBrainDrainEnabled != null)
-                        ProgressionTab.ChkBrainDrainEnabled.IsChecked = on;
                 }
                 else return; // Visuals / System cards have no single on/off toggle.
                 App.Settings?.Save();
@@ -1562,62 +1563,32 @@ namespace ConditioningControlPanel
             _isLoading = false;
         }
         
+        // PHASE 8: these six SessionEngine drive-ins each used to end with a Dispatcher.Invoke that
+        // pushed the new value into the dead ProgressionTab twins (flipping _isLoading around the
+        // write so the ghost's handlers couldn't re-enter). Every one of them writes
+        // App.Settings.Current FIRST, and the live Studio panels - SpiralFeatureControl,
+        // PinkFilterFeatureControl and Views/Controls/Studio/BrainDrainFeatureControl - subscribe
+        // to AppSettings.PropertyChanged and repaint themselves, so the mirrors were redundant
+        // before they were unreachable. The settings writes and the service calls are untouched.
+
         public void UpdateSpiralOpacity(int opacity)
         {
             App.Settings.Current.SpiralOpacity = opacity;
-            Dispatcher.Invoke(() =>
-            {
-                if (ProgressionTab.SliderSpiralOpacity != null && !_isLoading)
-                {
-                    _isLoading = true;
-                    ProgressionTab.SliderSpiralOpacity.Value = opacity;
-                    if (ProgressionTab.TxtSpiralOpacity != null) ProgressionTab.TxtSpiralOpacity.Text = $"{opacity}%";
-                    _isLoading = false;
-                }
-            });
         }
-        
+
         public void EnablePinkFilter(bool enabled)
         {
             App.Settings.Current.PinkFilterEnabled = enabled;
-            Dispatcher.Invoke(() =>
-            {
-                if (ProgressionTab.ChkPinkFilterEnabled != null && !_isLoading)
-                {
-                    _isLoading = true;
-                    ProgressionTab.ChkPinkFilterEnabled.IsChecked = enabled;
-                    _isLoading = false;
-                }
-            });
         }
-        
+
         public void EnableSpiral(bool enabled)
         {
             App.Settings.Current.SpiralEnabled = enabled;
-            Dispatcher.Invoke(() =>
-            {
-                if (ProgressionTab.ChkSpiralEnabled != null && !_isLoading)
-                {
-                    _isLoading = true;
-                    ProgressionTab.ChkSpiralEnabled.IsChecked = enabled;
-                    _isLoading = false;
-                }
-            });
         }
-        
+
         public void UpdatePinkFilterOpacity(int opacity)
         {
             App.Settings.Current.PinkFilterOpacity = opacity;
-            Dispatcher.Invoke(() =>
-            {
-                if (ProgressionTab.SliderPinkOpacity != null && !_isLoading)
-                {
-                    _isLoading = true;
-                    ProgressionTab.SliderPinkOpacity.Value = opacity;
-                    if (ProgressionTab.TxtPinkOpacity != null) ProgressionTab.TxtPinkOpacity.Text = $"{opacity}%";
-                    _isLoading = false;
-                }
-            });
         }
 
         public void EnableBrainDrain(bool enabled, int intensity = 5)
@@ -1633,35 +1604,12 @@ namespace ConditioningControlPanel
             {
                 App.BrainDrain.Stop();
             }
-
-            Dispatcher.Invoke(() =>
-            {
-                if (ProgressionTab.ChkBrainDrainEnabled != null && !_isLoading)
-                {
-                    _isLoading = true;
-                    ProgressionTab.ChkBrainDrainEnabled.IsChecked = enabled;
-                    if (ProgressionTab.SliderBrainDrainIntensity != null) ProgressionTab.SliderBrainDrainIntensity.Value = intensity;
-                    if (ProgressionTab.TxtBrainDrainIntensity != null) ProgressionTab.TxtBrainDrainIntensity.Text = $"{intensity}%";
-                    _isLoading = false;
-                }
-            });
         }
 
         public void UpdateBrainDrainIntensity(int intensity)
         {
             App.Settings.Current.BrainDrainIntensity = intensity;
             App.BrainDrain.UpdateSettings();
-
-            Dispatcher.Invoke(() =>
-            {
-                if (ProgressionTab.SliderBrainDrainIntensity != null && !_isLoading)
-                {
-                    _isLoading = true;
-                    ProgressionTab.SliderBrainDrainIntensity.Value = intensity;
-                    if (ProgressionTab.TxtBrainDrainIntensity != null) ProgressionTab.TxtBrainDrainIntensity.Text = $"{intensity}%";
-                    _isLoading = false;
-                }
-            });
         }
 
         public void SetBubblesActive(bool active, int bubblesPerBurst = 5)

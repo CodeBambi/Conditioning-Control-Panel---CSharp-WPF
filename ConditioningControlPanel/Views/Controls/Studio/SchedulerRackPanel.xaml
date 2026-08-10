@@ -11,9 +11,9 @@
          STUDIO RACK · SCHEDULER  (Phase 4)
 
          WHY THIS IS A HOST AND NOT A REBUILD
-         The plan lists Scheduler/Ramp as a rescue from the dead
-         ProgressionTabView.xaml:649-691 copy. That copy is NOT the better
-         one. Features/SchedulerFeatureControl.xaml has been live the whole
+         The plan listed Scheduler/Ramp as a rescue from the dead
+         ProgressionTabView copy (deleted in Phase 8). That copy was NOT the
+         better one. Features/SchedulerFeatureControl.xaml has been live the whole
          time (reachable only through the obscure "Scheduler + Ramp" button
          on the Presets surface, MainWindow.Presets.cs:1021-1024), it owns
          its own load/save handlers, and the ProgressionTab twin is a
@@ -25,10 +25,9 @@
          copy carried (HelpBtnScheduler, Tag="Scheduler") and a one-line
          statement of what the feature actually does.
 
-         The ProgressionTab twin stays where it is until Phase 8. It cannot
-         clobber an edit made here: SaveSettings re-seeds every legacy
-         control from settings by calling LoadSettings first
-         (MainWindow.Settings.cs:420-424) before it reads them back.
+         PHASE 8: the ProgressionTab twin is gone, and with it MainWindow's
+         Load/SaveSettings round-trip through it. This panel's hosted control
+         is now the only editor for all nine scheduler settings.
 
          Root MUST stay a Panel (StackPanel) and MUST stay the direct
          UserControl content: MainWindow.SessionFeatureLock.cs:365 inserts
@@ -46,7 +45,8 @@
 
         <!-- What it does + the rescued help button. HelpContentService already
              ships a full "Scheduler" entry (Services/HelpContentService.cs:332);
-             it has been unreachable since the ProgressionTab went dark. -->
+             it was unreachable from the moment the ProgressionTab went dark
+             until this button rescued it. -->
         <Border Background="{DynamicResource SurfaceBgBrush}"
                 BorderBrush="{DynamicResource GlassBorderBrush}"
                 BorderThickness="1" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">

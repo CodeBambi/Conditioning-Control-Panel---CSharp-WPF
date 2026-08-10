@@ -73,10 +73,15 @@ namespace ConditioningControlPanel.Services
     /// controls, each pointing at the ONE surface that owns it after the Phase 2 dedup.
     ///
     /// <para>Deliberately a hand-written list rather than a reflection sweep over the visual tree.
-    /// A tree walk would index whatever happened to exist - including the dead LegacyDashboardHost
-    /// copies and the duplicate blink/gaze/mic toggles this phase is deleting - and would silently
-    /// resurrect them in search results. Curating by hand is what makes the palette agree with the
-    /// "exactly one editor per property" contract.</para>
+    /// A tree walk would index whatever happened to exist and would silently resurrect duplicates
+    /// in search results. Curating by hand is what makes the palette agree with the "exactly one
+    /// editor per property" contract.</para>
+    ///
+    /// <para>Phase 8 removed the last ambiguity this guarded against: <c>ChkPerformanceMode</c>,
+    /// <c>CmbMotionLevel</c> and <c>BtnCheckUpdates</c> each existed TWICE (live editor + a
+    /// Collapsed LegacyDashboardHost / ProgressionTabView twin), so a <c>FindName</c> from the
+    /// palette could land on an invisible control. Those twins are deleted; every element name
+    /// below now resolves to exactly one control.</para>
     /// </summary>
     public static class SettingsPaletteIndex
     {

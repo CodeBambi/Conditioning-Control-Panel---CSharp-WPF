@@ -84,10 +84,10 @@ namespace ConditioningControlPanel
         /// <summary>
         /// The mosaic tiles. Null-tolerant - the view is a partial rewire.
         ///
-        /// <para>Phase 3: <c>CardBrainDrain</c> joined (the G2 rescue's front door) and
-        /// <c>CardSystem</c> stayed even though its tile is now Collapsed - the entry point moved
-        /// to the quick-toggles row, but the element is still in the tree and RefreshFx on a
-        /// hidden card is a no-op that parks its clock, which is what we want.</para>
+        /// <para>Phase 3: <c>CardBrainDrain</c> joined (the G2 rescue's front door), and
+        /// <c>CardSystem</c> was kept in the tree Collapsed. Phase 8 deleted that tile - "System"
+        /// is not a feature and its entry point is the quick-toggles row's pill - so the array is
+        /// twelve real tiles now, all visible.</para>
         /// </summary>
         private IEnumerable<FeatureCard> DashboardFeatureCards
         {
@@ -99,7 +99,7 @@ namespace ConditioningControlPanel
                 {
                     tab.CardFlash, tab.CardVisuals, tab.CardVideo, tab.CardSubliminal,
                     tab.CardSpiral, tab.CardLockCard, tab.CardPinkFilter, tab.CardMindWipe,
-                    tab.CardBubblePop, tab.CardBouncingText, tab.CardSystem, tab.CardBubbleCount,
+                    tab.CardBubblePop, tab.CardBouncingText, tab.CardBubbleCount,
                     tab.CardBrainDrain,
                 };
                 return all.Where(c => c != null)!;

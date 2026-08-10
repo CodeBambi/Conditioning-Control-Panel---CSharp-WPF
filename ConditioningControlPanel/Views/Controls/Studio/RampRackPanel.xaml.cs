@@ -38,7 +38,8 @@ namespace ConditioningControlPanel.Views.Controls.Studio
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
-            // Mirrors MainWindow.Presets.cs:59 for the ProgressionTab twin. Attach is idempotent.
+            // Mirrors what MainWindow's SetupHelpButtons used to run for the ProgressionTab twin
+            // (deleted in Phase 8). Attach is idempotent.
             try
             {
                 global::ConditioningControlPanel.Controls.HelpPopover.Attach(

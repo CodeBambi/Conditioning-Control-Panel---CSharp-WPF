@@ -12,11 +12,12 @@
          STUDIO RACK · BRAIN DRAIN  (Phase 4 rescue of gap-report G2)
 
          Brain Drain had no reachable UI. Its only markup lived in
-         Views/Tabs/ProgressionTabView.xaml:508-550, inside a permanently
-         Collapsed ghost tab, under a comment that literally reads
+         Views/Tabs/ProgressionTabView.xaml (deleted in Phase 8), inside a
+         permanently Collapsed ghost tab, under a comment that literally read
          "Hidden elements to prevent XAML binding errors" - the three
          controls carried NO Checked/ValueChanged attributes at all, so
-         MainWindow.LevelFeatures.cs:282-334 has been dead code. Meanwhile
+         MainWindow.LevelFeatures.cs was dead code end to end (Phase 8
+         deleted that file too). Meanwhile
          the settings stayed fully live and writable from DTRH, the Deeper
          editor, presets (Models/Preset.cs:413) and the autonomy voice
          commands, i.e. the feature could be turned ON for a user with no
@@ -94,7 +95,7 @@
 
         <!-- Intensity. Explicit 1-100 range: a WPF Slider defaults to Maximum=10,
              which silently clamps this percent value in the settings round-trip
-             (the same warning the dead XAML carried at ProgressionTabView.xaml:535). -->
+             (the same warning the now-deleted ProgressionTabView markup carried). -->
         <Border Background="{DynamicResource SurfaceBgBrush}"
                 BorderBrush="{DynamicResource GlassBorderBrush}"
                 BorderThickness="1" CornerRadius="10" Padding="16,14" Margin="0,0,0,10">

@@ -43,8 +43,9 @@ namespace ConditioningControlPanel
             RefreshPresetsList();
         }
 
-        // BtnProgression handler removed in velvet-mosaic phase 6 — the Progression
-        // tab no longer has a header button; its features live on the Dashboard now.
+        // No BtnProgression handler: the button went in the velvet-mosaic rework and the VIEW went
+        // in Phase 8. The "progression" tab key still resolves (see the case in ShowTab) and
+        // ChromeFx maps it onto BtnSettings for the nav indicator and tutorial spotlights.
 
         private void BtnQuests_Click(object sender, RoutedEventArgs e)
         {
@@ -160,11 +161,11 @@ namespace ConditioningControlPanel
             // Hide all tabs
             SettingsTab.Visibility = Visibility.Collapsed;
             PresetsTab.Visibility = Visibility.Collapsed;
-            ProgressionTab.Visibility = Visibility.Collapsed;
             QuestsTab.Visibility = Visibility.Collapsed;
             AchievementsTab.Visibility = Visibility.Collapsed;
             CompanionTab.Visibility = Visibility.Collapsed;
-            PatreonTab.Visibility = Visibility.Collapsed;
+            // PatreonTab is gone (Phase 8). The "patreon" key still works - it early-returns into
+            // ShowAppInfoPopup() at the top of this method, which lands on Settings · Account.
             LeaderboardTab.Visibility = Visibility.Collapsed;
             AssetsTab.Visibility = Visibility.Collapsed;
             DiscordTab.Visibility = Visibility.Collapsed;
@@ -242,9 +243,14 @@ namespace ConditioningControlPanel
                     _ = CheckCatalogueSubmissionStatusesAsync(CatalogueKindSessions);
                     break;
 
-                // "progression" tab removed in velvet-mosaic phase 6 — its content
-                // is now on the Dashboard. Legacy callers (e.g. older tutorial steps)
-                // that request ShowTab("progression") fall through to the Dashboard.
+                // PERMANENT ALIAS — do not retire. The "progression" VIEW is gone (Phase 8 deleted
+                // ProgressionTabView; the velvet-mosaic rework had already stopped revealing it),
+                // but the KEY is API: 54 bark rules per built-in mod carry tab_eq:"progression",
+                // and four TutorialService steps declare RequiresTab="progression". Home is the
+                // right destination — XP, level and the feature mosaic all live there. Fires its
+                // own bark key directly, so it must NOT be added to BarkTabAliases.
+                // See also ChromeFx.cs ("progression" => BtnSettings), the door map below, and
+                // Services/ChromeFxNav.cs, which are part of the same contract.
                 case "progression":
                     SettingsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(SettingsTab);
@@ -760,13 +766,17 @@ namespace ConditioningControlPanel
         /// must never land on top of live conditioning. FeatureIntroPopup itself guards the
         /// guided tour (which navigates tabs through ShowTab) and paces cards so a user
         /// clicking through every tab doesn't eat a modal per click.
+        /// <para>Phase 8: the owning door is handed over so a door can produce at most one card
+        /// per launch. Two doors own two cards each (Companion: awareness + she's listening; Play:
+        /// lockdown + blink trainer), and walking into a door should never mean two modals - the
+        /// sibling is left unspent and introduces itself on a later visit.</para>
         /// </summary>
         private void MaybeShowFeatureIntro(string key)
         {
             try
             {
                 if (_sessionEngine?.IsRunning == true) return;
-                FeatureIntroPopup.ShowIfFirstTime(key, this);
+                FeatureIntroPopup.ShowIfFirstTime(key, this, NavDoorForTab(key));
             }
             catch (Exception ex)
             {

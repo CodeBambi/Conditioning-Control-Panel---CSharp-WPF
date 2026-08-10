@@ -55,20 +55,40 @@ namespace ConditioningControlPanel
         internal const string CelebrationKey = "premium-celebration";
 
         /// <summary>
+        /// Phase 8: the doors each own more than one card (Companion has awareness + she's
+        /// listening, Play has lockdown + blink trainer), so "one card per first door visit" cannot
+        /// be a pure rename of the per-tab trigger. This is the budget instead - the FIRST card a
+        /// door produces in a launch is the only one that door produces, and the sibling shows on a
+        /// later launch's first visit. Session-local on purpose: it is a pacing rule, not a
+        /// seen-flag, so nothing is ever permanently lost and no settings property is needed.
+        /// Claimed at OPEN time (next to the seen-flag spend), never at queue time - a card
+        /// suppressed by pacing must leave the door's slot for the card that actually shows.
+        /// </summary>
+        private static readonly HashSet<string> _doorSlotsSpentThisLaunch =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
         /// Shows the intro for <paramref name="key"/> once per install, then never again.
         /// Silently does nothing while the guided tour is active (the tour navigates tabs through
-        /// ShowTab, and a modal would ambush it) or within the pacing cooldown of another card.
+        /// ShowTab, and a modal would ambush it), within the pacing cooldown of another card, or
+        /// when <paramref name="doorKey"/>'s door has already shown a card this launch.
         /// </summary>
-        internal static void ShowIfFirstTime(string key, Window? owner) => ShowCore(key, owner, paced: true);
+        /// <param name="doorKey">
+        /// The sidebar door that owns this card's tab, or null to opt out of the per-door budget.
+        /// </param>
+        internal static void ShowIfFirstTime(string key, Window? owner, string? doorKey = null) =>
+            ShowCore(key, owner, paced: true, doorKey: doorKey);
 
         /// <summary>
         /// The premium celebration rides the same card and seen-list but skips the pacing
         /// cooldown: it fires at most once per install and has retry points on every launch,
-        /// so suppressing it (unspent) is always safe and delaying it never is.
+        /// so suppressing it (unspent) is always safe and delaying it never is. It belongs to no
+        /// door, so it neither claims nor is blocked by the per-door budget.
         /// </summary>
-        internal static void ShowCelebrationIfFirstTime(Window? owner) => ShowCore(CelebrationKey, owner, paced: false);
+        internal static void ShowCelebrationIfFirstTime(Window? owner) =>
+            ShowCore(CelebrationKey, owner, paced: false, doorKey: null);
 
-        private static void ShowCore(string key, Window? owner, bool paced)
+        private static void ShowCore(string key, Window? owner, bool paced, string? doorKey)
         {
             try
             {
@@ -79,6 +99,7 @@ namespace ConditioningControlPanel
 
                 if (App.Tutorial?.IsActive == true) return;
                 if (paced && DateTime.UtcNow - _lastShownUtc < ShowCooldown) return;
+                if (doorKey != null && _doorSlotsSpentThisLaunch.Contains(doorKey)) return;
 
                 var dispatcher = Application.Current?.Dispatcher;
                 if (dispatcher == null || dispatcher.HasShutdownStarted) return;
@@ -106,6 +127,9 @@ namespace ConditioningControlPanel
                         live.SeenFeatureIntros.Add(key);
                         App.Settings?.Save();
                         _lastShownUtc = DateTime.UtcNow;
+                        // ...and claim this door's one slot for the launch, here rather than at
+                        // queue time so a card that never opened cannot spend its sibling's turn.
+                        if (doorKey != null) _doorSlotsSpentThisLaunch.Add(doorKey);
 
                         popup.ShowDialog();
                     }

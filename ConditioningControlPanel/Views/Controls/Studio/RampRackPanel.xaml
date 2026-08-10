@@ -11,8 +11,8 @@
          STUDIO RACK · INTENSITY RAMP  (Phase 4)
 
          Host, not a rebuild - same reasoning as SchedulerRackPanel.xaml,
-         plus one extra reason that matters: the dead ProgressionTab twin
-         (ProgressionTabView.xaml:694-766) is missing CmbRampCurve
+         plus one extra reason that mattered: the dead ProgressionTab twin
+         (deleted in Phase 8) was missing CmbRampCurve
          entirely. The curve is the single control on this feature that
          reshapes a RUNNING session (SessionEngine.cs:526 resolves
          `settings.RampCurve ?? App.Settings.Current.RampCurve` on every

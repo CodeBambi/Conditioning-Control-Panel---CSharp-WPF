@@ -127,8 +127,9 @@ namespace ConditioningControlPanel
             var level1Unlocked = hasPremiumAccess;
             var level2Unlocked = hasPremiumAccess; // Same as Level 1 now - all features at Tier 1
 
-            // Master overlay for the entire features grid
-            PatreonTab.PatreonFeaturesOverlay.Visibility = hasPremiumAccess ? Visibility.Collapsed : Visibility.Visible;
+            // PHASE 8: PatreonFeaturesOverlay - the one big "become a patron" veil over the old
+            // Exclusives grid - went with PatreonTabView. The Play door's per-card lockbands
+            // (RefreshPlayCards, below) are the wall now, and they repaint on this same path.
 
             // Keep the patron-achievements section lock + counts in sync with entitlement.
             UpdateAchievementCount();
@@ -225,14 +226,12 @@ namespace ConditioningControlPanel
 
             // Re-evaluate keyword triggers access (may have been disabled before Patreon validated)
             var hasKeywordAccess = KeywordTriggerService.HasAccess();
-            if (PatreonTab.TxtKeywordTriggersLocked != null)
-                PatreonTab.TxtKeywordTriggersLocked.Visibility = hasKeywordAccess ? Visibility.Collapsed : Visibility.Visible;
-            if (PatreonTab.BtnKeywordTriggersStartStop != null)
-                PatreonTab.BtnKeywordTriggersStartStop.IsEnabled = hasKeywordAccess;
-            if (PatreonTab.ChkScreenOcrEnabled != null)
-                PatreonTab.ChkScreenOcrEnabled.IsEnabled = hasKeywordAccess;
-            // PHASE 5 (G3): the live editors are on the Awareness tab now, and the OCR detail
+            // PHASE 5 (G3) + PHASE 8: the live editors are on the Awareness tab, and the OCR detail
             // rows are hidden until access is confirmed - re-seed them with the fresh verdict.
+            // The three PatreonTab twins that used to be gated here (TxtKeywordTriggersLocked,
+            // BtnKeywordTriggersStartStop, ChkScreenOcrEnabled) died with PatreonTabView;
+            // SyncKeywordRescuePanelUi re-derives every one of those states from
+            // KeywordTriggerService.HasAccess() itself.
             SyncKeywordRescuePanelUi();
 
             // If triggers were enabled in settings but couldn't start earlier (Patreon not validated yet),
@@ -1692,8 +1691,11 @@ namespace ConditioningControlPanel
             _isLoading = true;
             try
             {
-                // Settings tab - SettingsTab.ChkAudioWhispers represents "whispers enabled"
-                SettingsTab.ChkAudioWhispers.IsChecked = enabled;
+                // PHASE 8: the SettingsTab.ChkAudioWhispers mirror is gone with
+                // LegacyDashboardHost. The whispers ENABLE is SubAudioEnabled, whose only live
+                // editor is Features/SubliminalFeatureControl - which re-reads it on
+                // AppSettings.PropertyChanged, so the caller's write to s.SubAudioEnabled
+                // (ApplyVoiceMute) already repaints it. Nothing to push by hand.
 
                 // The Companion tab's box is a MUTE and no longer mirrors the enable, so it is
                 // driven from SubAudioMuted rather than !enabled (AppSettings.SubAudioMuted).

@@ -1880,16 +1880,23 @@ namespace ConditioningControlPanel
             // attached.
             Notifications = new NotificationService();
 
-            // Phase 4 Attention-Check mechanic: scrapped pre-ship per design call.
-            // Service is still constructed so the AttentionCheckSettingsDialog
-            // and AttentionCheckFeatureControl files compile (they hold the
-            // mechanic's design intact for future revival), but it's never
-            // Start()'d and the default for AttentionCheckEnabled is false.
-            // To revive in a later release, restore the OnPass/OnFail handler
-            // wiring, the PropertyChanged subscription, the Start() call, and
-            // the no-webcam sticky — all of which were here at HEAD before
-            // this commit. The Lab UI surface and intro sticky also need to
-            // come back; see MainWindow for those touchpoints.
+            // Phase 4 Attention-Check mechanic: scrapped pre-ship per design call. The UX
+            // restructure's Phase 8 deleted its two remaining UI files
+            // (Dialogs/AttentionCheckSettingsDialog + Features/AttentionCheckFeatureControl) -
+            // the dialog had zero constructors anywhere, so the mechanic had no door at all.
+            //
+            // THE SERVICE STILL MUST BE CONSTRUCTED. Services/Companion/BarkService.cs wires
+            // App.AttentionCheck.OnPass / OnFail; a null service (or a deleted type) breaks the
+            // bark harness. It is simply never Start()'d, and AttentionCheckEnabled defaults false.
+            //
+            // The six AttentionCheck* settings are deliberately untouched: AttentionCheckService
+            // still reads them, they were persisted historically, and they must keep round-tripping
+            // out of old settings files. They are NOT the video attention-target settings
+            // (AttentionChecksEnabled / Density / Lifespan / Size / RandomizeAttentionTargets),
+            // which are a live, shipped feature owned by Features/VideoFeatureControl.
+            //
+            // To revive: restore the OnPass/OnFail handler wiring, the PropertyChanged
+            // subscription, the Start() call, the no-webcam sticky, and a real UI surface.
             AttentionCheck = new AttentionCheckService();
 
             // Deeper enhancement library — file ops, recent files, library scan.

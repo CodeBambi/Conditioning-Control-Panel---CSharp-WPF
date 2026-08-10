@@ -1045,20 +1045,13 @@
                                   Icon="pack://application:,,,/Resources/features/brain_drain.png"
                                   Click="CardBrainDrain_Click"/>
 
-            <!-- TOMBSTONE (Phase 3). "System" is not a feature, so it lost its mosaic slot to
-                 Brain Drain and became the "System" pill in VelvetHelperButtonRow below. The card
-                 itself STAYS in the tree, Collapsed, in the cell it always had:
-                 MainWindow.DashboardFx.cs's DashboardFeatureCards array, ApplyModFeatureNames and
-                 the toggle dispatcher all still dereference SettingsTab.CardSystem by name, and a
-                 Collapsed FeatureCard costs no layout and no FX (RefreshFx parks a hidden card).
-                 Its Click handler is still wired and still reaches the SAME popup the pill opens.
-                 Phase 8 deletes this element together with those references. -->
-            <features:FeatureCard Grid.Row="3" Grid.Column="2" x:Name="CardSystem" x:FieldModifier="internal"
-                                  Visibility="Collapsed"
-                                  Title="System"
-                                  Glyph="⚙"
-                                  HelpSectionId="System"
-                                  Click="CardSystem_Click"/>
+            <!-- CardSystem: DEMOLISHED (UX restructure, Phase 8). Phase 3 traded the ⚙ mosaic
+                 tile for the Brain Drain rescue and left the tile in the tree Collapsed only
+                 because three code sites still dereferenced it by name (DashboardFeatureCards,
+                 ApplyModFeatureNames, and this Click binding). All three died with it. The
+                 entry point is unchanged: the "System" pill in VelvetHelperButtonRow below
+                 calls the SAME MainWindow.CardSystem_Click, so the popup, its mod-aware title
+                 and its NotifyFeatureOpened("System") bark are byte-for-byte what they were. -->
             <features:FeatureCard Grid.Row="3" Grid.Column="3" x:Name="CardBubbleCount" x:FieldModifier="internal"
                                   Title="Bubble Count"
                                   Icon="pack://application:,,,/Resources/features/Bubble_count.png"
@@ -1113,464 +1106,27 @@
         </Grid>
     
         <!-- ============================================================ -->
-        <!-- LEGACY DASHBOARD HOST - kept collapsed to preserve x:Names   -->
-        <!-- referenced by MainWindow.xaml.cs until the full rewire is    -->
-        <!-- complete. Phase 6+ will delete this block.                   -->
+        <!-- LEGACY DASHBOARD HOST - DEMOLISHED (UX restructure, Phase 8). -->
+        <!--                                                              -->
+        <!-- 459 lines and ~65 x:Names that were Visibility="Collapsed"   -->
+        <!-- forever, kept alive only so MainWindow's partials could keep  -->
+        <!-- addressing them by name. Every control had a proven live      -->
+        <!-- editor by Phase 4:                                            -->
+        <!--   Flash / Visuals / Video / Subliminal dose dials             -->
+        <!--       -> the Studio rack's Features/*FeatureControl panels    -->
+        <!--          (Views/Tabs/StudioTabView.xaml:181-199)              -->
+        <!--   ChkDualMon -> Features/SystemFeatureControl.ChkMultiMon,    -->
+        <!--          reachable from the "System" quick-toggle pill below  -->
+        <!--   Performance twins (ChkPerformanceMode, ChkAutoPerformance,  -->
+        <!--          ChkVideoHwDecode, ChkUnifiedOverlay, CmbMotionLevel) -->
+        <!--       -> Views/Controls/AppSettings/PerformanceSettingsSection-->
+        <!--                                                               -->
+        <!-- The read-backs in SaveSettings were provable identity ops      -->
+        <!-- (SaveSettings opened by calling LoadSettings), except where a  -->
+        <!-- twin slider's Min/Max clamped the value - the hazard the       -->
+        <!-- range-matching comments in this markup used to ward off.       -->
+        <!-- Deleting both halves removes the clamp permanently.            -->
         <!-- ============================================================ -->
-        <Grid x:Name="LegacyDashboardHost" x:FieldModifier="internal" Grid.Column="1" Grid.Row="1" Visibility="Collapsed">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="330"/>
-            <ColumnDefinition Width="360"/>
-        </Grid.ColumnDefinitions>
-    
-        <!-- LEFT COLUMN -->
-        <ScrollViewer Grid.Column="0" Grid.Row="0" VerticalScrollBarVisibility="Auto" Margin="5">
-            <StackPanel>
-    
-                <!-- Flash Images Section -->
-                <Border x:Name="FlashSection" CornerRadius="12" Padding="10,6" Margin="0,0,0,6"
-                        Background="{DynamicResource ElevatedSurfaceBrush}"
-                        BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
-                    <StackPanel>
-                        <Grid Margin="0,0,0,2">
-                            <helpers:EmojiTextBlock x:Name="TxtFeatureFlash" x:FieldModifier="internal" Style="{StaticResource SectionHeader}" Text="{loc:Str section_flash_images}" Margin="0"/>
-                            <Button x:Name="HelpBtnFlash" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="FlashImages"/>
-                        </Grid>
-                        
-                        <!-- Enable / Clickable / Hydra / Linked in one row -->
-                        <Grid Margin="0,2">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="0,0,10,0"
-                                        ToolTip="{loc:Str tooltip_flash_enable}">
-                                <CheckBox x:Name="ChkFlashEnabled" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                          Checked="ChkFlashEnabled_Changed" Unchecked="ChkFlashEnabled_Changed"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str btn_enable}" Margin="5,0,0,0" FontSize="11"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,10,0"
-                                        ToolTip="{loc:Str tooltip_when_enabled_clicking_an_image_dismisses_it_w}">
-                                <CheckBox x:Name="ChkClickable" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                          Checked="ChkClickable_Changed" Unchecked="ChkClickable_Changed"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_click}" Margin="5,0,0,0" FontSize="11"/>
-                            </StackPanel>
-                        </Grid>
-                        <Grid Margin="0,2">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,6,0"
-                                        ToolTip="{loc:Str tooltip_hydra_mode_clicking_an_image_spawns_two_more}">
-                                <CheckBox x:Name="ChkCorruption" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                          Checked="ChkCorruption_Changed" Unchecked="ChkCorruption_Changed"/>
-                                <helpers:EmojiTextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_hydra}" Margin="5,0,0,0" FontSize="11"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="2" Orientation="Horizontal"
-                                        ToolTip="{loc:Str tooltip_linked_hydra_spawns_share_the_parent_flash_ti}">
-                                <CheckBox x:Name="ChkHydraLinked" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                          Checked="ChkHydraLinked_Changed" Unchecked="ChkHydraLinked_Changed"/>
-                                <helpers:EmojiTextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_linked}" Margin="5,0,0,0" FontSize="11"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="6,0,0,0"
-                                        ToolTip="{loc:Str tooltip_toggle_the_pink_sparkle_glow_effect_on_flash}">
-                                <CheckBox x:Name="ChkFlashGlow" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                          Checked="ChkFlashGlow_Changed" Unchecked="ChkFlashGlow_Changed"/>
-                                <helpers:EmojiTextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_glow}" Margin="5,0,0,0" FontSize="11"/>
-                            </StackPanel>
-                        </Grid>
-                        <!-- Per Hour / Images in two columns -->
-                        <Grid Margin="0,2,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="8"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" ToolTip="{loc:Str tooltip_how_many_flash_events_occur_per_hour_higher_v}">
-                                <Grid><TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_per_hour}" FontSize="11"/><TextBlock x:Name="TxtPerMin" x:FieldModifier="internal" Style="{StaticResource ValueLabel}" Text="10" HorizontalAlignment="Right"/></Grid>
-                                <Slider x:Name="SliderPerMin" x:FieldModifier="internal" Minimum="1" Maximum="180" Value="10" Margin="0,1" ValueChanged="SliderPerMin_Changed"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="2" ToolTip="{loc:Str tooltip_number_of_images_shown_per_flash_event_multip}">
-                                <Grid><TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_images}" FontSize="11"/><TextBlock x:Name="TxtImages" x:FieldModifier="internal" Style="{StaticResource ValueLabel}" Text="5" HorizontalAlignment="Right"/></Grid>
-                                <!-- Range MUST match FlashFeatureControl's SliderImages (1-20): the SaveSettings round-trip clamps otherwise. -->
-                                <Slider x:Name="SliderImages" x:FieldModifier="internal" Minimum="1" Maximum="20" Value="5" Margin="0,1" ValueChanged="SliderImages_Changed"/>
-                            </StackPanel>
-                        </Grid>
-                        
-                        <!-- Max On Screen -->
-                        <Grid Margin="0,2,0,0" ToolTip="{loc:Str tooltip_maximum_images_displayed_at_once_limits_scree}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_max_on_screen}" FontSize="11"/>
-                            <TextBlock x:Name="TxtMaxOnScreen" x:FieldModifier="internal" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="20"/>
-                        </Grid>
-                        <Slider x:Name="SliderMaxOnScreen" x:FieldModifier="internal" Minimum="2" Maximum="20" Value="20" Margin="0,1" ValueChanged="SliderMaxOnScreen_Changed"/>
-                    </StackPanel>
-                </Border>
-    
-                <!-- Visuals Section -->
-                <Border x:Name="VisualsSection" CornerRadius="12" Padding="10,6" Margin="0,0,0,6"
-                        Background="{DynamicResource ElevatedSurfaceBrush}"
-                        BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
-                    <StackPanel>
-                        <Grid Margin="0,0,0,2">
-                            <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_visuals}" Margin="0"/>
-                            <Button x:Name="HelpBtnVisuals" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Visuals"/>
-                        </Grid>
-                        
-                        <!-- Size / Opacity in two columns -->
-                        <Grid Margin="0,2,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="8"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" ToolTip="{loc:Str tooltip_scale_of_flash_images_100_original_size_200_d}">
-                                <Grid><TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_size}" FontSize="11"/><TextBlock x:Name="TxtSize" x:FieldModifier="internal" Style="{StaticResource ValueLabel}" Text="100%" HorizontalAlignment="Right"/></Grid>
-                                <Slider x:Name="SliderSize" x:FieldModifier="internal" Minimum="50" Maximum="250" Value="100" Margin="0,1" ValueChanged="SliderSize_Changed"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="2" ToolTip="{loc:Str tooltip_transparency_of_flash_images_lower_more_see_t}">
-                                <Grid><TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_opacity}" FontSize="11"/><TextBlock x:Name="TxtOpacity" x:FieldModifier="internal" Style="{StaticResource ValueLabel}" Text="100%" HorizontalAlignment="Right"/></Grid>
-                                <Slider x:Name="SliderOpacity" x:FieldModifier="internal" Minimum="10" Maximum="100" Value="100" Margin="0,1" ValueChanged="SliderOpacity_Changed"/>
-                            </StackPanel>
-                        </Grid>
-
-                        <!-- Avoid Screen Center (#770) moved to Features/FlashFeatureControl.xaml
-                             for #859: this host is Collapsed, so the copy that lived here was the
-                             feature's only UI and it was unreachable. Nothing may re-add it here -
-                             two bound surfaces for one setting is what the old note warned about. -->
-
-                        <!-- Fade / Duration in two columns -->
-                        <Grid Margin="0,2,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="8"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" ToolTip="{loc:Str tooltip_fade_in_out_animation_speed_0_instant_appear}">
-                                <Grid><TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_fade}" FontSize="11"/><TextBlock x:Name="TxtFade" x:FieldModifier="internal" Style="{StaticResource ValueLabel}" Text="50%" HorizontalAlignment="Right"/></Grid>
-                                <Slider x:Name="SliderFade" x:FieldModifier="internal" Minimum="0" Maximum="100" Value="50" Margin="0,1" ValueChanged="SliderFade_Changed"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="2" ToolTip="{loc:Str tooltip_how_long_images_stay_on_screen_only_used_when}">
-                                <Grid><TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_duration}" FontSize="11"/><TextBlock x:Name="TxtFlashDuration" x:FieldModifier="internal" Style="{StaticResource ValueLabel}" Text="{loc:Str setting_5s}" HorizontalAlignment="Right"/></Grid>
-                                <Slider x:Name="SliderFlashDuration" x:FieldModifier="internal" Minimum="1" Maximum="30" Value="5" Margin="0,1" ValueChanged="SliderFlashDuration_Changed"/>
-                            </StackPanel>
-                        </Grid>
-                        
-                        <!-- Link to Audio -->
-                        <Border Background="#3D2D4D" CornerRadius="5" Padding="8,6" Margin="0,5,0,0"
-                                ToolTip="{loc:Str tooltip_when_enabled_flash_duration_matches_audio_len}">
-                            <Grid>
-                                <CheckBox x:Name="ChkFlashAudio" x:FieldModifier="internal" IsChecked="True" Checked="ChkFlashAudio_Changed" Unchecked="ChkFlashAudio_Changed">
-                                    <helpers:EmojiTextBlock Text="{loc:Str label_link_to_audio_trigger}" FontSize="12" FontWeight="SemiBold"/>
-                                </CheckBox>
-                                <TextBlock x:Name="TxtAudioWarning" x:FieldModifier="internal" Text="{loc:Str label_max_30_h}" Foreground="#FFB347" FontSize="10" 
-                                           HorizontalAlignment="Right" VerticalAlignment="Center" Visibility="Collapsed"/>
-                            </Grid>
-                        </Border>
-                    </StackPanel>
-                </Border>
-    
-                <!-- Legacy Logo removed — velvet-mosaic grid owns the live ImgLogo. -->
-    
-            </StackPanel>
-        </ScrollViewer>
-    
-        <!-- MIDDLE COLUMN -->
-        <ScrollViewer Grid.Column="1" Grid.Row="0" VerticalScrollBarVisibility="Auto" Margin="5">
-            <StackPanel>
-                
-                <!-- Mandatory Video Section -->
-                <Border x:Name="VideoSection" CornerRadius="12" Padding="10,7" Margin="0,0,0,6"
-                        Background="{DynamicResource ElevatedSurfaceBrush}"
-                        BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
-                    <StackPanel>
-                        <Grid>
-                            <helpers:EmojiTextBlock x:Name="TxtFeatureVideo" x:FieldModifier="internal" Style="{StaticResource SectionHeader}" Text="{loc:Str section_mandatory_video}"/>
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                <Button x:Name="HelpBtnVideo" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" Tag="Video" Margin="0,0,8,0"/>
-                                <Button x:Name="BtnTestVideo" Content="{loc:Str btn_test_2}" Style="{StaticResource OutlineButton}"
-                                        Padding="10,4" Click="BtnTestVideo_Click"
-                                        ToolTip="{loc:Str tooltip_play_a_random_video_now_to_test}"/>
-                            </StackPanel>
-                        </Grid>
-    
-                        <!-- Enable + Strict + Per Hour -->
-                        <Grid Margin="0,5,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="30"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" ToolTip="{loc:Str tooltip_turn_mandatory_videos_on_or_off}">
-                                <CheckBox x:Name="ChkVideoEnabled" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                          Checked="ChkVideoEnabled_Changed" Unchecked="ChkVideoEnabled_Changed"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str btn_enable}" Margin="6,0,15,0"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" ToolTip="{loc:Str tooltip_strict_mode_videos_cannot_be_skipped_must_wat}">
-                                <CheckBox x:Name="ChkStrictLock" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" Checked="ChkStrictLock_Changed" Unchecked="ChkStrictLock_Changed"/>
-                                <helpers:EmojiTextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_strict}" Foreground="#FFB347" Margin="6,0,15,0"/>
-                            </StackPanel>
-                            <Slider Grid.Column="2" x:Name="SliderPerHour" x:FieldModifier="internal" Minimum="1" Maximum="20" Value="2" ValueChanged="SliderPerHour_Changed"
-                                    ToolTip="{loc:Str tooltip_videos_per_hour}"/>
-                            <TextBlock x:Name="TxtPerHour" x:FieldModifier="internal" Grid.Column="3" Style="{StaticResource ValueLabel}" Text="2" HorizontalAlignment="Right"/>
-                        </Grid>
-    
-                        <!-- Mini-Game Sub-Section -->
-                        <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="10,7" Margin="0,7,0,0">
-                            <StackPanel>
-                                <Grid>
-                                    <StackPanel Orientation="Horizontal">
-                                        <helpers:EmojiTextBlock Text="{loc:Str label_mini_game}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold"/>
-                                        <Button x:Name="HelpBtnMiniGame" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" Tag="MiniGame"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="ChkMiniGameEnabled" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right"
-                                              Checked="ChkMiniGameEnabled_Changed" Unchecked="ChkMiniGameEnabled_Changed"
-                                              ToolTip="{loc:Str tooltip_enable_attention_check_targets}"/>
-                                </Grid>
-    
-                                <!-- Targets / Duration / Size -->
-                                <Grid Margin="0,5,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" Margin="0,0,6,0" ToolTip="{loc:Str tooltip_number_of_targets_to_click_per_video}">
-                                        <Grid>
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{loc:Str label_targets}" FontSize="11" Foreground="#A0A0B0"/>
-                                                <CheckBox x:Name="ChkRandomizeTargets" x:FieldModifier="internal" Margin="6,0,0,0" VerticalAlignment="Center"
-                                                          ToolTip="{loc:Str tooltip_randomize_target_count_1_to_max}"
-                                                          Checked="ChkRandomizeTargets_Changed" Unchecked="ChkRandomizeTargets_Changed">
-                                                    <Image Width="11" Height="11" ToolTip="{loc:Str tooltip_randomize}"
-                                                           Source="{Binding Source='🎲', Converter={StaticResource EmojiToImageSource}}"/>
-                                                </CheckBox>
-                                            </StackPanel>
-                                            <TextBlock x:Name="TxtTargets" x:FieldModifier="internal" Text="3" FontSize="11" Foreground="{DynamicResource TextLightBrush}" HorizontalAlignment="Right"/>
-                                        </Grid>
-                                        <Slider x:Name="SliderTargets" x:FieldModifier="internal" Minimum="1" Maximum="10" Value="3" Margin="0,3,0,0" ValueChanged="SliderTargets_Changed"/>
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="1" Margin="3,0" ToolTip="{loc:Str tooltip_seconds_each_target_stays_visible}">
-                                        <Grid><TextBlock Text="{loc:Str setting_duration}" FontSize="11" Foreground="#A0A0B0"/><TextBlock x:Name="TxtDuration" x:FieldModifier="internal" Text="5" FontSize="11" Foreground="{DynamicResource TextLightBrush}" HorizontalAlignment="Right"/></Grid>
-                                        <Slider x:Name="SliderDuration" x:FieldModifier="internal" Minimum="1" Maximum="15" Value="5" Margin="0,3,0,0" ValueChanged="SliderDuration_Changed"/>
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="2" Margin="6,0,0,0" ToolTip="{loc:Str tooltip_target_button_size_in_pixels}">
-                                        <Grid><TextBlock Text="{loc:Str setting_size}" FontSize="11" Foreground="#A0A0B0"/><TextBlock x:Name="TxtTargetSize" x:FieldModifier="internal" Text="70" FontSize="11" Foreground="{DynamicResource TextLightBrush}" HorizontalAlignment="Right"/></Grid>
-                                        <Slider x:Name="SliderTargetSize" x:FieldModifier="internal" Minimum="30" Maximum="150" Value="70" Margin="0,3,0,0" ValueChanged="SliderTargetSize_Changed"/>
-                                    </StackPanel>
-                                </Grid>
-    
-                                <StackPanel Orientation="Horizontal" Margin="0,7,0,0">
-                                    <Button Content="{loc:Str btn_phrases}" Style="{StaticResource PinkButton}" Padding="8,5" Click="BtnManageAttention_Click"
-                                            ToolTip="{loc:Str tooltip_edit_attention_check_phrases}"/>
-                                    <Button Content="{loc:Str btn_style}" Style="{StaticResource OutlineButton}" Margin="8,0,0,0" Padding="8,5" Click="BtnAttentionStyle_Click"
-                                            ToolTip="{loc:Str tooltip_customize_target_appearance_colors_border_fon}"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </Border>
-    
-                <!-- Subliminals Section -->
-                <Border x:Name="SubliminalSection" CornerRadius="12" Padding="10,7" Margin="0,0,0,6"
-                        Background="{DynamicResource ElevatedSurfaceBrush}"
-                        BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
-                    <StackPanel>
-                        <Grid>
-                            <helpers:EmojiTextBlock x:Name="TxtFeatureSubliminal" x:FieldModifier="internal" Style="{StaticResource SectionHeader}" Text="{loc:Str section_subliminals_2}"/>
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                <Button x:Name="HelpBtnSubliminals" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" Tag="Subliminals" Margin="0,0,8,0"/>
-                                <Button Content="📝" Style="{StaticResource OutlineButton}" Padding="6,3" Click="BtnManageMessages_Click" Margin="0,0,4,0"
-                                        ToolTip="{loc:Str tooltip_edit_subliminal_messages}"/>
-                                <Button Content="⚙" Style="{StaticResource OutlineButton}" Padding="6,3" Click="BtnSubliminalSettings_Click" Margin="0,0,8,0"
-                                        ToolTip="{loc:Str tooltip_advanced_subliminal_visual_settings}"/>
-                                <CheckBox x:Name="ChkSubliminalEnabled" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                          Checked="ChkSubliminalEnabled_Changed" Unchecked="ChkSubliminalEnabled_Changed"
-                                          ToolTip="{loc:Str tooltip_enable_disable_subliminal_messages}"/>
-                            </StackPanel>
-                        </Grid>
-    
-                        <!-- Per Min / Frames / Opacity in 3 columns -->
-                        <Grid Margin="0,6,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Margin="0,0,6,0" ToolTip="{loc:Str tooltip_messages_shown_per_minute}">
-                                <Grid><TextBlock Text="{loc:Str label_per_min}" FontSize="11" Foreground="#A0A0B0"/><TextBlock x:Name="TxtSubPerMin" x:FieldModifier="internal" Text="5" FontSize="11" Foreground="{DynamicResource TextLightBrush}" HorizontalAlignment="Right"/></Grid>
-                                <Slider x:Name="SliderSubPerMin" x:FieldModifier="internal" Minimum="1" Maximum="30" Value="5" Margin="0,3,0,0" ValueChanged="SliderSubPerMin_Changed"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" Margin="3,0" ToolTip="{loc:Str tooltip_display_duration_in_frames_lower_faster_flash}">
-                                <Grid><TextBlock Text="{loc:Str label_frames}" FontSize="11" Foreground="#A0A0B0"/><TextBlock x:Name="TxtFrames" x:FieldModifier="internal" Text="2" FontSize="11" Foreground="{DynamicResource TextLightBrush}" HorizontalAlignment="Right"/></Grid>
-                                <Slider x:Name="SliderFrames" x:FieldModifier="internal" Minimum="1" Maximum="10" Value="2" Margin="0,3,0,0" ValueChanged="SliderFrames_Changed"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="2" Margin="6,0,0,0" ToolTip="{loc:Str tooltip_text_visibility_lower_more_subtle}">
-                                <Grid><TextBlock Text="{loc:Str setting_opacity}" FontSize="11" Foreground="#A0A0B0"/><TextBlock x:Name="TxtSubOpacity" x:FieldModifier="internal" Text="80%" FontSize="11" Foreground="{DynamicResource TextLightBrush}" HorizontalAlignment="Right"/></Grid>
-                                <Slider x:Name="SliderSubOpacity" x:FieldModifier="internal" Minimum="10" Maximum="100" Value="80" Margin="0,3,0,0" ValueChanged="SliderSubOpacity_Changed"/>
-                            </StackPanel>
-                        </Grid>
-    
-                        <!-- Audio Whispers -->
-                        <Grid Margin="0,6,0,0" ToolTip="{loc:Str tooltip_play_whispered_audio_when_subliminal_messages}">
-                            <StackPanel Orientation="Horizontal">
-                                <CheckBox x:Name="ChkAudioWhispers" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                          Checked="ChkAudioWhispers_Changed" Unchecked="ChkAudioWhispers_Changed"/>
-                                <helpers:EmojiTextBlock x:Name="TxtFeatureWhispers" x:FieldModifier="internal" Style="{StaticResource SettingLabel}" Text="{loc:Str setting_audio_whispers}" Margin="6,0,0,0"/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                <Slider x:Name="SliderWhisperVol" x:FieldModifier="internal" Minimum="0" Maximum="100" Value="50" Width="100" ValueChanged="SliderWhisperVol_Changed"/>
-                                <TextBlock x:Name="TxtWhisperVol" x:FieldModifier="internal" Style="{StaticResource ValueLabel}" Text="50%" Width="40"/>
-                            </StackPanel>
-                        </Grid>
-                    </StackPanel>
-                </Border>
-    
-                <!-- System Section -->
-                <Border x:Name="SystemSection" CornerRadius="12" Padding="10,7" Margin="0,0,0,6"
-                        Background="{DynamicResource ElevatedSurfaceBrush}"
-                        BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
-                    <StackPanel>
-                        <Grid>
-                            <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_system}"/>
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                <Button x:Name="HelpBtnSystem" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" Tag="System" Margin="0,0,8,0"/>
-                                <Button Content="📁" Style="{StaticResource OutlineButton}"
-                                        Padding="6,3" Click="BtnPickAssetsFolder_Click" Margin="0,0,4,0"
-                                        ToolTip="{loc:Str tooltip_set_custom_assets_folder}"/>
-                                <Button Content="{loc:Str btn_assets}" Style="{StaticResource OutlineButton}"
-                                        Padding="8,3" Click="BtnOpenAssetsFolder_Click"
-                                        ToolTip="{loc:Str tooltip_open_assets_folder_images_videos_sounds}"/>
-                            </StackPanel>
-                        </Grid>
-    
-                        <Grid Margin="0,4,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-
-                            <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="0,3"
-                                        ToolTip="{loc:Str tooltip_show_content_on_all_connected_monitors_2_3_or}">
-                                <CheckBox x:Name="ChkDualMon" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                          Checked="ChkDualMon_Changed" Unchecked="ChkDualMon_Changed"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_multi_mon}" Margin="6,0,0,0"/>
-                            </StackPanel>
-                            <!-- Phase 2 moved the startup group out of here into
-                                 Views/Controls/AppSettings/GeneralSettingsSection.xaml:
-                                 ChkWinStart (row 0 col 1), ChkVidLaunch + ChkAutoRun (row 1),
-                                 ChkStartHidden (row 2 col 0) and the startup-video picker below.
-                                 They kept their x:Names — LoadSettings/SaveSettings,
-                                 ChkWinStart_Click, ChkStartHidden_Click, SyncWinStartState and
-                                 RequestToggleWindowsStartup address them by name, so those
-                                 MainWindow partials were re-pointed to AppSettingsTab and the twins
-                                 in Features/SystemFeatureControl.xaml became read-only mirrors.
-
-                                 ChkNoPanic moved to Settings → Devices in the same phase. It was the
-                                 copy live code wrote (MainWindow.Settings.cs, .UiUpdates.cs, .Lab.cs's
-                                 lockdown grey-out), which is why this one moved and the System
-                                 popup's twin became a read-only display.
-
-                                 ChkOfflineMode (row 3 col 0) moved to Settings → Data for the same
-                                 reason: RequestToggleOfflineMode / ApplyOfflineMode /
-                                 SyncOfflineModeState all drive it by name. -->
-
-                            <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Margin="0,3"
-                                        ToolTip="Force the lightest rendering mode (smaller decoded images, no glow, cheaper blur). Use if the app stutters when many effects are on screen.">
-                                <CheckBox x:Name="ChkPerformanceMode" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                          Checked="ChkPerformanceMode_Changed" Unchecked="ChkPerformanceMode_Changed"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="Performance mode" Margin="6,0,0,0"/>
-                            </StackPanel>
-    
-                            <StackPanel Grid.Row="4" Grid.Column="0" Orientation="Horizontal" Margin="0,3"
-                                        ToolTip="Automatically reduce rendering quality only while lots of elements (flashes/bubbles) are on screen, then restore it.">
-                                <CheckBox x:Name="ChkAutoPerformance" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                          Checked="ChkAutoPerformance_Changed" Unchecked="ChkAutoPerformance_Changed"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="Auto performance" Margin="6,0,0,0"/>
-                            </StackPanel>
-                            <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Margin="0,3"
-                                        ToolTip="Force GPU hardware decoding for mandatory videos. Off by default — mandatory videos software-decode to avoid a white-screen bug on some Windows machines. Only turn this on if you want GPU decode and your videos play fine.">
-                                <CheckBox x:Name="ChkVideoHwDecode" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                          Checked="ChkVideoHwDecode_Changed" Unchecked="ChkVideoHwDecode_Changed"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="Force video GPU decode" Margin="6,0,0,0"/>
-                            </StackPanel>
-
-                            <StackPanel Grid.Row="5" Grid.Column="0" Orientation="Horizontal" Margin="0,3"
-                                        ToolTip="Render fullscreen effects (spiral, pink filter, flashes, bubbles...) in one shared overlay window per monitor. Smoother with many effects on screen. Turn off to fall back to the classic one-window-per-effect renderer if overlays misbehave.">
-                                <CheckBox x:Name="ChkUnifiedOverlay" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                          Checked="ChkUnifiedOverlay_Changed" Unchecked="ChkUnifiedOverlay_Changed"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="Unified overlay renderer" Margin="6,0,0,0"/>
-                            </StackPanel>
-
-                            <!-- Weekly intake pass reminder (ChkIntakeNudge) MOVED in Phase 2 to
-                                 Views/Controls/AppSettings/NotificationsSettingsSection.xaml. It
-                                 was unreachable here (LegacyDashboardHost is Collapsed forever);
-                                 Settings · Notifications is now its one editor. Row 5 column 1 is
-                                 free again. -->
-
-                            <!-- Reduced motion. Sits with the other rendering switches because it is
-                                 one: Reduced/Off stop every ambient loop and particle field before
-                                 they start (Services/MotionFx). Capped to Reduced automatically when
-                                 Windows' own "Animation effects" flag is off. -->
-                            <StackPanel Grid.Row="6" Grid.Column="0" Orientation="Horizontal" Margin="0,3"
-                                        ToolTip="{loc:Str tooltip_motion_level}">
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_motion_level}" VerticalAlignment="Center"/>
-                                <ComboBox x:Name="CmbMotionLevel" x:FieldModifier="internal" Width="110" Margin="6,0,0,0"
-                                          Foreground="Black" Background="White"
-                                          ToolTip="{loc:Str tooltip_motion_level}"
-                                          SelectionChanged="CmbMotionLevel_SelectionChanged">
-                                    <ComboBoxItem Content="{loc:Str label_motion_full}"/>
-                                    <ComboBoxItem Content="{loc:Str label_motion_reduced}"/>
-                                    <ComboBoxItem Content="{loc:Str label_motion_off}"/>
-                                </ComboBox>
-                            </StackPanel>
-                        </Grid>
-    
-                        <!-- Startup Video Selection moved to Settings → General (Phase 2).
-                             TxtStartupVideo kept its x:Name: MainWindow.Settings.cs writes it on
-                             load and both picker buttons write it from MainWindow.UiUpdates.cs. -->
-
-                        <!-- Phrase Backup moved to Settings → Data (Phase 2). Those two buttons were
-                             the ONLY call sites of BtnExportPhrases_Click / BtnImportPhrases_Click
-                             (MainWindow.PresetIO.cs:62,93) in the app, and they sat inside this
-                             permanently-Collapsed host — the feature shipped unreachable. -->
-
-                        <!-- Gaming Tip -->
-                        <Grid Margin="0,5,0,0">
-                            <TextBlock Text="{loc:Str label_use_borderless_windowed_for_overlays}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"
-                                       ToolTip="{loc:Str tooltip_exclusive_fullscreen_games_block_overlays_use}"/>
-                            <!-- BtnPanicKey moved to Settings → Devices in Phase 2 (UpdatePanicKeyButton
-                                 writes its label, so the rebind surface had to travel with the name). -->
-                        </Grid>
-                    </StackPanel>
-                </Border>
-    
-                <!-- The Deeper master switch (ChkEnableDeeper) moved to Settings → General in
-                     Phase 2. It gates BtnDeeper's visibility, so it is a navigation switch as much
-                     as a feature switch — and it was unreachable here. MainWindow.DeeperTab.cs and
-                     MainWindow.Settings.cs were re-pointed to AppSettingsTab. -->
-            </StackPanel>
-        </ScrollViewer>
-        </Grid>
-        <!-- /LegacyDashboardHost -->
     
         <!-- RIGHT HALF — col 2 (after premium rail + feature grid).
              Phase 3 layout: browser card (star) · companion strip (auto) · account strip (auto).
@@ -2218,9 +1774,10 @@
             <!-- System — the display / video switches (multi-monitor, GPU decode, blurred
                  video background, browser video engine) plus the read-only jumps Phase 2 added
                  into Settings. It used to be the ⚙ mosaic tile; the tile went to Brain Drain
-                 and the entry point came here. VelvetBtnSystem_Click forwards to the SAME
-                 MainWindow.CardSystem_Click that the (now Collapsed) tile still calls, so the
-                 popup, its title, and its NotifyFeatureOpened("System") bark are unchanged. -->
+                 and the entry point came here. Phase 8 deleted the Collapsed tile, so this pill
+                 is now the ONLY route to MainWindow.CardSystem_Click - the popup, its title, and
+                 its NotifyFeatureOpened("System") bark are unchanged, but this button is the last
+                 thing holding them: never retire it without moving the handler somewhere else. -->
             <Button Grid.Column="2" x:Name="VelvetBtnSystem"
                     Click="VelvetBtnSystem_Click"
                     Cursor="Hand" FontSize="12" FontWeight="Bold">
@@ -2278,9 +1835,10 @@
     
             <!-- Combined Scheduler + Intensity Ramp card. Label is two live-localized
                  strings joined by " + " so both halves stay translated.
-                 Phase 3: this no longer opens a second popup around
-                 SchedulerRampFeatureControl - Phase 4 gave both panels rack entries
-                 ("scheduler" / "ramp"), so the pill navigates there instead. One surface,
+                 Phase 3: this no longer opens a second popup around the old
+                 SchedulerRampFeatureControl wrapper - Phase 4 gave both panels rack entries
+                 ("scheduler" / "ramp") and Phase 8 deleted the wrapper, so the pill navigates
+                 to the rack instead. One surface,
                  nothing lost: the rack fires the same single "SchedulerRamp"
                  NotifyFeatureOpened key the popup did (StudioTabView.xaml.cs:229-230). -->
             <Button Grid.Column="4" x:Name="VelvetBtnSchedulerRamp"

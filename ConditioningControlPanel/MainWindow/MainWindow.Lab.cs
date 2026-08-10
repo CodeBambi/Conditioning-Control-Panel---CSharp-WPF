@@ -625,12 +625,20 @@ namespace ConditioningControlPanel
                             App.Logger?.Warning("Lockdown: keyboard hook could not be installed - Esc/Win/Alt-Tab will NOT be blocked this session");
                     }
 
-                    // Gray out strict lock and panic key toggles
-                    if (SettingsTab.ChkStrictLock != null)
+                    // Gray out strict lock and panic key toggles.
+                    // PHASE 8: re-pointed from the deleted LegacyDashboardHost twin
+                    // (SettingsTab.ChkStrictLock) to the LIVE editor - the Studio rack's Video
+                    // panel. This is not cosmetic: LockdownService forces StrictLockEnabled true on
+                    // activate and restores it on exit, but VideoFeatureControl.ChkStrict_Changed
+                    // writes the setting directly, so a reachable toggle would let the user turn
+                    // strict lock back off mid-lockdown. Greying the twin nobody could see never
+                    // stopped that; greying this one does.
+                    var strictChk = StudioTab?.PanelVideo?.ChkStrict;
+                    if (strictChk != null)
                     {
-                        SettingsTab.ChkStrictLock.IsEnabled = false;
-                        SettingsTab.ChkStrictLock.Opacity = 0.4;
-                        SettingsTab.ChkStrictLock.ToolTip = Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape");
+                        strictChk.IsEnabled = false;
+                        strictChk.Opacity = 0.4;
+                        strictChk.ToolTip = Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape");
                     }
                     if (AppSettingsTab.ChkNoPanic != null)
                     {
@@ -684,12 +692,14 @@ namespace ConditioningControlPanel
                             _keyboardHook.Stop();
                     }
 
-                    // Restore strict lock and panic key toggles
-                    if (SettingsTab.ChkStrictLock != null)
+                    // Restore strict lock and panic key toggles (PHASE 8: re-pointed to the live
+                    // Studio rack editor - see OnLockdownActivated above).
+                    var strictChk = StudioTab?.PanelVideo?.ChkStrict;
+                    if (strictChk != null)
                     {
-                        SettingsTab.ChkStrictLock.IsEnabled = true;
-                        SettingsTab.ChkStrictLock.Opacity = 1.0;
-                        SettingsTab.ChkStrictLock.ToolTip = null;
+                        strictChk.IsEnabled = true;
+                        strictChk.Opacity = 1.0;
+                        strictChk.ToolTip = null;
                     }
                     if (AppSettingsTab.ChkNoPanic != null)
                     {
