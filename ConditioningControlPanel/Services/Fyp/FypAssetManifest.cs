@@ -35,6 +35,10 @@ internal static class FypAssetManifest
         [Newtonsoft.Json.JsonProperty("durationMs")] public long? DurationMs { get; set; }
         [Newtonsoft.Json.JsonProperty("width")] public int? Width { get; set; }
         [Newtonsoft.Json.JsonProperty("height")] public int? Height { get; set; }
+        /// <summary>"online" for remote entries (Scrolller et al.); absent for library files.
+        /// The page uses it for the source-mix pick and to keep remote ids out of stats.</summary>
+        [Newtonsoft.Json.JsonProperty("origin", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string? Origin { get; init; }
     }
 
     /// <summary>Build the asset list for the current EffectiveAssetsPath. Never throws.</summary>

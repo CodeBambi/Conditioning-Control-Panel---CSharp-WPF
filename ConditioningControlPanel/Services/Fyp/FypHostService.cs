@@ -4,8 +4,10 @@ using System.IO;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Linq;
 using Microsoft.Web.WebView2.Core;
 using Newtonsoft.Json.Linq;
+using ConditioningControlPanel.Services.Fyp.Online;
 
 namespace ConditioningControlPanel.Services.Fyp;
 
@@ -127,6 +129,7 @@ internal static class FypHostService
         var h = _host;
         _host = null;
         try { _meta?.Save(); } catch { }
+        try { FypOnlineCoordinator.Save(); } catch { }
         try { h?.Dispose(); }
         catch (Exception ex) { App.Logger?.Debug("FypHost.Close: {E}", ex.Message); }
     }
@@ -154,6 +157,22 @@ internal static class FypHostService
                     audioGlow = s?.FypAudioGlow ?? true,
                     eyeControl = s?.FypEyeControl ?? false,
                     eyeGaze = s?.FypEyeGaze ?? false,
+                    source = s?.FypSource ?? "library",
+                    onlineRatio = s?.FypOnlineRatio ?? 30,
+                    onlineConsented = s?.FypOnlineConsented ?? false,
+                },
+                // The niche catalog rides along so the page can render chips (and knows
+                // each niche's subreddits — deselecting one prunes its clips client-side).
+                online = new
+                {
+                    niches = FypOnlineCoordinator.Catalog.Select(n => new
+                    {
+                        id = n.Id,
+                        label = n.Label,
+                        subs = n.Subs,
+                        selected = s?.FypOnlineNiches?.Contains(n.Id) ?? false,
+                    }),
+                    customSubs = s?.FypOnlineCustomSubs ?? new List<string>(),
                 },
                 stats = LoadStats(),
             });
@@ -180,7 +199,10 @@ internal static class FypHostService
             }
             case "asset-meta":
             {
-                _meta?.Update((string?)o["id"], (long?)o["durationMs"], (int?)o["width"], (int?)o["height"]);
+                // Remote pools churn forever — never let their probes grow fyp_meta.json.
+                var id = (string?)o["id"];
+                if (!IsRemoteId(id))
+                    _meta?.Update(id, (long?)o["durationMs"], (int?)o["width"], (int?)o["height"]);
                 break;
             }
             case "media-error":
@@ -189,16 +211,31 @@ internal static class FypHostService
                 // (#562) was undiagnosable with the page swallowing errors client-side.
                 // MediaError codes: 2 = network/fetch, 3 = decode failed, 4 = format not
                 // supported (HEVC in Chromium reads as 3 or 4; LibVLC plays the same file).
+                var id = (string?)o["id"];
                 App.Logger?.Warning("[FYP] media-error for {Id}: code={Code} {Message}",
-                    (string?)o["id"], (int?)o["code"] ?? 0, (string?)o["message"] ?? "");
-                _meta?.RecordFailure((string?)o["id"]);
+                    id, (int?)o["code"] ?? 0, (string?)o["message"] ?? "");
+                // Fail-strikes are for library files (a remote entry is one-shot anyway;
+                // the page's own error swap already pages past it).
+                if (!IsRemoteId(id)) _meta?.RecordFailure(id);
                 break;
             }
             case "clip-viewed":
             {
+                // Remote clips feed the channel-taste EWMA before the XP cap gets a say.
+                var segId = (string?)o["segId"];
+                if (IsRemoteId(segId))
+                {
+                    try { FypOnlineCoordinator.RecordDwell(segId!, (long?)o["dwellMs"] ?? 0); }
+                    catch (Exception ex) { App.Logger?.Debug("FypHost: dwell record failed: {E}", ex.Message); }
+                }
                 if (!AllowClipXp()) break;
                 try { App.Progression?.AddXP(5, XPSource.Fyp); }
                 catch (Exception ex) { App.Logger?.Debug("FypHost: clip XP failed: {E}", ex.Message); }
+                break;
+            }
+            case "need-remote":
+            {
+                ServeRemoteBatch();
                 break;
             }
             case "attention-hit":
@@ -289,9 +326,94 @@ internal static class FypHostService
                     PostEyeStatus(null);
                     break;
                 }
+                case "source":
+                {
+                    var src = (string?)value ?? "library";
+                    // The page shows the consent card before ever posting a non-library
+                    // source; belt and braces here so a stale page can't skip it.
+                    if (src != "library" && s.FypOnlineConsented != true) src = "library";
+                    s.FypSource = src;
+                    break;
+                }
+                case "onlineRatio": s.FypOnlineRatio = (int?)value ?? 30; break;
+                case "onlineConsented":
+                {
+                    // One-way: the page only ever sends true (accepting the card).
+                    if ((bool?)value == true && !s.FypOnlineConsented)
+                    {
+                        s.FypOnlineConsented = true;
+                        App.Logger?.Information("FypHost: online-content consent accepted");
+                    }
+                    break;
+                }
+                case "onlineNiches":
+                {
+                    if (value is JArray arr)
+                    {
+                        var known = new HashSet<string>(FypOnlineCoordinator.Catalog.Select(n => n.Id));
+                        s.FypOnlineNiches = arr.Select(t => (string?)t)
+                            .Where(id => id != null && known.Contains(id)).Select(id => id!)
+                            .Distinct().ToList();
+                        FypOnlineCoordinator.ResetChannels();
+                    }
+                    break;
+                }
+                case "onlineCustomSubs":
+                {
+                    if (value is JArray arr)
+                    {
+                        s.FypOnlineCustomSubs = arr.Select(t => FypOnlineCoordinator.SanitizeSub((string?)t))
+                            .Where(x => x != null).Select(x => x!)
+                            .Distinct(StringComparer.OrdinalIgnoreCase).Take(20).ToList();
+                        FypOnlineCoordinator.ResetChannels();
+                    }
+                    break;
+                }
             }
         }
         catch (Exception ex) { App.Logger?.Debug("FypHost: settings-changed {Key} failed: {E}", key, ex.Message); }
+    }
+
+    // ============================= online feed (Scrolller) =============================
+    //
+    // The page asks for content ({type:'need-remote'}) whenever its remote buffer runs
+    // low; one batch (~a page from one channel) comes back as {type:'assets-append'}.
+    // Fetches run on the thread pool and the reply hops back to the UI thread — the
+    // WebView2 Post is thread-affine. Single-flight: a second need-remote while one is
+    // in the air is dropped (the page re-asks after every append until it is satisfied).
+    //
+    // BRIGHT LINE: these fetches go straight from this machine to scrolller's API/CDN.
+    // Nothing here may ever involve CC Labs servers — see planning/fyp-online/DESIGN.md.
+
+    private static int _remoteFetchInFlight;   // 0/1 via Interlocked
+
+    private static bool IsRemoteId(string? id) =>
+        id != null && id.StartsWith("scrolller/", StringComparison.Ordinal);
+
+    private static async void ServeRemoteBatch()
+    {
+        var s = App.Settings?.Current;
+        if (s == null || s.FypSource == "library" || !s.FypOnlineConsented) return;
+        if (System.Threading.Interlocked.CompareExchange(ref _remoteFetchInFlight, 1, 0) != 0) return;
+        try
+        {
+            var (entries, error) = await FypOnlineCoordinator
+                .FetchBatchAsync(System.Threading.CancellationToken.None).ConfigureAwait(false);
+
+            var win = _host?.Window;
+            if (win == null) return;   // feed closed while fetching
+            await win.Dispatcher.InvokeAsync(() =>
+            {
+                if (_host == null) return;
+                if (entries.Count > 0)
+                    _host.Post(new { type = "assets-append", assets = entries });
+                // Status goes out either way so the page can clear its loading state or
+                // show "offline" instead of an eternal spinner.
+                _host.Post(new { type = "online-status", ok = error == null, error, added = entries.Count });
+            });
+        }
+        catch (Exception ex) { App.Logger?.Warning("FypHost: remote batch failed: {E}", ex.Message); }
+        finally { System.Threading.Interlocked.Exchange(ref _remoteFetchInFlight, 0); }
     }
 
     private static JObject? LoadStats()
