@@ -177,7 +177,9 @@ namespace ConditioningControlPanel.Services
             Door("home", "nav_door_home", "🏠", "settings", "home dashboard start");
             Door("studio", "nav_door_studio", "🎛️", "presets", "studio effects rack presets");
             Door("companion", "nav_door_companion", "🤖", "companion", "companion ai avatar");
-            Door("play", "nav_door_play", "🎮", "lab", "play games lab");
+            // Phase 6: the Play door's default destination is the card wall's own key. "lab" is
+            // still a working alias but is no longer the name of anything that exists.
+            Door("play", "nav_door_play", "🎮", "play", "play games lab");
             Door("you", "nav_door_you", "👤", "discord", "you profile progress");
             Door("library", "nav_door_library", "📚", "assets", "library assets media");
             Door("settings", "nav_door_settings", "⚙️", "appsettings", "settings options preferences config");
@@ -201,7 +203,13 @@ namespace ConditioningControlPanel.Services
             Tab("bambitakeover", "tab_takeover", "💫", "bambitakeover", "takeover autonomy");
             Tab("shelistening", "tab_shelistening", "🎙️", "shelistening", "listening voice speech mic");
             Tab("awareness", "tab_awareness", "👁️", "awareness", "awareness screen watching");
-            Tab("lab", "tab_lab", "🧪", "lab", "lab experiments gaze tier 2");
+            // Phase 6: the Lab page became the Play door's card wall. The row survives (people
+            // search for "lab", "gaze", "rabbit hole") but it now names — and navigates to — the
+            // thing that actually exists. The 🧪 flask is the Tier 2 lockband badge now, not a
+            // room, so the rail's joystick is the honest glyph. Every card on the wall is listed
+            // in the aliases so the palette finds a feature by name, not just by room.
+            Tab("play", "nav_door_play", "🕹️", "play",
+                "play lab games experiments rabbit hole dtrh descent goon gaze focus bureau mantra loom showcase tier 2");
             Tab("deeper", "tab_deeper", "🌊", "deeper", "deeper files audio video");
             Tab("exclusives", "tab_exclusives", "⭐", "exclusives", "premium exclusives velvet vault showcase");
             Tab("gradedintake", "tab_gradedintake", "📝", "gradedintake", "intake quiz graded pass");

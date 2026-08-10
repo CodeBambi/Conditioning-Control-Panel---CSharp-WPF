@@ -522,7 +522,10 @@ namespace ConditioningControlPanel
             "bambitakeover" => BtnNavBambiTakeover,
             "shelistening" => BtnNavSheListening,
             "awareness" => BtnNavAwareness,
-            "lab" => BtnLab,
+            // Phase 6: one rail row, two keys. "play" is the live key; "lab" is the permanent
+            // alias that ShowTab still answers to, and it has to light the same row or a legacy
+            // caller leaves the indicator wherever it was.
+            "play" or "lab" => BtnLab,
             "deeper" => BtnDeeper,
             "exclusives" => BtnPatreonExclusives,
             "gradedintake" => BtnNavGradedIntake,

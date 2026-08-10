@@ -1,9 +1,73 @@
 using System;
+using System.Reflection;
 using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
 
 namespace ConditioningControlPanel.Tests;
+
+/// <summary>
+/// Points short-form pack URIs at the product assembly, before anything in this assembly runs.
+///
+/// <para>Most of the app's XAML writes art as <c>pack://application:,,,/Resources/…</c> with no
+/// assembly name. WPF resolves that form against <see cref="Application.ResourceAssembly"/>, which
+/// is <c>ConditioningControlPanel</c> at runtime but the TEST assembly here — so every view
+/// carrying such a URI dies in its constructor with "Cannot locate resource 'resources/…'". That
+/// is a harness artifact, and it reads exactly like a broken art path, which is one of the things
+/// the render suites exist to detect. A test that cannot tell those two apart is worse than no
+/// test.</para>
+///
+/// <para><b>Why the public setter is not used.</b> <see cref="Application.ResourceAssembly"/> is
+/// write-once and throws <see cref="InvalidOperationException"/> once pinned — and under xunit v3
+/// the test assembly IS the process entry point, so WPF has already pinned it to
+/// <c>ConditioningControlPanel.Tests</c> before any code we can write runs. Measured: even a
+/// <c>[ModuleInitializer]</c>, which runs before everything else in this assembly, arrives too
+/// late and its assignment throws. The two private caches behind the property are therefore
+/// rewritten directly — <c>Application._resourceAssembly</c> and
+/// <c>BaseUriHelper._resourceAssembly</c>, which is exactly the pair the public setter writes.
+/// It is still done from a module initializer so it lands before any BAML is loaded and before
+/// WPF's resource-manager cache has an entry for the wrong assembly.</para>
+///
+/// <para>Deliberately loud on failure: if a future WPF renames either field, the render suites
+/// must fail with <i>this</i> explanation rather than with a "Cannot locate resource" that reads
+/// like a deleted art file.</para>
+/// </summary>
+internal static class PackUriBootstrap
+{
+    /// <summary>Null when the redirect took; otherwise why it did not, for the suites to report.</summary>
+    internal static string? Failure { get; private set; }
+
+    [System.Runtime.CompilerServices.ModuleInitializer]
+    internal static void PinResourceAssembly()
+    {
+        try
+        {
+            var product = typeof(ConditioningControlPanel.App).Assembly;
+
+            // The public setter's own two writes. Order does not matter; both are plain fields.
+            var appField = typeof(Application).GetField("_resourceAssembly",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            var helper = typeof(System.Windows.Media.Brush).Assembly
+                .GetType("System.Windows.Navigation.BaseUriHelper");
+            var helperField = helper?.GetField("_resourceAssembly",
+                BindingFlags.Static | BindingFlags.NonPublic);
+
+            if (appField == null || helperField == null)
+            {
+                Failure = "WPF no longer exposes Application._resourceAssembly / "
+                        + "BaseUriHelper._resourceAssembly; short-form pack:// URIs cannot be redirected";
+                return;
+            }
+
+            appField.SetValue(null, product);
+            helperField.SetValue(null, product);
+        }
+        catch (Exception ex)
+        {
+            Failure = "could not redirect short-form pack:// URIs to the product assembly: " + ex;
+        }
+    }
+}
 
 /// <summary>
 /// The themed <see cref="Application"/> that the Settings section render suites need, and the one

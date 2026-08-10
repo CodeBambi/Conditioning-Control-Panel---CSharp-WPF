@@ -459,6 +459,12 @@ namespace ConditioningControlPanel
                 {
                     try { RefreshGradedIntakeGate(); }
                     catch (Exception ex) { App.Logger?.Debug("OnIntakePassStateChanged repaint: {E}", ex.Message); }
+                    // PHASE 6: the Play door's Graded Intake card carries the same four states, so
+                    // a pass consumed by a run finishing in another window has to repaint the card
+                    // too - otherwise the wall keeps offering a week that is already spent.
+                    // Separate try so a card failure cannot cost the page its repaint.
+                    try { RefreshPlayCards(); }
+                    catch (Exception ex) { App.Logger?.Debug("OnIntakePassStateChanged play repaint: {E}", ex.Message); }
                 }));
             }
             catch (Exception ex)

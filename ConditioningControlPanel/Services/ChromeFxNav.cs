@@ -21,14 +21,16 @@ namespace ConditioningControlPanel.Services
         /// INSERTING A KEY SHIFTS EVERY LATER INDEX, and ChromeFxNavTests asserts four of them
         /// by number. Phase 4 inserted "studio" at index 1 (it is the Studio door's first rail
         /// entry, so appending it instead would give the slide the wrong direction); the test's
-        /// InlineData rows moved with it.
+        /// InlineData rows moved with it. Phase 6 RENAMED index 8 ("lab" -> "play") in place
+        /// instead of inserting, so no index moved and the alias in <see cref="IndexOf"/> keeps
+        /// the old key scoring the same 8.
         /// </summary>
         public static readonly string[] NavOrder =
         {
             "settings",                                                        // Home
             "studio", "presets", "haptics",                                    // Studio
             "companion", "bambitakeover", "shelistening", "awareness",         // Companion
-            "lab", "deeper", "exclusives", "gradedintake", "lockdown",
+            "play", "deeper", "exclusives", "gradedintake", "lockdown",
             "blinktrainer", "remotecontrol", "availablesubjects",              // Play
             "discord", "quests", "achievements", "enhancements",
             "programs", "leaderboard",                                         // You
@@ -54,6 +56,10 @@ namespace ConditioningControlPanel.Services
             if (string.IsNullOrEmpty(tab)) return -1;
             // "progression" is a legacy alias that lands on the Dashboard.
             if (string.Equals(tab, "progression", StringComparison.OrdinalIgnoreCase)) tab = "settings";
+            // "lab" is a legacy alias that lands on the Play door's card wall (Phase 6). Without
+            // it every caller still passing "lab" would score -1 and get the fallback "rise"
+            // entrance instead of the horizontal slide its neighbours get.
+            if (string.Equals(tab, "lab", StringComparison.OrdinalIgnoreCase)) tab = "play";
             return Array.FindIndex(NavOrder, k => string.Equals(k, tab, StringComparison.OrdinalIgnoreCase));
         }
 

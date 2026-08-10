@@ -83,12 +83,33 @@ namespace ConditioningControlPanel
         /// third-party .ccpmod files on disk carry their own copies we can never edit. So a tab key
         /// that gets renamed or folded into another door MUST land here, mapping the new key back to
         /// the old one - otherwise that tab's barks simply stop firing, silently and untestably.
-        /// Empty today: no key has moved yet.
         /// </summary>
-        private static readonly Dictionary<string, string> BarkTabAliases = new()
+        /// <remarks>
+        /// Direction matters and is easy to get backwards: the KEY is the live ShowTab key, the
+        /// VALUE is the old key the rules on disk are written against. Never the other way round.
+        /// </remarks>
+        private static readonly Dictionary<string, string> BarkTabAliases = new(StringComparer.OrdinalIgnoreCase)
         {
-            // ["play"] = "lab",   // example: Phase 1 retires "lab", its barks keep answering to it
+            // Phase 6 retired the Lab page into the Play door's card wall. Every built-in mod has
+            // a `nav_lab` rule keyed `tab_eq: "lab"` (bark_rules.json, 3 variants each) and every
+            // third-party .ccpmod on disk carries its own copy we can never edit, so navigating to
+            // the new key still announces itself with the old one. ShowTab("lab") keeps working as
+            // a permanent alias and fires "lab" directly - it never round-trips through here.
+            ["play"] = "lab",
         };
+
+        /// <summary>
+        /// A retired tab key mapped onto the live key of the view that swallowed it. This is the
+        /// INVERSE of <see cref="BarkTabAliases"/> and exists for a different consumer: barks must
+        /// keep hearing the OLD key, while anything keyed to a VIEW (the ambient-FX registry, the
+        /// nav indicator, the door accordion) must be given the NEW one. Getting these two the
+        /// same way round is how a canvas ends up running forever behind a hidden tab.
+        /// <para>Deliberately NOT applied to <c>tab</c> itself inside <see cref="ShowTab"/>: the
+        /// switch below carries the aliases as real <c>case</c> labels so the alias is visible at
+        /// the destination rather than laundered at the door.</para>
+        /// </summary>
+        private static string CanonicalTabKey(string tab) =>
+            string.Equals(tab, "lab", StringComparison.OrdinalIgnoreCase) ? "play" : tab;
 
         internal void ShowTab(string tab)
         {
@@ -129,7 +150,9 @@ namespace ConditioningControlPanel
             StopExclusivesMotion();
             // Every registered AmbientFxCanvas parks with its tab (see MainWindow.AmbientFx.cs) —
             // new per-tab canvases get the stop hook without touching this method again.
-            SwitchTabFx(tab);
+            // CanonicalTabKey, not the raw key: the registry is keyed by the view, and an alias
+            // that lands on a view has to RESUME that view's canvas, not park it.
+            SwitchTabFx(CanonicalTabKey(tab));
             // A tooltip opened by a stationary cursor outlives the tab it belongs to, because
             // nothing ever moved the mouse off its owner. See MainWindow.ChromeFx.cs.
             CloseStaleToolTip();
@@ -147,7 +170,9 @@ namespace ConditioningControlPanel
             DiscordTab.Visibility = Visibility.Collapsed;
             EnhancementsTab.Visibility = Visibility.Collapsed;
             if (DeeperTab != null) DeeperTab.Visibility = Visibility.Collapsed;
-            LabTab.Visibility = Visibility.Collapsed;
+            // LabTab is gone (Phase 6). PlayTab is the surface both "play" and the permanent
+            // "lab" alias land on.
+            if (PlayTab != null) PlayTab.Visibility = Visibility.Collapsed;
             AwarenessTab.Visibility = Visibility.Collapsed;
             if (RemoteControlTab != null) RemoteControlTab.Visibility = Visibility.Collapsed;
             if (AvailableSubjectsTab != null) AvailableSubjectsTab.Visibility = Visibility.Collapsed;
@@ -278,9 +303,19 @@ namespace ConditioningControlPanel
                     InitializePhrasePresets();
                     break;
 
+                // Phase 6: the Play door's card wall. "lab" is a PERMANENT alias onto it, not a
+                // redirect that skips work - the two labels share one body, so an old caller
+                // (tutorial step, notification, Ctrl+K palette, third-party deep link) lands on
+                // exactly the same surface with exactly the same refreshes.
+                //
+                // The bark keys stay honest without any extra work: NotifyTabNavigated fires at
+                // the TOP of ShowTab with the incoming key, so arriving here as "lab" announces
+                // "lab" directly, and arriving as "play" announces "lab" through
+                // BarkTabAliases["play"]. One announcement either way; never two.
                 case "lab":
-                    LabTab.Visibility = Visibility.Visible;
-                    AnimateTabIn(LabTab);
+                case "play":
+                    PlayTab.Visibility = Visibility.Visible;
+                    AnimateTabIn(PlayTab);
                     // Phase 5: SyncLabEffectPermsUI() used to be called here because the AI
                     // effect-permission grid was on this tab while its only sync ran on the
                     // Companion tab (#512). The grid is Z7b of the Companion room now, and
@@ -288,9 +323,16 @@ namespace ConditioningControlPanel
                     // so the sync and the surface finally share a page. Do not re-add it here.
                     // Phase 2: the webcam engine bar (and the seeding it needed) moved to
                     // Settings → Devices, which re-enumerates on its own show via
-                    // RefreshDeviceSettingsLists. The Lab keeps a read-only status chip, painted
-                    // by UpdateWebcamStatusChips off the tracker-state event.
+                    // RefreshDeviceSettingsLists. This wall keeps a read-only status chip, painted
+                    // by UpdateWebcamStatusChips off the tracker-state event - and that call is
+                    // also what reaches EnsurePr4aFx on this door, so it is not optional.
                     UpdateWebcamStatusChips(App.Webcam?.IsRunning == true);
+                    // Everything live on the wall: tier lockbands, the Graded Intake's four pass
+                    // states, the Goon perk line, the Deeper master switch, the Bureau account chip
+                    // and the once-per-session folder stamp (MainWindow.PlayTab.cs). Also called
+                    // from UpdatePatreonUI and from the intake-pass change hook, so the wall is
+                    // right whether the user arrived or the entitlement did.
+                    RefreshPlayCards();
                     break;
 
                 // Note: "patreon" case is handled at the top of ShowTab as a
@@ -466,7 +508,11 @@ namespace ConditioningControlPanel
             ("home",      "settings",  new[] { "settings", "progression" }),
             ("studio",    "studio",    new[] { "studio", "presets", "haptics" }),
             ("companion", "companion", new[] { "companion", "bambitakeover", "shelistening", "awareness" }),
-            ("play",      "lab",       new[] { "lab", "deeper", "exclusives", "gradedintake", "lockdown",
+            // Phase 6: "play" replaced "lab" in place as this door's first entry and default
+            // destination. "lab" is deliberately NOT listed - it is a legacy alias, resolved by
+            // NavDoorForTab below so an old ShowTab("lab") still opens this door, and listing it
+            // as a real entry would claim the rail has a row for it, which it does not.
+            ("play",      "play",      new[] { "play", "deeper", "exclusives", "gradedintake", "lockdown",
                                                "blinktrainer", "remotecontrol", "availablesubjects" }),
             ("you",       "discord",   new[] { "discord", "quests", "achievements", "enhancements",
                                                "programs", "leaderboard" }),
@@ -501,6 +547,11 @@ namespace ConditioningControlPanel
         private static string? NavDoorForTab(string? tabKey)
         {
             if (string.IsNullOrEmpty(tabKey)) return null;
+            // Legacy aliases, same idiom as ChromeFxNav.IndexOf: a key that no longer has a rail
+            // row of its own still has to resolve to the door that swallowed it, or code-driven
+            // navigation (tutorial spotlights, notifications, the Ctrl+K palette) lands with the
+            // active indicator inside a door nobody opened.
+            tabKey = CanonicalTabKey(tabKey!);
             foreach (var door in NavDoorMap)
                 foreach (var t in door.Tabs)
                     if (string.Equals(t, tabKey, StringComparison.OrdinalIgnoreCase))
@@ -649,6 +700,15 @@ namespace ConditioningControlPanel
         private void BtnNavStudio_Click(object sender, RoutedEventArgs e) => ShowTab("studio");
 
         private void BtnNavHaptics_Click(object sender, RoutedEventArgs e) => ShowTab("haptics");
+
+        /// <summary>
+        /// The Play door's first rail entry (the button still x:Named BtnLab — that name is API for
+        /// NavButtonForTab, the NavButtons list and TutorialService.NavEntryDoorKeys, all of which
+        /// are keyed by the x:Names the nav has always used). Phase 6: it navigates to the card
+        /// wall's own key. The old <c>BtnLab_Click</c> — a bare <c>ShowTab("lab")</c> — was deleted
+        /// with the Lab view; the alias it relied on lives on in the <c>case "lab"</c> label.
+        /// </summary>
+        private void BtnNavPlay_Click(object sender, RoutedEventArgs e) => ShowTab("play");
 
         private void BtnNavBambiTakeover_Click(object sender, RoutedEventArgs e) => ShowTab("bambitakeover");
 

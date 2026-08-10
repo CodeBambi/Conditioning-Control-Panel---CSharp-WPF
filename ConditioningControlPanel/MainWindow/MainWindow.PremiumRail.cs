@@ -491,10 +491,14 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Debug("RefreshRailLockbands: {E}", ex.Message); }
         }
 
-        private static void SetLockband(FrameworkElement? band, in TierVerdict verdict)
+        // internal rather than private since Phase 6: the Play door's wall paints the same bands
+        // from the same TierVerdicts (MainWindow.PlayTab.cs). Widened rather than duplicated on
+        // purpose - two copies of "locked means Visible" is how a band ends up inverted on one
+        // surface and nobody notices for a release.
+        internal static void SetLockband(FrameworkElement? band, in TierVerdict verdict)
             => SetLockbandVisible(band, !verdict.Allowed);
 
-        private static void SetLockbandVisible(FrameworkElement? band, bool locked)
+        internal static void SetLockbandVisible(FrameworkElement? band, bool locked)
         {
             if (band == null) return;
             band.Visibility = locked ? Visibility.Visible : Visibility.Collapsed;

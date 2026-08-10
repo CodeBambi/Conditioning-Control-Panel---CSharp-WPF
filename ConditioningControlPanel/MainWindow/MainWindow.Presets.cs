@@ -79,8 +79,11 @@ namespace ConditioningControlPanel
             SetHelpContent(GradedIntakeTab.HelpBtnQuiz, "Quiz");
             // HelpBtnWebcamGames removed: the bundled Webcam Games card was split into
             // separate Gaze Minigame + Focus Gaze cards (each with its own ? button).
-            SetHelpContent(LabTab.HelpBtnGazeMinigame, "GazeMinigame");
-            SetHelpContent(LabTab.HelpBtnFocusGaze, "FocusGaze");
+            // PHASE 6: both ? buttons moved with their cards to the Play door. Same registry
+            // entries ("GazeMinigame" / "FocusGaze"), same popovers - only the accessor path
+            // changed. Attaching them to the Lab copies would reach a view that is never shown.
+            SetHelpContent(PlayTab.HelpBtnPlayGazeMinigame, "GazeMinigame");
+            SetHelpContent(PlayTab.HelpBtnPlayFocusGaze, "FocusGaze");
             // PHASE 5 (G3): these two ? buttons moved with their editors onto the Awareness
             // tab's custom-trigger drawer. The PatreonTab twins still exist (Phase 8 owns the
             // demolition) but are permanently Collapsed, so attaching the popover there
@@ -965,7 +968,10 @@ namespace ConditioningControlPanel
         /// selects the same row itself (<c>TabNavigation.cs:376-383</c>), so the landing is
         /// identical; only the announcement differs.</para>
         /// </summary>
-        private void OpenStudioModule(string rackKey)
+        // internal since Phase 6: the Play door's Loom card routes through here so the Spiral
+        // module keeps exactly ONE editor entry. A Play card that called LoomHostService.Launch()
+        // would be a second launcher for one feature.
+        internal void OpenStudioModule(string rackKey)
         {
             if (string.Equals(rackKey, "haptics", StringComparison.OrdinalIgnoreCase))
             {

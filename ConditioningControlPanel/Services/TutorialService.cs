@@ -174,7 +174,11 @@ namespace ConditioningControlPanel.Services
             ["BtnLeaderboard"] = "leaderboard",
             ["BtnCompanion"] = "companion",
             ["BtnDiscordTab"] = "discord",
-            ["BtnLab"] = "lab",
+            // The x:Name is API and never changes; the VALUE is the live ShowTab key, so it moved
+            // to "play" when Phase 6 retired the Lab page into the Play door's card wall.
+            // ("lab" would still resolve — ExpandDoorForTab canonicalises the alias — but a door
+            // map that names a deleted view is how the next reader learns the wrong thing.)
+            ["BtnLab"] = "play",
             ["BtnPatreonExclusives"] = "exclusives"
         };
 

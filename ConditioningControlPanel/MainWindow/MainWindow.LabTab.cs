@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -27,7 +27,20 @@ using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel
 {
-    // Lab tab: webcam diagnostics, blink trainer glue, and device UI.
+    // Webcam diagnostics, gaze/focus-gaze glue, blink trainer glue, and device UI.
+    //
+    // The FILENAME is historical and stays: the Lab tab it was named after was retired in Phase 6
+    // of the UX restructure, but every handler in here is live and is now called from three other
+    // surfaces — the Play door's card wall (gaze, focus gaze, the webcam status chip, the blink
+    // trainer entry), Settings → Devices (the webcam engine bar), and the Deeper/Blink Trainer
+    // tabs (the other two status chips UpdateWebcamStatusChips paints). Renaming the file would
+    // churn every reference in this repo's comments for no behaviour change; the handlers are what
+    // matter and they never moved.
+    //
+    // TOMBSTONE (UX restructure, Phase 6): BtnLab_Click - a bare ShowTab("lab") behind the old
+    // two-row tab strip - was deleted here. The rail entry is BtnNavPlay_Click
+    // (MainWindow.TabNavigation.cs) now; the button kept its BtnLab x:Name because that name is
+    // API, and ShowTab("lab") itself still works forever as a case alias onto the Play wall.
     //
     // TOMBSTONE (UX restructure, Phase 5): the "AI Companion Effects & Memory" card left this tab
     // for the Companion door (Views\Controls\Companion\AiPermissionsGrid, mounted as Z7b of
@@ -39,11 +52,6 @@ namespace ConditioningControlPanel
     public partial class MainWindow
     {
         #region Lab Tab
-
-        private void BtnLab_Click(object sender, RoutedEventArgs e)
-        {
-            ShowTab("lab");
-        }
 
         // ─── [DEBUG] Webcam smoke test — TEMPORARY, remove with the XAML card ───
         private bool _webcamDebugSubscribed;
@@ -305,10 +313,14 @@ namespace ConditioningControlPanel
             if (AppSettingsTab.LabTrackerDot != null) AppSettingsTab.LabTrackerDot.Fill = live ? (green ?? AppSettingsTab.LabTrackerDot.Fill) : (muted ?? AppSettingsTab.LabTrackerDot.Fill);
             if (AppSettingsTab.LabTrackerPill != null) AppSettingsTab.LabTrackerPill.BorderBrush = live ? (green ?? AppSettingsTab.LabTrackerPill.BorderBrush) : (panelAccent ?? AppSettingsTab.LabTrackerPill.BorderBrush);
 
-            if (LabTab.LabGazeCard != null) LabTab.LabGazeCard.Opacity = live ? 1.0 : 0.62;
-            if (LabTab.LabFocusCard != null) LabTab.LabFocusCard.Opacity = live ? 1.0 : 0.62;
-            if (LabTab.LabGazeNeedsTracker != null) LabTab.LabGazeNeedsTracker.Visibility = live ? Visibility.Collapsed : Visibility.Visible;
-            if (LabTab.LabFocusNeedsTracker != null) LabTab.LabFocusNeedsTracker.Visibility = live ? Visibility.Collapsed : Visibility.Visible;
+            // PHASE 6: the two Eyes cards live on the Play door now. Tracker dimming and the tier
+            // lockband are independent states that stack - an unentitled account with the camera
+            // off sees both - so this stays exactly what it was and RefreshPlayCards never touches
+            // Opacity.
+            if (PlayTab?.PlayGazeCard != null) PlayTab.PlayGazeCard.Opacity = live ? 1.0 : 0.62;
+            if (PlayTab?.PlayFocusCard != null) PlayTab.PlayFocusCard.Opacity = live ? 1.0 : 0.62;
+            if (PlayTab?.PlayGazeNeedsTracker != null) PlayTab.PlayGazeNeedsTracker.Visibility = live ? Visibility.Collapsed : Visibility.Visible;
+            if (PlayTab?.PlayFocusNeedsTracker != null) PlayTab.PlayFocusNeedsTracker.Visibility = live ? Visibility.Collapsed : Visibility.Visible;
 
             UpdateWebcamStatusChips(live, green, muted);
         }
@@ -334,7 +346,10 @@ namespace ConditioningControlPanel
                     if (label != null) label.Text = text;
                 }
 
-                Paint(LabTab?.WebcamStatusChipLabDot, LabTab?.TxtWebcamStatusChipLab);
+                // PHASE 6: the Lab's chip became the Play door's. Same three named parts, same one
+                // method painting three surfaces - rename any part here and the Blink Trainer and
+                // Deeper chips below it go with it.
+                Paint(PlayTab?.WebcamStatusChipPlayDot, PlayTab?.TxtWebcamStatusChipPlay);
                 Paint(BlinkTrainerTab?.WebcamStatusChipBlinkTrainerDot, BlinkTrainerTab?.TxtWebcamStatusChipBlinkTrainer);
                 Paint(DeeperTab?.WebcamStatusChipDeeperDot, DeeperTab?.TxtWebcamStatusChipDeeper);
             }
@@ -734,24 +749,47 @@ namespace ConditioningControlPanel
             };
         }
 
+        // PHASE 6: every LabTab.* accessor below became PlayTab.*. There is exactly ONE Focus Gaze
+        // switch in the app (Play door, Eyes zone) and this is the code that reads and writes it.
         private void SyncFocusGazeToggle(bool active)
         {
-            if (LabTab.ChkFocusGaze == null) return;
-            if (LabTab.ChkFocusGaze.IsChecked == active) return;
+            if (PlayTab?.ChkPlayFocusGaze == null) return;
+            if (PlayTab.ChkPlayFocusGaze.IsChecked == active) return;
             _focusGazeSyncing = true;
-            try { LabTab.ChkFocusGaze.IsChecked = active; }
+            try { PlayTab.ChkPlayFocusGaze.IsChecked = active; }
             finally { _focusGazeSyncing = false; }
-            if (LabTab.TxtFocusGazeStatus != null && !active) LabTab.TxtFocusGazeStatus.Text = "";
+            if (PlayTab.TxtPlayFocusGazeStatus != null && !active) PlayTab.TxtPlayFocusGazeStatus.Text = "";
         }
 
         internal async void ChkFocusGaze_Changed(object sender, RoutedEventArgs e)
         {
             if (_focusGazeSyncing) return;
             if (App.GazeFocus == null) return;
+            if (PlayTab?.ChkPlayFocusGaze == null) return;
 
-            var on = LabTab.ChkFocusGaze.IsChecked == true;
+            var on = PlayTab.ChkPlayFocusGaze.IsChecked == true;
             if (on)
             {
+                // HARD TIER-2 GATE, and it belongs on the ON branch only.
+                //
+                // Until Phase 6 this toggle's ONLY barrier was geography: the LabSmokescreen draped
+                // over the whole Lab tab. Phase 0 hardened "DTRH + Gaze", but "Gaze" resolved to the
+                // Gaze MINIGAME (BtnGazeMinigame_Click) and this sibling was missed - so the moment
+                // the card left the smokescreen for a door with no overlay, Focus Gaze would have
+                // become free. That is the exact T-1 failure Phase 0 existed to close.
+                //
+                // Revert first, then tell: the same order ChkRemoteControlEnabled_Changed uses, so
+                // the toggle never sits visibly ON behind a refusal. Turning it OFF is never gated
+                // (same rule the mic disarm and the Blink Trainer stop follow) - releasing a webcam
+                // consumer is not a premium act.
+                var verdict = TierGate.RequiresLab("Focus Gaze");
+                if (!verdict.Allowed)
+                {
+                    SyncFocusGazeToggle(false);
+                    TierGate.ShowDenied(verdict);
+                    return;
+                }
+
                 if (!WebcamTrackingService.IsConsentCurrent())
                 {
                     var dlg = new WebcamConsentDialog { Owner = this };
@@ -759,7 +797,7 @@ namespace ConditioningControlPanel
                     if (ok != true || !dlg.ConsentGiven)
                     {
                         SyncFocusGazeToggle(false);
-                        if (LabTab.TxtFocusGazeStatus != null) LabTab.TxtFocusGazeStatus.Text = Localization.Loc.Get("label_focus_gaze_consent_required");
+                        if (PlayTab.TxtPlayFocusGazeStatus != null) PlayTab.TxtPlayFocusGazeStatus.Text = Localization.Loc.Get("label_focus_gaze_consent_required");
                         return;
                     }
                 }
@@ -769,13 +807,13 @@ namespace ConditioningControlPanel
                 // synchronously — finds it already running and just subscribes.
                 if (App.Webcam != null && !App.Webcam.IsRunning)
                 {
-                    if (LabTab.TxtFocusGazeStatus != null) LabTab.TxtFocusGazeStatus.Text = "Starting webcam…";
+                    if (PlayTab.TxtPlayFocusGazeStatus != null) PlayTab.TxtPlayFocusGazeStatus.Text = "Starting webcam…";
                     var started = await Task.Run(() => App.Webcam.Start());
                     if (!started)
                     {
                         SyncFocusGazeToggle(false);
-                        if (LabTab.TxtFocusGazeStatus != null)
-                            LabTab.TxtFocusGazeStatus.Text = Localization.Loc.GetF("label_focus_gaze_webcam_failed_format", App.Webcam?.State);
+                        if (PlayTab.TxtPlayFocusGazeStatus != null)
+                            PlayTab.TxtPlayFocusGazeStatus.Text = Localization.Loc.GetF("label_focus_gaze_webcam_failed_format", App.Webcam?.State);
                         return;
                     }
                 }
@@ -786,7 +824,7 @@ namespace ConditioningControlPanel
                 App.GazeFocus.MasterEnabled = true;
                 if (App.GazeFocus.IsActive)
                 {
-                    if (LabTab.TxtFocusGazeStatus != null) LabTab.TxtFocusGazeStatus.Text = Localization.Loc.Get("label_focus_gaze_active");
+                    if (PlayTab.TxtPlayFocusGazeStatus != null) PlayTab.TxtPlayFocusGazeStatus.Text = Localization.Loc.Get("label_focus_gaze_active");
                 }
                 else
                 {
@@ -794,12 +832,12 @@ namespace ConditioningControlPanel
                     // master so it doesn't silently hold the engine wanted.
                     App.GazeFocus.MasterEnabled = false;
                     SyncFocusGazeToggle(false);
-                    if (LabTab.TxtFocusGazeStatus != null)
+                    if (PlayTab.TxtPlayFocusGazeStatus != null)
                     {
                         if (App.Webcam?.Calibration == null)
-                            LabTab.TxtFocusGazeStatus.Text = Localization.Loc.Get("label_focus_gaze_calibrate_first");
+                            PlayTab.TxtPlayFocusGazeStatus.Text = Localization.Loc.Get("label_focus_gaze_calibrate_first");
                         else
-                            LabTab.TxtFocusGazeStatus.Text = Localization.Loc.GetF("label_focus_gaze_webcam_failed_format", App.Webcam?.State);
+                            PlayTab.TxtPlayFocusGazeStatus.Text = Localization.Loc.GetF("label_focus_gaze_webcam_failed_format", App.Webcam?.State);
                     }
                 }
             }
@@ -809,7 +847,7 @@ namespace ConditioningControlPanel
                 // per-feature gaze toggle (Flash pop / linger, Video click) is
                 // still on — those are self-sufficient now.
                 App.GazeFocus.MasterEnabled = false;
-                if (LabTab.TxtFocusGazeStatus != null) LabTab.TxtFocusGazeStatus.Text = "";
+                if (PlayTab.TxtPlayFocusGazeStatus != null) PlayTab.TxtPlayFocusGazeStatus.Text = "";
             }
         }
 

@@ -777,19 +777,26 @@ namespace ConditioningControlPanel
                 if (SettingsTab.CardBouncingText != null) SettingsTab.CardBouncingText.IsLocked = false;
                 if (SettingsTab.CardMindWipe != null) SettingsTab.CardMindWipe.IsLocked = false;
 
-                // Lab Tab: Requires Patreon T2 / whitelist. HasLabAccess is the single truth and
-                // already covers every entitlement source (live tier, whitelist, SubscribeStar T2,
-                // and the 14-day grace over a server-linked T2 login), which matters twice over:
-                // this gate is destructive below (force-clears AllowAiToControlEffects and SAVES),
-                // so a stale-negative wipes a legit user's setting — and the bare
-                // `Settings.PatreonTier >= 2` that used to be OR'd in here never expired, so the
-                // smokescreen and the launch handlers could disagree about the same account.
+                // Tier 2 entitlement. HasLabAccess is the single truth and already covers every
+                // entitlement source (live tier, whitelist, SubscribeStar T2, and the 14-day grace
+                // over a server-linked T2 login). It matters twice over here, because the one thing
+                // this flag still drives is DESTRUCTIVE (it force-clears AllowAiToControlEffects and
+                // SAVES), so a stale-negative would wipe a legit user's setting.
+                //
+                // TOMBSTONE (UX restructure, Phase 6): this used to also raise LabSmokescreen, the
+                // opaque overlay draped over the whole Lab tab. That overlay WAS the Tier 2 gate for
+                // DTRH, the Gaze minigame and Focus Gaze — geography standing in for a check, which
+                // is why the --dtrh/--goon/--fyp CLI switches walked straight past it. Phase 0 put
+                // real TierGate checks in the launch handlers themselves and Phase 6 gave the cards
+                // teaser lockbands (decoration; the handler still does the refusing), so the
+                // smokescreen was deleted with the Lab view. Do not reintroduce a whole-page
+                // curtain: the Play door mixes Free, T1 and T2 cards and there is nothing uniform
+                // left to drape.
                 var labUnlocked = App.Patreon?.HasLabAccess == true;
-                if (LabTab.LabSmokescreen != null) LabTab.LabSmokescreen.Visibility = labUnlocked ? Visibility.Collapsed : Visibility.Visible;
 
                 // AI effect control is Tier 2 wherever it is drawn. Since Phase 5 of the UX
-                // restructure the switch lives on the COMPANION door (Z7b, AiPermissionsGrid), not
-                // behind the Lab smokescreen — so this block is now only half the story:
+                // restructure the switch lives on the COMPANION door (Z7b, AiPermissionsGrid) — so
+                // this block is now only half the story:
                 //
                 //   * the REPAIR is here, and stays destructive on purpose: a setting must not
                 //     outlive the entitlement that allowed it, so a lapsed T2 has

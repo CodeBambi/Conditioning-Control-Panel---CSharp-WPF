@@ -479,7 +479,10 @@ namespace ConditioningControlPanel
 
         private bool _availableSubjectsBound;
 
-        private void BtnAvailableSubjects_Click(object sender, RoutedEventArgs e)
+        // internal since Phase 6: the Play door's Available Subjects card forwards to this exact
+        // handler rather than calling ShowTab itself, so the polling lifecycle keeps exactly one
+        // caller shape (start lives in ShowTab's own case, never on a card).
+        internal void BtnAvailableSubjects_Click(object sender, RoutedEventArgs e)
         {
             ShowTab("availablesubjects");
         }

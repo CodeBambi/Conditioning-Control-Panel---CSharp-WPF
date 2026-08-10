@@ -32,7 +32,11 @@ namespace ConditioningControlPanel
     {
         #region Deeper Tab
 
-        private void BtnDeeper_Click(object sender, RoutedEventArgs e)
+        // internal since Phase 6: the Play door's Deeper card forwards here rather than calling
+        // ShowTab("deeper"), because the first-visit pulse stop, the HasSeenDeeperTab save, the
+        // welcome-card refresh and the lazy hub init all live in this method. A card that only
+        // navigated would leave the rail entry breathing forever.
+        internal void BtnDeeper_Click(object sender, RoutedEventArgs e)
         {
             ShowTab("deeper");
             if (App.Settings?.Current is { } s && !s.HasSeenDeeperTab)

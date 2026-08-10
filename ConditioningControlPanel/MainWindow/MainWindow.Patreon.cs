@@ -155,6 +155,10 @@ namespace ConditioningControlPanel
             RefreshPremiumGate(LockdownTab.LockdownGate);
             if (SheListeningTab != null) RefreshPremiumGate(SheListeningTab.SheListeningGate);
             if (GradedIntakeTab != null) RefreshGradedIntakeGate();
+            // PHASE 6: the Play door's wall is per-card lockbands, not one overlay, so entitlement
+            // arriving (or lapsing) has to repaint it the same way it repaints every gate above.
+            // This is also the path that covers the free-user logout, where no TierChanged fires.
+            RefreshPlayCards();
 
             // Weekly intake pass. It is a FREE-TIER amenity - patrons have the feature outright and
             // must never see pass UI - so every surface that paints off IntakePassService has to be

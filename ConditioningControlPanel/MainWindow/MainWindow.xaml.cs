@@ -1692,8 +1692,11 @@ namespace ConditioningControlPanel
                     }
                 }
 
-                // Lab hero headers (mod-sensitive): drone-mode ships green versions under
+                // "Lab" hero headers (mod-sensitive): drone-mode ships green versions under
                 // resources/features/lab_*_hero.png; the embedded pink ones are the fallback.
+                // Only two rows left - the Lab tab's own three moved to playHeroMap below with the
+                // cards they paint (Phase 6). The NAME is historical, like the filenames: the art
+                // path is the mod compatibility surface and is never renamed to match the room.
                 var labHeroMap = new (string resourcePath, ImageBrush? brush)[]
                 {
                     ("features/lab_quiz_hero.png", GradedIntakeTab.GradedIntakeHeroBrush),
@@ -1703,14 +1706,42 @@ namespace ConditioningControlPanel
                     // dropped row does not fail the build, it just silently stops repainting on a
                     // mod switch.
                     ("features/lab_aimemory_hero.png", CompanionTab.LabAiMemoryHeroBrush),
-                    ("features/lab_gaze_hero.png", LabTab.LabGazeHeroBrush),
-                    ("features/lab_focusgaze_hero.png", LabTab.LabFocusHeroBrush),
-                    ("features/goon_game.png", LabTab.LabGoonHeroBrush),
                 };
                 foreach (var (path, brush) in labHeroMap)
                 {
                     if (brush == null) continue;
                     var image = ModResourceResolver.ResolveImage(path);
+                    if (image != null)
+                        brush.ImageSource = image;
+                }
+
+                // Play door card heroes (UX restructure, Phase 6). The three that came off the Lab
+                // tab keep their EXACT resource paths - features/lab_gaze_hero.png,
+                // features/lab_focusgaze_hero.png, features/goon_game.png - because the path is the
+                // mod compatibility surface and is never renamed to match the room it now hangs in
+                // (same reason lab_aimemory_hero.png still says "lab" on the Companion door). The
+                // four joining them are the same files their other surfaces already use.
+                //
+                // Unlike labHeroMap above, this block goes through LoadModImageDecoded: these are
+                // 132-138px card headers, and ResolveImage decodes at full resolution, which is how
+                // the rail's neon PNGs used to cost a few MB apiece for a thumbnail. The caps mirror
+                // railArtMap's, and the brush's ImageSource is mutated IN PLACE - the cards bind the
+                // brush itself, so replacing the brush would repaint nothing.
+                var playHeroMap = new (string resourcePath, ImageBrush? brush, int decodeWidth)[]
+                {
+                    ("features/lab_gaze_hero.png",      PlayTab?.PlayGazeHeroBrush,     512),
+                    ("features/lab_focusgaze_hero.png", PlayTab?.PlayFocusHeroBrush,    512),
+                    ("features/goon_game.png",          PlayTab?.PlayGoonHeroBrush,     512),
+                    ("features/lab_quiz_hero.png",      PlayTab?.PlayIntakeHeroBrush,   512),
+                    ("features/blink_trainer.png",      PlayTab?.PlayBlinkHeroBrush,    512),
+                    ("features/remote_control.png",     PlayTab?.PlayRemoteHeroBrush,   768),
+                    ("features/fyp.png",                PlayTab?.PlayFypHeroBrush,      512),
+                    ("lockdown_icon.png",               PlayTab?.PlayLockdownHeroBrush, 1024),
+                };
+                foreach (var (path, brush, decodeWidth) in playHeroMap)
+                {
+                    if (brush == null || brush.IsFrozen) continue;
+                    var image = LoadModImageDecoded(path, decodeWidth);
                     if (image != null)
                         brush.ImageSource = image;
                 }

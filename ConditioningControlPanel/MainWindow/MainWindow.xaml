@@ -408,7 +408,7 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- ===== PLAY (default: lab) ===== -->
+                        <!-- ===== PLAY (default: play) ===== -->
                         <Button x:Name="DoorPlay" Tag="play" Style="{StaticResource NavDoorButton}"
                                 Click="NavDoor_Click" ToolTip="{loc:Str nav_door_play}">
                             <StackPanel Orientation="Horizontal">
@@ -419,12 +419,20 @@
                         </Button>
                         <Border x:Name="DoorPanelPlay" ClipToBounds="True" Height="0" IsHitTestVisible="False">
                             <StackPanel x:Name="DoorEntriesPlay">
-                                <Button x:Name="BtnLab" Tag="Lab" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnLab_Click" ToolTip="{loc:Str tooltip_lab}">
+                                <!-- Phase 6: this row is the Play card wall now (ShowTab("play")),
+                                     the Play door's first entry and therefore its default
+                                     destination. The x:Name STAYS BtnLab: it is API for
+                                     NavButtonForTab, MainWindow.ChromeFx's NavButtons list and
+                                     TutorialService.NavEntryDoorKeys, which is keyed by the
+                                     x:Names the nav has always used. The old "Lab" label and the
+                                     🧪 flask went with the page - the flask is the Tier 2 badge on
+                                     the wall's lockbands now, and nothing else. -->
+                                <Button x:Name="BtnLab" Tag="Play" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavPlay_Click" ToolTip="{loc:Str nav_door_play}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='🧪', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str tab_lab}" VerticalAlignment="Center"/>
+                                               Source="{Binding Source='🕹️', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str nav_door_play}" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnDeeper" Tag="Deeper" Style="{StaticResource NavEntryButtonDeeper}"
@@ -1324,8 +1332,20 @@
         <!-- Profile Tab -->
         <views:DiscordTabView x:Name="DiscordTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
-        <!-- Lab Tab -->
-        <views:LabTabView x:Name="LabTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+        <!-- Lab Tab — RETIRED in Phase 6 of the UX restructure; LabTabView.xaml(.cs) deleted.
+             Its cards live on the Play wall below and "lab" is a permanent ShowTab alias onto it,
+             so nothing that ever asked for this view lost its destination. -->
+
+        <!-- Play Tab ("play") — the Play door's card wall, added in Phase 6 of the UX restructure.
+             A scrollable wall of named slots (DTRH hero, Goon, Gaze, Focus Gaze, Bureau, Mantra,
+             Deeper, For You, Blink Trainer, Graded Intake, Lockdown, Remote Control, Available
+             Subjects, Loom, Showcase). Cards are shims onto the handlers that always owned them,
+             so an entitled click runs exactly the code the old Lab button ran; the gold/violet
+             lockbands are decoration and TierGate does the refusing.
+             ShowTab("lab") is a permanent alias onto this view — the key is API (54 bark rules
+             per mod match on it) and BarkTabAliases["play"]="lab" keeps those rules firing.
+             Owns this door's single ambient loop, RabbitHoleFx, registered as "play". -->
+        <views:PlayTabView x:Name="PlayTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
         <!-- Leaderboard Tab -->
