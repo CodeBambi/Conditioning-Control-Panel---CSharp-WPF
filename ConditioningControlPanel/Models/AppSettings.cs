@@ -2999,6 +2999,51 @@ namespace ConditioningControlPanel.Models
             get => _fypEyeGaze;
             set { _fypEyeGaze = value; OnPropertyChanged(); }
         }
+
+        private string _fypSource = "library";
+        /// <summary>Where feed content comes from: "library" (local assets only), "online"
+        /// (Scrolller streaming only) or "mixed" (both, blended by FypOnlineRatio). The online
+        /// path fetches straight from the user's device — see planning/fyp-online/DESIGN.md.</summary>
+        public string FypSource
+        {
+            get => _fypSource;
+            set { _fypSource = value is "library" or "online" or "mixed" ? value : "library"; OnPropertyChanged(); }
+        }
+
+        private int _fypOnlineRatio = 30;
+        /// <summary>In "mixed" mode, the share of feed picks that come from the online pool (%).</summary>
+        public int FypOnlineRatio
+        {
+            get => _fypOnlineRatio;
+            set { _fypOnlineRatio = Math.Clamp(value, 5, 95); OnPropertyChanged(); }
+        }
+
+        private List<string> _fypOnlineNiches = new() { "hypno" };
+        /// <summary>Selected online niche ids (see FypOnlineCoordinator.Catalog).</summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> FypOnlineNiches
+        {
+            get => _fypOnlineNiches;
+            set { _fypOnlineNiches = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        private List<string> _fypOnlineCustomSubs = new();
+        /// <summary>User-added subreddit names for the online feed (bare names, no "r/").</summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> FypOnlineCustomSubs
+        {
+            get => _fypOnlineCustomSubs;
+            set { _fypOnlineCustomSubs = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        private bool _fypOnlineConsented = false;
+        /// <summary>The one-time online-content consent card was accepted. Until then the
+        /// source setting cannot leave "library".</summary>
+        public bool FypOnlineConsented
+        {
+            get => _fypOnlineConsented;
+            set { _fypOnlineConsented = value; OnPropertyChanged(); }
+        }
         #endregion
 
         #region Lock Card (Unlocks Lv.35)

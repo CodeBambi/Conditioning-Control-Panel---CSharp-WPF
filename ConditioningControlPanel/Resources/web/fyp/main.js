@@ -32,7 +32,7 @@ function post(msg) {
 
 // ---------- state ----------
 
-let assets = [];
+let assets = [];            // local library manifest (init payload)
 let settings = {
   layout: 'duo',
   includeGifs: true,
@@ -44,7 +44,20 @@ let settings = {
   windowOpacity: 1,
   eyeControl: false,
   eyeGaze: false,
+  source: 'library',        // 'library' | 'mixed' | 'online'
+  onlineRatio: 30,          // mixed mode: % of picks that come from the online pool
+  onlineConsented: false,   // one-time online-content consent accepted
 };
+// ---- online source state (Scrolller via the host) ----
+let remoteAssets = [];      // appended online entries, session-scoped
+let onlineCatalog = [];     // [{id,label,subs,selected}] from init
+let customSubs = [];        // user-added subreddit names
+let onlineOk = true;        // last online-status verdict
+let remoteReqInFlight = false;
+let lastRemoteReqAt = 0;
+let remoteDryUntil = 0;     // backoff after an ok-but-empty batch (channels drained)
+const seenRemote = new Set();  // remote asset ids that already played (buffer freshness)
+let pendingSource = null;   // source waiting on the consent card
 let feed = null;
 const pages = new Map();      // compKey -> page object
 const audioFocus = new Map(); // compKey -> tileIndex
@@ -71,6 +84,75 @@ const aspect = () => (viewport.clientWidth || 1) / pageH();
 function setting(key, value) {
   settings[key] = value;
   post({ type: 'settings-changed', key, value });
+}
+
+// ---------- online source plumbing ----------
+//
+// The host fetches (straight from the user's machine to Scrolller — never through CC
+// Labs servers); this side only manages the buffer: ask when low, append what arrives,
+// prune when the niche selection changes. Remote ids look like
+// "scrolller/<subreddit>/<postId>" — the middle segment is the channel.
+
+const REMOTE_LOWWATER = 60;         // ask for more when fewer unseen than this
+const REMOTE_CAP = 1500;            // stop growing the session pool past this
+const REMOTE_REQ_TIMEOUT_MS = 20000; // a request with no reply may be retried after this
+const REMOTE_DRY_BACKOFF_MS = 30000; // all channels came back empty: breathe
+
+const sourceUsesRemote = () => settings.source !== 'library';
+const isRemoteId = (id) => typeof id === 'string' && id.startsWith('scrolller/');
+
+function remoteShare() {
+  if (settings.source === 'online') return 1;
+  if (settings.source === 'mixed') return Math.min(0.95, Math.max(0.05, (Number(settings.onlineRatio) || 30) / 100));
+  return 0;
+}
+
+function effectiveAssets() {
+  if (settings.source === 'online') return remoteAssets.slice();
+  if (settings.source === 'mixed') return assets.concat(remoteAssets);
+  return assets;
+}
+
+function requestRemote() {
+  const now = performance.now();
+  if (remoteReqInFlight && now - lastRemoteReqAt < REMOTE_REQ_TIMEOUT_MS) return;
+  remoteReqInFlight = true;
+  lastRemoteReqAt = now;
+  post({ type: 'need-remote' });
+}
+
+/** Keep the online buffer stocked: below the low-water mark in either total size or
+ *  unseen clips → ask the host for a batch. Self-clocking — every append/status reply
+ *  and every remote clip teardown calls back in here. */
+function ensureRemoteBuffer() {
+  if (!started || !sourceUsesRemote() || !settings.onlineConsented) return;
+  if (remoteAssets.length >= REMOTE_CAP) return;
+  if (performance.now() < remoteDryUntil) return;
+  const unseen = remoteAssets.length - seenRemote.size;
+  if (remoteAssets.length < REMOTE_LOWWATER || unseen < REMOTE_LOWWATER) requestRemote();
+}
+
+/** Channels currently in play, lowercased (mirror of the host's ActiveChannels). */
+function activeChannelSet() {
+  const set = new Set();
+  for (const n of onlineCatalog) {
+    if (n.selected) for (const s of n.subs || []) set.add(String(s).toLowerCase());
+  }
+  for (const c of customSubs) set.add(String(c).toLowerCase());
+  if (set.size === 0) {
+    for (const s of onlineCatalog[0]?.subs || []) set.add(String(s).toLowerCase());
+  }
+  return set;
+}
+
+/** Niche selection changed: clips from deselected channels leave the pool now (the
+ *  user just said "not that"), which resets the feed via the pool-identity check. */
+function pruneRemoteToChannels() {
+  const chans = activeChannelSet();
+  const before = remoteAssets.length;
+  remoteAssets = remoteAssets.filter((a) => chans.has((a.id.split('/')[1] || '').toLowerCase()));
+  if (started && sourceUsesRemote() && remoteAssets.length !== before) applyConfig();
+  ensureRemoteBuffer();
 }
 
 // ---------- page context ----------
@@ -113,7 +195,14 @@ const pageCtx = {
     post({ type: 'media-error', id: asset.id, code: detail?.code ?? 0, message: detail?.message || '' });
   },
   report(segIdKey, dwellMs, clipLenMs) {
-    stats.recordView(segIdKey, dwellMs, clipLenMs);
+    if (isRemoteId(segIdKey)) {
+      // One-shot clips never enter the per-segment stats (useless there and the ids
+      // churn forever); taste is learned per channel HOST-side from clip-viewed.
+      seenRemote.add(segIdKey.slice(0, segIdKey.lastIndexOf(':')));
+      ensureRemoteBuffer();
+    } else {
+      stats.recordView(segIdKey, dwellMs, clipLenMs);
+    }
     if (dwellMs >= CLIP_VIEWED_MIN_DWELL_MS) {
       post({ type: 'clip-viewed', segId: segIdKey, dwellMs: Math.round(dwellMs) });
     }
@@ -189,6 +278,7 @@ const prev = () => goTo(activeIdx - 1);
 
 function maybeExtend() {
   if (!feed || feed.comps.length === 0) return;
+  ensureRemoteBuffer(); // scroll progress is the natural "will need more soon" signal
   if (activeIdx < feed.comps.length - 3) return;
   const { appended, trimmed } = feed.extend();
   if (!appended && !trimmed) return;
@@ -200,7 +290,7 @@ function maybeExtend() {
 // ---------- config / rebuild ----------
 
 function applyConfig() {
-  const reset = feed.configure(assets, settings.includeGifs, settings.layout);
+  const reset = feed.configure(effectiveAssets(), settings.includeGifs, settings.layout, remoteShare());
   if (reset) {
     for (const p of pages.values()) p.destroy();
     pages.clear();
@@ -273,7 +363,107 @@ function updateOptionsUi() {
   $('window-opacity').value = String(pct);
   $('window-opacity-label').textContent = `${pct}%`;
   $('toggle-clickthrough').classList.toggle('on', clickThrough);
+  updateOnlineUi();
   updateEyeUi();
+}
+
+// ---------- online source UI ----------
+
+function updateOnlineUi() {
+  document.querySelectorAll('.source-chip').forEach((chip) => {
+    chip.classList.toggle('selected', chip.dataset.source === settings.source);
+  });
+  $('online-ratio-row').classList.toggle('hidden', settings.source !== 'mixed');
+  $('online-ratio').value = String(settings.onlineRatio);
+  $('online-ratio-label').textContent = `${settings.onlineRatio}%`;
+  $('online-config').classList.toggle('hidden', !sourceUsesRemote());
+
+  // Niche chips are rebuilt in place — the catalog is tiny.
+  const nicheBox = $('niche-chips');
+  nicheBox.innerHTML = '';
+  for (const n of onlineCatalog) {
+    const chip = document.createElement('button');
+    chip.className = 'niche-chip' + (n.selected ? ' selected' : '');
+    chip.textContent = n.label;
+    chip.addEventListener('click', () => {
+      n.selected = !n.selected;
+      setting('onlineNiches', onlineCatalog.filter((x) => x.selected).map((x) => x.id));
+      updateOnlineUi();
+      pruneRemoteToChannels();
+    });
+    nicheBox.appendChild(chip);
+  }
+
+  const customBox = $('custom-sub-chips');
+  customBox.innerHTML = '';
+  for (const sub of customSubs) {
+    const chip = document.createElement('button');
+    chip.className = 'niche-chip custom selected';
+    chip.title = 'Remove';
+    chip.innerHTML = `r/${sub}<span class="chip-x">✕</span>`;
+    chip.addEventListener('click', () => {
+      customSubs = customSubs.filter((s) => s !== sub);
+      setting('onlineCustomSubs', customSubs.slice());
+      updateOnlineUi();
+      pruneRemoteToChannels();
+    });
+    customBox.appendChild(chip);
+  }
+
+  const status = $('online-status');
+  if (!sourceUsesRemote()) {
+    status.classList.add('hidden');
+  } else if (!onlineOk) {
+    status.textContent = 'Online feed unreachable - retrying as you scroll.';
+    status.classList.remove('hidden');
+  } else if (remoteAssets.length > 0) {
+    status.textContent = `${remoteAssets.length} online clips this session`;
+    status.classList.remove('hidden');
+  } else {
+    status.classList.add('hidden');
+  }
+}
+
+/** "r/Name", full urls, stray punctuation → bare subreddit name (mirror of the host). */
+function sanitizeSub(raw) {
+  let s = String(raw || '').trim();
+  const idx = s.toLowerCase().lastIndexOf('/r/');
+  if (idx >= 0) s = s.slice(idx + 3);
+  else if (s.toLowerCase().startsWith('r/')) s = s.slice(2);
+  s = (s.match(/^[A-Za-z0-9_]+/) || [''])[0];
+  return s.length >= 2 && s.length <= 40 ? s : null;
+}
+
+function addCustomSub() {
+  const input = $('custom-sub-input');
+  const clean = sanitizeSub(input.value);
+  if (!clean) { input.value = ''; return; }
+  if (!customSubs.some((s) => s.toLowerCase() === clean.toLowerCase()) && customSubs.length < 20) {
+    customSubs.push(clean);
+    setting('onlineCustomSubs', customSubs.slice());
+  }
+  input.value = '';
+  updateOnlineUi();
+  ensureRemoteBuffer();
+}
+
+/** Source chip pressed: consent-gate the first step away from the library. */
+function requestSourceChange(src) {
+  if (src === settings.source) return;
+  if (src !== 'library' && !settings.onlineConsented) {
+    pendingSource = src;
+    $('consent-scrim').classList.remove('hidden');
+    return;
+  }
+  applySource(src);
+}
+
+function applySource(src) {
+  setting('source', src);
+  updateOnlineUi();
+  if (started) applyConfig();
+  updateEmptyState();
+  ensureRemoteBuffer();
 }
 
 // ---------- window opacity / ghost mode ----------
@@ -417,12 +607,28 @@ function onEyesClosed() {
 function updateEmptyState() {
   const empty = feed.comps.length === 0;
   $('empty').classList.toggle('hidden', !empty);
-  if (empty) {
-    const hiddenGifs = settings.includeGifs ? 0 : assets.filter((a) => a.type === 'gif').length;
-    const btn = $('btn-include-gifs');
-    btn.classList.toggle('hidden', hiddenGifs === 0);
-    btn.textContent = `INCLUDE ${hiddenGifs} GIF${hiddenGifs === 1 ? '' : 'S'}`;
+  if (!empty) return;
+  const gifBtn = $('btn-include-gifs');
+  if (sourceUsesRemote()) {
+    // Online/mixed with nothing yet: this is a loading (or offline) state, not
+    // a "your library is empty" state.
+    gifBtn.classList.add('hidden');
+    $('empty-hint').classList.add('hidden');
+    if (!onlineOk) {
+      $('empty-emoji').textContent = '📡';
+      $('empty-copy').innerHTML = "Couldn't reach the online feed.<br>Check your connection - it retries as you scroll.";
+    } else {
+      $('empty-emoji').textContent = '🌐';
+      $('empty-copy').textContent = 'Tuning in to the online feed…';
+    }
+    return;
   }
+  $('empty-emoji').textContent = '🎬';
+  $('empty-copy').innerHTML = 'An endless feed of 20-40 second clips from your own videos and GIFs.<br>Add some to your assets folder to switch it on.';
+  $('empty-hint').classList.remove('hidden');
+  const hiddenGifs = settings.includeGifs ? 0 : assets.filter((a) => a.type === 'gif').length;
+  gifBtn.classList.toggle('hidden', hiddenGifs === 0);
+  gifBtn.textContent = `INCLUDE ${hiddenGifs} GIF${hiddenGifs === 1 ? '' : 'S'}`;
 }
 
 // ---------- intro gate ----------
@@ -454,6 +660,7 @@ function startFeed() {
     if (!feed) return; // init never landed (host died) — nothing to build
     applyConfig();
     scheduleAttention();
+    ensureRemoteBuffer();   // online/mixed: start filling before the user hits the end
   }, INTRO_EXIT_MS);
 }
 
@@ -485,6 +692,35 @@ function wireChrome() {
       updateChromeForLayout();
       applyConfig(); // layout change resets the feed to the top (mobile behavior)
     });
+  });
+  document.querySelectorAll('.source-chip').forEach((chip) => {
+    chip.addEventListener('click', () => requestSourceChange(chip.dataset.source));
+  });
+  $('online-ratio').addEventListener('input', () => {
+    $('online-ratio-label').textContent = `${$('online-ratio').value}%`;
+  });
+  $('online-ratio').addEventListener('change', () => {
+    setting('onlineRatio', Math.max(5, Math.min(95, Number($('online-ratio').value) || 30)));
+    updateOnlineUi();
+    if (started) applyConfig(); // same pool → no reset; just re-biases future picks
+  });
+  $('btn-add-sub').addEventListener('click', addCustomSub);
+  $('custom-sub-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addCustomSub(); }
+    e.stopPropagation(); // typing must never page the feed (arrow keys etc.)
+  });
+  $('btn-consent-accept').addEventListener('click', () => {
+    settings.onlineConsented = true;
+    post({ type: 'settings-changed', key: 'onlineConsented', value: true });
+    $('consent-scrim').classList.add('hidden');
+    const src = pendingSource || 'mixed';
+    pendingSource = null;
+    applySource(src);
+  });
+  $('btn-consent-cancel').addEventListener('click', () => {
+    pendingSource = null;
+    $('consent-scrim').classList.add('hidden');
+    updateOnlineUi(); // chips snap back to the real (library) source
   });
   $('toggle-gifs').addEventListener('click', () => {
     setting('includeGifs', !settings.includeGifs);
@@ -637,6 +873,10 @@ function onHostMessage(data) {
       // Host may omit either (older builds) — both default rather than go undefined.
       settings.audioGlow = settings.audioGlow !== false;
       settings.windowOpacity = clampOpacity(settings.windowOpacity);
+      onlineCatalog = Array.isArray(data.online?.niches) ? data.online.niches : [];
+      customSubs = Array.isArray(data.online?.customSubs) ? data.online.customSubs.slice() : [];
+      // Consent is the source of truth for whether a non-library source can stand.
+      if (!settings.onlineConsented && settings.source !== 'library') settings.source = 'library';
       clickThrough = false; // never sticky across a reload
       document.body.classList.remove('clickthrough');
       stats.init(data.stats, (s) => post({ type: 'stats-save', stats: s }));
@@ -677,6 +917,43 @@ function onHostMessage(data) {
       // the same value again, which is harmless.
       setMuted(!!data.on);
       break;
+    case 'assets-append': {
+      // A batch of online entries from the host. Dedupe, grow the pool in place
+      // (feed.append never resets), and if the feed was empty-waiting (online mode
+      // booting), mount the first pages that append just built.
+      remoteReqInFlight = false;
+      const list = Array.isArray(data.assets) ? data.assets : [];
+      const known = new Set(remoteAssets.map((a) => a.id));
+      const fresh = list.filter((a) => a && a.id && !known.has(a.id));
+      remoteAssets.push(...fresh);
+      if (started && feed && sourceUsesRemote() && fresh.length) {
+        const wasEmpty = feed.comps.length === 0;
+        feed.append(fresh);
+        if (wasEmpty && feed.comps.length > 0) {
+          activeIdx = 0;
+          syncPages();
+          applyTrack(false);
+          pageAt(0)?.setActive(true);
+          updateCaption();
+        }
+        updateEmptyState();
+      }
+      updateOnlineUi();
+      ensureRemoteBuffer();
+      break;
+    }
+    case 'online-status': {
+      // Arrives after every batch attempt, success or not — this is what clears the
+      // in-flight latch, flips the offline notice, and paces the dry-channel backoff.
+      remoteReqInFlight = false;
+      onlineOk = !!data.ok;
+      if (data.ok && !(data.added > 0)) remoteDryUntil = performance.now() + REMOTE_DRY_BACKOFF_MS;
+      if (!data.ok) remoteDryUntil = performance.now() + REMOTE_DRY_BACKOFF_MS;
+      updateEmptyState();
+      updateOnlineUi();
+      if (data.ok && data.added > 0) ensureRemoteBuffer();
+      break;
+    }
     case 'eyeStatus':
       eyeStatus = {
         enabled: !!data.enabled,
@@ -730,6 +1007,9 @@ Object.defineProperty(window, '__ccpDebug', {
     get audioFocusCount() { return audioFocus.size; },
     get statCount() { return stats.statCount(); },
     get activeIdx() { return activeIdx; },
+    get remoteCount() { return remoteAssets.length; },
+    get remoteSeen() { return seenRemote.size; },
+    get source() { return settings.source; },
   },
 });
 
