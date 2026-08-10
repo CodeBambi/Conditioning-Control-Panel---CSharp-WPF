@@ -1814,7 +1814,7 @@ namespace ConditioningControlPanel
 
             text.Children.Add(new TextBlock
             {
-                Text = "???",
+                Text = Loc.Get("label_secret_skill_hidden"),
                 Foreground = new SolidColorBrush(Color.FromRgb(153, 50, 204)),
                 FontSize = 11,
                 FontWeight = FontWeights.Bold
@@ -1822,7 +1822,7 @@ namespace ConditioningControlPanel
 
             text.Children.Add(new TextBlock
             {
-                Text = skill.SecretRequirementDesc ?? "Unknown requirement",
+                Text = skill.SecretRequirementDesc ?? Loc.Get("label_secret_skill_unknown_req"),
                 Foreground = new SolidColorBrush(Color.FromRgb(128, 128, 128)),
                 FontSize = 8,
                 TextWrapping = TextWrapping.Wrap,
@@ -1966,7 +1966,7 @@ namespace ConditioningControlPanel
             {
                 stack.Children.Add(new TextBlock
                 {
-                    Text = $"💎{skill.Cost} ✓ OWNED",
+                    Text = $"💎{skill.Cost} {Loc.Get("label_skill_owned")}",
                     Foreground = new SolidColorBrush(Color.FromRgb(180, 130, 255)),
                     FontSize = 9,
                     Margin = new Thickness(0, 2, 0, 0)

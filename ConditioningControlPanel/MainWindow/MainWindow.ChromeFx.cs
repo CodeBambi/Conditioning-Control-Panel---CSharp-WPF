@@ -15,7 +15,7 @@ namespace ConditioningControlPanel
 {
     /// <summary>
     /// PR-1 of the FX overhaul: the *chrome* pass. Everything in here decorates the shell every
-    /// tab shares - tab transitions, the 14 nav buttons, the START CTA, the XP bar and the
+    /// tab shares - tab transitions, the nav rail's rows, the START CTA, the XP bar and the
     /// support banner/marquee - and nothing in here touches an individual tab's content.
     ///
     /// House rules this file obeys (FX plan section 2):
@@ -64,6 +64,8 @@ namespace ConditioningControlPanel
         private string _activeTabKey = "settings";
         private UIElement? _activeTabElement;
         private Button? _navGlowButton;
+        private Button? _navGlowDoor;
+        private FrameworkElement? _navActiveBar;
         private DispatcherTimer? _startSheenTimer;
         private DateTime _lastBannerSheenUtc = DateTime.MinValue;
         private DispatcherTimer? _staggerCleanupTimer;
@@ -71,16 +73,24 @@ namespace ConditioningControlPanel
         private double _lastXpShown = double.NaN;
         private int _lastXpLevelShown = -1;
 
-        /// <summary>The 14 primary nav buttons. Null-tolerant: a couple are conditionally present.</summary>
+        /// <summary>
+        /// Every clickable row in the nav rail: seven door headers then the entries, rail order.
+        /// Null-tolerant: a couple are conditionally present.
+        /// </summary>
         private IEnumerable<Button> NavButtons
         {
             get
             {
                 var all = new[]
                 {
-                    BtnSettings, BtnPresets, BtnQuests, BtnPrograms, BtnEnhancements, BtnDeeper,
-                    BtnAvailableSubjects, BtnOpenAssetsTop, BtnAchievements, BtnLeaderboard,
-                    BtnCompanion, BtnDiscordTab, BtnLab, BtnPatreonExclusives,
+                    DoorHome, DoorStudio, DoorCompanion, DoorPlay, DoorYou, DoorLibrary, DoorSettings,
+                    BtnSettings,
+                    BtnPresets, BtnNavHaptics,
+                    BtnCompanion, BtnNavBambiTakeover, BtnNavSheListening, BtnNavAwareness,
+                    BtnLab, BtnDeeper, BtnPatreonExclusives, BtnNavGradedIntake, BtnNavLockdown,
+                    BtnNavBlinkTrainer, BtnNavRemoteControl, BtnAvailableSubjects,
+                    BtnDiscordTab, BtnQuests, BtnAchievements, BtnEnhancements, BtnPrograms, BtnLeaderboard,
+                    BtnOpenAssetsTop,
                 };
                 return all.Where(b => b != null)!;
             }
@@ -250,9 +260,10 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// 12px directional slide. Nav order decides the axis: a tab further right in the nav
-        /// strip enters from the right, one further left enters from the left. Anything not in
-        /// the strip (Exclusives destinations) gets a plain rise instead of a guessed direction.
+        /// 12px directional slide. Nav order decides the axis: a tab further DOWN the rail
+        /// enters from the right, one further up enters from the left, so the movement still
+        /// reads as forward/back through the IA. Anything off the rail gets a plain rise
+        /// instead of a guessed direction.
         /// </summary>
         private void SlideTabIn(UIElement tab, string fromKey, string toKey)
         {
@@ -497,72 +508,104 @@ namespace ConditioningControlPanel
             return scale;
         }
 
-        /// <summary>The nav button that owns a tab key, for the active-tab glow. Everything
-        /// reachable only from the Exclusives submenu lights that launcher instead.</summary>
+        /// <summary>The rail entry that owns a tab key. Since Phase 1 every reachable key has
+        /// its own row, so nothing borrows the Exclusives launcher's highlight any more.</summary>
         private Button? NavButtonForTab(string? tab) => (tab ?? string.Empty).ToLowerInvariant() switch
         {
             "settings" or "progression" => BtnSettings,
             "presets" => BtnPresets,
-            "quests" => BtnQuests,
-            "programs" => BtnPrograms,
-            "enhancements" => BtnEnhancements,
-            "deeper" => BtnDeeper,
-            "availablesubjects" => BtnAvailableSubjects,
-            "assets" => BtnOpenAssetsTop,
-            "achievements" => BtnAchievements,
-            "leaderboard" => BtnLeaderboard,
+            "haptics" => BtnNavHaptics,
             "companion" => BtnCompanion,
-            "discord" => BtnDiscordTab,
+            "bambitakeover" => BtnNavBambiTakeover,
+            "shelistening" => BtnNavSheListening,
+            "awareness" => BtnNavAwareness,
             "lab" => BtnLab,
-            "exclusives" or "bambitakeover" or "haptics" or "lockdown" or "blinktrainer"
-                or "shelistening" or "gradedintake" or "awareness" or "remotecontrol" => BtnPatreonExclusives,
+            "deeper" => BtnDeeper,
+            "exclusives" => BtnPatreonExclusives,
+            "gradedintake" => BtnNavGradedIntake,
+            "lockdown" => BtnNavLockdown,
+            "blinktrainer" => BtnNavBlinkTrainer,
+            "remotecontrol" => BtnNavRemoteControl,
+            "availablesubjects" => BtnAvailableSubjects,
+            "discord" => BtnDiscordTab,
+            "quests" => BtnQuests,
+            "achievements" => BtnAchievements,
+            "enhancements" => BtnEnhancements,
+            "programs" => BtnPrograms,
+            "leaderboard" => BtnLeaderboard,
+            "assets" => BtnOpenAssetsTop,
             _ => null,
         };
 
         /// <summary>
-        /// Moves the active-tab glow. An outer DropShadow rather than a drawn underline on
-        /// purpose: the nav strip has no spare vertical room for a new element (the buttons are a
-        /// fixed 32px inside a padded header row), and a shadow needs none - WPF renders it
-        /// outside the layout slot, and neither header Border clips.
+        /// Moves the active-tab indicator: a 3px accent bar on the row's left edge plus a
+        /// tinted row background, on the entry AND on its door header (so a collapsed door
+        /// still says where you are). Both are template parts of the shared NavRailButton
+        /// template - "NavActiveBar" and "NavActiveFill" - not separate elements, so nothing
+        /// here depends on the rail's layout.
+        ///
+        /// This replaced an outer DropShadow, which only ever existed because the old 32px
+        /// header strip had no spare vertical room for a real indicator (PLAN decision #12).
+        /// The method name is unchanged: ~2 call sites plus RefreshChromeFx depend on it.
         /// </summary>
         private void ApplyNavActiveGlow(Button? active)
         {
             try
             {
                 if (_navGlowButton != null && !ReferenceEquals(_navGlowButton, active))
-                    ClearNavGlow(_navGlowButton);
+                    SetNavIndicator(_navGlowButton, false);
                 _navGlowButton = active;
-                if (active == null) return;
 
-                var tier = PerformanceProfile.CurrentTier;
-                if (!PerformanceProfile.AllowGlow(tier) || MotionFx.Level == MotionLevel.Off)
-                {
-                    ClearNavGlow(active);
-                    return;
-                }
+                var door = NavDoorHeaderForTab(_activeTabKey);
+                if (_navGlowDoor != null && !ReferenceEquals(_navGlowDoor, door))
+                    SetNavIndicator(_navGlowDoor, false);
+                _navGlowDoor = door;
+                if (door != null) SetNavIndicator(door, true);
 
-                if (active.Effect is not DropShadowEffect effect || effect.IsFrozen)
-                {
-                    effect = new DropShadowEffect { ShadowDepth = 0 };
-                    active.Effect = effect;
-                }
-                effect.Color = FxTheme.GlowColor;
-                effect.BlurRadius = Math.Min(16, PerformanceProfile.MaxGlowBlurRadius(tier));
+                _navActiveBar = active == null ? null : SetNavIndicator(active, true);
                 ApplyNavGlowBreath();
             }
             catch (Exception ex) { App.Logger?.Debug("ApplyNavActiveGlow: {E}", ex.Message); }
         }
 
-        /// <summary>Gentle breath on the active nav glow only - inactive buttons never hold a clock.</summary>
+        /// <summary>
+        /// Paints (or clears) the indicator parts of one rail button and hands back the bar so
+        /// the breath has something to animate. Template parts, so ApplyTemplate has to have
+        /// run - it is called here rather than assumed, because InitializeChromeFx seeds the
+        /// indicator before the rail has necessarily been through a render pass.
+        /// </summary>
+        private static FrameworkElement? SetNavIndicator(Button btn, bool on)
+        {
+            try
+            {
+                btn.ApplyTemplate();
+                var bar = btn.Template?.FindName("NavActiveBar", btn) as FrameworkElement;
+                var fill = btn.Template?.FindName("NavActiveFill", btn) as FrameworkElement;
+                if (bar != null)
+                {
+                    // Always drop the breath clock first: a held Opacity would otherwise
+                    // outlive the indicator and dim the next row that reuses this part.
+                    bar.BeginAnimation(UIElement.OpacityProperty, null);
+                    bar.Opacity = NavGlowMaxOpacity;
+                    bar.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+                }
+                if (fill != null) fill.Opacity = on ? 1 : 0;
+                return on ? bar : null;
+            }
+            catch { return null; }
+        }
+
+        /// <summary>Gentle breath on the active indicator bar only - no other row holds a clock.</summary>
         private void ApplyNavGlowBreath()
         {
             try
             {
-                if (_navGlowButton?.Effect is not DropShadowEffect effect || effect.IsFrozen) return;
+                var bar = _navActiveBar;
+                if (bar == null) return;
                 if (!ChromeAmbientAllowed)
                 {
-                    effect.BeginAnimation(DropShadowEffect.OpacityProperty, null);
-                    effect.Opacity = NavGlowMaxOpacity;
+                    bar.BeginAnimation(UIElement.OpacityProperty, null);
+                    bar.Opacity = NavGlowMaxOpacity;
                     return;
                 }
                 var anim = new DoubleAnimation(NavGlowMinOpacity, NavGlowMaxOpacity,
@@ -573,20 +616,9 @@ namespace ConditioningControlPanel
                     EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
                 };
                 Timeline.SetDesiredFrameRate(anim, AmbientFrameRate);
-                effect.BeginAnimation(DropShadowEffect.OpacityProperty, anim);
+                bar.BeginAnimation(UIElement.OpacityProperty, anim);
             }
             catch (Exception ex) { App.Logger?.Debug("ApplyNavGlowBreath: {E}", ex.Message); }
-        }
-
-        private static void ClearNavGlow(Button btn)
-        {
-            try
-            {
-                if (btn.Effect is DropShadowEffect effect && !effect.IsFrozen)
-                    effect.BeginAnimation(DropShadowEffect.OpacityProperty, null);
-                btn.Effect = null;
-            }
-            catch { }
         }
 
         // ============================== 3. START button ==============================

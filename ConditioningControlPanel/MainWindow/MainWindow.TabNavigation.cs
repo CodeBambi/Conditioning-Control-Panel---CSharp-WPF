@@ -178,32 +178,19 @@ namespace ConditioningControlPanel
             if (ProgramsTab != null) ProgramsTab.Visibility = Visibility.Collapsed;
             if (ExclusivesTab != null) ExclusivesTab.Visibility = Visibility.Collapsed;
 
-            // Reset all button styles to inactive. activeStyle is the primary-nav-only v6 variant —
-            // quest sub-tabs and roadmap tracks use TabButtonActive directly (see lines further down).
-            var inactiveStyle = FindResource("TabButton") as Style;
-            var activeStyle = FindResource("TabButtonActivePrimary") as Style;
-            BtnSettings.Style = inactiveStyle;
-            BtnPresets.Style = inactiveStyle;
-            BtnQuests.Style = inactiveStyle;
-            if (BtnPrograms != null) BtnPrograms.Style = inactiveStyle;
-            BtnEnhancements.Style = inactiveStyle;
-            if (BtnDeeper != null) BtnDeeper.Style = FindResource("TabButtonDeeper") as Style;
-            if (BtnAvailableSubjects != null) BtnAvailableSubjects.Style = FindResource("TabButtonNeon") as Style;
-            BtnAchievements.Style = inactiveStyle;
-            BtnCompanion.Style = inactiveStyle;
-            BtnLeaderboard.Style = inactiveStyle;
-            BtnLab.Style = inactiveStyle;
-            BtnOpenAssetsTop.Style = inactiveStyle;
-            // BtnAwareness was removed from the primary tab bar — its only entry point
-            // is now the Exclusives popup submenu
-            // BtnPatreonExclusives keeps its inline Patreon red style defined in XAML
+            // Phase 1: no more per-tab style swapping. The rail's active state is a real
+            // indicator (3px accent bar + tinted row) driven by ApplyNavActiveGlow at the
+            // bottom of this method, so every entry keeps the one Style it was authored with
+            // and the brand accents (Deeper violet, Subjects neon, Profile blue, Premium red)
+            // survive a tab switch instead of being reset and re-applied.
+            // "TabButton"/"TabButtonActive" stay untouched in the theme: quest sub-tabs and
+            // the roadmap track buttons still use them.
 
             switch (tab)
             {
                 case "settings":
                     SettingsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(SettingsTab);
-                    BtnSettings.Style = activeStyle;
                     RefreshPremiumRail(); // recompute chip dots (incl. Voice) from live state on every show
                     // Training Programs own the day's feature mix. Re-derived (never latched) on
                     // every show of the Dashboard, so arriving here can never find a stale lock -
@@ -219,7 +206,6 @@ namespace ConditioningControlPanel
                 case "presets":
                     PresetsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(PresetsTab);
-                    BtnPresets.Style = activeStyle;
                     // Refresh catalogue share statuses on tab open (throttled) so an
                     // approval/rejection reflects on preset + session cards.
                     _ = CheckCatalogueSubmissionStatusesAsync(CatalogueKindPresets);
@@ -232,14 +218,12 @@ namespace ConditioningControlPanel
                 case "progression":
                     SettingsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(SettingsTab);
-                    BtnSettings.Style = activeStyle;
                     RefreshPremiumRail();
                     break;
 
                 case "quests":
                     QuestsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(QuestsTab);
-                    BtnQuests.Style = activeStyle;
                     StartSeasonTitleShimmer();
                     RefreshQuestUI();
                     break;
@@ -247,14 +231,12 @@ namespace ConditioningControlPanel
                 case "programs":
                     ProgramsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(ProgramsTab);
-                    BtnPrograms.Style = activeStyle;
                     RefreshProgramsUI();
                     break;
 
                 case "enhancements":
                     EnhancementsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(EnhancementsTab);
-                    BtnEnhancements.Style = activeStyle;
                     RefreshEnhancementsUI();
                     break;
 
@@ -275,13 +257,11 @@ namespace ConditioningControlPanel
                         // an acceptance reflects without restarting the app.
                         _ = CheckDeeperSubmissionStatusesAsync();
                     }
-                    if (BtnDeeper != null) BtnDeeper.Style = FindResource("TabButtonDeeperActive") as Style;
                     break;
 
                 case "achievements":
                     AchievementsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(AchievementsTab);
-                    BtnAchievements.Style = activeStyle;
                     RefreshAllAchievementTiles();
                     UpdateAchievementCount();
                     break;
@@ -289,7 +269,6 @@ namespace ConditioningControlPanel
                 case "companion":
                     CompanionTab.Visibility = Visibility.Visible;
                     AnimateTabIn(CompanionTab);
-                    BtnCompanion.Style = activeStyle;
                     SyncCompanionTabUI();
                     InitializePhrasePresets();
                     break;
@@ -297,7 +276,6 @@ namespace ConditioningControlPanel
                 case "lab":
                     LabTab.Visibility = Visibility.Visible;
                     AnimateTabIn(LabTab);
-                    BtnLab.Style = activeStyle;
                     SyncLabEffectPermsUI();
                     RefreshWebcamDeviceList();
                     RefreshWebcamMonitorList();
@@ -314,14 +292,12 @@ namespace ConditioningControlPanel
                 case "leaderboard":
                     LeaderboardTab.Visibility = Visibility.Visible;
                     AnimateTabIn(LeaderboardTab);
-                    BtnLeaderboard.Style = activeStyle;
                     _ = RefreshLeaderboardAsync(); // Load on first view
                     break;
 
                 case "assets":
                     AssetsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(AssetsTab);
-                    BtnOpenAssetsTop.Style = activeStyle;
                     RefreshAssetTree();
                     InitializeAssetPresets();
                     if (PacksSectionEnabled) _ = RefreshPacksAsync();
@@ -330,7 +306,6 @@ namespace ConditioningControlPanel
                 case "discord":
                     DiscordTab.Visibility = Visibility.Visible;
                     AnimateTabIn(DiscordTab);
-                    // BtnDiscordTab keeps its inline Discord blue style defined in XAML
                     UpdateDiscordTabUI();
                     break;
 
@@ -353,8 +328,6 @@ namespace ConditioningControlPanel
                         AvailableSubjectsTab.Visibility = Visibility.Visible;
                         AnimateTabIn(AvailableSubjectsTab);
                     }
-                    if (BtnAvailableSubjects != null)
-                        BtnAvailableSubjects.Style = FindResource("TabButtonNeonActive") as Style;
                     EnsureAvailableSubjectsBound();
                     App.AvailableSubjects?.StartPolling();
                     break;
@@ -411,11 +384,205 @@ namespace ConditioningControlPanel
 
             }
 
-            // Chrome FX: move the breathing active-tab glow onto whichever nav button owns this
-            // tab (Exclusives destinations light the Exclusives launcher). Last, so it runs
-            // whatever the switch above did - and it never throws.
+            // Reveal the entry we just navigated to. Code-driven navigation (tutorial steps,
+            // Exclusives cards, notifications) has to open the owning door too, or the active
+            // indicator lands inside a collapsed panel where nobody can see it.
+            ExpandDoorForTab(tab);
+
+            // Chrome FX: move the active indicator onto whichever rail entry owns this tab,
+            // and light its door header. Last, so it runs whatever the switch above did - and
+            // it never throws.
             ApplyNavActiveGlow(NavButtonForTab(tab));
         }
+
+        // ============================== nav rail: doors ==============================
+
+        /// <summary>
+        /// The Phase 1 information architecture: six doors over the existing tab keys, plus a
+        /// pinned Settings door that has no tabs of its own yet. Order matches the rail top to
+        /// bottom, and each door's FIRST tab is the one its header navigates to.
+        /// Every reachable ShowTab key lives in exactly one door; the two ghosts are excluded
+        /// ("patreon" opens a popup, "fyp" opens a window - both return before the switch).
+        /// "progression" rides with Home because it redirects to the Dashboard.
+        /// </summary>
+        private static readonly (string Door, string DefaultTab, string[] Tabs)[] NavDoorMap =
+        {
+            ("home",      "settings",  new[] { "settings", "progression" }),
+            ("studio",    "presets",   new[] { "presets", "haptics" }),
+            ("companion", "companion", new[] { "companion", "bambitakeover", "shelistening", "awareness" }),
+            ("play",      "lab",       new[] { "lab", "deeper", "exclusives", "gradedintake", "lockdown",
+                                               "blinktrainer", "remotecontrol", "availablesubjects" }),
+            ("you",       "discord",   new[] { "discord", "quests", "achievements", "enhancements",
+                                               "programs", "leaderboard" }),
+            ("library",   "assets",    new[] { "assets" }),
+        };
+
+        /// <summary>Row pitch of a rail entry: Height 30 + Margin 0,1 in the NavRailButton style.
+        /// The accordion computes its open height from this instead of forcing a measure pass,
+        /// so the two MUST stay in step.</summary>
+        private const double NavEntryRowHeight = 32;
+
+        private const int NavDoorExpandMs = 160;
+
+        /// <summary>Which door is open. Home ships open, which is why DoorPanelHome is the one
+        /// panel authored without an explicit Height.</summary>
+        private string _expandedDoor = "home";
+
+        private (Button? Header, Border? Panel, StackPanel? Entries) NavDoorParts(string door) => door switch
+        {
+            "home" => (DoorHome, DoorPanelHome, DoorEntriesHome),
+            "studio" => (DoorStudio, DoorPanelStudio, DoorEntriesStudio),
+            "companion" => (DoorCompanion, DoorPanelCompanion, DoorEntriesCompanion),
+            "play" => (DoorPlay, DoorPanelPlay, DoorEntriesPlay),
+            "you" => (DoorYou, DoorPanelYou, DoorEntriesYou),
+            "library" => (DoorLibrary, DoorPanelLibrary, DoorEntriesLibrary),
+            _ => (null, null, null),
+        };
+
+        private static string? NavDoorForTab(string? tabKey)
+        {
+            if (string.IsNullOrEmpty(tabKey)) return null;
+            foreach (var door in NavDoorMap)
+                foreach (var t in door.Tabs)
+                    if (string.Equals(t, tabKey, StringComparison.OrdinalIgnoreCase))
+                        return door.Door;
+            return null;
+        }
+
+        /// <summary>The door header that owns a tab key, for the active-door indicator.</summary>
+        private Button? NavDoorHeaderForTab(string? tabKey)
+        {
+            var door = NavDoorForTab(tabKey);
+            return door == null ? null : NavDoorParts(door).Header;
+        }
+
+        /// <summary>
+        /// Opens the door that contains <paramref name="tabKey"/>'s entry, closing whichever
+        /// door was open. Public surface for TutorialOverlay (a spotlight can only measure an
+        /// entry once its door is open) and for the future Ctrl+K palette; ShowTab calls it on
+        /// every navigation.
+        /// </summary>
+        internal void ExpandDoorForTab(string tabKey)
+        {
+            try
+            {
+                var door = NavDoorForTab(tabKey);
+                if (door != null) SetExpandedDoor(door);
+            }
+            catch (Exception ex) { App.Logger?.Debug("ExpandDoorForTab({Tab}): {E}", tabKey, ex.Message); }
+        }
+
+        private void SetExpandedDoor(string door)
+        {
+            if (string.Equals(_expandedDoor, door, StringComparison.Ordinal)) return;
+            var previous = _expandedDoor;
+            _expandedDoor = door;
+
+            bool animate = MotionFx.AllowTransitions;
+            foreach (var d in NavDoorMap)
+            {
+                // Only the two doors that actually change state get touched; the rest are
+                // already parked at Height 0 and re-animating them would be four idle clocks.
+                if (!string.Equals(d.Door, door, StringComparison.Ordinal) &&
+                    !string.Equals(d.Door, previous, StringComparison.Ordinal)) continue;
+
+                var parts = NavDoorParts(d.Door);
+                if (parts.Panel == null) continue;
+                SetDoorPanelExpanded(d.Door, parts.Panel, parts.Entries,
+                                     string.Equals(d.Door, door, StringComparison.Ordinal), animate);
+            }
+        }
+
+        /// <summary>
+        /// The accordion itself: a 160ms Height tween on the door's panel, nothing else. No
+        /// loop, so there is nothing for the motion kill-switch to stop - at MotionLevel Off
+        /// (AllowTransitions false) the panel simply snaps.
+        ///
+        /// A closed door keeps Visibility=Visible at Height 0 rather than collapsing. That is
+        /// deliberate: EventFx anchors three of the six celebration bursts on BtnAchievements /
+        /// BtnQuests / BtnEnhancements, and TransformToVisual on a Collapsed element sends the
+        /// burst nowhere, silently.
+        /// </summary>
+        private void SetDoorPanelExpanded(string door, Border panel, StackPanel? entries, bool expand, bool animate)
+        {
+            panel.IsHitTestVisible = expand;
+
+            if (!animate)
+            {
+                panel.BeginAnimation(FrameworkElement.HeightProperty, null);
+                panel.Height = expand ? double.NaN : 0;
+                return;
+            }
+
+            double from = panel.ActualHeight;
+            double to = expand ? MeasureDoorPanel(entries) : 0;
+            if (Math.Abs(from - to) < 0.5)
+            {
+                panel.BeginAnimation(FrameworkElement.HeightProperty, null);
+                panel.Height = expand ? double.NaN : 0;
+                return;
+            }
+
+            var anim = new DoubleAnimation(from, to, TimeSpan.FromMilliseconds(NavDoorExpandMs))
+            {
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+            };
+            anim.Completed += (_, __) =>
+            {
+                try
+                {
+                    // A faster click already moved on: whoever owns the panel now finishes it.
+                    bool stillOpen = string.Equals(_expandedDoor, door, StringComparison.Ordinal);
+                    if (stillOpen != expand) return;
+                    panel.BeginAnimation(FrameworkElement.HeightProperty, null);
+                    // Hand an open panel back to layout so a later Visibility change on one of
+                    // its entries (BtnDeeper follows EnableDeeper) still resizes the door.
+                    panel.Height = expand ? double.NaN : 0;
+                }
+                catch (Exception ex) { App.Logger?.Debug("Door tween completion: {E}", ex.Message); }
+            };
+            panel.BeginAnimation(FrameworkElement.HeightProperty, anim);
+        }
+
+        private static double MeasureDoorPanel(StackPanel? entries)
+        {
+            if (entries == null) return 0;
+            double h = 0;
+            foreach (var child in entries.Children.OfType<FrameworkElement>())
+                if (child.Visibility == Visibility.Visible) h += NavEntryRowHeight;
+            return h;
+        }
+
+        /// <summary>A door header navigates to its default tab; ShowTab then expands it.</summary>
+        private void NavDoor_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn || btn.Tag is not string door) return;
+            foreach (var d in NavDoorMap)
+            {
+                if (!string.Equals(d.Door, door, StringComparison.Ordinal)) continue;
+                ShowTab(d.DefaultTab);
+                return;
+            }
+            // DoorSettings ("appsettings") has no view of its own until Phase 2 builds one.
+            ShowTab("settings");
+        }
+
+        // Direct entries for the tabs that used to be reachable only through the Exclusives
+        // shelf. Awareness is deliberately absent: BtnNavAwareness binds the existing
+        // BtnAwareness_Click (MainWindow.AccountShell.cs), which was an orphan until now.
+        private void BtnNavHaptics_Click(object sender, RoutedEventArgs e) => ShowTab("haptics");
+
+        private void BtnNavBambiTakeover_Click(object sender, RoutedEventArgs e) => ShowTab("bambitakeover");
+
+        private void BtnNavSheListening_Click(object sender, RoutedEventArgs e) => ShowTab("shelistening");
+
+        private void BtnNavGradedIntake_Click(object sender, RoutedEventArgs e) => ShowTab("gradedintake");
+
+        private void BtnNavLockdown_Click(object sender, RoutedEventArgs e) => ShowTab("lockdown");
+
+        private void BtnNavBlinkTrainer_Click(object sender, RoutedEventArgs e) => ShowTab("blinktrainer");
+
+        private void BtnNavRemoteControl_Click(object sender, RoutedEventArgs e) => ShowTab("remotecontrol");
 
         /// <summary>
         /// One-shot explainer cards for tabs whose purpose isn't obvious from their controls

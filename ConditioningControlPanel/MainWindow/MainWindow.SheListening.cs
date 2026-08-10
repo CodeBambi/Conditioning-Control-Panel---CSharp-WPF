@@ -14,6 +14,25 @@ namespace ConditioningControlPanel
     /// </summary>
     public partial class MainWindow
     {
+        /// <summary>
+        /// The premium bar for the offline mic, spelled once. SheListeningGate is only a Border
+        /// over the tab, so every control under it stays reachable by keyboard focus and by
+        /// automation - the bar has to sit on the handlers that actually hand the mic to the wake
+        /// loop. Turning the mic OFF is never gated: a lapsed patron must always be able to stop
+        /// a mic that is already open.
+        /// </summary>
+        private static bool DemandSheListeningPremium()
+            => Services.TierGate.DemandPremium("She's Listening");
+
+        /// <summary>Uncheck a box we just refused, without firing its Changed handler.</summary>
+        private void RevertCheck(CheckBox box)
+        {
+            var wasLoading = _isLoading;
+            _isLoading = true;
+            box.IsChecked = false;
+            _isLoading = wasLoading;
+        }
+
         /// <summary>Copy a checkbox's value to another without firing its Changed handler.</summary>
         private void MirrorCheck(CheckBox from, CheckBox to)
         {
@@ -57,6 +76,11 @@ namespace ConditioningControlPanel
         internal void SL_WakeWord_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading || SheListeningTab == null) return;
+            if (SheListeningTab.ChkSL_WakeWord.IsChecked == true && !DemandSheListeningPremium())
+            {
+                RevertCheck(SheListeningTab.ChkSL_WakeWord);
+                return;
+            }
             MirrorCheck(SheListeningTab.ChkSL_WakeWord, BambiTakeoverTab.ChkSpeechWakeWord);
             ChkSpeechWakeWord_Changed(sender, e);
             MirrorCheck(BambiTakeoverTab.ChkSpeechWakeWord, SheListeningTab.ChkSL_WakeWord);
@@ -82,6 +106,11 @@ namespace ConditioningControlPanel
         internal void SL_PushToTalk_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading || SheListeningTab == null) return;
+            if (SheListeningTab.ChkSL_PushToTalk.IsChecked == true && !DemandSheListeningPremium())
+            {
+                RevertCheck(SheListeningTab.ChkSL_PushToTalk);
+                return;
+            }
             MirrorCheck(SheListeningTab.ChkSL_PushToTalk, BambiTakeoverTab.ChkSpeechPushToTalk);
             ChkSpeechPushToTalk_Changed(sender, e);
             MirrorCheck(BambiTakeoverTab.ChkSpeechPushToTalk, SheListeningTab.ChkSL_PushToTalk);
@@ -221,6 +250,10 @@ namespace ConditioningControlPanel
             if (s == null) return;
 
             if (MicIsArmed()) { DisarmVoiceMic(); return; }
+
+            // Arming is the premium half - and this is the shared entry point for the master
+            // Start button and the dashboard Voice chip, so the bar covers both.
+            if (!DemandSheListeningPremium()) return;
 
             // Arm: consent, then default to the wake word so "she's listening" means something.
             if (App.Speech?.IsAvailable != true)

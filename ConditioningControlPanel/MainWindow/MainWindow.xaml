@@ -8,8 +8,8 @@
         xmlns:local="clr-namespace:ConditioningControlPanel"
         xmlns:views="clr-namespace:ConditioningControlPanel.Views.Tabs"
         Title="Conditioning Control Panel"
-        Height="943" Width="1469"
-        MinHeight="620" MinWidth="1062"
+        Height="943" Width="1656"
+        MinHeight="620" MinWidth="1198"
         Background="{DynamicResource DarkerBgBrush}"
         WindowStartupLocation="Manual"
         WindowStyle="None"
@@ -34,12 +34,119 @@
                       UseAeroCaptionButtons="False"/>
     </WindowChrome.WindowChrome>
 
+    <Window.Resources>
+        <!-- ===================== Phase 1: the nav rail =====================
+             New style keys on purpose. "TabButton"/"TabButtonActive" are ALSO used by
+             the quest sub-tabs and the roadmap track buttons (MainWindow.Roadmap.cs,
+             QuestsTabView.xaml), so restyling them for a vertical rail would silently
+             restyle the Quests tab.
+
+             Every rail template exposes two parts the code drives directly:
+               NavActiveBar  - the 3px accent bar on the row's left edge
+               NavActiveFill - the tinted row background
+             ApplyNavActiveGlow (MainWindow.ChromeFx.cs) finds them by name; it replaced
+             the old outer DropShadow, which only ever existed because the 32px header
+             strip had no room for a real indicator.
+
+             The row shape is Grid > [fill][hover][bar][ContentPresenter] and the button's
+             Content stays a Panel holding an Image, because NudgeNavIcon's hover nudge
+             hard-requires that shape (ChromeFx.cs:450-486).
+
+             Height 30 + Margin 0,1 = the 32px row pitch the accordion measures with
+             (NavEntryRowHeight in MainWindow.TabNavigation.cs). Change one, change both. -->
+        <Style x:Key="NavRailButton" TargetType="Button">
+            <!-- Background is the row TINT (used by both the active fill and the hover
+                 wash), never a painted background: the template's own Grid takes the
+                 hit-test area instead. -->
+            <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Margin" Value="0,1"/>
+            <Setter Property="Padding" Value="18,0,8,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid Background="Transparent">
+                            <Border x:Name="NavActiveFill" Background="{TemplateBinding Background}"
+                                    CornerRadius="0,6,6,0" Opacity="0" IsHitTestVisible="False"/>
+                            <Border x:Name="NavHover" Background="{TemplateBinding Background}"
+                                    CornerRadius="0,6,6,0" Opacity="0" IsHitTestVisible="False"/>
+                            <Border x:Name="NavActiveBar" Width="3" HorizontalAlignment="Left"
+                                    Background="{TemplateBinding BorderBrush}" CornerRadius="0,2,2,0"
+                                    Visibility="Collapsed" IsHitTestVisible="False"/>
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="NavHover" Property="Opacity" Value="0.6"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Door header: taller, bolder, not indented. -->
+        <Style x:Key="NavDoorButton" TargetType="Button" BasedOn="{StaticResource NavRailButton}">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="Margin" Value="0,2"/>
+            <Setter Property="Padding" Value="10,0,8,0"/>
+        </Style>
+
+        <Style x:Key="NavEntryButton" TargetType="Button" BasedOn="{StaticResource NavRailButton}"/>
+
+        <!-- Brand-accented entries. Same template, different accent: Deeper violet,
+             Available Subjects neon purple, Profile Discord blue, Premium Patreon red -
+             the four identities the old header strip carried in inline styles. -->
+        <Style x:Key="NavEntryButtonDeeper" TargetType="Button" BasedOn="{StaticResource NavRailButton}">
+            <Setter Property="Background" Value="{DynamicResource DeeperAccentTransparent20Brush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource DeeperAccentBrush}"/>
+        </Style>
+
+        <Style x:Key="NavEntryButtonNeon" TargetType="Button" BasedOn="{StaticResource NavRailButton}">
+            <Setter Property="Background" Value="{DynamicResource NeonPurpleTransparent20Brush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource NeonPurpleBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource NeonPurpleBrush}"/>
+        </Style>
+
+        <Style x:Key="NavEntryButtonDiscord" TargetType="Button" BasedOn="{StaticResource NavRailButton}">
+            <Setter Property="Background" Value="#335865F2"/>
+            <Setter Property="BorderBrush" Value="#5865F2"/>
+            <Setter Property="Foreground" Value="#8E9BFF"/>
+        </Style>
+
+        <Style x:Key="NavEntryButtonPatreon" TargetType="Button" BasedOn="{StaticResource NavRailButton}">
+            <Setter Property="Background" Value="#33FF424D"/>
+            <Setter Property="BorderBrush" Value="#FF424D"/>
+            <Setter Property="Foreground" Value="#FF8A91"/>
+        </Style>
+    </Window.Resources>
+
     <!-- Root grid allows browser fullscreen overlay without reparenting WebView across HWNDs -->
     <Grid x:Name="RootGrid">
     <!-- Viewbox scales all content proportionally with window size -->
     <Viewbox Stretch="Fill">
-        <!-- Design canvas at reference size - wider to fit all header buttons -->
-        <Grid Width="1489" Height="901">
+        <!-- Design canvas at reference size. Phase 1 grew it 1489 -> 1679 by ADDING a
+             190px nav-rail column on the left; column 1 is still exactly 1489 wide, so
+             every tab layout keeps the width it was authored against (fx-inventory §12.8:
+             they clip silently otherwise). The Window's default/min Width grew by the same
+             1.1276 factor so the Viewbox's Stretch="Fill" keeps the old aspect. -->
+        <Grid x:Name="DesignCanvas" Width="1679" Height="901">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="190"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
                 <RowDefinition Height="36"/>
                 <RowDefinition Height="Auto"/>
@@ -49,8 +156,10 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-        <!-- Custom Title Bar -->
-        <Border x:Name="TitleBarBorder" Grid.Row="0" Background="{DynamicResource PinkBrush}" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+        <!-- Custom Title Bar. Spans BOTH canvas columns: it is the window's own chrome,
+             so the pink strip has to reach the left edge and the min/max/close cluster
+             has to sit at the true top-right, above the nav rail rather than beside it. -->
+        <Border x:Name="TitleBarBorder" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Background="{DynamicResource PinkBrush}" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -162,18 +271,341 @@
             </Grid>
         </Border>
 
+        <!-- ===================== NAV RAIL (canvas column 0) =====================
+             Six doors + a pinned Settings door. A door header navigates to the door's
+             default tab AND expands its entry list; exactly one door is open at a time
+             (MainWindow.TabNavigation.cs: NavDoorMap / SetExpandedDoor / ExpandDoorForTab).
+
+             The entry buttons are the ORIGINAL header tab buttons, moved here whole -
+             same x:Name, Click handler, Tag, tooltip, icon-inside-a-Panel content shape
+             and (Programs/Deeper) first-visit pulse ScaleTransform. Only the Style changed.
+
+             Collapsed doors keep Visibility=Visible and animate Height to 0 instead. That
+             is deliberate: EventFx anchors three of the six celebration bursts on
+             BtnAchievements / BtnQuests / BtnEnhancements via TransformToVisual, and a
+             Collapsed anchor would silently send those bursts nowhere. -->
+        <Border x:Name="NavSidebar" Grid.Row="1" Grid.RowSpan="5" Grid.Column="0"
+                Background="{StaticResource PanelBgBrush}"
+                BorderBrush="#2A2A46" BorderThickness="0,0,1,0">
+            <Grid Margin="0,10,0,10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+
+                        <!-- ===== HOME (default: settings) ===== -->
+                        <Button x:Name="DoorHome" Tag="home" Style="{StaticResource NavDoorButton}"
+                                Click="NavDoor_Click" ToolTip="{loc:Str nav_door_home}">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"
+                                       Source="{Binding Source='🏠', Converter={StaticResource EmojiToImageSource}}"/>
+                                <TextBlock Text="{loc:Str nav_door_home}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <!-- The one door open at startup, so it keeps auto height in markup. -->
+                        <Border x:Name="DoorPanelHome" ClipToBounds="True">
+                            <StackPanel x:Name="DoorEntriesHome">
+                                <Button x:Name="BtnSettings" Tag="Settings" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnSettings_Click" ToolTip="{loc:Str tooltip_dashboard}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='📊', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_dashboard}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ===== STUDIO (default: presets) ===== -->
+                        <Button x:Name="DoorStudio" Tag="studio" Style="{StaticResource NavDoorButton}"
+                                Click="NavDoor_Click" ToolTip="{loc:Str nav_door_studio}">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"
+                                       Source="{Binding Source='🎛️', Converter={StaticResource EmojiToImageSource}}"/>
+                                <TextBlock Text="{loc:Str nav_door_studio}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <Border x:Name="DoorPanelStudio" ClipToBounds="True" Height="0" IsHitTestVisible="False">
+                            <StackPanel x:Name="DoorEntriesStudio">
+                                <Button x:Name="BtnPresets" Tag="Presets" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnPresets_Click" ToolTip="{loc:Str tooltip_presets_sessions}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='📋', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_presets}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnNavHaptics" Tag="Haptics" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavHaptics_Click" ToolTip="{loc:Str tab_haptics}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='📳', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_haptics}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ===== COMPANION (default: companion) ===== -->
+                        <Button x:Name="DoorCompanion" Tag="companion" Style="{StaticResource NavDoorButton}"
+                                Click="NavDoor_Click" ToolTip="{loc:Str nav_door_companion}">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"
+                                       Source="{Binding Source='🤖', Converter={StaticResource EmojiToImageSource}}"/>
+                                <TextBlock Text="{loc:Str nav_door_companion}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <Border x:Name="DoorPanelCompanion" ClipToBounds="True" Height="0" IsHitTestVisible="False">
+                            <StackPanel x:Name="DoorEntriesCompanion">
+                                <Button x:Name="BtnCompanion" Tag="Companion" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnCompanion_Click" ToolTip="{loc:Str tooltip_companion_settings}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🤖', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_companion}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnNavBambiTakeover" Tag="Takeover" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavBambiTakeover_Click" ToolTip="{loc:Str tab_takeover}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='💫', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_takeover}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnNavSheListening" Tag="SheListening" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavSheListening_Click" ToolTip="{loc:Str tab_shelistening}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🎙️', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_shelistening}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <!-- Awareness finally gets a real button: BtnAwareness_Click has been an
+                                     orphan handler (MainWindow.AccountShell.cs) with no XAML owner. -->
+                                <Button x:Name="BtnNavAwareness" Tag="Awareness" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnAwareness_Click" ToolTip="{loc:Str tab_awareness}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='👁️', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_awareness}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ===== PLAY (default: lab) ===== -->
+                        <Button x:Name="DoorPlay" Tag="play" Style="{StaticResource NavDoorButton}"
+                                Click="NavDoor_Click" ToolTip="{loc:Str nav_door_play}">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"
+                                       Source="{Binding Source='🎮', Converter={StaticResource EmojiToImageSource}}"/>
+                                <TextBlock Text="{loc:Str nav_door_play}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <Border x:Name="DoorPanelPlay" ClipToBounds="True" Height="0" IsHitTestVisible="False">
+                            <StackPanel x:Name="DoorEntriesPlay">
+                                <Button x:Name="BtnLab" Tag="Lab" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnLab_Click" ToolTip="{loc:Str tooltip_lab}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🧪', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_lab}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnDeeper" Tag="Deeper" Style="{StaticResource NavEntryButtonDeeper}"
+                                        Click="BtnDeeper_Click" ToolTip="{loc:Str tooltip_deeper}"
+                                        RenderTransformOrigin="0.5,0.5">
+                                    <Button.RenderTransform>
+                                        <ScaleTransform x:Name="BtnDeeperScale" ScaleX="1" ScaleY="1"/>
+                                    </Button.RenderTransform>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🌊', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_deeper}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnPatreonExclusives" Tag="Patreon" Style="{StaticResource NavEntryButtonPatreon}"
+                                        Click="BtnPatreonExclusives_Click" ToolTip="{loc:Str tooltip_patreon_exclusives}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="⭐" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{loc:Str tab_exclusives}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnNavGradedIntake" Tag="GradedIntake" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavGradedIntake_Click" ToolTip="{loc:Str tab_gradedintake}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='📝', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_gradedintake}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnNavLockdown" Tag="Lockdown" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavLockdown_Click" ToolTip="{loc:Str tab_lockdown_mode}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_lockdown_mode}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnNavBlinkTrainer" Tag="BlinkTrainer" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavBlinkTrainer_Click" ToolTip="{loc:Str tab_blink_trainer}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='👀', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_blink_trainer}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnNavRemoteControl" Tag="RemoteControl" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavRemoteControl_Click" ToolTip="{loc:Str tab_remote_control}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='📱', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_remote_control}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnAvailableSubjects" Tag="AvailableSubjects"
+                                        Style="{StaticResource NavEntryButtonNeon}"
+                                        Click="BtnAvailableSubjects_Click"
+                                        ToolTip="{loc:Str tooltip_available_subjects}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🛰️', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_available_subjects}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ===== YOU (default: discord / Profile) ===== -->
+                        <Button x:Name="DoorYou" Tag="you" Style="{StaticResource NavDoorButton}"
+                                Click="NavDoor_Click" ToolTip="{loc:Str nav_door_you}">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"
+                                       Source="{Binding Source='👤', Converter={StaticResource EmojiToImageSource}}"/>
+                                <TextBlock Text="{loc:Str nav_door_you}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <Border x:Name="DoorPanelYou" ClipToBounds="True" Height="0" IsHitTestVisible="False">
+                            <StackPanel x:Name="DoorEntriesYou">
+                                <Button x:Name="BtnDiscordTab" Tag="Profile" Style="{StaticResource NavEntryButtonDiscord}"
+                                        Click="BtnDiscordTab_Click" ToolTip="{loc:Str tab_profile}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='👤', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_profile}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnQuests" Tag="Quests" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnQuests_Click" ToolTip="{loc:Str tooltip_daily_weekly_quests}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='📜', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_quests}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnAchievements" Tag="Achievements" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnAchievements_Click" ToolTip="{loc:Str tab_achievements}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🏆', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_achievements}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnEnhancements" Tag="Enhancements" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnEnhancements_Click" ToolTip="{loc:Str tooltip_enhancement_tree}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='✨', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_enhancements}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <!-- Training Programs — multi-day arcs (Programs tab, v6.6) -->
+                                <Button x:Name="BtnPrograms" Tag="Programs" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnPrograms_Click" ToolTip="{loc:Str tooltip_programs}"
+                                        RenderTransformOrigin="0.5,0.5">
+                                    <Button.RenderTransform>
+                                        <ScaleTransform x:Name="BtnProgramsScale" ScaleX="1" ScaleY="1"/>
+                                    </Button.RenderTransform>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='📅', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_programs}" VerticalAlignment="Center"/>
+                                        <!-- BETA pill: gold on purpose - it must stand apart from the pink
+                                             accent so it reads as a status, not a highlight. Literal text
+                                             like the version strings, not a loc key. -->
+                                        <Border Margin="5,0,0,0" VerticalAlignment="Center" CornerRadius="9999"
+                                                Padding="4,0" Background="#33FFD700"
+                                                BorderBrush="#AAFFD700" BorderThickness="1">
+                                            <TextBlock Text="BETA" FontSize="8" FontWeight="Bold" Foreground="#FFD700"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnLeaderboard" Tag="Leaderboard" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnLeaderboard_Click" ToolTip="{loc:Str tab_leaderboard}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='📊', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_leaderboard}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ===== LIBRARY (default: assets) ===== -->
+                        <Button x:Name="DoorLibrary" Tag="library" Style="{StaticResource NavDoorButton}"
+                                Click="NavDoor_Click" ToolTip="{loc:Str nav_door_library}">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"
+                                       Source="{Binding Source='📚', Converter={StaticResource EmojiToImageSource}}"/>
+                                <TextBlock Text="{loc:Str nav_door_library}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <Border x:Name="DoorPanelLibrary" ClipToBounds="True" Height="0" IsHitTestVisible="False">
+                            <StackPanel x:Name="DoorEntriesLibrary">
+                                <Button x:Name="BtnOpenAssetsTop" Tag="Assets" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnAssets_Click" ToolTip="{loc:Str tooltip_assets_packs}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='📁', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str tab_assets}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Settings door: pinned to the bottom and visually separated. Phase 1 routes
+                     it at the Dashboard; Phase 2 gives it its own view (key "appsettings"). -->
+                <StackPanel Grid.Row="1">
+                    <Border Height="1" Background="#2A2A46" Margin="10,8,10,6"/>
+                    <Button x:Name="DoorSettings" Tag="appsettings" Style="{StaticResource NavDoorButton}"
+                            Click="NavDoor_Click" ToolTip="{loc:Str nav_door_settings}">
+                        <StackPanel Orientation="Horizontal">
+                            <Image Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"
+                                   Source="{Binding Source='⚙️', Converter={StaticResource EmojiToImageSource}}"/>
+                            <TextBlock Text="{loc:Str nav_door_settings}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
         <!-- Header Bar - Row 1 -->
-        <Border Grid.Row="1" Background="{StaticResource PanelBgBrush}" Padding="15,8">
+        <Border Grid.Row="1" Grid.Column="1" Background="{StaticResource PanelBgBrush}" Padding="15,8">
             <Grid>
-                <!-- #857: the tab strip owns an Auto column, the identity cluster owns the star.
-                     It used to be the other way round, so the Auto identity cluster took whatever
-                     it wanted and the right-aligned tab strip - measured against the leftovers -
-                     overflowed LEFT out of its own column, hiding Dashboard behind the mod
-                     switcher. Navigation is the one thing that must never be clipped, so it now
-                     sizes to content first and the identity cluster absorbs what is left. -->
+                <!-- #857 note, kept for the record: navigation used to live here in an Auto
+                     column and had to size to content BEFORE the identity cluster, or the
+                     right-aligned strip overflowed left and hid Dashboard behind the mod
+                     switcher. Phase 1 moved navigation into the rail, so the header is now
+                     just identity (elastic) + the right-hand chrome cluster (Auto). -->
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
@@ -208,9 +640,71 @@
                                   ItemsSource="{Binding AvailableMods, RelativeSource={RelativeSource AncestorType=Window}}"
                                   SelectedValuePath="Id"
                                   SelectionChanged="ModSelectorCombo_SelectionChanged"
-                                  MinWidth="100" MaxWidth="150" Height="22" VerticalAlignment="Center"
+                                  MinWidth="100" MaxWidth="150" Height="24" VerticalAlignment="Center"
                                   FontSize="11" FontWeight="SemiBold"
-                                  ToolTip="{loc:Str tooltip_switch_mod}">
+                                  ToolTip="{loc:Str tooltip_mod_chip}">
+                            <!-- Phase 1 mod chip: a local Template (not a new Style) so the
+                                 DarkComboBoxStyle ItemContainerStyle - and every ItemsSource /
+                                 SelectedValuePath / SelectionChanged binding above - stays exactly
+                                 as it was. Only the closed-state chrome changes: 3px-corner dark
+                                 box -> rounded pill in the mod accent. The accent DOT is not new
+                                 here; it already comes from the ItemTemplate below, which the
+                                 SelectionBox reuses. -->
+                            <ComboBox.Template>
+                                <ControlTemplate TargetType="ComboBox">
+                                    <Grid>
+                                        <ToggleButton x:Name="ToggleButton"
+                                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                                      Focusable="False" ClickMode="Press">
+                                            <ToggleButton.Template>
+                                                <ControlTemplate TargetType="ToggleButton">
+                                                    <Border x:Name="chip" CornerRadius="12" Cursor="Hand"
+                                                            Background="{DynamicResource SurfaceBgBrush}"
+                                                            BorderBrush="{DynamicResource PinkBrush}"
+                                                            BorderThickness="1">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="16"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Path Grid.Column="1" Fill="{DynamicResource PinkBrush}"
+                                                                  HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                  Data="M 0 0 L 3.5 3.5 L 7 0 Z"/>
+                                                        </Grid>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="chip" Property="Background"
+                                                                    Value="{DynamicResource TransparentPink20Brush}"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </ToggleButton.Template>
+                                        </ToggleButton>
+                                        <ContentPresenter IsHitTestVisible="False"
+                                                          Content="{TemplateBinding SelectionBoxItem}"
+                                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                          Margin="10,0,19,0" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                            <ContentPresenter.Resources>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="White"/>
+                                                </Style>
+                                            </ContentPresenter.Resources>
+                                        </ContentPresenter>
+                                        <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}"
+                                               Placement="Bottom" AllowsTransparency="True" Focusable="False"
+                                               PopupAnimation="Slide">
+                                            <Border Background="{DynamicResource PanelBgBrush}" BorderBrush="#3A3A5C"
+                                                    BorderThickness="1" CornerRadius="6" Margin="0,2,0,0"
+                                                    MinWidth="{TemplateBinding ActualWidth}">
+                                                <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto">
+                                                    <ItemsPresenter/>
+                                                </ScrollViewer>
+                                            </Border>
+                                        </Popup>
+                                    </Grid>
+                                </ControlTemplate>
+                            </ComboBox.Template>
                             <ComboBox.ItemTemplate>
                                 <DataTemplate>
                                     <Grid>
@@ -264,6 +758,48 @@
                                 </ControlTemplate>
                             </Button.Template>
                         </Button>
+
+                        <!-- Account chip (Phase 1, net-new). Sits beside the mod chip so the two
+                             "who am I / what am I running" facts read as one cluster.
+                             States are painted by RefreshAccountChip (MainWindow.UiUpdates.cs):
+                             signed out = pink CTA border, no badge; signed in free = neutral;
+                             T1 = gold 🔒; T2/whitelist = violet 🧪. Background/BorderBrush are
+                             TemplateBindings on purpose - the refresh sets them on the Button,
+                             and the signed-out/free states use SetResourceReference so a mod
+                             switch still repaints the accent.
+                             Phase 2 re-points the click at the real Settings/Account page. -->
+                        <Button x:Name="BtnAccountChip" Click="BtnAccountChip_Click"
+                                Margin="8,0,0,0" Height="24" VerticalAlignment="Center" Cursor="Hand"
+                                Background="{DynamicResource SurfaceBgBrush}"
+                                BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                                ToolTip="{loc:Str tooltip_account_chip}">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="chip" CornerRadius="12" Padding="9,0"
+                                            Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}">
+                                        <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="chip" Property="Background"
+                                                    Value="{DynamicResource TransparentPink20Brush}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtAccountChipBadge" Text="🔒" FontSize="10"
+                                           Margin="0,0,5,0" VerticalAlignment="Center"
+                                           Visibility="Collapsed"/>
+                                <TextBlock x:Name="TxtAccountChipName" Text="{loc:Str account_chip_sign_in}"
+                                           FontSize="11" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}"
+                                           VerticalAlignment="Center"
+                                           MaxWidth="110" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
                     <TextBlock Grid.Column="1" x:Name="TxtPlayerTitle" Text="{loc:Str label_basic_subject}" Foreground="{DynamicResource PinkBrush}"
                                FontSize="18" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0"
@@ -302,99 +838,13 @@
                     </Border>
                 </Grid>
 
-                <!-- Row 1 Tab Buttons: Settings, Presets, Progression, Assets -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button x:Name="BtnSettings" Tag="Settings" Style="{StaticResource TabButtonActivePrimary}"
-                            Margin="3,0" Click="BtnSettings_Click" ToolTip="{loc:Str tooltip_dashboard}">
-                        <StackPanel Orientation="Horizontal">
-                            <Image Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"
-                                   Source="{Binding Source='📊', Converter={StaticResource EmojiToImageSource}}"/>
-                            <TextBlock Text="{loc:Str tab_dashboard}" FontSize="11"/>
-                        </StackPanel>
-                    </Button>
-                    <Button x:Name="BtnPresets" Tag="Presets" Style="{StaticResource TabButton}"
-                            Margin="3,0" Click="BtnPresets_Click" ToolTip="{loc:Str tooltip_presets_sessions}">
-                        <StackPanel Orientation="Horizontal">
-                            <Image Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"
-                                   Source="{Binding Source='📋', Converter={StaticResource EmojiToImageSource}}"/>
-                            <TextBlock Text="{loc:Str tab_presets}" FontSize="11"/>
-                        </StackPanel>
-                    </Button>
-                    <!-- BtnProgression removed in velvet-mosaic phase 6 — progression features
-                         are now cards on the main Dashboard instead of a separate tab. -->
-                    <Button x:Name="BtnQuests" Tag="Quests" Style="{StaticResource TabButton}"
-                            Margin="3,0" Click="BtnQuests_Click" ToolTip="{loc:Str tooltip_daily_weekly_quests}">
-                        <StackPanel Orientation="Horizontal">
-                            <Image Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"
-                                   Source="{Binding Source='📜', Converter={StaticResource EmojiToImageSource}}"/>
-                            <TextBlock Text="{loc:Str tab_quests}" FontSize="11"/>
-                        </StackPanel>
-                    </Button>
-                    <!-- Training Programs — multi-day arcs (Programs tab, v6.6) -->
-                    <Button x:Name="BtnPrograms" Tag="Programs" Style="{StaticResource TabButton}"
-                            Margin="3,0" Click="BtnPrograms_Click" ToolTip="{loc:Str tooltip_programs}"
-                            RenderTransformOrigin="0.5,0.5">
-                        <Button.RenderTransform>
-                            <ScaleTransform x:Name="BtnProgramsScale" ScaleX="1" ScaleY="1"/>
-                        </Button.RenderTransform>
-                        <StackPanel Orientation="Horizontal">
-                            <Image Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"
-                                   Source="{Binding Source='📅', Converter={StaticResource EmojiToImageSource}}"/>
-                            <TextBlock Text="{loc:Str tab_programs}" FontSize="11"/>
-                            <!-- BETA pill: gold on purpose - it must stand apart from the pink
-                                 accent so it reads as a status, not a highlight. Literal text
-                                 like the version strings, not a loc key. -->
-                            <Border Margin="5,0,0,0" VerticalAlignment="Center" CornerRadius="9999"
-                                    Padding="5,1" Background="#33FFD700"
-                                    BorderBrush="#AAFFD700" BorderThickness="1">
-                                <TextBlock Text="BETA" FontSize="8" FontWeight="Bold" Foreground="#FFD700"/>
-                            </Border>
-                        </StackPanel>
-                    </Button>
-                    <Button x:Name="BtnEnhancements" Tag="Enhancements" Style="{StaticResource TabButton}"
-                            Margin="3,0" Click="BtnEnhancements_Click" ToolTip="{loc:Str tooltip_enhancement_tree}">
-                        <StackPanel Orientation="Horizontal">
-                            <Image Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"
-                                   Source="{Binding Source='✨', Converter={StaticResource EmojiToImageSource}}"/>
-                            <TextBlock Text="{loc:Str tab_enhancements}" FontSize="11"/>
-                        </StackPanel>
-                    </Button>
-                    <Button x:Name="BtnDeeper" Tag="Deeper" Style="{StaticResource TabButtonDeeper}"
-                            Margin="3,0" Click="BtnDeeper_Click" ToolTip="{loc:Str tooltip_deeper}"
-                            RenderTransformOrigin="0.5,0.5">
-                        <Button.RenderTransform>
-                            <ScaleTransform x:Name="BtnDeeperScale" ScaleX="1" ScaleY="1"/>
-                        </Button.RenderTransform>
-                        <StackPanel Orientation="Horizontal">
-                            <Image Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"
-                                   Source="{Binding Source='🌊', Converter={StaticResource EmojiToImageSource}}"/>
-                            <TextBlock Text="{loc:Str tab_deeper}" FontSize="11"/>
-                        </StackPanel>
-                    </Button>
-                    <!-- SP5 layer 3: Available Subjects directory tab. Free-tier
-                         (controller side of Remote Control). NeonPurple accent. -->
-                    <Button x:Name="BtnAvailableSubjects" Tag="AvailableSubjects"
-                            Style="{StaticResource TabButtonNeon}"
-                            Margin="3,0" Click="BtnAvailableSubjects_Click"
-                            ToolTip="{loc:Str tooltip_available_subjects}">
-                        <StackPanel Orientation="Horizontal">
-                            <Image Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"
-                                   Source="{Binding Source='🛰️', Converter={StaticResource EmojiToImageSource}}"/>
-                            <TextBlock Text="{loc:Str tab_available_subjects}" FontSize="11"/>
-                        </StackPanel>
-                    </Button>
-                    <Button x:Name="BtnOpenAssetsTop" Tag="Assets" Style="{StaticResource TabButton}"
-                            Margin="3,0" Click="BtnAssets_Click" ToolTip="{loc:Str tooltip_assets_packs}">
-                        <StackPanel Orientation="Horizontal">
-                            <Image Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"
-                                   Source="{Binding Source='📁', Converter={StaticResource EmojiToImageSource}}"/>
-                            <TextBlock Text="{loc:Str tab_assets}" FontSize="11"/>
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
+                <!-- Phase 1: the row-1 tab strip moved into the nav rail (canvas column 0).
+                     The eight buttons were MOVED, not rebuilt - same x:Name, Click, Tag,
+                     tooltip, icon-in-a-Panel content shape and pulse transforms. -->
 
-                <!-- Right side: Latest Version Button -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- Right side: preset picker (collapsed but live), language pill, update
+                     button, and - since row 2's button grid is gone - Help and Bug Report. -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <ComboBox x:Name="CmbPresets" Width="160" Margin="0,0,10,0" Visibility="Collapsed"
                               SelectionChanged="CmbPresets_SelectionChanged"
                               ToolTip="{loc:Str tooltip_select_a_preset_configuration}">
@@ -626,22 +1076,54 @@
                             </Style>
                         </Button.Style>
                     </Button>
+                    <!-- Re-homed from the row-2 button grid Phase 1 deleted. BtnMainHelp is a
+                         tutorial spotlight target (TutorialService.cs) - the name must survive. -->
+                    <Button x:Name="BtnMainHelp" Content="?" Click="BtnMainHelp_Click"
+                            Width="26" Height="26" ToolTip="{loc:Str tooltip_how_to_use}" Margin="10,0,0,0">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="{DynamicResource PinkBrush}" CornerRadius="13" Width="26" Height="26" Cursor="Hand">
+                                    <TextBlock Text="?" Foreground="White" FontWeight="Bold" FontSize="16"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Opacity" Value="0.85"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                    <Button x:Name="BtnMainBugReport" Click="BtnReportBug_Click"
+                            Width="26" Height="26" ToolTip="{loc:Str btn_report_bug}" Margin="6,0,0,0">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="#3D3D60" CornerRadius="13" Width="26" Height="26" Cursor="Hand">
+                                    <Image Width="15" Height="15"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Source="{Binding Source='🐛', Converter={StaticResource EmojiToImageSource}}"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Opacity" Value="0.85"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <!-- Row 2: Banner + Second row buttons + Patreon Login -->
-        <Border Grid.Row="2" Background="{StaticResource PanelBgBrush}" Padding="10,6">
+        <!-- Row 2: the support/marquee banner. Phase 1 deleted the second tab-button grid
+             that used to share this row, so the banner now spans the header outright.
+             Its fixed-width host requirement still holds - see MainWindow.Marquee.cs. -->
+        <Border Grid.Row="2" Grid.Column="1" Background="{StaticResource PanelBgBrush}" Padding="10,6">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="0.85*"/>
-                    <ColumnDefinition Width="1.15*"/>
-                </Grid.ColumnDefinitions>
-
                 <!-- Banner -->
-                <Border Grid.Column="0" Background="{DynamicResource SurfaceBgBrush}"
+                <Border Background="{DynamicResource SurfaceBgBrush}"
                         BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                        CornerRadius="8" Padding="12,8" Margin="0,0,6,0">
+                        CornerRadius="8" Padding="12,8">
                     <Grid>
                         <TextBlock x:Name="TxtBannerPrimary" Foreground="{DynamicResource PinkBrush}"
                                    FontSize="14" FontStyle="Italic"
@@ -693,157 +1175,14 @@
                     </Grid>
                 </Border>
 
-                <!-- Right side: Achievements, Leaderboard, Companion, Assets buttons + Patreon Login + Help -->
-                <Grid Grid.Column="1" VerticalAlignment="Center">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="1*"/>
-                        <ColumnDefinition Width="1*"/>
-                        <ColumnDefinition Width="1.1*"/>
-                        <ColumnDefinition Width="1*"/>
-                        <ColumnDefinition Width="0.7*"/>
-                        <ColumnDefinition Width="1.2*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <Button Grid.Column="0" x:Name="BtnAchievements" Tag="Achievements" Style="{StaticResource TabButton}"
-                            Margin="2,0" Click="BtnAchievements_Click" ToolTip="{loc:Str tab_achievements}">
-                        <StackPanel Orientation="Horizontal">
-                            <Image Width="12" Height="12" Margin="0,0,3,0" VerticalAlignment="Center"
-                                   Source="{Binding Source='🏆', Converter={StaticResource EmojiToImageSource}}"/>
-                            <TextBlock Text="{loc:Str tab_achievements}" FontSize="10"/>
-                        </StackPanel>
-                    </Button>
-                    <Button Grid.Column="1" x:Name="BtnLeaderboard" Tag="Leaderboard" Style="{StaticResource TabButton}"
-                            Margin="2,0" Click="BtnLeaderboard_Click" ToolTip="{loc:Str tab_leaderboard}">
-                        <StackPanel Orientation="Horizontal">
-                            <Image Width="12" Height="12" Margin="0,0,3,0" VerticalAlignment="Center"
-                                   Source="{Binding Source='📊', Converter={StaticResource EmojiToImageSource}}"/>
-                            <TextBlock Text="{loc:Str tab_leaderboard}" FontSize="10"/>
-                        </StackPanel>
-                    </Button>
-                    <Button Grid.Column="2" x:Name="BtnCompanion" Tag="Companion" Style="{StaticResource TabButton}"
-                            Margin="2,0" Click="BtnCompanion_Click" ToolTip="{loc:Str tooltip_companion_settings}">
-                        <StackPanel Orientation="Horizontal">
-                            <Image Width="12" Height="12" Margin="0,0,3,0" VerticalAlignment="Center"
-                                   Source="{Binding Source='🤖', Converter={StaticResource EmojiToImageSource}}"/>
-                            <TextBlock Text="{loc:Str tab_companion}" FontSize="10"/>
-                        </StackPanel>
-                    </Button>
+                <!-- Phase 1: the row-2 tab-button grid moved into the nav rail (canvas column 0);
+                     Help and Bug Report were re-homed to the row-1 right cluster. -->
 
-                    <Button Grid.Column="3" x:Name="BtnDiscordTab" Tag="Profile" Click="BtnDiscordTab_Click"
-                            ToolTip="{loc:Str tab_profile}" Cursor="Hand" Height="32" Margin="2,0">
-                        <Button.Style>
-                            <Style TargetType="Button">
-                                <Setter Property="Background" Value="#5865F2"/>
-                                <Setter Property="Foreground" Value="White"/>
-                                <Setter Property="FontWeight" Value="Bold"/>
-                                <Setter Property="FontSize" Value="10"/>
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border x:Name="border" Background="{TemplateBinding Background}"
-                                                    CornerRadius="6" BorderThickness="2" BorderBrush="#4752C4"
-                                                    Padding="7,3">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="border" Property="Background" Value="#4752C4"/>
-                                                    <Setter TargetName="border" Property="BorderBrush" Value="#5865F2"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </Button.Style>
-                        <StackPanel Orientation="Horizontal">
-                            <Image Width="12" Height="12" Margin="0,0,3,0" VerticalAlignment="Center"
-                                   Source="{Binding Source='👤', Converter={StaticResource EmojiToImageSource}}"/>
-                            <TextBlock Text="{loc:Str tab_profile}" FontSize="10"/>
-                        </StackPanel>
-                    </Button>
-                    <Button Grid.Column="4" x:Name="BtnLab" Tag="Lab" Style="{StaticResource TabButton}"
-                            Margin="2,0" Click="BtnLab_Click" ToolTip="{loc:Str tooltip_lab}">
-                        <StackPanel Orientation="Horizontal">
-                            <Image Width="12" Height="12" Margin="0,0,3,0" VerticalAlignment="Center"
-                                   Source="{Binding Source='🧪', Converter={StaticResource EmojiToImageSource}}"/>
-                            <TextBlock Text="{loc:Str tab_lab}" FontSize="10"/>
-                        </StackPanel>
-                    </Button>
-                    <Grid Grid.Column="5">
-                        <Button x:Name="BtnPatreonExclusives" Tag="Patreon" Click="BtnPatreonExclusives_Click"
-                                ToolTip="{loc:Str tooltip_patreon_exclusives}" Cursor="Hand" Height="32" Margin="2,0">
-                            <Button.Style>
-                                <Style TargetType="Button">
-                                    <Setter Property="Background" Value="#FF424D"/>
-                                    <Setter Property="Foreground" Value="White"/>
-                                    <Setter Property="FontWeight" Value="Bold"/>
-                                    <Setter Property="FontSize" Value="10"/>
-                                    <Setter Property="Template">
-                                        <Setter.Value>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border x:Name="border" Background="{TemplateBinding Background}"
-                                                        CornerRadius="6" BorderThickness="2" BorderBrush="#E8363F"
-                                                        Padding="7,3">
-                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="border" Property="Background" Value="#E8363F"/>
-                                                        <Setter TargetName="border" Property="BorderBrush" Value="#FF424D"/>
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                </Style>
-                            </Button.Style>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="⭐" FontSize="10" Margin="0,0,3,0"/>
-                                <TextBlock Text="{loc:Str tab_exclusives}" FontSize="10"/>
-                            </StackPanel>
-                        </Button>
-                    </Grid>
-                    <Button x:Name="BtnMainHelp" Grid.Column="6" Content="?" Click="BtnMainHelp_Click"
-                            Width="26" Height="26" ToolTip="{loc:Str tooltip_how_to_use}" Margin="3,0">
-                        <Button.Template>
-                            <ControlTemplate TargetType="Button">
-                                <Border Background="{DynamicResource PinkBrush}" CornerRadius="13" Width="26" Height="26" Cursor="Hand">
-                                    <TextBlock Text="?" Foreground="White" FontWeight="Bold" FontSize="16"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <ControlTemplate.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Opacity" Value="0.85"/>
-                                    </Trigger>
-                                </ControlTemplate.Triggers>
-                            </ControlTemplate>
-                        </Button.Template>
-                    </Button>
-                    <Button x:Name="BtnMainBugReport" Grid.Column="7" Click="BtnReportBug_Click"
-                            Width="26" Height="26" ToolTip="{loc:Str btn_report_bug}" Margin="3,0">
-                        <Button.Template>
-                            <ControlTemplate TargetType="Button">
-                                <Border Background="#3D3D60" CornerRadius="13" Width="26" Height="26" Cursor="Hand">
-                                    <Image Width="15" Height="15"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center"
-                                           Source="{Binding Source='🐛', Converter={StaticResource EmojiToImageSource}}"/>
-                                </Border>
-                                <ControlTemplate.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Opacity" Value="0.85"/>
-                                    </Trigger>
-                                </ControlTemplate.Triggers>
-                            </ControlTemplate>
-                        </Button.Template>
-                    </Button>
-                </Grid>
             </Grid>
         </Border>
 
         <!-- XP Progress Bar + Stat Pills - Row 3 -->
-        <Grid Grid.Row="3" Margin="15,10,15,5">
+        <Grid Grid.Row="3" Grid.Column="1" Margin="15,10,15,5">
             <!-- Main content with XP bar and stat pills -->
             <Grid x:Name="XPBarContent">
                 <Grid.ColumnDefinitions>
@@ -946,47 +1285,47 @@
         </Grid>
 
         <!-- Main Content - Settings Tab -->
-        <views:SettingsTabView x:Name="SettingsTab" Grid.Row="4" Margin="10,5,10,2" />
+        <views:SettingsTabView x:Name="SettingsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,2" />
 
 
         <!-- Presets Tab (Hidden by default) -->
-        <views:PresetsTabView x:Name="PresetsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:PresetsTabView x:Name="PresetsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
         <!-- Progression Tab (Hidden by default) -->
-        <views:ProgressionTabView x:Name="ProgressionTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:ProgressionTabView x:Name="ProgressionTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
         <!-- Quests Tab -->
-        <views:QuestsTabView x:Name="QuestsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:QuestsTabView x:Name="QuestsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
         <!-- Achievements Tab -->
-        <views:AchievementsTabView x:Name="AchievementsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:AchievementsTabView x:Name="AchievementsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
         <!-- Companion Tab (v5.9 - Hero + AI Brain redesign) -->
-        <views:CompanionTabView x:Name="CompanionTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:CompanionTabView x:Name="CompanionTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
         <!-- Patreon Exclusives Tab -->
-        <views:PatreonTabView x:Name="PatreonTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:PatreonTabView x:Name="PatreonTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
         <!-- Profile Tab -->
-        <views:DiscordTabView x:Name="DiscordTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:DiscordTabView x:Name="DiscordTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
         <!-- Lab Tab -->
-        <views:LabTabView x:Name="LabTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:LabTabView x:Name="LabTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
         <!-- Leaderboard Tab -->
-        <views:LeaderboardTabView x:Name="LeaderboardTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:LeaderboardTabView x:Name="LeaderboardTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
         <!-- Assets & Packs Tab -->
-        <views:AssetsTabView x:Name="AssetsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:AssetsTabView x:Name="AssetsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
         <!-- Enhancements Tab (Skill Tree) -->
-        <views:EnhancementsTabView x:Name="EnhancementsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:EnhancementsTabView x:Name="EnhancementsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
         <!-- Deeper Tab — universal media enhancement system.
              Mission 2 (hub redesign): single-column layout, unified library
@@ -997,15 +1336,15 @@
              tab is a uniform drop target. A tab-local AllowDrop handler here would
              steal the bubbling events from the global overlay and only cover part of
              the tab, so it's intentionally absent. -->
-        <views:DeeperTabView x:Name="DeeperTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:DeeperTabView x:Name="DeeperTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
         <!-- Awareness Engine Tab -->
-        <views:AwarenessTabView x:Name="AwarenessTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:AwarenessTabView x:Name="AwarenessTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
         <!-- Remote Control Tab — Patreon premium feature, full redesign with QR pairing -->
-        <views:RemoteControlTabView x:Name="RemoteControlTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:RemoteControlTabView x:Name="RemoteControlTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
         <!-- SP5 layer 3: Available Subjects directory tab. Controller side of
@@ -1015,50 +1354,50 @@
              200, the returned session_url opens in the user's default browser
              via Process.Start (one-click pairing URL with PIN in the hash
              fragment, never logged or persisted on the desktop). -->
-        <views:AvailableSubjectsTabView x:Name="AvailableSubjectsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:AvailableSubjectsTabView x:Name="AvailableSubjectsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
         <!-- Bambi Takeover Tab — Patreon premium feature, visible-but-locked for free users -->
-        <views:BambiTakeoverTabView x:Name="BambiTakeoverTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:BambiTakeoverTabView x:Name="BambiTakeoverTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
         <!-- Haptics Tab — Patreon premium feature, visible-but-locked for free users -->
-        <views:HapticsTabView x:Name="HapticsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:HapticsTabView x:Name="HapticsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
         <!-- Lockdown Mode Tab (graduated from Lab in v5.8.4) -->
-        <views:LockdownTabView x:Name="LockdownTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:LockdownTabView x:Name="LockdownTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
         <!-- Blink Trainer Tab — Patreon premium feature, flagship webcam experience.
              Promoted from Lab Webcam Games card in v5.9.8. Phase A: scaffold + header only. -->
-        <views:BlinkTrainerTabView x:Name="BlinkTrainerTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:BlinkTrainerTabView x:Name="BlinkTrainerTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
         <!-- She's Listening Tab — voice control Exclusive (offline mic commands + spoken mantras) -->
-        <views:SheListeningTabView x:Name="SheListeningTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:SheListeningTabView x:Name="SheListeningTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
         <!-- Graded Intake Tab — banded-descent intake Exclusive. Graduated out of the Lab;
              the controls moved here verbatim (see GradedIntakeTabView.xaml). -->
-        <views:GradedIntakeTabView x:Name="GradedIntakeTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:GradedIntakeTabView x:Name="GradedIntakeTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
         <!-- Training Programs Tab — multi-day arcs (enrollment ceremony, day clock, ledger).
              Browse / run / lapsed / graduated are four panels inside one view, switched from
              MainWindow.ProgramsTab.cs. -->
-        <views:ProgramsTabView x:Name="ProgramsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:ProgramsTabView x:Name="ProgramsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
         <!-- Exclusives Tab — "the Velvet Vault". Registry-driven showcase of the
              supporter-only features (ExclusiveFeature.All); replaced the launcher
              popup submenu. Cards navigate; destination tabs own the premium gates. -->
-        <views:ExclusivesTabView x:Name="ExclusivesTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" />
+        <views:ExclusivesTabView x:Name="ExclusivesTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
 
         <!-- Global Bottom Bar: Start / Save / Exit (Always visible) -->
-        <Border Grid.Row="5" Background="{StaticResource PanelBgBrush}" Margin="10,5,10,10" CornerRadius="10" Padding="15,12">
+        <Border Grid.Row="5" Grid.Column="1" Background="{StaticResource PanelBgBrush}" Margin="10,5,10,10" CornerRadius="10" Padding="15,12">
             <!-- One flat grid so the Start controls and Save/Exit can't collide. Auto
                  columns (Remember / caret / Pause) take their size first, START flexes,
                  and Save/Exit share the rest — nothing clips at any window width. -->
@@ -1210,7 +1549,7 @@
         </Border>
 
         <!-- Remote Control Overlay (shown when controller is connected) -->
-        <Border x:Name="RemoteControlOverlay" Grid.Row="1" Grid.RowSpan="5" Panel.ZIndex="999" Visibility="Collapsed" Background="#E0000000" Opacity="0">
+        <Border x:Name="RemoteControlOverlay" Grid.Row="1" Grid.RowSpan="5" Grid.Column="0" Grid.ColumnSpan="2" Panel.ZIndex="999" Visibility="Collapsed" Background="#E0000000" Opacity="0">
             <Grid>
                 <!-- Command notification banner at top -->
                 <Border x:Name="RemoteCommandNotification" VerticalAlignment="Top" HorizontalAlignment="Center"
@@ -1387,7 +1726,7 @@
         </Border>
 
         <!-- Global Drop Overlay (shown when dragging files anywhere) -->
-        <Border x:Name="GlobalDropOverlay" Grid.RowSpan="5" Visibility="Collapsed" Background="#D0000000" IsHitTestVisible="False">
+        <Border x:Name="GlobalDropOverlay" Grid.RowSpan="5" Grid.Column="0" Grid.ColumnSpan="2" Visibility="Collapsed" Background="#D0000000" IsHitTestVisible="False">
             <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="16" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="3"
                     MaxWidth="450" MaxHeight="220" VerticalAlignment="Center" HorizontalAlignment="Center"
                     Padding="40,30">
@@ -1402,7 +1741,7 @@
         </Border>
 
         <!-- Main App Tutorial Overlay -->
-        <Border x:Name="MainTutorialOverlay" Grid.RowSpan="5" Panel.ZIndex="1000" Visibility="Collapsed" Background="#E8000000">
+        <Border x:Name="MainTutorialOverlay" Grid.RowSpan="5" Grid.Column="0" Grid.ColumnSpan="2" Panel.ZIndex="1000" Visibility="Collapsed" Background="#E8000000">
             <Grid>
                 <Border Background="Transparent" MouseLeftButtonDown="MainTutorial_Close"/>
                 <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2"

@@ -272,6 +272,95 @@ namespace ConditioningControlPanel
                     XPBarContent.Opacity = 0.3;
                 }
             }
+
+            // The header account chip paints the same login/tier truth, so it rides this
+            // method rather than owning a timer or a second TierChanged subscription. This
+            // is the choke point every auth change already runs through: UpdatePatreonUI
+            // calls it (and UpdatePatreonUI is what OnPatreonTierChanged, both SubscribeStar
+            // paths, ClearAccountData and every login/link flow call), plus UpdateLevelDisplay.
+            RefreshAccountChip();
+        }
+
+        // Tier colours for the account chip. Fixed brand values, not mod-owned: gold is the
+        // Tier-1 lock everywhere in the app, violet is the Tier-2 "Lab" flask.
+        private static SolidColorBrush AccountChipBrush(byte r, byte g, byte b)
+        {
+            var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+            brush.Freeze();
+            return brush;
+        }
+
+        private static readonly SolidColorBrush AccountChipTier1Brush = AccountChipBrush(0xFF, 0xD7, 0x00);
+        private static readonly SolidColorBrush AccountChipTier2Brush = AccountChipBrush(0xB4, 0x7B, 0xFF);
+        private static readonly SolidColorBrush AccountChipNeutralBrush = AccountChipBrush(0x3D, 0x3D, 0x60);
+
+        /// <summary>
+        /// Repaints the header account chip: signed-out CTA, or display name plus a tier
+        /// badge (gold lock = Tier 1, violet flask = Tier 2/whitelist).
+        /// </summary>
+        private void RefreshAccountChip()
+        {
+            // Reachable from UpdateLevelDisplay during early startup, before the chip's
+            // name-scope fields are populated.
+            if (BtnAccountChip == null || TxtAccountChipName == null || TxtAccountChipBadge == null) return;
+
+            try
+            {
+                if (!App.IsLoggedIn)
+                {
+                    TxtAccountChipName.Text = Loc.Get("account_chip_sign_in");
+                    TxtAccountChipBadge.Visibility = Visibility.Collapsed;
+                    // SetResourceReference, not a resolved brush: PinkBrush is the mod accent
+                    // and has to keep repainting when the active mod changes.
+                    BtnAccountChip.SetResourceReference(System.Windows.Controls.Control.BorderBrushProperty, "PinkBrush");
+                    return;
+                }
+
+                var name = App.UserDisplayName;
+                TxtAccountChipName.Text = string.IsNullOrWhiteSpace(name)
+                    ? Loc.Get("account_chip_signed_in")
+                    : name;
+
+                // HasLabAccess / HasPremiumAccess already fold in the whitelist, SubscribeStar
+                // and the offline grace, so the badge tells the same story the feature gates do.
+                if (App.Patreon?.HasLabAccess == true)
+                {
+                    TxtAccountChipBadge.Text = "🧪";
+                    TxtAccountChipBadge.Visibility = Visibility.Visible;
+                    BtnAccountChip.BorderBrush = AccountChipTier2Brush;
+                }
+                else if (App.Patreon?.HasPremiumAccess == true)
+                {
+                    TxtAccountChipBadge.Text = "🔒";
+                    TxtAccountChipBadge.Visibility = Visibility.Visible;
+                    BtnAccountChip.BorderBrush = AccountChipTier1Brush;
+                }
+                else
+                {
+                    TxtAccountChipBadge.Visibility = Visibility.Collapsed;
+                    BtnAccountChip.BorderBrush = AccountChipNeutralBrush;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("RefreshAccountChip failed: {E}", ex.Message);
+            }
+        }
+
+        private void BtnAccountChip_Click(object sender, RoutedEventArgs e)
+        {
+            // Today's account surface is the dashboard's "App Info & Data" popup, which borrows
+            // the real login / linking / cloud-backup cards out of PatreonTab. Phase 2 replaces
+            // it with a Settings/Account page and re-points this handler there.
+            try
+            {
+                ShowAppInfoPopup();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("BtnAccountChip_Click: app-info popup failed: {E}", ex.Message);
+                ShowTab("settings");
+            }
         }
 
         /// <summary>

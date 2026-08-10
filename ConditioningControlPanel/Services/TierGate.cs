@@ -1,4 +1,5 @@
 using System;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services
@@ -53,7 +54,7 @@ namespace ConditioningControlPanel.Services
         {
             var allowed = App.Patreon?.HasPremiumAccess == true;
             return new TierVerdict(allowed, featureName, PatreonTier.Level1,
-                allowed ? string.Empty : $"{featureName} is for supporters - any Patreon tier unlocks it.");
+                allowed ? string.Empty : Loc.GetF("tiergate_denied_premium", featureName));
         }
 
         /// <summary>Tier 2+ ("Lab"): the real T2 bar, whitelist folded in as permanent tier 2.</summary>
@@ -61,7 +62,7 @@ namespace ConditioningControlPanel.Services
         {
             var allowed = App.Patreon?.HasLabAccess == true;
             return new TierVerdict(allowed, featureName, PatreonTier.Level2,
-                allowed ? string.Empty : $"{featureName} is a Tier 2 perk - upgrade your pledge to unlock it.");
+                allowed ? string.Empty : Loc.GetF("tiergate_denied_lab", featureName));
         }
 
         /// <summary>
@@ -94,7 +95,7 @@ namespace ConditioningControlPanel.Services
             try
             {
                 App.Notifications?.Show(verdict.Reason, NotificationType.Warning, TimeSpan.FromSeconds(8),
-                    "See tiers", () => App.MainWindowRef?.ShowAppInfoPopup());
+                    Loc.Get("tiergate_see_tiers"), () => App.MainWindowRef?.ShowAppInfoPopup());
             }
             catch (Exception ex)
             {

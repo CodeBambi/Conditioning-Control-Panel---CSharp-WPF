@@ -2890,6 +2890,9 @@ namespace ConditioningControlPanel
             restored.UserDisplayName = current.UserDisplayName;
             restored.PatreonTier = current.PatreonTier;
             restored.PatreonPremiumValidUntil = current.PatreonPremiumValidUntil;
+            // Tier-2 twin of the line above. Both are LOCAL entitlement grace windows, never the
+            // backup's - a restore from another machine must not import (or drop) Lab access.
+            restored.PatreonLabValidUntil = current.PatreonLabValidUntil;
             restored.LastPatreonVerification = current.LastPatreonVerification;
             restored.OpenRouterApiKey = current.OpenRouterApiKey;
 

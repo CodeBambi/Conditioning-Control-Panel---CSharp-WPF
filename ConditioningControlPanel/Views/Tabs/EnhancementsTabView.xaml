@@ -80,10 +80,10 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel VerticalAlignment="Center" Margin="0,0,14,0">
-                    <helpers:EmojiTextBlock Text="🔮 Secret Skills"
+                    <helpers:EmojiTextBlock Text="{loc:Str label_secret_skills}"
                                             Foreground="{DynamicResource PinkBrush}"
                                             FontSize="12" FontWeight="Bold"/>
-                    <TextBlock Text="Hidden until you earn them."
+                    <TextBlock Text="{loc:Str label_secret_skills_sub}"
                                Foreground="#8A8AA0" FontSize="9" FontStyle="Italic"
                                Margin="0,1,0,0"/>
                 </StackPanel>

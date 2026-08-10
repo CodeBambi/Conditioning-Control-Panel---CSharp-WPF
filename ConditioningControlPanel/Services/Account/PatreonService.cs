@@ -28,6 +28,9 @@ namespace ConditioningControlPanel.Services
         private const int LocalCallbackPort = 47832;
         private const int CacheHours = 24;
         private const int OAuthTimeoutMinutes = 5;
+        // Offline grace window. ONE constant for both tiers on purpose: a Lab window that outlived
+        // the premium one would let a lapsed tier-2 keep the Lab after losing everything else.
+        private const int GraceDays = 14;
 
         // Server-side whitelist status (fetched from proxy)
         private bool _isWhitelisted;
@@ -132,17 +135,17 @@ namespace ConditioningControlPanel.Services
             || (App.SubscribeStar?.HasPremiumAccess == true);
 
         /// <summary>
-        /// The tier-2 half of the offline grace, and the reason it is safe: it reads the SAME
-        /// 14-day window the premium cache uses, but only for an account whose last validated tier
-        /// was Level2. A tier-1 patron therefore never falls through it, which is the property the
-        /// grace was previously excluded for.
+        /// The tier-2 half of the offline grace: its own 14-day stamp
+        /// (<see cref="Models.AppSettings.PatreonLabValidUntil"/>), written only by a validation
+        /// that actually returned Level2. A tier-1 patron therefore never falls through it.
         ///
-        /// The persisted tier on its own (what MainWindow.UiUpdates used to OR in) never expires -
-        /// running it THROUGH the window is what turns a permanently-stale read into a grace.
+        /// It used to be derived from the persisted PatreonTier AND'd with the premium window,
+        /// which sounded equivalent and was not: PatreonTier is written by the V2 sync, so a
+        /// Patreon-OAuth-only tier 2 (whose settings tier stays 0 until a sync that may never
+        /// happen) got no grace at all, while any path that wrote the tier once handed out Lab for
+        /// as long as premium held. One dedicated timestamp removes both halves of that.
         /// </summary>
-        private static bool HasCachedLabAccess =>
-            (App.Settings?.Current?.PatreonTier ?? 0) >= (int)PatreonTier.Level2
-            && App.Settings?.Current?.HasCachedPremiumAccess == true;
+        private static bool HasCachedLabAccess => App.Settings?.Current?.HasCachedLabAccess == true;
 
         /// <summary>
         /// Whether the user has Lab access: Tier 2+ OR whitelisted.
@@ -216,6 +219,7 @@ namespace ConditioningControlPanel.Services
                     {
                         App.Settings.Current.PatreonTier = 0;
                         App.Settings.Current.PatreonPremiumValidUntil = null;
+                        App.Settings.Current.PatreonLabValidUntil = null;
                         App.Logger?.Debug("No Patreon tokens found, cleared cached premium access");
                     }
                 }
@@ -645,8 +649,22 @@ namespace ConditioningControlPanel.Services
                 {
                     if (App.Settings?.Current != null)
                     {
-                        App.Settings.Current.PatreonPremiumValidUntil = DateTime.UtcNow.AddDays(14);
+                        App.Settings.Current.PatreonPremiumValidUntil = DateTime.UtcNow.AddDays(GraceDays);
                         App.Logger?.Information("Extended premium access grace period to {Date}", App.Settings.Current.PatreonPremiumValidUntil);
+
+                        // Tier-2 half of the same grace. Stamped from the tier this validation just
+                        // returned - never from the persisted PatreonTier, which is exactly the
+                        // never-expiring read HasCachedLabAccess was rewritten to stop trusting.
+                        // A tier-1 patron falls through to the else and any stale Lab window dies.
+                        if (newTier >= PatreonTier.Level2)
+                        {
+                            App.Settings.Current.PatreonLabValidUntil = DateTime.UtcNow.AddDays(GraceDays);
+                            App.Logger?.Information("Extended Lab (tier 2) grace period to {Date}", App.Settings.Current.PatreonLabValidUntil);
+                        }
+                        else
+                        {
+                            App.Settings.Current.PatreonLabValidUntil = null;
+                        }
                     }
                 }
 
@@ -943,6 +961,7 @@ namespace ConditioningControlPanel.Services
             if (App.Settings?.Current != null)
             {
                 App.Settings.Current.PatreonPremiumValidUntil = null;
+                App.Settings.Current.PatreonLabValidUntil = null;
                 App.Settings.Current.PatreonTier = 0; // Clear cached tier
                 App.Settings.Save(); // Force save immediately
             }

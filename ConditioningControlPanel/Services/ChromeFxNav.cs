@@ -11,15 +11,23 @@ namespace ConditioningControlPanel.Services
     public static class ChromeFxNav
     {
         /// <summary>
-        /// Tab keys in nav-strip order: row one left-to-right, then row two. The incoming tab's
+        /// Tab keys in nav-rail order, top to bottom: each door's entries in the order they sit
+        /// under their header (Home, Studio, Companion, Play, You, Library). The incoming tab's
         /// position relative to the outgoing one decides the slide direction, so this list is the
-        /// visual order the user sees, not an arbitrary enum order.
+        /// visual order the user sees, not an arbitrary enum order. Phase 1 replaced the old
+        /// two-header-rows order with this one; every reachable key is now on the rail, so a
+        /// -1 lookup means a genuine ghost ("patreon", "fyp") rather than a submenu destination.
         /// </summary>
         public static readonly string[] NavOrder =
         {
-            "settings", "presets", "quests", "programs", "enhancements", "deeper",
-            "availablesubjects", "assets",
-            "achievements", "leaderboard", "companion", "discord", "lab",
+            "settings",                                                        // Home
+            "presets", "haptics",                                              // Studio
+            "companion", "bambitakeover", "shelistening", "awareness",         // Companion
+            "lab", "deeper", "exclusives", "gradedintake", "lockdown",
+            "blinktrainer", "remotecontrol", "availablesubjects",              // Play
+            "discord", "quests", "achievements", "enhancements",
+            "programs", "leaderboard",                                         // You
+            "assets",                                                          // Library
         };
 
         /// <summary>

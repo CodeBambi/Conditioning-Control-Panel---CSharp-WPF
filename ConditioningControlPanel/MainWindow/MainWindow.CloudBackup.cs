@@ -127,6 +127,8 @@ namespace ConditioningControlPanel
                     restored.UserDisplayName = current.UserDisplayName;
                     restored.PatreonTier = current.PatreonTier;
                     restored.PatreonPremiumValidUntil = current.PatreonPremiumValidUntil;
+                    // Tier-2 twin of the line above: a local entitlement window, never the backup's.
+                    restored.PatreonLabValidUntil = current.PatreonLabValidUntil;
                     restored.LastPatreonVerification = current.LastPatreonVerification;
                     restored.OpenRouterApiKey = current.OpenRouterApiKey;
                 }

@@ -41,9 +41,29 @@ namespace ConditioningControlPanel
         private const double DesignWidth = 780;
         private const double DesignHeight = 1020;
 
-        // Gap between tube window and main window (negative = overlap)
-        // This will be scaled based on actual window size
-        private const double BaseOffsetFromParent = -350;
+        // Horizontal seam between the tube window and the main window (negative = the tube's window
+        // RECT overlaps main). Scaled by _scaleFactor, like every other distance here.
+        //
+        // MEASURED, don't guess: the tube canvas is 780 wide, but tube.png's opaque pixels stop at
+        // 55.1% of the image (alpha bounds x 664..1128 of 2048). ImgTubeFrame is Uniform in the
+        // 780x1080 canvas (square art -> 780x780, canvas x 429.6), and ContentViewbox is Uniform
+        // again (x0.9444 + 21.7px side pad), so the art's right edge lands 352.6*scale px from the
+        // tube WINDOW's right edge. Everything right of it is alpha-0 on a layered window, i.e.
+        // invisible AND click/hover-through — which is why main's header has always been usable
+        // under the old flat -350. That -350 was not "a 350px overlap"; it parked the cables ~3px
+        // inside main's left edge so they appear to plug into the frame.
+        //
+        // UX restructure Phase 1 (owner decision #1): main's left edge is now the door rail, so the
+        // seam is expressed as a budget instead of a magic number. SeamOverlapOverMain is the only
+        // knob — canvas px of OPAQUE art allowed over main's left edge; 0 = flush against the rail,
+        // 60 = the decision's ceiling. Do NOT set the base offset itself to a small number like
+        // -60: that does not shrink the overlap, it drags the whole tube ~290px further left and
+        // leaves the cables ending in mid-air (and pushes her off-screen when main is left-docked).
+        // A mod that paints tube.png past that seam will cover the rail — mod art contract, not a
+        // constant we can tune for.
+        private const double TubeArtRightPadding = 353;   // transparent right margin of the tube frame
+        private const double SeamOverlapOverMain = 0;     // <= 60 (owner decision #1)
+        private const double BaseOffsetFromParent = -(TubeArtRightPadding - SeamOverlapOverMain);
 
         // Vertical offset from center (positive = lower, negative = higher)
         private const double VerticalOffset = 20;
@@ -657,7 +677,10 @@ namespace ConditioningControlPanel
             double actualWidth = ActualWidth > 0 ? ActualWidth : DesignWidth * _scaleFactor;
             double actualHeight = ActualHeight > 0 ? ActualHeight : DesignHeight * _scaleFactor;
 
-            // Scale the offset based on current scale factor
+            // Scale the offset based on current scale factor. Safe to ignore _currentScale here:
+            // the user zoom only exists while detached, and Attach() resets it to 1.0 and re-sizes
+            // the viewbox before calling us — so ActualWidth and the offset share one scale and the
+            // art seam holds (see BaseOffsetFromParent).
             double scaledOffset = BaseOffsetFromParent * _scaleFactor;
 
             // Calculate new position

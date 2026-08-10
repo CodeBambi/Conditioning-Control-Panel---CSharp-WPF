@@ -2240,6 +2240,27 @@ namespace ConditioningControlPanel.Models
         [System.Text.Json.Serialization.JsonIgnore]
         public bool HasCachedPremiumAccess => _patreonPremiumValidUntil.HasValue && DateTime.UtcNow < _patreonPremiumValidUntil.Value;
 
+        private DateTime? _patreonLabValidUntil = null;
+        /// <summary>
+        /// Tier-2 twin of <see cref="PatreonPremiumValidUntil"/>: stamped only when a validation
+        /// actually returned Level2, so the Lab grace can never be inferred from a tier number that
+        /// was cached once and then never expired. Same 14-day window as premium.
+        /// Absent from an older settings file → null → no grace (deliberate: no free Lab on upgrade).
+        /// </summary>
+        [JsonProperty("patreon_lab_valid_until")]
+        public DateTime? PatreonLabValidUntil
+        {
+            get => _patreonLabValidUntil;
+            set { _patreonLabValidUntil = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Check if cached Patreon Lab (tier 2) access is still valid (within the 2-week window)
+        /// </summary>
+        [Newtonsoft.Json.JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool HasCachedLabAccess => _patreonLabValidUntil.HasValue && DateTime.UtcNow < _patreonLabValidUntil.Value;
+
         #endregion
 
         #region Scheduler

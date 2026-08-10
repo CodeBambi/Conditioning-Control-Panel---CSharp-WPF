@@ -106,6 +106,35 @@ namespace ConditioningControlPanel.Services
         private Action? _showPatreon;
         private Action? _showAwareness;
         private Action? _showDeeper;
+        // Generic router for every other ShowTab key. The named callbacks above only cover eight
+        // keys, so before this existed a step declaring any other RequiresTab navigated nowhere
+        // (silently - the spotlight just landed on whatever tab happened to be open).
+        private Action<string>? _showTab;
+
+        /// <summary>
+        /// Nav entry element name -> the ShowTab key whose sidebar door owns that entry. A step can
+        /// spotlight a nav entry that lives in a *different* door than the tab it requires (the
+        /// "open the assets folder" step stands on the dashboard but points at the Assets entry), so
+        /// the door to open is decided by the target element first, RequiresTab second.
+        /// Keys are the x:Names the nav has always used - they are API for the tutorial and FX.
+        /// </summary>
+        private static readonly Dictionary<string, string> NavEntryDoorKeys = new(StringComparer.Ordinal)
+        {
+            ["BtnSettings"] = "settings",
+            ["BtnPresets"] = "presets",
+            ["BtnQuests"] = "quests",
+            ["BtnPrograms"] = "programs",
+            ["BtnEnhancements"] = "enhancements",
+            ["BtnDeeper"] = "deeper",
+            ["BtnAvailableSubjects"] = "availablesubjects",
+            ["BtnOpenAssetsTop"] = "assets",
+            ["BtnAchievements"] = "achievements",
+            ["BtnLeaderboard"] = "leaderboard",
+            ["BtnCompanion"] = "companion",
+            ["BtnDiscordTab"] = "discord",
+            ["BtnLab"] = "lab",
+            ["BtnPatreonExclusives"] = "exclusives"
+        };
 
         public event EventHandler<TutorialStep>? StepChanged;
         public event EventHandler? TutorialStarted;
@@ -140,7 +169,8 @@ namespace ConditioningControlPanel.Services
             Action showCompanion,
             Action showPatreon,
             Action? showAwareness = null,
-            Action? showDeeper = null)
+            Action? showDeeper = null,
+            Action<string>? showTab = null)
         {
             _showSettings = showSettings;
             _showPresets = showPresets;
@@ -150,6 +180,7 @@ namespace ConditioningControlPanel.Services
             _showPatreon = showPatreon;
             _showAwareness = showAwareness;
             _showDeeper = showDeeper;
+            _showTab = showTab;
         }
 
         /// <summary>
@@ -217,18 +248,7 @@ namespace ConditioningControlPanel.Services
                 // Apply callbacks based on step requirements
                 if (step.RequiresTab != null)
                 {
-                    var tabAction = step.RequiresTab switch
-                    {
-                        "settings" => _showSettings,
-                        "presets" => _showPresets,
-                        "progression" => _showProgression,
-                        "achievements" => _showAchievements,
-                        "companion" => _showCompanion,
-                        "patreon" => _showPatreon,
-                        "awareness" => _showAwareness,
-                        "deeper" => _showDeeper,
-                        _ => null
-                    };
+                    var tabAction = ResolveTabAction(step.RequiresTab);
 
                     // Compose with any custom OnActivate the step set in its constructor
                     // (e.g. demo-fire steps that need the tab switch AND a side-effect).
@@ -246,6 +266,66 @@ namespace ConditioningControlPanel.Services
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// The navigation action for a step's RequiresTab. The eight named callbacks keep their
+        /// hand-wired behaviour (presets also refreshes its list, "patreon" opens the App Info popup
+        /// rather than a tab); every other key goes through the generic router so adding a door
+        /// never means adding another callback field. "mod:*" keys belong to the Mod Creator
+        /// window's own tab strip and are handled there.
+        /// </summary>
+        private Action? ResolveTabAction(string tab)
+        {
+            if (tab.StartsWith("mod:", StringComparison.Ordinal)) return null;
+
+            var named = tab switch
+            {
+                "settings" => _showSettings,
+                "presets" => _showPresets,
+                "progression" => _showProgression,
+                "achievements" => _showAchievements,
+                "companion" => _showCompanion,
+                "patreon" => _showPatreon,
+                "awareness" => _showAwareness,
+                "deeper" => _showDeeper,
+                _ => null
+            };
+            if (named != null) return named;
+
+            if (_showTab != null)
+            {
+                var router = _showTab;
+                return () => router(tab);
+            }
+
+            // Last resort so a tour started before ConfigureCallbacks (or from a window that never
+            // configured one) still lands on the right tab instead of silently staying put.
+            return () =>
+            {
+                try { (Application.Current?.MainWindow as MainWindow)?.ShowTab(tab); }
+                catch { /* a tour never blocks on UI quirks */ }
+            };
+        }
+
+        /// <summary>
+        /// The ShowTab key whose sidebar door must be open before this step's target can be found
+        /// and measured. Null when the step points at chrome that lives outside the doors (title
+        /// bar, bottom bar), at nothing at all, or at another window's tabs ("mod:*").
+        /// TutorialOverlay calls this before every spotlight measure.
+        /// </summary>
+        internal static string? DoorTabKeyFor(TutorialStep step)
+        {
+            if (step.TargetElementName != null &&
+                NavEntryDoorKeys.TryGetValue(step.TargetElementName, out var navDoor))
+            {
+                return navDoor;
+            }
+
+            var tab = step.RequiresTab;
+            if (string.IsNullOrEmpty(tab)) return null;
+            if (tab!.StartsWith("mod:", StringComparison.Ordinal)) return null;
+            return tab;
         }
 
         public void Next()
@@ -400,7 +480,10 @@ namespace ConditioningControlPanel.Services
                     Title = "Add Your Own Content",
                     Description = "Add images to 'assets/images' for flashes, and videos to 'assets/videos'. " +
                                   "Use the folder button to open the assets folder directly.",
-                    TargetElementName = "BtnOpenAssets",
+                    // "BtnOpenAssets" only ever existed in the Gaze minigame window - in MainWindow
+                    // the assets nav entry has always been BtnOpenAssetsTop, so this step silently
+                    // degraded to a centered card. It lives in the Library door (see NavEntryDoorKeys).
+                    TargetElementName = "BtnOpenAssetsTop",
                     RequiresTab = "settings",
                     TextPosition = TutorialStepPosition.Right
                 },

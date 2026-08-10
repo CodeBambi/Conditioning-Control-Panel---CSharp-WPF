@@ -8,8 +8,13 @@ namespace ConditioningControlPanel.Tests;
 /// <summary>
 /// PR-1 chrome — the pure half of the tab transition: which way a tab slides in, and which tabs
 /// must not slide at all. The choreography itself is UI and is checked by eye; these are the two
-/// decisions that can silently go wrong (a direction that fights the nav strip, or a WebView2 tab
+/// decisions that can silently go wrong (a direction that fights the nav rail, or a WebView2 tab
 /// getting a RenderTransform its native HWND cannot follow).
+///
+/// UX restructure Phase 1 replaced the two-row header strip with the vertical door rail, so
+/// NavOrder is now the rail top-to-bottom and every reachable tab key is on it. The indices
+/// below follow that order; a -1 lookup now means a genuine ghost ("patreon", "fyp"), which is
+/// what the off-the-rail cases assert.
 /// </summary>
 public class ChromeFxNavTests
 {
@@ -19,9 +24,10 @@ public class ChromeFxNavTests
                         ChromeFxNav.NavOrder.Distinct(StringComparer.OrdinalIgnoreCase).Count());
 
     [Theory]
-    [InlineData("settings", 0)]
-    [InlineData("presets", 1)]
-    [InlineData("lab", 12)]
+    [InlineData("settings", 0)]     // Home
+    [InlineData("presets", 1)]      // Studio
+    [InlineData("lab", 7)]          // Play, first entry
+    [InlineData("assets", 21)]      // Library, last row on the rail
     public void IndexOf_FollowsTheNavStrip(string tab, int expected)
         => Assert.Equal(expected, ChromeFxNav.IndexOf(tab));
 
@@ -34,8 +40,8 @@ public class ChromeFxNavTests
         => Assert.Equal(ChromeFxNav.IndexOf("settings"), ChromeFxNav.IndexOf("progression"));
 
     [Theory]
-    [InlineData("bambitakeover")]
-    [InlineData("haptics")]
+    [InlineData("patreon")]   // ghost: ShowTab opens the App Info popup and returns
+    [InlineData("fyp")]       // ghost: ShowTab opens a window and returns
     [InlineData("")]
     [InlineData(null)]
     public void IndexOf_IsNegative_ForTabsOffTheStrip(string? tab)
@@ -58,8 +64,8 @@ public class ChromeFxNavTests
     }
 
     [Theory]
-    [InlineData("settings", "haptics")]   // destination is off the strip
-    [InlineData("haptics", "settings")]   // origin is off the strip
+    [InlineData("settings", "patreon")]   // destination is off the rail
+    [InlineData("patreon", "settings")]   // origin is off the rail
     [InlineData("quests", "quests")]      // same tab: no direction to imply
     public void EntranceOffset_FallsBackToARise_WhenThereIsNoHonestDirection(string from, string to)
     {

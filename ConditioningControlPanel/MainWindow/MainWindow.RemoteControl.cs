@@ -39,6 +39,22 @@ namespace ConditioningControlPanel
 
             if (isEnabled)
             {
+                // Hard gate on the host side only. RefreshPremiumGate drapes a Border over this
+                // tab, which leaves the toggle reachable by keyboard focus and by automation - and
+                // this handler is the one that mints a session code for someone else to drive.
+                // Browsing Available Subjects (controller side) stays free by design.
+                var gate = TierGate.RequiresPremium("Remote Control");
+                if (!gate.Allowed)
+                {
+                    // Revert before telling: same order as the login check below, so the toggle's
+                    // animation is already settled when the refusal surface appears.
+                    _isLoading = true;
+                    RemoteControlTab.ChkRemoteControlEnabled.IsChecked = false;
+                    _isLoading = false;
+                    TierGate.ShowDenied(gate);
+                    return;
+                }
+
                 // Must have a cloud identity (unified ID from Patreon or Discord login)
                 if (string.IsNullOrEmpty(App.UnifiedUserId))
                 {
