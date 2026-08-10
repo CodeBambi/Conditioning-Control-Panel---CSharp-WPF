@@ -1202,6 +1202,13 @@ namespace ConditioningControlPanel.Services
                         // local loadout is empty and unconfirmed - see BuildCosmeticsPayload, an
                         // all-empty object means "unequip everything" to the server.
                         cosmetics = BuildCosmeticsPayload(settings),
+                        // One Descent (PLAN.md Phase A): best on-disk evidence of this install's
+                        // age, stamped once at startup (App.EnsureInstallDateRecorded). The server
+                        // stores it once as legacy_install_date and silently drops anything it
+                        // cannot parse, so a null here — every sync before the field was ever
+                        // recorded — is a no-op, not an error. Fallback data for the Year One
+                        // anchor only; nothing reads it back.
+                        install_date = string.IsNullOrWhiteSpace(settings.InstallDate) ? null : settings.InstallDate,
                         // Send false to clear server-side reset flags only when acknowledging
                         reset_weekly_quest = false,
                         reset_daily_quest = false,

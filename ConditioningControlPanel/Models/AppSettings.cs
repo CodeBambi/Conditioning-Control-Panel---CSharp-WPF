@@ -6254,6 +6254,33 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region One Descent
+
+        private string? _installDate = null;
+        /// <summary>
+        /// Best available evidence of when this install first appeared on this machine, as a UTC
+        /// <c>yyyy-MM-dd</c> string. Written ONCE by <c>App.EnsureInstallDateRecorded</c> on the
+        /// first launch that finds it absent (see that method for the evidence ordering) and never
+        /// touched again — a re-derived value would drift downward as old files are cleaned up.
+        ///
+        /// Sent to the server as <c>install_date</c> on POST /v2/user/sync, where it lands in
+        /// <c>legacy_install_date</c> (also stored once). This is LEGACY FALLBACK DATA ONLY: the
+        /// Descent's Year One anchor is the migration-ceremony date for veterans and account
+        /// creation for new users (DECISIONS.md 2026-08-10). Nothing in the UI reads it.
+        ///
+        /// Null on installs that predate this field only until their next launch. Never blank —
+        /// the recorder falls back to today rather than writing an empty string, so
+        /// "null" reliably means "not recorded yet".
+        /// </summary>
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public string? InstallDate
+        {
+            get => _installDate;
+            set { _installDate = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Migrations
 
         /// <summary>
