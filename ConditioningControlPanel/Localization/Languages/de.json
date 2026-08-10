@@ -4163,5 +4163,16 @@
   "hm3_audio_sync_tuning": "🎚 Audio-Sync einstellen",
   "hm3_rail_lock_t1": "Nur Patrons",
   "hm3_rail_lock_pass": "Wochenpass",
-  "hm3_rail_lock_t2": "Nur Labor"
+  "hm3_rail_lock_t2": "Nur Labor",
+  "cp5_awareness_custom_triggers_header": "Eigene Trigger (erweitert)",
+  "cp5_awareness_custom_triggers_note": "Deine eigene Keyword-Liste, mit Audio, Effekten und Cooldowns pro Trigger.",
+  "cp5_ocr_detail_needs_source": "Bildschirm-OCR ist aus. Schalte es unter Signal Sources ein, um das Scan-Intervall zu setzen.",
+  "cp5_highlight_detail_needs_source": "Hervorhebung auf dem Bildschirm ist aus. Schalte sie unter Safety ein, um Modus und Dauer zu wählen.",
+  "cp5_ocr_confirm_label": "Vor dem Auslösen bestätigen",
+  "cp5_ocr_confirm_tip": "Wie viele Scans hintereinander ein Wort auf dem Bildschirm bleiben muss, bevor es auslöst. Höhere Werte verhindern versehentliche Treffer beim Scrollen oder Fensterwechsel, dafür reagiert sie etwas langsamer.",
+  "cp5_ocr_confirm_first": "Beim ersten Blick auslösen",
+  "cp5_ocr_confirm_double": "Doppelt bestätigen (empfohlen)",
+  "cp5_ocr_confirm_triple": "Dreifach bestätigen",
+  "cp5_awareness_advanced_link_presets": "Installierte Presets anpassen →",
+  "cp5_awareness_advanced_link_editor": "Erweiterter Editor →"
 }

@@ -4154,5 +4154,16 @@
   "hm3_audio_sync_tuning": "🎚 Ajuste de sincronía de audio",
   "hm3_rail_lock_t1": "Solo patrons",
   "hm3_rail_lock_pass": "Pase semanal",
-  "hm3_rail_lock_t2": "Solo Lab"
+  "hm3_rail_lock_t2": "Solo Lab",
+  "cp5_awareness_custom_triggers_header": "Disparadores personalizados (avanzado)",
+  "cp5_awareness_custom_triggers_note": "Tu propia lista de palabras clave, con audio, efectos y enfriamiento por cada disparador.",
+  "cp5_ocr_detail_needs_source": "El OCR de pantalla está apagado. Actívalo en Signal Sources para ajustar el intervalo de escaneo.",
+  "cp5_highlight_detail_needs_source": "El resaltado en pantalla está apagado. Actívalo en Safety para elegir modo y duración.",
+  "cp5_ocr_confirm_label": "Confirmar antes de disparar",
+  "cp5_ocr_confirm_tip": "Cuántos escaneos seguidos debe permanecer una palabra en pantalla antes de dispararse. Valores más altos evitan resaltados sueltos cuando haces scroll o cambias de ventana, a cambio de una reacción algo más lenta.",
+  "cp5_ocr_confirm_first": "Disparar a la primera",
+  "cp5_ocr_confirm_double": "Doble confirmación (recomendado)",
+  "cp5_ocr_confirm_triple": "Triple confirmación",
+  "cp5_awareness_advanced_link_presets": "Personalizar presets instalados →",
+  "cp5_awareness_advanced_link_editor": "Editor avanzado →"
 }

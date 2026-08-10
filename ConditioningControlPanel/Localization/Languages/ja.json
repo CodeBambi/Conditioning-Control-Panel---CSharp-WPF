@@ -4154,5 +4154,16 @@
   "hm3_audio_sync_tuning": "🎚 オーディオ同期の調整",
   "hm3_rail_lock_t1": "支援者限定",
   "hm3_rail_lock_pass": "週間パス",
-  "hm3_rail_lock_t2": "ラボ限定"
+  "hm3_rail_lock_t2": "ラボ限定",
+  "cp5_awareness_custom_triggers_header": "カスタムトリガー（上級）",
+  "cp5_awareness_custom_triggers_note": "あなただけのキーワードリスト。トリガーごとに音声・エフェクト・クールダウンを設定できるよ。",
+  "cp5_ocr_detail_needs_source": "画面OCRはオフだよ。Signal Sources でオンにするとスキャン間隔を設定できるの。",
+  "cp5_highlight_detail_needs_source": "画面上のハイライトはオフだよ。Safety でオンにするとモードと表示時間を選べるの。",
+  "cp5_ocr_confirm_label": "発動前に確認",
+  "cp5_ocr_confirm_tip": "単語が発動するまでに、連続で何回のスキャンで画面に映り続ける必要があるか。値を上げるとスクロールやタブ切り替えでの誤検出を防げるけど、反応は少しだけ遅くなるよ。",
+  "cp5_ocr_confirm_first": "最初に見つけたら発動",
+  "cp5_ocr_confirm_double": "2回確認（おすすめ）",
+  "cp5_ocr_confirm_triple": "3回確認",
+  "cp5_awareness_advanced_link_presets": "インストール済みプリセットをカスタマイズ →",
+  "cp5_awareness_advanced_link_editor": "詳細エディター →"
 }

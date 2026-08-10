@@ -60,6 +60,39 @@ namespace ConditioningControlPanel.Views.Tabs
         /// <summary>The hero XP bar's drain flash overlay (MainWindow.Companion.cs).</summary>
         internal Border PrgCompanion0FlashOverlay => Room.PrgCompanion0FlashOverlay;
 
+        // ---- Z7b · AI PERMISSIONS (moved off the Lab tab, UX restructure Phase 5) ----
+        //
+        // Sixteen names that used to be reached as LabTab.X and are now CompanionTab.X. The
+        // handlers behind them did not move: MainWindow.Patreon.cs still owns every one, and
+        // SyncLabEffectPermsUI still writes the whole grid in a single pass. Second hop of the
+        // usual two — the controls themselves live on CompanionRoomView's Z7b card.
+
+        /// <summary>The permissions card, for the Tier 2 gate (see AiPermissionsGrid.ApplyTierGate).</summary>
+        internal Views.Controls.Companion.AiPermissionsGrid AiPermissions => Room.AiPermissions;
+
+        internal System.Windows.Media.ImageBrush LabAiMemoryHeroBrush => Room.LabAiMemoryHeroBrush;
+        internal Border LabEffectsNeedsLocalNotice => Room.LabEffectsNeedsLocalNotice;
+
+        internal CheckBox ChkCapEffects => Room.ChkCapEffects;
+        internal Border EffectPermsPanel => Room.EffectPermsPanel;
+
+        internal Slider SliderMaxHapticIntensity => Room.SliderMaxHapticIntensity;
+        internal TextBlock TxtMaxHapticIntensity => Room.TxtMaxHapticIntensity;
+
+        internal CheckBox ChkAllowFlash => Room.ChkAllowFlash;
+        internal CheckBox ChkAllowVideo => Room.ChkAllowVideo;
+        internal CheckBox ChkAllowAudio => Room.ChkAllowAudio;
+        internal CheckBox ChkAllowBubbles => Room.ChkAllowBubbles;
+        internal CheckBox ChkAllowSubliminal => Room.ChkAllowSubliminal;
+        internal CheckBox ChkAllowOverlay => Room.ChkAllowOverlay;
+        internal CheckBox ChkAllowLockCard => Room.ChkAllowLockCard;
+        internal CheckBox ChkAllowBounce => Room.ChkAllowBounce;
+        internal CheckBox ChkAllowHaptic => Room.ChkAllowHaptic;
+        internal CheckBox ChkAllowGetBackToMe => Room.ChkAllowGetBackToMe;
+        internal Button HelpBtnGetBackToMe => Room.HelpBtnGetBackToMe;
+
+        internal CheckBox ChkChatMemoryEnabled => Room.ChkChatMemoryEnabled;
+
         // ---- Z8 · ROSTER ----
         internal Border CompanionCard0 => _vm.Shelf.Roster.CompanionCard0;
         internal Border CompanionCard1 => _vm.Shelf.Roster.CompanionCard1;

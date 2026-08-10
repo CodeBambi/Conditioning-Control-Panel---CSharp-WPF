@@ -295,46 +295,24 @@ namespace ConditioningControlPanel
             LoadHapticsSettingsToUi();
 
             // Keyword Triggers
+            // PHASE 5 (G3): the editors moved off the dead PatreonTab onto the Awareness tab
+            // (Views/Controls/Companion/KeywordTriggersPanel.xaml). SyncKeywordRescuePanelUi()
+            // seeds every one of them - including the OCR/highlight detail visibilities - and
+            // refreshes the trigger list, so nothing is copied into the corpse's twins here any
+            // more. Seeding a Collapsed twin would raise its ValueChanged, and those handlers now
+            // read the live panel.
             {
-                PatreonTab.SliderKeywordBufferTimeout.Value = s.KeywordBufferTimeoutMs;
-                PatreonTab.SliderKeywordGlobalCooldown.Value = s.KeywordGlobalCooldownSeconds;
-                PatreonTab.SliderKeywordSessionMultiplier.Value = s.KeywordSessionMultiplier;
-
                 var hasKeywordAccess = KeywordTriggerService.HasAccess();
 
-                // Show/hide lock indicator
+                // The corpse's own start/stop + lock label are still wired to
+                // UpdateKeywordTriggersButtonState; the user-facing master is ChkAwarenessMaster.
                 if (PatreonTab.TxtKeywordTriggersLocked != null)
                     PatreonTab.TxtKeywordTriggersLocked.Visibility = hasKeywordAccess ? Visibility.Collapsed : Visibility.Visible;
                 if (PatreonTab.BtnKeywordTriggersStartStop != null)
                     PatreonTab.BtnKeywordTriggersStartStop.IsEnabled = hasKeywordAccess;
 
                 UpdateKeywordTriggersButtonState();
-                RefreshKeywordTriggerList();
-
-                // Screen OCR
-                if (PatreonTab.ChkScreenOcrEnabled != null)
-                {
-                    PatreonTab.ChkScreenOcrEnabled.IsChecked = s.ScreenOcrEnabled;
-                    PatreonTab.ChkScreenOcrEnabled.IsEnabled = hasKeywordAccess;
-                    PatreonTab.SliderScreenOcrInterval.Value = s.ScreenOcrIntervalMs / 1000.0;
-                    PatreonTab.ScreenOcrIntervalPanel.Visibility = s.ScreenOcrEnabled && hasKeywordAccess ? Visibility.Visible : Visibility.Collapsed;
-                    if (PatreonTab.CmbOcrConfirmation != null)
-                        PatreonTab.CmbOcrConfirmation.SelectedIndex = Math.Clamp(s.OcrConfirmationScans - 1, 0, 2);
-                }
-                if (PatreonTab.ChkKeywordHighlightEnabled != null)
-                {
-                    PatreonTab.ChkKeywordHighlightEnabled.IsChecked = s.KeywordHighlightEnabled;
-                    if (PatreonTab.HighlightDurationPanel != null)
-                    {
-                        PatreonTab.HighlightDurationPanel.Visibility = s.KeywordHighlightEnabled ? Visibility.Visible : Visibility.Collapsed;
-                        PatreonTab.SliderKeywordHighlightDuration.Value = s.KeywordHighlightDurationMs / 1000.0;
-                        PatreonTab.TxtKeywordHighlightDuration.Text = $"{s.KeywordHighlightDurationMs / 1000.0:0.0}s";
-                        if (PatreonTab.CmbOcrHighlightMode != null)
-                            PatreonTab.CmbOcrHighlightMode.SelectedIndex = s.OcrHighlightAll ? 0 : 1;
-                        if (PatreonTab.ChkHighlightVisibleInCapture != null)
-                            PatreonTab.ChkHighlightVisibleInCapture.IsChecked = s.OcrHighlightVisibleInCapture;
-                    }
-                }
+                SyncKeywordRescuePanelUi();
             }
 
             // Discord Sharing Settings

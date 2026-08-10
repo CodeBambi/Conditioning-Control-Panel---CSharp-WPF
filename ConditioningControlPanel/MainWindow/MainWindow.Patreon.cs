@@ -227,6 +227,9 @@ namespace ConditioningControlPanel
                 PatreonTab.BtnKeywordTriggersStartStop.IsEnabled = hasKeywordAccess;
             if (PatreonTab.ChkScreenOcrEnabled != null)
                 PatreonTab.ChkScreenOcrEnabled.IsEnabled = hasKeywordAccess;
+            // PHASE 5 (G3): the live editors are on the Awareness tab now, and the OCR detail
+            // rows are hidden until access is confirmed - re-seed them with the fresh verdict.
+            SyncKeywordRescuePanelUi();
 
             // If triggers were enabled in settings but couldn't start earlier (Patreon not validated yet),
             // start them now that access is confirmed
@@ -1364,8 +1367,8 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
             var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null || LabTab.ChkChatMemoryEnabled == null) return;
-            var on = LabTab.ChkChatMemoryEnabled.IsChecked == true;
+            if (s == null || CompanionTab.ChkChatMemoryEnabled == null) return;
+            var on = CompanionTab.ChkChatMemoryEnabled.IsChecked == true;
             if (s.ChatMemoryEnabled == on) return;
             s.ChatMemoryEnabled = on;
             App.Settings?.Save();
@@ -1388,14 +1391,39 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// The master "she may drive effects" switch, on the Companion door's permissions card
+        /// since Phase 5 of the UX restructure.
+        ///
+        /// <para>It carries the tier check the move made necessary. On the Lab tab the switch was
+        /// gated by geography — the whole page sat under LabSmokescreen — and the only thing left
+        /// after it was the force-clear in UpdateUnlockablesVisibility, which is a REPAIR (it undoes
+        /// a setting that outlived its entitlement) and not a gate (a Free account could still tick
+        /// the box and have it stick until the next refresh). The Companion door is Free/Tier 1, so
+        /// the bar has to be here.</para>
+        ///
+        /// <para>Only turning it ON is gated: unticking must always work, whatever the account.</para>
+        /// </summary>
         internal void ChkCapEffects_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
             var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null || LabTab.ChkCapEffects == null) return;
-            var on = LabTab.ChkCapEffects.IsChecked == true;
+            if (s == null || CompanionTab.ChkCapEffects == null) return;
+            var on = CompanionTab.ChkCapEffects.IsChecked == true;
+
+            if (on && !TierGate.DemandLab(Loc.Get("lab_ai_effects_memory_title")))
+            {
+                // Put the switch back without re-entering this handler, and leave the setting
+                // untouched — a refusal must not write.
+                var wasLoading = _isLoading;
+                _isLoading = true;
+                try { CompanionTab.ChkCapEffects.IsChecked = false; }
+                finally { _isLoading = wasLoading; }
+                return;
+            }
+
             s.AllowAiToControlEffects = on;
-            if (LabTab.EffectPermsPanel != null) LabTab.EffectPermsPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            if (CompanionTab.EffectPermsPanel != null) CompanionTab.EffectPermsPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
             App.Settings.Save();
         }
 
@@ -1426,20 +1454,21 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
             var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null || LabTab.SliderMaxHapticIntensity == null) return;
-            s.MaxAiHapticIntensity = LabTab.SliderMaxHapticIntensity.Value;
-            if (LabTab.TxtMaxHapticIntensity != null)
-                LabTab.TxtMaxHapticIntensity.Text = $"{(int)(LabTab.SliderMaxHapticIntensity.Value * 100)}%";
+            if (s == null || CompanionTab.SliderMaxHapticIntensity == null) return;
+            s.MaxAiHapticIntensity = CompanionTab.SliderMaxHapticIntensity.Value;
+            if (CompanionTab.TxtMaxHapticIntensity != null)
+                CompanionTab.TxtMaxHapticIntensity.Text = $"{(int)(CompanionTab.SliderMaxHapticIntensity.Value * 100)}%";
             App.Settings.Save();
         }
 
         /// <summary>
-        /// The two hero pills, plus the Lab tab's "needs local" notice.
+        /// The two hero pills, plus the permissions card's "needs a local model" notice.
         ///
         /// <para>The pills are Z1's now and derive their own text from the same settings this used
         /// to format (design §6: "kept — Z1, become deep-link buttons"), and the live-actions feed's
-        /// visibility is the Engine Room's. Both come from one re-read. The Lab notice is a
-        /// different tab and still has to be written here.</para>
+        /// visibility is the Engine Room's. Both come from one re-read. The notice is Z7b's — same
+        /// Companion page since Phase 5, one card below the drawer it points at, which is why the
+        /// deep link behind its button can simply open that drawer.</para>
         /// </summary>
         private void UpdateAiBrainPills()
         {
@@ -1449,8 +1478,8 @@ namespace ConditioningControlPanel
             CompanionRoom?.SyncBrain();
 
             var effectsActive = s.AiChatEnabled && ProviderSupportsEffects(s.CompanionPrompt.AiProvider);
-            if (LabTab.LabEffectsNeedsLocalNotice != null)
-                LabTab.LabEffectsNeedsLocalNotice.Visibility = effectsActive ? Visibility.Collapsed : Visibility.Visible;
+            if (CompanionTab.LabEffectsNeedsLocalNotice != null)
+                CompanionTab.LabEffectsNeedsLocalNotice.Visibility = effectsActive ? Visibility.Collapsed : Visibility.Visible;
         }
 
         // Providers that parse the model's response for command output and run it
@@ -1468,11 +1497,20 @@ namespace ConditioningControlPanel
         private void UpdateLiveActionsPlaceholder() => CompanionRoom?.EngineVm.Sync();
 
         /// <summary>
-        /// Populate the Lab tab's AI effect-permission controls from settings. These
-        /// checkboxes live on the Lab tab but were only synced when the Companion tab
-        /// was visited, so after a restart the Lab tab showed XAML defaults while the
-        /// persisted AllowAi* values kept gating effects — videos fired that the UI
-        /// said were off (#512). Called from SyncAiBrainUI and on Lab tab open.
+        /// Populate the AI effect-permission controls from settings.
+        ///
+        /// <para>The name is a fossil: since Phase 5 of the UX restructure these controls are Z7b of
+        /// the Companion room, not the Lab tab. The method survives verbatim because the bug it was
+        /// written for survives the move — the grid was only ever synced when the Companion tab was
+        /// visited, so after a restart it showed XAML defaults while the persisted AllowAi* values
+        /// kept gating effects, and videos fired that the UI said were off (#512). Now that the grid
+        /// IS on the Companion tab there is exactly one caller (SyncAiBrainUI, from
+        /// SyncCompanionTabUI, from ShowTab("companion")), which is the point: the sync and the
+        /// surface can no longer be on different pages.</para>
+        ///
+        /// <para>Ends on the tier gate so the lockband and the values it covers are always painted
+        /// in the same pass — a grid showing a legit T2 user's ticked boxes under a lock, or a
+        /// lapsed one's under none, would be worse than either state alone.</para>
         /// </summary>
         internal void SyncLabEffectPermsUI()
         {
@@ -1483,35 +1521,37 @@ namespace ConditioningControlPanel
             _isLoading = true;
             try
             {
-                if (LabTab.ChkCapEffects != null)
-                    LabTab.ChkCapEffects.IsChecked = s.CompanionPrompt.AllowAiToControlEffects;
-                if (LabTab.EffectPermsPanel != null)
-                    LabTab.EffectPermsPanel.Visibility = s.CompanionPrompt.AllowAiToControlEffects
+                if (CompanionTab.ChkCapEffects != null)
+                    CompanionTab.ChkCapEffects.IsChecked = s.CompanionPrompt.AllowAiToControlEffects;
+                if (CompanionTab.EffectPermsPanel != null)
+                    CompanionTab.EffectPermsPanel.Visibility = s.CompanionPrompt.AllowAiToControlEffects
                         ? Visibility.Visible : Visibility.Collapsed;
 
                 // Effect permission grid
-                if (LabTab.ChkAllowFlash != null)       LabTab.ChkAllowFlash.IsChecked       = s.CompanionPrompt.AllowAiFlash;
-                if (LabTab.ChkAllowVideo != null)       LabTab.ChkAllowVideo.IsChecked       = s.CompanionPrompt.AllowAiVideo;
-                if (LabTab.ChkAllowAudio != null)       LabTab.ChkAllowAudio.IsChecked       = s.CompanionPrompt.AllowAiAudio;
-                if (LabTab.ChkAllowBubbles != null)     LabTab.ChkAllowBubbles.IsChecked     = s.CompanionPrompt.AllowAiBubbles;
-                if (LabTab.ChkAllowSubliminal != null)  LabTab.ChkAllowSubliminal.IsChecked  = s.CompanionPrompt.AllowAiSubliminal;
-                if (LabTab.ChkAllowOverlay != null)     LabTab.ChkAllowOverlay.IsChecked     = s.CompanionPrompt.AllowAiOverlay;
-                if (LabTab.ChkAllowLockCard != null)    LabTab.ChkAllowLockCard.IsChecked    = s.CompanionPrompt.AllowAiLockCard;
-                if (LabTab.ChkAllowBounce != null)      LabTab.ChkAllowBounce.IsChecked      = s.CompanionPrompt.AllowAiBounce;
-                if (LabTab.ChkAllowHaptic != null)      LabTab.ChkAllowHaptic.IsChecked      = s.CompanionPrompt.AllowAiHaptic;
-                if (LabTab.ChkAllowGetBackToMe != null) LabTab.ChkAllowGetBackToMe.IsChecked = s.CompanionPrompt.AllowAiGetBackToMe;
+                if (CompanionTab.ChkAllowFlash != null)       CompanionTab.ChkAllowFlash.IsChecked       = s.CompanionPrompt.AllowAiFlash;
+                if (CompanionTab.ChkAllowVideo != null)       CompanionTab.ChkAllowVideo.IsChecked       = s.CompanionPrompt.AllowAiVideo;
+                if (CompanionTab.ChkAllowAudio != null)       CompanionTab.ChkAllowAudio.IsChecked       = s.CompanionPrompt.AllowAiAudio;
+                if (CompanionTab.ChkAllowBubbles != null)     CompanionTab.ChkAllowBubbles.IsChecked     = s.CompanionPrompt.AllowAiBubbles;
+                if (CompanionTab.ChkAllowSubliminal != null)  CompanionTab.ChkAllowSubliminal.IsChecked  = s.CompanionPrompt.AllowAiSubliminal;
+                if (CompanionTab.ChkAllowOverlay != null)     CompanionTab.ChkAllowOverlay.IsChecked     = s.CompanionPrompt.AllowAiOverlay;
+                if (CompanionTab.ChkAllowLockCard != null)    CompanionTab.ChkAllowLockCard.IsChecked    = s.CompanionPrompt.AllowAiLockCard;
+                if (CompanionTab.ChkAllowBounce != null)      CompanionTab.ChkAllowBounce.IsChecked      = s.CompanionPrompt.AllowAiBounce;
+                if (CompanionTab.ChkAllowHaptic != null)      CompanionTab.ChkAllowHaptic.IsChecked      = s.CompanionPrompt.AllowAiHaptic;
+                if (CompanionTab.ChkAllowGetBackToMe != null) CompanionTab.ChkAllowGetBackToMe.IsChecked = s.CompanionPrompt.AllowAiGetBackToMe;
 
                 // Max haptic intensity
-                if (LabTab.SliderMaxHapticIntensity != null) LabTab.SliderMaxHapticIntensity.Value = s.CompanionPrompt.MaxAiHapticIntensity;
-                if (LabTab.TxtMaxHapticIntensity != null)    LabTab.TxtMaxHapticIntensity.Text    = $"{(int)(s.CompanionPrompt.MaxAiHapticIntensity * 100)}%";
+                if (CompanionTab.SliderMaxHapticIntensity != null) CompanionTab.SliderMaxHapticIntensity.Value = s.CompanionPrompt.MaxAiHapticIntensity;
+                if (CompanionTab.TxtMaxHapticIntensity != null)    CompanionTab.TxtMaxHapticIntensity.Text    = $"{(int)(s.CompanionPrompt.MaxAiHapticIntensity * 100)}%";
 
                 // Chat memory toggle
-                if (LabTab.ChkChatMemoryEnabled != null) LabTab.ChkChatMemoryEnabled.IsChecked = s.CompanionPrompt.ChatMemoryEnabled;
+                if (CompanionTab.ChkChatMemoryEnabled != null) CompanionTab.ChkChatMemoryEnabled.IsChecked = s.CompanionPrompt.ChatMemoryEnabled;
             }
             finally
             {
                 _isLoading = wasLoading;
             }
+
+            CompanionTab.AiPermissions?.ApplyTierGate();
         }
 
         /// <summary>

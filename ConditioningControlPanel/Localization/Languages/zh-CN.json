@@ -4621,5 +4621,16 @@
   "hm3_audio_sync_tuning": "🎚 音频同步微调",
   "hm3_rail_lock_t1": "赞助者专享",
   "hm3_rail_lock_pass": "每周通行证",
-  "hm3_rail_lock_t2": "实验室专享"
+  "hm3_rail_lock_t2": "实验室专享",
+  "cp5_awareness_custom_triggers_header": "自定义触发词（高级）",
+  "cp5_awareness_custom_triggers_note": "你自己的关键词清单，每条触发词都能单独设置音频、特效和冷却。",
+  "cp5_ocr_detail_needs_source": "屏幕 OCR 已关闭。在 Signal Sources 里打开后就能设置扫描间隔啦。",
+  "cp5_highlight_detail_needs_source": "屏幕高亮已关闭。在 Safety 里打开后就能选择模式和持续时间啦。",
+  "cp5_ocr_confirm_label": "触发前确认",
+  "cp5_ocr_confirm_tip": "一个词要连续多少次扫描都留在屏幕上才会触发。数值越高越能避免滚动或切换窗口时的误触发，代价是反应稍微慢一点。",
+  "cp5_ocr_confirm_first": "第一次看到就触发",
+  "cp5_ocr_confirm_double": "二次确认（推荐）",
+  "cp5_ocr_confirm_triple": "三次确认",
+  "cp5_awareness_advanced_link_presets": "自定义已安装预设 →",
+  "cp5_awareness_advanced_link_editor": "高级编辑器 →"
 }

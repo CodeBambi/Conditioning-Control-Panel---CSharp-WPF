@@ -37,11 +37,12 @@ namespace ConditioningControlPanel.Views.Tabs
                     : Services.Chaos.ChaosPlayMode.FreeDesktop;
         }
 
-        private void BtnClearChatMemory_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnClearChatMemory_Click(sender, e);
-        }
+        // TOMBSTONE (UX restructure, Phase 5). Six shims left with the "AI Companion Effects &
+        // Memory" card: BtnClearChatMemory_Click, BtnLabEffectsSetupLocal_Click,
+        // ChkAllowEffect_Changed, ChkCapEffects_Changed, ChkChatMemoryEnabled_Changed and
+        // SliderMaxHapticIntensity_ValueChanged. The card is Z7b of the Companion room now
+        // (Views\Controls\Companion\AiPermissionsGrid), and its shims went with it — the real
+        // handlers never moved at all; they are still MainWindow.Patreon.cs's.
         private void BtnGazeMinigame_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -51,11 +52,6 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnLabBlinkTrainerOpenNew_Click(sender, e);
-        }
-        private void BtnLabEffectsSetupLocal_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnLabEffectsSetupLocal_Click(sender, e);
         }
         private void BtnQuickStartChaos_Click(object sender, RoutedEventArgs e)
         {
@@ -88,30 +84,10 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.OpenDeviceSettings();
         }
-        private void ChkAllowEffect_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkAllowEffect_Changed(sender, e);
-        }
-        private void ChkCapEffects_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkCapEffects_Changed(sender, e);
-        }
-        private void ChkChatMemoryEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkChatMemoryEnabled_Changed(sender, e);
-        }
         private void ChkFocusGaze_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkFocusGaze_Changed(sender, e);
-        }
-        private void SliderMaxHapticIntensity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderMaxHapticIntensity_ValueChanged(sender, e);
         }
     }
 }

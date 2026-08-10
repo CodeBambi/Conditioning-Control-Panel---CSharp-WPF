@@ -1697,7 +1697,12 @@ namespace ConditioningControlPanel
                 var labHeroMap = new (string resourcePath, ImageBrush? brush)[]
                 {
                     ("features/lab_quiz_hero.png", GradedIntakeTab.GradedIntakeHeroBrush),
-                    ("features/lab_aimemory_hero.png", LabTab.LabAiMemoryHeroBrush),
+                    // Still a "lab hero" by filename — the art path is the mod compatibility
+                    // surface and is never renamed — but the card it paints is the Companion
+                    // door's permissions grid since Phase 5. The row travels with the brush: a
+                    // dropped row does not fail the build, it just silently stops repainting on a
+                    // mod switch.
+                    ("features/lab_aimemory_hero.png", CompanionTab.LabAiMemoryHeroBrush),
                     ("features/lab_gaze_hero.png", LabTab.LabGazeHeroBrush),
                     ("features/lab_focusgaze_hero.png", LabTab.LabFocusHeroBrush),
                     ("features/goon_game.png", LabTab.LabGoonHeroBrush),

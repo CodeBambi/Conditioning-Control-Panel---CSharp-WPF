@@ -281,7 +281,11 @@ namespace ConditioningControlPanel
                 case "lab":
                     LabTab.Visibility = Visibility.Visible;
                     AnimateTabIn(LabTab);
-                    SyncLabEffectPermsUI();
+                    // Phase 5: SyncLabEffectPermsUI() used to be called here because the AI
+                    // effect-permission grid was on this tab while its only sync ran on the
+                    // Companion tab (#512). The grid is Z7b of the Companion room now, and
+                    // case "companion" -> SyncCompanionTabUI -> SyncAiBrainUI already calls it,
+                    // so the sync and the surface finally share a page. Do not re-add it here.
                     // Phase 2: the webcam engine bar (and the seeding it needed) moved to
                     // Settings → Devices, which re-enumerates on its own show via
                     // RefreshDeviceSettingsLists. The Lab keeps a read-only status chip, painted

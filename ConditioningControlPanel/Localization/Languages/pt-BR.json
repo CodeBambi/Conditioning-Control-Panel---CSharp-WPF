@@ -4162,5 +4162,16 @@
   "hm3_audio_sync_tuning": "🎚 Ajuste da sincronia de áudio",
   "hm3_rail_lock_t1": "Só apoiadores",
   "hm3_rail_lock_pass": "Passe semanal",
-  "hm3_rail_lock_t2": "Só no Lab"
+  "hm3_rail_lock_t2": "Só no Lab",
+  "cp5_awareness_custom_triggers_header": "Gatilhos personalizados (avançado)",
+  "cp5_awareness_custom_triggers_note": "Sua própria lista de palavras-chave, com áudio, efeitos e recarga pra cada gatilho.",
+  "cp5_ocr_detail_needs_source": "O OCR de tela está desligado. Ligue em Signal Sources pra definir o intervalo de escaneamento.",
+  "cp5_highlight_detail_needs_source": "O destaque na tela está desligado. Ligue em Safety pra escolher modo e duração.",
+  "cp5_ocr_confirm_label": "Confirmar antes de disparar",
+  "cp5_ocr_confirm_tip": "Quantos escaneamentos seguidos uma palavra precisa ficar na tela antes de disparar. Valores maiores evitam destaques perdidos quando você rola a página ou troca de janela, ao custo de uma reação um pouco mais lenta.",
+  "cp5_ocr_confirm_first": "Disparar de primeira",
+  "cp5_ocr_confirm_double": "Confirmação dupla (recomendado)",
+  "cp5_ocr_confirm_triple": "Confirmação tripla",
+  "cp5_awareness_advanced_link_presets": "Personalizar presets instalados →",
+  "cp5_awareness_advanced_link_editor": "Editor avançado →"
 }

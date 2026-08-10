@@ -787,7 +787,22 @@ namespace ConditioningControlPanel
                 var labUnlocked = App.Patreon?.HasLabAccess == true;
                 if (LabTab.LabSmokescreen != null) LabTab.LabSmokescreen.Visibility = labUnlocked ? Visibility.Collapsed : Visibility.Visible;
 
-                // AI effect control lives in the Lab — force-disable for non-T2 users so settings can't outlive the entitlement.
+                // AI effect control is Tier 2 wherever it is drawn. Since Phase 5 of the UX
+                // restructure the switch lives on the COMPANION door (Z7b, AiPermissionsGrid), not
+                // behind the Lab smokescreen — so this block is now only half the story:
+                //
+                //   * the REPAIR is here, and stays destructive on purpose: a setting must not
+                //     outlive the entitlement that allowed it, so a lapsed T2 has
+                //     AllowAiToControlEffects force-cleared and SAVED. HasLabAccess is the single
+                //     truth precisely because of that write (a stale negative would wipe a legit
+                //     user's setting);
+                //   * the GATE is on the card — TierGate.RequiresLab paints a lockband and
+                //     ChkCapEffects_Changed refuses the write. A repair is not a gate: without the
+                //     card's own check a Free account could tick the box and keep it until the next
+                //     refresh ran.
+                //
+                // ApplyTierGate is called for both verdicts, not just the locked one: this method is
+                // also how a freshly validated T2 account gets its lockband taken away.
                 if (!labUnlocked)
                 {
                     var cp = App.Settings?.Current?.CompanionPrompt;
@@ -796,11 +811,12 @@ namespace ConditioningControlPanel
                         cp.AllowAiToControlEffects = false;
                         App.Settings?.Save();
                     }
-                    if (LabTab.ChkCapEffects != null && LabTab.ChkCapEffects.IsChecked == true)
-                        LabTab.ChkCapEffects.IsChecked = false;
-                    if (LabTab.EffectPermsPanel != null)
-                        LabTab.EffectPermsPanel.Visibility = Visibility.Collapsed;
+                    if (CompanionTab.ChkCapEffects != null && CompanionTab.ChkCapEffects.IsChecked == true)
+                        CompanionTab.ChkCapEffects.IsChecked = false;
+                    if (CompanionTab.EffectPermsPanel != null)
+                        CompanionTab.EffectPermsPanel.Visibility = Visibility.Collapsed;
                 }
+                CompanionTab.AiPermissions?.ApplyTierGate();
 
                 // Bambi Takeover: Requires Patreon (any tier)
                 var autonomyUnlocked = App.Patreon?.HasPremiumAccess == true;

@@ -81,10 +81,17 @@ namespace ConditioningControlPanel
             // separate Gaze Minigame + Focus Gaze cards (each with its own ? button).
             SetHelpContent(LabTab.HelpBtnGazeMinigame, "GazeMinigame");
             SetHelpContent(LabTab.HelpBtnFocusGaze, "FocusGaze");
-            SetHelpContent(PatreonTab.HelpBtnKeywordTriggers, "KeywordTriggers");
-            SetHelpContent(PatreonTab.HelpBtnScreenOcr, "ScreenOcr");
+            // PHASE 5 (G3): these two ? buttons moved with their editors onto the Awareness
+            // tab's custom-trigger drawer. The PatreonTab twins still exist (Phase 8 owns the
+            // demolition) but are permanently Collapsed, so attaching the popover there
+            // reached nobody.
+            SetHelpContent(AwarenessTab.HelpBtnKeywordTriggers, "KeywordTriggers");
+            SetHelpContent(AwarenessTab.HelpBtnScreenOcr, "ScreenOcr");
             SetHelpContent(RemoteControlTab.HelpBtnRemoteControl, "RemoteControl");
-            SetHelpContent(LabTab.HelpBtnGetBackToMe, "GetBackToMe");
+            // "Get back to me" is a permission, so its ? button went to the Companion door with the
+            // rest of the permissions card (UX restructure, Phase 5). Same registry entry, same
+            // popup — only the accessor path changed.
+            SetHelpContent(CompanionTab.HelpBtnGetBackToMe, "GetBackToMe");
 
             // Side panels + Exclusives features (Awareness / Haptics / BlinkTrainer
             // share this cluster — they're dedicated full-tab Exclusives surfaces

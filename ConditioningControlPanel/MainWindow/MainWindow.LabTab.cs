@@ -28,6 +28,14 @@ using ConditioningControlPanel.Services;
 namespace ConditioningControlPanel
 {
     // Lab tab: webcam diagnostics, blink trainer glue, and device UI.
+    //
+    // TOMBSTONE (UX restructure, Phase 5): the "AI Companion Effects & Memory" card left this tab
+    // for the Companion door (Views\Controls\Companion\AiPermissionsGrid, mounted as Z7b of
+    // CompanionRoomView). Nothing of it was ever in this file — its handlers have always lived in
+    // MainWindow.Patreon.cs (ChkCapEffects_Changed, ChkAllowEffect_Changed,
+    // SliderMaxHapticIntensity_ValueChanged, ChkChatMemoryEnabled_Changed, BtnClearChatMemory_Click,
+    // SyncLabEffectPermsUI) — which is why the move touched no logic here. Noted so nobody goes
+    // looking for the permissions grid in the file named after the tab it used to sit on.
     public partial class MainWindow
     {
         #region Lab Tab

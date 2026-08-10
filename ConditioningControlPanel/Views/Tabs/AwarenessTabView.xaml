@@ -5,6 +5,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:cmp="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
              xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
@@ -17,6 +18,7 @@
                     <RowDefinition Height="Auto"/> <!-- Presets -->
                     <RowDefinition Height="Auto"/> <!-- Timing (two sliders) -->
                     <RowDefinition Height="Auto"/> <!-- Sources + Safety (two columns) -->
+                    <RowDefinition Height="Auto"/> <!-- Custom triggers (Phase 5 G3 rescue) -->
                     <RowDefinition Height="Auto"/> <!-- Advanced link -->
                 </Grid.RowDefinitions>
     
@@ -470,8 +472,19 @@
                     </Border>
                 </Grid>
     
+                <!-- ==================== CUSTOM TRIGGERS (Phase 5 / G3 rescue) ====================
+                     The keyword-trigger list + the Screen OCR / highlight detail editors, rescued
+                     from the dead PatreonTabView. Collapsed by default: the masters that most
+                     people touch (sources, cooldowns, presets, highlight colour) are the rows
+                     above; this drawer is the authoring surface underneath them. It deliberately
+                     re-hosts NO app-scoping UI - CmbAwarenessAppScope in SAFETY above is the one
+                     editor for KeywordTriggerAppScope. -->
+                <cmp:KeywordTriggersPanel x:Name="KeywordPanel" x:FieldModifier="internal"
+                                          Grid.Row="5" Margin="0,0,0,4"
+                                          AutomationProperties.AutomationId="AwarenessCustomTriggers"/>
+
                 <!-- ==================== ADVANCED LINK ==================== -->
-                <Grid Grid.Row="5" Margin="0,0,0,0"
+                <Grid Grid.Row="6" Margin="0,0,0,0"
                       ToolTip="Opens a detailed editor for the currently installed preset where you can add/remove keywords, tweak per-trigger actions, and edit phrase pools. If no preset is installed yet, this link opens the App Info &amp; Data popup instead.">
                     <TextBlock HorizontalAlignment="Center">
                         <Hyperlink x:Name="LnkAwarenessAdvanced"

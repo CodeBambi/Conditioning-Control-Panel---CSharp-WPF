@@ -4163,5 +4163,16 @@
   "hm3_audio_sync_tuning": "🎚 Réglage de la sync audio",
   "hm3_rail_lock_t1": "Aux mécènes",
   "hm3_rail_lock_pass": "Pass hebdo",
-  "hm3_rail_lock_t2": "Labo requis"
+  "hm3_rail_lock_t2": "Labo requis",
+  "cp5_awareness_custom_triggers_header": "Déclencheurs personnalisés (avancé)",
+  "cp5_awareness_custom_triggers_note": "Ta propre liste de mots-clés, avec audio, effets et temps de recharge pour chaque déclencheur.",
+  "cp5_ocr_detail_needs_source": "L’OCR d’écran est désactivé. Active-le dans Signal Sources pour régler l’intervalle de scan.",
+  "cp5_highlight_detail_needs_source": "Le surlignage à l’écran est désactivé. Active-le dans Safety pour choisir un mode et une durée.",
+  "cp5_ocr_confirm_label": "Confirmer avant de déclencher",
+  "cp5_ocr_confirm_tip": "Combien de scans consécutifs un mot doit rester à l’écran avant de déclencher. Des valeurs plus élevées évitent les surlignages parasites quand tu scrolles ou changes de fenêtre, au prix d’une réaction un peu plus lente.",
+  "cp5_ocr_confirm_first": "Déclencher au premier coup d’œil",
+  "cp5_ocr_confirm_double": "Double confirmation (recommandé)",
+  "cp5_ocr_confirm_triple": "Triple confirmation",
+  "cp5_awareness_advanced_link_presets": "Personnaliser les presets installés →",
+  "cp5_awareness_advanced_link_editor": "Éditeur avancé →"
 }

@@ -4161,5 +4161,16 @@
   "hm3_audio_sync_tuning": "🎚 오디오 동기화 조절",
   "hm3_rail_lock_t1": "후원자 전용",
   "hm3_rail_lock_pass": "주간 패스",
-  "hm3_rail_lock_t2": "연구소 전용"
+  "hm3_rail_lock_t2": "연구소 전용",
+  "cp5_awareness_custom_triggers_header": "커스텀 트리거 (고급)",
+  "cp5_awareness_custom_triggers_note": "너만의 키워드 목록이야. 트리거마다 오디오, 효과, 쿨다운을 따로 정할 수 있어요.",
+  "cp5_ocr_detail_needs_source": "화면 OCR이 꺼져 있어요. Signal Sources에서 켜면 스캔 간격을 정할 수 있어요.",
+  "cp5_highlight_detail_needs_source": "화면 강조가 꺼져 있어요. Safety에서 켜면 모드와 지속 시간을 고를 수 있어요.",
+  "cp5_ocr_confirm_label": "발동 전에 확인",
+  "cp5_ocr_confirm_tip": "단어가 발동하기 전에 몇 번 연속 스캔 동안 화면에 남아 있어야 하는지예요. 값을 올리면 스크롤하거나 창을 바꿀 때 생기는 오탐을 막아주지만, 반응은 살짝 느려져요.",
+  "cp5_ocr_confirm_first": "처음 보이면 바로 발동",
+  "cp5_ocr_confirm_double": "2회 확인 (권장)",
+  "cp5_ocr_confirm_triple": "3회 확인",
+  "cp5_awareness_advanced_link_presets": "설치된 프리셋 꾸미기 →",
+  "cp5_awareness_advanced_link_editor": "고급 편집기 →"
 }

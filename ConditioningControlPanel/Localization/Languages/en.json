@@ -4723,5 +4723,16 @@
   "hm3_audio_sync_tuning": "🎚 Audio sync tuning",
   "hm3_rail_lock_t1": "Patron only",
   "hm3_rail_lock_pass": "Weekly pass",
-  "hm3_rail_lock_t2": "Lab only"
+  "hm3_rail_lock_t2": "Lab only",
+  "cp5_awareness_custom_triggers_header": "Custom triggers (advanced)",
+  "cp5_awareness_custom_triggers_note": "Your own keyword list, with per-trigger audio, effects and cooldowns.",
+  "cp5_ocr_detail_needs_source": "Screen OCR is off. Turn it on under Signal Sources to set the scan interval.",
+  "cp5_highlight_detail_needs_source": "On-screen highlighting is off. Turn it on under Safety to pick a mode and duration.",
+  "cp5_ocr_confirm_label": "Confirm before firing",
+  "cp5_ocr_confirm_tip": "How many consecutive scans a word must stay on screen before it fires. Higher settings stop stray highlights when you scroll or tab away, at the cost of a slightly slower reaction.",
+  "cp5_ocr_confirm_first": "Fire on first sight",
+  "cp5_ocr_confirm_double": "Double-confirm (recommended)",
+  "cp5_ocr_confirm_triple": "Triple-confirm",
+  "cp5_awareness_advanced_link_presets": "Customize installed presets →",
+  "cp5_awareness_advanced_link_editor": "Advanced editor →"
 }
