@@ -76,6 +76,20 @@ namespace ConditioningControlPanel
         // AnimateTabIn now lives in MainWindow.ChromeFx.cs: the bare 200ms fade was replaced by
         // the PR-1 choreography (outgoing fade -> directional slide + fade -> entrance stagger).
 
+        /// <summary>
+        /// Live ShowTab key -> the key the companion's bark rules are still written against.
+        /// Every built-in mod's bark_rules.json matches navigation eggs with `tab_eq` on the exact
+        /// ShowTab strings (54 voiced rules per mod, including the first-run tutorial ladder), and
+        /// third-party .ccpmod files on disk carry their own copies we can never edit. So a tab key
+        /// that gets renamed or folded into another door MUST land here, mapping the new key back to
+        /// the old one - otherwise that tab's barks simply stop firing, silently and untestably.
+        /// Empty today: no key has moved yet.
+        /// </summary>
+        private static readonly Dictionary<string, string> BarkTabAliases = new()
+        {
+            // ["play"] = "lab",   // example: Phase 1 retires "lab", its barks keep answering to it
+        };
+
         internal void ShowTab(string tab)
         {
             // Legacy redirect: the "patreon" tab was eliminated and its
@@ -98,7 +112,12 @@ namespace ConditioningControlPanel
             }
 
             // Bark hook: announce navigation (gated/chanced in the rules so it isn't spammy).
-            try { App.Bark?.NotifyTabNavigated(tab); } catch { }
+            // Routed through BarkTabAliases so renamed tabs keep answering to their old bark key.
+            try
+            {
+                App.Bark?.NotifyTabNavigated(BarkTabAliases.TryGetValue(tab, out var barkTab) ? barkTab : tab);
+            }
+            catch { }
 
             // Park the incoming key for the transition choreography. AnimateTabIn reads it, so the
             // ~25 call sites below stay a single argument and still get a slide direction.

@@ -1645,6 +1645,7 @@ namespace ConditioningControlPanel
                     ("ArtIntake",    "features/lab_quiz_hero.png",  512),
                     ("ArtRemote",    "features/remote_control.png", 768),
                     ("ArtBlink",     "features/blink_trainer.png",  512),
+                    ("ArtFyp",       "features/fyp.png",           512),
                     ("ArtLockdown",  "lockdown_icon.png",          1024),
                 };
                 var railResources = SettingsTab.PremiumRail?.Resources;
@@ -1667,6 +1668,7 @@ namespace ConditioningControlPanel
                     ("features/lab_aimemory_hero.png", LabTab.LabAiMemoryHeroBrush),
                     ("features/lab_gaze_hero.png", LabTab.LabGazeHeroBrush),
                     ("features/lab_focusgaze_hero.png", LabTab.LabFocusHeroBrush),
+                    ("features/goon_game.png", LabTab.LabGoonHeroBrush),
                 };
                 foreach (var (path, brush) in labHeroMap)
                 {

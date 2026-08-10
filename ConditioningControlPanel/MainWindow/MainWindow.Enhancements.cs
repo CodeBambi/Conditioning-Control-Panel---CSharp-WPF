@@ -16,7 +16,6 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
-using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Rectangle = System.Windows.Shapes.Rectangle;
 using NAudio.Wave;
@@ -37,10 +36,12 @@ namespace ConditioningControlPanel
         private const double NodeHeight = 139;  // Includes name label row
         private const double TierSpacing = 350; // Much larger vertical spacing between tiers
 
-        // Skill grid image cell dimensions (determined dynamically from skills1.png)
-        private static int _skillCellWidth = 0;
-        private static int _skillCellHeight = 0;
-        private static bool _skillCellSizeInitialized = false;
+        // Secret-skill rail cards (the strip under the tree). The height is a budget, not taste:
+        // the rail shares a ~620dip tab with the fixed 460dip tree canvas, and that canvas has no
+        // vertical scroll to spill into - anything taller here silently crops the bottom row of
+        // skill nodes. Landscape cards keep three of them on one line at any window width.
+        private const double SecretCardWidth = 180;
+        private const double SecretCardHeight = 56;
 
         /// <summary>
         /// Refreshes the entire Enhancements tab UI
@@ -69,6 +70,9 @@ namespace ConditioningControlPanel
 
             // Draw the skill tree on canvas
             DrawSkillTree();
+
+            // Fill the secret-skill rail under it (the tree itself never draws secrets)
+            PopulateSecretSkills();
 
             // Update active bonuses panel
             RefreshActiveBonuses();
@@ -147,7 +151,10 @@ namespace ConditioningControlPanel
             // Draw connection lines first (so they're behind nodes)
             DrawConnectionLines(nodePositions);
 
-            // Draw skill nodes (excluding secret skills)
+            // Draw skill nodes. Secret skills are excluded on purpose: they have no position in
+            // nodePositions and no prerequisite chain to hang a connection line off, and a card
+            // sitting in the tree would announce them. They render in the rail underneath instead
+            // (PopulateSecretSkills → EnhancementsTab.SecretSkills).
             foreach (var skill in Models.SkillDefinition.All.Where(s => !s.IsSecret))
             {
                 if (nodePositions.TryGetValue(skill.Id, out var pos))
@@ -1743,110 +1750,35 @@ namespace ConditioningControlPanel
         #endregion
 
         /// <summary>
-        /// Determines the cell dimensions of the skill grid images
-        /// </summary>
-        private static (int cellWidth, int cellHeight) GetSkillGridCellSize()
-        {
-            try
-            {
-                var resolvedImg = Services.ModResourceResolver.ResolveImage("skills1.png");
-                var bitmap = resolvedImg as BitmapImage ?? new BitmapImage(new Uri("pack://application:,,,/Resources/skills1.png", UriKind.Absolute));
-
-                // Grid is 3 columns × 2 rows
-                int cellWidth = bitmap.PixelWidth / 3;
-                int cellHeight = bitmap.PixelHeight / 2;
-
-                return (cellWidth, cellHeight);
-            }
-            catch
-            {
-                // Fallback if image doesn't load
-                return (0, 0);
-            }
-        }
-
-        /// <summary>
-        /// Maps skill IDs to their source image and crop coordinates
-        /// </summary>
-        private (string? imageFile, Int32Rect cropRect) GetSkillImageCrop(string skillId)
-        {
-            // Initialize cell dimensions if not already done
-            if (!_skillCellSizeInitialized)
-            {
-                (_skillCellWidth, _skillCellHeight) = GetSkillGridCellSize();
-                _skillCellSizeInitialized = true;
-            }
-
-            // If dimensions couldn't be determined, return null
-            if (_skillCellWidth == 0 || _skillCellHeight == 0)
-                return (null, new Int32Rect(0, 0, 0, 0));
-
-            var mapping = new Dictionary<string, (string file, int col, int row)>
-            {
-                // skills1.png
-                ["hive_mind"] = ("skills1.png", 0, 0),
-                ["trophy_case"] = ("skills1.png", 1, 0),
-                ["sparkle_boost_2"] = ("skills1.png", 2, 0),
-                ["lucky_bimbo"] = ("skills1.png", 0, 1),
-                ["milestone_rewards"] = ("skills1.png", 1, 1),
-                ["oopsie_insurance"] = ("skills1.png", 2, 1),
-
-                // skills2.png
-                ["popular_girl"] = ("skills2.png", 0, 0),
-                ["quest_refresh"] = ("skills2.png", 1, 0),
-                ["better_quests"] = ("skills2.png", 2, 0),
-                ["sparkle_boost_3"] = ("skills2.png", 0, 1),
-                ["lucky_bubbles"] = ("skills2.png", 1, 1),
-                ["pink_rush"] = ("skills2.png", 2, 1),
-
-                // skills3.png
-                ["streak_power"] = ("skills3.png", 0, 0),
-                ["reroll_addict"] = ("skills3.png", 1, 0),
-                ["perfect_bimbo_week"] = ("skills3.png", 2, 0),
-                ["night_shift"] = ("skills3.png", 0, 1),
-                ["early_bird_bimbo"] = ("skills3.png", 1, 1),
-                ["eternal_doll"] = ("skills3.png", 2, 1),
-            };
-
-            if (mapping.TryGetValue(skillId, out var info))
-            {
-                int x = info.col * _skillCellWidth;
-                int y = info.row * _skillCellHeight;
-                return (info.file, new Int32Rect(x, y, _skillCellWidth, _skillCellHeight));
-            }
-
-            return (null, new Int32Rect(0, 0, 0, 0));
-        }
-
-        /// <summary>
-        /// Populates the secret skills panel
+        /// Fills the secret-skill rail under the tree: one card per IsSecret skill, hidden
+        /// ("???" + its requirement hint) until <see cref="Services.SkillTreeService.IsSecretSkillAvailable"/>
+        /// says the condition has been met. The counters behind those conditions are ticked
+        /// elsewhere already (TrackTimeOfDayUsage on every session start, HighestLevelEver on
+        /// level-up), so the rail reveals itself over time with no other prompting.
         /// </summary>
         private void PopulateSecretSkills()
         {
-            // DISABLED: Secret skills panel removed from UI
-            return;
-            // SecretSkills.Children.Clear();
-            var secrets = Models.SkillDefinition.All.Where(s => s.IsSecret).ToList();
+            var panel = EnhancementsTab?.SecretSkills;
+            if (panel == null) return;
 
-            foreach (var skill in secrets)
+            panel.Children.Clear();
+
+            foreach (var skill in Models.SkillDefinition.All.Where(s => s.IsSecret))
             {
                 var isAvailable = App.SkillTree?.IsSecretSkillAvailable(skill.Id) == true;
                 var isUnlocked = App.SkillTree?.HasSkill(skill.Id) == true;
 
                 // Show hidden card if not available, actual card if available
-                if (isAvailable || isUnlocked)
-                {
-                    // SecretSkills.Children.Add(CreateSecretSkillCard(skill));
-                }
-                else
-                {
-                    // SecretSkills.Children.Add(CreateHiddenSecretCard(skill));
-                }
+                panel.Children.Add(isAvailable || isUnlocked
+                    ? CreateSecretSkillCard(skill)
+                    : CreateHiddenSecretCard(skill));
             }
         }
 
         /// <summary>
-        /// Creates a hidden secret skill card showing only the requirement hint
+        /// Creates a hidden secret skill card showing only the requirement hint. The skill's name,
+        /// icon, cost and effect all stay withheld until <see cref="Services.SkillTreeService.IsSecretSkillAvailable"/>
+        /// turns true - the hint is the whole card.
         /// </summary>
         private Border CreateHiddenSecretCard(Models.SkillDefinition skill)
         {
@@ -1856,44 +1788,49 @@ namespace ConditioningControlPanel
                 BorderBrush = new SolidColorBrush(Color.FromRgb(80, 60, 100)),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(8),
-                Width = 140,
-                Height = 100,
-                Margin = new Thickness(5),
-                Padding = new Thickness(8),
+                Width = SecretCardWidth,
+                Height = SecretCardHeight,
+                Margin = new Thickness(0, 3, 10, 3),
+                Padding = new Thickness(8, 6, 8, 6),
                 Opacity = 0.6
             };
 
-            var stack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            var body = new Grid();
+            body.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            stack.Children.Add(new TextBlock
+            // EmojiTextBlock, not TextBlock: at 18pt the padlock is this card's only art, and a
+            // plain TextBlock renders it as the monochrome Segoe silhouette.
+            body.Children.Add(new Helpers.EmojiTextBlock
             {
                 Text = "🔒",
-                FontSize = 20,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 0, 0, 5)
+                FontSize = 18,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 8, 0)
             });
 
-            stack.Children.Add(new TextBlock
+            var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(text, 1);
+
+            text.Children.Add(new TextBlock
             {
                 Text = "???",
                 Foreground = new SolidColorBrush(Color.FromRgb(153, 50, 204)),
-                FontSize = 12,
-                FontWeight = FontWeights.Bold,
-                HorizontalAlignment = HorizontalAlignment.Center
+                FontSize = 11,
+                FontWeight = FontWeights.Bold
             });
 
-            stack.Children.Add(new TextBlock
+            text.Children.Add(new TextBlock
             {
                 Text = skill.SecretRequirementDesc ?? "Unknown requirement",
                 Foreground = new SolidColorBrush(Color.FromRgb(128, 128, 128)),
-                FontSize = 9,
+                FontSize = 8,
                 TextWrapping = TextWrapping.Wrap,
-                TextAlignment = TextAlignment.Center,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 4, 0, 0)
+                Margin = new Thickness(0, 1, 0, 0)
             });
 
-            border.Child = stack;
+            body.Children.Add(text);
+            border.Child = body;
             return border;
         }
 
@@ -1929,10 +1866,10 @@ namespace ConditioningControlPanel
                 BorderBrush = new SolidColorBrush(borderColor),
                 BorderThickness = new Thickness(isUnlocked ? 2 : 1),
                 CornerRadius = new CornerRadius(8),
-                Width = 140,
-                Height = 100,
-                Margin = new Thickness(5),
-                Padding = new Thickness(8),
+                Width = SecretCardWidth,
+                Height = SecretCardHeight,
+                Margin = new Thickness(0, 3, 10, 3),
+                Padding = new Thickness(8, 6, 8, 6),
                 Cursor = canPurchase ? System.Windows.Input.Cursors.Hand : System.Windows.Input.Cursors.Arrow,
                 Tag = skill.Id
             };
@@ -1989,27 +1926,40 @@ namespace ConditioningControlPanel
                 Padding = new Thickness(10)
             };
 
-            var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            var body = new Grid();
+            body.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            stack.Children.Add(new Image
+            // Same per-skill art path the tree nodes use, then the emoji. The emoji really is only
+            // a fallback here: all three secrets carry a PAIR of emoji in Icon ("🌙😴"), and Twemoji
+            // ships no file for a pair, so EmojiImage returns null for every one of them.
+            var iconSource = Services.ModResourceResolver.ResolveImage($"skills/{skill.Id}.png")
+                             ?? Helpers.EmojiImage.Get(skill.Icon);
+            if (iconSource != null)
             {
-                Source = Helpers.EmojiImage.Get(skill.Icon),
-                Width = 22,
-                Height = 22,
-                Stretch = System.Windows.Media.Stretch.Uniform,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 0, 0, 3)
-            });
+                // 44x30 is the 3:2 the skills/ art is drawn at, so Uniform shows all of it with
+                // no letterbox and nothing to clip.
+                body.Children.Add(new Image
+                {
+                    Source = iconSource,
+                    Width = 44,
+                    Height = 30,
+                    Stretch = System.Windows.Media.Stretch.Uniform,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 8, 0)
+                });
+            }
+
+            var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(stack, 1);
 
             stack.Children.Add(new TextBlock
             {
                 Text = App.Mods?.MakeModAware(skill.Name) ?? skill.LocalizedName,
                 Foreground = new SolidColorBrush(isUnlocked ? Color.FromRgb(180, 130, 255) : Color.FromRgb(153, 50, 204)),
-                FontSize = 10,
+                FontSize = 11,
                 FontWeight = FontWeights.Bold,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                TextWrapping = TextWrapping.Wrap,
-                TextAlignment = TextAlignment.Center
+                TextWrapping = TextWrapping.Wrap
             });
 
             if (isUnlocked)
@@ -2019,8 +1969,7 @@ namespace ConditioningControlPanel
                     Text = $"💎{skill.Cost} ✓ OWNED",
                     Foreground = new SolidColorBrush(Color.FromRgb(180, 130, 255)),
                     FontSize = 9,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    Margin = new Thickness(0, 4, 0, 0)
+                    Margin = new Thickness(0, 2, 0, 0)
                 });
             }
             else
@@ -2034,12 +1983,12 @@ namespace ConditioningControlPanel
                     Text = $"💎 {skill.Cost}",
                     Foreground = new SolidColorBrush(costColor),
                     FontSize = 10,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    Margin = new Thickness(0, 4, 0, 0)
+                    Margin = new Thickness(0, 2, 0, 0)
                 });
             }
 
-            border.Child = stack;
+            body.Children.Add(stack);
+            border.Child = body;
             return border;
         }
 

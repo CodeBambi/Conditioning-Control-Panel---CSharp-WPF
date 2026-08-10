@@ -45,6 +45,11 @@ namespace ConditioningControlPanel
         {
             if (App.Lockdown == null) return;
 
+            // Hard gate. RefreshPremiumGate only collapses a Border over this card, so the button
+            // stays reachable by keyboard focus and by automation - and this handler is the one
+            // that takes the keys away for an hour.
+            if (!TierGate.DemandPremium("Lockdown Mode")) return;
+
             // Get duration from combo box
             var selectedItem = LockdownTab.CmbLockdownDuration.SelectedItem as ComboBoxItem;
             if (selectedItem?.Tag is not string minutesStr || !int.TryParse(minutesStr, out var minutes))
@@ -205,6 +210,11 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // Tier 2 door, checked here rather than left to the Lab smokescreen: the overlay
+                // covers one tab, and the descent is reachable from the hero card, Quick Start and
+                // (Phase 6) a Play card that will not have an overlay at all.
+                if (!TierGate.DemandLab("Down the Rabbit Hole")) return;
+
                 // DtRH browser game (default ON since M6): the whole experience lives in the web
                 // page — hub, run and all. The legacy WPF path below stays for the Lab toggle and
                 // as the automatic fallback when the page reported a WebGL boot-error this session.
@@ -282,6 +292,9 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // Same tier-2 door as the hero card - Quick Start skips the picker, not the gate.
+                if (!TierGate.DemandLab("Down the Rabbit Hole")) return;
+
                 // DtRH browser game: same surface as the hero card — see BtnStartChaos_Click.
                 // Quick Start skips the save picker by design (that's the "quick" part) and reuses
                 // the last-chosen slot, already live in ChaosMeta.State.

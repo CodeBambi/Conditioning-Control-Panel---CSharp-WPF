@@ -32,7 +32,6 @@ public class CompanionWorkshopCellRenderTests
         "Resources/Theme/Brushes.xaml",
         "Resources/Theme/Controls.xaml",
         "Resources/Theme/Converters.xaml",
-        "Resources/Theme/Motion.xaml",
         "Resources/Theme/MainWindow.xaml"
     };
 

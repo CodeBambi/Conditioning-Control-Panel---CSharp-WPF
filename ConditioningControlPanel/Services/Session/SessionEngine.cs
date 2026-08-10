@@ -1453,15 +1453,24 @@ namespace ConditioningControlPanel.Services
                 {
                     try
                     {
-                        gifUri = new Uri(ModResourceResolver.ResolveUri("spirals/spiral.gif"), UriKind.Absolute);
-                        var resourceInfo = Application.GetResourceStream(gifUri);
-                        if (resourceInfo?.Stream != null)
+                        gifUri = new Uri(ModResourceResolver.ResolveSpiralUri(), UriKind.Absolute);
+                        if (gifUri.IsFile)
                         {
-                            using (resourceInfo.Stream)
-                            {
-                                img = System.Drawing.Image.FromStream(resourceInfo.Stream);
-                            }
+                            // Active-mod override: GetResourceStream only accepts pack:// URIs.
+                            img = System.Drawing.Image.FromFile(gifUri.LocalPath);
                             App.Logger?.Information("Corner GIF not set or found, defaulting to spiral.gif resource");
+                        }
+                        else
+                        {
+                            var resourceInfo = Application.GetResourceStream(gifUri);
+                            if (resourceInfo?.Stream != null)
+                            {
+                                using (resourceInfo.Stream)
+                                {
+                                    img = System.Drawing.Image.FromStream(resourceInfo.Stream);
+                                }
+                                App.Logger?.Information("Corner GIF not set or found, defaulting to spiral.gif resource");
+                            }
                         }
                     }
                     catch (Exception ex)

@@ -238,7 +238,7 @@ namespace ConditioningControlPanel.Features
 
             // Built-in spiral (active when SpiralPath is empty / missing).
             string? defaultThumb = null;
-            try { defaultThumb = ModResourceResolver.ResolveUri("spiral.gif"); }
+            try { defaultThumb = ModResourceResolver.ResolveSpiralUri(); }
             catch { /* fall back to glyph */ }
             SpiralLibraryPanel.Children.Add(BuildSpiralCard("", "Default", defaultThumb));
 

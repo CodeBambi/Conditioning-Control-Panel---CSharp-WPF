@@ -2078,12 +2078,22 @@ namespace ConditioningControlPanel
                 Services.Chaos.DtrhSpike.Run();
 
             // DtRH browser game, dev shortcuts: `--dtrh` launches the web game window immediately,
-            // bypassing the Lab UI and the ChaosWebGameEnabled flag; `--dtrh-m2test` additionally
-            // runs the M2 bridge exercise against a CLONED meta state (real save untouched).
+            // bypassing the Lab UI and the ChaosWebGameEnabled flag — but NOT the tier gate, which
+            // it now answers to like the Lab card does. `--dtrh-m2test` additionally runs the M2
+            // bridge exercise against a CLONED meta state (real save untouched) and stays
+            // unrestricted: it is the capture rig's entry point.
+            //
+            // Entitlement is read from the cached state loaded in PatreonService's constructor —
+            // online validation may still be in flight this early, so an unvalidated launch fails
+            // closed. Denials only log: a dialog here would fire before the user has done anything.
             if (e.Args.Contains("--dtrh-m2test"))
                 Services.Chaos.DtrhHostService.Launch(testMode: true);
             else if (e.Args.Contains("--dtrh"))
-                Services.Chaos.DtrhHostService.Launch();
+            {
+                var dtrhGate = Services.TierGate.RequiresLab("Down the Rabbit Hole");
+                if (dtrhGate.Allowed) Services.Chaos.DtrhHostService.Launch();
+                else Logger?.Information("--dtrh ignored: {Reason}", dtrhGate.Reason);
+            }
 
             // Goon Game browser client, dev shortcut: `--goon` opens the web duel window straight
             // away (same shape as `--dtrh`). Needs MainWindow to exist first — the host owns its
@@ -2108,10 +2118,15 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            // For You feed, dev shortcut: `--fyp` opens the feed window immediately,
-            // bypassing the Lab card and the premium gate (dev machines only).
+            // For You feed, dev shortcut: `--fyp` opens the feed window immediately, bypassing the
+            // Lab card — but it answers to the same tier-1 gate OpenFypFeed applies. Logs and skips
+            // on denial, like `--dtrh` above.
             if (e.Args.Contains("--fyp"))
-                Services.Fyp.FypHostService.Launch();
+            {
+                var fypGate = Services.TierGate.RequiresPremium("The For You feed");
+                if (fypGate.Allowed) Services.Fyp.FypHostService.Launch();
+                else Logger?.Information("--fyp ignored: {Reason}", fypGate.Reason);
+            }
 
             // Arm the offline mic features (wake word / push-to-talk) at startup if the user left them
             // on. They're decoupled from Takeover ("She's Listening" owns them), so they no longer wait

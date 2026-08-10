@@ -132,6 +132,19 @@ namespace ConditioningControlPanel.Services
             || (App.SubscribeStar?.HasPremiumAccess == true);
 
         /// <summary>
+        /// The tier-2 half of the offline grace, and the reason it is safe: it reads the SAME
+        /// 14-day window the premium cache uses, but only for an account whose last validated tier
+        /// was Level2. A tier-1 patron therefore never falls through it, which is the property the
+        /// grace was previously excluded for.
+        ///
+        /// The persisted tier on its own (what MainWindow.UiUpdates used to OR in) never expires -
+        /// running it THROUGH the window is what turns a permanently-stale read into a grace.
+        /// </summary>
+        private static bool HasCachedLabAccess =>
+            (App.Settings?.Current?.PatreonTier ?? 0) >= (int)PatreonTier.Level2
+            && App.Settings?.Current?.HasCachedPremiumAccess == true;
+
+        /// <summary>
         /// Whether the user has Lab access: Tier 2+ OR whitelisted.
         ///
         /// THIS IS THE GOON GAME **HOST** BAR, and it mirrors the server exactly:
@@ -143,15 +156,20 @@ namespace ConditioningControlPanel.Services
         /// Whitelist folds to permanent tier 2 on both sides (<see cref="SetWhitelistStatus"/>
         /// raises CurrentTier to Level2, computeEffectiveTier does the same server-side), so the
         /// OR is belt-and-braces rather than a second rule. SubscribeStar is OR'd in the same way
-        /// the server folds <c>substar_tier</c>. The 2-week grace cache is NOT: it caches a
-        /// tier-1 entitlement and would let a lapsed patron host.
+        /// the server folds <c>substar_tier</c>. The plain premium grace cache is still NOT OR'd
+        /// in - it caches a tier-1 entitlement - but <see cref="HasCachedLabAccess"/> gives the
+        /// same 14-day offline window to accounts whose last validated tier was 2, so a supporter
+        /// who goes offline (or logs in with Discord) keeps the Lab for a fortnight the way they
+        /// keep every premium feature. Owner decision, 2026-08-10.
         ///
         /// Advisory only — the server refuses on its own, and this exists so the UI can say so
-        /// before the round-trip instead of after it.
+        /// before the round-trip instead of after it. The grace can therefore say yes where the
+        /// server still says 403 <c>no_host_access</c>; that costs a round-trip, not a leak.
         /// </summary>
         public bool HasLabAccess => CurrentTier >= PatreonTier.Level2 || IsWhitelisted
             || (App.SubscribeStar?.CurrentTier ?? PatreonTier.None) >= PatreonTier.Level2
-            || (App.SubscribeStar?.IsWhitelisted == true);
+            || (App.SubscribeStar?.IsWhitelisted == true)
+            || HasCachedLabAccess;
 
         public PatreonService()
         {

@@ -24,6 +24,10 @@ namespace ConditioningControlPanel.Views.Tabs
             // FX lifecycle (PR-4b): entrance stagger on the profile column, and the search box's
             // focus glow wiring. No ambient loop is added here - the OG border already owns that.
             IsVisibleChanged += DiscordTabView_IsVisibleChanged;
+            // The Record's six stat badges borrow achievement art, which mods override. XAML can
+            // only name the embedded pack URI, so MainWindow repaints them through the resolver
+            // once the tab is in the tree - and installs the ModChanged hook that keeps them right.
+            Loaded += DiscordTabView_Loaded;
         }
 
         // ---- passthroughs -------------------------------------------------------------
@@ -54,6 +58,12 @@ namespace ConditioningControlPanel.Views.Tabs
         internal System.Windows.Shapes.Ellipse ProfileOnlineIndicator => ProfileHeroAvatar.PresenceDot;
 
         // ---- forwarding ---------------------------------------------------------------
+
+        private void DiscordTabView_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.RefreshProfileStatBadges();
+        }
 
         private void DiscordTabView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
         {

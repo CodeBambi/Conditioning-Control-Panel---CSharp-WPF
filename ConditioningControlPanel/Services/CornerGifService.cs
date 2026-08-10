@@ -289,7 +289,7 @@ namespace ConditioningControlPanel.Services
             {
                 try
                 {
-                    gifUri = new Uri(ModResourceResolver.ResolveUri("spiral.gif"), UriKind.Absolute);
+                    gifUri = new Uri(ModResourceResolver.ResolveSpiralUri(), UriKind.Absolute);
                     if (gifUri.IsFile)
                     {
                         img = System.Drawing.Image.FromFile(gifUri.LocalPath);

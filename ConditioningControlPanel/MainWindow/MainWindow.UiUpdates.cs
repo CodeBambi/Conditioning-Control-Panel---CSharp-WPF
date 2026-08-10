@@ -685,14 +685,14 @@ namespace ConditioningControlPanel
                 if (SettingsTab.CardBouncingText != null) SettingsTab.CardBouncingText.IsLocked = false;
                 if (SettingsTab.CardMindWipe != null) SettingsTab.CardMindWipe.IsLocked = false;
 
-                // Lab Tab: Requires Patreon T2 / whitelist. Cover every entitlement source —
-                // this gate is destructive below (force-clears AllowAiToControlEffects and
-                // SAVES), so a stale-negative here wipes a legit user's setting: live tier,
-                // server-linked tier (Discord login), whitelist, and SubscribeStar T2.
-                var labUnlocked = App.Patreon?.CurrentTier >= PatreonTier.Level2
-                    || (App.Settings?.Current?.PatreonTier ?? 0) >= 2
-                    || App.Patreon?.IsWhitelisted == true
-                    || App.SubscribeStar?.CurrentTier >= PatreonTier.Level2;
+                // Lab Tab: Requires Patreon T2 / whitelist. HasLabAccess is the single truth and
+                // already covers every entitlement source (live tier, whitelist, SubscribeStar T2,
+                // and the 14-day grace over a server-linked T2 login), which matters twice over:
+                // this gate is destructive below (force-clears AllowAiToControlEffects and SAVES),
+                // so a stale-negative wipes a legit user's setting — and the bare
+                // `Settings.PatreonTier >= 2` that used to be OR'd in here never expired, so the
+                // smokescreen and the launch handlers could disagree about the same account.
+                var labUnlocked = App.Patreon?.HasLabAccess == true;
                 if (LabTab.LabSmokescreen != null) LabTab.LabSmokescreen.Visibility = labUnlocked ? Visibility.Collapsed : Visibility.Visible;
 
                 // AI effect control lives in the Lab — force-disable for non-T2 users so settings can't outlive the entitlement.
@@ -2790,6 +2790,7 @@ namespace ConditioningControlPanel
                 StopSeasonTitleShimmer();
                 StopSkillTreeAnimations();
                 StopProgramBannerFx();
+                StopLockdownPulse();
                 SwitchTabFx(string.Empty);
             }
             StartMarqueeAnimation();

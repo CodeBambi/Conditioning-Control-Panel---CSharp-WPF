@@ -49,7 +49,7 @@
                     <Border Height="58" CornerRadius="10" Margin="0,0,0,20"
                             BorderBrush="#59B478FF" BorderThickness="1" ClipToBounds="True">
                         <Border.Background>
-                            <ImageBrush ImageSource="/Resources/programs/banner_default.png"
+                            <ImageBrush ImageSource="pack://application:,,,/Resources/programs/banner_default.png"
                                         Stretch="UniformToFill" AlignmentX="Right"/>
                         </Border.Background>
                         <Grid>
@@ -89,10 +89,10 @@
                                 <StackPanel Grid.Column="2" Orientation="Horizontal"
                                             VerticalAlignment="Center">
                                     <Image x:Name="TierPlate1" x:FieldModifier="internal"
-                                           Source="/Resources/Patreon tier1.png"
+                                           Source="pack://application:,,,/Resources/Patreon tier1.png"
                                            Height="30" Margin="0,0,8,0" Opacity="0.3"/>
                                     <Image x:Name="TierPlate2" x:FieldModifier="internal"
-                                           Source="/Resources/Patreon tier2.png"
+                                           Source="pack://application:,,,/Resources/Patreon tier2.png"
                                            Height="30" Opacity="0.3"/>
                                 </StackPanel>
                             </Grid>

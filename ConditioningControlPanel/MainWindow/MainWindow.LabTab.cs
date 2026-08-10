@@ -620,6 +620,10 @@ namespace ConditioningControlPanel
 
         internal void BtnGazeMinigame_Click(object sender, RoutedEventArgs e)
         {
+            // Tier 2, checked here: the Lab smokescreen is a tab-wide overlay, not a gate on the
+            // window this opens.
+            if (!TierGate.DemandLab("The Gaze Minigame")) return;
+
             new Lab.GazeMinigame.GazeMinigameWindow { Owner = this }.Show();
         }
 
