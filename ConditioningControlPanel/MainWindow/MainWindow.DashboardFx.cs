@@ -81,7 +81,14 @@ namespace ConditioningControlPanel
         private readonly List<Ellipse> _pulsingRailDots = new();
         private TextBlock? _browserStatusWatched;
 
-        /// <summary>The 12 mosaic tiles. Null-tolerant - the view is a partial rewire.</summary>
+        /// <summary>
+        /// The mosaic tiles. Null-tolerant - the view is a partial rewire.
+        ///
+        /// <para>Phase 3: <c>CardBrainDrain</c> joined (the G2 rescue's front door) and
+        /// <c>CardSystem</c> stayed even though its tile is now Collapsed - the entry point moved
+        /// to the quick-toggles row, but the element is still in the tree and RefreshFx on a
+        /// hidden card is a no-op that parks its clock, which is what we want.</para>
+        /// </summary>
         private IEnumerable<FeatureCard> DashboardFeatureCards
         {
             get
@@ -93,12 +100,19 @@ namespace ConditioningControlPanel
                     tab.CardFlash, tab.CardVisuals, tab.CardVideo, tab.CardSubliminal,
                     tab.CardSpiral, tab.CardLockCard, tab.CardPinkFilter, tab.CardMindWipe,
                     tab.CardBubblePop, tab.CardBouncingText, tab.CardSystem, tab.CardBubbleCount,
+                    tab.CardBrainDrain,
                 };
                 return all.Where(c => c != null)!;
             }
         }
 
-        /// <summary>The premium rail's 8 hoverable items (6 chips + the 2 launcher cards).</summary>
+        /// <summary>
+        /// The premium rail's 9 hoverable items (7 chips + the 2 launcher cards).
+        ///
+        /// <para>ChipFyp was missing here until the Phase-3 verify pass: For You got no hover lift
+        /// and no art nudge, the same omission family as the ArtFyp-missing-from-railArtMap bug
+        /// Phase 0 fixed. Every element that carries an Art* brush belongs in this list.</para>
+        /// </summary>
         private IEnumerable<FrameworkElement> PremiumRailItems
         {
             get
@@ -108,7 +122,7 @@ namespace ConditioningControlPanel
                 var all = new FrameworkElement?[]
                 {
                     tab.ChipTakeover, tab.ChipAwareness, tab.ChipHaptics, tab.ChipGradedIntake,
-                    tab.ChipVoice, tab.CardLockdown, tab.CardBlink, tab.ChipRemote,
+                    tab.ChipVoice, tab.ChipFyp, tab.CardLockdown, tab.CardBlink, tab.ChipRemote,
                 };
                 return all.Where(c => c != null)!;
             }
@@ -286,11 +300,18 @@ namespace ConditioningControlPanel
         // ============================== 4. premium rail ==============================
 
         /// <summary>
+        /// Source resource brush -> the private clone a rail item actually paints with. Populated
+        /// by <see cref="PrepareRailArtNudge"/>; drained by <see cref="RefreshRailArtClones"/>.
+        /// See that method for why the pair has to be remembered at all.
+        /// </summary>
+        private readonly List<(ImageBrush Source, ImageBrush Clone)> _railArtClones = new();
+
+        /// <summary>
         /// Gives a rail item its own copy of its art brush with a translate transform on it. The
         /// brushes are shared XAML resources and may be frozen, so we clone once at init rather
         /// than reach into the resource (which would also nudge every other user of it).
         /// </summary>
-        private static void PrepareRailArtNudge(FrameworkElement item)
+        private void PrepareRailArtNudge(FrameworkElement item)
         {
             try
             {
@@ -305,6 +326,11 @@ namespace ConditioningControlPanel
 
                 var copy = brush.Clone();
                 copy.RelativeTransform = new TranslateTransform();
+                // Cloning severs the {StaticResource} link, which is exactly what railArtMap
+                // (MainWindow.xaml.cs, LoadFeatureImages) mutates on a mod switch. Remember the
+                // pair so the clone can be re-synced; see RefreshRailArtClones.
+                if (brush is ImageBrush src && copy is ImageBrush dst)
+                    _railArtClones.Add((src, dst));
                 switch (item)
                 {
                     case Control c: c.Background = copy; break;
@@ -312,6 +338,35 @@ namespace ConditioningControlPanel
                 }
             }
             catch (Exception ex) { App.Logger?.Debug("PrepareRailArtNudge: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// Re-points every rail chip's private art clone at whatever the shared resource brush is
+        /// showing now. Called at the end of <c>LoadFeatureImages()</c>.
+        ///
+        /// <para>Why this exists: the rail's mod-awareness is <b>brush mutation, not brush
+        /// reassignment</b> - <c>railArtMap</c> writes <c>ImageSource</c> into the eight
+        /// <c>Art*</c> resources and relies on every chip's <c>{StaticResource}</c> reference to
+        /// repaint from that one write. <see cref="PrepareRailArtNudge"/> hands each chip a
+        /// <c>Clone()</c> so the hover nudge does not shove every other user of the brush, and a
+        /// clone does not observe the source's later edits. At startup the order hides it
+        /// (<c>LoadFeatureImages()</c> runs in the ctor, the clones are made on Loaded, so they
+        /// capture the correct art), but a RUNTIME mod switch repainted the resources only and the
+        /// chips kept the previous mod's art until restart. Pre-existing; found by the Phase-3
+        /// verify pass, which has "mod switch repaints the rail" as an exit criterion.</para>
+        /// </summary>
+        private void RefreshRailArtClones()
+        {
+            try
+            {
+                foreach (var (source, clone) in _railArtClones)
+                {
+                    if (clone.IsFrozen) continue;
+                    if (!ReferenceEquals(clone.ImageSource, source.ImageSource))
+                        clone.ImageSource = source.ImageSource;
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("RefreshRailArtClones: {E}", ex.Message); }
         }
 
         private void RailItem_MouseEnter(object sender, MouseEventArgs e) => ApplyRailHover(sender, true);

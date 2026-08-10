@@ -124,6 +124,9 @@ namespace ConditioningControlPanel
             if (SettingsTab.CardBouncingText != null) SettingsTab.CardBouncingText.Title = MLCard("Bouncing Text", "label_bouncing_text");
             if (SettingsTab.CardSystem != null) SettingsTab.CardSystem.Title = MLCard("System", "section_system");
             if (SettingsTab.CardBubbleCount != null) SettingsTab.CardBubbleCount.Title = MLCard("Bubble Count", "label_bubble_count");
+            // Phase 3: the Brain Drain tile. Same key the Studio rack row and the dead
+            // ProgressionTab label use, so a mod that renames the feature renames all three.
+            if (SettingsTab.CardBrainDrain != null) SettingsTab.CardBrainDrain.Title = MLCard("Brain Drain", "label_brain_drain");
 
             // Main section headers
             if (SettingsTab.TxtFeatureFlash != null) SettingsTab.TxtFeatureFlash.Text = ML("⚡ Flash Images", "section_flash_images");
@@ -2904,7 +2907,8 @@ namespace ConditioningControlPanel
         internal void ChkVideoHwDecode_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            App.Settings.Current.VideoForceHardwareDecoding = SettingsTab.ChkVideoHwDecode.IsChecked ?? false;
+            var chk = sender as CheckBox ?? SettingsTab.ChkVideoHwDecode;
+            App.Settings.Current.VideoForceHardwareDecoding = chk.IsChecked ?? false;
             App.Logger?.Information("Force video hardware decoding set to {Enabled}", App.Settings.Current.VideoForceHardwareDecoding);
         }
 

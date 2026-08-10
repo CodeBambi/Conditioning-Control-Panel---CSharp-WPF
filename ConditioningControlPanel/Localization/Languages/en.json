@@ -4691,6 +4691,8 @@
   "set2_tooltip_auto_performance": "Automatically reduce rendering quality only while lots of elements (flashes/bubbles) are on screen, then restore it.",
   "set2_setting_unified_overlay": "Unified overlay renderer",
   "set2_tooltip_unified_overlay": "Render fullscreen effects (spiral, pink filter, flashes, bubbles...) in one shared overlay window per monitor. Smoother with many effects on screen. Turn off to fall back to the classic one-window-per-effect renderer if overlays misbehave.",
+  "set2_setting_video_hw_decode": "Force video GPU decode",
+  "set2_tooltip_video_hw_decode": "Force GPU hardware decoding for mandatory videos. Off by default - videos software-decode to avoid a white-screen bug on some machines. Turn on only if your videos play fine.",
   "set2_whats_new_header": "What's new in this version",
   "set2_btn_view_patch_notes": "View full notes",
   "set2_whats_new_title_0": "What's new in v{0}",
@@ -4716,5 +4718,10 @@
   "st4_scheduler_active_days": "Active Days",
   "st4_ramp_hint": "Eases intensity upward over the ramp's length, then optionally ends the session at the top.",
   "st4_ramp_session_note": "While a session is running the global ramp stands down so the two can't fight - only the ramp curve keeps shaping the session's own ramp.",
-  "label_brain_drain": "💧 Brain Drain"
+  "label_brain_drain": "💧 Brain Drain",
+  "hm3_companion_strip_sub": "Chat, takeover, awareness and permissions",
+  "hm3_audio_sync_tuning": "🎚 Audio sync tuning",
+  "hm3_rail_lock_t1": "Patron only",
+  "hm3_rail_lock_pass": "Weekly pass",
+  "hm3_rail_lock_t2": "Lab only"
 }

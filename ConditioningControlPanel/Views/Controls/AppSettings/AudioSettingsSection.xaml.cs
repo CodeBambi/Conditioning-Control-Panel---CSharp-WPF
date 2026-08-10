@@ -64,6 +64,20 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
             if (Window.GetWindow(this) is MainWindow mw) mw.BtnTestAudio_Click(sender, e);
         }
 
+        // Audio-sync tuning pair, moved here from the dashboard's browser card in Phase 3.
+        // Same MainWindow handlers, same names — MainWindow.Haptics.cs writes these sliders'
+        // Values from the Haptics panel's own delay/power pair and vice versa, so the hop must
+        // stay a pure forward or the two surfaces will fight.
+        private void SliderAudioSyncLatency_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.SliderAudioSyncLatency_Changed(sender, e);
+        }
+
+        private void SliderAudioSyncIntensity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.SliderAudioSyncIntensity_Changed(sender, e);
+        }
+
         // Suggestion #659 — open the Audio Layers config window (self-contained, no MainWindow dep).
         private void BtnAudioLayers_Click(object sender, RoutedEventArgs e)
         {

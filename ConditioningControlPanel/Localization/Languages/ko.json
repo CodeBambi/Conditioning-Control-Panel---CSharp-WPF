@@ -4129,6 +4129,8 @@
   "set2_tooltip_auto_performance": "화면에 요소(플래시/버블)가 많을 때만 자동으로 렌더링 품질을 낮췄다가 다시 되돌려요.",
   "set2_setting_unified_overlay": "통합 오버레이 렌더러",
   "set2_tooltip_unified_overlay": "전체 화면 효과(스파이럴, 핑크 필터, 플래시, 버블…)를 모니터마다 하나의 공용 오버레이 창에서 그려요. 효과가 많을 때 더 부드러워요. 오버레이가 이상하면 꺼서 효과마다 창 하나인 예전 방식으로 되돌릴 수 있어요.",
+  "set2_setting_video_hw_decode": "비디오 GPU 디코딩 강제",
+  "set2_tooltip_video_hw_decode": "필수 비디오에 GPU 하드웨어 디코딩을 강제합니다. 기본값은 꺼짐 - 일부 기기의 화이트 스크린 버그를 피하기 위해 소프트웨어 디코딩을 사용합니다. 비디오가 정상 재생될 때만 켜세요.",
   "set2_whats_new_header": "이번 버전의 새로운 점",
   "set2_btn_view_patch_notes": "전체 노트 보기",
   "set2_whats_new_title_0": "v{0}의 새로운 점",
@@ -4154,5 +4156,10 @@
   "st4_scheduler_active_days": "활성 요일",
   "st4_ramp_hint": "램프 길이에 걸쳐 강도를 서서히 올리고, 원하면 정점에서 세션을 끝내.",
   "st4_ramp_session_note": "세션이 돌아가는 동안에는 전역 램프가 물러나서 둘이 부딪히지 않아 - 램프 커브만 세션 자체의 램프를 계속 다듬어.",
-  "label_brain_drain": "💧 브레인 드레인"
+  "label_brain_drain": "💧 브레인 드레인",
+  "hm3_companion_strip_sub": "채팅, 테이크오버, 인식, 권한",
+  "hm3_audio_sync_tuning": "🎚 오디오 동기화 조절",
+  "hm3_rail_lock_t1": "후원자 전용",
+  "hm3_rail_lock_pass": "주간 패스",
+  "hm3_rail_lock_t2": "연구소 전용"
 }

@@ -85,6 +85,7 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
                 ChkPerformanceMode.IsChecked = s.PerformanceMode;
                 ChkAutoPerformance.IsChecked = s.AutoPerformanceMode;
                 ChkUnifiedOverlay.IsChecked = s.UnifiedOverlayHost;
+                ChkVideoHwDecode.IsChecked = s.VideoForceHardwareDecoding;
 
                 // MotionLevel's ordinal IS the item index (Full=0, Reduced=1, Off=2) - the same
                 // contract MainWindow.Settings.cs:92 relies on. Clamped rather than trusted so a
@@ -122,6 +123,16 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
             if (Window.GetWindow(this) is MainWindow mw)
             {
                 mw.ChkUnifiedOverlay_Changed(sender, e);
+                App.Settings?.Save();
+            }
+        }
+
+        private void ChkVideoHwDecode_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            if (Window.GetWindow(this) is MainWindow mw)
+            {
+                mw.ChkVideoHwDecode_Changed(sender, e);
                 App.Settings?.Save();
             }
         }

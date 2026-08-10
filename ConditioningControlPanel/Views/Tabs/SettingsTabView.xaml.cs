@@ -234,6 +234,13 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.CardBubblePop_Click(sender, e);
         }
+        // Phase 3 rescue: Brain Drain's front door. Its panel is the Studio rack's
+        // "braindrain" entry (Phase 4); before that it had no reachable UI at all.
+        private void CardBrainDrain_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.CardBrainDrain_Click(sender, e);
+        }
         private void CardFlash_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -395,16 +402,8 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.IntakePassFace_MouseLeftButtonDown(sender, e);
         }
-        private void SliderAudioSyncIntensity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderAudioSyncIntensity_Changed(sender, e);
-        }
-        private void SliderAudioSyncLatency_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderAudioSyncLatency_Changed(sender, e);
-        }
+        // Phase 3: SliderAudioSyncLatency_Changed / SliderAudioSyncIntensity_Changed moved with
+        // the audio-sync tuning panel to Views/Controls/AppSettings/AudioSettingsSection.xaml.cs.
         private void SliderDuration_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -509,6 +508,29 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnCatalogue_Click(sender, e);
+        }
+        /// <summary>
+        /// Quick-toggles row · "System". Phase 3 traded the ⚙ mosaic tile for the Brain Drain
+        /// rescue and moved its entry point here; the tile itself is still in the tree (Collapsed)
+        /// and both callers reach the SAME <c>MainWindow.CardSystem_Click</c>, so the popup, its
+        /// mod-aware title and its <c>NotifyFeatureOpened("System")</c> bark are byte-for-byte
+        /// what they were.
+        /// </summary>
+        private void VelvetBtnSystem_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.CardSystem_Click(sender, e);
+        }
+        /// <summary>
+        /// Home's companion strip. Pure navigation into the Companion door - the strip owns no
+        /// portrait and no clock, so there is nothing to start or stop here (see the XAML note:
+        /// CompanionTheme.xaml budgets ONE Forever storyboard for the companion app-wide, and
+        /// CompanionHeroCard already spends it).
+        /// </summary>
+        private void CompanionStrip_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.ShowTab("companion");
         }
 
         // Training Programs "Today" card (row 0). Loaded is the card's own first-paint hook so

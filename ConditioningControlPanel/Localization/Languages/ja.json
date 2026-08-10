@@ -4122,6 +4122,8 @@
   "set2_tooltip_auto_performance": "画面に要素（フラッシュやバブル）が大量にある間だけ自動で描画品質を下げ、あとで戻す。",
   "set2_setting_unified_overlay": "統合オーバーレイレンダラー",
   "set2_tooltip_unified_overlay": "全画面エフェクト（スパイラル、ピンクフィルター、フラッシュ、バブル…）をモニターごとに 1 枚の共有オーバーレイで描画する。エフェクトが多い時に滑らか。オーバーレイの挙動がおかしい時はオフにして、エフェクトごとに 1 ウィンドウの従来方式に戻せる。",
+  "set2_setting_video_hw_decode": "動画のGPUデコードを強制",
+  "set2_tooltip_video_hw_decode": "必須動画にGPUハードウェアデコードを強制します。既定ではオフ - 一部の環境で発生するホワイトスクリーン不具合を避けるためソフトウェアデコードされます。動画が正常に再生される場合のみオンにしてください。",
   "set2_whats_new_header": "このバージョンの新着",
   "set2_btn_view_patch_notes": "全文を見る",
   "set2_whats_new_title_0": "v{0} の新着",
@@ -4147,5 +4149,10 @@
   "st4_scheduler_active_days": "有効な曜日",
   "st4_ramp_hint": "ランプの長さをかけて強度をゆっくり上げて、お好みで頂点でセッションを終わらせるよ。",
   "st4_ramp_session_note": "セッション中はグローバルランプが引っ込んでぶつからないようになるよ - ランプカーブだけがセッション自身のランプを形づくり続けるの。",
-  "label_brain_drain": "💧 ブレインドレイン"
+  "label_brain_drain": "💧 ブレインドレイン",
+  "hm3_companion_strip_sub": "チャット・テイクオーバー・認識・権限",
+  "hm3_audio_sync_tuning": "🎚 オーディオ同期の調整",
+  "hm3_rail_lock_t1": "支援者限定",
+  "hm3_rail_lock_pass": "週間パス",
+  "hm3_rail_lock_t2": "ラボ限定"
 }

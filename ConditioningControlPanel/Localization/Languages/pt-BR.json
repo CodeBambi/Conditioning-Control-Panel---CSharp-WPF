@@ -4130,6 +4130,8 @@
   "set2_tooltip_auto_performance": "Reduz a qualidade de renderização automaticamente só enquanto tem muitos elementos (flashes/bolhas) na tela, e depois restaura.",
   "set2_setting_unified_overlay": "Renderizador de overlay unificado",
   "set2_tooltip_unified_overlay": "Desenha os efeitos em tela cheia (espiral, filtro rosa, flashes, bolhas...) em uma única janela de overlay por monitor. Fica mais suave com muitos efeitos. Desligue para voltar ao renderizador clássico de uma janela por efeito se os overlays derem problema.",
+  "set2_setting_video_hw_decode": "Forçar decodificação de vídeo por GPU",
+  "set2_tooltip_video_hw_decode": "Força a decodificação por GPU dos vídeos obrigatórios. Desligado por padrão - os vídeos usam decodificação por software para evitar um bug de tela branca em algumas máquinas. Ative apenas se seus vídeos tocarem bem.",
   "set2_whats_new_header": "Novidades desta versão",
   "set2_btn_view_patch_notes": "Ver notas completas",
   "set2_whats_new_title_0": "Novidades da v{0}",
@@ -4155,5 +4157,10 @@
   "st4_scheduler_active_days": "Dias ativos",
   "st4_ramp_hint": "Sobe a intensidade aos poucos ao longo da rampa e, se você quiser, encerra a sessão no topo.",
   "st4_ramp_session_note": "Enquanto uma sessão roda, a rampa global sai de cena pra as duas não brigarem - só a curva de rampa continua moldando a rampa da própria sessão.",
-  "label_brain_drain": "💧 Drenagem Cerebral"
+  "label_brain_drain": "💧 Drenagem Cerebral",
+  "hm3_companion_strip_sub": "Chat, tomada de controle, consciência e permissões",
+  "hm3_audio_sync_tuning": "🎚 Ajuste da sincronia de áudio",
+  "hm3_rail_lock_t1": "Só apoiadores",
+  "hm3_rail_lock_pass": "Passe semanal",
+  "hm3_rail_lock_t2": "Só no Lab"
 }

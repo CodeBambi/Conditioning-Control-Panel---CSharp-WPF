@@ -24,8 +24,13 @@
               card at FontSize 9-10, this is a full-width settings page.
               Sizing only - no logic, no bindings changed.
 
-         Global audio only. Per-feature volumes (whisper, bubbles, mindwipe,
-         audio-sync) stay with their feature panels.
+         Global audio only. Per-feature volumes (whisper, bubbles, mindwipe)
+         stay with their feature panels.
+
+         Phase 3 added ONE more block at the foot: the audio-sync delay/power
+         tuning pair, moved off the dashboard's browser card per PLAN.md
+         Phase 3. It is a tuning pair, not a per-feature volume - its enable
+         switch stays on the Haptics routing matrix.
 
          Quiet surface: no ambient loops, no storyboards (PLAN.md §2.9).
          ================================================================ -->
@@ -172,6 +177,76 @@
                         Background="#33FF69B4" Foreground="White" FontSize="11" Padding="12,5"
                         BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"/>
             </StackPanel>
+
+            <!-- ============================================================
+                 AUDIO SYNC — the live haptic tuning pair (Phase 3).
+
+                 Moved verbatim from the dashboard's browser card
+                 (SettingsTabView.xaml), per PLAN.md Phase 3. All four x:Names
+                 and both handler names are the ones MainWindow.Haptics.cs
+                 (:254, :941, :955, :959, :974) and MainWindow.xaml.cs
+                 (:2404-2421) already read and write; they resolve as
+                 AppSettingsTab.<Name> through AppSettingsTabView.Audio.cs now.
+
+                 The ENABLE switch is NOT here and must not be: it lives on the
+                 Haptics routing matrix (Studio - Haptics - Media > Audio sync),
+                 and this whole block is Collapsed until that layer is on -
+                 RefreshAudioSyncCardVisibility owns the Visibility, so a
+                 hard-coded Visible here would show two dials that do nothing.
+                 These are MIRRORS of the Haptics panel's own delay/power
+                 sliders; each side writes the other's Value, which is why
+                 neither may grow a second ValueChanged handler.
+                 ============================================================ -->
+            <Border x:Name="AudioSyncLatencyPanel" x:FieldModifier="internal"
+                    Visibility="Collapsed"
+                    Background="{DynamicResource PanelBgBrush}" CornerRadius="8"
+                    Padding="12,10" Margin="0,14,0,0">
+                <StackPanel>
+                    <helpers:EmojiTextBlock Text="{loc:Str hm3_audio_sync_tuning}"
+                                            Foreground="{DynamicResource PinkBrush}"
+                                            FontSize="12" FontWeight="Bold" Margin="0,0,0,8"/>
+
+                    <!-- Delay -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="46"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str label_delay}" FontSize="12"
+                                   VerticalAlignment="Center"
+                                   ToolTip="{loc:Str tooltip_adjust_haptic_timing_positive_earlier_negativ}"/>
+                        <Slider Grid.Column="1" x:Name="SliderAudioSyncLatency" x:FieldModifier="internal"
+                                Minimum="-600" Maximum="600" Value="0"
+                                Margin="6,0" VerticalAlignment="Center"
+                                ValueChanged="SliderAudioSyncLatency_Changed"
+                                ToolTip="{loc:Str tooltip_adjust_haptic_timing_positive_earlier_negativ}"/>
+                        <TextBlock x:Name="TxtAudioSyncLatency" x:FieldModifier="internal" Grid.Column="2"
+                                   Style="{StaticResource ValueLabel}" Text="{loc:Str label_0ms}" FontSize="12"
+                                   VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <!-- Power -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="46"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str label_power}" FontSize="12"
+                                   VerticalAlignment="Center"
+                                   ToolTip="{loc:Str tooltip_live_intensity_control_reduce_if_vibration_is}"/>
+                        <Slider Grid.Column="1" x:Name="SliderAudioSyncIntensity" x:FieldModifier="internal"
+                                Minimum="0" Maximum="100" Value="100"
+                                Margin="6,0" VerticalAlignment="Center"
+                                ValueChanged="SliderAudioSyncIntensity_Changed"
+                                ToolTip="{loc:Str tooltip_live_intensity_control_reduce_if_vibration_is}"/>
+                        <TextBlock x:Name="TxtAudioSyncIntensity" x:FieldModifier="internal" Grid.Column="2"
+                                   Style="{StaticResource ValueLabel}" Text="100%" FontSize="12"
+                                   VerticalAlignment="Center"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
 
         </StackPanel>
     </Border>

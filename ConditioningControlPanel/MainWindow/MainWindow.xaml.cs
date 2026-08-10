@@ -1599,6 +1599,10 @@ namespace ConditioningControlPanel
                     ("features/bouncing_text.png", SettingsTab.CardBouncingText),
                     ("features/Mind_Wipers.png", SettingsTab.CardMindWipe),
                     ("features/Bubble_count.png", SettingsTab.CardBubbleCount),
+                    // Phase 3: the Brain Drain tile. Same art the (dead) ProgressionTab rectangle
+                    // uses below — without this row the tile would keep base art after a mod
+                    // switch forever, which is exactly how ArtFyp got stranded.
+                    ("features/brain_drain.png", SettingsTab.CardBrainDrain),
                 };
                 foreach (var (path, card) in cardMap)
                 {
@@ -1705,6 +1709,14 @@ namespace ConditioningControlPanel
                     if (image != null)
                         brush.ImageSource = image;
                 }
+
+                // The rail chips do NOT all paint straight from the resources above: the hover
+                // nudge (PrepareRailArtNudge) hands each of them a private Clone(), which stops
+                // observing the resource the moment it is made. Push the freshly mutated art into
+                // those clones or a runtime mod switch repaints the resource and nothing else.
+                // No-op before the dashboard FX are wired (the list is empty), which is exactly
+                // the startup case where the clones are made AFTER this method and are correct.
+                RefreshRailArtClones();
             }
             catch (Exception ex)
             {
@@ -2400,23 +2412,24 @@ namespace ConditioningControlPanel
 
             // Audio-sync ENABLE moved onto the Haptics tab's routing matrix (Media > Audio sync)
             // in the Phase E rebuild, and the Haptics tab's own delay/power sliders are loaded by
-            // LoadHapticsSettingsToUi(). Only the Settings-tab mirrors are initialised here.
-            if (SettingsTab.SliderAudioSyncLatency != null)
+            // LoadHapticsSettingsToUi(). Only the mirror pair is initialised here — it lived on
+            // the dashboard's browser card until Phase 3 moved it into Settings · Audio.
+            if (AppSettingsTab.SliderAudioSyncLatency != null)
             {
-                SettingsTab.SliderAudioSyncLatency.Value = App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs;
+                AppSettingsTab.SliderAudioSyncLatency.Value = App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs;
                 var latencyMs = App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs;
                 var sign = latencyMs >= 0 ? "+" : "";
-                SettingsTab.TxtAudioSyncLatency.Text = $"{sign}{latencyMs}ms";
+                AppSettingsTab.TxtAudioSyncLatency.Text = $"{sign}{latencyMs}ms";
             }
-            if (SettingsTab.SliderAudioSyncIntensity != null)
+            if (AppSettingsTab.SliderAudioSyncIntensity != null)
             {
                 var intensityPercent = (int)(App.Settings.Current.Haptics.AudioSync.LiveIntensity * 100);
-                SettingsTab.SliderAudioSyncIntensity.Value = intensityPercent;
-                SettingsTab.TxtAudioSyncIntensity.Text = $"{intensityPercent}%";
+                AppSettingsTab.SliderAudioSyncIntensity.Value = intensityPercent;
+                AppSettingsTab.TxtAudioSyncIntensity.Text = $"{intensityPercent}%";
             }
-            if (SettingsTab.AudioSyncLatencyPanel != null)
+            if (AppSettingsTab.AudioSyncLatencyPanel != null)
             {
-                SettingsTab.AudioSyncLatencyPanel.Visibility = App.Settings.Current.Haptics.AudioSync.Enabled
+                AppSettingsTab.AudioSyncLatencyPanel.Visibility = App.Settings.Current.Haptics.AudioSync.Enabled
                     ? Visibility.Visible : Visibility.Collapsed;
             }
 

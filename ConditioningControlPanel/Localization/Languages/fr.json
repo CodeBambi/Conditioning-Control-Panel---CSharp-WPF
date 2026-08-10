@@ -4131,6 +4131,8 @@
   "set2_tooltip_auto_performance": "Baisse automatiquement la qualité de rendu seulement quand plein d'éléments (flashes/bulles) sont à l'écran, puis la restaure.",
   "set2_setting_unified_overlay": "Rendu d'overlay unifié",
   "set2_tooltip_unified_overlay": "Rend les effets plein écran (spirale, filtre rose, flashes, bulles...) dans une seule fenêtre d'overlay par écran. Plus fluide quand il y a beaucoup d'effets. Désactive pour revenir au rendu classique une-fenêtre-par-effet si les overlays déraillent.",
+  "set2_setting_video_hw_decode": "Forcer le décodage GPU des vidéos",
+  "set2_tooltip_video_hw_decode": "Force le décodage matériel GPU des vidéos obligatoires. Désactivé par défaut - les vidéos sont décodées par logiciel pour éviter un bug d'écran blanc sur certaines machines. À activer seulement si tes vidéos se lisent bien.",
   "set2_whats_new_header": "Quoi de neuf dans cette version",
   "set2_btn_view_patch_notes": "Voir toutes les notes",
   "set2_whats_new_title_0": "Quoi de neuf en v{0}",
@@ -4156,5 +4158,10 @@
   "st4_scheduler_active_days": "Jours actifs",
   "st4_ramp_hint": "Fait monter l'intensité en douceur sur toute la durée de la montée, puis termine la session au sommet si tu veux.",
   "st4_ramp_session_note": "Pendant une session, la montée globale s'efface pour que les deux ne se battent pas - seule la courbe de montée continue de façonner la montée de la session elle-même.",
-  "label_brain_drain": "💧 Drainage Cérébral"
+  "label_brain_drain": "💧 Drainage Cérébral",
+  "hm3_companion_strip_sub": "Chat, prise de contrôle, conscience et permissions",
+  "hm3_audio_sync_tuning": "🎚 Réglage de la sync audio",
+  "hm3_rail_lock_t1": "Aux mécènes",
+  "hm3_rail_lock_pass": "Pass hebdo",
+  "hm3_rail_lock_t2": "Labo requis"
 }

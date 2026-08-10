@@ -581,9 +581,13 @@ namespace ConditioningControlPanel.Services
                                   "• Images: How many images per flash event\n" +
                                   "• Clickable: Click to dismiss or click-through\n" +
                                   "• Hydra Mode: Clicking spawns more images!",
-                    RequiresTab = "settings",
-                    TargetElementName = "FlashSection",
-                    TextPosition = TutorialStepPosition.Right
+                    // Phase 3: the dashboard flash card is a Studio shortcut now; the real
+                    // controls live on the rack. "FlashSection" was the dead LegacyDashboardHost
+                    // Border - the spotlight degraded to a centred card.
+                    RequiresTab = "studio",
+                    TargetElementName = "PanelFlash",
+                    OnActivate = () => FocusStudioRack("flash"),
+                    TextPosition = TutorialStepPosition.Left
                 },
                 new TutorialStep
                 {
@@ -595,9 +599,10 @@ namespace ConditioningControlPanel.Services
                                   "• Opacity: Make images more transparent\n" +
                                   "• Fade: Smooth fade in/out animation\n" +
                                   "• Duration: How long images stay visible",
-                    RequiresTab = "settings",
-                    TargetElementName = "VisualsSection",
-                    TextPosition = TutorialStepPosition.Right
+                    RequiresTab = "studio",
+                    TargetElementName = "PanelVisuals",
+                    OnActivate = () => FocusStudioRack("visuals"),
+                    TextPosition = TutorialStepPosition.Left
                 },
                 new TutorialStep
                 {
@@ -609,9 +614,10 @@ namespace ConditioningControlPanel.Services
                                   "• Force Focus: Bring video to front\n" +
                                   "• Attention Targets: Click targets to dismiss\n" +
                                   "Add videos to 'assets/videos' folder.",
-                    RequiresTab = "settings",
-                    TargetElementName = "VideoSection",
-                    TextPosition = TutorialStepPosition.Right
+                    RequiresTab = "studio",
+                    TargetElementName = "PanelVideo",
+                    OnActivate = () => FocusStudioRack("video"),
+                    TextPosition = TutorialStepPosition.Left
                 },
                 new TutorialStep
                 {
@@ -640,9 +646,10 @@ namespace ConditioningControlPanel.Services
                                   "• Frequency: How often they appear\n" +
                                   "• Duration: How long they're visible\n" +
                                   "• Customize text in the Subliminals section",
-                    RequiresTab = "settings",
-                    TargetElementName = "SubliminalSection",
-                    TextPosition = TutorialStepPosition.Right
+                    RequiresTab = "studio",
+                    TargetElementName = "PanelSubliminal",
+                    OnActivate = () => FocusStudioRack("subliminal"),
+                    TextPosition = TutorialStepPosition.Left
                 },
                 new TutorialStep
                 {
@@ -654,9 +661,12 @@ namespace ConditioningControlPanel.Services
                                   "• Start minimized to tray\n" +
                                   "• Custom assets folder location\n" +
                                   "• Open assets folder to add content",
-                    RequiresTab = "settings",
-                    TargetElementName = "SystemSection",
-                    TextPosition = TutorialStepPosition.Right
+                    // Phase 3: startup/tray/assets settings live in Settings - General now
+                    // ("SystemSection" was the dead LegacyDashboardHost Border).
+                    RequiresTab = "appsettings",
+                    TargetElementName = "SectionGeneral",
+                    PrepareTargetWindowAction = AppSettingsTutorialPrep.Prepare("general"),
+                    TextPosition = TutorialStepPosition.Left
                 },
                 new TutorialStep
                 {

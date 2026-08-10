@@ -101,6 +101,25 @@
 
             <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Opacity="0.5" Margin="0,12,0,0"/>
 
+            <!-- Force video GPU decode. Phase-3 rescue: this toggle only ever existed inside the
+                 Collapsed LegacyDashboardHost, so it has been unreachable since velvet-mosaic. -->
+            <Grid Margin="0,12,0,0" ToolTip="{loc:Str set2_tooltip_video_hw_decode}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,14,0">
+                    <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str set2_setting_video_hw_decode}"/>
+                    <TextBlock Text="{loc:Str set2_tooltip_video_hw_decode}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"/>
+                </StackPanel>
+                <CheckBox Grid.Column="1" x:Name="ChkVideoHwDecode" x:FieldModifier="internal"
+                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                          Checked="ChkVideoHwDecode_Changed" Unchecked="ChkVideoHwDecode_Changed"/>
+            </Grid>
+
+            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Opacity="0.5" Margin="0,12,0,0"/>
+
             <!-- Motion (accessibility). The three items ARE the enum ordinals — never reorder. -->
             <Grid Margin="0,12,0,0" ToolTip="{loc:Str tooltip_motion_level}">
                 <Grid.ColumnDefinitions>

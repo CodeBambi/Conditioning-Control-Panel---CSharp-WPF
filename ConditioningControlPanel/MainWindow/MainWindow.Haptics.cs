@@ -251,8 +251,9 @@ namespace ConditioningControlPanel
             // The Advanced expander tunes the same analysis pass, so it follows the same gate.
             if (HapticsTab.HapticAudioAdvanced != null)
                 HapticsTab.HapticAudioAdvanced.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
-            if (SettingsTab?.AudioSyncLatencyPanel != null)
-                SettingsTab.AudioSyncLatencyPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            // Phase 3: the mirror pair lives in Settings · Audio now, not on the dashboard.
+            if (AppSettingsTab?.AudioSyncLatencyPanel != null)
+                AppSettingsTab.AudioSyncLatencyPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
         }
 
         // ---------------------------------------------------------------- Phase F live status
@@ -938,8 +939,8 @@ namespace ConditioningControlPanel
             HapticCfg.AudioSync.ManualLatencyOffsetMs = latencyMs;
             App.Settings.Save();
 
-            if (SettingsTab?.SliderAudioSyncLatency != null)
-                SettingsTab.SliderAudioSyncLatency.Value = latencyMs;
+            if (AppSettingsTab?.SliderAudioSyncLatency != null)
+                AppSettingsTab.SliderAudioSyncLatency.Value = latencyMs;
         }
 
         internal void SliderVideoHapticPower_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -952,22 +953,22 @@ namespace ConditioningControlPanel
             HapticCfg.AudioSync.LiveIntensity = intensityPercent / 100.0;
             App.Settings.Save();
 
-            if (SettingsTab?.SliderAudioSyncIntensity != null)
-                SettingsTab.SliderAudioSyncIntensity.Value = intensityPercent;
+            if (AppSettingsTab?.SliderAudioSyncIntensity != null)
+                AppSettingsTab.SliderAudioSyncIntensity.Value = intensityPercent;
         }
 
         internal void SliderAudioSyncLatency_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (_isLoading) return;
 
-            var latencyMs = (int)SettingsTab.SliderAudioSyncLatency.Value;
+            var latencyMs = (int)AppSettingsTab.SliderAudioSyncLatency.Value;
             HapticCfg.AudioSync.ManualLatencyOffsetMs = latencyMs;
             App.Settings.Save();
 
-            if (SettingsTab.TxtAudioSyncLatency != null)
+            if (AppSettingsTab.TxtAudioSyncLatency != null)
             {
                 var sign = latencyMs >= 0 ? "+" : "";
-                SettingsTab.TxtAudioSyncLatency.Text = $"{sign}{latencyMs}ms";
+                AppSettingsTab.TxtAudioSyncLatency.Text = $"{sign}{latencyMs}ms";
             }
         }
 
@@ -975,13 +976,13 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
 
-            var intensityPercent = (int)SettingsTab.SliderAudioSyncIntensity.Value;
+            var intensityPercent = (int)AppSettingsTab.SliderAudioSyncIntensity.Value;
             HapticCfg.AudioSync.LiveIntensity = intensityPercent / 100.0;
             // Safe per tick: SettingsService.Save() is debounced (500 ms of quiet -> one write).
             App.Settings.Save();
 
-            if (SettingsTab.TxtAudioSyncIntensity != null)
-                SettingsTab.TxtAudioSyncIntensity.Text = $"{intensityPercent}%";
+            if (AppSettingsTab.TxtAudioSyncIntensity != null)
+                AppSettingsTab.TxtAudioSyncIntensity.Text = $"{intensityPercent}%";
         }
 
         #endregion

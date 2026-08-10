@@ -469,12 +469,14 @@ namespace ConditioningControlPanel
             s.StartMinimized = AppSettingsTab.ChkStartHidden.IsChecked ?? false;
             s.PanicKeyEnabled = !(AppSettingsTab.ChkNoPanic.IsChecked ?? false);
             s.OfflineMode = AppSettingsTab.ChkOfflineMode.IsChecked ?? false;
-            if (SettingsTab.ChkPerformanceMode != null) s.PerformanceMode = SettingsTab.ChkPerformanceMode.IsChecked ?? false;
-            if (SettingsTab.ChkAutoPerformance != null) s.AutoPerformanceMode = SettingsTab.ChkAutoPerformance.IsChecked ?? true;
-            if (SettingsTab.CmbMotionLevel != null && SettingsTab.CmbMotionLevel.SelectedIndex >= 0)
-                s.MotionLevel = (Models.MotionLevel)SettingsTab.CmbMotionLevel.SelectedIndex;
-            if (SettingsTab.ChkVideoHwDecode != null) s.VideoForceHardwareDecoding = SettingsTab.ChkVideoHwDecode.IsChecked ?? false;
-            if (SettingsTab.ChkUnifiedOverlay != null) s.UnifiedOverlayHost = SettingsTab.ChkUnifiedOverlay.IsChecked ?? true;
+            // Performance: read the LIVE Settings-door editors, not the LegacyDashboardHost twins
+            // (the twins survive until Phase 8, but nothing reads them any more).
+            if (AppSettingsTab?.ChkPerformanceMode != null) s.PerformanceMode = AppSettingsTab.ChkPerformanceMode.IsChecked ?? false;
+            if (AppSettingsTab?.ChkAutoPerformance != null) s.AutoPerformanceMode = AppSettingsTab.ChkAutoPerformance.IsChecked ?? true;
+            if (AppSettingsTab?.CmbMotionLevel != null && AppSettingsTab.CmbMotionLevel.SelectedIndex >= 0)
+                s.MotionLevel = (Models.MotionLevel)AppSettingsTab.CmbMotionLevel.SelectedIndex;
+            if (AppSettingsTab?.ChkVideoHwDecode != null) s.VideoForceHardwareDecoding = AppSettingsTab.ChkVideoHwDecode.IsChecked ?? false;
+            if (AppSettingsTab?.ChkUnifiedOverlay != null) s.UnifiedOverlayHost = AppSettingsTab.ChkUnifiedOverlay.IsChecked ?? true;
             // Weekly intake pass nudge. Defaults ON (it is the feature's re-engagement hook), but a
             // recurring popup with no off switch is a bug report waiting to happen.
             if (AppSettingsTab?.ChkIntakeNudge != null) s.IntakeNudgeEnabled = AppSettingsTab.ChkIntakeNudge.IsChecked ?? true;

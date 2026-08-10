@@ -32,5 +32,15 @@ namespace ConditioningControlPanel.Views.Tabs
         internal Button    BtnAudioOutputRefresh       => SectionAudio.BtnAudioOutputRefresh;
         internal Button    BtnTestAudio                => SectionAudio.BtnTestAudio;
         internal Button    BtnAudioLayers              => SectionAudio.BtnAudioLayers;
+
+        // Phase 3: the audio-sync tuning pair followed the rest of AudioSection out of the
+        // dashboard. MainWindow.Haptics.cs (:254 visibility, :941/:955 cross-writes,
+        // :959/:974 handlers) and MainWindow.xaml.cs (:2404-2421 load) reached these as
+        // SettingsTab.<Name>; they are AppSettingsTab.<Name> now.
+        internal Border    AudioSyncLatencyPanel       => SectionAudio.AudioSyncLatencyPanel;
+        internal Slider    SliderAudioSyncLatency      => SectionAudio.SliderAudioSyncLatency;
+        internal TextBlock TxtAudioSyncLatency         => SectionAudio.TxtAudioSyncLatency;
+        internal Slider    SliderAudioSyncIntensity    => SectionAudio.SliderAudioSyncIntensity;
+        internal TextBlock TxtAudioSyncIntensity       => SectionAudio.TxtAudioSyncIntensity;
     }
 }

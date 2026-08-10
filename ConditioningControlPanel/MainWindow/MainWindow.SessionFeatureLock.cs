@@ -227,9 +227,11 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Dashboard mosaic tiles. Left-click still opens the tile's popup; only the
-        /// right-click quick-toggle is refused (see OnFeatureCardToggleRequested). The
-        /// tooltip carries the reason so a refused right-click is never mysterious.
+        /// Dashboard mosaic tiles. Left-click is navigation into the Studio rack since Phase 3
+        /// (it used to open the tile's popup) and stays allowed either way - reading the dose is
+        /// never refused, and the rack paints its own lock on arrival. Only the right-click
+        /// quick-toggle is refused (see OnFeatureCardToggleRequested). The tooltip carries the
+        /// reason so a refused right-click is never mysterious.
         ///
         /// FeatureCard.IsLocked is deliberately NOT used: it drops the tile to 35% opacity
         /// and suppresses the pink "this feature is on" ring, which would hide exactly the
@@ -251,6 +253,12 @@ namespace ConditioningControlPanel
             SetCardLockTooltip(dash.CardBubbleCount, locked, reason);
             SetCardLockTooltip(dash.CardBouncingText, locked, reason);
             SetCardLockTooltip(dash.CardMindWipe, locked, reason);
+            // Phase 3: Brain Drain got a mosaic tile, so it needs the same explanation its
+            // siblings carry. It IS prescribed dose - a Session carries BrainDrainEnabled plus
+            // its start minute and its intensity ramp (Models/Session.cs:926-929) - and its
+            // Studio panel is already swept by ApplySessionLockToFeaturePopup, so leaving the
+            // tile out would refuse the right-click here and never say why.
+            SetCardLockTooltip(dash.CardBrainDrain, locked, reason);
             // CardSystem is intentionally absent: the System popup owns No-Panic, offline
             // mode and the monitor layout - configuration, not the prescribed dose, and
             // No-Panic is a safety control.

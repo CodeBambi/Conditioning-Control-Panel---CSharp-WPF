@@ -797,6 +797,7 @@ namespace ConditioningControlPanel
             if (SettingsTab.CardBubbleCount != null) SettingsTab.CardBubbleCount.IsActive = s.BubbleCountEnabled;
             if (SettingsTab.CardBouncingText != null) SettingsTab.CardBouncingText.IsActive = s.BouncingTextEnabled;
             if (SettingsTab.CardMindWipe != null) SettingsTab.CardMindWipe.IsActive = s.MindWipeEnabled;
+            if (SettingsTab.CardBrainDrain != null) SettingsTab.CardBrainDrain.IsActive = s.BrainDrainEnabled;
             // Visuals and System cards have no single "enabled" toggle; they stay neutral.
         }
 
@@ -824,6 +825,19 @@ namespace ConditioningControlPanel
                 else if (card == SettingsTab.CardBubbleCount) { var on = s.BubbleCountEnabled = !s.BubbleCountEnabled; if (running) { if (on) App.BubbleCount?.Start(); else App.BubbleCount?.Stop(); } }
                 else if (card == SettingsTab.CardBouncingText) { var on = s.BouncingTextEnabled = !s.BouncingTextEnabled; if (running) { if (on) App.BouncingText?.Start(); else App.BouncingText?.Stop(); } }
                 else if (card == SettingsTab.CardMindWipe) { s.MindWipeEnabled = !s.MindWipeEnabled; }
+                else if (card == SettingsTab.CardBrainDrain)
+                {
+                    // Mirrors BrainDrainFeatureControl.ChkEnable_Changed exactly, INCLUDING the
+                    // legacy write-back: MainWindow.SaveSettings() still reads Brain Drain FROM
+                    // the dead ProgressionTab checkbox (MainWindow.Settings.cs:504) and runs on
+                    // session start, so a quick-toggle that skipped the mirror would be silently
+                    // reverted the next time the user pressed Start. Dies with the ghost tab in
+                    // Phase 8, together with that line and the panel's own mirror.
+                    var on = s.BrainDrainEnabled = !s.BrainDrainEnabled;
+                    if (running) { if (on) App.BrainDrain?.Start(); else App.BrainDrain?.Stop(); }
+                    if (ProgressionTab?.ChkBrainDrainEnabled != null)
+                        ProgressionTab.ChkBrainDrainEnabled.IsChecked = on;
+                }
                 else return; // Visuals / System cards have no single on/off toggle.
                 App.Settings?.Save();
             }
@@ -847,7 +861,8 @@ namespace ConditioningControlPanel
                 e.PropertyName == nameof(Models.AppSettings.LockCardEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.BubbleCountEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.BouncingTextEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.MindWipeEnabled))
+                e.PropertyName == nameof(Models.AppSettings.MindWipeEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.BrainDrainEnabled))
             {
                 Dispatcher.BeginInvoke(new Action(RefreshFeatureCardActiveStates));
             }
@@ -909,64 +924,91 @@ namespace ConditioningControlPanel
             catch { }
         }
 
-        // Popup titles go through ModAwareLabel so a mod that renames a feature retitles
-        // the window too — otherwise a "Flash Images" → "Drone Pulses" replacement would
-        // rename the tile and the in-popup section header but leave the title bar behind.
-        internal void CardFlash_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.FlashFeatureControl(),
-                ModAwareLabel("⚡ Flash Images", "section_flash_images"),
-                SettingsTab.CardFlash.Icon);
+        /// <summary>
+        /// Phase 3: a Home mosaic tile is a SHORTCUT now, not a popup host.
+        ///
+        /// <para>Phase 4 re-hosted every one of these <c>*FeatureControl</c>s as a Studio rack
+        /// entry. Opening the popup as well would give one feature two live editors — the exact
+        /// duplication this restructure exists to remove — so the tile selects the rack row and
+        /// shows the Studio door instead. Nothing is lost: the panels are the same instances with
+        /// the same handlers, and the session feature lock is re-derived by ShowTab's
+        /// <c>studio</c> case exactly as <c>ShowFeaturePopup</c> did for the popup.</para>
+        ///
+        /// <para><b>Order matters.</b> Focus first, THEN <c>ShowTab</c>: ShowTab's <c>studio</c>
+        /// case calls <c>StudioTab.OnTabShown()</c>, which re-announces whatever row is selected.
+        /// Selecting first makes that announcement the row the user actually asked for instead of
+        /// the one they left behind last time. The resulting second
+        /// <c>NotifyFeatureOpened</c> for the SAME key is swallowed by BarkService's global
+        /// min-gap; announcing the WRONG key would not have been.</para>
+        ///
+        /// <para>The bark keys are unchanged — the rack fires the same values the popup derived
+        /// from the control's type name (<c>StudioTabView.xaml.cs</c>, BarkFeature column). Rack
+        /// keys are API (<c>StudioTabView.xaml.cs:62</c>); never spell one wrong here, because
+        /// <c>FocusRackEntry</c> treats an unknown key as a quiet no-op by contract.</para>
+        ///
+        /// <para><b>Haptics is the one rack key that must NOT come through here.</b> It is the
+        /// only module that is also a ShowTab key, and everything it owns hangs off that key
+        /// rather than off the rack row: <c>NotifyTabNavigated("haptics")</c> (three voiced rules
+        /// per built-in mod, plus any third-party .ccpmod's) fires from the top of
+        /// <c>ShowTab</c> with the INCOMING key, and <c>MaybeShowFeatureIntro("haptics")</c> is
+        /// one of only five first-visit intro cards. Its rack row deliberately carries no
+        /// <c>BarkFeature</c> (<c>StudioTabView.xaml.cs:221-226</c>) precisely because the tab key
+        /// already speaks for it — so routing it as a plain module would land on the right panel
+        /// while silently saying nothing and never showing the intro. <c>ShowTab("haptics")</c>
+        /// selects the same row itself (<c>TabNavigation.cs:376-383</c>), so the landing is
+        /// identical; only the announcement differs.</para>
+        /// </summary>
+        private void OpenStudioModule(string rackKey)
+        {
+            if (string.Equals(rackKey, "haptics", StringComparison.OrdinalIgnoreCase))
+            {
+                ShowTab("haptics");
+                return;
+            }
+            try { StudioTab?.FocusRackEntry(rackKey); }
+            catch (Exception ex) { App.Logger?.Debug("OpenStudioModule({Key}): {E}", rackKey, ex.Message); }
+            ShowTab("studio");
+        }
 
-        internal void CardVisuals_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.VisualsFeatureControl(),
-                ModAwareLabel("👁 Visuals", "section_visuals"),
-                glyph: "👁");
+        internal void CardFlash_Click(object sender, RoutedEventArgs e) => OpenStudioModule("flash");
 
-        internal void CardVideo_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.VideoFeatureControl(),
-                ModAwareLabel("🎬 Mandatory Video", "section_mandatory_video"),
-                SettingsTab.CardVideo.Icon);
+        internal void CardVisuals_Click(object sender, RoutedEventArgs e) => OpenStudioModule("visuals");
 
-        internal void CardSubliminal_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.SubliminalFeatureControl(),
-                ModAwareLabel("💭 Subliminals", "section_subliminals_2"),
-                SettingsTab.CardSubliminal.Icon);
+        internal void CardVideo_Click(object sender, RoutedEventArgs e) => OpenStudioModule("video");
 
-        internal void CardSpiral_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.SpiralFeatureControl(),
-                ModAwareLabel("🌀 Spiral Overlay", "label_spiral_overlay"),
-                SettingsTab.CardSpiral.Icon);
+        internal void CardSubliminal_Click(object sender, RoutedEventArgs e) => OpenStudioModule("subliminal");
 
-        internal void CardPinkFilter_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.PinkFilterFeatureControl(),
-                ModAwareLabel("💗 Pink Filter", "label_pink_filter"),
-                SettingsTab.CardPinkFilter.Icon);
+        internal void CardSpiral_Click(object sender, RoutedEventArgs e) => OpenStudioModule("spiral");
 
-        internal void CardBubblePop_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.BubblePopFeatureControl(),
-                ModAwareLabel("🫧 Bubble Pop", "label_bubble_pop"),
-                SettingsTab.CardBubblePop.Icon);
+        internal void CardPinkFilter_Click(object sender, RoutedEventArgs e) => OpenStudioModule("pinkfilter");
 
-        internal void CardLockCard_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.LockCardFeatureControl(),
-                ModAwareLabel("📐 Lock Card", "label_lock_card"),
-                SettingsTab.CardLockCard.Icon);
+        internal void CardBubblePop_Click(object sender, RoutedEventArgs e) => OpenStudioModule("bubbles");
 
-        internal void CardBubbleCount_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.BubbleCountFeatureControl(),
-                ModAwareLabel("🫧 Bubble Count", "label_bubble_count"),
-                SettingsTab.CardBubbleCount.Icon);
+        internal void CardLockCard_Click(object sender, RoutedEventArgs e) => OpenStudioModule("lockcard");
 
-        internal void CardBouncingText_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.BouncingTextFeatureControl(),
-                ModAwareLabel("📺 Bouncing Text", "label_bouncing_text"),
-                SettingsTab.CardBouncingText.Icon);
+        internal void CardBubbleCount_Click(object sender, RoutedEventArgs e) => OpenStudioModule("bubblecount");
 
-        internal void CardMindWipe_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.MindWipeFeatureControl(),
-                ModAwareLabel("🧠 Mind Wipe", "label_mind_wipe"),
-                SettingsTab.CardMindWipe.Icon);
+        internal void CardBouncingText_Click(object sender, RoutedEventArgs e) => OpenStudioModule("bouncingtext");
 
+        internal void CardMindWipe_Click(object sender, RoutedEventArgs e) => OpenStudioModule("mindwipe");
+
+        /// <summary>
+        /// Phase 3 rescue: Brain Drain's front door. Its panel was rebuilt in Phase 4 from the dead
+        /// ProgressionTab markup; before that the feature had no reachable UI at all.
+        /// </summary>
+        internal void CardBrainDrain_Click(object sender, RoutedEventArgs e) => OpenStudioModule("braindrain");
+
+        /// <summary>
+        /// The System popup. Still a <see cref="Features.FeaturePopupWindow"/> because System has
+        /// no Studio rack entry — it is display/video switches, not a feature. Phase 3 moved its
+        /// ENTRY POINT off the mosaic (the tile is Collapsed) onto the quick-toggles row's "System"
+        /// pill, which calls this same method: the popup, its mod-aware title and its
+        /// <c>NotifyFeatureOpened("System")</c> bark are unchanged.
+        ///
+        /// <para>Popup titles go through <c>ModAwareLabel</c> so a mod that renames a feature
+        /// retitles the window too — otherwise a "Flash Images" → "Drone Pulses" replacement would
+        /// rename the tile and the in-popup section header but leave the title bar behind.</para>
+        /// </summary>
         internal void CardSystem_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.SystemFeatureControl(),
                 ModAwareLabel("⚙ System", "section_system"),
@@ -979,8 +1021,23 @@ namespace ConditioningControlPanel
         /// popup host and the reparenting are retired: the webcam and microphone controls live in
         /// Settings -&gt; Devices, which is a real page, so this is now plain navigation. The tile
         /// stays because it is a shortcut people know - Phase 3 re-lays the dashboard around it.
+        ///
+        /// <para><b>The bark is restored here, not inside OpenDeviceSettings.</b> Retiring the
+        /// popup took the <c>NotifyFeatureOpened("Webcam")</c> call with it, and that left the
+        /// <c>feat_webcam</c> rule - two RECORDED clips in each of the three built-in mods -
+        /// with no call site at all: a voiced line that had simply stopped existing, which is the
+        /// one thing this restructure is not allowed to do. It goes on this handler because this
+        /// pill is the surface it always fired from; the other four
+        /// <c>OpenDeviceSettings()</c> callers (Takeover, Blink Trainer, Deeper, and the Settings
+        /// mirrors) never fired it, and putting it in the shared method would make her comment on
+        /// the camera from four places she never used to.</para>
         /// </summary>
-        internal void VelvetBtnWebcam_Click(object sender, RoutedEventArgs e) => OpenDeviceSettings();
+        internal void VelvetBtnWebcam_Click(object sender, RoutedEventArgs e)
+        {
+            try { App.Bark?.NotifyFeatureOpened("Webcam"); }
+            catch { /* a bark must never break a navigation */ }
+            OpenDeviceSettings();
+        }
 
         internal void VelvetBtnAppInfo_Click(object sender, RoutedEventArgs e)
         {
@@ -1018,10 +1075,16 @@ namespace ConditioningControlPanel
             popup.Show();
         }
 
+        /// <summary>
+        /// Quick-toggles row · "Scheduler + Intensity Ramp". Phase 4 gave both panels rack entries
+        /// (<c>scheduler</c> / <c>ramp</c>), so Phase 3 re-points this pill at the rack instead of
+        /// opening a second copy of them in a popup. Nothing goes quiet: both rack rows fire the
+        /// popup's single <c>"SchedulerRamp"</c> FeatureOpened key
+        /// (<c>StudioTabView.xaml.cs:229-230</c>), so the existing bark rules keep matching.
+        /// Scheduler is the landing row because it is the first of the pair in the rack.
+        /// </summary>
         internal void VelvetBtnSchedulerRamp_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.SchedulerRampFeatureControl(),
-                Localization.Loc.Get("section_scheduler") + " + " + Localization.Loc.Get("section_intensity_ramp"),
-                glyph: "📅");
+            OpenStudioModule("scheduler");
 
         // Opens the web catalogue (browse/share community presets & sessions).
         // Surfaced by the dashboard "CCP Catalogue" pill.

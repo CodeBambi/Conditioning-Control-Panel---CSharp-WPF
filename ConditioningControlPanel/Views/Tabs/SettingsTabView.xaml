@@ -335,6 +335,74 @@
                         </Setter.Value>
                     </Setter>
                 </Style>
+
+                <!-- ============================================================ -->
+                <!-- LOCKBANDS - the rail is the app's standing ad, so a card the  -->
+                <!-- account cannot use stays exactly where it is, art and all,    -->
+                <!-- and wears a band instead of vanishing or greying out. One     -->
+                <!-- band per card, shown from a TierGate verdict (RefreshRail-    -->
+                <!-- Lockbands, MainWindow.PremiumRail.cs). This replaced the one  -->
+                <!-- blanket overlay + IsEnabled=false that used to answer "no"    -->
+                <!-- for eight different features with a single padlock.           -->
+                <!--                                                                -->
+                <!-- IsHitTestVisible=False is load-bearing. The card underneath    -->
+                <!-- must stay live so its hover lift + art nudge still run (a dead -->
+                <!-- ad is a worse ad) and so the click reaches the normal handler, -->
+                <!-- which is where TierGate refuses and offers the tiers. A band   -->
+                <!-- that swallowed the click would be the dead end the old blanket -->
+                <!-- overlay was - cursor:hand, and nothing behind it.              -->
+                <!--                                                                -->
+                <!-- Tier language, deliberately CONSTANT across mods: gold padlock -->
+                <!-- = tier 1, violet flask = tier 2. This is a price tag, not      -->
+                <!-- decor, so it does not take its colour from the mod chain the   -->
+                <!-- way the rest of the chrome does. A tier-2 card swaps two       -->
+                <!-- attributes - BorderBrush/Foreground to RailLockT2Brush and the -->
+                <!-- glyph to 🧪 - and calls TierGate.RequiresLab. Local to the     -->
+                <!-- rail until the Play door adopts the same band, then they       -->
+                <!-- belong in the theme.                                           -->
+                <!-- ============================================================ -->
+                <SolidColorBrush x:Key="RailLockT1Brush" Color="#FFF0C24B"/>
+                <SolidColorBrush x:Key="RailLockT2Brush" Color="#FFB47BFF"/>
+                <!-- A scrim, not a curtain: ~66% so the feature art still reads
+                     through it. Seeing what you are missing is the entire job. -->
+                <SolidColorBrush x:Key="RailLockScrimBrush" Color="#A8120A1E"/>
+                <Style x:Key="RailLockBand" TargetType="Border">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <!-- 8 = the chip's 9 minus its 1px border, the same inner
+                         curve the scrim and hover tint follow. -->
+                    <Setter Property="CornerRadius" Value="8"/>
+                    <Setter Property="Background" Value="{StaticResource RailLockScrimBrush}"/>
+                    <Setter Property="BorderThickness" Value="1"/>
+                    <Setter Property="BorderBrush" Value="{StaticResource RailLockT1Brush}"/>
+                    <Setter Property="IsHitTestVisible" Value="False"/>
+                </Style>
+                <!-- TargetType stays TextBlock so it applies to the EmojiTextBlock
+                     (a TextBlock subclass) that renders the padlock in colour. -->
+                <Style x:Key="RailLockGlyph" TargetType="TextBlock">
+                    <Setter Property="FontSize" Value="11"/>
+                    <Setter Property="HorizontalAlignment" Value="Center"/>
+                    <Setter Property="VerticalAlignment" Value="Top"/>
+                    <Setter Property="Margin" Value="0,3,0,0"/>
+                </Style>
+                <!-- One short line, centred in the gap between the glyph and the
+                     caption band at the foot of the chip - 42px of chip and 69px
+                     of rail leave room for a price tag, not a pitch. The pitch is
+                     the toast the click raises, which carries the "See tiers"
+                     button into the App Info popup. -->
+                <Style x:Key="RailLockTeaser" TargetType="TextBlock">
+                    <Setter Property="FontSize" Value="7.5"/>
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                    <Setter Property="Foreground" Value="{StaticResource RailLockT1Brush}"/>
+                    <Setter Property="TextAlignment" Value="Center"/>
+                    <Setter Property="TextWrapping" Value="NoWrap"/>
+                    <!-- A longer translation than "Patron only" has to end in an ellipsis, not
+                         spill past the chip: the TextBlock stretches to the band, so trimming
+                         keeps it inside. Nothing clips it otherwise - a Border does not clip its
+                         child without ClipToBounds, and the toast carries the full sentence. -->
+                    <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                    <Setter Property="VerticalAlignment" Value="Center"/>
+                    <Setter Property="Margin" Value="1,5,1,0"/>
+                </Style>
             </Border.Resources>
             <Grid>
                 <!-- The rail is a plain stack in a fixed-height row, so anything past the
@@ -360,6 +428,13 @@
                         <Grid>
                             <Ellipse x:Name="DotTakeover" x:FieldModifier="internal" Style="{StaticResource ChipDot}"/>
                             <TextBlock Text="Takeover" Style="{StaticResource ChipCaption}"/>
+                            <!-- Last child = on top of the dot and the caption. -->
+                            <Border x:Name="LockBandTakeover" x:FieldModifier="internal" Style="{StaticResource RailLockBand}">
+                                <Grid>
+                                    <helpers:EmojiTextBlock Text="🔒" Style="{StaticResource RailLockGlyph}"/>
+                                    <TextBlock Text="{loc:Str hm3_rail_lock_t1}" Style="{StaticResource RailLockTeaser}"/>
+                                </Grid>
+                            </Border>
                         </Grid>
                     </Button>
                     <Button x:Name="ChipAwareness" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
@@ -368,6 +443,12 @@
                         <Grid>
                             <Ellipse x:Name="DotAwareness" x:FieldModifier="internal" Style="{StaticResource ChipDot}"/>
                             <TextBlock Text="Awareness" Style="{StaticResource ChipCaption}"/>
+                            <Border x:Name="LockBandAwareness" x:FieldModifier="internal" Style="{StaticResource RailLockBand}">
+                                <Grid>
+                                    <helpers:EmojiTextBlock Text="🔒" Style="{StaticResource RailLockGlyph}"/>
+                                    <TextBlock Text="{loc:Str hm3_rail_lock_t1}" Style="{StaticResource RailLockTeaser}"/>
+                                </Grid>
+                            </Border>
                         </Grid>
                     </Button>
                     <Button x:Name="ChipHaptics" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
@@ -376,6 +457,12 @@
                         <Grid>
                             <Ellipse x:Name="DotHaptics" x:FieldModifier="internal" Style="{StaticResource ChipDot}"/>
                             <TextBlock Text="Haptics" Style="{StaticResource ChipCaption}"/>
+                            <Border x:Name="LockBandHaptics" x:FieldModifier="internal" Style="{StaticResource RailLockBand}">
+                                <Grid>
+                                    <helpers:EmojiTextBlock Text="🔒" Style="{StaticResource RailLockGlyph}"/>
+                                    <TextBlock Text="{loc:Str hm3_rail_lock_t1}" Style="{StaticResource RailLockTeaser}"/>
+                                </Grid>
+                            </Border>
                         </Grid>
                     </Button>
                     <!-- Graded Intake — a navigation shortcut, not a toggle: the intake runs in its
@@ -386,6 +473,17 @@
                             Click="ChipGradedIntake_Click" ToolTip="Graded Intake — open the intake page">
                         <Grid>
                             <TextBlock Text="Intake" Style="{StaticResource ChipCaption}"/>
+                            <!-- The one band that is not a tier question: a FREE account holding
+                                 this week's pass may take the intake, and the pass is exactly what
+                                 the logo tile's flip ceremony hands out. So this band follows
+                                 IntakePassService.CanStartIntake - the same truth the intake
+                                 page's four-state gate reads - and says "pass", not "patron". -->
+                            <Border x:Name="LockBandIntake" x:FieldModifier="internal" Style="{StaticResource RailLockBand}">
+                                <Grid>
+                                    <helpers:EmojiTextBlock Text="🔒" Style="{StaticResource RailLockGlyph}"/>
+                                    <TextBlock Text="{loc:Str hm3_rail_lock_pass}" Style="{StaticResource RailLockTeaser}"/>
+                                </Grid>
+                            </Border>
                         </Grid>
                     </Button>
                     <Button x:Name="ChipVoice" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
@@ -398,6 +496,12 @@
                                    Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,8"/>
                             <Ellipse x:Name="DotVoice" x:FieldModifier="internal" Style="{StaticResource ChipDot}"/>
                             <TextBlock Text="Voice" Style="{StaticResource ChipCaption}"/>
+                            <Border x:Name="LockBandVoice" x:FieldModifier="internal" Style="{StaticResource RailLockBand}">
+                                <Grid>
+                                    <helpers:EmojiTextBlock Text="🔒" Style="{StaticResource RailLockGlyph}"/>
+                                    <TextBlock Text="{loc:Str hm3_rail_lock_t1}" Style="{StaticResource RailLockTeaser}"/>
+                                </Grid>
+                            </Border>
                         </Grid>
                     </Button>
                     <!-- For You — a navigation shortcut like Graded Intake, not a toggle: the feed
@@ -410,6 +514,16 @@
                             Click="ChipFyp_Click" ToolTip="For You — an endless feed cut from your own library">
                         <Grid>
                             <TextBlock Text="{loc:Str tab_fyp}" Style="{StaticResource ChipCaption}"/>
+                            <!-- Band on, click still through: OpenFypFeed owns this gate and
+                                 already opens the App Info popup for a locked account, which is
+                                 the same destination TierGate's toast offers. Two refusals for
+                                 one click would be worse than the band plus the one it has. -->
+                            <Border x:Name="LockBandFyp" x:FieldModifier="internal" Style="{StaticResource RailLockBand}">
+                                <Grid>
+                                    <helpers:EmojiTextBlock Text="🔒" Style="{StaticResource RailLockGlyph}"/>
+                                    <TextBlock Text="{loc:Str hm3_rail_lock_t1}" Style="{StaticResource RailLockTeaser}"/>
+                                </Grid>
+                            </Border>
                         </Grid>
                     </Button>
                     <!-- Lockdown — launcher with +/- duration and a live countdown. Same
@@ -443,6 +557,16 @@
                                 <TextBlock x:Name="TxtLockdownCountdown" x:FieldModifier="internal" Visibility="Collapsed"
                                            FontSize="12" FontWeight="Bold" Foreground="#FF6B6B" TextAlignment="Center" Margin="0,2,0,0"/>
                             </StackPanel>
+                            <!-- Outside the StackPanel so the band never fights SetLockdownActiveUi,
+                                 which owns LockdownSetRow / BtnLockdownGo / TxtLockdownCountdown
+                                 visibility while a lockdown runs. Two owners of one Visibility is
+                                 how a countdown goes missing. -->
+                            <Border x:Name="LockBandLockdown" x:FieldModifier="internal" Style="{StaticResource RailLockBand}">
+                                <Grid>
+                                    <helpers:EmojiTextBlock Text="🔒" Style="{StaticResource RailLockGlyph}"/>
+                                    <TextBlock Text="{loc:Str hm3_rail_lock_t1}" Style="{StaticResource RailLockTeaser}"/>
+                                </Grid>
+                            </Border>
                         </Grid>
                     </Border>
                     <!-- Blink Trainer — launcher with +/- duration and countdown. Same
@@ -474,6 +598,14 @@
                                 <TextBlock x:Name="TxtBlinkCountdown" x:FieldModifier="internal" Visibility="Collapsed"
                                            FontSize="12" FontWeight="Bold" Foreground="#7FD8FF" TextAlignment="Center" Margin="0,2,0,0"/>
                             </StackPanel>
+                            <!-- Sibling of the StackPanel for the same reason as Lockdown's:
+                                 SetBlinkActiveUi owns BlinkSetRow / BtnBlinkGo / TxtBlinkCountdown. -->
+                            <Border x:Name="LockBandBlink" x:FieldModifier="internal" Style="{StaticResource RailLockBand}">
+                                <Grid>
+                                    <helpers:EmojiTextBlock Text="🔒" Style="{StaticResource RailLockGlyph}"/>
+                                    <TextBlock Text="{loc:Str hm3_rail_lock_t1}" Style="{StaticResource RailLockTeaser}"/>
+                                </Grid>
+                            </Border>
                         </Grid>
                     </Border>
                     <!-- Remote — opens a flyout to compose + start a remote session -->
@@ -483,6 +615,12 @@
                         <Grid>
                             <Ellipse x:Name="DotRemote" x:FieldModifier="internal" Style="{StaticResource ChipDot}"/>
                             <TextBlock Text="Remote" Style="{StaticResource ChipCaption}"/>
+                            <Border x:Name="LockBandRemote" x:FieldModifier="internal" Style="{StaticResource RailLockBand}">
+                                <Grid>
+                                    <helpers:EmojiTextBlock Text="🔒" Style="{StaticResource RailLockGlyph}"/>
+                                    <TextBlock Text="{loc:Str hm3_rail_lock_t1}" Style="{StaticResource RailLockTeaser}"/>
+                                </Grid>
+                            </Border>
                         </Grid>
                     </Button>
                     <!-- VerticalOffset lifts the flyout up: ChipRemote is the last rail item and
@@ -532,7 +670,14 @@
                     </Popup>
                 </StackPanel>
                 </ScrollViewer>
-                <!-- Patron lock overlay (also serves as the ad) -->
+                <!-- RETIRED (Phase 3) - the old blanket. One padlock over the whole rail, with
+                     PremiumRailContent.IsEnabled=false underneath it, answered "no" for eight
+                     different features at once and had nowhere to click: Cursor=Hand and no
+                     handler behind it. The per-card lockbands above replaced it - each names its
+                     own bar, keeps its art, and routes the click into TierGate's upsell toast.
+                     RefreshPremiumRail force-collapses this so no stale state can revive it; the
+                     element stays only because live code still reads the name and Phase 8 owns
+                     deleting dead dashboard chrome. Do not re-show it. -->
                 <Border x:Name="PremiumRailLock" x:FieldModifier="internal" Visibility="Collapsed"
                         Background="#B31A1A2E" CornerRadius="12" Cursor="Hand"
                         ToolTip="Premium features — unlock with Patreon">
@@ -583,7 +728,16 @@
 
             <!-- The Title="" literals below are English design-time fallbacks only.
                  At runtime MainWindow.ApplyModFeatureNames() overwrites every card
-                 title with the localized (and mod-text-replaced) name. -->
+                 title with the localized (and mod-text-replaced) name.
+
+                 Phase 3: a LEFT-click on a tile is now navigation, not a popup. Each
+                 Card*_Click selects the matching Studio rack entry and shows the Studio
+                 door (MainWindow.Presets.cs) instead of opening a FeaturePopupWindow -
+                 the dials are the same instances, re-hosted by Phase 4, so nothing is
+                 lost and the FeatureOpened bark still fires (from the rack, once).
+                 RIGHT-click is unchanged: it still quick-toggles the feature, and the
+                 handler is attached to VelvetFeatureGrid by name in
+                 MainWindow.xaml.cs:642 - every tile must stay a descendant of it. -->
 
             <!-- Row 1: Dashboard features -->
             <features:FeatureCard Grid.Row="0" Grid.Column="0" x:Name="CardFlash" x:FieldModifier="internal"
@@ -875,7 +1029,32 @@
                                   Icon="pack://application:,,,/Resources/features/bouncing_text.png"
                                   HelpSectionId="BouncingText"
                                   Click="CardBouncingText_Click"/>
+            <!-- Brain Drain (Phase 3 rescue). Its only UI used to be the dead ProgressionTab
+                 rectangle; Phase 4 gave it a real panel (Studio rack key "braindrain") and this
+                 tile is its front door. Five registrations keep it honest and all of them are
+                 additive - drop any one and the tile is half-alive:
+                   1. cardMap row              MainWindow.xaml.cs (LoadFeatureImages)  - mod art
+                   2. DashboardFeatureCards    MainWindow.DashboardFx.cs               - RefreshFx
+                   3. ApplyModFeatureNames     MainWindow.UiUpdates.cs                 - title
+                   4. RefreshFeatureCardActiveStates + the INPC filter, MainWindow.Presets.cs
+                   5. OnFeatureCardToggleRequested branch, MainWindow.Presets.cs       - right-click
+                 No HelpSectionId: HelpContentService has no "BrainDrain" entry, and FeatureCard
+                 hides the "?" for unknown ids rather than showing a dead button. -->
+            <features:FeatureCard Grid.Row="3" Grid.Column="2" x:Name="CardBrainDrain" x:FieldModifier="internal"
+                                  Title="Brain Drain"
+                                  Icon="pack://application:,,,/Resources/features/brain_drain.png"
+                                  Click="CardBrainDrain_Click"/>
+
+            <!-- TOMBSTONE (Phase 3). "System" is not a feature, so it lost its mosaic slot to
+                 Brain Drain and became the "System" pill in VelvetHelperButtonRow below. The card
+                 itself STAYS in the tree, Collapsed, in the cell it always had:
+                 MainWindow.DashboardFx.cs's DashboardFeatureCards array, ApplyModFeatureNames and
+                 the toggle dispatcher all still dereference SettingsTab.CardSystem by name, and a
+                 Collapsed FeatureCard costs no layout and no FX (RefreshFx parks a hidden card).
+                 Its Click handler is still wired and still reaches the SAME popup the pill opens.
+                 Phase 8 deletes this element together with those references. -->
             <features:FeatureCard Grid.Row="3" Grid.Column="2" x:Name="CardSystem" x:FieldModifier="internal"
+                                  Visibility="Collapsed"
                                   Title="System"
                                   Glyph="⚙"
                                   HelpSectionId="System"
@@ -1393,13 +1572,19 @@
         </Grid>
         <!-- /LegacyDashboardHost -->
     
-        <!-- RIGHT HALF (Browser / Audio / Quick Links) — col 2 (after premium rail + feature grid) -->
+        <!-- RIGHT HALF — col 2 (after premium rail + feature grid).
+             Phase 3 layout: browser card (star) · companion strip (auto) · account strip (auto).
+             The Audio card left in Phase 2 and the audio-sync sliders left in Phase 3; the old
+             tall "Quick Links" card is compressed into the one-line account strip at the foot, so
+             this column is SHORTER than it was and the browser card gains the difference. Nothing
+             here may grow: every unit taken from row 0 comes off the WebView2's layout slot. -->
         <Grid Grid.Column="2" Grid.Row="1" Margin="5">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-    
+
             <!-- Browser Section -->
             <!-- ClipToBounds is a backstop, not the fix: the WebView2 below is a native HWND
                  (an HwndHost), and WPF's layout clip does not reliably clip native children.
@@ -1709,47 +1894,17 @@
                                 </Grid>
                             </Border>
     
-                            <!-- Audio Sync Controls (shown when audio sync enabled) -->
-                            <Border x:Name="AudioSyncLatencyPanel" x:FieldModifier="internal" Grid.Row="1" Background="{DynamicResource PanelBgBrush}" Padding="6,3" Visibility="Collapsed">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="8"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-    
-                                    <!-- Delay Slider (left half) -->
-                                    <Grid Grid.Column="0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="40"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Text="{loc:Str label_delay}" Foreground="#AAAAAA" FontSize="9" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                        <Slider x:Name="SliderAudioSyncLatency" x:FieldModifier="internal" Grid.Column="1" Minimum="-600" Maximum="600" Value="0"
-                                                VerticalAlignment="Center" ValueChanged="SliderAudioSyncLatency_Changed"
-                                                ToolTip="{loc:Str tooltip_adjust_haptic_timing_positive_earlier_negativ}"/>
-                                        <TextBlock x:Name="TxtAudioSyncLatency" x:FieldModifier="internal" Grid.Column="2" Text="{loc:Str label_0ms}" Foreground="{DynamicResource PinkBrush}" FontSize="9"
-                                                   VerticalAlignment="Center" HorizontalAlignment="Right"/>
-                                    </Grid>
-    
-                                    <!-- Intensity Slider (right half) -->
-                                    <Grid Grid.Column="2">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="32"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Text="{loc:Str label_power}" Foreground="#AAAAAA" FontSize="9" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                        <Slider x:Name="SliderAudioSyncIntensity" x:FieldModifier="internal" Grid.Column="1" Minimum="0" Maximum="100" Value="100"
-                                                VerticalAlignment="Center" ValueChanged="SliderAudioSyncIntensity_Changed"
-                                                ToolTip="{loc:Str tooltip_live_intensity_control_reduce_if_vibration_is}"/>
-                                        <TextBlock x:Name="TxtAudioSyncIntensity" x:FieldModifier="internal" Grid.Column="2" Text="100%" Foreground="{DynamicResource PinkBrush}" FontSize="9"
-                                                   VerticalAlignment="Center" HorizontalAlignment="Right"/>
-                                    </Grid>
-                                </Grid>
-                            </Border>
-    
+                            <!-- MOVED to Settings/Audio (Phase 3): AudioSyncLatencyPanel with
+                                 SliderAudioSyncLatency / TxtAudioSyncLatency /
+                                 SliderAudioSyncIntensity / TxtAudioSyncIntensity. They now live
+                                 verbatim in Views/Controls/AppSettings/AudioSettingsSection.xaml
+                                 and are reached as AppSettingsTab.<Name> - the same passthrough
+                                 pattern Phase 2 used for the rest of AudioSection.
+                                 Grid.Row="1" is deliberately left EMPTY rather than renumbered:
+                                 BrowserContainer keeps Grid.Row="2", so the browser's layout slot
+                                 (and therefore the native WebView2's window) does not move a pixel.
+                                 An Auto row with no child measures 0. -->
+
                             <Grid x:Name="BrowserContainer" x:FieldModifier="internal" Grid.Row="2">
                                 <!-- WebView2 will be added here programmatically -->
                                 <TextBlock x:Name="BrowserLoadingText" x:FieldModifier="internal"
@@ -1764,34 +1919,91 @@
                 </Grid>
             </Border>
     
-            <!-- Quick Actions
-                 The Audio section used to occupy the left half of this row. Phase 2 of the UX
-                 restructure moved it (verbatim, disclosure arrow dropped) to the Settings door -
-                 Views/Controls/AppSettings/AudioSettingsSection.xaml. Quick Links spans the row
-                 until Phase 3 re-lays Home. -->
-            <Grid Grid.Row="1" Margin="0,5,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="5"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
+            <!-- ============================================================ -->
+            <!-- COMPANION STRIP (Phase 3, new).                              -->
+            <!--                                                              -->
+            <!-- The Companion door owns her portrait, her status dots and    -->
+            <!-- her breathe loop (CompanionHeroCard), and CompanionTheme.xaml -->
+            <!-- budgets exactly ONE Forever storyboard for the companion     -->
+            <!-- app-wide. A second breathing portrait here would spend that   -->
+            <!-- budget twice and would need Start/Stop/RefreshAmbientState    -->
+            <!-- wiring from the shell. So this is deliberately a QUIET strip: -->
+            <!-- a standing affordance into her door, no art, no clock,        -->
+            <!-- nothing for the motion kill-switch or the ShowTab teardown to -->
+            <!-- have to reach. Give it a portrait later, with the loop.       -->
+            <!-- ============================================================ -->
+            <Border x:Name="CompanionStrip" x:FieldModifier="internal" Grid.Row="1"
+                    CornerRadius="12" Padding="10,7" Margin="0,0,0,5"
+                    Background="{DynamicResource ElevatedSurfaceBrush}"
+                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+                    Cursor="Hand" MouseLeftButtonDown="CompanionStrip_Click"
+                    ToolTip="{loc:Str tooltip_companion_settings}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <!-- WPF cannot draw COLR/CPAL colour-emoji fonts, so every emoji in this app
+                         is an Image routed through EmojiToImageSource. Same glyph as the sidebar's
+                         Companion door, so the two read as one place. -->
+                    <Image Grid.Column="0" Width="18" Height="18" VerticalAlignment="Center" Margin="0,0,9,0"
+                           RenderOptions.BitmapScalingMode="HighQuality"
+                           Source="{Binding Source='🤖', Converter={StaticResource EmojiToImageSource}}"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str nav_door_companion}"
+                                   Foreground="{DynamicResource PinkBrush}"
+                                   FontSize="12" FontWeight="Bold"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{loc:Str hm3_companion_strip_sub}"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="10" Margin="0,1,0,0"
+                                   TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                    <TextBlock Grid.Column="2" Text="›" VerticalAlignment="Center" Margin="12,0,2,0"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="18"/>
+                </Grid>
+            </Border>
 
-                <!-- MOVED to Settings/Audio (Phase 2): AudioSection -->
+            <!-- ============================================================ -->
+            <!-- ACCOUNT STRIP (Phase 3) - the old "Quick Links" card,         -->
+            <!-- compressed from a four-row tile into one line.                -->
+            <!--                                                               -->
+            <!-- Settings - Account has been the real account page since        -->
+            <!-- Phase 2, so this is the glance-and-go surface, not the editor. -->
+            <!-- It is NOT redundant markup: every x:Name below is written by   -->
+            <!-- live code and none may be dropped before Phase 8 -             -->
+            <!--   BtnUnifiedLogin ............ Login.cs:337, UiUpdates.cs      -->
+            <!--                                offline gating (:3022)          -->
+            <!--   LoggedInStatusPanel ........ Login.cs:338                    -->
+            <!--   TxtLoggedInName ............ Login.cs:346/:351 (incl. the    -->
+            <!--                                OG star prefix)                 -->
+            <!--   ChkQuickDiscordRichPresence  AccountShell.cs:291/:302 mirror -->
+            <!--                                + MainWindow.xaml.cs:2397 load  -->
+            <!--   HelpBtnQuickLinks .......... Presets.cs:49 SetHelpContent    -->
+            <!--                                ("QuickLinks")                  -->
+            <!-- The card's old section_quick_links caption is gone with the    -->
+            <!-- header row; the "?" popover still explains the strip.          -->
+            <!-- ============================================================ -->
+            <Border Grid.Row="2" CornerRadius="12" Padding="9,7"
+                    Background="{DynamicResource ElevatedSurfaceBrush}"
+                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-                <!-- Quick Actions (spans the row now that Audio has left) -->
-                <Border Grid.Column="0" Grid.ColumnSpan="3" CornerRadius="12" Padding="9" Margin="0,0,0,6"
-                        Background="{DynamicResource ElevatedSurfaceBrush}"
-                        BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" VerticalAlignment="Stretch">
-                    <StackPanel>
-                        <Grid Margin="0,0,0,6">
-                            <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_quick_links}" FontSize="12" Margin="0"/>
-                            <Button x:Name="HelpBtnQuickLinks" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="QuickLinks"/>
-                        </Grid>
-    
+                    <!-- The logged-out and logged-in faces share ONE cell: MainWindow.Login.cs
+                         flips exactly these two Visibilities against each other, so they must
+                         never be able to claim two slots' worth of width between them. -->
+                    <Grid Grid.Column="0">
                         <!-- Unified Login Button -->
                         <Button x:Name="BtnUnifiedLogin" x:FieldModifier="internal" Content="{loc:Str btn_login_2}"
                                 Click="BtnUnifiedLogin_Click"
-                                Padding="8,12" Margin="0,0,0,6"
+                                Padding="14,7" HorizontalAlignment="Left" VerticalAlignment="Center"
                                 ToolTip="{loc:Str tooltip_login_with_discord_or_patreon}">
                             <Button.Style>
                                 <Style TargetType="Button">
@@ -1825,7 +2037,8 @@
     
                         <!-- Logged In Status (shown when logged in) -->
                         <Border x:Name="LoggedInStatusPanel" x:FieldModifier="internal" Visibility="Collapsed"
-                                Background="{DynamicResource PanelBgBrush}" CornerRadius="6" Padding="12,10" Margin="0,0,0,6"
+                                Background="{DynamicResource PanelBgBrush}" CornerRadius="6" Padding="9,4"
+                                VerticalAlignment="Center"
                                 BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -1836,7 +2049,8 @@
                                     <TextBlock x:Name="TxtLoggedInAs" Text="{loc:Str label_logged_in_as}"
                                                Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/>
                                     <TextBlock x:Name="TxtLoggedInName" x:FieldModifier="internal" Text="{loc:Str label_username}"
-                                               Foreground="White" FontWeight="Bold" FontSize="17" Margin="0,1,0,0">
+                                               Foreground="White" FontWeight="Bold" FontSize="14" Margin="0,1,0,0"
+                                               TextTrimming="CharacterEllipsis">
                                         <TextBlock.Effect>
                                             <DropShadowEffect Color="#FF69B4" BlurRadius="10" ShadowDepth="0" Opacity="0.65"/>
                                         </TextBlock.Effect>
@@ -1846,12 +2060,12 @@
                                 <Button x:Name="BtnLinkPhone" Content="📱 Link phone"
                                         Click="BtnLinkPhone_Click" Margin="0,0,6,0" VerticalAlignment="Center"
                                         ToolTip="Sign in to the CCP mobile app by scanning a QR code"
-                                        Padding="10,5" Background="{DynamicResource AccentTintedBgBrush}" Foreground="{DynamicResource PinkBrush}"
+                                        Padding="8,3" Background="{DynamicResource AccentTintedBgBrush}" Foreground="{DynamicResource PinkBrush}"
                                         BorderThickness="0" FontSize="10" Cursor="Hand"/>
                                 <!-- Prominent, high-contrast Logout button -->
                                 <Button x:Name="BtnQuickLogout" Content="{loc:Str btn_logout}"
                                         Click="BtnQuickLogout_Click" VerticalAlignment="Center"
-                                        Padding="16,7" FontSize="12" FontWeight="Bold" Cursor="Hand"
+                                        Padding="12,4" FontSize="11" FontWeight="Bold" Cursor="Hand"
                                         ToolTip="{loc:Str btn_logout}">
                                     <Button.Style>
                                         <Style TargetType="Button">
@@ -1882,16 +2096,12 @@
                                 </StackPanel>
                             </Grid>
                         </Border>
-    
-                        <!-- Discord Join Button + Rich Presence -->
-                        <Grid Margin="0,4,0,2">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <Button Grid.Column="0" Click="BtnDiscord_Click"
-                                    ToolTip="{loc:Str tooltip_join_the_discord_community}" Cursor="Hand"
-                                    HorizontalAlignment="Stretch">
+                    </Grid>
+
+                    <!-- Discord Join Button -->
+                    <Button Grid.Column="1" Click="BtnDiscord_Click"
+                            ToolTip="{loc:Str tooltip_join_the_discord_community}" Cursor="Hand"
+                            VerticalAlignment="Center" Margin="10,0,0,0">
                                 <Button.Style>
                                     <Style TargetType="Button">
                                         <Setter Property="Background" Value="Transparent"/>
@@ -1900,7 +2110,7 @@
                                             <Setter.Value>
                                                 <ControlTemplate TargetType="Button">
                                                     <Border x:Name="border" Background="#5865F2" CornerRadius="5"
-                                                            Padding="0,4" HorizontalAlignment="Stretch">
+                                                            Padding="12,5" HorizontalAlignment="Stretch">
                                                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                                             <Image Width="13" Height="13" VerticalAlignment="Center"
                                                                    Source="{Binding Source='💬', Converter={StaticResource EmojiToImageSource}}"/>
@@ -1919,7 +2129,7 @@
                                     </Style>
                                 </Button.Style>
                             </Button>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0">
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
                                 <StackPanel.ToolTip>
                                     <ToolTip Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="10">
                                         <StackPanel MaxWidth="280">
@@ -1942,20 +2152,32 @@
                                 </CheckBox>
                                 <TextBlock Text="{loc:Str label_rp}" Foreground="{DynamicResource TextMutedBrush}" FontSize="9"
                                            VerticalAlignment="Center" Margin="4,0,0,0"/>
-                            </StackPanel>
-                        </Grid>
                     </StackPanel>
-                </Border>
-            </Grid>
+
+                    <Button x:Name="HelpBtnQuickLinks" x:FieldModifier="internal" Grid.Column="3"
+                            Style="{StaticResource HelpButtonStyle}" Tag="QuickLinks"
+                            VerticalAlignment="Center" Margin="8,0,0,0"/>
+                </Grid>
+            </Border>
         </Grid>
     
         <!-- ============================================================ -->
-        <!-- VELVET MOSAIC HELPER BUTTON ROW - full width, under both     -->
-        <!-- the feature grid AND the right half.                         -->
+        <!-- QUICK TOGGLES ROW - full width, under both the feature grid  -->
+        <!-- AND the right half. (Historic x:Name VelvetHelperButtonRow.) -->
+        <!--                                                               -->
+        <!-- Phase 3 added the fifth pill: "System" used to be a mosaic    -->
+        <!-- tile, but it is not a feature - it is the display/video       -->
+        <!-- switches - so it traded its tile for Brain Drain and became a -->
+        <!-- pill. Same handler, same popup, new caller. Keep this row at  -->
+        <!-- Height=30: it sits between the mosaic and the marquee inside  -->
+        <!-- the fixed 1489x901 canvas, and every unit it grows comes off  -->
+        <!-- the mosaic's star row (WPF clips silently - #860).            -->
         <!-- ============================================================ -->
         <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" x:Name="VelvetHelperButtonRow"
               Height="30" Margin="5,4,5,0">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="10"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="10"/>
                 <ColumnDefinition Width="*"/>
@@ -1993,7 +2215,42 @@
                 </Button.Template>
             </Button>
     
-            <Button Grid.Column="2" x:Name="VelvetBtnAppInfo"
+            <!-- System — the display / video switches (multi-monitor, GPU decode, blurred
+                 video background, browser video engine) plus the read-only jumps Phase 2 added
+                 into Settings. It used to be the ⚙ mosaic tile; the tile went to Brain Drain
+                 and the entry point came here. VelvetBtnSystem_Click forwards to the SAME
+                 MainWindow.CardSystem_Click that the (now Collapsed) tile still calls, so the
+                 popup, its title, and its NotifyFeatureOpened("System") bark are unchanged. -->
+            <Button Grid.Column="2" x:Name="VelvetBtnSystem"
+                    Click="VelvetBtnSystem_Click"
+                    Cursor="Hand" FontSize="12" FontWeight="Bold">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b"
+                                Background="{DynamicResource ElevatedSurfaceBrush}"
+                                BorderBrush="{DynamicResource GlassBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="14">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <!-- No separate cog image and no x:Name: section_system already
+                                     starts with the gear glyph (same idiom as the Scheduler pill
+                                     below), and a name inside a ControlTemplate belongs to the
+                                     template's namescope, not the UserControl's, so it would
+                                     generate no field and reach nothing. -->
+                                <helpers:EmojiTextBlock Text="{loc:Str section_system}" Foreground="White" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                <Setter TargetName="b" Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+
+            <Button Grid.Column="8" x:Name="VelvetBtnAppInfo"
                     Click="VelvetBtnAppInfo_Click"
                     Cursor="Hand" FontSize="12" FontWeight="Bold">
                 <Button.Template>
@@ -2019,9 +2276,13 @@
                 </Button.Template>
             </Button>
     
-            <!-- Combined Scheduler + Intensity Ramp card. Opens one popup
-                 holding both panels. Label is two live-localized strings
-                 joined by " + " so both halves stay translated. -->
+            <!-- Combined Scheduler + Intensity Ramp card. Label is two live-localized
+                 strings joined by " + " so both halves stay translated.
+                 Phase 3: this no longer opens a second popup around
+                 SchedulerRampFeatureControl - Phase 4 gave both panels rack entries
+                 ("scheduler" / "ramp"), so the pill navigates there instead. One surface,
+                 nothing lost: the rack fires the same single "SchedulerRamp"
+                 NotifyFeatureOpened key the popup did (StudioTabView.xaml.cs:229-230). -->
             <Button Grid.Column="4" x:Name="VelvetBtnSchedulerRamp"
                     Click="VelvetBtnSchedulerRamp_Click"
                     Cursor="Hand" FontSize="12" FontWeight="Bold">

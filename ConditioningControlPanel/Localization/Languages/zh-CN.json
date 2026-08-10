@@ -4589,6 +4589,8 @@
   "set2_tooltip_auto_performance": "只在屏幕上元素（闪图/泡泡）很多时自动降低渲染质量，之后再恢复。",
   "set2_setting_unified_overlay": "统一覆盖层渲染器",
   "set2_tooltip_unified_overlay": "把全屏效果（螺旋、粉色滤镜、闪图、泡泡……）画在每台显示器共用的一个覆盖层窗口里。效果多时更流畅。如果覆盖层出问题，可以关掉回到每个效果一个窗口的经典渲染方式。",
+  "set2_setting_video_hw_decode": "强制视频 GPU 解码",
+  "set2_tooltip_video_hw_decode": "为必看视频强制启用 GPU 硬件解码。默认关闭 - 视频使用软件解码，以避免部分电脑上的白屏问题。仅在视频播放正常时开启。",
   "set2_whats_new_header": "本版本的新内容",
   "set2_btn_view_patch_notes": "查看完整说明",
   "set2_whats_new_title_0": "v{0} 的新内容",
@@ -4614,5 +4616,10 @@
   "st4_scheduler_active_days": "生效的星期",
   "st4_ramp_hint": "在递增的时长里让强度慢慢往上走，还可以选择在顶点结束会话。",
   "st4_ramp_session_note": "会话进行时，全局递增会先退场，免得两边打架 — 只有递增曲线继续塑造会话自己的递增。",
-  "label_brain_drain": "💧 脑力流失"
+  "label_brain_drain": "💧 脑力流失",
+  "hm3_companion_strip_sub": "聊天、接管、感知与权限",
+  "hm3_audio_sync_tuning": "🎚 音频同步微调",
+  "hm3_rail_lock_t1": "赞助者专享",
+  "hm3_rail_lock_pass": "每周通行证",
+  "hm3_rail_lock_t2": "实验室专享"
 }

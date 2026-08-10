@@ -4131,6 +4131,8 @@
   "set2_tooltip_auto_performance": "Senkt die Renderqualität automatisch nur, solange viele Elemente (Flashes/Bubbles) auf dem Bildschirm sind, und stellt sie danach wieder her.",
   "set2_setting_unified_overlay": "Vereinheitlichter Overlay-Renderer",
   "set2_tooltip_unified_overlay": "Rendert Vollbild-Effekte (Spirale, Pink-Filter, Flashes, Bubbles ...) in einem gemeinsamen Overlay-Fenster pro Monitor. Flüssiger bei vielen Effekten. Schalt es aus, um auf den klassischen Renderer mit einem Fenster pro Effekt zurückzufallen, falls Overlays spinnen.",
+  "set2_setting_video_hw_decode": "Video-GPU-Dekodierung erzwingen",
+  "set2_tooltip_video_hw_decode": "Erzwingt GPU-Hardware-Dekodierung für Pflichtvideos. Standardmäßig aus - Videos werden per Software dekodiert, um einen White-Screen-Fehler auf manchen Rechnern zu vermeiden. Nur aktivieren, wenn deine Videos einwandfrei laufen.",
   "set2_whats_new_header": "Was in dieser Version neu ist",
   "set2_btn_view_patch_notes": "Alle Notes ansehen",
   "set2_whats_new_title_0": "Was ist neu in v{0}",
@@ -4156,5 +4158,10 @@
   "st4_scheduler_active_days": "Aktive Tage",
   "st4_ramp_hint": "Steigert die Intensität sanft über die Länge der Steigerung und beendet die Session auf Wunsch ganz oben.",
   "st4_ramp_session_note": "Während eine Session läuft, tritt die globale Steigerung zurück, damit sich die beiden nicht in die Quere kommen - nur die Steigerungskurve formt weiter die Steigerung der Session selbst.",
-  "label_brain_drain": "💧 Brain Drain"
+  "label_brain_drain": "💧 Brain Drain",
+  "hm3_companion_strip_sub": "Chat, Übernahme, Erkennung und Berechtigungen",
+  "hm3_audio_sync_tuning": "🎚 Audio-Sync einstellen",
+  "hm3_rail_lock_t1": "Nur Patrons",
+  "hm3_rail_lock_pass": "Wochenpass",
+  "hm3_rail_lock_t2": "Nur Labor"
 }
