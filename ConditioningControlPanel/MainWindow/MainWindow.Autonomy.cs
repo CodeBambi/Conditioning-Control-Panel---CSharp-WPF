@@ -524,16 +524,28 @@ namespace ConditioningControlPanel
             var s = App.Settings?.Current;
             if (s == null) return;
 
-            var turningOn = BambiTakeoverTab.ChkSpeechWakeWord.IsChecked == true;
+            var turningOn = AppSettingsTab.ChkSpeechWakeWord.IsChecked == true;
 
             if (turningOn)
             {
+                // Premium bar. This check used to live one level up, in SL_WakeWord_Changed, because
+                // the only reachable wake-word toggle was on the She's Listening tab and this pair
+                // was a Collapsed mirror on the Takeover tab. Phase 2 made this THE toggle
+                // (Settings → Devices) and turned the She's Listening row into a read-only chip, so
+                // without this line the gate would have silently disappeared. Turning the wake word
+                // OFF is never gated - a lapsed patron must always be able to close an open mic.
+                if (!Services.TierGate.DemandPremium("She's Listening"))
+                {
+                    RevertToggle(AppSettingsTab.ChkSpeechWakeWord);
+                    return;
+                }
+
                 // Mic consent first (shared with the prompt-only path).
                 if (!s.MicConsentGiven)
                 {
                     var dlg = new MicConsentDialog { Owner = this };
                     var ok = dlg.ShowDialog() == true && dlg.ConsentGiven;
-                    if (!ok) { RevertToggle(BambiTakeoverTab.ChkSpeechWakeWord); return; }
+                    if (!ok) { RevertToggle(AppSettingsTab.ChkSpeechWakeWord); return; }
                 }
 
                 // Always-on mic is more invasive than the prompt-only path — get an explicit OK.
@@ -543,7 +555,7 @@ namespace ConditioningControlPanel
                     "Turn on always-on listening?",
                     "Always-on microphone",
                     MessageBoxButton.YesNo, MessageBoxImage.Question);
-                if (confirm != MessageBoxResult.Yes) { RevertToggle(BambiTakeoverTab.ChkSpeechWakeWord); return; }
+                if (confirm != MessageBoxResult.Yes) { RevertToggle(AppSettingsTab.ChkSpeechWakeWord); return; }
             }
 
             s.SpeechWakeWordEnabled = turningOn;
@@ -557,9 +569,9 @@ namespace ConditioningControlPanel
             if (_isLoading) return;
             var s = App.Settings?.Current;
             if (s == null) return;
-            var text = BambiTakeoverTab.TxtSpeechWakeWords.Text?.Trim();
+            var text = AppSettingsTab.TxtSpeechWakeWords.Text?.Trim();
             s.SpeechWakeWords = string.IsNullOrWhiteSpace(text) ? "hey bambi" : text;
-            if (string.IsNullOrWhiteSpace(text)) BambiTakeoverTab.TxtSpeechWakeWords.Text = "hey bambi";
+            if (string.IsNullOrWhiteSpace(text)) AppSettingsTab.TxtSpeechWakeWords.Text = "hey bambi";
             App.Settings?.Save();
             // Restart the loop so new phrases take effect immediately.
             App.Autonomy?.RefreshVoiceInputModes();
@@ -571,12 +583,21 @@ namespace ConditioningControlPanel
             var s = App.Settings?.Current;
             if (s == null) return;
 
-            var turningOn = BambiTakeoverTab.ChkSpeechPushToTalk.IsChecked == true;
+            var turningOn = AppSettingsTab.ChkSpeechPushToTalk.IsChecked == true;
+
+            // Same story as the wake word: the premium bar used to sit in SL_PushToTalk_Changed
+            // and has to live here now that Settings → Devices owns the only toggle.
+            if (turningOn && !Services.TierGate.DemandPremium("She's Listening"))
+            {
+                RevertToggle(AppSettingsTab.ChkSpeechPushToTalk);
+                return;
+            }
+
             if (turningOn && !s.MicConsentGiven)
             {
                 var dlg = new MicConsentDialog { Owner = this };
                 var ok = dlg.ShowDialog() == true && dlg.ConsentGiven;
-                if (!ok) { RevertToggle(BambiTakeoverTab.ChkSpeechPushToTalk); return; }
+                if (!ok) { RevertToggle(AppSettingsTab.ChkSpeechPushToTalk); return; }
             }
 
             s.SpeechPushToTalkEnabled = turningOn;
@@ -591,7 +612,7 @@ namespace ConditioningControlPanel
         {
             if (_capturingPttKey) return;
             _capturingPttKey = true;
-            BambiTakeoverTab.BtnSetPttKey.Content = "Press a key…";
+            AppSettingsTab.BtnSetPttKey.Content = "Press a key…";
             PreviewKeyDown += CapturePttKey;
         }
 
@@ -615,8 +636,8 @@ namespace ConditioningControlPanel
                 App.Settings?.Save();
                 App.Autonomy?.RefreshVoiceInputModes();
             }
-            BambiTakeoverTab.TxtPttKey.Text = key.ToString();
-            BambiTakeoverTab.BtnSetPttKey.Content = "Set key…";
+            AppSettingsTab.TxtPttKey.Text = key.ToString();
+            AppSettingsTab.BtnSetPttKey.Content = "Set key…";
         }
 
         /// <summary>Refresh the small grey availability hints under the voice toggles.</summary>

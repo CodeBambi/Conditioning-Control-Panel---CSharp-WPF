@@ -1307,29 +1307,13 @@ namespace ConditioningControlPanel
             RefreshBlinkTrainerTrackerButton();
         }
 
-        internal void CmbBlinkTrainerWebcamDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (_webcamDevicePopulating) return;
-            if (BlinkTrainerTab.CmbBlinkTrainerWebcamDevice?.SelectedItem is not ComboBoxItem item) return;
-            if (item.Tag is not int idx || idx < 0) return;
-
-            if (App.Settings?.Current is { } s)
-            {
-                if (s.WebcamDeviceIndex == idx) return;
-                s.WebcamDeviceIndex = idx;
-                s.WebcamDeviceName = item.Content?.ToString() ?? "";
-                App.Settings?.Save();
-            }
-
-            // Cross-tab sync (Cleanup 1) — propagate to the Lab combo.
-            SyncWebcamComboSelections(idx);
-        }
-
-        internal void BtnBlinkTrainerWebcamRefresh_Click(object sender, RoutedEventArgs e)
-        {
-            try { PopulateWebcamDeviceCombos(); }
-            catch (Exception ex) { App.Logger?.Warning(ex, "BtnBlinkTrainerWebcamRefresh_Click failed"); }
-        }
+        // Phase 2 (UX restructure): the Blink Trainer's camera picker + refresh button and the
+        // Deeper hub's camera/monitor pickers, refresh button and restrict-gaze checkbox were
+        // duplicate editors of WebcamDeviceIndex / WebcamCalibrationScreen /
+        // RestrictGazeContentToCalibratedScreen. Settings -> Devices owns all three now, so those
+        // six handlers were deleted with their controls. Consent + calibration handlers below are
+        // ACTIONS, not settings - several launchers for one dialog is fine, and keeping them here
+        // is what lets a free user set the camera up without leaving the page they came for.
 
         internal void BtnBlinkTrainerManageConsent_Click(object sender, RoutedEventArgs e)
         {
@@ -1364,7 +1348,7 @@ namespace ConditioningControlPanel
                 if (result != MessageBoxResult.OK) return;
 
                 App.Webcam?.RevokeConsent();
-                if (LabTab.ChkWebcamDebugCursor != null) LabTab.ChkWebcamDebugCursor.IsChecked = false;
+                if (AppSettingsTab.ChkWebcamDebugCursor != null) AppSettingsTab.ChkWebcamDebugCursor.IsChecked = false;
 
                 RefreshBlinkTrainerWebcamColumn();
                 RefreshBlinkTrainerStatusRow();
@@ -1449,46 +1433,6 @@ namespace ConditioningControlPanel
         // both surfaces.
         // ──────────────────────────────────────────────────────────────
 
-        internal void CmbDeeperWebcamDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (_webcamDevicePopulating) return;
-            if (DeeperTab.CmbDeeperWebcamDevice?.SelectedItem is not ComboBoxItem item) return;
-            if (item.Tag is not int idx || idx < 0) return;
-
-            if (App.Settings?.Current is { } s)
-            {
-                if (s.WebcamDeviceIndex == idx) return;
-                s.WebcamDeviceIndex = idx;
-                s.WebcamDeviceName = item.Content?.ToString() ?? "";
-                App.Settings?.Save();
-            }
-
-            SyncWebcamComboSelections(idx);
-        }
-
-        internal void BtnDeeperWebcamRefresh_Click(object sender, RoutedEventArgs e)
-        {
-            try { PopulateWebcamDeviceCombos(); }
-            catch (Exception ex) { App.Logger?.Warning(ex, "BtnDeeperWebcamRefresh_Click failed"); }
-        }
-
-        internal void CmbDeeperWebcamMonitor_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (_webcamMonitorPopulating) return;
-            if (DeeperTab.CmbDeeperWebcamMonitor?.SelectedItem is not ComboBoxItem item) return;
-            if (item.Tag is not string deviceName) return;
-
-            if (App.Settings?.Current is { } s)
-            {
-                if (string.Equals(s.WebcamCalibrationScreen, deviceName, StringComparison.OrdinalIgnoreCase)) return;
-                s.WebcamCalibrationScreen = deviceName;
-                App.Settings.Save();
-            }
-
-            SyncMonitorComboSelection(LabTab.CmbWebcamMonitor, deviceName);
-            SyncMonitorComboSelection(BlinkTrainerTab.CmbBlinkTrainerWebcamMonitor, deviceName);
-        }
-
         internal void BtnDeeperWebcamManageConsent_Click(object sender, RoutedEventArgs e)
             => BtnBlinkTrainerManageConsent_Click(sender, e);
 
@@ -1503,15 +1447,6 @@ namespace ConditioningControlPanel
 
         internal void BtnDeeperWebcamStartStopTracker_Click(object sender, RoutedEventArgs e)
             => BtnBlinkTrainerStartStopTracker_Click(sender, e);
-
-        internal void ChkDeeperWebcamRestrictGazeToCalScreen_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading || _restrictGazeCheckboxSyncing) return;
-            if (DeeperTab.ChkDeeperWebcamRestrictGazeToCalScreen == null || App.Settings?.Current == null) return;
-            bool v = DeeperTab.ChkDeeperWebcamRestrictGazeToCalScreen.IsChecked == true;
-            App.Settings.Current.RestrictGazeContentToCalibratedScreen = v;
-            MirrorRestrictGazeToOtherCards(v, except: DeeperTab.ChkDeeperWebcamRestrictGazeToCalScreen);
-        }
 
         /// <summary>
         /// Mirrors RefreshBlinkTrainerWebcamColumn for the Deeper hub's setup
@@ -1570,17 +1505,6 @@ namespace ConditioningControlPanel
                     else
                     {
                         DeeperTab.DeeperWebcamCalibrationStatus.Text = Localization.Loc.Get("blink_trainer_calibration_outdated");
-                    }
-                }
-
-                if (DeeperTab.ChkDeeperWebcamRestrictGazeToCalScreen != null && App.Settings?.Current is { } s)
-                {
-                    bool want = s.RestrictGazeContentToCalibratedScreen;
-                    if (DeeperTab.ChkDeeperWebcamRestrictGazeToCalScreen.IsChecked != want)
-                    {
-                        _restrictGazeCheckboxSyncing = true;
-                        try { DeeperTab.ChkDeeperWebcamRestrictGazeToCalScreen.IsChecked = want; }
-                        finally { _restrictGazeCheckboxSyncing = false; }
                     }
                 }
             }

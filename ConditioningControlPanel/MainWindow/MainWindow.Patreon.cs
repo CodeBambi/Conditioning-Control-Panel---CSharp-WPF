@@ -87,27 +87,34 @@ namespace ConditioningControlPanel
 
                 // Show unified DisplayName if available, otherwise Patreon display name
                 var nameToShow = unifiedDisplayName ?? patreonDisplayName;
-                PatreonTab.TxtPatreonStatus.Text = string.IsNullOrEmpty(nameToShow) ? "Connected to Patreon" : $"Welcome, {nameToShow}!";
-                PatreonTab.TxtPatreonTier.Text = tier switch
+                AppSettingsTab.TxtPatreonStatus.Text = string.IsNullOrEmpty(nameToShow) ? "Connected to Patreon" : $"Welcome, {nameToShow}!";
+                AppSettingsTab.TxtPatreonTier.Text = tier switch
                 {
                     PatreonTier.Level2 => Loc.Get("label_patreon_tier_level2"),
                     PatreonTier.Level1 => Loc.Get("label_patreon_tier_level1"),
                     _ when isWhitelisted => Loc.Get("label_patreon_tier_whitelisted"),
                     _ => Loc.Get(isActivePatron ? "label_patreon_tier_patron" : "label_patreon_tier_connected")
                 };
-                PatreonTab.BtnPatreonLogin.Content = Loc.Get("btn_logout");
+                AppSettingsTab.BtnPatreonLogin.Content = Loc.Get("btn_logout");
             }
             else
             {
                 // Check if user is logged in with another provider (has unified_id)
                 var hasUnifiedId = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
 
-                PatreonTab.TxtPatreonStatus.Text = Loc.Get("label_not_connected");
-                PatreonTab.TxtPatreonTier.Text = Loc.Get("label_login_to_unlock_exclusive_features");
+                AppSettingsTab.TxtPatreonStatus.Text = Loc.Get("label_not_connected");
+                AppSettingsTab.TxtPatreonTier.Text = Loc.Get("label_login_to_unlock_exclusive_features");
 
                 // Show "Link Patreon" if logged in via Discord, otherwise "Login"
-                PatreonTab.BtnPatreonLogin.Content = hasUnifiedId ? "Link Patreon" : "Login";
+                AppSettingsTab.BtnPatreonLogin.Content = hasUnifiedId ? "Link Patreon" : "Login";
             }
+
+            // Phase 2: the Settings/Account tier card rides this method for the same reason the
+            // header chip rides UpdateLevelDisplay - it is the choke point every auth change
+            // already runs through (TierChanged for both providers, ClearAccountData, every
+            // login/link flow). The section also repaints itself when it becomes visible, so a
+            // missed call here degrades to "stale until you leave and come back", never to wrong.
+            AppSettingsTab?.RefreshAccountTierBadge();
 
             // The page-wide AI lock veil is gone (design §6: superseded). Logged-out is an inline
             // row in the Engine Room and a teaser on the chat card, so the Companion page never
@@ -241,92 +248,14 @@ namespace ConditioningControlPanel
         }
 
         // ========================================================================
-        // Account sections reparenting (App Info & Data popup)
+        // Account sections reparenting — RETIRED in Phase 2 (gap-report R-2)
         // ========================================================================
-        // The Patreon login card, Discord login card, PatreonTab.AccountLinkingSection,
-        // PatreonTab.CloudSettingsBackupSection and PatreonTab.DataPrivacySection live physically inside
-        // PatreonTab's XAML tree (so their x:Name fields resolve for ~64 handler
-        // references across this file). When the dashboard's "App Info & Data"
-        // popup opens, we temporarily detach these Borders and attach them to the
-        // popup's host StackPanel so the user can manage their account/data from
-        // the dashboard. When the popup closes we put them back — the same element
-        // instances, so all handler refs remain valid.
-
-        private readonly System.Collections.Generic.List<System.Windows.FrameworkElement> _detachedAccountSections = new();
-
-        /// <summary>
-        /// Detaches the account/data sections from PatreonTab's content StackPanel
-        /// and attaches them to the provided target host (usually the AppInfoFeatureControl's
-        /// ExternalSectionsHost). Called when the App Info &amp; Data popup opens.
-        /// </summary>
-        internal void DetachAccountSectionsInto(System.Windows.Controls.Panel target)
-        {
-            if (target == null) return;
-            if (_detachedAccountSections.Count > 0) return; // already detached
-
-            // Order matters — this is the vertical order they'll appear in the popup.
-            var toMove = new System.Windows.FrameworkElement?[]
-            {
-                PatreonTab.PatreonLoginCard,
-                PatreonTab.SubscribeStarLoginCard,
-                PatreonTab.DiscordLoginCard,
-                PatreonTab.AccountLinkingSection,
-                PatreonTab.CloudSettingsBackupSection,
-                PatreonTab.DataPrivacySection,
-                PatreonTab.SupportDevelopmentCard,
-            };
-
-            foreach (var fe in toMove)
-            {
-                if (fe == null) continue;
-
-                // Detach from whichever parent it currently has (defensive:
-                // could be PatreonTab.PatreonTabContent on first open, or a stale popup
-                // host if a previous close didn't clean up).
-                if (fe.Parent is System.Windows.Controls.Panel currentParent)
-                {
-                    currentParent.Children.Remove(fe);
-                }
-                else if (fe.Parent is System.Windows.Controls.ContentControl cc)
-                {
-                    cc.Content = null;
-                }
-
-                try
-                {
-                    target.Children.Add(fe);
-                    _detachedAccountSections.Add(fe);
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Warning(ex, "DetachAccountSectionsInto: failed to attach {Name}", fe.Name);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Returns the detached account/data sections to PatreonTab so their
-        /// x:Name references stay valid and they can be borrowed again next time
-        /// the popup opens. Called when the App Info &amp; Data popup closes.
-        /// </summary>
-        internal void ReattachAccountSections()
-        {
-            if (_detachedAccountSections.Count == 0 || PatreonTab.PatreonTabContent == null) return;
-
-            // Insert right after the header Grid (index 0), preserving the original order.
-            int insertAt = 1;
-            foreach (var fe in _detachedAccountSections)
-            {
-                if (fe.Parent is System.Windows.Controls.Panel currentParent)
-                    currentParent.Children.Remove(fe);
-
-                if (insertAt > PatreonTab.PatreonTabContent.Children.Count)
-                    insertAt = PatreonTab.PatreonTabContent.Children.Count;
-                PatreonTab.PatreonTabContent.Children.Insert(insertAt, fe);
-                insertAt++;
-            }
-            _detachedAccountSections.Clear();
-        }
+        // The seven account/data cards used to live in PatreonTab's XAML tree and were
+        // borrowed at runtime (DetachAccountSectionsInto / ReattachAccountSections) so the
+        // dashboard's "App Info & Data" popup could show them. They now live in
+        // Views/Controls/AppSettings/AccountSettingsSection.xaml, mounted permanently on
+        // AppSettingsTab — same element names, same handlers, no reparenting. The writes
+        // below read AppSettingsTab.X. The popup keeps only its About/version content.
 
         internal async void BtnPatreonLogin_Click(object sender, RoutedEventArgs e)
         {
@@ -358,8 +287,8 @@ namespace ConditioningControlPanel
                 if (hasUnifiedId)
                 {
                     // Link Patreon to existing account
-                    PatreonTab.BtnPatreonLogin.IsEnabled = false;
-                    PatreonTab.BtnPatreonLogin.Content = Loc.Get("login_connecting");
+                    AppSettingsTab.BtnPatreonLogin.IsEnabled = false;
+                    AppSettingsTab.BtnPatreonLogin.Content = Loc.Get("login_connecting");
 
                     try
                     {
@@ -387,7 +316,7 @@ namespace ConditioningControlPanel
                     }
                     finally
                     {
-                        PatreonTab.BtnPatreonLogin.IsEnabled = true;
+                        AppSettingsTab.BtnPatreonLogin.IsEnabled = true;
                         UpdatePatreonUI();
                     }
                 }
@@ -428,8 +357,8 @@ namespace ConditioningControlPanel
                 if (hasUnifiedId)
                 {
                     // Link Discord to existing account
-                    PatreonTab.BtnDiscordLogin.IsEnabled = false;
-                    PatreonTab.BtnDiscordLogin.Content = Loc.Get("login_connecting");
+                    AppSettingsTab.BtnDiscordLogin.IsEnabled = false;
+                    AppSettingsTab.BtnDiscordLogin.Content = Loc.Get("login_connecting");
 
                     try
                     {
@@ -457,7 +386,7 @@ namespace ConditioningControlPanel
                     }
                     finally
                     {
-                        PatreonTab.BtnDiscordLogin.IsEnabled = true;
+                        AppSettingsTab.BtnDiscordLogin.IsEnabled = true;
                         UpdateDiscordUI();
                     }
                 }
@@ -475,20 +404,20 @@ namespace ConditioningControlPanel
             {
                 // Use unified display name first, then fall back to Discord-specific
                 var discordDisplayName = App.Settings?.Current?.UserDisplayName ?? App.Discord.DisplayName;
-                PatreonTab.TxtDiscordStatus.Text = $"Connected as {discordDisplayName}";
-                PatreonTab.TxtDiscordInfo.Text = $"@{App.Discord.Username}";
-                PatreonTab.BtnDiscordLogin.Content = Loc.Get("btn_logout");
+                AppSettingsTab.TxtDiscordStatus.Text = $"Connected as {discordDisplayName}";
+                AppSettingsTab.TxtDiscordInfo.Text = $"@{App.Discord.Username}";
+                AppSettingsTab.BtnDiscordLogin.Content = Loc.Get("btn_logout");
             }
             else
             {
                 // Check if user is logged in with another provider (has unified_id)
                 var hasUnifiedId = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
 
-                PatreonTab.TxtDiscordStatus.Text = Loc.Get("label_not_connected");
-                PatreonTab.TxtDiscordInfo.Text = Loc.Get("label_link_discord_for_community_features");
+                AppSettingsTab.TxtDiscordStatus.Text = Loc.Get("label_not_connected");
+                AppSettingsTab.TxtDiscordInfo.Text = Loc.Get("label_link_discord_for_community_features");
 
                 // Show "Link Discord" if logged in via Patreon, otherwise "Login"
-                PatreonTab.BtnDiscordLogin.Content = hasUnifiedId ? "Link Discord" : "Login";
+                AppSettingsTab.BtnDiscordLogin.Content = hasUnifiedId ? "Link Discord" : "Login";
             }
 
             // Update XP bar login state when Discord auth changes
@@ -507,15 +436,15 @@ namespace ConditioningControlPanel
 
             // Show section only if logged in and missing at least one provider
             bool showLinkingSection = hasUnifiedId && (!hasLinkedPatreon || !hasLinkedDiscord);
-            PatreonTab.AccountLinkingSection.Visibility = showLinkingSection ? Visibility.Visible : Visibility.Collapsed;
+            AppSettingsTab.AccountLinkingSection.Visibility = showLinkingSection ? Visibility.Visible : Visibility.Collapsed;
 
             // Show individual buttons for unlinked providers
-            PatreonTab.BtnLinkPatreon.Visibility = (hasUnifiedId && !hasLinkedPatreon) ? Visibility.Visible : Visibility.Collapsed;
-            PatreonTab.BtnLinkDiscord.Visibility = (hasUnifiedId && !hasLinkedDiscord) ? Visibility.Visible : Visibility.Collapsed;
+            AppSettingsTab.BtnLinkPatreon.Visibility = (hasUnifiedId && !hasLinkedPatreon) ? Visibility.Visible : Visibility.Collapsed;
+            AppSettingsTab.BtnLinkDiscord.Visibility = (hasUnifiedId && !hasLinkedDiscord) ? Visibility.Visible : Visibility.Collapsed;
 
             // Show cloud settings backup section if user has a cloud identity
-            PatreonTab.CloudSettingsBackupSection.Visibility = hasUnifiedId ? Visibility.Visible : Visibility.Collapsed;
-            PatreonTab.DataPrivacySection.Visibility = hasUnifiedId ? Visibility.Visible : Visibility.Collapsed;
+            AppSettingsTab.CloudSettingsBackupSection.Visibility = hasUnifiedId ? Visibility.Visible : Visibility.Collapsed;
+            AppSettingsTab.DataPrivacySection.Visibility = hasUnifiedId ? Visibility.Visible : Visibility.Collapsed;
             if (hasUnifiedId)
             {
                 _ = UpdateBackupStatus();
@@ -529,8 +458,8 @@ namespace ConditioningControlPanel
         {
             if (App.Patreon == null) return;
 
-            PatreonTab.BtnLinkPatreon.IsEnabled = false;
-            PatreonTab.BtnLinkPatreon.Content = Loc.Get("login_connecting");
+            AppSettingsTab.BtnLinkPatreon.IsEnabled = false;
+            AppSettingsTab.BtnLinkPatreon.Content = Loc.Get("login_connecting");
 
             try
             {
@@ -559,8 +488,8 @@ namespace ConditioningControlPanel
             }
             finally
             {
-                PatreonTab.BtnLinkPatreon.IsEnabled = true;
-                PatreonTab.BtnLinkPatreon.Content = Loc.Get("btn_link_patreon");
+                AppSettingsTab.BtnLinkPatreon.IsEnabled = true;
+                AppSettingsTab.BtnLinkPatreon.Content = Loc.Get("btn_link_patreon");
             }
         }
 
@@ -571,8 +500,8 @@ namespace ConditioningControlPanel
         {
             if (App.Discord == null) return;
 
-            PatreonTab.BtnLinkDiscord.IsEnabled = false;
-            PatreonTab.BtnLinkDiscord.Content = Loc.Get("login_connecting");
+            AppSettingsTab.BtnLinkDiscord.IsEnabled = false;
+            AppSettingsTab.BtnLinkDiscord.Content = Loc.Get("login_connecting");
 
             try
             {
@@ -602,8 +531,8 @@ namespace ConditioningControlPanel
             }
             finally
             {
-                PatreonTab.BtnLinkDiscord.IsEnabled = true;
-                PatreonTab.BtnLinkDiscord.Content = Loc.Get("btn_link_discord");
+                AppSettingsTab.BtnLinkDiscord.IsEnabled = true;
+                AppSettingsTab.BtnLinkDiscord.Content = Loc.Get("btn_link_discord");
             }
         }
 
@@ -1770,8 +1699,8 @@ namespace ConditioningControlPanel
                 _isLoading = true;
                 try
                 {
-                    SettingsTab.SliderMaster.Value = s.MasterVolume;
-                    if (SettingsTab.TxtMaster != null) SettingsTab.TxtMaster.Text = $"{s.MasterVolume}%";
+                    AppSettingsTab.SliderMaster.Value = s.MasterVolume;
+                    if (AppSettingsTab.TxtMaster != null) AppSettingsTab.TxtMaster.Text = $"{s.MasterVolume}%";
                 }
                 finally { _isLoading = false; }
 
@@ -1808,8 +1737,8 @@ namespace ConditioningControlPanel
                 _isLoading = true;
                 try
                 {
-                    SettingsTab.SliderMaster.Value = s.MasterVolume;
-                    if (SettingsTab.TxtMaster != null) SettingsTab.TxtMaster.Text = $"{s.MasterVolume}%";
+                    AppSettingsTab.SliderMaster.Value = s.MasterVolume;
+                    if (AppSettingsTab.TxtMaster != null) AppSettingsTab.TxtMaster.Text = $"{s.MasterVolume}%";
                 }
                 finally { _isLoading = false; }
                 App.Settings?.Save();

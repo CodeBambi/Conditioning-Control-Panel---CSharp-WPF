@@ -79,50 +79,19 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnStartBureau_Click(sender, e);
         }
-        private void BtnWebcamDebugCalibrate_Click(object sender, RoutedEventArgs e)
+        // The webcam engine bar (camera/monitor pickers, calibrate, tracker start/stop,
+        // diagnostics, blink-recal + restrict-gaze toggles) moved to Settings → Devices in
+        // Phase 2, so its thirteen shims went with it. All that is left on this tab is the
+        // read-only status chip and the way back to the page that owns the camera.
+        private void BtnOpenDeviceSettings_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnWebcamDebugCalibrate_Click(sender, e);
-        }
-        private void BtnWebcamDebugQuickRecal_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnWebcamDebugQuickRecal_Click(sender, e);
-        }
-        private void BtnWebcamDebugStart_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnWebcamDebugStart_Click(sender, e);
-        }
-        private void BtnWebcamDebugTrackerTest_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnWebcamDebugTrackerTest_Click(sender, e);
-        }
-        private void BtnWebcamDeviceRefresh_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnWebcamDeviceRefresh_Click(sender, e);
-        }
-        private void BtnWebcamReviewPrivacy_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnWebcamReviewPrivacy_Click(sender, e);
-        }
-        private void BtnWebcamRevokeConsent_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnWebcamRevokeConsent_Click(sender, e);
+                mw.OpenDeviceSettings();
         }
         private void ChkAllowEffect_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkAllowEffect_Changed(sender, e);
-        }
-        private void ChkBlinkRecalShortcut_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkBlinkRecalShortcut_Changed(sender, e);
         }
         private void ChkCapEffects_Changed(object sender, RoutedEventArgs e)
         {
@@ -138,31 +107,6 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkFocusGaze_Changed(sender, e);
-        }
-        private void ChkRestrictGazeToCalScreen_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkRestrictGazeToCalScreen_Changed(sender, e);
-        }
-        private void ChkWebcamDebugCursor_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkWebcamDebugCursor_Changed(sender, e);
-        }
-        private void ChkWebcamDriftCorrection_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkWebcamDriftCorrection_Changed(sender, e);
-        }
-        private void CmbWebcamDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CmbWebcamDevice_SelectionChanged(sender, e);
-        }
-        private void CmbWebcamMonitor_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CmbWebcamMonitor_SelectionChanged(sender, e);
         }
         private void SliderMaxHapticIntensity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {

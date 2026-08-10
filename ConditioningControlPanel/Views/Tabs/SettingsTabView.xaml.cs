@@ -73,29 +73,10 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnAttentionStyle_Click(sender, e);
         }
-        private void BtnAudioOutputRefresh_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnAudioOutputRefresh_Click(sender, e);
-        }
-        // Suggestion #659 — open the Audio Layers config window (self-contained, no MainWindow dep).
-        private void BtnAudioLayers_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var win = new LayeredAudioWindow { Owner = Window.GetWindow(this) };
-                win.Show();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "Settings: Audio Layers window launch failed");
-            }
-        }
-        private void BtnClearStartupVideo_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnClearStartupVideo_Click(sender, e);
-        }
+        // Phase 2: BtnAudioOutputRefresh_Click / BtnAudioLayers_Click moved with the Audio
+        // section to Views/Controls/AppSettings/AudioSettingsSection.xaml.cs.
+        // Phase 2: BtnClearStartupVideo_Click / BtnSelectStartupVideo_Click moved with the startup
+        // group to Views/Controls/AppSettings/GeneralSettingsSection.xaml.cs.
         private void BtnDiscord_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -115,11 +96,6 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnOpenAssetsFolder_Click(sender, e);
-        }
-        private void BtnPanicKey_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnPanicKey_Click(sender, e);
         }
         private void BtnPickAssetsFolder_Click(object sender, RoutedEventArgs e)
         {
@@ -221,31 +197,13 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnReloadBrowser_Click(sender, e);
         }
-        private void BtnSelectStartupVideo_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnSelectStartupVideo_Click(sender, e);
-        }
         private void BtnSubliminalSettings_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnSubliminalSettings_Click(sender, e);
         }
-        private void BtnExportPhrases_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnExportPhrases_Click(sender, e);
-        }
-        private void BtnImportPhrases_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnImportPhrases_Click(sender, e);
-        }
-        private void BtnTestAudio_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnTestAudio_Click(sender, e);
-        }
+        // Phase 2: BtnExportPhrases_Click / BtnImportPhrases_Click moved with the phrase-backup
+        // card to Views/Controls/AppSettings/DataSettingsSection.xaml.cs.
         private void BtnTestVideo_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -321,11 +279,6 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.CardVisuals_Click(sender, e);
         }
-        private void ChkAudioDuck_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkAudioDuck_Changed(sender, e);
-        }
         private void ChkAudioWhispers_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -356,16 +309,8 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkDualMon_Changed(sender, e);
         }
-        private void ChkEnableDeeper_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkEnableDeeper_Changed(sender, e);
-        }
-        private void ChkExcludeBambiCloudDucking_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkExcludeBambiCloudDucking_Changed(sender, e);
-        }
+        // Phase 2: ChkEnableDeeper_Changed moved with the Deeper master switch to
+        // Views/Controls/AppSettings/GeneralSettingsSection.xaml.cs.
         private void ChkFlashAudio_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -391,16 +336,10 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkMiniGameEnabled_Changed(sender, e);
         }
-        private void ChkNoPanic_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkNoPanic_Changed(sender, e);
-        }
-        private void ChkOfflineMode_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkOfflineMode_Changed(sender, e);
-        }
+        // BtnPanicKey_Click / ChkNoPanic_Changed left with their controls in Phase 2 — the panic
+        // key is rebound and disabled in Settings → Devices now.
+        // Phase 2: ChkOfflineMode_Changed moved with the offline toggle to
+        // Views/Controls/AppSettings/DataSettingsSection.xaml.cs.
         private void ChkPerformanceMode_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -416,11 +355,8 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkRandomizeTargets_Changed(sender, e);
         }
-        private void ChkStartHidden_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkStartHidden_Click(sender, e);
-        }
+        // Phase 2: ChkStartHidden_Click / ChkWinStart_Click moved with the startup group to
+        // Views/Controls/AppSettings/GeneralSettingsSection.xaml.cs.
         private void ChkStrictLock_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -446,16 +382,6 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkUnifiedOverlay_Changed(sender, e);
         }
-        private void ChkWinStart_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkWinStart_Click(sender, e);
-        }
-        private void CmbAudioOutputDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CmbAudioOutputDevice_SelectionChanged(sender, e);
-        }
         private void ImgLogo_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -478,11 +404,6 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.SliderAudioSyncLatency_Changed(sender, e);
-        }
-        private void SliderDuck_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderDuck_Changed(sender, e);
         }
         private void SliderDuration_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
@@ -508,11 +429,6 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.SliderImages_Changed(sender, e);
-        }
-        private void SliderMaster_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderMaster_Changed(sender, e);
         }
         private void SliderMaxOnScreen_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
@@ -558,11 +474,6 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.SliderTargets_Changed(sender, e);
-        }
-        private void SliderVideoVolume_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderVideoVolume_Changed(sender, e);
         }
         private void SliderWhisperVol_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {

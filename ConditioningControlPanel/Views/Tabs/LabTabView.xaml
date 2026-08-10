@@ -402,151 +402,39 @@
                     </Button>
                 </Grid>
     
-                <!-- Engine bar — slim webcam tracking controls (reproportioned from the old card).
-                     Named so VelvetBtnWebcam can borrow it into a popup (reparent on open,
-                     restore on close — same instance, all handlers stay valid). -->
-                <Border x:Name="LabWebcamEngineBar" x:FieldModifier="internal" CornerRadius="16" Margin="9,4,9,12" Padding="16,14"
-                        Background="{DynamicResource PanelBgBrush}" BorderBrush="{DynamicResource PanelAccentHoverBrush}" BorderThickness="1">
-                    <StackPanel>
-                        <WrapPanel Orientation="Horizontal">
-                            <!-- label -->
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,18,4">
-                                <Border Width="38" Height="38" CornerRadius="11" Margin="0,0,11,0"
-                                        Background="{DynamicResource AccentTintedBgBrush}" BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
-                                    <Image Width="20" Height="20" Source="{Binding Source='👁', Converter={StaticResource EmojiToImageSource}}"/>
-                                </Border>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Webcam tracking" Foreground="{DynamicResource TextLightBrush}" FontWeight="Bold" FontSize="15"/>
-                                    <TextBlock Text="local · on-device" Foreground="{DynamicResource TextMutedBrush}" FontFamily="Consolas" FontSize="11"/>
-                                </StackPanel>
-                            </StackPanel>
-                            <!-- 6-blink → stop & recalibrate shortcut toggle -->
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,18,4"
-                                        ToolTip="Blink fast 6 times in a row to stop everything and jump to recalibration.">
-                                <CheckBox x:Name="ChkBlinkRecalWebcamBar" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                          Checked="ChkBlinkRecalShortcut_Changed" Unchecked="ChkBlinkRecalShortcut_Changed"/>
-                                <TextBlock Text="Blink to recalibrate" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" VerticalAlignment="Center" Margin="7,0,0,0"/>
-                            </StackPanel>
-                            <!-- camera -->
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,12,4">
-                                <TextBlock Text="CAM" Foreground="{DynamicResource TextDimBrush}" FontFamily="Consolas" FontSize="10.5" VerticalAlignment="Center" Margin="0,0,7,0"/>
-                                <ComboBox x:Name="CmbWebcamDevice" x:FieldModifier="internal" Width="150"
-                                          Foreground="Black" Background="White"
-                                          BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" VerticalAlignment="Center"
-                                          ToolTip="Pick the capture device to use for blink / gaze tracking. If your physical webcam doesn't show its in-use light, you may have a virtual camera selected (OBS, Snap, etc.) — switch here, then hit Start."
-                                          SelectionChanged="CmbWebcamDevice_SelectionChanged"/>
-                                <Button x:Name="BtnWebcamDeviceRefresh" Content="↻"
-                                        ToolTip="Re-scan connected video-capture devices."
-                                        Padding="9,3" Margin="6,0,0,0" VerticalAlignment="Center"
-                                        Background="Transparent" Foreground="{DynamicResource PinkBrush}"
-                                        BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                                        FontSize="12" FontWeight="Bold" Cursor="Hand"
-                                        Click="BtnWebcamDeviceRefresh_Click">
-                                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
-                                </Button>
-                            </StackPanel>
-                            <!-- monitor -->
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,12,4">
-                                <TextBlock Text="MON" Foreground="{DynamicResource TextDimBrush}" FontFamily="Consolas" FontSize="10.5" VerticalAlignment="Center" Margin="0,0,7,0"/>
-                                <ComboBox x:Name="CmbWebcamMonitor" x:FieldModifier="internal" Width="140"
-                                          Foreground="Black" Background="White"
-                                          BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" VerticalAlignment="Center"
-                                          ToolTip="{loc:Str webcam_monitor_tooltip}"
-                                          SelectionChanged="CmbWebcamMonitor_SelectionChanged"/>
-                            </StackPanel>
-                            <!-- status pill -->
-                            <Border x:Name="LabTrackerPill" x:FieldModifier="internal" CornerRadius="9" Padding="11,7" Margin="0,4,16,4" VerticalAlignment="Center"
-                                    Background="{DynamicResource PanelBgBrush}" BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Ellipse x:Name="LabTrackerDot" x:FieldModifier="internal" Width="8" Height="8" Fill="{DynamicResource TextMutedBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                    <TextBlock x:Name="TxtWebcamDebugStatus" x:FieldModifier="internal" Text="Stopped" Foreground="{DynamicResource TextLightBrush}"
-                                               FontFamily="Consolas" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </Border>
-                            <!-- actions -->
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,0,4">
-                                <Button x:Name="BtnWebcamReviewPrivacy" Content="Privacy info"
-                                        ToolTip="{loc:Str tooltip_webcam_review_privacy}"
-                                        Padding="10,6" Margin="0,0,6,0" VerticalAlignment="Center"
-                                        Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
-                                        BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
-                                        FontSize="11" Cursor="Hand" Click="BtnWebcamReviewPrivacy_Click">
-                                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
-                                </Button>
-                                <Button x:Name="BtnWebcamDebugCalibrate" Content="Calibrate"
-                                        ToolTip="{loc:Str tooltip_webcam_calibrate}"
-                                        Padding="11,6" Margin="0,0,6,0" VerticalAlignment="Center"
-                                        Background="Transparent" Foreground="{DynamicResource PinkBrush}"
-                                        BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                                        FontSize="11" FontWeight="SemiBold" Cursor="Hand" Click="BtnWebcamDebugCalibrate_Click">
-                                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
-                                </Button>
-                                <Button x:Name="BtnWebcamDebugQuickRecal" Content="Quick Recal"
-                                        ToolTip="One-dot drift correction. Stare at the pink center dot for ~2 s — a constant nudge is added to the cursor so it lands where you're looking, no full recalibration needed."
-                                        Padding="11,6" Margin="0,0,6,0" VerticalAlignment="Center"
-                                        Background="Transparent" Foreground="{DynamicResource PinkBrush}"
-                                        BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                                        FontSize="11" FontWeight="SemiBold" Cursor="Hand" Click="BtnWebcamDebugQuickRecal_Click">
-                                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
-                                </Button>
-                                <Button x:Name="BtnWebcamDebugStart" x:FieldModifier="internal" Content="Start tracking"
-                                        ToolTip="{loc:Str tooltip_webcam_start_tracking}"
-                                        Padding="14,7" VerticalAlignment="Center"
-                                        Background="{DynamicResource SuccessGreenBrush}" Foreground="Black" BorderThickness="0"
-                                        FontWeight="Bold" FontSize="12" Cursor="Hand" Click="BtnWebcamDebugStart_Click">
-                                    <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="9"/></Style></Button.Resources>
-                                </Button>
-                            </StackPanel>
-                        </WrapPanel>
-    
-                        <!-- Advanced / diagnostics (everything from the old card preserved) -->
-                        <Expander Header="Advanced" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,12,0,0">
-                            <StackPanel Margin="4,8,0,0">
-                                <WrapPanel Orientation="Horizontal">
-                                    <Button x:Name="BtnWebcamDebugTrackerTest" Content="Tracker Test"
-                                            ToolTip="{loc:Str tooltip_webcam_tracker_test}"
-                                            Padding="11,6" Margin="0,0,10,8" VerticalAlignment="Center"
-                                            Background="Transparent" Foreground="{DynamicResource SecondaryBrush}"
-                                            BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1"
-                                            FontSize="11" FontWeight="SemiBold" Cursor="Hand" Click="BtnWebcamDebugTrackerTest_Click">
-                                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
-                                    </Button>
-                                    <Button x:Name="BtnWebcamRevokeConsent" Content="Revoke consent"
-                                            ToolTip="Stops webcam tracking, deletes calibration data, and clears your consent. You'll be re-prompted next time you enable a webcam feature."
-                                            Padding="11,6" Margin="0,0,10,8" VerticalAlignment="Center"
-                                            Background="Transparent" Foreground="{DynamicResource DangerBrush}"
-                                            BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1"
-                                            FontSize="11" FontWeight="SemiBold" Cursor="Hand" Click="BtnWebcamRevokeConsent_Click">
-                                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
-                                    </Button>
-                                    <CheckBox x:Name="ChkWebcamDebugCursor" x:FieldModifier="internal" Content="Show debug gaze cursor"
-                                              ToolTip="{loc:Str tooltip_webcam_show_debug_cursor}"
-                                              Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,0,8"
-                                              Checked="ChkWebcamDebugCursor_Changed" Unchecked="ChkWebcamDebugCursor_Changed"/>
-                                    <CheckBox x:Name="ChkWebcamDriftCorrection" x:FieldModifier="internal" Content="Auto drift correction"
-                                              ToolTip="Keeps the calibration fresh automatically: when you click somewhere while looking at it, the gaze mapping gets a tiny nudge toward the click. Corrects the slow drift that used to need a Quick Recal."
-                                              Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="12,0,0,8"
-                                              Checked="ChkWebcamDriftCorrection_Changed" Unchecked="ChkWebcamDriftCorrection_Changed"/>
-                                </WrapPanel>
-                                <TextBlock x:Name="TxtWebcamDebugCounters" x:FieldModifier="internal"
-                                           Text="Face: — | Blinks: 0 | Gaze: —"
-                                           Foreground="{DynamicResource SuccessGreenBrush}" FontFamily="Consolas" FontSize="12"
-                                           FontWeight="SemiBold" Margin="0,2,0,0"/>
-                                <Border Background="{DynamicResource PreviewBgBrush}" CornerRadius="6" Padding="10" Margin="0,8,0,0">
-                                    <TextBlock x:Name="TxtWebcamDebugLog" x:FieldModifier="internal" Text="(events will appear here)"
-                                               Foreground="{DynamicResource SuccessGreenBrush}" FontFamily="Consolas" FontSize="11"
-                                               TextWrapping="Wrap" MinHeight="60"/>
-                                </Border>
-                                <CheckBox x:Name="ChkRestrictGazeToCalScreen" x:FieldModifier="internal"
-                                          Content="Restrict gaze-reactive effects to the calibrated screen"
-                                          ToolTip="Advanced: leave on unless you know what you're doing. Affects how gaze-reactive effects map to your monitors."
-                                          Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,10,0,0"
-                                          Checked="ChkRestrictGazeToCalScreen_Changed"
-                                          Unchecked="ChkRestrictGazeToCalScreen_Changed"/>
-                            </StackPanel>
-                        </Expander>
-                    </StackPanel>
+                <!-- Webcam configuration lives in Settings → Devices since Phase 2 of the UX
+                     restructure. The engine bar that used to sit here (camera + monitor pickers,
+                     calibrate, tracker start/stop, diagnostics) moved there wholesale, together
+                     with the DetachWebcamBarInto reparenting trick that used to lend it to the
+                     Webcam popup. What is left is a read-only chip: the Eyes cards below dim
+                     against tracker state, so the state has to be visible here — but it is
+                     DISPLAY ONLY. Painted by UpdateWebcamStatusChips (MainWindow.LabTab.cs). -->
+                <Border x:Name="WebcamStatusChipLab" x:FieldModifier="internal" CornerRadius="14" Margin="9,4,9,12" Padding="16,13"
+                        Background="{DynamicResource PanelBgBrush}" BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Ellipse Grid.Column="0" x:Name="WebcamStatusChipLabDot" x:FieldModifier="internal" Width="9" Height="9"
+                                 Fill="{DynamicResource TextMutedBrush}" Margin="0,0,11,0" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="{loc:Str set2_webcam_chip_label}" Foreground="{DynamicResource TextLightBrush}"
+                                       FontWeight="Bold" FontSize="14"/>
+                            <TextBlock x:Name="TxtWebcamStatusChipLab" x:FieldModifier="internal" Text="Stopped"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontFamily="Consolas" FontSize="11"/>
+                        </StackPanel>
+                        <Button Grid.Column="2" Content="{loc:Str set2_configure_in_settings}"
+                                Padding="12,6" VerticalAlignment="Center" Cursor="Hand"
+                                Background="Transparent" Foreground="{DynamicResource PinkBrush}"
+                                BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" FontSize="11" FontWeight="SemiBold"
+                                Click="BtnOpenDeviceSettings_Click">
+                            <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+                        </Button>
+                    </Grid>
                 </Border>
+
     
                 <!-- Eyes cards (dim when tracker is off — gated in code-behind) -->
                 <UniformGrid Rows="1" Columns="2">
@@ -584,12 +472,8 @@
                                     </Border>
                                     <Button x:Name="HelpBtnGazeMinigame" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" Tag="GazeMinigame" Margin="6,0,0,0" VerticalAlignment="Center"/>
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"
-                                            ToolTip="Blink fast 6 times in a row to stop everything and jump to recalibration.">
-                                    <CheckBox x:Name="ChkBlinkRecalGaze" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                              Checked="ChkBlinkRecalShortcut_Changed" Unchecked="ChkBlinkRecalShortcut_Changed"/>
-                                    <TextBlock Text="Blink to recal" Foreground="{DynamicResource TextMutedBrush}" FontSize="10.5" VerticalAlignment="Center" Margin="6,0,0,0"/>
-                                </StackPanel>
+                                <!-- "Blink to recalibrate" used to be duplicated on five cards for one
+                                     bool. Settings → Devices owns the single toggle now. -->
                             </Grid>
                             <TextBlock Text="{loc:Str label_gaze_minigame_description}"
                                        Foreground="{DynamicResource TextMutedBrush}" FontSize="12.5" TextWrapping="Wrap" Margin="0,0,0,14"/>
@@ -644,12 +528,7 @@
                                     <TextBlock Text="{loc:Str label_focus_gaze}" Style="{StaticResource LabCardTitle}"/>
                                     <Button x:Name="HelpBtnFocusGaze" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" Tag="FocusGaze" Margin="6,0,0,0" VerticalAlignment="Center"/>
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"
-                                            ToolTip="Blink fast 6 times in a row to stop everything and jump to recalibration.">
-                                    <CheckBox x:Name="ChkBlinkRecalFocus" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                              Checked="ChkBlinkRecalShortcut_Changed" Unchecked="ChkBlinkRecalShortcut_Changed"/>
-                                    <TextBlock Text="Blink to recal" Foreground="{DynamicResource TextMutedBrush}" FontSize="10.5" VerticalAlignment="Center" Margin="6,0,0,0"/>
-                                </StackPanel>
+                                <!-- see the Gaze card: the blink-recal toggle lives in Settings → Devices -->
                             </Grid>
                             <TextBlock Text="{loc:Str label_focus_gaze_description}"
                                        Foreground="{DynamicResource TextMutedBrush}" FontSize="12.5" TextWrapping="Wrap" Margin="0,0,0,12"/>

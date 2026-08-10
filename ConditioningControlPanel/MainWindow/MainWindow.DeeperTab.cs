@@ -127,7 +127,7 @@ namespace ConditioningControlPanel
         internal void ChkEnableDeeper_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            var enabled = SettingsTab.ChkEnableDeeper.IsChecked ?? true;
+            var enabled = AppSettingsTab.ChkEnableDeeper.IsChecked ?? true;
             if (App.Settings?.Current is { } s) s.EnableDeeper = enabled;
             if (BtnDeeper != null) BtnDeeper.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
             // If the user just disabled Deeper while it's the active tab, fall back to Settings.

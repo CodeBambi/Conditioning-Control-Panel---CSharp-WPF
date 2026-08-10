@@ -1,0 +1,46 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.AppSettingsSections.NotificationsSettingsSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             mc:Ignorable="d" d:DesignWidth="760">
+
+    <!-- ================================================================
+         SETTINGS · NOTIFICATIONS (Phase 2)
+
+         One row, and that is the honest size of it: ChkIntakeNudge is the
+         only notification/popup preference that exists in AppSettings.
+         It MOVED here from Views/Tabs/SettingsTabView.xaml:1363-1367, where
+         it sat inside the permanently-collapsed LegacyDashboardHost and had
+         therefore been unreachable since that host was hidden - the toggle
+         users kept asking for was already written, just invisible.
+
+         Same x:Name, same loc keys, same "no Changed handler" contract:
+         MainWindow.Marquee.cs:CheckIntakePassNudge reads the setting at
+         launch, so nothing has to happen when it is flipped. It is loaded
+         by MainWindow.Settings.cs:LoadSettings and written by SaveSettings,
+         both re-pointed from SettingsTab to AppSettingsTab.
+
+         Deliberately NOT added: toast/marquee suppression switches. No such
+         property exists and Phase 2 does not invent settings.
+         ================================================================ -->
+
+    <StackPanel>
+
+        <TextBlock Text="{loc:Str set2_section_notifications}" Style="{StaticResource SectionHeader}"/>
+
+        <Border Style="{StaticResource SectionPanel}" Padding="15" Margin="0,0,0,15">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,4"
+                            ToolTip="{loc:Str tooltip_intake_nudge_enabled}">
+                    <CheckBox x:Name="ChkIntakeNudge" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" IsChecked="True"/>
+                    <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str label_intake_nudge_enabled}" Margin="6,0,0,0"/>
+                </StackPanel>
+                <TextBlock Text="{loc:Str set2_intake_nudge_hint}"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+    </StackPanel>
+</UserControl>

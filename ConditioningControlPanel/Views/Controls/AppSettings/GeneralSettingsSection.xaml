@@ -1,0 +1,234 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.AppSettingsSections.GeneralSettingsSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             mc:Ignorable="d" d:DesignWidth="620">
+
+    <!-- ================================================================
+         SETTINGS ▸ GENERAL  (UX restructure, Phase 2)
+
+         Language, startup, the window/tray contract, and the Deeper master
+         switch. Three different origins, one page:
+
+         · LANGUAGE is a SECOND surface by explicit owner decision (PLAN §7
+           decision #8: "Keep in chrome AND list in Settings/General"). It is
+           not a duplicate editor - CmbLanguageSetting and the chrome's
+           CmbLanguagePill both call MainWindow.ApplyLanguageSelection and are
+           re-selected from each other by SyncLanguageSelectors, so there is
+           still exactly one code path that writes AppSettings.Language.
+
+         · STARTUP (ChkWinStart / ChkStartHidden / ChkVidLaunch / ChkAutoRun
+           and the startup-video picker) MOVED here from the permanently
+           Collapsed LegacyDashboardHost (Views/Tabs/SettingsTabView.xaml
+           :1298-1394). Those were the copies live code named - LoadSettings,
+           SaveSettings, ChkWinStart_Click, SyncWinStartState and
+           RequestToggleWindowsStartup all address them by x:Name - so the
+           names travel with the controls and the MainWindow partials were
+           re-pointed from SettingsTab.X to AppSettingsTab.X. The twins in
+           Features/SystemFeatureControl.xaml became read-only mirrors in the
+           same change (Devices-agent precedent for the panic key).
+
+         · TRAY is a read-only explainer. There is no minimize-to-tray
+           preference in AppSettings - closing ALWAYS minimises
+           (MainWindow.WindowChrome.cs:324) - and Phase 2 documents behaviour
+           rather than inventing settings.
+
+         · ChkEnableDeeper MOVED from SettingsTabView.xaml:1437. It drives
+           BtnDeeper's visibility, so it is a navigation switch as much as a
+           feature switch, which is why it sits in General and not in Play.
+
+         Quiet surface (PLAN §2.8): no storyboards, no ambient canvas.
+         ================================================================ -->
+
+    <StackPanel>
+
+        <TextBlock Text="{loc:Str set2_section_general}" Style="{StaticResource SectionHeader}"/>
+
+        <!-- ============================= language ============================= -->
+        <Border Style="{StaticResource SectionPanel}" Padding="15" Margin="0,0,0,12">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
+                           Source="{Binding Source='🌍', Converter={StaticResource EmojiToImageSource}}"/>
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str set2_general_language_title}"
+                               FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                </StackPanel>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str label_language}"/>
+                        <TextBlock Text="{loc:Str set2_general_language_hint}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <ComboBox Grid.Column="1" x:Name="CmbLanguageSetting" x:FieldModifier="internal"
+                              Style="{StaticResource DarkComboBoxStyle}" FontSize="11"
+                              Width="190" Height="26" VerticalAlignment="Center"
+                              ToolTip="{loc:Str set2_general_language_hint}"
+                              SelectionChanged="CmbLanguageSetting_SelectionChanged"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- ============================== startup ============================= -->
+        <Border Style="{StaticResource SectionPanel}" Padding="15" Margin="0,0,0,12">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
+                           Source="{Binding Source='🚀', Converter={StaticResource EmojiToImageSource}}"/>
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str set2_general_startup_title}"
+                               FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                </StackPanel>
+
+                <!-- Launch with Windows. Click (not Checked/Unchecked) on purpose: the handler
+                     registers an OS shortcut and may revert the box, and a Click handler does not
+                     re-fire when it does. MainWindow.RequestToggleWindowsStartup relies on that. -->
+                <Grid ToolTip="{loc:Str tooltip_launch_automatically_when_windows_starts}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_win_start}"/>
+                        <TextBlock Text="{loc:Str tooltip_launch_automatically_when_windows_starts}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" x:Name="ChkWinStart" x:FieldModifier="internal"
+                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                              Click="ChkWinStart_Click"/>
+                </Grid>
+
+                <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Opacity="0.5" Margin="0,12,0,0"/>
+
+                <Grid Margin="0,12,0,0" ToolTip="{loc:Str tooltip_start_minimized_to_system_tray}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_start_hidden}"/>
+                        <TextBlock Text="{loc:Str tooltip_start_minimized_to_system_tray}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" x:Name="ChkStartHidden" x:FieldModifier="internal"
+                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                              Click="ChkStartHidden_Click"/>
+                </Grid>
+
+                <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Opacity="0.5" Margin="0,12,0,0"/>
+
+                <Grid Margin="0,12,0,0" ToolTip="{loc:Str tooltip_start_the_engine_automatically_on_launch}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_auto_run}"/>
+                        <TextBlock Text="{loc:Str tooltip_start_the_engine_automatically_on_launch}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" x:Name="ChkAutoRun" x:FieldModifier="internal"
+                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                              Checked="ChkAutoRun_Changed" Unchecked="ChkAutoRun_Changed"/>
+                </Grid>
+
+                <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Opacity="0.5" Margin="0,12,0,0"/>
+
+                <Grid Margin="0,12,0,0" ToolTip="{loc:Str tooltip_play_a_mandatory_video_when_app_opens}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_vid_launch}"/>
+                        <TextBlock Text="{loc:Str tooltip_play_a_mandatory_video_when_app_opens}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" x:Name="ChkVidLaunch" x:FieldModifier="internal"
+                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                              Checked="ChkVidLaunch_Changed" Unchecked="ChkVidLaunch_Changed"/>
+                </Grid>
+
+                <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Opacity="0.5" Margin="0,12,0,0"/>
+
+                <!-- Startup video picker. TxtStartupVideo is written by MainWindow.Settings.cs
+                     (LoadSettings) and by both buttons' MainWindow handlers, so the name matters. -->
+                <Grid Margin="0,12,0,0" ToolTip="{loc:Str tooltip_select_a_specific_video_to_play_on_startup_wh}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str label_startup_video}"/>
+                        <TextBlock x:Name="TxtStartupVideo" x:FieldModifier="internal"
+                                   Text="{loc:Str label_random}" TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource PinkBrush}" FontSize="11" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <Button Grid.Column="1" x:Name="BtnSelectStartupVideo" Content="📁" Width="36"
+                            Style="{StaticResource OutlineButton}" Padding="6,4" VerticalAlignment="Center"
+                            Click="BtnSelectStartupVideo_Click"
+                            ToolTip="{loc:Str tooltip_browse_for_startup_video}"/>
+                    <Button Grid.Column="2" x:Name="BtnClearStartupVideo" Content="✕" Width="36"
+                            Style="{StaticResource OutlineButton}" Padding="6,4" Margin="6,0,0,0"
+                            VerticalAlignment="Center"
+                            Click="BtnClearStartupVideo_Click"
+                            ToolTip="{loc:Str tooltip_clear_selection_use_random}"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- ========================== window & tray ========================== -->
+        <!-- Read-only by design. ✕ minimises to the tray and always has; there is no
+             AppSettings property behind it, and Phase 2 does not invent one. Saying so
+             here is the fix for "the app won't close" - it is the app's most-reported
+             non-bug. -->
+        <Border Style="{StaticResource SectionPanel}" Padding="15" Margin="0,0,0,12">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
+                           Source="{Binding Source='🪟', Converter={StaticResource EmojiToImageSource}}"/>
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str set2_general_tray_title}"
+                               FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                </StackPanel>
+                <TextBlock Text="{loc:Str set2_general_tray_body}" TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ============================== Deeper ============================= -->
+        <Border x:Name="DeeperGeneralCard" CornerRadius="12" Padding="15" Margin="0,0,0,12"
+                Background="{DynamicResource ElevatedSurfaceBrush}"
+                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
+                           Source="{Binding Source='🌊', Converter={StaticResource EmojiToImageSource}}"/>
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_deeper}"
+                               Foreground="{DynamicResource DeeperAccentBrush}"
+                               FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                </StackPanel>
+                <Grid ToolTip="{loc:Str tooltip_deeper_enable}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_deeper_enable}"/>
+                        <TextBlock Text="{loc:Str tooltip_deeper_enable}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" x:Name="ChkEnableDeeper" x:FieldModifier="internal"
+                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center" IsChecked="True"
+                              Checked="ChkEnableDeeper_Changed" Unchecked="ChkEnableDeeper_Changed"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+    </StackPanel>
+</UserControl>

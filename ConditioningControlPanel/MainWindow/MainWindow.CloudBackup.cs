@@ -36,8 +36,8 @@ namespace ConditioningControlPanel
         {
             if (App.ProfileSync == null) return;
 
-            PatreonTab.BtnBackupSettingsNow.IsEnabled = false;
-            PatreonTab.BtnBackupSettingsNow.Content = Loc.Get("btn_backing_up");
+            AppSettingsTab.BtnBackupSettingsNow.IsEnabled = false;
+            AppSettingsTab.BtnBackupSettingsNow.Content = Loc.Get("btn_backing_up");
 
             try
             {
@@ -73,8 +73,8 @@ namespace ConditioningControlPanel
             }
             finally
             {
-                PatreonTab.BtnBackupSettingsNow.IsEnabled = true;
-                PatreonTab.BtnBackupSettingsNow.Content = Loc.Get("btn_backup_now");
+                AppSettingsTab.BtnBackupSettingsNow.IsEnabled = true;
+                AppSettingsTab.BtnBackupSettingsNow.Content = Loc.Get("btn_backup_now");
             }
         }
 
@@ -94,8 +94,8 @@ namespace ConditioningControlPanel
 
             if (confirm != MessageBoxResult.Yes) return;
 
-            PatreonTab.BtnRestoreSettings.IsEnabled = false;
-            PatreonTab.BtnRestoreSettings.Content = Loc.Get("btn_restoring");
+            AppSettingsTab.BtnRestoreSettings.IsEnabled = false;
+            AppSettingsTab.BtnRestoreSettings.Content = Loc.Get("btn_restoring");
 
             try
             {
@@ -156,8 +156,8 @@ namespace ConditioningControlPanel
             }
             finally
             {
-                PatreonTab.BtnRestoreSettings.IsEnabled = true;
-                PatreonTab.BtnRestoreSettings.Content = Loc.Get("btn_restore_from_cloud");
+                AppSettingsTab.BtnRestoreSettings.IsEnabled = true;
+                AppSettingsTab.BtnRestoreSettings.Content = Loc.Get("btn_restore_from_cloud");
             }
         }
 
@@ -165,8 +165,8 @@ namespace ConditioningControlPanel
         {
             if (App.ProfileSync == null) return;
 
-            PatreonTab.BtnExportData.IsEnabled = false;
-            PatreonTab.BtnExportData.Content = Loc.Get("btn_exporting");
+            AppSettingsTab.BtnExportData.IsEnabled = false;
+            AppSettingsTab.BtnExportData.Content = Loc.Get("btn_exporting");
 
             try
             {
@@ -210,8 +210,8 @@ namespace ConditioningControlPanel
             }
             finally
             {
-                PatreonTab.BtnExportData.IsEnabled = true;
-                PatreonTab.BtnExportData.Content = Loc.Get("btn_export_my_data");
+                AppSettingsTab.BtnExportData.IsEnabled = true;
+                AppSettingsTab.BtnExportData.Content = Loc.Get("btn_export_my_data");
             }
         }
 
@@ -242,17 +242,17 @@ namespace ConditioningControlPanel
                 if (info?.BackedUpAt != null)
                 {
                     var dateStr = info.BackedUpAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt");
-                    PatreonTab.TxtCloudBackupStatus.Text = Loc.GetF("label_last_backup_0_v_1", dateStr, info.AppVersion);
+                    AppSettingsTab.TxtCloudBackupStatus.Text = Loc.GetF("label_last_backup_0_v_1", dateStr, info.AppVersion);
                 }
                 else
                 {
-                    PatreonTab.TxtCloudBackupStatus.Text = Loc.Get("label_no_cloud_backup_found_back_up_your_settings_t");
+                    AppSettingsTab.TxtCloudBackupStatus.Text = Loc.Get("label_no_cloud_backup_found_back_up_your_settings_t");
                 }
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("Failed to update backup status: {Error}", ex.Message);
-                PatreonTab.TxtCloudBackupStatus.Text = Loc.Get("label_could_not_check_backup_status");
+                AppSettingsTab.TxtCloudBackupStatus.Text = Loc.Get("label_could_not_check_backup_status");
             }
         }
 

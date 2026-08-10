@@ -28,6 +28,7 @@ namespace ConditioningControlPanel.Services
             "discord", "quests", "achievements", "enhancements",
             "programs", "leaderboard",                                         // You
             "assets",                                                          // Library
+            "appsettings",                                                     // Settings (pinned last)
         };
 
         /// <summary>

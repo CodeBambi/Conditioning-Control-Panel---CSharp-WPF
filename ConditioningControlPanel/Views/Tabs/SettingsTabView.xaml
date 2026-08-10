@@ -1295,40 +1295,25 @@
                                           Checked="ChkDualMon_Changed" Unchecked="ChkDualMon_Changed"/>
                                 <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_multi_mon}" Margin="6,0,0,0"/>
                             </StackPanel>
-                            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="0,3"
-                                        ToolTip="{loc:Str tooltip_launch_automatically_when_windows_starts}">
-                                <CheckBox x:Name="ChkWinStart" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" Click="ChkWinStart_Click"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_win_start}" Margin="6,0,0,0"/>
-                            </StackPanel>
-    
-                            <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,3"
-                                        ToolTip="{loc:Str tooltip_play_a_mandatory_video_when_app_opens}">
-                                <CheckBox x:Name="ChkVidLaunch" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_vid_launch}" Margin="6,0,0,0"/>
-                            </StackPanel>
-                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,3"
-                                        ToolTip="{loc:Str tooltip_start_the_engine_automatically_on_launch}">
-                                <CheckBox x:Name="ChkAutoRun" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_auto_run}" Margin="6,0,0,0"/>
-                            </StackPanel>
-    
-                            <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" Margin="0,3"
-                                        ToolTip="{loc:Str tooltip_start_minimized_to_system_tray}">
-                                <CheckBox x:Name="ChkStartHidden" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" Click="ChkStartHidden_Click"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_start_hidden}" Margin="6,0,0,0"/>
-                            </StackPanel>
-                            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="0,3"
-                                        ToolTip="{loc:Str tooltip_danger_completely_disables_panic_key_you_won}">
-                                <CheckBox x:Name="ChkNoPanic" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" Checked="ChkNoPanic_Changed" Unchecked="ChkNoPanic_Changed"/>
-                                <helpers:EmojiTextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_no_panic}" Margin="6,0,0,0" Foreground="#FF6B6B"/>
-                            </StackPanel>
-    
-                            <StackPanel Grid.Row="3" Grid.Column="0" Orientation="Horizontal" Margin="0,3"
-                                        ToolTip="{loc:Str tooltip_disable_all_network_features_updates_ai_leade}">
-                                <CheckBox x:Name="ChkOfflineMode" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                          Checked="ChkOfflineMode_Changed" Unchecked="ChkOfflineMode_Changed"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_offline_mode}" Margin="6,0,0,0"/>
-                            </StackPanel>
+                            <!-- Phase 2 moved the startup group out of here into
+                                 Views/Controls/AppSettings/GeneralSettingsSection.xaml:
+                                 ChkWinStart (row 0 col 1), ChkVidLaunch + ChkAutoRun (row 1),
+                                 ChkStartHidden (row 2 col 0) and the startup-video picker below.
+                                 They kept their x:Names — LoadSettings/SaveSettings,
+                                 ChkWinStart_Click, ChkStartHidden_Click, SyncWinStartState and
+                                 RequestToggleWindowsStartup address them by name, so those
+                                 MainWindow partials were re-pointed to AppSettingsTab and the twins
+                                 in Features/SystemFeatureControl.xaml became read-only mirrors.
+
+                                 ChkNoPanic moved to Settings → Devices in the same phase. It was the
+                                 copy live code wrote (MainWindow.Settings.cs, .UiUpdates.cs, .Lab.cs's
+                                 lockdown grey-out), which is why this one moved and the System
+                                 popup's twin became a read-only display.
+
+                                 ChkOfflineMode (row 3 col 0) moved to Settings → Data for the same
+                                 reason: RequestToggleOfflineMode / ApplyOfflineMode /
+                                 SyncOfflineModeState all drive it by name. -->
+
                             <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Margin="0,3"
                                         ToolTip="Force the lightest rendering mode (smaller decoded images, no glow, cheaper blur). Use if the app stutters when many effects are on screen.">
                                 <CheckBox x:Name="ChkPerformanceMode" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
@@ -1356,15 +1341,11 @@
                                 <TextBlock Style="{StaticResource SettingLabel}" Text="Unified overlay renderer" Margin="6,0,0,0"/>
                             </StackPanel>
 
-                            <!-- Weekly intake pass reminder. Row 5 column 1 was the one free cell in
-                                 this grid, so no RowDefinition change was needed. Read at launch by
-                                 MainWindow.Marquee.cs:CheckIntakePassNudge; no Changed handler because
-                                 nothing needs to happen until the next launch. -->
-                            <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" Margin="0,3"
-                                        ToolTip="{loc:Str tooltip_intake_nudge_enabled}">
-                                <CheckBox x:Name="ChkIntakeNudge" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" IsChecked="True"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str label_intake_nudge_enabled}" Margin="6,0,0,0"/>
-                            </StackPanel>
+                            <!-- Weekly intake pass reminder (ChkIntakeNudge) MOVED in Phase 2 to
+                                 Views/Controls/AppSettings/NotificationsSettingsSection.xaml. It
+                                 was unreachable here (LegacyDashboardHost is Collapsed forever);
+                                 Settings · Notifications is now its one editor. Row 5 column 1 is
+                                 free again. -->
 
                             <!-- Reduced motion. Sits with the other rendering switches because it is
                                  one: Reduced/Off stop every ambient loop and particle field before
@@ -1384,67 +1365,29 @@
                             </StackPanel>
                         </Grid>
     
-                        <!-- Startup Video Selection -->
-                        <StackPanel Orientation="Horizontal" Margin="0,5,0,0"
-                                    ToolTip="{loc:Str tooltip_select_a_specific_video_to_play_on_startup_wh}">
-                            <TextBlock Text="{loc:Str label_startup_video}" Foreground="#B0B0B0" FontSize="10" VerticalAlignment="Center" Width="75"/>
-                            <TextBlock x:Name="TxtStartupVideo" x:FieldModifier="internal" Text="{loc:Str label_random}" Foreground="{DynamicResource TextLightBrush}" FontSize="10"
-                                       VerticalAlignment="Center" Width="90" TextTrimming="CharacterEllipsis"/>
-                            <Button Content="📁" Background="#40FFFFFF" Foreground="White" BorderThickness="0"
-                                    Padding="5,1" Margin="4,0,0,0" Cursor="Hand" Click="BtnSelectStartupVideo_Click"
-                                    ToolTip="{loc:Str tooltip_browse_for_startup_video}"/>
-                            <Button Content="✕" Background="#40FF6B6B" Foreground="White" BorderThickness="0"
-                                    Padding="5,1" Margin="4,0,0,0" Cursor="Hand" Click="BtnClearStartupVideo_Click"
-                                    ToolTip="{loc:Str tooltip_clear_selection_use_random}"/>
-                        </StackPanel>
-    
-                        <!-- Phrase Backup (export/import all editable phrase pools) -->
-                        <Grid Margin="0,6,0,0"
-                              ToolTip="Save or restore your lock-card phrases, subliminals, mantras and other custom text. Use this to back up your phrases before an update or when moving to a new PC.">
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="Phrase backup" Foreground="#B0B0B0" FontSize="11" VerticalAlignment="Center"/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                <Button Content="📤 Export" Style="{StaticResource OutlineButton}" Padding="8,3" Margin="0,0,6,0"
-                                        Click="BtnExportPhrases_Click"
-                                        ToolTip="Save all your custom phrases to a backup file."/>
-                                <Button Content="📥 Import" Style="{StaticResource OutlineButton}" Padding="8,3"
-                                        Click="BtnImportPhrases_Click"
-                                        ToolTip="Restore custom phrases from a backup file (replaces your current phrases)."/>
-                            </StackPanel>
-                        </Grid>
+                        <!-- Startup Video Selection moved to Settings → General (Phase 2).
+                             TxtStartupVideo kept its x:Name: MainWindow.Settings.cs writes it on
+                             load and both picker buttons write it from MainWindow.UiUpdates.cs. -->
+
+                        <!-- Phrase Backup moved to Settings → Data (Phase 2). Those two buttons were
+                             the ONLY call sites of BtnExportPhrases_Click / BtnImportPhrases_Click
+                             (MainWindow.PresetIO.cs:62,93) in the app, and they sat inside this
+                             permanently-Collapsed host — the feature shipped unreachable. -->
 
                         <!-- Gaming Tip -->
                         <Grid Margin="0,5,0,0">
                             <TextBlock Text="{loc:Str label_use_borderless_windowed_for_overlays}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"
                                        ToolTip="{loc:Str tooltip_exclusive_fullscreen_games_block_overlays_use}"/>
-                            <Button x:Name="BtnPanicKey" x:FieldModifier="internal" Content="{loc:Str btn_escape}" Style="{StaticResource OutlineButton}"
-                                    HorizontalAlignment="Right" Padding="10,4" Click="BtnPanicKey_Click" ToolTip="{loc:Str tooltip_click_to_change_panic_key}"/>
+                            <!-- BtnPanicKey moved to Settings → Devices in Phase 2 (UpdatePanicKeyButton
+                                 writes its label, so the rebind surface had to travel with the name). -->
                         </Grid>
                     </StackPanel>
                 </Border>
     
-                <!-- Deeper Section -->
-                <Border x:Name="DeeperSection" CornerRadius="12" Padding="10,7" Margin="0,0,0,6"
-                        Background="{DynamicResource ElevatedSurfaceBrush}"
-                        BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1">
-                    <StackPanel>
-                        <Grid>
-                            <StackPanel Orientation="Horizontal">
-                                <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
-                                       Source="{Binding Source='🌊', Converter={StaticResource EmojiToImageSource}}"/>
-                                <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_deeper}"
-                                           Foreground="{DynamicResource DeeperAccentBrush}"/>
-                            </StackPanel>
-                        </Grid>
-                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0"
-                                    ToolTip="{loc:Str tooltip_deeper_enable}">
-                            <CheckBox x:Name="ChkEnableDeeper" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                      Checked="ChkEnableDeeper_Changed" Unchecked="ChkEnableDeeper_Changed"/>
-                            <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_deeper_enable}" Margin="6,0,0,0"/>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
+                <!-- The Deeper master switch (ChkEnableDeeper) moved to Settings → General in
+                     Phase 2. It gates BtnDeeper's visibility, so it is a navigation switch as much
+                     as a feature switch — and it was unreachable here. MainWindow.DeeperTab.cs and
+                     MainWindow.Settings.cs were re-pointed to AppSettingsTab. -->
             </StackPanel>
         </ScrollViewer>
         </Grid>
@@ -1821,182 +1764,22 @@
                 </Grid>
             </Border>
     
-            <!-- Audio Section + Quick Actions -->
+            <!-- Quick Actions
+                 The Audio section used to occupy the left half of this row. Phase 2 of the UX
+                 restructure moved it (verbatim, disclosure arrow dropped) to the Settings door -
+                 Views/Controls/AppSettings/AudioSettingsSection.xaml. Quick Links spans the row
+                 until Phase 3 re-lays Home. -->
             <Grid Grid.Row="1" Margin="0,5,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="5"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-    
-                <!-- Audio Section (left half) -->
-                <Border x:Name="AudioSection" Grid.Column="0" CornerRadius="12" Padding="9" Margin="0,0,0,6"
-                        Background="{DynamicResource ElevatedSurfaceBrush}"
-                        BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" VerticalAlignment="Stretch">
-                    <StackPanel>
-                        <Grid>
-                            <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_audio}" FontSize="12"/>
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                <Button x:Name="HelpBtnAudio" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" Tag="Audio" Margin="0,0,8,0"/>
-                                <!-- Expand/collapse the advanced audio options -->
-                                <ToggleButton x:Name="BtnAudioAdvanced" x:FieldModifier="internal"
-                                              ToolTip="Show advanced audio options (video &amp; duck volume, output device, ducking)"
-                                              Cursor="Hand" VerticalAlignment="Center">
-                                    <ToggleButton.Style>
-                                        <Style TargetType="ToggleButton">
-                                            <Setter Property="Background" Value="Transparent"/>
-                                            <Setter Property="BorderThickness" Value="0"/>
-                                            <Setter Property="Template">
-                                                <Setter.Value>
-                                                    <ControlTemplate TargetType="ToggleButton">
-                                                        <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="6,1">
-                                                            <TextBlock x:Name="arrow" Text="&#x25BE;" FontSize="13"
-                                                                       Foreground="{DynamicResource PinkBrush}"
-                                                                       RenderTransformOrigin="0.5,0.5"/>
-                                                        </Border>
-                                                        <ControlTemplate.Triggers>
-                                                            <Trigger Property="IsChecked" Value="True">
-                                                                <Setter TargetName="arrow" Property="RenderTransform">
-                                                                    <Setter.Value>
-                                                                        <RotateTransform Angle="180"/>
-                                                                    </Setter.Value>
-                                                                </Setter>
-                                                            </Trigger>
-                                                            <Trigger Property="IsMouseOver" Value="True">
-                                                                <Setter TargetName="arrow" Property="Foreground" Value="White"/>
-                                                            </Trigger>
-                                                        </ControlTemplate.Triggers>
-                                                    </ControlTemplate>
-                                                </Setter.Value>
-                                            </Setter>
-                                        </Style>
-                                    </ToggleButton.Style>
-                                </ToggleButton>
-                            </StackPanel>
-                        </Grid>
 
-                        <!-- Master Volume (always visible) -->
-                        <Grid Margin="0,4,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="45"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="32"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_master}" FontSize="10"
-                                       ToolTip="{loc:Str tooltip_master_volume_for_all_audio}"/>
-                            <Slider Grid.Column="1" x:Name="SliderMaster" x:FieldModifier="internal" Minimum="0" Maximum="100" Value="50"
-                                    Margin="4,0" ValueChanged="SliderMaster_Changed"
-                                    ToolTip="{loc:Str tooltip_overall_audio_volume_level}"/>
-                            <TextBlock x:Name="TxtMaster" x:FieldModifier="internal" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="50%" FontSize="10"/>
-                        </Grid>
+                <!-- MOVED to Settings/Audio (Phase 2): AudioSection -->
 
-                        <!-- Advanced audio options (collapsed by default, toggled by the down arrow) -->
-                        <StackPanel Visibility="{Binding IsChecked, ElementName=BtnAudioAdvanced, Converter={StaticResource BoolToVisibility}}">
-
-                        <!-- Auto-duck toggle -->
-                        <Grid Margin="0,6,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="{loc:Str label_duck}" Style="{StaticResource SettingLabel}" FontSize="10" VerticalAlignment="Center"
-                                       ToolTip="{loc:Str tooltip_automatically_reduce_other_app_volumes_during}"/>
-                            <CheckBox Grid.Column="1" x:Name="ChkAudioDuck" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                      IsChecked="True"
-                                      Checked="ChkAudioDuck_Changed" Unchecked="ChkAudioDuck_Changed"
-                                      ToolTip="{loc:Str tooltip_automatically_reduce_other_app_volumes_during}"/>
-                        </Grid>
-
-                        <!-- Video Volume -->
-                        <Grid Margin="0,4,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="45"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="32"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_video}" FontSize="10"
-                                       ToolTip="{loc:Str tooltip_volume_for_mandatory_videos}"/>
-                            <Slider Grid.Column="1" x:Name="SliderVideoVolume" x:FieldModifier="internal" Minimum="0" Maximum="100" Value="50"
-                                    Margin="4,0" ValueChanged="SliderVideoVolume_Changed"
-                                    ToolTip="{loc:Str tooltip_separate_volume_control_for_videos}"/>
-                            <TextBlock x:Name="TxtVideoVolume" x:FieldModifier="internal" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="50%" FontSize="10"/>
-                        </Grid>
-    
-                        <!-- Duck % -->
-                        <Grid Margin="0,4,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="45"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="32"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str label_duck}" FontSize="10"
-                                       ToolTip="{loc:Str tooltip_how_much_to_reduce_other_audio}"/>
-                            <Slider Grid.Column="1" x:Name="SliderDuck" x:FieldModifier="internal" Minimum="0" Maximum="100" Value="80"
-                                    Margin="4,0" ValueChanged="SliderDuck_Changed"
-                                    ToolTip="{loc:Str tooltip_ducking_percentage_80_reduce_other_audio_to_2}"/>
-                            <TextBlock x:Name="TxtDuck" x:FieldModifier="internal" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="80%" FontSize="10"/>
-                        </Grid>
-    
-                        <!-- Audio Output device picker — route CCP audio to a chosen device
-                             (e.g. private headset) so streamers can use the program without
-                             their viewers hearing the audio on the system default endpoint. -->
-                        <Grid Margin="0,6,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="45"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_output}" FontSize="10"
-                                       ToolTip="{loc:Str tooltip_audio_output_device}"/>
-                            <ComboBox Grid.Column="1" x:Name="CmbAudioOutputDevice" x:FieldModifier="internal"
-                                      Margin="4,0,4,0" Foreground="Black" Background="White"
-                                      ToolTip="{loc:Str tooltip_audio_output_device}"
-                                      SelectionChanged="CmbAudioOutputDevice_SelectionChanged"/>
-                            <Button Grid.Column="2" x:Name="BtnAudioOutputRefresh" Content="↻"
-                                    Click="BtnAudioOutputRefresh_Click"
-                                    ToolTip="Re-scan playback devices."
-                                    Padding="8,2" Background="#33FF69B4" Foreground="White" FontSize="10"
-                                    BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"/>
-                        </Grid>
-    
-                        <!-- Don't-duck-browser toggle + Audio Test on the same row -->
-                        <Grid Margin="0,4,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <CheckBox Grid.Column="0"
-                                      x:Name="ChkExcludeBambiCloudDucking" x:FieldModifier="internal"
-                                      VerticalAlignment="Center"
-                                      Content="{loc:Str setting_don_t_duck_browser}"
-                                      IsChecked="True"
-                                      Checked="ChkExcludeBambiCloudDucking_Changed"
-                                      Unchecked="ChkExcludeBambiCloudDucking_Changed"
-                                      ToolTip="{loc:Str tooltip_when_enabled_audio_from_the_integrated_bambic}"
-                                      Foreground="{DynamicResource PinkBrush}" FontSize="9"/>
-                            <Button Grid.Column="1"
-                                    x:Name="BtnTestAudio" Content="Test Audio"
-                                    Click="BtnTestAudio_Click"
-                                    ToolTip="Play a test sound and show audio diagnostics. Use this if audio isn't working."
-                                    Background="#33FF69B4" Foreground="White" FontSize="9" Padding="8,3"
-                                    BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"
-                                    VerticalAlignment="Center"/>
-                        </Grid>
-
-                        <!-- Audio Layers (#659) — looping background tracks mixed through one device -->
-                        <Button x:Name="BtnAudioLayers" Content="{loc:Str btn_audio_layers}"
-                                Click="BtnAudioLayers_Click"
-                                ToolTip="{loc:Str tooltip_audio_layers}"
-                                Margin="0,8,0,0" HorizontalAlignment="Left"
-                                Background="#33FF69B4" Foreground="White" FontSize="10" Padding="10,4"
-                                BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"/>
-                        </StackPanel>
-                        <!-- /Advanced audio options -->
-                    </StackPanel>
-                </Border>
-
-                <!-- Quick Actions (right half) -->
-                <Border Grid.Column="2" CornerRadius="12" Padding="9" Margin="0,0,0,6"
+                <!-- Quick Actions (spans the row now that Audio has left) -->
+                <Border Grid.Column="0" Grid.ColumnSpan="3" CornerRadius="12" Padding="9" Margin="0,0,0,6"
                         Background="{DynamicResource ElevatedSurfaceBrush}"
                         BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" VerticalAlignment="Stretch">
                     <StackPanel>

@@ -534,6 +534,8 @@ namespace ConditioningControlPanel
             "programs" => BtnPrograms,
             "leaderboard" => BtnLeaderboard,
             "assets" => BtnOpenAssetsTop,
+            // The pinned Settings door is its own entry: header and destination in one row.
+            "appsettings" => DoorSettings,
             _ => null,
         };
 

@@ -66,6 +66,48 @@ namespace ConditioningControlPanel.Services
     }
 
     /// <summary>
+    /// Settings-door prep (Phase 2). The audio block and the account cards no longer live on the
+    /// dashboard or inside the App Info popup - they are sections of <c>AppSettingsTabView</c>
+    /// (tab key <c>appsettings</c>), one long scrolling page with a mini-rail. Landing on that
+    /// page is not the same as landing on the right section, so a step that needs a section says
+    /// so here.
+    ///
+    /// Two entry points because TutorialOverlay treats the two step shapes differently:
+    /// <list type="bullet">
+    /// <item><see cref="Focus"/> is for <c>OnActivate</c> - the only hook a
+    /// <c>TutorialStepPosition.Center</c> card gets, since <c>UpdateSpotlight</c> early-returns
+    /// before <c>PrepareTargetWindowAction</c> for centered cards.</item>
+    /// <item><see cref="Prepare"/> is the <c>PrepareTargetWindowAction</c> for a spotlight step;
+    /// the overlay's own <c>BringIntoView</c> would scroll the target into view anyway, this just
+    /// lights the matching rail pill so the page agrees with the card.</item>
+    /// </list>
+    /// Both are best-effort: a tour never blocks on UI quirks.
+    /// </summary>
+    internal static class AppSettingsTutorialPrep
+    {
+        /// <summary>Compose into a step's <c>OnActivate</c> (runs after the tab switch).</summary>
+        public static Action Focus(string sectionKey) =>
+            () => FocusOn(Application.Current?.MainWindow, sectionKey);
+
+        /// <summary>Use as a step's <c>PrepareTargetWindowAction</c>.</summary>
+        public static Action<Window> Prepare(string sectionKey) =>
+            w => FocusOn(w, sectionKey);
+
+        private static void FocusOn(Window? window, string sectionKey)
+        {
+            try
+            {
+                // Same resolve the Ctrl+K palette uses (SettingsPaletteWindow.Navigate): the view
+                // is an x:Name on MainWindow, so FindName reaches it without this service needing
+                // to know about the generated field.
+                (window?.FindName("AppSettingsTab") as Views.Tabs.AppSettingsTabView)
+                    ?.FocusSection(sectionKey);
+            }
+            catch { /* a tour never blocks on UI quirks */ }
+        }
+    }
+
+    /// <summary>
     /// Types of tutorials available in the app
     /// </summary>
     public enum TutorialType
@@ -270,8 +312,9 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// The navigation action for a step's RequiresTab. The eight named callbacks keep their
-        /// hand-wired behaviour (presets also refreshes its list, "patreon" opens the App Info popup
-        /// rather than a tab); every other key goes through the generic router so adding a door
+        /// hand-wired behaviour (presets also refreshes its list; "patreon" is kept wired for
+        /// compatibility but no step asks for it since Phase 2 moved the account cards to
+        /// Settings · Account); every other key goes through the generic router so adding a door
         /// never means adding another callback field. "mod:*" keys belong to the Mod Creator
         /// window's own tab strip and are handled there.
         /// </summary>
@@ -565,8 +608,13 @@ namespace ConditioningControlPanel.Services
                                   "• Audio Ducking: Lower other audio during videos\n" +
                                   "• Video Volume: Control video playback volume\n" +
                                   "• Moans: Enable/configure moaning sounds",
-                    RequiresTab = "settings",
+                    // Phase 2: the audio block moved off the dashboard into the Settings door
+                    // (Views/Controls/AppSettings/AudioSettingsSection.xaml). The Border kept the
+                    // name "AudioSection", and TutorialOverlay resolves by walking the visual tree
+                    // comparing Name, so it still finds it inside the nested UserControl.
+                    RequiresTab = "appsettings",
                     TargetElementName = "AudioSection",
+                    PrepareTargetWindowAction = AppSettingsTutorialPrep.Prepare("audio"),
                     TextPosition = TutorialStepPosition.Left
                 },
                 new TutorialStep
@@ -1049,6 +1097,13 @@ namespace ConditioningControlPanel.Services
             return steps;
         }
 
+        // Phase 2 retired the App Info popup's account section (gap-report R-2): the login cards,
+        // linking, cloud backup and privacy blocks are now Settings · Account. These five steps
+        // used RequiresTab="patreon", whose named callback opened that popup; they now say where
+        // they actually land. The "patreon" ShowTab key itself is untouched API (bark rules, ten
+        // redirect call sites) - only these steps stopped going through it.
+        // Every step here is a centered card, so the section focus has to ride OnActivate:
+        // UpdateSpotlight early-returns past PrepareTargetWindowAction for Center steps.
         private List<TutorialStep> CreatePatreonSteps()
         {
             return new List<TutorialStep>
@@ -1059,7 +1114,8 @@ namespace ConditioningControlPanel.Services
                     Icon = "💎",
                     Title = "Patreon Exclusives Guide",
                     Description = "Special features for Patreon supporters!",
-                    RequiresTab = "patreon",
+                    RequiresTab = "appsettings",
+                    OnActivate = AppSettingsTutorialPrep.Focus("account"),
                     TextPosition = TutorialStepPosition.Center
                 },
                 new TutorialStep
@@ -1069,7 +1125,8 @@ namespace ConditioningControlPanel.Services
                     Title = "Logging In",
                     Description = "Click 'Login with Patreon' to connect your account.\n" +
                                   "Your subscription tier unlocks corresponding features automatically.",
-                    RequiresTab = "patreon",
+                    RequiresTab = "appsettings",
+                    OnActivate = AppSettingsTutorialPrep.Focus("account"),
                     TextPosition = TutorialStepPosition.Center
                 },
                 new TutorialStep
@@ -1081,7 +1138,8 @@ namespace ConditioningControlPanel.Services
                                   "• Double-click the avatar to chat\n" +
                                   "• She remembers conversation context\n" +
                                   "• Personality adapts to your interactions",
-                    RequiresTab = "patreon",
+                    RequiresTab = "appsettings",
+                    OnActivate = AppSettingsTutorialPrep.Focus("account"),
                     TextPosition = TutorialStepPosition.Center
                 },
                 new TutorialStep
@@ -1093,7 +1151,8 @@ namespace ConditioningControlPanel.Services
                                   "• Detects active windows\n" +
                                   "• Comments on your activity\n" +
                                   "• Privacy: Only window titles are read",
-                    RequiresTab = "patreon",
+                    RequiresTab = "appsettings",
+                    OnActivate = AppSettingsTutorialPrep.Focus("account"),
                     TextPosition = TutorialStepPosition.Center
                 },
                 new TutorialStep
@@ -1105,7 +1164,8 @@ namespace ConditioningControlPanel.Services
                                   "• More provocative messages\n" +
                                   "• Adult-themed interactions\n" +
                                   "• Toggle on/off anytime",
-                    RequiresTab = "patreon",
+                    RequiresTab = "appsettings",
+                    OnActivate = AppSettingsTutorialPrep.Focus("account"),
                     TextPosition = TutorialStepPosition.Center
                 }
             };

@@ -49,8 +49,8 @@ namespace ConditioningControlPanel
             SettingsTab.TxtFrames.Text = ((int)SettingsTab.SliderFrames.Value).ToString();
             SettingsTab.TxtSubOpacity.Text = $"{(int)SettingsTab.SliderSubOpacity.Value}%";
             SettingsTab.TxtWhisperVol.Text = $"{(int)SettingsTab.SliderWhisperVol.Value}%";
-            SettingsTab.TxtMaster.Text = $"{(int)SettingsTab.SliderMaster.Value}%";
-            SettingsTab.TxtDuck.Text = $"{(int)SettingsTab.SliderDuck.Value}%";
+            AppSettingsTab.TxtMaster.Text = $"{(int)AppSettingsTab.SliderMaster.Value}%";
+            AppSettingsTab.TxtDuck.Text = $"{(int)AppSettingsTab.SliderDuck.Value}%";
             ProgressionTab.TxtSpiralOpacity.Text = $"{(int)ProgressionTab.SliderSpiralOpacity.Value}%";
             ProgressionTab.TxtPinkOpacity.Text = $"{(int)ProgressionTab.SliderPinkOpacity.Value}%";
             ProgressionTab.TxtBubbleFreq.Text = ((int)ProgressionTab.SliderBubbleFreq.Value).ToString();
@@ -349,17 +349,17 @@ namespace ConditioningControlPanel
 
         private void BtnAccountChip_Click(object sender, RoutedEventArgs e)
         {
-            // Today's account surface is the dashboard's "App Info & Data" popup, which borrows
-            // the real login / linking / cloud-backup cards out of PatreonTab. Phase 2 replaces
-            // it with a Settings/Account page and re-points this handler there.
+            // Phase 2: the account surface is a real page. The chip opens the Settings door and
+            // scrolls it to Account - no popup, no reparenting trick. FocusSection is deliberately
+            // called after ShowTab: the section can only be measured once the view is visible.
             try
             {
-                ShowAppInfoPopup();
+                ShowTab("appsettings");
+                AppSettingsTab?.FocusSection("account");
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("BtnAccountChip_Click: app-info popup failed: {E}", ex.Message);
-                ShowTab("settings");
+                App.Logger?.Debug("BtnAccountChip_Click: settings navigation failed: {E}", ex.Message);
             }
         }
 
@@ -1009,8 +1009,8 @@ namespace ConditioningControlPanel
 
         internal void SliderMaster_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (_isLoading || SettingsTab.TxtMaster == null) return;
-            SettingsTab.TxtMaster.Text = $"{(int)e.NewValue}%";
+            if (_isLoading || AppSettingsTab.TxtMaster == null) return;
+            AppSettingsTab.TxtMaster.Text = $"{(int)e.NewValue}%";
             ApplySettingsLive();
 
             // Update volume on all currently playing audio
@@ -1021,16 +1021,16 @@ namespace ConditioningControlPanel
 
         internal void SliderVideoVolume_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (_isLoading || SettingsTab.TxtVideoVolume == null) return;
-            SettingsTab.TxtVideoVolume.Text = $"{(int)e.NewValue}%";
+            if (_isLoading || AppSettingsTab.TxtVideoVolume == null) return;
+            AppSettingsTab.TxtVideoVolume.Text = $"{(int)e.NewValue}%";
             App.Settings.Current.VideoVolume = (int)e.NewValue;
             App.Video?.UpdateVideoVolume((int)e.NewValue);
         }
 
         internal void SliderDuck_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (_isLoading || SettingsTab.TxtDuck == null) return;
-            SettingsTab.TxtDuck.Text = $"{(int)e.NewValue}%";
+            if (_isLoading || AppSettingsTab.TxtDuck == null) return;
+            AppSettingsTab.TxtDuck.Text = $"{(int)e.NewValue}%";
             ApplySettingsLive();
         }
 
@@ -1039,7 +1039,7 @@ namespace ConditioningControlPanel
             if (_isLoading) return;
 
             // If ducking was just disabled, immediately restore audio for any ducked sessions
-            if (SettingsTab.ChkAudioDuck.IsChecked == false)
+            if (AppSettingsTab.ChkAudioDuck.IsChecked == false)
             {
                 App.Audio?.ForceUnduck();
             }
@@ -1092,13 +1092,13 @@ namespace ConditioningControlPanel
 
         private void PopulateAudioOutputDevices()
         {
-            if (SettingsTab.CmbAudioOutputDevice == null || App.Audio == null) return;
+            if (AppSettingsTab.CmbAudioOutputDevice == null || App.Audio == null) return;
             try
             {
                 _populatingAudioOutputs = true;
                 var devices = App.Audio.EnumerateOutputDevices();
-                SettingsTab.CmbAudioOutputDevice.ItemsSource = devices;
-                SettingsTab.CmbAudioOutputDevice.DisplayMemberPath = nameof(Services.AudioService.AudioOutputDevice.Name);
+                AppSettingsTab.CmbAudioOutputDevice.ItemsSource = devices;
+                AppSettingsTab.CmbAudioOutputDevice.DisplayMemberPath = nameof(Services.AudioService.AudioOutputDevice.Name);
 
                 // Restore persisted selection: prefer ID match, fall back to name (handles ID
                 // changes after driver reinstall / device reorder).
@@ -1116,7 +1116,7 @@ namespace ConditioningControlPanel
                         if (string.Equals(d.Name, savedName, StringComparison.OrdinalIgnoreCase)) { pick = d; break; }
                     }
                 }
-                SettingsTab.CmbAudioOutputDevice.SelectedItem = pick ?? devices[0]; // index 0 = "System default"
+                AppSettingsTab.CmbAudioOutputDevice.SelectedItem = pick ?? devices[0]; // index 0 = "System default"
             }
             catch (Exception ex)
             {
@@ -1131,7 +1131,7 @@ namespace ConditioningControlPanel
         internal void CmbAudioOutputDevice_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
             if (_isLoading || _populatingAudioOutputs) return;
-            if (SettingsTab.CmbAudioOutputDevice?.SelectedItem is not Services.AudioService.AudioOutputDevice dev) return;
+            if (AppSettingsTab.CmbAudioOutputDevice?.SelectedItem is not Services.AudioService.AudioOutputDevice dev) return;
             if (App.Settings?.Current == null) return;
 
             App.Settings.Current.AudioOutputDeviceId = dev.Id ?? "";
@@ -2288,7 +2288,7 @@ namespace ConditioningControlPanel
             if (dialog.ShowDialog() == true)
             {
                 App.Settings.Current.StartupVideoPath = dialog.FileName;
-                SettingsTab.TxtStartupVideo.Text = System.IO.Path.GetFileName(dialog.FileName);
+                AppSettingsTab.TxtStartupVideo.Text = System.IO.Path.GetFileName(dialog.FileName);
                 App.Settings.Save();
                 App.Logger?.Information("Startup video set to: {Path}", dialog.FileName);
             }
@@ -2297,7 +2297,7 @@ namespace ConditioningControlPanel
         internal void BtnClearStartupVideo_Click(object sender, RoutedEventArgs e)
         {
             App.Settings.Current.StartupVideoPath = null;
-            SettingsTab.TxtStartupVideo.Text = Loc.Get("label_random");
+            AppSettingsTab.TxtStartupVideo.Text = Loc.Get("label_random");
             App.Settings.Save();
             App.Logger?.Information("Startup video cleared - will use random");
         }
@@ -2803,7 +2803,7 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
 
-            var isNoPanic = SettingsTab.ChkNoPanic.IsChecked ?? false;
+            var isNoPanic = AppSettingsTab.ChkNoPanic.IsChecked ?? false;
 
             // Show warning when enabling no-panic mode
             if (isNoPanic)
@@ -2822,7 +2822,7 @@ namespace ConditioningControlPanel
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
                         _isLoading = true;
-                        SettingsTab.ChkNoPanic.IsChecked = false;
+                        AppSettingsTab.ChkNoPanic.IsChecked = false;
                         _isLoading = false;
                     }));
                     return;
@@ -2846,24 +2846,34 @@ namespace ConditioningControlPanel
             }
         }
 
+        // UX restructure Phase 2: the four perf controls below now have TWO instances - the live
+        // editor in Settings ▸ Performance (Views/Controls/AppSettings/PerformanceSettingsSection)
+        // and the unreachable LegacyDashboardHost original, which stays until Phase 8 because
+        // LoadSettings/SaveSettings still round-trip through it. So each handler reads the control
+        // that actually raised the event instead of a hard-coded one; the SettingsTab field is kept
+        // as the fallback for a programmatic call with no sender.
         internal void ChkPerformanceMode_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            App.Settings.Current.PerformanceMode = SettingsTab.ChkPerformanceMode.IsChecked ?? false;
+            var chk = sender as CheckBox ?? SettingsTab.ChkPerformanceMode;
+            if (chk == null) return;
+            App.Settings.Current.PerformanceMode = chk.IsChecked ?? false;
             App.Logger?.Information("Performance mode set to {Enabled}", App.Settings.Current.PerformanceMode);
         }
 
         internal void ChkAutoPerformance_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            App.Settings.Current.AutoPerformanceMode = SettingsTab.ChkAutoPerformance.IsChecked ?? true;
+            var chk = sender as CheckBox ?? SettingsTab.ChkAutoPerformance;
+            if (chk == null) return;
+            App.Settings.Current.AutoPerformanceMode = chk.IsChecked ?? true;
             App.Logger?.Information("Auto performance mode set to {Enabled}", App.Settings.Current.AutoPerformanceMode);
         }
 
         internal void CmbMotionLevel_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_isLoading) return;
-            var index = SettingsTab.CmbMotionLevel?.SelectedIndex ?? 0;
+            var index = (sender as ComboBox ?? SettingsTab.CmbMotionLevel)?.SelectedIndex ?? 0;
             var level = index switch
             {
                 1 => Models.MotionLevel.Reduced,
@@ -2901,7 +2911,9 @@ namespace ConditioningControlPanel
         internal void ChkUnifiedOverlay_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            App.Settings.Current.UnifiedOverlayHost = SettingsTab.ChkUnifiedOverlay.IsChecked ?? true;
+            var chk = sender as CheckBox ?? SettingsTab.ChkUnifiedOverlay;
+            if (chk == null) return;
+            App.Settings.Current.UnifiedOverlayHost = chk.IsChecked ?? true;
             App.Logger?.Information("Unified overlay renderer set to {Enabled}", App.Settings.Current.UnifiedOverlayHost);
         }
 
@@ -2909,7 +2921,7 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
 
-            var isEnabled = SettingsTab.ChkOfflineMode.IsChecked ?? false;
+            var isEnabled = AppSettingsTab.ChkOfflineMode.IsChecked ?? false;
 
             if (isEnabled)
             {
@@ -2926,7 +2938,7 @@ namespace ConditioningControlPanel
                     else
                     {
                         // User cancelled - revert checkbox
-                        SettingsTab.ChkOfflineMode.IsChecked = false;
+                        AppSettingsTab.ChkOfflineMode.IsChecked = false;
                         return;
                     }
                 }
@@ -2984,26 +2996,26 @@ namespace ConditioningControlPanel
             {
                 // === LOGIN BUTTONS (disable all of them) ===
 
-                // Patreon login button (in Patreon Exclusives tab)
-                if (PatreonTab.BtnPatreonLogin != null)
+                // Patreon login button (Settings · Account since Phase 2)
+                if (AppSettingsTab?.BtnPatreonLogin != null)
                 {
-                    PatreonTab.BtnPatreonLogin.IsEnabled = !isOffline;
-                    PatreonTab.BtnPatreonLogin.Opacity = isOffline ? 0.5 : 1.0;
+                    AppSettingsTab.BtnPatreonLogin.IsEnabled = !isOffline;
+                    AppSettingsTab.BtnPatreonLogin.Opacity = isOffline ? 0.5 : 1.0;
                     if (isOffline)
-                        PatreonTab.BtnPatreonLogin.ToolTip = Loc.Get("tooltip_disabled_in_offline_mode");
+                        AppSettingsTab.BtnPatreonLogin.ToolTip = Loc.Get("tooltip_disabled_in_offline_mode");
                     else
-                        PatreonTab.BtnPatreonLogin.ToolTip = null;
+                        AppSettingsTab.BtnPatreonLogin.ToolTip = null;
                 }
 
-                // Discord login button (in Patreon Exclusives tab)
-                if (PatreonTab.BtnDiscordLogin != null)
+                // Discord login button (Settings · Account since Phase 2)
+                if (AppSettingsTab?.BtnDiscordLogin != null)
                 {
-                    PatreonTab.BtnDiscordLogin.IsEnabled = !isOffline;
-                    PatreonTab.BtnDiscordLogin.Opacity = isOffline ? 0.5 : 1.0;
+                    AppSettingsTab.BtnDiscordLogin.IsEnabled = !isOffline;
+                    AppSettingsTab.BtnDiscordLogin.Opacity = isOffline ? 0.5 : 1.0;
                     if (isOffline)
-                        PatreonTab.BtnDiscordLogin.ToolTip = Loc.Get("tooltip_disabled_in_offline_mode");
+                        AppSettingsTab.BtnDiscordLogin.ToolTip = Loc.Get("tooltip_disabled_in_offline_mode");
                     else
-                        PatreonTab.BtnDiscordLogin.ToolTip = null;
+                        AppSettingsTab.BtnDiscordLogin.ToolTip = null;
                 }
 
                 // Unified login button (in main area)
@@ -3166,8 +3178,8 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
 
-            var isEnabled = SettingsTab.ChkWinStart.IsChecked ?? false;
-            var isHidden = SettingsTab.ChkStartHidden.IsChecked ?? false;
+            var isEnabled = AppSettingsTab.ChkWinStart.IsChecked ?? false;
+            var isHidden = AppSettingsTab.ChkStartHidden.IsChecked ?? false;
 
             if (isEnabled && isHidden)
             {
@@ -3180,7 +3192,7 @@ namespace ConditioningControlPanel
 
                 if (result != MessageBoxResult.Yes)
                 {
-                    SettingsTab.ChkWinStart.IsChecked = false;
+                    AppSettingsTab.ChkWinStart.IsChecked = false;
                     return;
                 }
             }
@@ -3193,8 +3205,8 @@ namespace ConditioningControlPanel
                     Loc.Get("title_startup_error"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
-                SettingsTab.ChkWinStart.IsChecked = StartupManager.IsRegistered();
-                App.Settings.Current.RunOnStartup = SettingsTab.ChkWinStart.IsChecked ?? false;
+                AppSettingsTab.ChkWinStart.IsChecked = StartupManager.IsRegistered();
+                App.Settings.Current.RunOnStartup = AppSettingsTab.ChkWinStart.IsChecked ?? false;
                 App.Settings.Save();
                 return;
             }
@@ -3209,8 +3221,8 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
 
-            var isStartup = SettingsTab.ChkWinStart.IsChecked ?? false;
-            var isHidden = SettingsTab.ChkStartHidden.IsChecked ?? false;
+            var isStartup = AppSettingsTab.ChkWinStart.IsChecked ?? false;
+            var isHidden = AppSettingsTab.ChkStartHidden.IsChecked ?? false;
 
             if (isStartup && isHidden)
             {
@@ -3223,7 +3235,7 @@ namespace ConditioningControlPanel
 
                 if (result != MessageBoxResult.Yes)
                 {
-                    SettingsTab.ChkStartHidden.IsChecked = false;
+                    AppSettingsTab.ChkStartHidden.IsChecked = false;
                 }
             }
         }

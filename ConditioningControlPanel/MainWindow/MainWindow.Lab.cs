@@ -626,11 +626,11 @@ namespace ConditioningControlPanel
                         SettingsTab.ChkStrictLock.Opacity = 0.4;
                         SettingsTab.ChkStrictLock.ToolTip = Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape");
                     }
-                    if (SettingsTab.ChkNoPanic != null)
+                    if (AppSettingsTab.ChkNoPanic != null)
                     {
-                        SettingsTab.ChkNoPanic.IsEnabled = false;
-                        SettingsTab.ChkNoPanic.Opacity = 0.4;
-                        SettingsTab.ChkNoPanic.ToolTip = Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape");
+                        AppSettingsTab.ChkNoPanic.IsEnabled = false;
+                        AppSettingsTab.ChkNoPanic.Opacity = 0.4;
+                        AppSettingsTab.ChkNoPanic.ToolTip = Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape");
                     }
 
                     // Swap UI panels
@@ -685,11 +685,11 @@ namespace ConditioningControlPanel
                         SettingsTab.ChkStrictLock.Opacity = 1.0;
                         SettingsTab.ChkStrictLock.ToolTip = null;
                     }
-                    if (SettingsTab.ChkNoPanic != null)
+                    if (AppSettingsTab.ChkNoPanic != null)
                     {
-                        SettingsTab.ChkNoPanic.IsEnabled = true;
-                        SettingsTab.ChkNoPanic.Opacity = 1.0;
-                        SettingsTab.ChkNoPanic.ToolTip = null;
+                        AppSettingsTab.ChkNoPanic.IsEnabled = true;
+                        AppSettingsTab.ChkNoPanic.Opacity = 1.0;
+                        AppSettingsTab.ChkNoPanic.ToolTip = null;
                     }
 
                     // Swap UI panels back

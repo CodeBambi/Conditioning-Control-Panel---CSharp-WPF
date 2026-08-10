@@ -32,6 +32,28 @@ namespace ConditioningControlPanel
     {
         #region Settings Load/Save
 
+        /// <summary>
+        /// Opens the Settings door and scrolls to one of its sections. The generic form of
+        /// <see cref="OpenDeviceSettings"/>, added in Phase 2 for the read-only mirrors that stayed
+        /// behind in the feature popups ("Configure in Settings" on the System popup's startup and
+        /// offline rows). Goes through <c>ShowTab</c> so the nav bark, the door expansion and the
+        /// per-tab FX teardown all behave exactly as a rail click would.
+        /// Valid keys: <see cref="Views.Tabs.AppSettingsTabView.SectionKeys"/>; an unknown key still
+        /// opens the door and simply does not scroll.
+        /// </summary>
+        internal void OpenAppSettingsSection(string sectionKey)
+        {
+            try
+            {
+                ShowTab("appsettings");
+                AppSettingsTab?.FocusSection(sectionKey);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "OpenAppSettingsSection({Key}) failed", sectionKey);
+            }
+        }
+
         private void LoadSettings()
         {
             var s = App.Settings.Current;
@@ -81,18 +103,23 @@ namespace ConditioningControlPanel
 
             // System
             SettingsTab.ChkDualMon.IsChecked = s.DualMonitorEnabled;
-            SettingsTab.ChkWinStart.IsChecked = s.RunOnStartup;
-            SettingsTab.ChkVidLaunch.IsChecked = s.ForceVideoOnLaunch;
-            SettingsTab.ChkAutoRun.IsChecked = s.AutoStartEngine;
-            SettingsTab.ChkStartHidden.IsChecked = s.StartMinimized;
-            SettingsTab.ChkNoPanic.IsChecked = !s.PanicKeyEnabled;
-            SettingsTab.ChkOfflineMode.IsChecked = s.OfflineMode;
+            // Startup group: Phase 2 moved these four out of the Collapsed LegacyDashboardHost into
+            // Settings · General. Same x:Names, same round-trip, reachable at last.
+            AppSettingsTab.ChkWinStart.IsChecked = s.RunOnStartup;
+            AppSettingsTab.ChkVidLaunch.IsChecked = s.ForceVideoOnLaunch;
+            AppSettingsTab.ChkAutoRun.IsChecked = s.AutoStartEngine;
+            AppSettingsTab.ChkStartHidden.IsChecked = s.StartMinimized;
+            AppSettingsTab.ChkNoPanic.IsChecked = !s.PanicKeyEnabled;
+            // Offline mode lives on Settings · Data now (its System-popup twin is read-only).
+            AppSettingsTab.ChkOfflineMode.IsChecked = s.OfflineMode;
             if (SettingsTab.ChkPerformanceMode != null) SettingsTab.ChkPerformanceMode.IsChecked = s.PerformanceMode;
             if (SettingsTab.ChkAutoPerformance != null) SettingsTab.ChkAutoPerformance.IsChecked = s.AutoPerformanceMode;
             if (SettingsTab.CmbMotionLevel != null) SettingsTab.CmbMotionLevel.SelectedIndex = (int)s.MotionLevel;
             if (SettingsTab.ChkVideoHwDecode != null) SettingsTab.ChkVideoHwDecode.IsChecked = s.VideoForceHardwareDecoding;
             if (SettingsTab.ChkUnifiedOverlay != null) SettingsTab.ChkUnifiedOverlay.IsChecked = s.UnifiedOverlayHost;
-            if (SettingsTab.ChkIntakeNudge != null) SettingsTab.ChkIntakeNudge.IsChecked = s.IntakeNudgeEnabled;
+            // Phase 2: Settings · Notifications owns this toggle now (it was unreachable in the
+            // collapsed LegacyDashboardHost). Same property, same round-trip, new home.
+            if (AppSettingsTab?.ChkIntakeNudge != null) AppSettingsTab.ChkIntakeNudge.IsChecked = s.IntakeNudgeEnabled;
             RemoteControlTab.ChkStopEffectsOnRemoteDisconnect.IsChecked = s.StopEffectsOnRemoteDisconnect;
             if (RemoteControlTab.ChkRemoteShareAvatar != null) RemoteControlTab.ChkRemoteShareAvatar.IsChecked = s.RemoteShareAvatar;
 
@@ -122,7 +149,7 @@ namespace ConditioningControlPanel
             }
 
             // Deeper
-            if (SettingsTab.ChkEnableDeeper != null) SettingsTab.ChkEnableDeeper.IsChecked = s.EnableDeeper;
+            if (AppSettingsTab?.ChkEnableDeeper != null) AppSettingsTab.ChkEnableDeeper.IsChecked = s.EnableDeeper;
             if (BtnDeeper != null) BtnDeeper.Visibility = s.EnableDeeper ? Visibility.Visible : Visibility.Collapsed;
 
             // Update UI for offline mode state (disable login buttons, browser, etc.)
@@ -134,19 +161,19 @@ namespace ConditioningControlPanel
             // Startup video display
             if (!string.IsNullOrEmpty(s.StartupVideoPath) && System.IO.File.Exists(s.StartupVideoPath))
             {
-                SettingsTab.TxtStartupVideo.Text = System.IO.Path.GetFileName(s.StartupVideoPath);
+                AppSettingsTab.TxtStartupVideo.Text = System.IO.Path.GetFileName(s.StartupVideoPath);
             }
             else
             {
-                SettingsTab.TxtStartupVideo.Text = Loc.Get("label_random");
+                AppSettingsTab.TxtStartupVideo.Text = Loc.Get("label_random");
             }
 
-            // Audio
-            SettingsTab.SliderMaster.Value = s.MasterVolume;
-            SettingsTab.SliderVideoVolume.Value = s.VideoVolume;
-            SettingsTab.ChkAudioDuck.IsChecked = s.AudioDuckingEnabled;
-            SettingsTab.SliderDuck.Value = s.DuckingLevel;
-            SettingsTab.ChkExcludeBambiCloudDucking.IsChecked = s.ExcludeBambiCloudFromDucking;
+            // Audio (Phase 2: owned by the Settings door — AppSettingsTab/AudioSettingsSection)
+            AppSettingsTab.SliderMaster.Value = s.MasterVolume;
+            AppSettingsTab.SliderVideoVolume.Value = s.VideoVolume;
+            AppSettingsTab.ChkAudioDuck.IsChecked = s.AudioDuckingEnabled;
+            AppSettingsTab.SliderDuck.Value = s.DuckingLevel;
+            AppSettingsTab.ChkExcludeBambiCloudDucking.IsChecked = s.ExcludeBambiCloudFromDucking;
             PopulateAudioOutputDevices();
 
             // Progression
@@ -219,10 +246,10 @@ namespace ConditioningControlPanel
             BambiTakeoverTab.ChkAutonomyVoice.IsChecked = s.AutonomyCanTriggerVoiceCommand && s.MicConsentGiven;
             BambiTakeoverTab.ChkAutonomyResumeOnStartup.IsChecked = s.AutonomyResumeOnStartup;
             BambiTakeoverTab.ChkShowTakeoverCountdown.IsChecked = s.ShowTakeoverCountdownBar;
-            BambiTakeoverTab.ChkSpeechWakeWord.IsChecked = s.SpeechWakeWordEnabled && s.MicConsentGiven;
-            BambiTakeoverTab.TxtSpeechWakeWords.Text = string.IsNullOrWhiteSpace(s.SpeechWakeWords) ? "hey bambi" : s.SpeechWakeWords;
-            BambiTakeoverTab.ChkSpeechPushToTalk.IsChecked = s.SpeechPushToTalkEnabled && s.MicConsentGiven;
-            BambiTakeoverTab.TxtPttKey.Text = string.IsNullOrWhiteSpace(s.SpeechPushToTalkKey) ? "F8" : s.SpeechPushToTalkKey;
+            AppSettingsTab.ChkSpeechWakeWord.IsChecked = s.SpeechWakeWordEnabled && s.MicConsentGiven;
+            AppSettingsTab.TxtSpeechWakeWords.Text = string.IsNullOrWhiteSpace(s.SpeechWakeWords) ? "hey bambi" : s.SpeechWakeWords;
+            AppSettingsTab.ChkSpeechPushToTalk.IsChecked = s.SpeechPushToTalkEnabled && s.MicConsentGiven;
+            AppSettingsTab.TxtPttKey.Text = string.IsNullOrWhiteSpace(s.SpeechPushToTalkKey) ? "F8" : s.SpeechPushToTalkKey;
             BambiTakeoverTab.SliderAutonomyAnnounce.Value = s.AutonomyAnnouncementChance;
             // The Slider_Changed handlers bail out while _isLoading, so the value labels
             // next to these four bars kept their XAML defaults ("5", "60s", "30s", "50%")
@@ -357,10 +384,10 @@ namespace ConditioningControlPanel
             if (SettingsTab.TxtSubOpacity != null) SettingsTab.TxtSubOpacity.Text = $"{(int)SettingsTab.SliderSubOpacity.Value}%";
             if (SettingsTab.TxtWhisperVol != null) SettingsTab.TxtWhisperVol.Text = $"{(int)SettingsTab.SliderWhisperVol.Value}%";
             
-            // Audio sliders
-            if (SettingsTab.TxtMaster != null) SettingsTab.TxtMaster.Text = $"{(int)SettingsTab.SliderMaster.Value}%";
-            if (SettingsTab.TxtVideoVolume != null) SettingsTab.TxtVideoVolume.Text = $"{(int)SettingsTab.SliderVideoVolume.Value}%";
-            if (SettingsTab.TxtDuck != null) SettingsTab.TxtDuck.Text = $"{(int)SettingsTab.SliderDuck.Value}%";
+            // Audio sliders (Settings door)
+            if (AppSettingsTab.TxtMaster != null) AppSettingsTab.TxtMaster.Text = $"{(int)AppSettingsTab.SliderMaster.Value}%";
+            if (AppSettingsTab.TxtVideoVolume != null) AppSettingsTab.TxtVideoVolume.Text = $"{(int)AppSettingsTab.SliderVideoVolume.Value}%";
+            if (AppSettingsTab.TxtDuck != null) AppSettingsTab.TxtDuck.Text = $"{(int)AppSettingsTab.SliderDuck.Value}%";
             
             // Progression sliders
             if (ProgressionTab.TxtSpiralOpacity != null) ProgressionTab.TxtSpiralOpacity.Text = $"{(int)ProgressionTab.SliderSpiralOpacity.Value}%";
@@ -436,12 +463,12 @@ namespace ConditioningControlPanel
 
             // System
             s.DualMonitorEnabled = SettingsTab.ChkDualMon.IsChecked ?? true;
-            s.RunOnStartup = SettingsTab.ChkWinStart.IsChecked ?? false;
-            s.ForceVideoOnLaunch = SettingsTab.ChkVidLaunch.IsChecked ?? false;
-            s.AutoStartEngine = SettingsTab.ChkAutoRun.IsChecked ?? false;
-            s.StartMinimized = SettingsTab.ChkStartHidden.IsChecked ?? false;
-            s.PanicKeyEnabled = !(SettingsTab.ChkNoPanic.IsChecked ?? false);
-            s.OfflineMode = SettingsTab.ChkOfflineMode.IsChecked ?? false;
+            s.RunOnStartup = AppSettingsTab.ChkWinStart.IsChecked ?? false;
+            s.ForceVideoOnLaunch = AppSettingsTab.ChkVidLaunch.IsChecked ?? false;
+            s.AutoStartEngine = AppSettingsTab.ChkAutoRun.IsChecked ?? false;
+            s.StartMinimized = AppSettingsTab.ChkStartHidden.IsChecked ?? false;
+            s.PanicKeyEnabled = !(AppSettingsTab.ChkNoPanic.IsChecked ?? false);
+            s.OfflineMode = AppSettingsTab.ChkOfflineMode.IsChecked ?? false;
             if (SettingsTab.ChkPerformanceMode != null) s.PerformanceMode = SettingsTab.ChkPerformanceMode.IsChecked ?? false;
             if (SettingsTab.ChkAutoPerformance != null) s.AutoPerformanceMode = SettingsTab.ChkAutoPerformance.IsChecked ?? true;
             if (SettingsTab.CmbMotionLevel != null && SettingsTab.CmbMotionLevel.SelectedIndex >= 0)
@@ -450,16 +477,16 @@ namespace ConditioningControlPanel
             if (SettingsTab.ChkUnifiedOverlay != null) s.UnifiedOverlayHost = SettingsTab.ChkUnifiedOverlay.IsChecked ?? true;
             // Weekly intake pass nudge. Defaults ON (it is the feature's re-engagement hook), but a
             // recurring popup with no off switch is a bug report waiting to happen.
-            if (SettingsTab.ChkIntakeNudge != null) s.IntakeNudgeEnabled = SettingsTab.ChkIntakeNudge.IsChecked ?? true;
+            if (AppSettingsTab?.ChkIntakeNudge != null) s.IntakeNudgeEnabled = AppSettingsTab.ChkIntakeNudge.IsChecked ?? true;
 
             // Deeper
-            if (SettingsTab.ChkEnableDeeper != null) s.EnableDeeper = SettingsTab.ChkEnableDeeper.IsChecked ?? true;
+            if (AppSettingsTab?.ChkEnableDeeper != null) s.EnableDeeper = AppSettingsTab.ChkEnableDeeper.IsChecked ?? true;
 
-            // Audio
-            s.MasterVolume = (int)SettingsTab.SliderMaster.Value;
-            s.AudioDuckingEnabled = SettingsTab.ChkAudioDuck.IsChecked ?? true;
-            s.DuckingLevel = (int)SettingsTab.SliderDuck.Value;
-            s.ExcludeBambiCloudFromDucking = SettingsTab.ChkExcludeBambiCloudDucking.IsChecked ?? true;
+            // Audio (Settings door)
+            s.MasterVolume = (int)AppSettingsTab.SliderMaster.Value;
+            s.AudioDuckingEnabled = AppSettingsTab.ChkAudioDuck.IsChecked ?? true;
+            s.DuckingLevel = (int)AppSettingsTab.SliderDuck.Value;
+            s.ExcludeBambiCloudFromDucking = AppSettingsTab.ChkExcludeBambiCloudDucking.IsChecked ?? true;
 
             // Progression
             s.SpiralEnabled = ProgressionTab.ChkSpiralEnabled.IsChecked ?? false;

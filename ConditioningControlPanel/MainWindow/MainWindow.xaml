@@ -1395,6 +1395,12 @@
         <views:ExclusivesTabView x:Name="ExclusivesTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
+        <!-- Settings Tab ("appsettings") — the Settings door's own page, added in Phase 2 of
+             the UX restructure. NOT "SettingsTab": that name belongs to the dashboard/Home and
+             is API for ~200 call sites. Eight sections + a mini-rail; see AppSettingsTabView.xaml. -->
+        <views:AppSettingsTabView x:Name="AppSettingsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+
+
 
         <!-- Global Bottom Bar: Start / Save / Exit (Always visible) -->
         <Border Grid.Row="5" Grid.Column="1" Background="{StaticResource PanelBgBrush}" Margin="10,5,10,10" CornerRadius="10" Padding="15,12">

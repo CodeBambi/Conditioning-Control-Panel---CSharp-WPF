@@ -44,7 +44,8 @@ namespace ConditioningControlPanel
             SetHelpContent(SettingsTab.HelpBtnSubliminals, "Subliminals");
             SetHelpContent(SettingsTab.HelpBtnSystem, "System");
             SetHelpContent(SettingsTab.HelpBtnBrowser, "Browser");
-            SetHelpContent(SettingsTab.HelpBtnAudio, "Audio");
+            // Phase 2: the Audio section (and its help button) live on the Settings door now.
+            SetHelpContent(AppSettingsTab.HelpBtnAudio, "Audio");
             SetHelpContent(SettingsTab.HelpBtnQuickLinks, "QuickLinks");
 
             // Presets tab
@@ -971,119 +972,22 @@ namespace ConditioningControlPanel
                 ModAwareLabel("⚙ System", "section_system"),
                 glyph: "⚙");
 
-        internal void VelvetBtnWebcam_Click(object sender, RoutedEventArgs e)
-        {
-            // Surface the Lab's webcam tracking controls in a popup. We borrow the
-            // same LabTab.LabWebcamEngineBar instance (reparent into the control's host
-            // pre-show) and return it to the Lab on close — mirrors the App Info
-            // account-sections pattern so every existing handler/tracker stays valid.
-            // Close any existing popup FIRST so its close handler returns whatever
-            // it borrowed (incl. a prior webcam bar) before we borrow it again.
-            _activeFeaturePopup?.Close();
-
-            var control = new Features.WebcamFeatureControl();
-            try
-            {
-                DetachWebcamBarInto(control.WebcamSettingsHost);
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "Webcam: failed to attach engine bar pre-show");
-            }
-
-            var popup = new Features.FeaturePopupWindow(
-                control,
-                "Webcam & Mic",
-                glyph: "📷")
-            {
-                Owner = this
-            };
-
-            popup.Closed += (_, __) =>
-            {
-                if (_activeFeaturePopup == popup)
-                    _activeFeaturePopup = null;
-                try { ReattachWebcamBar(); }
-                catch (Exception ex)
-                {
-                    App.Logger?.Warning(ex, "Webcam: failed to return engine bar to Lab");
-                }
-                try
-                {
-                    if (WindowState == WindowState.Minimized)
-                        WindowState = WindowState.Normal;
-                    Activate();
-                }
-                catch { /* window may be shutting down */ }
-            };
-
-            _activeFeaturePopup = popup;
-            popup.Show();
-
-            // The camera + monitor combos are normally seeded when the Lab tab is
-            // shown. Opening this popup may be the user's first webcam touchpoint,
-            // so populate both here too — otherwise the monitor list shows up empty.
-            try { RefreshWebcamDeviceList(); } catch (Exception ex) { App.Logger?.Warning(ex, "Webcam popup: device list refresh failed"); }
-            try { RefreshWebcamMonitorList(); } catch (Exception ex) { App.Logger?.Warning(ex, "Webcam popup: monitor list refresh failed"); }
-        }
-
-        // Tracks the Lab webcam engine bar's home so it can be restored to the
-        // exact same spot after the Webcam popup closes.
-        private System.Windows.Controls.Panel? _webcamBarParent;
-        private int _webcamBarIndex = -1;
-
         /// <summary>
-        /// Detaches the Lab webcam engine bar from its place in the Lab and parents
-        /// it into the provided popup host, remembering its original parent + index.
+        /// Dashboard "Webcam &amp; Mic" tile. Until Phase 2 this opened a FeaturePopupWindow around
+        /// Features.WebcamFeatureControl and, pre-show, physically reparented the Lab tab's
+        /// LabWebcamEngineBar into it (DetachWebcamBarInto), putting it back on close. Both the
+        /// popup host and the reparenting are retired: the webcam and microphone controls live in
+        /// Settings -&gt; Devices, which is a real page, so this is now plain navigation. The tile
+        /// stays because it is a shortcut people know - Phase 3 re-lays the dashboard around it.
         /// </summary>
-        private void DetachWebcamBarInto(System.Windows.Controls.Panel target)
-        {
-            if (target == null || LabTab.LabWebcamEngineBar == null) return;
-            if (_webcamBarParent != null) return; // already borrowed
-
-            if (LabTab.LabWebcamEngineBar.Parent is System.Windows.Controls.Panel parent)
-            {
-                _webcamBarParent = parent;
-                _webcamBarIndex = parent.Children.IndexOf(LabTab.LabWebcamEngineBar);
-                parent.Children.Remove(LabTab.LabWebcamEngineBar);
-            }
-            target.Children.Add(LabTab.LabWebcamEngineBar);
-        }
-
-        /// <summary>
-        /// Returns the Lab webcam engine bar to its original position in the Lab.
-        /// </summary>
-        private void ReattachWebcamBar()
-        {
-            if (LabTab.LabWebcamEngineBar == null || _webcamBarParent == null) return;
-
-            if (LabTab.LabWebcamEngineBar.Parent is System.Windows.Controls.Panel currentParent)
-                currentParent.Children.Remove(LabTab.LabWebcamEngineBar);
-
-            var idx = _webcamBarIndex;
-            if (idx < 0 || idx > _webcamBarParent.Children.Count)
-                idx = _webcamBarParent.Children.Count;
-            _webcamBarParent.Children.Insert(idx, LabTab.LabWebcamEngineBar);
-
-            _webcamBarParent = null;
-            _webcamBarIndex = -1;
-        }
+        internal void VelvetBtnWebcam_Click(object sender, RoutedEventArgs e) => OpenDeviceSettings();
 
         internal void VelvetBtnAppInfo_Click(object sender, RoutedEventArgs e)
         {
-            // Build the UserControl and immediately reparent the account/data
-            // sections (Patreon/Discord login, Cloud Backup, Data & Privacy,
-            // Support Development) into its host BEFORE showing the popup.
-            // Doing it pre-show avoids timing issues with the Loaded event.
+            // Phase 2: no reparenting. The account/data cards live permanently in
+            // Settings · Account (AppSettingsTab), so this popup is About + support forms only
+            // and can be built and shown in one step.
             var control = new Features.AppInfoFeatureControl();
-            try
-            {
-                DetachAccountSectionsInto(control.AccountSectionsHost);
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "AppInfo: failed to attach account sections pre-show");
-            }
 
             // Close any existing popup before opening a new one
             _activeFeaturePopup?.Close();
@@ -1096,18 +1000,11 @@ namespace ConditioningControlPanel
                 Owner = this
             };
 
-            // When the popup closes, return the sections to PatreonTab.PatreonTabContent
-            // so the next open can borrow them again and any MainWindow
-            // handlers that read their Text/Visibility keep working.
+            // Nothing to give back on close since Phase 2 — the popup no longer borrows anything.
             popup.Closed += (_, __) =>
             {
                 if (_activeFeaturePopup == popup)
                     _activeFeaturePopup = null;
-                try { ReattachAccountSections(); }
-                catch (Exception ex)
-                {
-                    App.Logger?.Warning(ex, "AppInfo: failed to return account sections");
-                }
                 try
                 {
                     if (WindowState == WindowState.Minimized)

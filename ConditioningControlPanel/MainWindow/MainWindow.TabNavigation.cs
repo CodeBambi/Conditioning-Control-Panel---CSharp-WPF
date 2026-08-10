@@ -92,10 +92,9 @@ namespace ConditioningControlPanel
 
         internal void ShowTab(string tab)
         {
-            // Legacy redirect: the "patreon" tab was eliminated and its
-            // account/data content lives in the dashboard's App Info popup now.
-            // Route any legacy callers there WITHOUT disturbing the currently
-            // active tab (opening a popup is overlay-style, not a tab switch).
+            // Legacy redirect: the "patreon" tab was eliminated; its account/data
+            // content lives in the Settings door's Account section now, so this IS
+            // a tab switch (ShowAppInfoPopup -> ShowAccountSettings -> appsettings).
             if (tab == "patreon")
             {
                 ShowAppInfoPopup();
@@ -177,6 +176,7 @@ namespace ConditioningControlPanel
             if (GradedIntakeTab != null) GradedIntakeTab.Visibility = Visibility.Collapsed;
             if (ProgramsTab != null) ProgramsTab.Visibility = Visibility.Collapsed;
             if (ExclusivesTab != null) ExclusivesTab.Visibility = Visibility.Collapsed;
+            if (AppSettingsTab != null) AppSettingsTab.Visibility = Visibility.Collapsed;
 
             // Phase 1: no more per-tab style swapping. The rail's active state is a real
             // indicator (3px accent bar + tinted row) driven by ApplyNavActiveGlow at the
@@ -246,12 +246,12 @@ namespace ConditioningControlPanel
                         DeeperTab.Visibility = Visibility.Visible;
                         AnimateTabIn(DeeperTab);
                         RefreshDeeperLibraryUI();
-                        // Populate the Deeper-hub webcam card (device + monitor
-                        // combos populate empty until something asks). Refresh
-                        // also fills the consent + calibration status cells.
-                        try { PopulateWebcamDeviceCombos(); } catch { }
-                        try { RefreshWebcamMonitorList(); } catch { }
+                        // Phase 2: the Deeper hub's device/monitor pickers moved to
+                        // Settings → Devices, so there is nothing to populate here. The refresh
+                        // below still fills the consent + calibration status cells, which are
+                        // actions this card legitimately keeps.
                         RefreshDeeperWebcamColumn();
+                        UpdateWebcamStatusChips(App.Webcam?.IsRunning == true);
                         RefreshBlinkTrainerTrackerButton();
                         // Refresh submission statuses on tab open (throttled) so
                         // an acceptance reflects without restarting the app.
@@ -277,12 +277,11 @@ namespace ConditioningControlPanel
                     LabTab.Visibility = Visibility.Visible;
                     AnimateTabIn(LabTab);
                     SyncLabEffectPermsUI();
-                    RefreshWebcamDeviceList();
-                    RefreshWebcamMonitorList();
-                    if (LabTab.ChkRestrictGazeToCalScreen != null && App.Settings?.Current != null)
-                        LabTab.ChkRestrictGazeToCalScreen.IsChecked = App.Settings.Current.RestrictGazeContentToCalibratedScreen;
-                    if (LabTab.ChkWebcamDriftCorrection != null && App.Settings?.Current != null)
-                        LabTab.ChkWebcamDriftCorrection.IsChecked = App.Settings.Current.WebcamAutoDriftCorrection;
+                    // Phase 2: the webcam engine bar (and the seeding it needed) moved to
+                    // Settings → Devices, which re-enumerates on its own show via
+                    // RefreshDeviceSettingsLists. The Lab keeps a read-only status chip, painted
+                    // by UpdateWebcamStatusChips off the tracker-state event.
+                    UpdateWebcamStatusChips(App.Webcam?.IsRunning == true);
                     break;
 
                 // Note: "patreon" case is handled at the top of ShowTab as a
@@ -374,6 +373,15 @@ namespace ConditioningControlPanel
                     RefreshPastQuizzes();
                     break;
 
+                case "appsettings":
+                    AppSettingsTab.Visibility = Visibility.Visible;
+                    AnimateTabIn(AppSettingsTab);
+                    // Sections that have to re-read live state (device lists, login cards,
+                    // update status) get their seam here. Sections that only bind settings
+                    // implement nothing and are skipped - see IAppSettingsSection.
+                    AppSettingsTab.RefreshSections();
+                    break;
+
                 case "exclusives":
                     ExclusivesTab.Visibility = Visibility.Visible;
                     AnimateTabIn(ExclusivesTab);
@@ -398,12 +406,18 @@ namespace ConditioningControlPanel
         // ============================== nav rail: doors ==============================
 
         /// <summary>
-        /// The Phase 1 information architecture: six doors over the existing tab keys, plus a
-        /// pinned Settings door that has no tabs of its own yet. Order matches the rail top to
-        /// bottom, and each door's FIRST tab is the one its header navigates to.
+        /// The Phase 1 information architecture: six doors over the existing tab keys, plus the
+        /// pinned Settings door. Order matches the rail top to bottom, and each door's FIRST tab
+        /// is the one its header navigates to.
         /// Every reachable ShowTab key lives in exactly one door; the two ghosts are excluded
-        /// ("patreon" opens a popup, "fyp" opens a window - both return before the switch).
-        /// "progression" rides with Home because it redirects to the Dashboard.
+        /// ("patreon" redirects to the Settings door's Account section, "fyp" opens a window -
+        /// both return before the switch). "progression" rides with Home (Dashboard redirect).
+        ///
+        /// The pinned Settings door is keyed "appsettings", NOT "settings": the tab key of that
+        /// name is the dashboard (Home), and DoorSettings has carried Tag="appsettings" since
+        /// Phase 1 - NavDoor_Click matches this door name against that Tag, so the two must stay
+        /// identical. The door has a header and no entry list, so NavDoorParts hands back a null
+        /// panel and the accordion simply has nothing to open for it.
         /// </summary>
         private static readonly (string Door, string DefaultTab, string[] Tabs)[] NavDoorMap =
         {
@@ -415,6 +429,7 @@ namespace ConditioningControlPanel
             ("you",       "discord",   new[] { "discord", "quests", "achievements", "enhancements",
                                                "programs", "leaderboard" }),
             ("library",   "assets",    new[] { "assets" }),
+            ("appsettings", "appsettings", new[] { "appsettings" }),
         };
 
         /// <summary>Row pitch of a rail entry: Height 30 + Margin 0,1 in the NavRailButton style.
@@ -436,6 +451,8 @@ namespace ConditioningControlPanel
             "play" => (DoorPlay, DoorPanelPlay, DoorEntriesPlay),
             "you" => (DoorYou, DoorPanelYou, DoorEntriesYou),
             "library" => (DoorLibrary, DoorPanelLibrary, DoorEntriesLibrary),
+            // Pinned, entry-less: a header to light, nothing to expand.
+            "appsettings" => (DoorSettings, null, null),
             _ => (null, null, null),
         };
 
@@ -563,8 +580,10 @@ namespace ConditioningControlPanel
                 ShowTab(d.DefaultTab);
                 return;
             }
-            // DoorSettings ("appsettings") has no view of its own until Phase 2 builds one.
-            ShowTab("settings");
+            // Every door in the rail is in NavDoorMap, Settings included since Phase 2. A Tag
+            // that matches nothing is an authoring mistake, not a navigation - say so and stay
+            // put rather than teleporting the user to the Dashboard.
+            App.Logger?.Warning("NavDoor_Click: no NavDoorMap entry for door {Door}", door);
         }
 
         // Direct entries for the tabs that used to be reachable only through the Exclusives
@@ -641,17 +660,10 @@ namespace ConditioningControlPanel
 
                 RebuildBlinkTrainerFolderCards();
                 RefreshBlinkTrainerWebcamColumn();
-                // Monitor picker + Restrict-gaze checkbox mirror the Lab card.
-                // RefreshWebcamMonitorList now populates both combos; the checkbox
-                // gets its initial state here so the BT tab matches without
-                // requiring a Lab visit first.
-                RefreshWebcamMonitorList();
-                if (BlinkTrainerTab.ChkBlinkTrainerRestrictGazeToCalScreen != null && s != null)
-                {
-                    _restrictGazeCheckboxSyncing = true;
-                    try { BlinkTrainerTab.ChkBlinkTrainerRestrictGazeToCalScreen.IsChecked = s.RestrictGazeContentToCalibratedScreen; }
-                    finally { _restrictGazeCheckboxSyncing = false; }
-                }
+                // Phase 2: this tab no longer carries a camera picker, a monitor picker or a
+                // restrict-gaze checkbox (Settings → Devices owns all three), so there is nothing
+                // to seed here. The read-only webcam chip is painted by UpdateWebcamStatusChips
+                // off the tracker-state event, exactly like the title-bar privacy pill.
                 RefreshBlinkTrainerGate();
                 RefreshBlinkTrainerTrackerButton();
 

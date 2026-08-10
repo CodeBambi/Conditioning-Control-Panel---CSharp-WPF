@@ -458,7 +458,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         //  chips
         // =====================================================================================
 
-        private void RebuildDeny(AppSettings? settings)
+        private void RebuildDeny(Models.AppSettings? settings)
         {
             _deny.Clear();
             foreach (var entry in AwarenessPrivacyRules.EffectiveDenyList(settings))
@@ -471,7 +471,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
             }
         }
 
-        private void RebuildAllow(AppSettings? settings)
+        private void RebuildAllow(Models.AppSettings? settings)
         {
             _allow.Clear();
             foreach (var entry in settings?.AwarenessTitleAllowList ?? new List<string>())
@@ -490,7 +490,7 @@ namespace ConditioningControlPanel.Views.Controls.Companion.Runtime
         /// would mean two answers to "which apps have I used". Already-denied apps are dropped rather
         /// than shown inert: a chip that does nothing when clicked reads as broken.</para>
         /// </summary>
-        private void RebuildSeen(AppSettings? settings)
+        private void RebuildSeen(Models.AppSettings? settings)
         {
             _seen.Clear();
 

@@ -6,9 +6,11 @@ namespace ConditioningControlPanel.Views.Tabs
     /// <summary>
     /// "She's Listening" — the voice-control Exclusive. A purpose-built surface for the offline
     /// mic features (spoken mantras + the "Hey Bambi" voice commands), with a command cheat-sheet.
-    /// Its toggles bind the SAME AppSettings as the Takeover tab; the code-behind delegates to the
-    /// MainWindow handlers (which keep both tabs in sync), so there is no duplicated consent/settings
-    /// logic here.
+    /// The microphone hardware and the voice input modes (device, wake word, push-to-talk,
+    /// headphone barge-in) are owned by Settings > Devices since Phase 2 of the UX restructure and
+    /// appear here only as read-only chips; what stays live is what belongs to this page - the
+    /// master switch, sensitivity, spoken mantras, wake calibration, the test and mic consent.
+    /// Every handler still delegates to a MainWindow partial, so no settings logic lives here.
     /// </summary>
     public partial class SheListeningTabView : UserControl
     {
@@ -21,41 +23,20 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw) mw.SL_Mantras_Changed(sender, e);
         }
-        private void ChkSL_WakeWord_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.SL_WakeWord_Changed(sender, e);
-        }
-        private void TxtSL_WakeWords_LostFocus(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.SL_WakeWords_LostFocus(sender, e);
-        }
         private void BtnSL_Calibrate_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw) mw.SL_Calibrate_Click(sender, e);
         }
-        private void ChkSL_PushToTalk_Changed(object sender, RoutedEventArgs e)
+        // Phase 2: the mic device picker, the wake-word and push-to-talk toggles and the
+        // headphone switch are read-only chips here now - Settings > Devices owns them, so
+        // seven shims went with them. This is the link to that page.
+        private void BtnSL_OpenDeviceSettings_Click(object sender, RoutedEventArgs e)
         {
-            if (Window.GetWindow(this) is MainWindow mw) mw.SL_PushToTalk_Changed(sender, e);
-        }
-        private void BtnSL_SetPttKey_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.SL_SetPttKey_Click(sender, e);
-        }
-        private void ChkSL_Headphones_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.SL_Headphones_Changed(sender, e);
+            if (Window.GetWindow(this) is MainWindow mw) mw.OpenDeviceSettings();
         }
         private void BtnSL_MicMaster_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw) mw.ToggleVoiceMic();
-        }
-        private void CmbSL_MicDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.SL_MicDevice_SelectionChanged(sender, e);
-        }
-        private void BtnSL_MicRefresh_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw) mw.SL_MicRefresh_Click(sender, e);
         }
         private void SldSL_MicSensitivity_ValueChanged(object sender, System.Windows.RoutedPropertyChangedEventArgs<double> e)
         {

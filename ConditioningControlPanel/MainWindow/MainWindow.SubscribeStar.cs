@@ -54,7 +54,7 @@ namespace ConditioningControlPanel
 
         private void UpdateSubscribeStarUI()
         {
-            if (PatreonTab.TxtSubscribeStarStatus == null || PatreonTab.TxtSubscribeStarTier == null || PatreonTab.BtnSubscribeStarLogin == null)
+            if (AppSettingsTab.TxtSubscribeStarStatus == null || AppSettingsTab.TxtSubscribeStarTier == null || AppSettingsTab.BtnSubscribeStarLogin == null)
                 return;
 
             var svc = App.SubscribeStar;
@@ -66,24 +66,24 @@ namespace ConditioningControlPanel
                 var isWhitelisted = svc?.IsWhitelisted == true;
                 var nameToShow = App.Settings?.Current?.UserDisplayName ?? svc?.DisplayName;
 
-                PatreonTab.TxtSubscribeStarStatus.Text = string.IsNullOrEmpty(nameToShow)
+                AppSettingsTab.TxtSubscribeStarStatus.Text = string.IsNullOrEmpty(nameToShow)
                     ? "Connected to SubscribeStar"
                     : $"Welcome, {nameToShow}!";
 
-                PatreonTab.TxtSubscribeStarTier.Text = tier switch
+                AppSettingsTab.TxtSubscribeStarTier.Text = tier switch
                 {
                     PatreonTier.Level2 => Loc.Get("label_patreon_tier_level2"),
                     PatreonTier.Level1 => Loc.Get("label_patreon_tier_level1"),
                     _ when isWhitelisted => Loc.Get("label_patreon_tier_whitelisted"),
                     _ => Loc.Get(svc?.IsActiveSubscriber == true ? "label_patreon_tier_patron" : "label_patreon_tier_connected")
                 };
-                PatreonTab.BtnSubscribeStarLogin.Content = Loc.Get("btn_logout");
+                AppSettingsTab.BtnSubscribeStarLogin.Content = Loc.Get("btn_logout");
             }
             else
             {
-                PatreonTab.TxtSubscribeStarStatus.Text = Loc.Get("label_not_connected");
-                PatreonTab.TxtSubscribeStarTier.Text = Loc.Get("label_login_to_unlock_exclusive_features");
-                PatreonTab.BtnSubscribeStarLogin.Content = Loc.Get("btn_login");
+                AppSettingsTab.TxtSubscribeStarStatus.Text = Loc.Get("label_not_connected");
+                AppSettingsTab.TxtSubscribeStarTier.Text = Loc.Get("label_login_to_unlock_exclusive_features");
+                AppSettingsTab.BtnSubscribeStarLogin.Content = Loc.Get("btn_login");
             }
         }
 

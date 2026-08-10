@@ -445,8 +445,8 @@ namespace ConditioningControlPanel
                 }
                 if (_rampBaseValues.TryGetValue("MasterVolume", out var masterVol))
                 {
-                    SettingsTab.SliderMaster.Value = masterVol;
-                    SettingsTab.TxtMaster.Text = $"{(int)masterVol}%";
+                    AppSettingsTab.SliderMaster.Value = masterVol;
+                    AppSettingsTab.TxtMaster.Text = $"{(int)masterVol}%";
                     settings.MasterVolume = (int)masterVol;
                 }
                 if (_rampBaseValues.TryGetValue("SubAudioVolume", out var subVol))
@@ -515,8 +515,8 @@ namespace ConditioningControlPanel
                 if (settings.RampLinkMasterAudio && _rampBaseValues.TryGetValue("MasterVolume", out var masterBase))
                 {
                     var newVal = (int)Math.Min(masterBase * currentMult, 100);
-                    SettingsTab.SliderMaster.Value = newVal;
-                    SettingsTab.TxtMaster.Text = $"{newVal}%";
+                    AppSettingsTab.SliderMaster.Value = newVal;
+                    AppSettingsTab.TxtMaster.Text = $"{newVal}%";
                     settings.MasterVolume = newVal;
                 }
                 
@@ -738,11 +738,11 @@ namespace ConditioningControlPanel
             s.SubAudioEnabled = SettingsTab.ChkAudioWhispers.IsChecked ?? false;
             s.SubAudioVolume = (int)SettingsTab.SliderWhisperVol.Value;
 
-            // Audio settings
-            s.MasterVolume = (int)SettingsTab.SliderMaster.Value;
-            s.AudioDuckingEnabled = SettingsTab.ChkAudioDuck.IsChecked ?? true;
-            s.DuckingLevel = (int)SettingsTab.SliderDuck.Value;
-            s.ExcludeBambiCloudFromDucking = SettingsTab.ChkExcludeBambiCloudDucking.IsChecked ?? true;
+            // Audio settings (Phase 2: Settings door owns these controls)
+            s.MasterVolume = (int)AppSettingsTab.SliderMaster.Value;
+            s.AudioDuckingEnabled = AppSettingsTab.ChkAudioDuck.IsChecked ?? true;
+            s.DuckingLevel = (int)AppSettingsTab.SliderDuck.Value;
+            s.ExcludeBambiCloudFromDucking = AppSettingsTab.ChkExcludeBambiCloudDucking.IsChecked ?? true;
 
             // Overlay settings
             s.SpiralOpacity = (int)ProgressionTab.SliderSpiralOpacity.Value;

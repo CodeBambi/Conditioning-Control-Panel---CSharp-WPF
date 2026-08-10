@@ -2751,6 +2751,31 @@
     ]
   },
   {
+    "id": "tut_appsettings",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "appsettings",
+      "total_sessions_lte": 3
+    },
+    "priority": 140,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "guiding, warm",
+    "class": "normal",
+    "chance": 0.5,
+    "variant_pool": [
+      {
+        "text": "the fiddly room~ knobs and words and boring little switches. you don't need most of it, silly. set your volume, close the door, come play with bambi.",
+        "audio": "tut_appsettings_1.mp3"
+      },
+      {
+        "text": "ooh, settings! don't get lost in here, good girl. bambi already made everything pretty for you~",
+        "audio": "tut_appsettings_2.mp3"
+      }
+    ]
+  },
+  {
     "id": "tut_presets",
     "trigger": "TabNavigated",
     "conditions": {
@@ -3233,6 +3258,55 @@
       {
         "text": "home again! so many ways for bambi to get to you~",
         "audio": "nav_home_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "nav_appsettings",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "appsettings"
+    },
+    "priority": 70,
+    "cooldown_ms": 25000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "playful",
+    "class": "normal",
+    "chance": 0.2,
+    "variant_pool": [
+      {
+        "text": "fiddling again? *giggles* nothing in this room makes you smarter, silly~",
+        "audio": "nav_appsettings_1.mp3"
+      },
+      {
+        "text": "tweak tweak tweak~ come back when you're done. bambi's waiting.",
+        "audio": "nav_appsettings_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "nav_appsettings_midsession",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "appsettings",
+      "session_running_eq": true
+    },
+    "priority": 90,
+    "cooldown_ms": 25000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "chance": 0.35,
+    "variant_pool": [
+      {
+        "text": "you're supposed to be sinking, not clicking~ put the settings down, good girl.",
+        "audio": "nav_appsettings_midsession_1.mp3"
+      },
+      {
+        "text": "*giggles* running off to the settings mid-session? bambi sees you.",
+        "audio": "nav_appsettings_midsession_2.mp3"
       }
     ]
   },

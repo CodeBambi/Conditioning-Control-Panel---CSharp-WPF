@@ -13,35 +13,15 @@ namespace ConditioningControlPanel.Features
             Loaded += OnLoaded;
         }
 
-        /// <summary>
-        /// Publicly-exposed host for the account/data sections that get reparented
-        /// in from MainWindow's PatreonTab. Populated by VelvetBtnAppInfo_Click
-        /// before the popup is shown so the sections are in place before layout.
-        /// </summary>
-        public StackPanel AccountSectionsHost => ExternalSectionsHost;
+        // Phase 2: AccountSectionsHost / ExternalSectionsHost and BtnCheckUpdates are gone.
+        // The account cards are a real page now (Settings · Account) instead of Borders borrowed
+        // out of PatreonTab at popup-open time, and the update check lives in Settings · Updates
+        // beside the patch notes. What remains here is About + the three support forms.
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
             TxtVersion.Text = $"v{UpdateService.AppVersion}";
             TxtProduct.Text = "Conditioning Control Panel";
-        }
-
-        private async void BtnCheckUpdates_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var owner = Window.GetWindow(this) ?? Application.Current.MainWindow;
-                await App.CheckForUpdatesManuallyAsync(owner);
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "AppInfo: check updates failed");
-                MessageBox.Show(
-                    $"Failed to check for updates: {ex.Message}",
-                    "Update Check",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
-            }
         }
 
         private void BtnReportBug_Click(object sender, RoutedEventArgs e)

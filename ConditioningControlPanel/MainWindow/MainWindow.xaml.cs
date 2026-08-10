@@ -251,6 +251,16 @@ namespace ConditioningControlPanel
                 ApplyCameraShortcutTo();
                 RefreshCameraShortcutLabel();
                 ApplyGlobalCameraHotkey();
+                // Ctrl+K settings palette (Windows/SettingsPaletteWindow.xaml.cs). Registered
+                // AFTER the camera shortcut on purpose: WPF executes the FIRST matching
+                // InputBinding, so a user who rebound the camera hotkey to Ctrl+K keeps their
+                // explicit choice and the palette quietly yields. In-window only by design - the
+                // palette is a navigation aid for this window, not something to summon from a
+                // browser, so it deliberately does not take a system-wide GlobalHotkeyService slot.
+                InputBindings.Add(new KeyBinding(SettingsPaletteWindow.OpenPaletteCommand,
+                                                Key.K, ModifierKeys.Control));
+                CommandBindings.Add(new CommandBinding(SettingsPaletteWindow.OpenPaletteCommand,
+                    (_, ce) => { SettingsPaletteWindow.Toggle(this); ce.Handled = true; }));
                 HookFocusGazeService();
                 HookBlinkTrainerService();
                 // Tooltip hygiene: start tracking before the user can hover anything, so no tooltip
@@ -824,6 +834,22 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // Ctrl+K palette. Escape is the DEFAULT panic key and the LL hook delivers it whatever
+            // has focus, so an Esc aimed at "close the palette" also arrives here — and the ladder
+            // below EXITS THE APP on press 2. Consume it (which closes the palette) without
+            // advancing _panicPressCount, exactly like the lock-card hand-off above.
+            // Gated on the panic key really being Escape, so a user who rebound panic to F8 still
+            // gets a real panic from F8 while the palette is open; the palette then closes itself
+            // through its own Esc handler and never sees this path. TryConsumeEscape carries a
+            // short grace window, so the press is claimed exactly once whichever of the two
+            // deliveries (WPF KeyDown vs the hook's queued handler) lands first.
+            if (string.Equals(App.Settings?.Current?.PanicKey, "Escape", StringComparison.OrdinalIgnoreCase)
+                && SettingsPaletteWindow.TryConsumeEscape())
+            {
+                VideoDiag.Log("PANIC", "press consumed by the Ctrl+K palette (palette closed)");
+                return;
+            }
+
             // A live Rabbit Hole descent owns the panic key: the chaos key hook pauses the
             // run (and a second press surfaces it). Without this hand-off a mid-run panic
             // fell into the "not running" branch below — where a second press EXITS the app.
@@ -1038,10 +1064,10 @@ namespace ConditioningControlPanel
 
         private void UpdatePanicKeyButton()
         {
-            if (SettingsTab.BtnPanicKey != null)
+            if (AppSettingsTab.BtnPanicKey != null)
             {
                 var currentKey = App.Settings.Current.PanicKey;
-                SettingsTab.BtnPanicKey.Content = _isCapturingPanicKey ? "Press any key..." : $"🔑 {currentKey}";
+                AppSettingsTab.BtnPanicKey.Content = _isCapturingPanicKey ? "Press any key..." : $"🔑 {currentKey}";
             }
         }
 
@@ -1061,18 +1087,19 @@ namespace ConditioningControlPanel
 
         internal void RequestToggleOfflineMode(bool enable)
         {
-            // Drive the existing handler via the legacy checkbox so the two-way sync logic
-            // (UpdateOfflineModeUI, login button disable, etc.) runs exactly once.
-            if (SettingsTab.ChkOfflineMode == null) return;
-            if ((SettingsTab.ChkOfflineMode.IsChecked ?? false) == enable) return;
-            SettingsTab.ChkOfflineMode.IsChecked = enable;
+            // Drive the existing handler via the one live checkbox (Settings · Data since Phase 2)
+            // so the two-way sync logic (UpdateOfflineModeUI, login button disable, etc.) runs
+            // exactly once.
+            if (AppSettingsTab.ChkOfflineMode == null) return;
+            if ((AppSettingsTab.ChkOfflineMode.IsChecked ?? false) == enable) return;
+            AppSettingsTab.ChkOfflineMode.IsChecked = enable;
         }
 
         internal void RequestToggleNoPanic(bool disablePanic)
         {
-            if (SettingsTab.ChkNoPanic == null) return;
-            if ((SettingsTab.ChkNoPanic.IsChecked ?? false) == disablePanic) return;
-            SettingsTab.ChkNoPanic.IsChecked = disablePanic;
+            if (AppSettingsTab.ChkNoPanic == null) return;
+            if ((AppSettingsTab.ChkNoPanic.IsChecked ?? false) == disablePanic) return;
+            AppSettingsTab.ChkNoPanic.IsChecked = disablePanic;
         }
 
         /// <summary>
@@ -1108,7 +1135,7 @@ namespace ConditioningControlPanel
 
             // Sync MainWindow checkbox without triggering handler
             _isLoading = true;
-            SettingsTab.ChkNoPanic.IsChecked = disablePanic;
+            AppSettingsTab.ChkNoPanic.IsChecked = disablePanic;
             _isLoading = false;
 
             return true;
@@ -1152,9 +1179,9 @@ namespace ConditioningControlPanel
             UpdateOfflineModeUI(enable);
             App.Settings.Save();
 
-            // Sync MainWindow checkbox without triggering handler
+            // Sync the Settings · Data checkbox without triggering handler
             _isLoading = true;
-            SettingsTab.ChkOfflineMode.IsChecked = enable;
+            AppSettingsTab.ChkOfflineMode.IsChecked = enable;
             _isLoading = false;
 
             return true;
@@ -1179,7 +1206,7 @@ namespace ConditioningControlPanel
             }
 
             _isLoading = true;
-            SettingsTab.ChkNoPanic.IsChecked = !panicEnabled;
+            AppSettingsTab.ChkNoPanic.IsChecked = !panicEnabled;
             _isLoading = false;
         }
 
@@ -1194,20 +1221,19 @@ namespace ConditioningControlPanel
             UpdateOfflineModeUI(isOffline);
 
             _isLoading = true;
-            SettingsTab.ChkOfflineMode.IsChecked = isOffline;
+            AppSettingsTab.ChkOfflineMode.IsChecked = isOffline;
             _isLoading = false;
         }
 
         internal bool RequestToggleWindowsStartup(bool enable)
         {
-            // The legacy SettingsTab.ChkWinStart hidden on MainWindow uses a Click handler that
-            // doesn't fire on programmatic IsChecked changes — so just toggling the
-            // checkbox here would silently skip StartupManager.SetStartupState and
-            // the OS shortcut would never be created/removed. Drive the registration
-            // ourselves and mirror the result onto the legacy checkbox for any code
-            // that still reads it.
-            if (SettingsTab.ChkWinStart == null) return StartupManager.IsRegistered();
-            if ((SettingsTab.ChkWinStart.IsChecked ?? false) == enable && StartupManager.IsRegistered() == enable)
+            // Settings · General's ChkWinStart uses a Click handler, which doesn't fire on
+            // programmatic IsChecked changes — so just toggling the checkbox here would
+            // silently skip StartupManager.SetStartupState and the OS shortcut would never
+            // be created/removed. Drive the registration ourselves and mirror the result
+            // onto the checkbox for any code that still reads it.
+            if (AppSettingsTab.ChkWinStart == null) return StartupManager.IsRegistered();
+            if ((AppSettingsTab.ChkWinStart.IsChecked ?? false) == enable && StartupManager.IsRegistered() == enable)
                 return enable;
 
             if (!StartupManager.SetStartupState(enable))
@@ -1219,14 +1245,14 @@ namespace ConditioningControlPanel
                     MessageBoxImage.Warning);
                 var actual = StartupManager.IsRegistered();
                 _isLoading = true;
-                try { SettingsTab.ChkWinStart.IsChecked = actual; } finally { _isLoading = false; }
+                try { AppSettingsTab.ChkWinStart.IsChecked = actual; } finally { _isLoading = false; }
                 App.Settings.Current.RunOnStartup = actual;
                 App.Settings.Save();
                 return actual;
             }
 
             _isLoading = true;
-            try { SettingsTab.ChkWinStart.IsChecked = enable; } finally { _isLoading = false; }
+            try { AppSettingsTab.ChkWinStart.IsChecked = enable; } finally { _isLoading = false; }
             App.Settings.Current.RunOnStartup = enable;
             App.Settings.Save();
             return enable;
@@ -1268,8 +1294,10 @@ namespace ConditioningControlPanel
                 if (BambiTakeoverTab.TxtTakeoverUnlocked != null) BambiTakeoverTab.TxtTakeoverUnlocked.Text = $"🤖 {takeoverLabel}";
                 if (BambiTakeoverTab.BtnAutonomyStartStop != null)
                     BambiTakeoverTab.BtnAutonomyStartStop.ToolTip = Loc.GetF("tooltip_start_stop_takeover", takeoverLabel);
-                if (PatreonTab.RunPatreonFeatures != null)
-                    PatreonTab.RunPatreonFeatures.Text = Loc.GetF("label_patreon_features", takeoverLabel);
+                // Phase 2: the Support Development card (and its RunPatreonFeatures inline Run)
+                // moved from PatreonTab to Settings/Account.
+                if (AppSettingsTab?.RunPatreonFeatures != null)
+                    AppSettingsTab.RunPatreonFeatures.Text = Loc.GetF("label_patreon_features", takeoverLabel);
             }
             catch (Exception ex)
             {

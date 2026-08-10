@@ -2707,6 +2707,31 @@
     ]
   },
   {
+    "id": "tut_appsettings",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "appsettings",
+      "total_sessions_lte": 3
+    },
+    "priority": 140,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "guiding, warm",
+    "class": "normal",
+    "chance": 0.5,
+    "variant_pool": [
+      {
+        "text": "this is the tinkering room, sweetie. volumes, devices, the boring bits. set it once and forget it - you're not here to configure things.",
+        "audio": "tut_appsettings_1.mp3"
+      },
+      {
+        "text": "settings, cutie. almost all of it is optional. pick your volume, pick your device, then come back to me, lovely.",
+        "audio": "tut_appsettings_2.mp3"
+      }
+    ]
+  },
+  {
     "id": "tut_presets",
     "trigger": "TabNavigated",
     "conditions": {
@@ -3189,6 +3214,55 @@
       {
         "text": "home again, lovely. so many ways for me to get to you.",
         "audio": "nav_home_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "nav_appsettings",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "appsettings"
+    },
+    "priority": 70,
+    "cooldown_ms": 25000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "playful",
+    "class": "normal",
+    "chance": 0.2,
+    "variant_pool": [
+      {
+        "text": "adjusting things again, sweetie? none of these dials change what happens to you.",
+        "audio": "nav_appsettings_1.mp3"
+      },
+      {
+        "text": "mm, tidying the settings, lovely. you do like feeling organized before you let go.",
+        "audio": "nav_appsettings_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "nav_appsettings_midsession",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "appsettings",
+      "session_running_eq": true
+    },
+    "priority": 90,
+    "cooldown_ms": 25000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "chance": 0.35,
+    "variant_pool": [
+      {
+        "text": "you left me running to come fiddle in here, cutie? eyes back on the screen.",
+        "audio": "nav_appsettings_midsession_1.mp3"
+      },
+      {
+        "text": "the session is still going, lovely. the settings can wait. i can't.",
+        "audio": "nav_appsettings_midsession_2.mp3"
       }
     ]
   },
