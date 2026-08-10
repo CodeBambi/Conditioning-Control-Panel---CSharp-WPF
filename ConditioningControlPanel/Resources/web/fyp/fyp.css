@@ -357,6 +357,11 @@ html, body {
 
 #mosaic-slider-row, #opacity-row, #clickthrough-row, #eye-gaze-row { margin-top: 10px; }
 
+/* The opacity row's title+description were being crushed to one word per line by the
+   slider (both flex:1 in a 288px card). Wrap instead: text on its own line, slider under. */
+#opacity-row { flex-wrap: wrap; }
+#opacity-row .option-text { flex-basis: 100%; }
+
 /* sub-option: indented under its master toggle, and inert until the master
    (and, for gaze, a calibration) makes it meaningful */
 .option-row.sub-row { padding-left: 14px; }
