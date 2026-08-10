@@ -43,7 +43,7 @@ namespace ConditioningControlPanel
                 // tab, which leaves the toggle reachable by keyboard focus and by automation - and
                 // this handler is the one that mints a session code for someone else to drive.
                 // Browsing Available Subjects (controller side) stays free by design.
-                var gate = TierGate.RequiresPremium("Remote Control");
+                var gate = TierGate.RequiresPremium(Loc.Get("tab_remote_control"));
                 if (!gate.Allowed)
                 {
                     // Revert before telling: same order as the login check below, so the toggle's

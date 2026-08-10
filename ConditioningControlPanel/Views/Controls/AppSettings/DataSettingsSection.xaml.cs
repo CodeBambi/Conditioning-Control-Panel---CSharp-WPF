@@ -155,6 +155,15 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
             App.Logger?.Warning("[RESET] Factory reset confirmed. Settings only - assets, packs, mods " +
                                 "and the account are untouched. Data folder: {Dir}", dir);
 
+            // BEFORE anything touches the file: flush the user's true final state (so the
+            // moved-aside backup is what they actually had), then seal the service. The debounce
+            // timer is a thread-pool System.Threading.Timer, not a DispatcherTimer, so a Save() from
+            // the last 500 ms would otherwise fire between the File.Move and the Exit below and
+            // re-create settings.json with the pre-reset content - a reset that silently did
+            // nothing. Sealing also blocks async continuations that call Save after the move.
+            try { App.Settings?.SaveImmediate(); } catch (Exception ex) { App.Logger?.Warning("[RESET] final flush failed: {E}", ex.Message); }
+            App.Settings?.SealForReset();
+
             // Relaunch FIRST so the window between "settings gone" and "process gone" is as small
             // as possible: if anything below throws, the user still gets an app back.
             var relaunched = TryScheduleRelaunch();
@@ -184,17 +193,40 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
                     catch (Exception ex) { App.Logger?.Warning("[RESET] could not clear restore marker: {E}", ex.Message); }
                 }
 
+                // Tell the next launch that the missing settings.json is DELIBERATE. Without this,
+                // App.CheckCloudSettingsRestoreAsync sees WasSettingsFileMissing (the fresh-install
+                // signal) and offers to restore the cloud backup of the settings the user just
+                // asked to be rid of. The marker is consumed and deleted there.
+                try
+                {
+                    File.WriteAllText(settingsPath + ".factory-reset", stamp);
+                    App.Logger?.Information("[RESET] dropped factory-reset marker for the next launch");
+                }
+                catch (Exception ex) { App.Logger?.Warning("[RESET] could not drop factory-reset marker: {E}", ex.Message); }
+
                 App.Logger?.Warning("[RESET] Factory reset complete - exiting{Relaunch}",
                                     relaunched ? " and relaunching" : " (relaunch unavailable, start the app again manually)");
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "[RESET] Factory reset failed while clearing the settings file");
+                // The app keeps running on this path, so give it its saves back - a sealed service
+                // would silently stop persisting anything for the rest of the session.
+                App.Settings?.UnsealAfterFailedReset();
                 Tell(Window.GetWindow(this),
                      Loc.GetF("set2_reset_failed_body", ex.Message),
                      Loc.Get("set2_reset_failed_title"),
                      MessageBoxImage.Error);
                 return;
+            }
+
+            // Belt and braces: a temp created by a save that was already mid-flight when the sweep
+            // above ran would be promoted to settings.json by
+            // SettingsService.RecoverAndCleanTempFiles on the next launch, undoing the reset.
+            foreach (var temp in SafeGlob(dir, "settings.json*.tmp"))
+            {
+                try { File.Delete(temp); App.Logger?.Warning("[RESET] deleted late temp {Temp}", temp); }
+                catch (Exception ex) { App.Logger?.Warning("[RESET] could not delete late temp {Temp}: {E}", temp, ex.Message); }
             }
 
             // Hard exit on purpose - see the method docs. Serilog buffers, so flush first or the

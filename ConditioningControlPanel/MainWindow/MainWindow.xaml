@@ -280,10 +280,12 @@
              same x:Name, Click handler, Tag, tooltip, icon-inside-a-Panel content shape
              and (Programs/Deeper) first-visit pulse ScaleTransform. Only the Style changed.
 
-             Collapsed doors keep Visibility=Visible and animate Height to 0 instead. That
-             is deliberate: EventFx anchors three of the six celebration bursts on
-             BtnAchievements / BtnQuests / BtnEnhancements via TransformToVisual, and a
-             Collapsed anchor would silently send those bursts nowhere. -->
+             Collapsed doors keep Visibility=Visible and animate Height to 0 instead, so an
+             entry in a shut door still measures and still maps through TransformToVisual
+             (a Collapsed anchor maps nowhere). Where it maps is meaningless, though - every
+             entry of a shut door lands on one zero-height strip - so EventFx bursts and the
+             first-visit pulses route through MainWindow.NavAnchorForTab, which hands back
+             the DOOR HEADER while that door is shut. -->
         <Border x:Name="NavSidebar" Grid.Row="1" Grid.RowSpan="5" Grid.Column="0"
                 Background="{StaticResource PanelBgBrush}"
                 BorderBrush="#2A2A46" BorderThickness="0,0,1,0">

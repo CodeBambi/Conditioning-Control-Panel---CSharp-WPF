@@ -22,7 +22,7 @@ namespace ConditioningControlPanel.Views.Controls.Studio
     /// back, the kick belongs in <see cref="Features.SchedulerFeatureControl"/>, not in
     /// SaveSettings.</para>
     /// </summary>
-    public partial class SchedulerRackPanel : UserControl
+    public partial class SchedulerRackPanel : UserControl, Features.ISettingsRebindable
     {
         /// <summary>
         /// Bark key for <c>BarkService.NotifyFeatureOpened</c>. The rack must keep firing the key
@@ -46,6 +46,13 @@ namespace ConditioningControlPanel.Views.Controls.Studio
 
         /// <summary>The live control this panel hosts, for callers that need the real editor.</summary>
         internal global::ConditioningControlPanel.Features.SchedulerFeatureControl Inner => SchedulerHost;
+
+        /// <summary>
+        /// Pass-through: this panel is a frame, the hosted control is the editor that holds the
+        /// AppSettings hook. Implemented here so the rack's CurrentReplaced fan-out (which walks
+        /// the entries' top-level panels) reaches the editor inside the wrapper too.
+        /// </summary>
+        public void RebindToCurrentSettings() => Inner.RebindToCurrentSettings();
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {

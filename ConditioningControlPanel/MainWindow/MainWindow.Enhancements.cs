@@ -1822,7 +1822,7 @@ namespace ConditioningControlPanel
 
             text.Children.Add(new TextBlock
             {
-                Text = skill.SecretRequirementDesc ?? Loc.Get("label_secret_skill_unknown_req"),
+                Text = skill.LocalizedSecretRequirementDesc,
                 Foreground = new SolidColorBrush(Color.FromRgb(128, 128, 128)),
                 FontSize = 8,
                 TextWrapping = TextWrapping.Wrap,

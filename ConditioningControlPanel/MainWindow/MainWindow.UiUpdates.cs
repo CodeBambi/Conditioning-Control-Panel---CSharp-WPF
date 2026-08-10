@@ -2264,9 +2264,14 @@ namespace ConditioningControlPanel
         // UX restructure Phase 2: the four perf controls below now have TWO instances - the live
         // editor in Settings ▸ Performance (Views/Controls/AppSettings/PerformanceSettingsSection)
         // and the unreachable LegacyDashboardHost original.
-        // PHASE 8 deleted those twins, so each of these five has exactly one instance again. The
-        // handlers still read the control that raised the event rather than a hard-coded field;
-        // the fallback is now AppSettingsTab, for a programmatic call with no sender.
+        // PHASE 8 deleted those twins, so four of these five have exactly one instance again. The
+        // exception is ChkVideoHwDecode: VideoForceHardwareDecoding also has a live editor in
+        // Features/SystemFeatureControl (ChkVideoGpuDecode, reachable from Home's System pill), which
+        // writes App.Settings.Current and saves. Because of that second instance, SaveSettings must
+        // NOT read the Settings-door checkbox back for this property - see the note in
+        // MainWindow.Settings.cs. The handlers still read the control that raised the event rather
+        // than a hard-coded field; the fallback is now AppSettingsTab, for a programmatic call with
+        // no sender.
         internal void ChkPerformanceMode_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;

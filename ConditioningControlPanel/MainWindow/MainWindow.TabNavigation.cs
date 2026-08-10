@@ -572,6 +572,104 @@ namespace ConditioningControlPanel
             return door == null ? null : NavDoorParts(door).Header;
         }
 
+        /// <summary>True when the door owning <paramref name="tabKey"/> is the open one, i.e. when
+        /// that tab's entry row is actually painted rather than clipped to Height 0.</summary>
+        private bool IsDoorExpandedForTab(string? tabKey)
+        {
+            var door = NavDoorForTab(tabKey);
+            return door != null && string.Equals(door, _expandedDoor, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// The rail element that visibly STANDS FOR <paramref name="tabKey"/> right now: its entry
+        /// row when the owning door is open, the door header when the door is closed.
+        ///
+        /// A closed door keeps Visibility=Visible at Height 0 (see SetDoorPanelExpanded), so its
+        /// entries still pass FireBurstAt's IsVisible/ActualSize guard and still map through
+        /// TransformToVisual - but they all map onto the same zero-height strip at the top of the
+        /// clipped panel, which paints as some unrelated rail row. Anything that draws AT a rail row
+        /// (celebration bursts, first-launch pulses) must ask for this instead of naming an entry
+        /// button directly, or it lands on the wrong row whenever that door happens to be shut.
+        /// </summary>
+        internal Button? NavAnchorForTab(string? tabKey)
+        {
+            try
+            {
+                var entry = NavButtonForTab(tabKey);
+                var header = NavDoorHeaderForTab(tabKey);
+                if (header == null) return entry;
+                return IsDoorExpandedForTab(tabKey) ? (entry ?? header) : header;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("NavAnchorForTab({Tab}): {E}", tabKey, ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>Door headers currently carrying a first-visit attention pulse, keyed by the tab
+        /// key that asked for it - so the matching Stop can release the animation's hold on Opacity
+        /// and two announcements (Programs in "you", Deeper in "play") can run side by side.</summary>
+        private readonly Dictionary<string, Button> _navHeaderPulses = new(StringComparer.Ordinal);
+
+        /// <summary>
+        /// First-visit attention pulse for a rail entry whose door is SHUT. The entry is clipped to
+        /// Height 0 there, so the scale pulse it carries plays inside a zero-height ClipToBounds
+        /// panel and nobody ever sees it - and the rail opens on Home, so that is every launch. The
+        /// door header is always painted and is the row the user has to click first, so the
+        /// announcement escalates one level instead of being lost.
+        ///
+        /// Opacity rather than scale: a door header stretches the full rail width, so growing it
+        /// 1.12x would spill over the sidebar's edge onto the page.
+        ///
+        /// Returns false when the door is already open or has no header - the caller then runs its
+        /// own entry-level pulse, which is visible in that case.
+        /// </summary>
+        private bool StartNavDoorHeaderPulse(string tabKey)
+        {
+            try
+            {
+                if (IsDoorExpandedForTab(tabKey)) return false;
+                var header = NavDoorHeaderForTab(tabKey);
+                if (header == null) return false;
+                if (_navHeaderPulses.ContainsKey(tabKey)) return true;   // already announcing
+
+                _navHeaderPulses[tabKey] = header;
+                var anim = new DoubleAnimation
+                {
+                    From = 1.0,
+                    To = 0.35,
+                    Duration = TimeSpan.FromMilliseconds(700),
+                    AutoReverse = true,
+                    RepeatBehavior = new RepeatBehavior(4),
+                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+                };
+                anim.Completed += (_, __) => StopNavDoorHeaderPulse(tabKey);
+                header.BeginAnimation(UIElement.OpacityProperty, anim);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("StartNavDoorHeaderPulse({Tab}): {E}", tabKey, ex.Message);
+                return false;
+            }
+        }
+
+        /// <summary>Releases a door-header pulse. Passing null to BeginAnimation is what drops the
+        /// animation's hold on Opacity - without it the last animated value sticks and the header
+        /// stays half-faded for the rest of the session.</summary>
+        private void StopNavDoorHeaderPulse(string tabKey)
+        {
+            try
+            {
+                if (!_navHeaderPulses.TryGetValue(tabKey, out var header)) return;
+                _navHeaderPulses.Remove(tabKey);
+                header.BeginAnimation(UIElement.OpacityProperty, null);
+                header.Opacity = 1.0;
+            }
+            catch (Exception ex) { App.Logger?.Debug("StopNavDoorHeaderPulse({Tab}): {E}", tabKey, ex.Message); }
+        }
+
         /// <summary>
         /// Opens the door that contains <paramref name="tabKey"/>'s entry, closing whichever
         /// door was open. Public surface for TutorialOverlay (a spotlight can only measure an
@@ -614,10 +712,11 @@ namespace ConditioningControlPanel
         /// loop, so there is nothing for the motion kill-switch to stop - at MotionLevel Off
         /// (AllowTransitions false) the panel simply snaps.
         ///
-        /// A closed door keeps Visibility=Visible at Height 0 rather than collapsing. That is
-        /// deliberate: EventFx anchors three of the six celebration bursts on BtnAchievements /
-        /// BtnQuests / BtnEnhancements, and TransformToVisual on a Collapsed element sends the
-        /// burst nowhere, silently.
+        /// A closed door keeps Visibility=Visible at Height 0 rather than collapsing, so an entry
+        /// in a shut door still measures and still maps through TransformToVisual (a Collapsed
+        /// element maps nowhere). It does NOT map anywhere USEFUL, though - every entry of a shut
+        /// door lands on the same zero-height strip - so anything that draws at a rail row asks
+        /// NavAnchorForTab for the row to use and gets the door header while the door is shut.
         /// </summary>
         private void SetDoorPanelExpanded(string door, Border panel, StackPanel? entries, bool expand, bool animate)
         {

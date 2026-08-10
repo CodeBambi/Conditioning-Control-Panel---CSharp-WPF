@@ -53,17 +53,50 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
                 var s = App.Settings?.Current;
                 if (s == null) return;
 
-                // StartupManager is the authority for RunOnStartup - the registry shortcut can be
-                // removed by the user or a cleaner without the settings file ever hearing about it.
+                // The Startup-folder shortcut can vanish behind the app's back (a cleaner, an AV, a
+                // moved exe), so it is worth re-reading here - but SETTINGS stay the authority when
+                // the two disagree. Adopting the OS state blindly would silently and permanently
+                // flip the user's "Run on startup" choice off the first time a registration write
+                // failed, and it would do so on every visit to the Settings door.
                 var registered = Services.StartupManager.IsRegistered();
-                if ((ChkWinStart.IsChecked ?? false) != registered)
+                if (s.RunOnStartup && !registered)
                 {
-                    ChkWinStart.IsChecked = registered;   // Click handler: no echo from this
-                    s.RunOnStartup = registered;
+                    // Stored ON, shortcut missing: re-assert rather than erase the choice.
+                    if (Services.StartupManager.SetStartupState(true))
+                    {
+                        registered = true;
+                        App.Logger?.Information(
+                            "Settings/General: re-created the missing Windows startup shortcut");
+                    }
+                    else
+                    {
+                        // Re-assert failed too - only now does the stored value give way, and never
+                        // silently (same warning the click handlers raise).
+                        s.RunOnStartup = false;
+                        App.Settings?.Save();
+                        App.Logger?.Warning(
+                            "Settings/General: could not re-create the Windows startup shortcut - RunOnStartup cleared");
+                        if (Window.GetWindow(this) is { } owner)
+                        {
+                            MessageBox.Show(owner,
+                                Localization.Loc.Get("msg_failed_to_update_startup"),
+                                Localization.Loc.Get("title_startup_error"),
+                                MessageBoxButton.OK, MessageBoxImage.Warning);
+                        }
+                    }
+                }
+                else if (!s.RunOnStartup && registered)
+                {
+                    // An external tool added the shortcut. Adopting that direction is harmless -
+                    // the app really does start with Windows now, so say so.
+                    s.RunOnStartup = true;
                     App.Settings?.Save();
                     App.Logger?.Information(
-                        "Settings/General: RunOnStartup re-synced to the OS shortcut ({Registered})", registered);
+                        "Settings/General: RunOnStartup adopted from an externally added OS shortcut");
                 }
+
+                if ((ChkWinStart.IsChecked ?? false) != registered)
+                    ChkWinStart.IsChecked = registered;   // Click handler: no echo from this
 
                 // Assign only on a real difference. These four raise Checked/Unchecked, and their
                 // handlers are live editors - a blind re-seed would round-trip through a Save (and,

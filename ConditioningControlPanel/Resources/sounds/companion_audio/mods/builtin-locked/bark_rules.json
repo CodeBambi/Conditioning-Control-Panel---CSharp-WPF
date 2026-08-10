@@ -3122,6 +3122,30 @@
     ]
   },
   {
+    "id": "feat_braindrain",
+    "trigger": "FeatureOpened",
+    "conditions": {
+      "feature_eq": "BrainDrain"
+    },
+    "priority": 70,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "dreamy, controlling",
+    "class": "normal",
+    "chance": 0.2,
+    "variant_pool": [
+      {
+        "text": "the drain, pet. whatever is still in there will not be missed.",
+        "audio": "feat_braindrain_1.mp3"
+      },
+      {
+        "text": "opening the drain yourself. good. hold still while it empties.",
+        "audio": "feat_braindrain_2.mp3"
+      }
+    ]
+  },
+  {
     "id": "feat_system",
     "trigger": "FeatureOpened",
     "conditions": {

@@ -472,7 +472,7 @@
                                             <TextBlock Text="{loc:Str set2_webcam_chip_label}" Foreground="White"
                                                        FontSize="12" FontWeight="Medium"/>
                                             <TextBlock x:Name="TxtWebcamStatusChipBlinkTrainer" x:FieldModifier="internal"
-                                                       Text="Stopped" Foreground="{DynamicResource TextMutedBrush}"
+                                                       Text="{loc:Str rf_webcam_stopped}" Foreground="{DynamicResource TextMutedBrush}"
                                                        FontFamily="Consolas" FontSize="10"/>
                                         </StackPanel>
                                         <Button Grid.Column="2" Content="{loc:Str set2_configure_in_settings}"

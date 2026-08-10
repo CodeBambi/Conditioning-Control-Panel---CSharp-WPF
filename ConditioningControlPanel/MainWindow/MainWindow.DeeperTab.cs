@@ -143,6 +143,11 @@ namespace ConditioningControlPanel
 
         private void StartDeeperTabPulse()
         {
+            // Same story as the Programs pulse: Phase 1 moved BtnDeeper into DoorPanelPlay, which is
+            // ClipToBounds at Height 0 unless the Play door is open, so on a first launch (rail opens
+            // on Home) this scale would be invisible. Escalate to the door header when it is shut.
+            if (StartNavDoorHeaderPulse("deeper")) return;
+
             if (BtnDeeperScale == null || _deeperPulseRunning) return;
             _deeperPulseRunning = true;
             var anim = new System.Windows.Media.Animation.DoubleAnimation
@@ -172,6 +177,9 @@ namespace ConditioningControlPanel
 
         private void StopDeeperTabPulse()
         {
+            // The announcement may be riding the Play door's header rather than this button.
+            StopNavDoorHeaderPulse("deeper");
+
             if (!_deeperPulseRunning && BtnDeeperScale == null) return;
             _deeperPulseRunning = false;
             if (BtnDeeperScale != null)

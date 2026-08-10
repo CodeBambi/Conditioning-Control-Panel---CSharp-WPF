@@ -180,7 +180,10 @@ namespace ConditioningControlPanel.Services
                 });
 
             Door("home", "nav_door_home", "🏠", "settings", "home dashboard start");
-            Door("studio", "nav_door_studio", "🎛️", "presets", "studio effects rack presets");
+            // Phase 4 gave the Studio door a first entry of its own - the effects rack - so its
+            // default tab is "studio", not "presets". Clicking DoorStudio lands on the rack; this
+            // row has to land in the same place or the palette and the rail disagree.
+            Door("studio", "nav_door_studio", "🎛️", "studio", "studio effects rack presets");
             Door("companion", "nav_door_companion", "🤖", "companion", "companion ai avatar");
             // Phase 6: the Play door's default destination is the card wall's own key. "lab" is
             // still a working alias but is no longer the name of anything that exists.
@@ -202,7 +205,14 @@ namespace ConditioningControlPanel.Services
                 });
 
             Tab("settings", "tab_dashboard", "📊", "settings", "dashboard home start engine");
-            Tab("presets", "tab_presets", "📋", "presets", "presets sessions scheduler ramp");
+            Tab("presets", "tab_presets", "📋", "presets", "presets sessions catalogue share");
+            // Phase 4: the effects rack. Reuses the door's own loc key as the caption, the same way
+            // the Play row does. Every rack module is in the aliases so a feature is findable by its
+            // own name ("brain drain", "spiral") and not only by the room it now lives in - which is
+            // also where "scheduler"/"ramp" resolve to now that they are rack modules.
+            Tab("studio", "nav_door_studio", "🎛️", "studio",
+                "studio effects rack flashes visuals video spiral subliminal brain drain melt mind wipe " +
+                "bubbles lock card bouncing text pink filter scheduler ramp exclusion haptics");
             Tab("haptics", "tab_haptics", "📳", "haptics", "haptics toy vibrator buttplug funscript");
             Tab("companion", "tab_companion", "🤖", "companion", "companion ai persona workshop chat");
             Tab("bambitakeover", "tab_takeover", "💫", "bambitakeover", "takeover autonomy");
@@ -304,36 +314,43 @@ namespace ConditioningControlPanel.Services
                 });
 
             // Audio (landed: Views/Controls/AppSettings/AudioSettingsSection.xaml)
-            Setting("master_volume", "setting_master", "🔊", "audio",
+            //
+            // Eleven rows below point at rf_palette_* keys rather than the form label beside the
+            // control they open. A form label is written to be read next to its widget, so it is
+            // terse ("Duck", "Master", "Motion"), sometimes carries the widget's punctuation
+            // ("Startup Video:") and sometimes an emoji the palette already draws itself
+            // ("🔑 Escape" rendered as a second glyph). Standalone captions need standalone
+            // strings - and every translation inherited the colon and the doubled glyph.
+            Setting("master_volume", "rf_palette_master_volume", "🔊", "audio",
                     new[] { "SliderMaster" }, "set2_section_audio", "master volume loudness");
             Setting("video_volume", "setting_video", "🎬", "audio",
                     new[] { "SliderVideoVolume" }, "set2_section_audio", "video volume mandatory");
-            Setting("ducking", "label_duck", "🔉", "audio",
+            Setting("ducking", "rf_palette_ducking", "🔉", "audio",
                     new[] { "ChkAudioDuck" }, "set2_section_audio", "duck ducking lower other apps");
             Setting("duck_level", "set2_palette_duck_level", "🔉", "audio",
                     new[] { "SliderDuck" }, "set2_section_audio", "ducking level percent");
-            Setting("audio_output", "setting_output", "🎚️", "audio",
+            Setting("audio_output", "rf_palette_audio_output", "🎚️", "audio",
                     new[] { "CmbAudioOutputDevice" }, "set2_section_audio", "output device speakers headphones playback");
             Setting("dont_duck_browser", "setting_don_t_duck_browser", "🌐", "audio",
                     new[] { "ChkExcludeBambiCloudDucking" }, "set2_section_audio", "browser bambicloud exclude ducking");
             Setting("test_audio", "set2_btn_test_audio", "🔔", "audio",
                     new[] { "BtnTestAudio" }, "set2_section_audio", "test audio sound check");
-            Setting("audio_layers", "btn_audio_layers", "🎧", "audio",
+            Setting("audio_layers", "rf_palette_audio_layers", "🎧", "audio",
                     new[] { "BtnAudioLayers" }, "set2_section_audio", "layered audio ambience loops");
 
             // General
             Setting("language", "label_language", "🌍", "general",
                     new[] { "CmbLanguageSetting" },
                     "set2_section_general", "language locale translation");
-            Setting("run_on_startup", "setting_win_start", "🚀", "general",
+            Setting("run_on_startup", "rf_palette_run_on_startup", "🚀", "general",
                     new[] { "ChkWinStart" }, "set2_section_general", "startup windows boot autostart launch");
             Setting("start_minimized", "setting_start_hidden", "🫥", "general",
                     new[] { "ChkStartHidden" }, "set2_section_general", "start minimized hidden tray");
-            Setting("video_on_launch", "setting_vid_launch", "🎬", "general",
+            Setting("video_on_launch", "rf_palette_video_on_launch", "🎬", "general",
                     new[] { "ChkVidLaunch" }, "set2_section_general", "video on launch mandatory startup");
-            Setting("auto_start_engine", "setting_auto_run", "▶️", "general",
+            Setting("auto_start_engine", "rf_palette_auto_start_engine", "▶️", "general",
                     new[] { "ChkAutoRun" }, "set2_section_general", "auto start engine run");
-            Setting("startup_video", "label_startup_video", "📼", "general",
+            Setting("startup_video", "rf_palette_startup_video", "📼", "general",
                     new[] { "TxtStartupVideo" }, "set2_section_general", "startup video pick file");
             Setting("enable_deeper", "setting_deeper_enable", "🌊", "general",
                     new[] { "ChkEnableDeeper" }, "set2_section_general", "deeper enable tab");
@@ -365,9 +382,9 @@ namespace ConditioningControlPanel.Services
                     "headphones interrupt barge in speakers");
 
             // Devices - panic + shortcuts
-            Setting("panic_key", "btn_escape", "🆘", "devices",
+            Setting("panic_key", "rf_palette_panic_key", "🆘", "devices",
                     new[] { "BtnPanicKey" }, "set2_section_devices", "panic key escape rebind emergency stop");
-            Setting("no_panic", "setting_no_panic", "⚠️", "devices",
+            Setting("no_panic", "rf_palette_no_panic", "⚠️", "devices",
                     new[] { "ChkNoPanic" }, "set2_section_devices", "no panic disable escape");
             Setting("chat_shortcut", "set2_palette_chat_shortcut", "⌨️", "devices",
                     new[] { "TxtChatShortcutLabel", "BtnChatShortcut" }, "set2_section_devices",
@@ -383,7 +400,7 @@ namespace ConditioningControlPanel.Services
                     new[] { "ChkAutoPerformance" }, "set2_section_performance", "auto performance adaptive");
             Setting("unified_overlay", "set2_setting_unified_overlay", "🪟", "performance",
                     new[] { "ChkUnifiedOverlay" }, "set2_section_performance", "unified overlay renderer compositor");
-            Setting("motion_level", "setting_motion_level", "🎞️", "performance",
+            Setting("motion_level", "rf_palette_motion_level", "🎞️", "performance",
                     new[] { "CmbMotionLevel" }, "set2_section_performance",
                     "motion reduced off animation accessibility kill switch");
 

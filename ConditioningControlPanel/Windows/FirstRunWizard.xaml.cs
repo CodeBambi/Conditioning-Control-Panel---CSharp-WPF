@@ -384,18 +384,48 @@ namespace ConditioningControlPanel
             catch (FormatException) { return template; }
         }
 
+        /// <summary>
+        /// The one art load on this screen that CAN be mod-aware: logo.png is a real
+        /// resource-relative path, so a mod that ships its own brand mark shows it here.
+        /// (The mod cards on step 2 cannot use the resolver - it resolves against the ACTIVE
+        /// mod only, and that step is showing five candidates.)
+        /// <para>
+        /// Which wordmark is the same branch <c>MainWindow.LoadLogo</c> takes: logo.png is
+        /// the Bambi-branded mark, logo2.png the neutral "Conditioning Control Panel" one used by
+        /// CCP Default and Sissy - and a fresh install IS CCP Default, so the wizard must not
+        /// hardcode logo.png. Re-called from ShowStep(1) so Back-navigation after a mod pick
+        /// repaints instead of showing the previous mod's mark.
+        /// </para>
+        /// </summary>
+        private void RefreshWelcomeLogo()
+        {
+            try
+            {
+                var useNeutralLogo = App.Mods?.IsCCPDefault == true
+                                     || App.Settings?.Current?.IsSissyMode == true;
+                var logoFile = useNeutralLogo ? "logo2.png" : "logo.png";
+
+                // ResolveUri + DecodePixelWidth instead of ResolveImage: the frame is 46 DIP, so a
+                // 2x decode is plenty and the full-res PNG never reaches memory.
+                var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = new Uri(ModResourceResolver.ResolveUri(logoFile), UriKind.Absolute);
+                bitmap.DecodePixelWidth = 92;
+                bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                bitmap.EndInit();
+                bitmap.Freeze();
+                ImgWelcomeLogo.Source = bitmap;
+            }
+            catch (Exception ex) { App.Logger?.Debug("[FirstRun] logo resolve failed: {E}", ex.Message); }
+        }
+
         private void ApplyStaticText()
         {
             Title = Str("fr8_wizard_title", "Getting started");
             TxtWizardTitle.Text = Title;
 
             // --- step 1 ---
-            // The one art load on this screen that CAN be mod-aware: logo.png is a real
-            // resource-relative path, so a mod that ships its own brand mark shows it here.
-            // (The mod cards below cannot use the resolver - it resolves against the ACTIVE mod
-            // only, and that step is showing five candidates.)
-            try { ImgWelcomeLogo.Source = ModResourceResolver.ResolveImage("logo.png"); }
-            catch (Exception ex) { App.Logger?.Debug("[FirstRun] logo.png resolve failed: {E}", ex.Message); }
+            RefreshWelcomeLogo();
 
             TxtAppTitle.Text = Loc.Get("app_title");
             TxtWelcomeHeading.Text = StrF("fr8_welcome_heading", "Welcome, {0}.",
@@ -463,6 +493,7 @@ namespace ConditioningControlPanel
                 BtnNext.Content = Str("fr8_wizard_next", "Next");
             }
 
+            if (_step == 1) RefreshWelcomeLogo();
             if (_step == 2) PrepareModStep();
 
             FadeInCurrentStep();

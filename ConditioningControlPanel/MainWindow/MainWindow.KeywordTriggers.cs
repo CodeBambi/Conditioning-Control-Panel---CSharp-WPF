@@ -46,7 +46,11 @@ namespace ConditioningControlPanel
             if (_isLoading || AwarenessTab.TxtKeywordBufferTimeout == null) return;
             var value = (int)AwarenessTab.SliderKeywordBufferTimeout.Value;
             AwarenessTab.TxtKeywordBufferTimeout.Text = $"{value / 1000.0:F1}s";
-            App.Settings.Current.KeywordBufferTimeoutMs = value;
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.KeywordBufferTimeoutMs = value;
+                App.Settings.Save();
+            }
         }
 
         // PHASE 8: SliderKeywordGlobalCooldown_ValueChanged went with PatreonTabView. Its slider
@@ -88,7 +92,11 @@ namespace ConditioningControlPanel
             if (_isLoading || AwarenessTab.TxtKeywordSessionMultiplier == null) return;
             var value = AwarenessTab.SliderKeywordSessionMultiplier.Value;
             AwarenessTab.TxtKeywordSessionMultiplier.Text = $"{value:F1}x";
-            App.Settings.Current.KeywordSessionMultiplier = value;
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.KeywordSessionMultiplier = value;
+                App.Settings.Save();
+            }
         }
 
         // PHASE 8: ChkScreenOcrEnabled_Changed went with PatreonTabView. Its live replacement is
@@ -103,7 +111,11 @@ namespace ConditioningControlPanel
             if (_isLoading || AwarenessTab.TxtScreenOcrInterval == null) return;
             var value = (int)AwarenessTab.SliderScreenOcrInterval.Value;
             AwarenessTab.TxtScreenOcrInterval.Text = $"{value}s";
-            App.Settings.Current.ScreenOcrIntervalMs = value * 1000;
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.ScreenOcrIntervalMs = value * 1000;
+                App.Settings.Save();
+            }
             App.ScreenOcr?.UpdateInterval(value * 1000);
         }
 
@@ -117,13 +129,21 @@ namespace ConditioningControlPanel
             if (_isLoading || AwarenessTab.SliderKeywordHighlightDuration == null) return;
             var ms = (int)(AwarenessTab.SliderKeywordHighlightDuration.Value * 1000);
             AwarenessTab.TxtKeywordHighlightDuration.Text = $"{AwarenessTab.SliderKeywordHighlightDuration.Value:0.0}s";
-            App.Settings.Current.KeywordHighlightDurationMs = ms;
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.KeywordHighlightDurationMs = ms;
+                App.Settings.Save();
+            }
         }
 
         internal void CmbOcrHighlightMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_isLoading || AwarenessTab.CmbOcrHighlightMode == null) return;
-            App.Settings.Current.OcrHighlightAll = AwarenessTab.CmbOcrHighlightMode.SelectedIndex == 0;
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.OcrHighlightAll = AwarenessTab.CmbOcrHighlightMode.SelectedIndex == 0;
+                App.Settings.Save();
+            }
         }
 
         internal void CmbOcrConfirmation_SelectionChanged(object sender, SelectionChangedEventArgs e)

@@ -2130,7 +2130,9 @@ namespace ConditioningControlPanel
             // on denial, like `--dtrh` above.
             if (e.Args.Contains("--fyp"))
             {
-                var fypGate = Services.TierGate.RequiresPremium("The For You feed");
+                // Same subject the Play door's band and the OpenFypFeed refusal name, from the same
+                // key - "The For You feed" here vs "For You" there was two names for one gate.
+                var fypGate = Services.TierGate.RequiresPremium(Loc.Get("tab_fyp"));
                 if (fypGate.Allowed) Services.Fyp.FypHostService.Launch();
                 else Logger?.Information("--fyp ignored: {Reason}", fypGate.Reason);
             }
@@ -2815,6 +2817,15 @@ namespace ConditioningControlPanel
                 // Only run on fresh installs (no settings file existed)
                 if (Settings?.WasSettingsFileMissing != true) return;
 
+                // ...but "no settings file" is also what a deliberate factory reset leaves behind.
+                // Settings ▸ Data drops this marker on its way out; consume it and stay quiet, or the
+                // reset is immediately offered its own undo under fresh-install copy.
+                if (ConsumeFactoryResetMarker())
+                {
+                    Logger?.Information("Skipping the cloud settings restore offer — the missing settings file is a factory reset");
+                    return;
+                }
+
                 // Wait for provider auth to complete
                 await Task.Delay(5000);
 
@@ -2834,18 +2845,43 @@ namespace ConditioningControlPanel
                 Logger?.Information("Cloud settings backup found (v{Version}, {Date})",
                     backupInfo.AppVersion, backupInfo.BackedUpAt);
 
+                // This prompt fires on exactly the population the FIRST-RUN WIZARD claims, and it is
+                // unowned and task-modal: landing it on top of the wizard disables the wizard's
+                // buttons behind a box that can hide under it, and accepting swaps
+                // App.Settings.Current out from under the flags the wizard already spent. So wait
+                // out the startup ladder (update dialog, What's New, season recap, the wizard) the
+                // same way MainWindow.xaml.cs:537 does - up to 5 minutes, because a mod pack can
+                // take that long to download inside the wizard - and re-check before showing.
+                for (int i = 0; i < 600 && (IsUpdateDialogActive ||
+                                           ConditioningControlPanel.MainWindow.IsStartupDialogShowing); i++)
+                {
+                    await Task.Delay(500);
+                }
+                if (IsUpdateDialogActive || ConditioningControlPanel.MainWindow.IsStartupDialogShowing)
+                {
+                    Logger?.Information("Cloud settings restore offer deferred to the next launch — a startup dialog is still open");
+                    return;
+                }
+
                 // Ask user on UI thread
                 await Current.Dispatcher.InvokeAsync(async () =>
                 {
                     var dateStr = backupInfo.BackedUpAt?.ToLocalTime().ToString("MMM d, yyyy h:mm tt") ?? "unknown date";
-                    var result = System.Windows.MessageBox.Show(
-                        $"A cloud backup of your settings was found!\n\n" +
-                        $"Backed up: {dateStr}\n" +
-                        $"App version: {backupInfo.AppVersion}\n\n" +
-                        $"Would you like to restore your settings from this backup?",
-                        "Restore Settings from Cloud",
-                        System.Windows.MessageBoxButton.YesNo,
-                        System.Windows.MessageBoxImage.Question);
+                    var owner = MainWindowRef ?? Current?.MainWindow;
+                    var body = $"A cloud backup of your settings was found!\n\n" +
+                               $"Backed up: {dateStr}\n" +
+                               $"App version: {backupInfo.AppVersion}\n\n" +
+                               $"Would you like to restore your settings from this backup?";
+                    // Owned when there is a window: an unowned box can end up BEHIND the app.
+                    var result = owner != null
+                        ? System.Windows.MessageBox.Show(owner, body,
+                            "Restore Settings from Cloud",
+                            System.Windows.MessageBoxButton.YesNo,
+                            System.Windows.MessageBoxImage.Question)
+                        : System.Windows.MessageBox.Show(body,
+                            "Restore Settings from Cloud",
+                            System.Windows.MessageBoxButton.YesNo,
+                            System.Windows.MessageBoxImage.Question);
 
                     if (result != System.Windows.MessageBoxResult.Yes) return;
 
@@ -2872,6 +2908,27 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 Logger?.Warning(ex, "Cloud settings restore check failed");
+            }
+        }
+
+        /// <summary>
+        /// True (once) if the previous run ended in a Settings ▸ Data factory reset. The marker is
+        /// deleted on the way out, so a later fresh install on the same machine still gets the offer.
+        /// </summary>
+        private static bool ConsumeFactoryResetMarker()
+        {
+            try
+            {
+                var marker = System.IO.Path.Combine(UserDataPath, "settings.json.factory-reset");
+                if (!System.IO.File.Exists(marker)) return false;
+                try { System.IO.File.Delete(marker); }
+                catch (Exception ex) { Logger?.Warning("Could not clear the factory-reset marker: {Error}", ex.Message); }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning("Factory-reset marker check failed: {Error}", ex.Message);
+                return false;
             }
         }
 
@@ -2903,6 +2960,13 @@ namespace ConditioningControlPanel
             restored.LastPatreonVerification = current.LastPatreonVerification;
             restored.OpenRouterApiKey = current.OpenRouterApiKey;
 
+            // First-run one-shots belong to THIS install and are already spent by the time a
+            // startup restore can land (FirstRunWizard.ShouldRunAndClaim writes both before the
+            // wizard opens). Importing the backup's values would re-arm the wizard - and the
+            // hardcoded assets prompt - on the next launch of an install that has already had them.
+            restored.Welcomed = current.Welcomed;
+            restored.FirstRunAssetsPromptShown = current.FirstRunAssetsPromptShown;
+
             // Preserve lifetime stats — take higher value (current may have server-synced data)
             restored.TotalConditioningMinutes = Math.Max(current.TotalConditioningMinutes, restored.TotalConditioningMinutes);
 
@@ -2925,10 +2989,15 @@ namespace ConditioningControlPanel
 
             Settings.RestoreFrom(restored);
 
-            // Refresh UI if MainWindow is loaded
-            if (MainWindow is MainWindow mw)
+            // Refresh UI if MainWindow is loaded. ApplySessionSettings alone leaves every control on
+            // the Settings door painted from the discarded instance - the manual restore path
+            // (MainWindow.CloudBackup.cs) re-runs LoadSettings for exactly that reason, so this one
+            // does too.
+            var mw = MainWindowRef ?? (MainWindow as MainWindow);
+            if (mw != null)
             {
                 mw.ApplySessionSettings();
+                mw.ReloadSettingsUiAfterRestore();
             }
 
             Logger?.Information("Applied restored cloud settings (identity/progression fields preserved)");

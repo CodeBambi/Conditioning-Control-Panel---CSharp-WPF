@@ -105,6 +105,10 @@ namespace ConditioningControlPanel.Views.Tabs
         private string _selected = DefaultRackKey;
         private bool _settingsHooked;
 
+        /// <summary>The AppSettings instance the dot listener is attached to. See
+        /// <see cref="BindDotListener"/> - a cloud restore swaps the instance out.</summary>
+        private Models.AppSettings? _hookedSettings;
+
         /// <summary>The rack key currently showing. Survives leaving and re-entering the door.</summary>
         internal string SelectedRackKey => _selected;
 
@@ -135,6 +139,19 @@ namespace ConditioningControlPanel.Views.Tabs
         }
 
         /// <summary>
+        /// Same selection, SILENT: no bark, no crossfade. For callers that pick the module before
+        /// the rack is on screen (the tutorial's Studio steps, which run on
+        /// <c>TutorialStep.OnBeforeTab</c>) - <see cref="OnTabShown"/> then announces the incoming
+        /// selection exactly once, and it is the right one. Announcing here as well would say the
+        /// same thing twice; announcing only here would say it while the page is still hidden.
+        /// </summary>
+        internal void PreselectRackEntry(string? rackKey)
+        {
+            try { SelectEntry(rackKey, announce: false, animate: false); }
+            catch (Exception ex) { App.Logger?.Debug("PreselectRackEntry({Key}): {E}", rackKey, ex.Message); }
+        }
+
+        /// <summary>
         /// Per-open refresh, called from ShowTab's <c>studio</c> case. Repaints the mod-aware row
         /// captions and the state dots, re-asserts the current selection's visibility (ShowTab's
         /// teardown collapses the Haptics panel on every navigation) and re-announces the visible
@@ -152,13 +169,13 @@ namespace ConditioningControlPanel.Views.Tabs
         }
 
         /// <summary>
-        /// Mod-switch repaint: captions and dots only. Deliberately does NOT re-announce the
-        /// visible module the way <see cref="OnTabShown"/> does — a mid-session mod switch on a
-        /// different tab must not fire a spurious feature-opened bark.
+        /// Mod-switch repaint: captions, dots and the detail pane's big header. Deliberately does
+        /// NOT re-announce the visible module the way <see cref="OnTabShown"/> does — a mid-session
+        /// mod switch on a different tab must not fire a spurious feature-opened bark.
         /// </summary>
         internal void RepaintModAwareChrome()
         {
-            try { RefreshRackLabels(); RefreshDots(); }
+            try { RefreshRackLabels(); RefreshDots(); RefreshDetailHeader(); }
             catch (Exception ex) { App.Logger?.Debug("StudioTabView.RepaintModAwareChrome: {E}", ex.Message); }
         }
 
@@ -214,8 +231,8 @@ namespace ConditioningControlPanel.Views.Tabs
             _layout.Add("st4_studio_group_immersion");
             Add("mindwipe", "🧠", "Mind Wipe", "label_mind_wipe", HostMindWipe, PanelMindWipe, "MindWipe",
                 () => App.Settings?.Current?.MindWipeEnabled);
-            // New in Phase 4 (G2 rescue). "BrainDrain" is a NEW feature_eq value - the built-in
-            // mods need matching FeatureOpened rules or selecting this row fires nothing.
+            // New in Phase 4 (G2 rescue). "BrainDrain" is a NEW feature_eq value; all three
+            // built-in mods now carry a matching feat_braindrain FeatureOpened rule.
             Add("braindrain", "💧", "Brain Drain", "section_brain_drain", HostBrainDrain, PanelBrainDrain, "BrainDrain",
                 () => App.Settings?.Current?.BrainDrainEnabled);
             // Haptics: no FeatureOpened key. ShowTab("haptics") still fires
@@ -265,15 +282,27 @@ namespace ConditioningControlPanel.Views.Tabs
             {
                 if (item is string headerKey)
                 {
-                    RackList.Children.Add(new TextBlock
+                    var caption = new TextBlock
                     {
-                        Text = Loc.Get(headerKey),
                         Margin = new Thickness(13, 8, 10, 4),
                         FontSize = 10,
                         FontWeight = FontWeights.Bold,
                         Opacity = 0.85,
                         Foreground = (Brush?)TryFindResource("TextDimBrush") ?? Brushes.Gray,
-                    });
+                    };
+                    // BOUND, not assigned. RenderRackRows runs exactly once (BuildRack, from the
+                    // ctor) and the group captions are not _entries, so RefreshRackLabels never
+                    // revisits them - a language switch left them frozen in the old language while
+                    // the page title beside them changed. This is the same binding {loc:Str}
+                    // produces (LocExtension.cs), so they now track SetLanguage's "Item[]"
+                    // notification with no repaint path at all.
+                    caption.SetBinding(TextBlock.TextProperty,
+                        new System.Windows.Data.Binding($"[{headerKey}]")
+                        {
+                            Source = LocalizationManager.Instance,
+                            Mode = System.Windows.Data.BindingMode.OneWay,
+                        });
+                    RackList.Children.Add(caption);
                     continue;
                 }
 
@@ -361,16 +390,30 @@ namespace ConditioningControlPanel.Views.Tabs
                 e.Host.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
             }
 
-            if (DetailHeader != null)
-                DetailHeader.Visibility = target.OwnHeader ? Visibility.Collapsed : Visibility.Visible;
-            if (TxtDetailIcon != null) TxtDetailIcon.Text = target.Glyph;
-            if (TxtDetailTitle != null) TxtDetailTitle.Text = LabelFor(target);
+            RefreshDetailHeader();
 
             if (animate) FadeInDetail(target.Host);
 
             RefreshDots();
 
             if (announce) Announce(target);
+        }
+
+        /// <summary>
+        /// Repaints the detail pane's big header for the current selection. Split out of
+        /// <see cref="SelectEntry"/> so a mod switch can repaint it too: <c>LabelFor</c> routes
+        /// through <c>MainWindow.ModAwareLabel</c>, so the title is mod-renamable and would
+        /// otherwise keep the previous mod's feature name. Deliberately does not re-announce.
+        /// </summary>
+        private void RefreshDetailHeader()
+        {
+            var target = EntryFor(_selected);
+            if (target == null) return;
+
+            if (DetailHeader != null)
+                DetailHeader.Visibility = target.OwnHeader ? Visibility.Collapsed : Visibility.Visible;
+            if (TxtDetailIcon != null) TxtDetailIcon.Text = target.Glyph;
+            if (TxtDetailTitle != null) TxtDetailTitle.Text = LabelFor(target);
         }
 
         /// <summary>
@@ -495,10 +538,13 @@ namespace ConditioningControlPanel.Views.Tabs
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
-            if (_settingsHooked) return;
-            if (App.Settings?.Current is INotifyPropertyChanged inpc)
+            if (!_settingsHooked)
             {
-                inpc.PropertyChanged += OnSettingsPropertyChanged;
+                BindDotListener();
+                // The rack and its panels live for the whole session, so they outlive the
+                // AppSettings instance they hooked: a cloud restore or a factory-default Reset
+                // SWAPS App.Settings.Current (SettingsService.RestoreFrom/Reset) and raises this.
+                if (App.Settings != null) App.Settings.CurrentReplaced += OnSettingsCurrentReplaced;
                 _settingsHooked = true;
             }
             // Per-module hosting wiring contributed by the module partials
@@ -506,6 +552,46 @@ namespace ConditioningControlPanel.Views.Tabs
             HookHapticsModule();
             RefreshRackLabels();
             RefreshDots();
+        }
+
+        /// <summary>
+        /// Points the dot listener at the CURRENT AppSettings instance, detaching from whichever
+        /// one it was on. The instance is tracked rather than re-read from
+        /// <c>App.Settings.Current</c>, which after a swap is already a different object - detaching
+        /// from that one would leave the old subscription live and the new one absent.
+        /// </summary>
+        private void BindDotListener()
+        {
+            if (_hookedSettings != null) _hookedSettings.PropertyChanged -= OnSettingsPropertyChanged;
+            _hookedSettings = App.Settings?.Current;
+            if (_hookedSettings != null) _hookedSettings.PropertyChanged += OnSettingsPropertyChanged;
+        }
+
+        /// <summary>
+        /// Cloud restore / Reset swapped the settings object. Re-point this host's dot listener and
+        /// every hosted panel's own hook, then repaint: without it the entire rack would show - and
+        /// write back from - the discarded instance for the rest of the session.
+        /// <para>
+        /// Normal priority, not Loaded: Loaded-priority work is starved in this app (the note at
+        /// PerformanceSettingsSection.xaml.cs:64 is the same lesson).
+        /// </para>
+        /// </summary>
+        private void OnSettingsCurrentReplaced()
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    BindDotListener();
+                    foreach (var panel in _entries.Select(x => x.Panel).OfType<Features.ISettingsRebindable>())
+                        panel.RebindToCurrentSettings();
+                    RefreshDots();
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "Studio rack rebind after a settings restore failed");
+                }
+            }));
         }
 
         private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)

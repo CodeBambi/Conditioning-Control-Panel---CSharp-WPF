@@ -855,6 +855,7 @@ namespace ConditioningControlPanel.Services
                     App.Settings.Current.SpiralEnabled = false;
                     App.Settings.Current.StrictLockEnabled = false;
                     App.Settings.Current.PanicKeyEnabled = true;
+                    SyncPanicKeyUi();
                 }
                 App.Overlay?.RefreshOverlays();
 
@@ -899,6 +900,21 @@ namespace ConditioningControlPanel.Services
         /// timeout, which fires while the subject is simply sitting still.
         /// </para>
         /// </summary>
+        /// <summary>
+        /// Pushes a remote PanicKeyEnabled write into the UI layer: the global keyboard hook and the
+        /// Settings ▸ Devices checkbox. Without it the hook and the flag diverged (a remote
+        /// "disable panic" left the hook armed) and the stale checkbox was read back by SaveSettings
+        /// on START, silently undoing the controller's command.
+        /// </summary>
+        private void SyncPanicKeyUi()
+        {
+            DispatcherHelper.RunOnUI(() =>
+            {
+                try { (MainWindowRef ?? App.MainWindowRef)?.SyncNoPanicState(); }
+                catch (Exception ex) { App.Logger?.Warning("[RemoteControl] Panic-key UI sync failed: {Error}", ex.Message); }
+            });
+        }
+
         private void HandleControllerDisconnectCleanup()
         {
             if (App.Settings?.Current?.StopEffectsOnRemoteDisconnect == true)
@@ -940,6 +956,7 @@ namespace ConditioningControlPanel.Services
                     App.Settings.Current.SpiralEnabled = false;
                     App.Settings.Current.StrictLockEnabled = false;
                     App.Settings.Current.PanicKeyEnabled = true;
+                    SyncPanicKeyUi();
                 }
                 App.Overlay?.RefreshOverlays();
 
@@ -1270,6 +1287,7 @@ namespace ConditioningControlPanel.Services
                             {
                                 App.Settings.Current.PanicKeyEnabled = false;
                                 App.Settings.Save();
+                                SyncPanicKeyUi();
                             }
                             break;
 
@@ -1278,6 +1296,7 @@ namespace ConditioningControlPanel.Services
                             {
                                 App.Settings.Current.PanicKeyEnabled = true;
                                 App.Settings.Save();
+                                SyncPanicKeyUi();
                             }
                             break;
 

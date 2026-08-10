@@ -134,7 +134,7 @@
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <Ellipse x:Name="LabTrackerDot" x:FieldModifier="internal" Width="8" Height="8"
                                              Fill="{DynamicResource TextMutedBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                    <TextBlock x:Name="TxtWebcamDebugStatus" x:FieldModifier="internal" Text="Stopped"
+                                    <TextBlock x:Name="TxtWebcamDebugStatus" x:FieldModifier="internal" Text="{loc:Str rf_webcam_stopped}"
                                                Foreground="{DynamicResource TextLightBrush}"
                                                FontFamily="Consolas" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"/>
                                 </StackPanel>

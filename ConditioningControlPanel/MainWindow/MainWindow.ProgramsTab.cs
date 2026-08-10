@@ -44,6 +44,12 @@ namespace ConditioningControlPanel
         /// </summary>
         private void StartProgramsTabPulse()
         {
+            // Phase 1 moved BtnPrograms into DoorPanelYou, a ClipToBounds panel parked at Height 0
+            // unless the You door is the open one - and the rail opens on Home, so on a first launch
+            // this scale would play entirely inside the clip. When the owning door is shut the
+            // announcement escalates to that door's header instead (see StartNavDoorHeaderPulse).
+            if (StartNavDoorHeaderPulse("programs")) return;
+
             if (BtnProgramsScale == null || _programsPulseRunning) return;
             _programsPulseRunning = true;
             var anim = new DoubleAnimation
@@ -75,6 +81,9 @@ namespace ConditioningControlPanel
         /// </summary>
         private void StopProgramsTabPulse()
         {
+            // The announcement may be riding the You door's header rather than this button.
+            StopNavDoorHeaderPulse("programs");
+
             if (!_programsPulseRunning && BtnProgramsScale == null) return;
             _programsPulseRunning = false;
             if (BtnProgramsScale != null)

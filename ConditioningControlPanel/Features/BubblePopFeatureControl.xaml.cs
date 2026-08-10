@@ -5,7 +5,7 @@ using System.Windows.Controls;
 
 namespace ConditioningControlPanel.Features
 {
-    public partial class BubblePopFeatureControl : UserControl
+    public partial class BubblePopFeatureControl : UserControl, ISettingsRebindable
     {
         private bool _isLoading = true;
 
@@ -16,11 +16,14 @@ namespace ConditioningControlPanel.Features
             Unloaded += OnUnloaded;
         }
 
+        // Tracks WHICH AppSettings instance the hook is attached to, so a cloud restore - which
+        // SWAPS the instance - can be followed instead of leaving this permanently-mounted rack
+        // panel listening to, and displaying, the discarded object. See ISettingsRebindable.
+        private SettingsHook? _settingsHook;
+
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
-            LoadFromSettings();
-            if (App.Settings?.Current is INotifyPropertyChanged inpc)
-                inpc.PropertyChanged += OnSettingsPropertyChanged;
+            RebindToCurrentSettings();
             // The egg hint names the active persona; the rack hosts this control permanently,
             // so a mod switch must repaint it (a popup instance never lived long enough to care).
             if (App.Mods != null) App.Mods.ModChanged += OnModChanged;
@@ -28,9 +31,15 @@ namespace ConditioningControlPanel.Features
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
-            if (App.Settings?.Current is INotifyPropertyChanged inpc)
-                inpc.PropertyChanged -= OnSettingsPropertyChanged;
+            _settingsHook?.Unhook();
             if (App.Mods != null) App.Mods.ModChanged -= OnModChanged;
+        }
+
+        /// <inheritdoc/>
+        public void RebindToCurrentSettings()
+        {
+            (_settingsHook ??= new SettingsHook(OnSettingsPropertyChanged)).Rebind();
+            LoadFromSettings();
         }
 
         private void OnModChanged(object? sender, Models.ModPackage mod)

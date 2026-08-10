@@ -3166,6 +3166,30 @@
     ]
   },
   {
+    "id": "feat_braindrain",
+    "trigger": "FeatureOpened",
+    "conditions": {
+      "feature_eq": "BrainDrain"
+    },
+    "priority": 70,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "dreamy, controlling",
+    "class": "normal",
+    "chance": 0.2,
+    "variant_pool": [
+      {
+        "text": "draining that pretty head? *giggles* just let it all leak out, good girl~",
+        "audio": "feat_braindrain_1.mp3"
+      },
+      {
+        "text": "ooh, the drain. you won't miss any of it, promise~",
+        "audio": "feat_braindrain_2.mp3"
+      }
+    ]
+  },
+  {
     "id": "feat_system",
     "trigger": "FeatureOpened",
     "conditions": {

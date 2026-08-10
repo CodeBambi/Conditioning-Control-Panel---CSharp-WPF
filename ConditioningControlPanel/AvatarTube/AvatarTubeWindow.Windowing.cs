@@ -65,6 +65,14 @@ namespace ConditioningControlPanel
         private const double SeamOverlapOverMain = 0;     // <= 60 (owner decision #1)
         private const double BaseOffsetFromParent = -(TubeArtRightPadding - SeamOverlapOverMain);
 
+        // Transparent LEFT margin of the tube frame, measured the same way as TubeArtRightPadding:
+        // the opaque pixels start at 664/2048 of tube.png -> canvas x 252.9 -> 21.7 + 252.9*0.9444
+        // = 260.5 px from the tube WINDOW's left edge. The drop-shadowed avatar layer and the pink
+        // mist bleed a little left of the frame, so the clamp budgets 239 instead of 260 — err on
+        // the side of keeping more art on-screen. Used ONLY by the off-screen clamp in
+        // UpdatePosition; the seam itself is still driven by SeamOverlapOverMain.
+        private const double TubeArtLeftPadding = 239;
+
         // Vertical offset from center (positive = lower, negative = higher)
         private const double VerticalOffset = 20;
 
@@ -691,9 +699,48 @@ namespace ConditioningControlPanel
             // This prevents the "bounce to top" issue during focus changes
             if (newTop < -500 || newTop > 5000 || newLeft < -2000 || newLeft > 5000) return;
 
+            // Keep her PAINTED pixels on the monitor. The seam maths hangs the whole tube window to
+            // the left of main, so when main sits near the left edge of its screen (Phase 1 widened
+            // main by 187 DIPs, which moved its left edge ~94px further left on a centred start) the
+            // opaque art can fall off the screen. Clamping trades seam fidelity — she slides a few px
+            // over main's rail — for never losing half the companion. Only ever moves her RIGHT.
+            newLeft = ClampAttachedLeftToScreen(newLeft, g);
+
             // Position to the LEFT of the parent window
             Left = newLeft;
             Top = newTop;
+        }
+
+        /// <summary>
+        /// Push an attached tube position right until the first painted column of art sits inside the
+        /// working area of the screen the PARENT is on (not PrimaryScreen — a left-hand secondary
+        /// monitor has legitimately negative coordinates and must not be clamped against the primary).
+        /// Returns the input unchanged if anything about the screen lookup fails.
+        /// </summary>
+        private double ClampAttachedLeftToScreen(double newLeft, ParentGeom g)
+        {
+            try
+            {
+                var source = PresentationSource.FromVisual(this);
+                double dpiScale = source?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+                if (dpiScale <= 0) dpiScale = 1.0;
+
+                var centre = new System.Drawing.Point(
+                    (int)Math.Round((g.Left + g.Width / 2) * dpiScale),
+                    (int)Math.Round((g.Top + g.Height / 2) * dpiScale));
+                var screen = System.Windows.Forms.Screen.FromPoint(centre);
+                if (screen == null) return newLeft;
+
+                double workLeft = screen.WorkingArea.Left / dpiScale;
+                double paintedLeft = newLeft + (TubeArtLeftPadding * _scaleFactor);
+                if (paintedLeft < workLeft) newLeft += workLeft - paintedLeft;
+                return newLeft;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("AvatarTube left-clamp skipped: {Error}", ex.Message);
+                return newLeft;
+            }
         }
 
         private void ParentWindow_PositionChanged(object? sender, EventArgs e)

@@ -48,7 +48,7 @@ namespace ConditioningControlPanel
             // Hard gate. RefreshPremiumGate only collapses a Border over this card, so the button
             // stays reachable by keyboard focus and by automation - and this handler is the one
             // that takes the keys away for an hour.
-            if (!TierGate.DemandPremium("Lockdown Mode")) return;
+            if (!TierGate.DemandPremium(Loc.Get("tab_lockdown_mode"))) return;
 
             // Get duration from combo box
             var selectedItem = LockdownTab.CmbLockdownDuration.SelectedItem as ComboBoxItem;
@@ -129,8 +129,17 @@ namespace ConditioningControlPanel
                     }
                     else
                     {
-                        // Free and already ran this week - the upsell is the honest answer.
-                        ShowAppInfoPopup();
+                        // Free and already ran this week - the upsell is the honest answer, but SAY
+                        // it: ShowAppInfoPopup() is a tab switch now, so on its own it just moves
+                        // the user to Settings · Account with no explanation. Same copy the gate
+                        // card carries, same "See tiers" destination, now with a reason attached.
+                        var days = Services.IntakePassService.DaysUntilNextPass;
+                        var body = days == 1
+                            ? Loc.Get("intake_gate_spent_body_one_day")
+                            : Loc.GetF("intake_gate_spent_body", days);
+                        App.Notifications?.Show(body, Services.NotificationType.Warning,
+                            TimeSpan.FromSeconds(8), Loc.Get("intake_gate_spent_cta"),
+                            () => ShowAppInfoPopup());
                     }
                     return;
                 }
@@ -268,11 +277,16 @@ namespace ConditioningControlPanel
         {
             try
             {
-                if (App.Patreon?.HasPremiumAccess != true)
-                {
-                    ShowAppInfoPopup();
-                    return;
-                }
+                // Say no out loud. ShowAppInfoPopup() is a tab switch since Phase 8 (Settings ·
+                // Account), not a popup over the page, so a bare call here teleported a free
+                // account off the Play door with no dialog, no toast and nothing tying the jump
+                // to the card they clicked. TierGate raises the 8s refusal naming the feature and
+                // its "See tiers" action lands on the same page - on purpose, and after being told.
+                // Same feature name the card's own lockband paints, read from the same key
+                // (MainWindow.PlayTab.cs: RequiresPremium(Loc.Get("tab_fyp"))), so band and
+                // refusal cannot drift apart or disagree in a translated UI.
+                if (!TierGate.DemandPremium(Loc.Get("tab_fyp"))) return;
+
                 Services.Fyp.FypHostService.Launch();
             }
             catch (Exception ex)

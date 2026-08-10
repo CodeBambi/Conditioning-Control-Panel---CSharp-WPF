@@ -299,15 +299,27 @@ namespace ConditioningControlPanel
             s.ForceVideoOnLaunch = AppSettingsTab.ChkVidLaunch.IsChecked ?? false;
             s.AutoStartEngine = AppSettingsTab.ChkAutoRun.IsChecked ?? false;
             s.StartMinimized = AppSettingsTab.ChkStartHidden.IsChecked ?? false;
-            s.PanicKeyEnabled = !(AppSettingsTab.ChkNoPanic.IsChecked ?? false);
-            s.OfflineMode = AppSettingsTab.ChkOfflineMode.IsChecked ?? false;
+            // PanicKeyEnabled / OfflineMode are NOT read back here. Both have exactly one live
+            // editor that writes settings AND saves (ChkNoPanic_Changed / ChkOfflineMode_Changed in
+            // MainWindow.UiUpdates.cs), and both are also written from outside the UI entirely -
+            // LockdownService and RemoteControlService flip PanicKeyEnabled, ApplyOfflineMode flips
+            // OfflineMode. Re-deriving them from a checkbox on START reverted those external writes
+            // (a remote "no panic" command, or a lockdown window, undone by pressing START). The
+            // PanicKeyEnabled writers now go through SyncNoPanicState(), which moves the setting,
+            // the keyboard hook and the checkbox together; ApplyOfflineMode already does that work
+            // inline, and SyncOfflineModeState() stands ready for any future non-UI writer.
             // Performance: the LegacyDashboardHost twins were deleted in Phase 8, so these are the
             // only editors left. One control, one writer.
             if (AppSettingsTab?.ChkPerformanceMode != null) s.PerformanceMode = AppSettingsTab.ChkPerformanceMode.IsChecked ?? false;
             if (AppSettingsTab?.ChkAutoPerformance != null) s.AutoPerformanceMode = AppSettingsTab.ChkAutoPerformance.IsChecked ?? true;
             if (AppSettingsTab?.CmbMotionLevel != null && AppSettingsTab.CmbMotionLevel.SelectedIndex >= 0)
                 s.MotionLevel = (Models.MotionLevel)AppSettingsTab.CmbMotionLevel.SelectedIndex;
-            if (AppSettingsTab?.ChkVideoHwDecode != null) s.VideoForceHardwareDecoding = AppSettingsTab.ChkVideoHwDecode.IsChecked ?? false;
+            // VideoForceHardwareDecoding is NOT read back here: it is the one performance property
+            // with a SECOND live editor (Features/SystemFeatureControl.ChkVideoGpuDecode, reachable
+            // from Home's System pill), which writes Current and saves directly. Reading the
+            // Settings-door checkbox on START silently reverted the popup's choice - the exact
+            // symptom (video freeze / white screen) the popup exists to fix. Both editors write
+            // Current; nothing needs to re-derive it.
             if (AppSettingsTab?.ChkUnifiedOverlay != null) s.UnifiedOverlayHost = AppSettingsTab.ChkUnifiedOverlay.IsChecked ?? true;
             // Weekly intake pass nudge. Defaults ON (it is the feature's re-engagement hook), but a
             // recurring popup with no off switch is a bug report waiting to happen.

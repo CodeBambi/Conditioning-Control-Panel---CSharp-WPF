@@ -1199,6 +1199,12 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Syncs the keyboard hook and MainWindow NoPanic checkbox after the setting changes externally.
+        /// <para>
+        /// Callers are the non-UI writers of <c>PanicKeyEnabled</c>: LockdownService (activate /
+        /// deactivate / crash recovery) and RemoteControlService (enable_panic / disable_panic and
+        /// the two stop-effects cleanups). They must call this rather than writing the flag alone -
+        /// the keyboard hook is started/stopped here, and the checkbox is the surface the user sees.
+        /// </para>
         /// </summary>
         internal void SyncNoPanicState()
         {
@@ -1222,6 +1228,12 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Syncs the MainWindow offline mode UI after the setting changes externally.
+        /// <para>
+        /// Kept for non-UI callers. Everything that flips <c>OfflineMode</c> today goes through
+        /// <see cref="ApplyOfflineMode"/> or ChkOfflineMode_Changed, both of which already do this
+        /// work inline; anything new that writes the flag directly must call this instead, because
+        /// SaveSettings deliberately no longer re-derives OfflineMode from the checkbox.
+        /// </para>
         /// </summary>
         internal void SyncOfflineModeState()
         {
@@ -1865,6 +1877,10 @@ namespace ConditioningControlPanel
             RefreshThemeAwareElements();
             PopulateAchievementGrid();
             DrawSkillTree();
+            // The secret-skill rail under the tree is mod-dependent on two axes (per-skill art via
+            // ModResourceResolver, names via MakeModAware), so it repaints on the same signal as
+            // the tree. Idempotent: it null-guards the tab and clears before rebuilding.
+            PopulateSecretSkills();
 
             var modWantsBambiCloud = App.Mods.ShowBambiCloudOption();
             var showBambiCloud = modWantsBambiCloud || (App.Settings?.Current?.ForceShowBambiCloud ?? false);
@@ -2208,9 +2224,19 @@ namespace ConditioningControlPanel
             var screenHeight = primaryScreen.WorkingArea.Height / dpiScale;
             var screenLeft = primaryScreen.WorkingArea.Left / dpiScale;
             var screenTop = primaryScreen.WorkingArea.Top / dpiScale;
-            
-            Left = screenLeft + (screenWidth - Width) / 2;
-            Top = screenTop + (screenHeight - Height) / 2;
+
+            // Clamp SIZE to the work area before centring. Phase 1 grew the default window to
+            // 1656x943 DIPs, which does not fit a 1080p desktop at 125% scaling (1536x816 logical)
+            // — an unclamped centre put Left at -60 and the title-bar buttons past the right edge.
+            // The root Viewbox (MainWindow.xaml:139) is Stretch="Fill" over a fixed design canvas,
+            // so shrinking the window scales the content instead of clipping it. Width/Height are
+            // still floored by MinWidth/MinHeight; the Max() below keeps the top-left corner
+            // on-screen in that case, so the window is always grabbable.
+            if (screenWidth > 0) Width = Math.Min(Width, screenWidth);
+            if (screenHeight > 0) Height = Math.Min(Height, screenHeight);
+
+            Left = Math.Max(screenLeft, screenLeft + (screenWidth - Width) / 2);
+            Top = Math.Max(screenTop, screenTop + (screenHeight - Height) / 2);
         }
 
 

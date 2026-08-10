@@ -78,18 +78,28 @@ namespace ConditioningControlPanel
             try
             {
                 // --- tier lockbands ---------------------------------------------------------
-                // Feature names are the plain-English literals every other TierGate call site
-                // already uses ("Down the Rabbit Hole" from MainWindow.Lab.cs:216, "The Gaze
-                // Minigame" from MainWindow.LabTab.cs:706, and RailFeatureName's set), so the same
-                // refusal never gets two phrasings. They are deliberately not localised - see the
-                // doc block on RailFeatureName.
-                SetLockband(tab.PlayLockDtrh, TierGate.RequiresLab("Down the Rabbit Hole"));
-                SetLockband(tab.PlayLockGaze, TierGate.RequiresLab("The Gaze Minigame"));
-                SetLockband(tab.PlayLockFocusGaze, TierGate.RequiresLab("Focus Gaze"));
-                SetLockband(tab.PlayLockRemote, TierGate.RequiresPremium("Remote Control"));
-                SetLockband(tab.PlayLockLockdown, TierGate.RequiresPremium("Lockdown Mode"));
-                SetLockband(tab.PlayLockBlink, TierGate.RequiresPremium("Blink Trainer"));
-                SetLockband(tab.PlayLockFyp, TierGate.RequiresPremium("For You"));
+                // Feature names come from the SAME loc keys the cards themselves render, so the
+                // band, the click's refusal and the card title are one string in every language -
+                // a Japanese user no longer reads a Japanese refusal about an English subject.
+                // "Down the Rabbit Hole" stays a literal: it is the brand name, identical in all
+                // nine files, so a key would only add a row nobody translates.
+                var dtrhVerdict = TierGate.RequiresLab("Down the Rabbit Hole");
+                SetLockband(tab.PlayLockDtrh, dtrhVerdict);
+                // The DTRH band is hit-test invisible on purpose (FALL IN / Quick Drop refuse in
+                // their handlers), but the card's two settings checkboxes write
+                // ChaosAnnouncerEnabled / ChaosWebGameEnabled straight through a TwoWay binding
+                // with no handler to refuse in. Disable them alongside the band so a free account
+                // cannot click through the padlock and rewrite two Descent settings.
+                if (tab.ChkPlayChaosAnnouncer != null)
+                    tab.ChkPlayChaosAnnouncer.IsEnabled = dtrhVerdict.Allowed;
+                if (tab.ChkPlayChaosWebGame != null)
+                    tab.ChkPlayChaosWebGame.IsEnabled = dtrhVerdict.Allowed;
+                SetLockband(tab.PlayLockGaze, TierGate.RequiresLab(Loc.Get("label_gaze_minigame")));
+                SetLockband(tab.PlayLockFocusGaze, TierGate.RequiresLab(Loc.Get("label_focus_gaze")));
+                SetLockband(tab.PlayLockRemote, TierGate.RequiresPremium(Loc.Get("tab_remote_control")));
+                SetLockband(tab.PlayLockLockdown, TierGate.RequiresPremium(Loc.Get("tab_lockdown_mode")));
+                SetLockband(tab.PlayLockBlink, TierGate.RequiresPremium(Loc.Get("tab_blink_trainer")));
+                SetLockband(tab.PlayLockFyp, TierGate.RequiresPremium(Loc.Get("tab_fyp")));
 
                 // --- Goon: name the rungs, gate nothing -------------------------------------
                 // Joining is free and stays free. The T1 send half and the T2 host half are the

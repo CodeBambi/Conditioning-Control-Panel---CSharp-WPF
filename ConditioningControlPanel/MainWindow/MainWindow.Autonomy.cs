@@ -534,7 +534,7 @@ namespace ConditioningControlPanel
                 // (Settings → Devices) and turned the She's Listening row into a read-only chip, so
                 // without this line the gate would have silently disappeared. Turning the wake word
                 // OFF is never gated - a lapsed patron must always be able to close an open mic.
-                if (!Services.TierGate.DemandPremium("She's Listening"))
+                if (!Services.TierGate.DemandPremium(Loc.Get("tab_shelistening")))
                 {
                     RevertToggle(AppSettingsTab.ChkSpeechWakeWord);
                     return;
@@ -587,7 +587,7 @@ namespace ConditioningControlPanel
 
             // Same story as the wake word: the premium bar used to sit in SL_PushToTalk_Changed
             // and has to live here now that Settings → Devices owns the only toggle.
-            if (turningOn && !Services.TierGate.DemandPremium("She's Listening"))
+            if (turningOn && !Services.TierGate.DemandPremium(Loc.Get("tab_shelistening")))
             {
                 RevertToggle(AppSettingsTab.ChkSpeechPushToTalk);
                 return;
@@ -612,7 +612,7 @@ namespace ConditioningControlPanel
         {
             if (_capturingPttKey) return;
             _capturingPttKey = true;
-            AppSettingsTab.BtnSetPttKey.Content = "Press a key…";
+            AppSettingsTab.BtnSetPttKey.Content = Loc.Get("rf_btn_press_a_key");
             PreviewKeyDown += CapturePttKey;
         }
 
@@ -637,7 +637,26 @@ namespace ConditioningControlPanel
                 App.Autonomy?.RefreshVoiceInputModes();
             }
             AppSettingsTab.TxtPttKey.Text = key.ToString();
-            AppSettingsTab.BtnSetPttKey.Content = "Set key…";
+            RestorePttKeyButtonCaption();
+        }
+
+        /// <summary>
+        /// Put the push-to-talk button back to its {loc:Str set2_btn_set_key} caption after a
+        /// capture. Re-applies the BINDING rather than writing the resolved string: the markup
+        /// extension's binding IS the local value, so a plain assignment (or ClearValue) would
+        /// leave the button frozen on whatever language was active at capture time - which is how
+        /// a Japanese user ended up with a permanently English "Set key…" the moment they rebound.
+        /// </summary>
+        private void RestorePttKeyButtonCaption()
+        {
+            var btn = AppSettingsTab?.BtnSetPttKey;
+            if (btn == null) return;
+            System.Windows.Data.BindingOperations.SetBinding(btn, ContentControl.ContentProperty,
+                new System.Windows.Data.Binding("[set2_btn_set_key]")
+                {
+                    Source = LocalizationManager.Instance,
+                    Mode = System.Windows.Data.BindingMode.OneWay,
+                });
         }
 
         /// <summary>Refresh the small grey availability hints under the voice toggles.</summary>

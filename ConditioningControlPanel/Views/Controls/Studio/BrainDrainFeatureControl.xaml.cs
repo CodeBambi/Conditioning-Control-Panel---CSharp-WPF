@@ -18,7 +18,7 @@ namespace ConditioningControlPanel.Views.Controls.Studio
     /// is withheld behind <c>OverlayService.BrainDrainWithheld</c>; this panel reads that flag and
     /// nothing else, so it can never disagree with the gate.
     /// </summary>
-    public partial class BrainDrainFeatureControl : UserControl
+    public partial class BrainDrainFeatureControl : UserControl, Features.ISettingsRebindable
     {
         private bool _isLoading = true;
 
@@ -29,18 +29,24 @@ namespace ConditioningControlPanel.Views.Controls.Studio
             Unloaded += OnUnloaded;
         }
 
+        // Tracks WHICH AppSettings instance the hook is attached to, so a cloud restore - which
+        // SWAPS the instance - can be followed instead of leaving this permanently-mounted rack
+        // panel listening to, and displaying, the discarded object. See ISettingsRebindable.
+        private Features.SettingsHook? _settingsHook;
+
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
             ApplyWithheldPresentation();
-            LoadFromSettings();
-            if (App.Settings?.Current is INotifyPropertyChanged inpc)
-                inpc.PropertyChanged += OnSettingsPropertyChanged;
+            RebindToCurrentSettings();
         }
 
-        private void OnUnloaded(object sender, RoutedEventArgs e)
+        private void OnUnloaded(object sender, RoutedEventArgs e) => _settingsHook?.Unhook();
+
+        /// <inheritdoc/>
+        public void RebindToCurrentSettings()
         {
-            if (App.Settings?.Current is INotifyPropertyChanged inpc)
-                inpc.PropertyChanged -= OnSettingsPropertyChanged;
+            (_settingsHook ??= new Features.SettingsHook(OnSettingsPropertyChanged)).Rebind();
+            LoadFromSettings();
         }
 
         /// <summary>

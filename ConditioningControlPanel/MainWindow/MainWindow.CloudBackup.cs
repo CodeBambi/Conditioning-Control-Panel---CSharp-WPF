@@ -32,6 +32,30 @@ namespace ConditioningControlPanel
     {
         #region Cloud Settings Backup
 
+        /// <summary>
+        /// Re-seeds the whole settings UI from the (just-swapped) <c>App.Settings.Current</c>.
+        /// <para>
+        /// The manual restore above does this inline; the STARTUP restore prompt
+        /// (<c>App.CheckCloudSettingsRestoreAsync</c> -> <c>ApplyRestoredSettings</c>) used to call
+        /// only <see cref="ApplySessionSettings"/>, which touches the engine's live values and
+        /// leaves every Settings-door control painted from the discarded instance. Same restore,
+        /// same refresh.
+        /// </para>
+        /// </summary>
+        internal void ReloadSettingsUiAfterRestore()
+        {
+            try
+            {
+                _isLoading = true;
+                LoadSettings();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Settings UI reload after a cloud restore failed");
+            }
+            finally { _isLoading = false; }
+        }
+
         internal async void BtnBackupSettingsNow_Click(object sender, RoutedEventArgs e)
         {
             if (App.ProfileSync == null) return;

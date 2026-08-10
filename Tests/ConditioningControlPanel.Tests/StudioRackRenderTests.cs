@@ -385,13 +385,14 @@ public class StudioRackRenderTests
     };
 
     [Fact]
-    public void EveryRackBarkKeyExceptTheNewOneAlreadyHasRulesInEveryBuiltInMod()
+    public void EveryRackBarkKeyHasRulesInEveryBuiltInMod()
     {
-        // The popup path's feature_eq values are voiced content: 13 rules per built-in mod match
-        // on them. Re-hosting must not have renamed one. "BrainDrain" is the single known gap —
-        // it is a NEW feature_eq value introduced by the G2 rescue and owes rules from the bark
-        // agent. Asserting it as a known gap means the day someone adds them, this test tells
-        // them to promote it rather than silently passing.
+        // The popup path's feature_eq values are voiced content: one rule per built-in mod matches
+        // on each of them. Re-hosting must not have renamed one. "BrainDrain" was the single known
+        // gap — a NEW feature_eq value introduced by the G2 rescue — and this test was written as
+        // "all but that one" so that the day the rules landed it would demand promotion rather than
+        // silently passing. The feat_braindrain rules are now in all three built-in mods, so the
+        // gap list is empty and stays empty.
         var known = new HashSet<string>(RackBarkFeatures, StringComparer.Ordinal);
         var missingEverywhere = new List<string>();
 
@@ -403,9 +404,7 @@ public class StudioRackRenderTests
                     missingEverywhere.Add($"{Path.GetFileName(Path.GetDirectoryName(mod))}:{key}");
         }
 
-        // Exactly the three BrainDrain gaps (one per built-in mod), nothing else.
-        Assert.All(missingEverywhere, m => Assert.EndsWith(":BrainDrain", m));
-        Assert.Equal(3, missingEverywhere.Count);
+        Assert.Empty(missingEverywhere);
     }
 
     [Fact]

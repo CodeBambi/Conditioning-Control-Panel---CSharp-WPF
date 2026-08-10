@@ -7,7 +7,7 @@ using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Features
 {
-    public partial class LockCardFeatureControl : UserControl
+    public partial class LockCardFeatureControl : UserControl, ISettingsRebindable
     {
         private bool _isLoading = true; // Prevent XAML default values from overwriting settings during InitializeComponent
 
@@ -18,17 +18,20 @@ namespace ConditioningControlPanel.Features
             Unloaded += OnUnloaded;
         }
 
-        private void OnLoaded(object sender, RoutedEventArgs e)
-        {
-            LoadFromSettings();
-            if (App.Settings?.Current is INotifyPropertyChanged inpc)
-                inpc.PropertyChanged += OnSettingsPropertyChanged;
-        }
+        // Tracks WHICH AppSettings instance the hook is attached to, so a cloud restore - which
+        // SWAPS the instance - can be followed instead of leaving this permanently-mounted rack
+        // panel listening to, and displaying, the discarded object. See ISettingsRebindable.
+        private SettingsHook? _settingsHook;
 
-        private void OnUnloaded(object sender, RoutedEventArgs e)
+        private void OnLoaded(object sender, RoutedEventArgs e) => RebindToCurrentSettings();
+
+        private void OnUnloaded(object sender, RoutedEventArgs e) => _settingsHook?.Unhook();
+
+        /// <inheritdoc/>
+        public void RebindToCurrentSettings()
         {
-            if (App.Settings?.Current is INotifyPropertyChanged inpc)
-                inpc.PropertyChanged -= OnSettingsPropertyChanged;
+            (_settingsHook ??= new SettingsHook(OnSettingsPropertyChanged)).Rebind();
+            LoadFromSettings();
         }
 
         private void LoadFromSettings()

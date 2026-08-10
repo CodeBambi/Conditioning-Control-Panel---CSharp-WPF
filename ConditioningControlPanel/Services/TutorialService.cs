@@ -291,26 +291,25 @@ namespace ConditioningControlPanel.Services
         {
             foreach (var step in _currentSteps)
             {
-                // Apply callbacks based on step requirements
-                if (step.RequiresTab != null)
-                {
-                    var tabAction = ResolveTabAction(step.RequiresTab);
+                // Three slots, one fixed order: OnBeforeTab, then the RequiresTab navigation, then
+                // the step's own OnActivate. Most steps only fill the last two - the tab switch has
+                // to happen before anything that touches the page (AppSettingsTutorialPrep.Focus
+                // scrolls a section into view, which needs the page up). OnBeforeTab exists for the
+                // opposite need: the Studio rack steps must choose their module BEFORE ShowTab, or
+                // ShowTab's studio case announces whichever module was selected last.
+                var tabAction = step.RequiresTab != null ? ResolveTabAction(step.RequiresTab) : null;
+                var preTab = step.OnBeforeTab;
+                if (tabAction == null && preTab == null) continue;
 
-                    // Compose with any custom OnActivate the step set in its constructor
-                    // (e.g. demo-fire steps that need the tab switch AND a side-effect).
-                    if (tabAction != null)
-                    {
-                        var existingActivate = step.OnActivate;
-                        if (existingActivate == null)
-                        {
-                            step.OnActivate = tabAction;
-                        }
-                        else
-                        {
-                            step.OnActivate = () => { tabAction(); existingActivate(); };
-                        }
-                    }
-                }
+                // Compose with any custom OnActivate the step set in its constructor
+                // (e.g. demo-fire steps that need the tab switch AND a side-effect).
+                var existingActivate = step.OnActivate;
+                step.OnActivate = () =>
+                {
+                    preTab?.Invoke();
+                    tabAction?.Invoke();
+                    existingActivate?.Invoke();
+                };
             }
         }
 
@@ -379,13 +378,20 @@ namespace ConditioningControlPanel.Services
         /// Selects an entry in the Studio rack (Phase 4). <c>ShowTab("studio")</c> only opens the
         /// door and restores whatever entry was last selected, so a step that spotlights one
         /// rack panel has to ask for it by name or it lands on a Collapsed panel and degrades to
-        /// a centred card. Composed onto the step's <c>RequiresTab</c> action, which runs first.
-        /// Unknown keys are a quiet no-op inside <c>FocusRackEntry</c>, and the whole thing is
+        /// a centred card.
+        ///
+        /// Wired to <see cref="TutorialStep.OnBeforeTab"/>, i.e. it runs BEFORE the RequiresTab
+        /// navigation, and selects QUIETLY: ShowTab's studio case re-announces the rack's current
+        /// selection on the way in, so choosing the step's module first makes that one announcement
+        /// name the right module instead of the one the user was last looking at. Selecting after
+        /// the switch (the Phase 4 wiring) announced the previous module and then this one.
+        ///
+        /// Unknown keys are a quiet no-op inside <c>PreselectRackEntry</c>, and the whole thing is
         /// swallowed on failure: a tour never blocks on UI quirks.
         /// </summary>
         private static void FocusStudioRack(string rackKey)
         {
-            try { (Application.Current?.MainWindow as MainWindow)?.StudioTab?.FocusRackEntry(rackKey); }
+            try { (Application.Current?.MainWindow as MainWindow)?.StudioTab?.PreselectRackEntry(rackKey); }
             catch { /* see above */ }
         }
 
@@ -695,7 +701,7 @@ namespace ConditioningControlPanel.Services
                     // Border - the spotlight degraded to a centred card.
                     RequiresTab = "studio",
                     TargetElementName = "PanelFlash",
-                    OnActivate = () => FocusStudioRack("flash"),
+                    OnBeforeTab = () => FocusStudioRack("flash"),
                     TextPosition = TutorialStepPosition.Left
                 },
                 new TutorialStep
@@ -710,7 +716,7 @@ namespace ConditioningControlPanel.Services
                                   "• Duration: How long images stay visible",
                     RequiresTab = "studio",
                     TargetElementName = "PanelVisuals",
-                    OnActivate = () => FocusStudioRack("visuals"),
+                    OnBeforeTab = () => FocusStudioRack("visuals"),
                     TextPosition = TutorialStepPosition.Left
                 },
                 new TutorialStep
@@ -725,7 +731,7 @@ namespace ConditioningControlPanel.Services
                                   "Add videos to 'assets/videos' folder.",
                     RequiresTab = "studio",
                     TargetElementName = "PanelVideo",
-                    OnActivate = () => FocusStudioRack("video"),
+                    OnBeforeTab = () => FocusStudioRack("video"),
                     TextPosition = TutorialStepPosition.Left
                 },
                 new TutorialStep
@@ -757,7 +763,7 @@ namespace ConditioningControlPanel.Services
                                   "• Customize text in the Subliminals section",
                     RequiresTab = "studio",
                     TargetElementName = "PanelSubliminal",
-                    OnActivate = () => FocusStudioRack("subliminal"),
+                    OnBeforeTab = () => FocusStudioRack("subliminal"),
                     TextPosition = TutorialStepPosition.Left
                 },
                 new TutorialStep
@@ -794,7 +800,7 @@ namespace ConditioningControlPanel.Services
                     // (gap-report T-4 - level gating was removed; every feature is on from
                     // level 1). Re-pointed at the Studio rack the same way its neighbours are.
                     RequiresTab = "studio",
-                    OnActivate = () => FocusStudioRack("spiral"),
+                    OnBeforeTab = () => FocusStudioRack("spiral"),
                     TextPosition = TutorialStepPosition.Center
                 },
                 new TutorialStep
@@ -936,7 +942,7 @@ namespace ConditioningControlPanel.Services
                     // as authored: renaming it back would be churn for zero gain.
                     TargetElementName = "StudioSchedulerPanel",
                     RequiresTab = "studio",
-                    OnActivate = () => FocusStudioRack("scheduler"),
+                    OnBeforeTab = () => FocusStudioRack("scheduler"),
                     TextPosition = TutorialStepPosition.Left
                 },
                 new TutorialStep
@@ -953,7 +959,7 @@ namespace ConditioningControlPanel.Services
                     // one - it owns CmbRampCurve, which the deleted twin never had.
                     TargetElementName = "StudioRampPanel",
                     RequiresTab = "studio",
-                    OnActivate = () => FocusStudioRack("ramp"),
+                    OnBeforeTab = () => FocusStudioRack("ramp"),
                     TextPosition = TutorialStepPosition.Left
                 }
             };

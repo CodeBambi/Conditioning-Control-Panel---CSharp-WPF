@@ -17,7 +17,7 @@ namespace ConditioningControlPanel.Features
     /// and stays in sync with external changes (Intensity Ramp, presets, sessions)
     /// via INotifyPropertyChanged.
     /// </summary>
-    public partial class SpiralFeatureControl : UserControl
+    public partial class SpiralFeatureControl : UserControl, ISettingsRebindable
     {
         private bool _isLoading = true;
         private bool _monitorPopulating; // guards the monitor combo while it is rebuilt
@@ -29,26 +29,41 @@ namespace ConditioningControlPanel.Features
             Unloaded += OnUnloaded;
         }
 
+        // Tracks WHICH AppSettings instance the hook is attached to, so a cloud restore - which
+        // SWAPS the instance - can be followed instead of leaving this permanently-mounted rack
+        // panel listening to, and displaying, the discarded object. See ISettingsRebindable.
+        private SettingsHook? _settingsHook;
+
+        /// <inheritdoc/>
+        public void RebindToCurrentSettings()
+        {
+            (_settingsHook ??= new SettingsHook(OnSettingsPropertyChanged)).Rebind();
+            LoadFromSettings();
+        }
+
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
-            LoadFromSettings();
+            RebindToCurrentSettings();
             RefreshLibrary();
 
-            if (App.Settings?.Current is INotifyPropertyChanged inpc)
-            {
-                inpc.PropertyChanged += OnSettingsPropertyChanged;
-            }
             // Loom saves/deletes (game pane or the main-app Loom window) show up live.
             Services.Chaos.DtrhLoomStore.Changed += OnLoomStoreChanged;
+            // The "Default" card's thumbnail comes from ModResourceResolver.ResolveSpiralUri();
+            // the rack hosts this control permanently, so a mod switch must repaint the library
+            // (a popup instance was rebuilt on every open and never saw a switch).
+            if (App.Mods != null) App.Mods.ModChanged += OnModChanged;
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
-            if (App.Settings?.Current is INotifyPropertyChanged inpc)
-            {
-                inpc.PropertyChanged -= OnSettingsPropertyChanged;
-            }
+            _settingsHook?.Unhook();
             Services.Chaos.DtrhLoomStore.Changed -= OnLoomStoreChanged;
+            if (App.Mods != null) App.Mods.ModChanged -= OnModChanged;
+        }
+
+        private void OnModChanged(object? sender, Models.ModPackage mod)
+        {
+            Dispatcher.BeginInvoke(new Action(RefreshLibrary));
         }
 
         private void LoadFromSettings()

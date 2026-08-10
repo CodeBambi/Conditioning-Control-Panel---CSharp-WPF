@@ -338,7 +338,8 @@ namespace ConditioningControlPanel
             {
                 green ??= TryFindResource("SuccessGreenBrush") as Brush;
                 muted ??= TryFindResource("TextMutedBrush") as Brush;
-                var text = AppSettingsTab?.TxtWebcamDebugStatus?.Text ?? (live ? "Tracking" : "Stopped");
+                var text = AppSettingsTab?.TxtWebcamDebugStatus?.Text
+                           ?? WebcamStateText(live ? WebcamTrackingState.Tracking : WebcamTrackingState.Stopped);
 
                 void Paint(System.Windows.Shapes.Ellipse? dot, System.Windows.Controls.TextBlock? label)
                 {
@@ -355,6 +356,24 @@ namespace ConditioningControlPanel
             }
             catch (Exception ex) { App.Logger?.Debug("UpdateWebcamStatusChips: {E}", ex.Message); }
         }
+
+        /// <summary>
+        /// The tracker's state as prose the user can read, in their language. The enum's own
+        /// ToString() was doing this job on four surfaces (the Devices status line plus the three
+        /// read-only chips on Play / Blink Trainer / Deeper), which meant a Russian user read
+        /// "Stopped" beside fully-Russian card copy - and "FaceLost", which is not a sentence in
+        /// any language. One mapper, so all four surfaces move together.
+        /// </summary>
+        private static string WebcamStateText(WebcamTrackingState state) => Loc.Get(state switch
+        {
+            WebcamTrackingState.Starting => "rf_webcam_starting",
+            WebcamTrackingState.Tracking => "rf_webcam_tracking",
+            WebcamTrackingState.FaceLost => "rf_webcam_face_lost",
+            WebcamTrackingState.CameraInUse => "rf_webcam_camera_in_use",
+            WebcamTrackingState.CameraDenied => "rf_webcam_camera_denied",
+            WebcamTrackingState.Error => "rf_webcam_error",
+            _ => "rf_webcam_stopped",
+        });
 
         /// <summary>
         /// "Configure in Settings" from any of the three webcam status chips, and from the
@@ -471,7 +490,7 @@ namespace ConditioningControlPanel
         private async Task<bool> StartWebcamOffUiThreadAsync(WebcamTrackingService svc)
         {
             AppendWebcamDebugLog("Starting webcam (camera open + model load can take a few seconds)…");
-            if (AppSettingsTab.TxtWebcamDebugStatus != null) AppSettingsTab.TxtWebcamDebugStatus.Text = "Starting…";
+            if (AppSettingsTab.TxtWebcamDebugStatus != null) AppSettingsTab.TxtWebcamDebugStatus.Text = WebcamStateText(WebcamTrackingState.Starting);
             // The movable loading splash is driven globally off the service's
             // OnStartupProgress event (see InstallWebcamLoadingSplash), so it
             // shows no matter which code path calls Start() — not just this one.
@@ -572,7 +591,7 @@ namespace ConditioningControlPanel
 
             _onDebugStateChanged = s =>
             {
-                if (AppSettingsTab.TxtWebcamDebugStatus != null) AppSettingsTab.TxtWebcamDebugStatus.Text = s.ToString();
+                if (AppSettingsTab.TxtWebcamDebugStatus != null) AppSettingsTab.TxtWebcamDebugStatus.Text = WebcamStateText(s);
                 AppendWebcamDebugLog($"State → {s}");
                 if (s == WebcamTrackingState.Stopped || s == WebcamTrackingState.Error
                     || s == WebcamTrackingState.CameraInUse || s == WebcamTrackingState.CameraDenied)
@@ -718,7 +737,7 @@ namespace ConditioningControlPanel
         {
             // Tier 2, checked here: the Lab smokescreen is a tab-wide overlay, not a gate on the
             // window this opens.
-            if (!TierGate.DemandLab("The Gaze Minigame")) return;
+            if (!TierGate.DemandLab(Loc.Get("label_gaze_minigame"))) return;
 
             new Lab.GazeMinigame.GazeMinigameWindow { Owner = this }.Show();
         }
@@ -782,7 +801,7 @@ namespace ConditioningControlPanel
                 // the toggle never sits visibly ON behind a refusal. Turning it OFF is never gated
                 // (same rule the mic disarm and the Blink Trainer stop follow) - releasing a webcam
                 // consumer is not a premium act.
-                var verdict = TierGate.RequiresLab("Focus Gaze");
+                var verdict = TierGate.RequiresLab(Loc.Get("label_focus_gaze"));
                 if (!verdict.Allowed)
                 {
                     SyncFocusGazeToggle(false);

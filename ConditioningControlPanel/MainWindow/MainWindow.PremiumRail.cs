@@ -427,26 +427,26 @@ namespace ConditioningControlPanel
         /// Display names handed to <see cref="TierGate"/>. They end up inside the refusal copy
         /// ("{0} is for supporters..."), so they are the names as the user sees them on the card,
         /// and the two that already exist elsewhere - "Lockdown Mode" (BtnActivateLockdown_Click)
-        /// and "Remote Control" (ChkRemoteControlEnabled_Changed) - are reused verbatim so the
-        /// dashboard and the tab never phrase the same refusal two ways.
+        /// and "Remote Control" (ChkRemoteControlEnabled_Changed) - resolve through the SAME loc
+        /// keys, so the dashboard and the tab never phrase the same refusal two ways.
         ///
-        /// Deliberately plain English literals, matching every other TierGate call site: these are
-        /// feature names, not UI chrome, and a half-localised sentence reads worse than an English
-        /// one. If they are ever localised it should happen inside TierGate, for all callers at once.
+        /// Resolved, not literal: the refusal template is translated into nine languages, so a
+        /// hardcoded English subject left every non-English toast half-English. Each name is the
+        /// key the card itself renders, which is why no new translation rows were needed.
         /// </summary>
-        private static string RailFeatureName(PremiumFeature feature) => feature switch
+        private static string RailFeatureName(PremiumFeature feature) => Localization.Loc.Get(feature switch
         {
-            PremiumFeature.Takeover => "Takeover",
-            PremiumFeature.Awareness => "Awareness",
-            PremiumFeature.Haptics => "Haptics",
-            PremiumFeature.Voice => "She's Listening",
-            PremiumFeature.Lockdown => "Lockdown Mode",
-            PremiumFeature.Blink => "Blink Trainer",
-            PremiumFeature.Remote => "Remote Control",
-            PremiumFeature.GradedIntake => "Graded Intake",
-            PremiumFeature.Fyp => "For You",
-            _ => "This feature",
-        };
+            PremiumFeature.Takeover => "tab_takeover",
+            PremiumFeature.Awareness => "tab_awareness",
+            PremiumFeature.Haptics => "tab_haptics",
+            PremiumFeature.Voice => "tab_shelistening",
+            PremiumFeature.Lockdown => "tab_lockdown_mode",
+            PremiumFeature.Blink => "tab_blink_trainer",
+            PremiumFeature.Remote => "tab_remote_control",
+            PremiumFeature.GradedIntake => "tab_gradedintake",
+            PremiumFeature.Fyp => "tab_fyp",
+            _ => "rf_feature_generic",
+        });
 
         /// <summary>
         /// Paints the per-card lockbands: one <see cref="TierVerdict"/> per rail entry, so the band

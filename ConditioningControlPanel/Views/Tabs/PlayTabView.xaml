@@ -298,13 +298,20 @@
                                         </Button.Resources>
                                     </Button>
                                     <!-- Pure XAML two-way bindings, portable verbatim: no handler,
-                                         no shim, nothing for the move to break. -->
-                                    <CheckBox Content="Announcements"
+                                         no shim, nothing for the move to break.
+                                         They ARE named, though: the T2 lockband above is
+                                         IsHitTestVisible=False so the FALL IN / Quick Drop refusal
+                                         path keeps working, which means these two writers would
+                                         otherwise stay clickable straight through the padlock.
+                                         RefreshPlayCards disables them with the band. -->
+                                    <CheckBox x:Name="ChkPlayChaosAnnouncer" x:FieldModifier="internal"
+                                              Content="Announcements"
                                               IsChecked="{Binding Source={x:Static local:App.Settings}, Path=Current.ChaosAnnouncerEnabled, Mode=TwoWay}"
                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Cursor="Hand"
                                               HorizontalAlignment="Right" Margin="0,10,0,0"
                                               ToolTip="Flash on-screen subtitle announcements (mantra, resistance, depth, streak) during a descent"/>
-                                    <CheckBox Content="3D game (recommended)"
+                                    <CheckBox x:Name="ChkPlayChaosWebGame" x:FieldModifier="internal"
+                                              Content="3D game (recommended)"
                                               IsChecked="{Binding Source={x:Static local:App.Settings}, Path=Current.ChaosWebGameEnabled, Mode=TwoWay}"
                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Cursor="Hand"
                                               HorizontalAlignment="Right" Margin="0,6,0,0"
@@ -334,7 +341,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="TOGETHER" Style="{StaticResource PlayZoneTag}"/>
+                    <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_together}" Style="{StaticResource PlayZoneTag}"/>
                     <Border Grid.Column="1" Style="{StaticResource PlayZoneRule}">
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
@@ -509,7 +516,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="EYES" Style="{StaticResource PlayZoneTag}"/>
+                    <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_eyes}" Style="{StaticResource PlayZoneTag}"/>
                     <Border Grid.Column="1" Style="{StaticResource PlayZoneRule}">
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
@@ -542,7 +549,7 @@
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <TextBlock Text="{loc:Str set2_webcam_chip_label}" Foreground="{DynamicResource TextLightBrush}"
                                            FontWeight="Bold" FontSize="14"/>
-                                <TextBlock x:Name="TxtWebcamStatusChipPlay" x:FieldModifier="internal" Text="Stopped"
+                                <TextBlock x:Name="TxtWebcamStatusChipPlay" x:FieldModifier="internal" Text="{loc:Str rf_webcam_stopped}"
                                            Foreground="{DynamicResource TextMutedBrush}" FontFamily="Consolas" FontSize="11"/>
                             </StackPanel>
                             <Button Grid.Column="2" Content="{loc:Str set2_configure_in_settings}"
@@ -664,7 +671,7 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="Enable" Foreground="{DynamicResource TextLightBrush}" FontSize="14" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str btn_enable}" Foreground="{DynamicResource TextLightBrush}" FontSize="14" VerticalAlignment="Center"/>
                                         <!-- The ONE Focus Gaze switch. ChkFocusGaze_Changed reads this
                                              control and writes TxtPlayFocusGazeStatus below; the Lab
                                              copies it used to read are dead with that view. -->
@@ -702,7 +709,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="SESSIONS" Style="{StaticResource PlayZoneTag}"/>
+                    <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_sessions}" Style="{StaticResource PlayZoneTag}"/>
                     <Border Grid.Column="1" Style="{StaticResource PlayZoneRule}">
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
@@ -892,7 +899,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="RITUAL" Style="{StaticResource PlayZoneTag}"/>
+                    <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_ritual}" Style="{StaticResource PlayZoneTag}"/>
                     <Border Grid.Column="1" Style="{StaticResource PlayZoneRule}">
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
@@ -1051,7 +1058,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="MORE" Style="{StaticResource PlayZoneTag}"/>
+                    <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_more}" Style="{StaticResource PlayZoneTag}"/>
                     <Border Grid.Column="1" Style="{StaticResource PlayZoneRule}">
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
@@ -1133,15 +1140,22 @@
                                     </StackPanel>
                                 </Border>
 
-                                <Button x:Name="BtnPlayBureau" Content="🔍 Inspection Bureau" Cursor="Hand"
+                                <!-- The 🔍 stays OUTSIDE the string: the caption reuses the card's own
+                                     pl6_bureau_title, so the button and the title can never drift
+                                     apart and no translator has to carry a glyph. -->
+                                <Button x:Name="BtnPlayBureau" Cursor="Hand"
                                         HorizontalAlignment="Left" Padding="14,8"
                                         Background="Transparent" Foreground="{DynamicResource PinkBrush}"
                                         BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" FontWeight="SemiBold" FontSize="12"
-                                        ToolTip="Clock in at the Beta Inspection Bureau - stamp dossiers, earn commendations, help train the censor (Beta)."
+                                        ToolTip="{loc:Str rf_play_bureau_tooltip}"
                                         Click="BtnStartBureau_Click">
                                     <Button.Resources>
                                         <Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style>
                                     </Button.Resources>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="🔍" Margin="0,0,6,0"/>
+                                        <TextBlock Text="{loc:Str pl6_bureau_title}"/>
+                                    </StackPanel>
                                 </Button>
                             </StackPanel>
                         </Border>

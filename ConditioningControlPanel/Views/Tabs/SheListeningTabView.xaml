@@ -101,7 +101,12 @@
                                         CornerRadius="8" Padding="14,11" Margin="0,2,0,4">
                                     <StackPanel>
                                         <Grid Margin="0,0,0,8">
-                                            <TextBlock Text="Microphone setup" FontSize="11" FontWeight="Bold"
+                                            <!-- Same keys the Settings ▸ Devices page uses for the same
+                                                 four rows, so one microphone never reads in two
+                                                 languages on two pages. The glyphs stay OUTSIDE the
+                                                 strings - a translator should never have to carry an
+                                                 emoji through nine files. -->
+                                            <TextBlock Text="{loc:Str set2_devices_mic_title}" FontSize="11" FontWeight="Bold"
                                                        Foreground="#9090A8" VerticalAlignment="Center"/>
                                             <Button x:Name="BtnSL_OpenDeviceSettings" HorizontalAlignment="Right"
                                                     Content="{loc:Str set2_configure_in_settings}"
@@ -111,27 +116,39 @@
                                         </Grid>
 
                                         <Grid Margin="0,2">
-                                            <TextBlock Text="🎚 Input device" FontSize="11" Foreground="#999" VerticalAlignment="Center"/>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="🎚" FontSize="11" Foreground="#999" Margin="0,0,5,0"/>
+                                                <TextBlock Text="{loc:Str set2_devices_mic_input}" FontSize="11" Foreground="#999"/>
+                                            </StackPanel>
                                             <TextBlock x:Name="TxtSL_MicDeviceChip" x:FieldModifier="internal"
                                                        HorizontalAlignment="Right" VerticalAlignment="Center"
                                                        Text="System default" FontSize="11" Foreground="#DDD"
                                                        TextTrimming="CharacterEllipsis" MaxWidth="280"/>
                                         </Grid>
                                         <Grid Margin="0,2">
-                                            <TextBlock Text="👂 Wake word" FontSize="11" Foreground="#999" VerticalAlignment="Center"/>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="👂" FontSize="11" Foreground="#999" Margin="0,0,5,0"/>
+                                                <TextBlock Text="{loc:Str rf_sl_chip_wake_word}" FontSize="11" Foreground="#999"/>
+                                            </StackPanel>
                                             <TextBlock x:Name="TxtSL_WakeWordChip" x:FieldModifier="internal"
                                                        HorizontalAlignment="Right" VerticalAlignment="Center"
                                                        Text="Off" FontSize="11" Foreground="#DDD"
                                                        TextTrimming="CharacterEllipsis" MaxWidth="280"/>
                                         </Grid>
                                         <Grid Margin="0,2">
-                                            <TextBlock Text="🎙 Push-to-talk" FontSize="11" Foreground="#999" VerticalAlignment="Center"/>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="🎙" FontSize="11" Foreground="#999" Margin="0,0,5,0"/>
+                                                <TextBlock Text="{loc:Str rf_sl_chip_ptt}" FontSize="11" Foreground="#999"/>
+                                            </StackPanel>
                                             <TextBlock x:Name="TxtSL_PttChip" x:FieldModifier="internal"
                                                        HorizontalAlignment="Right" VerticalAlignment="Center"
                                                        Text="Off" FontSize="11" Foreground="#DDD"/>
                                         </Grid>
                                         <Grid Margin="0,2">
-                                            <TextBlock Text="🎧 Headphone mode" FontSize="11" Foreground="#999" VerticalAlignment="Center"/>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="🎧" FontSize="11" Foreground="#999" Margin="0,0,5,0"/>
+                                                <TextBlock Text="{loc:Str rf_sl_chip_headphones}" FontSize="11" Foreground="#999"/>
+                                            </StackPanel>
                                             <TextBlock x:Name="TxtSL_HeadphonesChip" x:FieldModifier="internal"
                                                        HorizontalAlignment="Right" VerticalAlignment="Center"
                                                        Text="Off" FontSize="11" Foreground="#DDD"/>
