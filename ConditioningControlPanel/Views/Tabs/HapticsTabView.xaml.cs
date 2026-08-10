@@ -8,6 +8,13 @@ namespace ConditioningControlPanel.Views.Tabs
     /// (MainWindow/MainWindow.Haptics.cs), which owns the state. Handlers declared
     /// inside a DataTemplate resolve against THIS class, so the toy-card Test button
     /// has to be here too.
+    ///
+    /// <para>PHASE 4 (UX restructure): this view is no longer mounted in MainWindow.xaml. It is
+    /// the "haptics" module of the Studio rack (Views/Tabs/StudioTabView.xaml), and MainWindow
+    /// reaches it through the single <c>MainWindow.HapticsTab</c> passthrough. Nothing in this
+    /// file had to change: <see cref="Owner"/> walks to the containing WINDOW, which is still
+    /// MainWindow - the rack is a UserControl inside it, not a separate window - so all 34
+    /// forwards below resolve exactly as before.</para>
     /// </summary>
     public partial class HapticsTabView : UserControl
     {

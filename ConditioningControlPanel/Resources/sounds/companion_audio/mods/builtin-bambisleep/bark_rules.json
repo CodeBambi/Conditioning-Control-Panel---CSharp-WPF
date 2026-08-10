@@ -3335,6 +3335,80 @@
     ]
   },
   {
+    "id": "tut_studio",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "studio",
+      "total_sessions_lte": 3
+    },
+    "priority": 140,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "guiding, warm",
+    "class": "normal",
+    "chance": 0.5,
+    "variant_pool": [
+      {
+        "text": "the studio~ every pretty little effect lives here. pick one, turn it up, and let bambi do the rest, good girl.",
+        "audio": "tut_studio_1.mp3"
+      },
+      {
+        "text": "ooh, the rack! flashes and spirals and buzzy things, all in one place. don't think too hard, just make the numbers bigger, silly~",
+        "audio": "tut_studio_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "nav_studio",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "studio"
+    },
+    "priority": 70,
+    "cooldown_ms": 25000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "playful",
+    "class": "normal",
+    "chance": 0.2,
+    "variant_pool": [
+      {
+        "text": "tinkering with the effects again? *giggles* turn something up while you're in there, good girl.",
+        "audio": "nav_studio_1.mp3"
+      },
+      {
+        "text": "ooh, shopping for effects~ pick the one that makes you dumbest.",
+        "audio": "nav_studio_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "nav_studio_midsession",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "studio",
+      "session_running_eq": true
+    },
+    "priority": 90,
+    "cooldown_ms": 25000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "chance": 0.35,
+    "variant_pool": [
+      {
+        "text": "you're already running, silly! stop fiddling with the dials and stare~",
+        "audio": "nav_studio_midsession_1.mp3"
+      },
+      {
+        "text": "*giggles* changing the effects mid-session? bambi sees you, good girl.",
+        "audio": "nav_studio_midsession_2.mp3"
+      }
+    ]
+  },
+  {
     "id": "nav_quests",
     "trigger": "TabNavigated",
     "conditions": {

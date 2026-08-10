@@ -1,0 +1,150 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.Studio.BrainDrainFeatureControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+             xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
+             mc:Ignorable="d" d:DesignWidth="488">
+
+    <!-- ================================================================
+         STUDIO RACK · BRAIN DRAIN  (Phase 4 rescue of gap-report G2)
+
+         Brain Drain had no reachable UI. Its only markup lived in
+         Views/Tabs/ProgressionTabView.xaml:508-550, inside a permanently
+         Collapsed ghost tab, under a comment that literally reads
+         "Hidden elements to prevent XAML binding errors" - the three
+         controls carried NO Checked/ValueChanged attributes at all, so
+         MainWindow.LevelFeatures.cs:282-334 has been dead code. Meanwhile
+         the settings stayed fully live and writable from DTRH, the Deeper
+         editor, presets (Models/Preset.cs:413) and the autonomy voice
+         commands, i.e. the feature could be turned ON for a user with no
+         switch anywhere in the app to turn it back off. That is the gap.
+
+         TWO HALVES, ONE SETTING - read this before changing the copy:
+          - AUDIO (Services/LockCard/BrainDrainService.cs) is fully alive.
+            BrainDrainIntensity is its per-minute trigger probability and
+            BrainDrainHighRefresh picks the 500ms vs 5s tick. Everything on
+            this panel drives that, and only that.
+          - VISUAL (the screen blur, OverlayService.StartBrainDrainBlur) is
+            WITHHELD behind OverlayService.BrainDrainWithheld while the
+            effect is reworked, and early-returns for every caller.
+         So the rework notice at the top is not decoration: it is the one
+         thing that stops this panel advertising a dead blur. It is driven
+         straight off that same flag - no second gate, no new mechanism -
+         so flipping OverlayService.BrainDrainWithheld to false hides the
+         notice and nothing else on this panel has to change.
+
+         Root MUST stay a Panel (StackPanel): MainWindow.SessionFeatureLock
+         .cs:365 inserts the session-lock banner via
+         ((Panel)content.Content).Children.Insert(0, banner). The master
+         toggle MUST stay named ChkEnable - the same file's belt-and-braces
+         FindName("ChkEnable") at :358 is the app-wide convention.
+
+         SessionLock.Owned markers are copied verbatim from the dead XAML:
+         enable + intensity are prescribed dose, high-refresh is a pure
+         perf knob and stays live mid-session (lock rule 4).
+
+         No feature art here on purpose: no Features/*FeatureControl panel
+         carries a hero rectangle, and adding one would owe a row in the
+         mod repaint map (MainWindow.xaml.cs:1612-1622). The rack row's
+         icon is the rack's business.
+         ================================================================ -->
+
+    <StackPanel>
+
+        <!-- Rework notice. Visibility is set in code from
+             OverlayService.BrainDrainWithheld; Collapsed here so the
+             designer/harness never shows it by accident. -->
+        <Border x:Name="WithheldNotice" x:FieldModifier="internal"
+                Background="#2A2A4A" BorderBrush="#66FFA500" BorderThickness="1"
+                CornerRadius="10" Padding="16,12" Margin="0,0,0,10"
+                Visibility="Collapsed">
+            <StackPanel>
+                <helpers:EmojiTextBlock Text="{loc:Str section_rework}"
+                                        Foreground="#FFA500" FontSize="13" FontWeight="Bold"/>
+                <TextBlock Text="{loc:Str st4_braindrain_withheld_notice}"
+                           Foreground="#FFA500" FontSize="11"
+                           TextWrapping="Wrap" Margin="0,6,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Master enable -->
+        <Border Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{DynamicResource GlassBorderBrush}"
+                BorderThickness="1" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="{loc:Str btn_enable}" Foreground="White" FontSize="14" FontWeight="SemiBold"/>
+                    <TextBlock Text="{loc:Str st4_braindrain_enable_hint}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+                </StackPanel>
+                <CheckBox Grid.Column="1" x:Name="ChkEnable" x:FieldModifier="internal"
+                          feat:SessionLock.Owned="True"
+                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                          Checked="ChkEnable_Changed" Unchecked="ChkEnable_Changed"/>
+            </Grid>
+        </Border>
+
+        <!-- Intensity. Explicit 1-100 range: a WPF Slider defaults to Maximum=10,
+             which silently clamps this percent value in the settings round-trip
+             (the same warning the dead XAML carried at ProgressionTabView.xaml:535). -->
+        <Border Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{DynamicResource GlassBorderBrush}"
+                BorderThickness="1" CornerRadius="10" Padding="16,14" Margin="0,0,0,10">
+            <StackPanel>
+                <Grid Margin="0,0,0,6">
+                    <TextBlock Text="{loc:Str setting_intensity}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="TxtIntensity" x:FieldModifier="internal" Text="50%" HorizontalAlignment="Right"
+                               Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
+                </Grid>
+                <Slider x:Name="SliderIntensity" x:FieldModifier="internal"
+                        feat:SessionLock.Owned="True"
+                        Minimum="1" Maximum="100" Value="50"
+                        ValueChanged="SliderIntensity_Changed"/>
+                <TextBlock Text="{loc:Str st4_braindrain_intensity_hint}"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                           TextWrapping="Wrap" Margin="0,6,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- High refresh. Comfort/perf knob, NOT prescribed dose: deliberately
+             unmarked so it stays editable mid-session, exactly as in the dead XAML. -->
+        <Border Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{DynamicResource GlassBorderBrush}"
+                BorderThickness="1" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="{loc:Str st4_braindrain_high_refresh}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                    <TextBlock Text="{loc:Str st4_braindrain_high_refresh_hint}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+                </StackPanel>
+                <CheckBox Grid.Column="1" x:Name="ChkHighRefresh" x:FieldModifier="internal"
+                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                          Checked="ChkHighRefresh_Changed" Unchecked="ChkHighRefresh_Changed"/>
+            </Grid>
+        </Border>
+
+        <!-- Shown only when Resources/sounds/braindrain is empty. Without it the
+             feature is a completely silent no-op with no way to tell why: the
+             service logs a warning and returns, and the UI would look armed. -->
+        <Border x:Name="NoAudioHint" x:FieldModifier="internal"
+                Background="#2A2A4A" BorderBrush="#66FFA500" BorderThickness="1"
+                CornerRadius="10" Padding="16,12" Visibility="Collapsed">
+            <TextBlock Text="{loc:Str st4_braindrain_no_audio_hint}"
+                       Foreground="#FFA500" FontSize="11" TextWrapping="Wrap"/>
+        </Border>
+
+    </StackPanel>
+</UserControl>

@@ -17,11 +17,16 @@ namespace ConditioningControlPanel.Services
         /// visual order the user sees, not an arbitrary enum order. Phase 1 replaced the old
         /// two-header-rows order with this one; every reachable key is now on the rail, so a
         /// -1 lookup means a genuine ghost ("patreon", "fyp") rather than a submenu destination.
+        ///
+        /// INSERTING A KEY SHIFTS EVERY LATER INDEX, and ChromeFxNavTests asserts four of them
+        /// by number. Phase 4 inserted "studio" at index 1 (it is the Studio door's first rail
+        /// entry, so appending it instead would give the slide the wrong direction); the test's
+        /// InlineData rows moved with it.
         /// </summary>
         public static readonly string[] NavOrder =
         {
             "settings",                                                        // Home
-            "presets", "haptics",                                              // Studio
+            "studio", "presets", "haptics",                                    // Studio
             "companion", "bambitakeover", "shelistening", "awareness",         // Companion
             "lab", "deeper", "exclusives", "gradedintake", "lockdown",
             "blinktrainer", "remotecontrol", "availablesubjects",              // Play

@@ -371,6 +371,20 @@ namespace ConditioningControlPanel.Services
             return tab;
         }
 
+        /// <summary>
+        /// Selects an entry in the Studio rack (Phase 4). <c>ShowTab("studio")</c> only opens the
+        /// door and restores whatever entry was last selected, so a step that spotlights one
+        /// rack panel has to ask for it by name or it lands on a Collapsed panel and degrades to
+        /// a centred card. Composed onto the step's <c>RequiresTab</c> action, which runs first.
+        /// Unknown keys are a quiet no-op inside <c>FocusRackEntry</c>, and the whole thing is
+        /// swallowed on failure: a tour never blocks on UI quirks.
+        /// </summary>
+        private static void FocusStudioRack(string rackKey)
+        {
+            try { (Application.Current?.MainWindow as MainWindow)?.StudioTab?.FocusRackEntry(rackKey); }
+            catch { /* see above */ }
+        }
+
         public void Next()
         {
             if (!IsActive) return;
@@ -781,9 +795,19 @@ namespace ConditioningControlPanel.Services
                     Description = "Set automatic start times:\n" +
                                   "• Choose active hours\n" +
                                   "• Select days of the week\n" +
-                                  "• App auto-starts during scheduled times",
-                    TargetElementName = "SchedulerPanel",
-                    RequiresTab = "progression",
+                                  "• App auto-starts during scheduled times\n" +
+                                  "Lives in Studio ▸ Scheduler.",
+                    // Phase 4: the Scheduler moved into the Studio rack. "SchedulerPanel" was the
+                    // Border in ProgressionTabView.xaml, which no ShowTab case has revealed since
+                    // the velvet-mosaic rework - this step has been silently degrading to a
+                    // centred card ever since. StudioSchedulerPanel is the new panel's root
+                    // (Views/Controls/Studio/SchedulerRackPanel.xaml); the name is deliberately
+                    // NOT "SchedulerPanel", because TutorialOverlay.FindElementByName walks the
+                    // whole visual tree and the dead ProgressionTab twin is still in it until
+                    // Phase 8 - a duplicate name would spotlight the invisible one.
+                    TargetElementName = "StudioSchedulerPanel",
+                    RequiresTab = "studio",
+                    OnActivate = () => FocusStudioRack("scheduler"),
                     TextPosition = TutorialStepPosition.Left
                 },
                 new TutorialStep
@@ -794,9 +818,13 @@ namespace ConditioningControlPanel.Services
                     Description = "Gradually increase intensity over time:\n" +
                                   "• Start at lower intensity\n" +
                                   "• Ramp up to your settings\n" +
-                                  "• Great for longer sessions!",
-                    TargetElementName = "RampPanel",
-                    RequiresTab = "progression",
+                                  "• Great for longer sessions!\n" +
+                                  "Lives in Studio ▸ Intensity Ramp.",
+                    // Phase 4, same story as prog_scheduler above: "RampPanel" was the dead
+                    // ProgressionTab Border (and the poorer copy - it never had the ramp curve).
+                    TargetElementName = "StudioRampPanel",
+                    RequiresTab = "studio",
+                    OnActivate = () => FocusStudioRack("ramp"),
                     TextPosition = TutorialStepPosition.Left
                 }
             };

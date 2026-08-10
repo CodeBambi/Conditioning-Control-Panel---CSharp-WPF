@@ -155,6 +155,11 @@ namespace ConditioningControlPanel
             // SP5L3: stop polling whenever we leave the Available Subjects
             // tab. Idempotent — safe to call even if not currently polling.
             App.AvailableSubjects?.StopPolling();
+            if (StudioTab != null) StudioTab.Visibility = Visibility.Collapsed;
+            // Phase 4: HapticsTab is a module INSIDE StudioTab now (see the passthrough below),
+            // so collapsing StudioTab already hides it. Kept because it is also the rack's
+            // "haptics" panel and both the "studio" and "haptics" cases re-assert the rack's
+            // current selection on the way in - the two can never disagree.
             if (HapticsTab != null) HapticsTab.Visibility = Visibility.Collapsed;
             if (LockdownTab != null) LockdownTab.Visibility = Visibility.Collapsed;
             if (BlinkTrainerTab != null)
@@ -337,9 +342,42 @@ namespace ConditioningControlPanel
                     UpdatePatreonUI();
                     break;
 
+                // Phase 4: the Studio door's effects rack. Every module panel is already
+                // instantiated inside StudioTabView; OnTabShown only repaints the mod-aware row
+                // captions + state dots and re-asserts the last selection. No ambient canvas is
+                // registered for this key and none may be (PLAN §2.7) - SwitchTabFx("studio")
+                // above therefore parks all five existing ones for free.
+                case "studio":
+                    StudioTab.Visibility = Visibility.Visible;
+                    AnimateTabIn(StudioTab);
+                    StudioTab.OnTabShown();
+                    // The rack hosts the real dose dials now, so the session feature lock has to
+                    // be re-derived on the way in exactly like the Dashboard does.
+                    RefreshSessionFeatureLock();
+                    // Haptics is a MODULE of this rack, and its premium gate treatment
+                    // (HapticsGate + the content-grid dimming, MainWindow.Patreon.cs:141-152) is
+                    // painted only by UpdatePatreonUI. The old top-level "haptics" case called it
+                    // on every entry; the rack can now restore a haptics selection through THIS
+                    // case, so it has to call it too or the door could open on an unpainted gate.
+                    UpdatePatreonUI();
+                    // NO MaybeShowFeatureIntro here, deliberately. The FeatureIntros roster
+                    // (Windows/FeatureIntroPopup.xaml.cs) has five cards - awareness,
+                    // shelistening, blinktrainer, lockdown, haptics - and none of them describes
+                    // an effects rack. Borrowing one would explain the wrong thing, and writing a
+                    // sixth is the Phase-8 door tour's job, not Phase 4's. The "haptics" card
+                    // still fires from its own case below, unchanged.
+                    break;
+
+                // Phase 4: haptics is a MODULE of the Studio rack, so this shows the Studio tab
+                // and focuses that module. Everything else the old case did is preserved, and
+                // the bark key stays "haptics" - NotifyTabNavigated fires at the top of ShowTab
+                // with the incoming key, which is still "haptics" on this path, so all three of
+                // the mod's haptics rules (and any third-party .ccpmod's) keep matching.
                 case "haptics":
-                    HapticsTab.Visibility = Visibility.Visible;
-                    AnimateTabIn(HapticsTab);
+                    StudioTab.Visibility = Visibility.Visible;
+                    AnimateTabIn(StudioTab);
+                    StudioTab.FocusRackEntry("haptics");
+                    RefreshSessionFeatureLock();
                     UpdatePatreonUI();
                     MaybeShowFeatureIntro("haptics");
                     break;
@@ -422,7 +460,7 @@ namespace ConditioningControlPanel
         private static readonly (string Door, string DefaultTab, string[] Tabs)[] NavDoorMap =
         {
             ("home",      "settings",  new[] { "settings", "progression" }),
-            ("studio",    "presets",   new[] { "presets", "haptics" }),
+            ("studio",    "studio",    new[] { "studio", "presets", "haptics" }),
             ("companion", "companion", new[] { "companion", "bambitakeover", "shelistening", "awareness" }),
             ("play",      "lab",       new[] { "lab", "deeper", "exclusives", "gradedintake", "lockdown",
                                                "blinktrainer", "remotecontrol", "availablesubjects" }),
@@ -586,9 +624,26 @@ namespace ConditioningControlPanel
             App.Logger?.Warning("NavDoor_Click: no NavDoorMap entry for door {Door}", door);
         }
 
+        /// <summary>
+        /// Phase 4: the Haptics page is a module of the Studio rack rather than a top-level tab,
+        /// so the x:Name MainWindow.xaml used to declare is a passthrough now.
+        ///
+        /// This one property is why the move cost nothing: all ~71 <c>HapticsTab.&lt;x:Name&gt;</c>
+        /// dereferences across MainWindow.Haptics.cs, .Patreon.cs, .PremiumRail.cs, .Presets.cs,
+        /// .Remember.cs, .SessionFeatureLock.cs, .TabFxTakeoverLabStatus.cs and .xaml.cs (incl.
+        /// both <c>features/vibe.png</c> repaint rows and the IsVisibleChanged live-status hook)
+        /// resolve through it unchanged. Never rename it.
+        /// </summary>
+        /// <remarks>Null-conditional on StudioTab so the several <c>if (HapticsTab != null)</c>
+        /// guards that already exist keep meaning something if this is ever read before
+        /// InitializeComponent has connected the rack.</remarks>
+        internal Views.Tabs.HapticsTabView HapticsTab => StudioTab?.HapticsPanel!;
+
         // Direct entries for the tabs that used to be reachable only through the Exclusives
         // shelf. Awareness is deliberately absent: BtnNavAwareness binds the existing
         // BtnAwareness_Click (MainWindow.AccountShell.cs), which was an orphan until now.
+        private void BtnNavStudio_Click(object sender, RoutedEventArgs e) => ShowTab("studio");
+
         private void BtnNavHaptics_Click(object sender, RoutedEventArgs e) => ShowTab("haptics");
 
         private void BtnNavBambiTakeover_Click(object sender, RoutedEventArgs e) => ShowTab("bambitakeover");

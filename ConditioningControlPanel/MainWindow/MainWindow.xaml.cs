@@ -2306,6 +2306,8 @@ namespace ConditioningControlPanel
             if (App.Mods != null)
             {
                 App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(ApplyModFeatureNames);
+                // The Studio rack's row captions are mod-aware too (Phase 4).
+                App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(() => StudioTab?.RepaintModAwareChrome());
                 // Re-render the Remote Control QR code in the new mod's accent color
                 App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(() =>
                 {

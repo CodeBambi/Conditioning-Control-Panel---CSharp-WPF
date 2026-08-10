@@ -21,12 +21,21 @@ namespace ConditioningControlPanel.Features
             LoadFromSettings();
             if (App.Settings?.Current is INotifyPropertyChanged inpc)
                 inpc.PropertyChanged += OnSettingsPropertyChanged;
+            // The egg hint names the active persona; the rack hosts this control permanently,
+            // so a mod switch must repaint it (a popup instance never lived long enough to care).
+            if (App.Mods != null) App.Mods.ModChanged += OnModChanged;
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
             if (App.Settings?.Current is INotifyPropertyChanged inpc)
                 inpc.PropertyChanged -= OnSettingsPropertyChanged;
+            if (App.Mods != null) App.Mods.ModChanged -= OnModChanged;
+        }
+
+        private void OnModChanged(object? sender, Models.ModPackage mod)
+        {
+            Dispatcher.BeginInvoke(new Action(LoadFromSettings));
         }
 
         private void LoadFromSettings()

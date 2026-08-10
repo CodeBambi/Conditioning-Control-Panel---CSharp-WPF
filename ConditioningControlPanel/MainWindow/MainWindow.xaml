@@ -331,6 +331,16 @@
                         </Button>
                         <Border x:Name="DoorPanelStudio" ClipToBounds="True" Height="0" IsHitTestVisible="False">
                             <StackPanel x:Name="DoorEntriesStudio">
+                                <!-- Phase 4: the effects rack. First entry, so it is what the
+                                     Studio door header lands on (NavDoorMap default = "studio"). -->
+                                <Button x:Name="BtnNavStudio" Tag="Studio" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavStudio_Click" ToolTip="{loc:Str st4_nav_studio_tip}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🎚️', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str st4_nav_studio}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
                                 <Button x:Name="BtnPresets" Tag="Presets" Style="{StaticResource NavEntryButton}"
                                         Click="BtnPresets_Click" ToolTip="{loc:Str tooltip_presets_sessions}">
                                     <StackPanel Orientation="Horizontal">
@@ -1361,8 +1371,14 @@
         <views:BambiTakeoverTabView x:Name="BambiTakeoverTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-        <!-- Haptics Tab — Patreon premium feature, visible-but-locked for free users -->
-        <views:HapticsTabView x:Name="HapticsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+        <!-- Haptics Tab — Patreon premium feature, visible-but-locked for free users.
+             MOVED in Phase 4: HapticsTabView is now a module of the Studio rack
+             (Views/Tabs/StudioTabView.xaml, rack key "haptics"). The x:Name "HapticsTab" it
+             used to declare here survives as a MainWindow passthrough property in
+             MainWindow.TabNavigation.cs, so every HapticsTab.<x:Name> dereference across the
+             MainWindow partials, both features/vibe.png repaint rows, the IsVisibleChanged
+             live-status hook and the SessionLock sweep keep working verbatim.
+             ShowTab("haptics") still fires the bark key "haptics", never "studio". -->
 
 
         <!-- Lockdown Mode Tab (graduated from Lab in v5.8.4) -->
@@ -1399,6 +1415,15 @@
              the UX restructure. NOT "SettingsTab": that name belongs to the dashboard/Home and
              is API for ~200 call sites. Eight sections + a mini-rail; see AppSettingsTabView.xaml. -->
         <views:AppSettingsTabView x:Name="AppSettingsTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+
+
+        <!-- Studio Tab ("studio") — the Studio door's effects rack, added in Phase 4 of the UX
+             restructure. Master-detail: a fixed rack list on the left, exactly one module panel
+             on the right. Every module is instantiated with this view and toggled by Visibility
+             (ground rule §2.3); nothing is ever re-parented, so the dashboard mosaic's
+             FeaturePopupWindow path keeps building its own separate instances and keeps working.
+             Hosts the Haptics page as its "haptics" module. -->
+        <views:StudioTabView x:Name="StudioTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
 

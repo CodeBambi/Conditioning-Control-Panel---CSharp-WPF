@@ -1,0 +1,294 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Tabs.StudioTabView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+             xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
+             xmlns:studio="clr-namespace:ConditioningControlPanel.Views.Controls.Studio"
+             xmlns:tabs="clr-namespace:ConditioningControlPanel.Views.Tabs"
+             mc:Ignorable="d"
+             d:DesignHeight="700" d:DesignWidth="1460">
+
+    <!-- ========================================================================
+         THE STUDIO DOOR (UX restructure, Phase 4 · tab key "studio")
+
+         The effects rack: a fixed left list of modules, a detail pane on the
+         right showing exactly ONE module. It replaces the thirteen
+         FeaturePopupWindow openers as the primary home for the per-feature
+         config panels - the popups still exist and still work (the dashboard
+         mosaic keeps opening them), because a popup builds its OWN fresh
+         instance every time and nothing here is ever re-parented.
+
+         WHY THE PANELS ARE ALL INSTANTIATED HERE, ALWAYS (ground rule §2.3):
+         no lazy creation. Every Features/*FeatureControl below is constructed
+         with this view and toggled by Visibility, exactly like the tab views
+         themselves. Their Loaded/Unloaded pairs subscribe/unsubscribe
+         AppSettings.PropertyChanged symmetrically, so thirteen permanently
+         live INPC listeners is the whole cost.
+
+         WHY NOTHING IS RE-PARENTED: a UserControl has exactly one visual
+         parent. The rack owning an instance AND a popup borrowing it is the
+         DetachWebcamBarInto mechanism Phase 2 just deleted; it fires
+         Unloaded/Loaded, which re-runs LoadFromSettings and re-subscribes
+         handlers. Two independent instances that both re-read App.Settings on
+         PropertyChanged stay in step for free.
+
+         HAPTICS LIVES HERE NOW. HapticsTabView (1353 lines, its own page) was
+         a top-level tab mounted in MainWindow.xaml; it moved into this rack
+         WHOLE, not decomposed. MainWindow keeps reaching it through a single
+         MainWindow.HapticsTab passthrough (MainWindow.TabNavigation.cs), so
+         all 71 `HapticsTab.<x:Name>` dereferences across the MainWindow
+         partials, the two features/vibe.png repaint rows, the
+         IsVisibleChanged live-status hook and the SessionLock sweep keep
+         working untouched. ShowTab("haptics") still fires the bark key
+         "haptics", never "studio".
+
+         QUIET SURFACE (PLAN §2.7, hard rule 7): no ambient loop is registered
+         for this view and none may be. The rack's selection visual is trigger
+         driven - no clock, nothing for the motion kill-switch to reach. The
+         only motion is a 120ms detail crossfade, gated on MotionFx.
+
+         RESOURCES: a UserControl's XAML is parsed before it is attached to
+         MainWindow, so a StaticResource declared in MainWindow.xaml's own
+         Resources will NOT resolve here. Everything below comes from
+         Resources/Theme/*.xaml or the local Resources block (Phase 2 lesson).
+         ======================================================================== -->
+
+    <UserControl.Resources>
+
+        <!-- Rack row. Same grammar as the nav rail's active indicator and the
+             Settings door's section pills: a 3px accent bar plus a tinted fill,
+             both driven by ControlTemplate triggers. Deliberately no storyboard -
+             a trigger setter is not an animation, so there is nothing here for
+             MotionFx to gate or for the kill-switch to stop. -->
+        <Style x:Key="RackEntryStyle" TargetType="RadioButton">
+            <Setter Property="GroupName" Value="StudioRack"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="True"/>
+            <Setter Property="Margin" Value="0,1"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Grid Background="Transparent" Height="30">
+                            <Border x:Name="RowFill" CornerRadius="8" Opacity="0"
+                                    Background="{DynamicResource TransparentPink20Brush}"/>
+                            <Border x:Name="RowBar" Width="3" CornerRadius="2" Margin="0,5"
+                                    HorizontalAlignment="Left" Visibility="Collapsed"
+                                    Background="{DynamicResource PinkBrush}"/>
+                            <ContentPresenter Margin="12,0,10,0" VerticalAlignment="Center"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="RowFill" Property="Opacity" Value="0.5"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="RowFill" Property="Opacity" Value="1"/>
+                                <Setter TargetName="RowBar" Property="Visibility" Value="Visible"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- ============================ page header ============================ -->
+        <Grid Grid.Row="0" Margin="4,2,4,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Image Grid.Column="0" Width="30" Height="30" Margin="0,0,12,0" VerticalAlignment="Center"
+                   Source="{Binding Source='🎛️', Converter={StaticResource EmojiToImageSource}}"/>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <TextBlock x:Name="TxtStudioTitle" Text="{loc:Str st4_studio_title}"
+                           Foreground="White" FontSize="21" FontWeight="Bold"/>
+                <TextBlock Text="{loc:Str st4_studio_subtitle}"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12.5"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- ========================== rack + detail pane ======================== -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- The rack list. Fixed 230 wide per the Phase-4 contract; rows are built in
+                 code from the single RackEntries table so the key, the icon, the label, the
+                 state dot, the panel and the NotifyFeatureOpened key can never drift apart. -->
+            <Border Grid.Column="0" Width="230" Margin="0,0,14,0"
+                    Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2A2A46"
+                    BorderThickness="1" CornerRadius="12" Padding="8,10">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="RackList"/>
+                </ScrollViewer>
+            </Border>
+
+            <!-- The detail column. -->
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Stand-in for the FeaturePopupWindow title bar: same icon + title the popup
+                     showed, so a panel that used to name itself in a window chrome still does.
+                     Collapsed for modules that draw their own page header (Haptics). -->
+                <Border x:Name="DetailHeader" Grid.Row="0" Margin="0,0,0,10" Padding="14,9"
+                        Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2A2A46"
+                        BorderThickness="1" CornerRadius="10">
+                    <StackPanel Orientation="Horizontal">
+                        <helpers:EmojiTextBlock x:Name="TxtDetailIcon" FontSize="15"
+                                                VerticalAlignment="Center" Margin="0,0,9,0"/>
+                        <TextBlock x:Name="TxtDetailTitle" Foreground="White" FontSize="14"
+                                   FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Every module's panel, all instantiated, exactly one visible.
+
+                     Each Features/* panel gets its OWN ScrollViewer and ~14px of padding
+                     because that is what FeaturePopupWindow gave it (ScrollViewer Padding=16
+                     inside a fixed 520x640 window); without it the long panels - Flash 255
+                     XAML lines, BouncingText 246, System 228, Spiral 226 - clip silently with
+                     no scrollbar at all (fx-inventory §12.8).
+
+                     HapticsTabView is the exception: its own root IS a ScrollViewer, so it is
+                     hosted raw. Nesting it would give it infinite available height and it
+                     would never scroll. -->
+                <Grid x:Name="DetailHost" Grid.Row="1">
+
+                    <ScrollViewer x:Name="HostFlash" Visibility="Collapsed"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:FlashFeatureControl x:Name="PanelFlash"/>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="HostVisuals" Visibility="Collapsed"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:VisualsFeatureControl x:Name="PanelVisuals"/>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="HostVideo" Visibility="Collapsed"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:VideoFeatureControl x:Name="PanelVideo"/>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="HostSubliminal" Visibility="Collapsed"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:SubliminalFeatureControl x:Name="PanelSubliminal"/>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="HostSpiral" Visibility="Collapsed"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:SpiralFeatureControl x:Name="PanelSpiral"/>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="HostPinkFilter" Visibility="Collapsed"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:PinkFilterFeatureControl x:Name="PanelPinkFilter"/>
+                    </ScrollViewer>
+
+                    <!-- TxtTriggerEggHint travels with this panel (preservation item 15). KNOWN
+                         GAP: it is set in BubblePopFeatureControl.LoadFromSettings, which only
+                         runs on Loaded and on flash/bubble property changes - so on this
+                         long-lived instance the persona name ("careful — Bambi loves these…")
+                         goes stale after a mod switch until a bubble setting moves. The fix
+                         belongs in the panel or in ApplyModFeatureNames, not here; see
+                         CONCERNS in the Phase-4 handoff. -->
+                    <ScrollViewer x:Name="HostBubblePop" Visibility="Collapsed"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:BubblePopFeatureControl x:Name="PanelBubblePop"/>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="HostLockCard" Visibility="Collapsed"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:LockCardFeatureControl x:Name="PanelLockCard"/>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="HostBubbleCount" Visibility="Collapsed"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:BubbleCountFeatureControl x:Name="PanelBubbleCount"/>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="HostBouncingText" Visibility="Collapsed"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:BouncingTextFeatureControl x:Name="PanelBouncingText"/>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="HostMindWipe" Visibility="Collapsed"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:MindWipeFeatureControl x:Name="PanelMindWipe"/>
+                    </ScrollViewer>
+
+                    <!-- NEW in Phase 4 (Views/Controls/Studio/, built by the Brain Drain agent).
+                         G2 rescue: the controls existed ONLY in the dead ProgressionTabView XAML
+                         with no handlers attached. Note OverlayService.BrainDrainWithheld is still
+                         true, so the BLUR half is a no-op app-wide; the panel must not advertise
+                         a screen effect that cannot run. -->
+                    <ScrollViewer x:Name="HostBrainDrain" Visibility="Collapsed"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <studio:BrainDrainFeatureControl x:Name="PanelBrainDrain"/>
+                    </ScrollViewer>
+
+                    <!-- SystemFeatureControl and AppInfoFeatureControl are deliberately NOT rack
+                         modules (Phase-4 contract): System is configuration + the No-Panic
+                         safety control, and both belong to the Settings/Home doors. The
+                         dashboard's System tile keeps opening its popup, so the
+                         NotifyFeatureOpened("System") bark rule keeps firing from there. -->
+
+                    <!-- Hosted RAW: HapticsTabView's root is already a ScrollViewer (and it
+                         carries its own 34px page header, which is why DetailHeader hides for
+                         this module). MainWindow.HapticsTab passthrough points here. -->
+                    <tabs:HapticsTabView x:Name="PanelHaptics" Visibility="Collapsed"/>
+
+                    <!-- NEW in Phase 4 (Views/Controls/Studio/). These wrap the LIVE
+                         Features/SchedulerFeatureControl and Features/IntensityRampFeatureControl -
+                         NOT the strictly-poorer dead twins in ProgressionTabView (which lack
+                         CmbRampCurve). MainWindow.Settings.cs still SAVES the schedule from the
+                         ProgressionTab copies, so nothing about those may be deleted in Phase 4. -->
+                    <ScrollViewer x:Name="HostScheduler" Visibility="Collapsed"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <studio:SchedulerRackPanel x:Name="PanelScheduler"/>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="HostRamp" Visibility="Collapsed"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <studio:RampRackPanel x:Name="PanelRamp"/>
+                    </ScrollViewer>
+
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -513,7 +513,10 @@ namespace ConditioningControlPanel
         private Button? NavButtonForTab(string? tab) => (tab ?? string.Empty).ToLowerInvariant() switch
         {
             "settings" or "progression" => BtnSettings,
+            "studio" => BtnNavStudio,
             "presets" => BtnPresets,
+            // Phase 4: haptics is a Studio rack module, but it keeps its own rail entry and its
+            // own tab key, so it keeps lighting its own row - not the rack's.
             "haptics" => BtnNavHaptics,
             "companion" => BtnCompanion,
             "bambitakeover" => BtnNavBambiTakeover,

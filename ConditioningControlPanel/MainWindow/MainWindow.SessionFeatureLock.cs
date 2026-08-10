@@ -180,6 +180,7 @@ namespace ConditioningControlPanel
             allOk &= PaintSection("legacy", () => ApplySessionLockToLegacyDashboard(locked, reason));
             allOk &= PaintSection("tabs", () => ApplySessionLockToTabs(locked, reason));
             allOk &= PaintSection("popup", () => ApplySessionLockToFeaturePopup(_activeFeaturePopupContent));
+            allOk &= PaintSection("studio", ApplySessionLockToStudioRack);
 
             // Only remember this paint if it fully succeeded, so the heartbeat retries a partial one.
             _sessionLockPainted = allOk ? locked : null;
@@ -377,6 +378,42 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Warning(ex, "[SessionLock] Failed to apply lock to feature popup");
             }
+        }
+
+        /// <summary>
+        /// Phase 4: the Studio rack (<c>StudioTabView</c>) hosts the SAME
+        /// <c>Features/*FeatureControl</c> panels the dashboard popups host - the master enables
+        /// and every ramped dial - so it is a second door onto the prescribed dose and has to be
+        /// painted exactly like the first one.
+        ///
+        /// <para>WHY THIS IS NOT JUST "ADD StudioTab TO <see cref="ApplySessionLockToTabs"/>".
+        /// That sweep is attached-property only, and three panels - Flash, Spiral and PinkFilter -
+        /// leave their master <c>ChkEnable</c> UNMARKED and rely entirely on
+        /// <see cref="ApplySessionLockToFeaturePopup"/>'s belt-and-braces
+        /// <c>FindName("ChkEnable")</c>. A bare marker sweep would leave three master toggles live
+        /// for the whole session, which is precisely the bypass this file exists to close. Reusing
+        /// the popup painter gives the rack the identical treatment, banner included.</para>
+        ///
+        /// <para>The rack's panels are LONG-LIVED (built once with the view, toggled by
+        /// Visibility - ground rule §2.3), where a popup's were rebuilt on every open. That is
+        /// safe here: the painter is idempotent in both directions, the banner is found by Tag
+        /// before being inserted so it cannot stack across repaints, and its text is rewritten
+        /// from the freshly derived reason on every pass. It is also why this must run on session
+        /// START and END rather than on reveal - a rack panel that was on screen when the session
+        /// began is never re-created to pick the lock up.</para>
+        ///
+        /// <para>Haptics is deliberately NOT in <c>HostedFeaturePanels</c>: it is already swept by
+        /// name in <see cref="ApplySessionLockToTabs"/> (as <c>HapticsTab</c>, which is now a
+        /// passthrough into this same rack), and its Content is a ScrollViewer rather than a
+        /// Panel, so it could never take the banner anyway.</para>
+        /// </summary>
+        private void ApplySessionLockToStudioRack()
+        {
+            var rack = StudioTab;
+            if (rack == null) return;
+
+            foreach (var panel in rack.HostedFeaturePanels)
+                ApplySessionLockToFeaturePopup(panel);
         }
 
         private static Border? FindSessionLockBanner(Panel root)
