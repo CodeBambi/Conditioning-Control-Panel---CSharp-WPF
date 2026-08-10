@@ -351,7 +351,7 @@ namespace ConditioningControlPanel
             BuildIdentitySection();
             BuildImageSlotsSection("achievements", "Achievements", "Custom badge images for the built-in achievements shown in the Trophy Case. Use square PNGs (128x128 recommended). Achievement display names are changed via Text Replacements, not here.", AchievementSlots);
             BuildImageSlotsSection("features", "Features", "Icons for the feature tiles in the main control panel tabs (Flashes, Videos, Overlays, etc). Use square PNGs with transparent backgrounds. Feature display names are changed via Text Replacements, not here.", FeatureSlots);
-            BuildImageSlotsSection("skills", "Skills", "Icons for the nodes in the skill/enhancement tree. Each icon represents a specific unlockable skill. Use square PNGs. Skill display names are changed via Text Replacements.", SkillSlots);
+            BuildImageSlotsSection("skills", "Skills", "Icons for the nodes in the skill tree. Each icon represents a specific unlockable skill. Use square PNGs. Skill display names are changed via Text Replacements.", SkillSlots);
             BuildAvatarsSection();
             BuildImageSlotsSection("uiassets", "UI Assets", "Miscellaneous UI images: Bubble is the floating orb in the pop minigame, Tube is the glass container around the avatar, Spiral GIF is the hypnotic overlay animation, and Logo replaces the app logo.", UiAssetSlots);
             BuildAudioSection();

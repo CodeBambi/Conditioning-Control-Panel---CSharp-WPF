@@ -227,6 +227,38 @@ namespace ConditioningControlPanel.Services
             Tab("fyp", "tab_fyp", "📲", "fyp", "for you feed scroll fyp");
             Tab("appsettings", "tab_settings", "⚙️", "appsettings", "settings options preferences");
 
+            // ---- Library launchers (Phase 7) --------------------------------------------
+            // Four things the Library door opens that are NOT tabs: a dialog, a website, a dialog
+            // and a window. The palette has exactly one navigation verb - ShowTab - so a row here
+            // cannot press a button for the user, and inventing a second verb would put window
+            // launches behind a search box where a mistyped Enter opens a modal. These rows
+            // therefore do what the index says it does everywhere else: they take you to where the
+            // thing LIVES. TabKey "assets" is the Library door's default destination (opening the
+            // door via ExpandDoorForTab for free), and ElementNames pulses the rail row that
+            // launches it, so the answer to "where is the phrase manager" is the button itself.
+            //
+            // If the palette ever grows a launch verb, these four are its first customers.
+            void Launcher(string id, string labelKey, string glyph, string element, string aliases) =>
+                list.Add(new SettingsPaletteEntry
+                {
+                    Id = "launch." + id,
+                    LabelKey = labelKey,
+                    Glyph = glyph,
+                    TabKey = "assets",
+                    ElementNames = new[] { element },
+                    ContextKeys = new[] { GroupNav, "nav_door_library" },
+                    Aliases = aliases,
+                });
+
+            Launcher("mods", "yl7_nav_mods", "🧩", "BtnNavMods",
+                     "mods mod manager install ccpmod creator themes packs");
+            Launcher("catalogue", "yl7_nav_catalogue", "🌐", "BtnNavCatalogue",
+                     "catalogue community share browse presets sessions download");
+            Launcher("phrases", "yl7_nav_phrases", "💬", "BtnNavPhrases",
+                     "phrase manager text pools mantras subliminals barks lines");
+            Launcher("medialog", "yl7_nav_medialog", "🎞️", "BtnNavMediaLog",
+                     "media log history what did i see flashes videos recently shown");
+
             // ---- the eight Settings sections -------------------------------------------
             void Section(string key, string labelKey, string glyph, string aliases) =>
                 list.Add(new SettingsPaletteEntry

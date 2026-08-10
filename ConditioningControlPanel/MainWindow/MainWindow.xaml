@@ -585,12 +585,70 @@
                         </Button>
                         <Border x:Name="DoorPanelLibrary" ClipToBounds="True" Height="0" IsHitTestVisible="False">
                             <StackPanel x:Name="DoorEntriesLibrary">
+                                <!-- Assets STAYS first: it is the Library door's default destination
+                                     in NavDoorMap ("library" -> "assets"), and the four rows below
+                                     are launchers, not tabs. -->
                                 <Button x:Name="BtnOpenAssetsTop" Tag="Assets" Style="{StaticResource NavEntryButton}"
                                         Click="BtnAssets_Click" ToolTip="{loc:Str tooltip_assets_packs}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='📁', Converter={StaticResource EmojiToImageSource}}"/>
                                         <TextBlock Text="{loc:Str tab_assets}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <!-- Phase 7 · Library door. These four rows are LAUNCHERS, not tabs:
+                                     none of them calls ShowTab, none of them appears in NavDoorMap,
+                                     and none of them may (a rail row that claims a tab key the app
+                                     has no view for would leave the active indicator pointing at
+                                     nothing). Each one calls the EXACT handler that already owned
+                                     the launch, so there is precisely one code path per window:
+
+                                       Mods      -> BtnManageMods_Click   (MainWindow.xaml.cs:1789,
+                                                    the title-bar gear's own handler - _isLoading
+                                                    guard, share-badge poll and ApplyActiveModChange
+                                                    all included). The Mod Creator is untouched: it
+                                                    is a button INSIDE ModManagerDialog.
+                                       Catalogue -> BtnCatalogue_Click    (MainWindow.Presets.cs:1104)
+                                       Phrases   -> BtnManagePhrases_Click(MainWindow.Patreon.cs:898,
+                                                    which also refreshes the Companion tab's count)
+                                       Media Log -> BtnNavMediaLog_Click  (TabNavigation.cs), which
+                                                    re-fires the Assets tab's own BtnMediaLog rather
+                                                    than newing a second MediaHistoryWindow - see the
+                                                    comment there for why that matters.
+
+                                     Deliberately NOT duplicated here: the Mod Catalogue browser
+                                     (a button inside ModManagerDialog) and Session History (a
+                                     Studio/Presets surface). -->
+                                <Button x:Name="BtnNavMods" Tag="Mods" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnManageMods_Click" ToolTip="{loc:Str yl7_nav_mods_tip}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🧩', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str yl7_nav_mods}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnNavCatalogue" Tag="Catalogue" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnCatalogue_Click" ToolTip="{loc:Str yl7_nav_catalogue_tip}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🌐', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str yl7_nav_catalogue}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnNavPhrases" Tag="Phrases" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnManagePhrases_Click" ToolTip="{loc:Str yl7_nav_phrases_tip}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='💬', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str yl7_nav_phrases}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnNavMediaLog" Tag="MediaLog" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavMediaLog_Click" ToolTip="{loc:Str yl7_nav_medialog_tip}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🎞️', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str yl7_nav_medialog}" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Button>
                             </StackPanel>

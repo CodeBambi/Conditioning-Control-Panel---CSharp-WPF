@@ -723,6 +723,38 @@ namespace ConditioningControlPanel
         private void BtnNavRemoteControl_Click(object sender, RoutedEventArgs e) => ShowTab("remotecontrol");
 
         /// <summary>
+        /// Phase 7 · the Library door's Media Log row. The only one of that door's four new rows
+        /// that needed a handler at all: Mods, Catalogue and Phrase Manager each bind the exact
+        /// existing launcher (<c>BtnManageMods_Click</c>, <c>BtnCatalogue_Click</c>,
+        /// <c>BtnManagePhrases_Click</c>) straight from XAML.
+        ///
+        /// <para>This one re-fires the Assets tab's own <c>BtnMediaLog</c> instead of newing a
+        /// second <see cref="MediaHistoryWindow"/>, because that button's Click has a SECOND
+        /// subscriber: <c>MediaLogButton_Clicked</c> in MainWindow.AssetsFx.cs, which banks
+        /// <c>_mediaLogSeenCount</c> so the three-beat "new media since you last looked" pulse goes
+        /// quiet once the log has been read. A parallel launcher would open the same window and
+        /// leave that badge armed - the failure being a nag nobody can dismiss, from the one entry
+        /// point that never touches the Assets tab.</para>
+        ///
+        /// <para><see cref="InitializeAssetsFx"/> first because that subscription is wired lazily,
+        /// on the first show of the Assets tab, and this row is reachable by someone who has never
+        /// opened it. The call is idempotent (<c>_assetsFxInitialized</c>).</para>
+        ///
+        /// <para>Deliberately no <c>ShowTab("assets")</c>: the Media Log is a window, and it is
+        /// worth having from wherever you are. Navigating first would also fire
+        /// <c>PulseMediaLogIfUnseen</c> one beat before the click that spends it.</para>
+        /// </summary>
+        private void BtnNavMediaLog_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                InitializeAssetsFx();
+                AssetsTab?.BtnMediaLog?.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "BtnNavMediaLog_Click failed"); }
+        }
+
+        /// <summary>
         /// One-shot explainer cards for tabs whose purpose isn't obvious from their controls
         /// (see FeatureIntros for the roster). Suppressed while a session is running - a modal
         /// must never land on top of live conditioning. FeatureIntroPopup itself guards the

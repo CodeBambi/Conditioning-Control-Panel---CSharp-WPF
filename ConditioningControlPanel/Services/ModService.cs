@@ -1184,9 +1184,12 @@ namespace ConditioningControlPanel.Services
         public int GetAvatarOffsetY() => Math.Clamp(EffectiveTubeLayout()?.AvatarOffsetY ?? 0, -500, 500);
         public int GetAvatarDetachedOffsetY() => Math.Clamp(EffectiveTubeLayout()?.AvatarDetachedOffsetY ?? 0, -500, 500);
 
-        // Enhancement overrides — check explicit override first, then fall back to MakeModAware(default)
+        // Enhancement overrides — check explicit override first, then fall back to MakeModAware(default).
+        // Phase 7: the tree is user-facing "Skill Tree" now. These fallbacks shadow
+        // label_enhancement_tree_title / tooltip_enhancement_tree (App.Mods is never null in
+        // practice), so the rename has to land here too or the header keeps the old name.
         public string GetEnhancementTreeTitle() =>
-            _activeMod.Manifest.EnhancementOverrides?.TreeTitle ?? MakeModAware("Bimbo Enhancement Tree");
+            _activeMod.Manifest.EnhancementOverrides?.TreeTitle ?? MakeModAware("Bimbo Skill Tree");
 
         public string GetEnhancementTreeSubtitle() =>
             _activeMod.Manifest.EnhancementOverrides?.TreeSubtitle ?? MakeModAware("you earn sparkle points from leveling up + every 100 bubbles popped~");
@@ -1201,7 +1204,7 @@ namespace ConditioningControlPanel.Services
             _activeMod.Manifest.EnhancementOverrides?.StatsTitle ?? MakeModAware("Ditzy Data Stats");
 
         public string GetTabTooltip() =>
-            _activeMod.Manifest.EnhancementOverrides?.TabTooltip ?? MakeModAware("Bimbo Enhancement Tree");
+            _activeMod.Manifest.EnhancementOverrides?.TabTooltip ?? MakeModAware("Bimbo Skill Tree");
 
         public string GetPinkRushName() =>
             _activeMod.Manifest.EnhancementOverrides?.PinkRushName ?? MakeModAware("PINK RUSH!");

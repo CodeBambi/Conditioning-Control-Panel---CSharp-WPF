@@ -76,6 +76,11 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Every clickable row in the nav rail: seven door headers then the entries, rail order.
         /// Null-tolerant: a couple are conditionally present.
+        ///
+        /// <para>This list is the ONLY thing that subscribes a rail row to the icon hover nudge
+        /// (§2.1). A row left out of it still gets the style's hover background, so the omission
+        /// reads as "that button feels slightly dead" rather than as a bug - keep it in sync with
+        /// the DoorEntries* panels in MainWindow.xaml whenever a row is added.</para>
         /// </summary>
         private IEnumerable<Button> NavButtons
         {
@@ -85,12 +90,12 @@ namespace ConditioningControlPanel
                 {
                     DoorHome, DoorStudio, DoorCompanion, DoorPlay, DoorYou, DoorLibrary, DoorSettings,
                     BtnSettings,
-                    BtnPresets, BtnNavHaptics,
+                    BtnNavStudio, BtnPresets, BtnNavHaptics,
                     BtnCompanion, BtnNavBambiTakeover, BtnNavSheListening, BtnNavAwareness,
                     BtnLab, BtnDeeper, BtnPatreonExclusives, BtnNavGradedIntake, BtnNavLockdown,
                     BtnNavBlinkTrainer, BtnNavRemoteControl, BtnAvailableSubjects,
                     BtnDiscordTab, BtnQuests, BtnAchievements, BtnEnhancements, BtnPrograms, BtnLeaderboard,
-                    BtnOpenAssetsTop,
+                    BtnOpenAssetsTop, BtnNavMods, BtnNavCatalogue, BtnNavPhrases, BtnNavMediaLog,
                 };
                 return all.Where(b => b != null)!;
             }
