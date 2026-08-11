@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-21
 **Status:** CLOSED-OUT — no claimable board work remains (see below)
-**Next Task ID:** SP-054
+**Next Task ID:** SP-057
 
 ---
 
@@ -89,6 +89,13 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 ### Wave 14 (next)
 
 **Next claimable work:** SP-054 = **Graded Intake web-core host** (P1, size L — gets a wave to itself per the wave-12 land consult): the window class (ChaosWebViewHost parity) + the full bridge vocabulary (6 out / 12 in; ping/payload-state authoring obligation) + 3 stores + profiler + session drafting sink + loom-save against the shared b4 store; degraded-delivery contract verbatim in the row; privacy boundaries as listed. Next unused task ID: SP-054.
+
+### Wave 15 (staged 2026-08-11 — first work from the v6.7.4 upstream sync)
+
+| Task | Summary | Status | Deps |
+|------|---------|--------|------|
+| SP-055-asset-active-pool | Row (**P0**): one active-pool definition honoring asset deselection across DTRH pools + Graded Intake provisioning — upstream made deselection a shipped contract (#762 #798 #619); ship the SEAM, not the Assets-tree UI | Authored 2026-08-11 | SP-054 |
+| SP-056-upstream-tree-guard | Row (backlog §D): committed upstream payload-tree inventory + a guard test that FAILS when upstream gains a tree the client has never heard of (a 184-file `web/goon/` tree appeared with the suite green) | Authored 2026-08-11 | — |
 
 ### Wave 14 (staged 2026-08-11)
 
