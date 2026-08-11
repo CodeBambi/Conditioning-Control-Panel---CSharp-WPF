@@ -1,10 +1,10 @@
 ## STATUS: SP-052 — DTRH run-setup ownership gates (b4 parity defects)
 **Current Step:** Step 1 — drift verification + fix design + pre-approach consult
-**Last Updated:** 2026-08-05 (authored)
+**Last Updated:** 2026-08-05 (worker)
 **Blockers:** none
 
-### Step 1: drift verification + design + pre-approach consult
-- [ ] Update STATUS.md before starting work
+### Step 1: drift verification + design + pre-approach consult (IN PROGRESS)
+- [x] Update STATUS.md before starting work
 - [ ] Re-verify every drift line against git main (clamp sites, endless points, habit exclusion)
 - [ ] Design (ownership-gated ceiling both points; Endless additive member + five-point carry)
 - [ ] Pre-approach solo consult (verdict + actual model in record.md)
