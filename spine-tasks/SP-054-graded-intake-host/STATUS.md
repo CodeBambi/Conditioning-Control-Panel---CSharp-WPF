@@ -1,10 +1,12 @@
 ## STATUS: SP-054 — Graded Intake web-core host
-**Current Step:** Step 1 — archaeology + host design + pre-approach consult
-**Last Updated:** 2026-08-11 (Step 1 complete pending plan review)
+**Current Step:** Step 3 — serving + loom-share + headed evidence + pre-completion consult
+**Last Updated:** 2026-08-11 (Step 2 complete — 795/795 + 33/33 green)
 **Blockers:** none
 
 ### Step 1: archaeology + design + pre-approach consult
-**Status:** complete (plan review pending)
+**Status:** complete (plan review SKIPPED — engine-runs-after-.DONE class, recorded below)
+
+> **Engine-review presence (T-2):** Step-1 plan review call → `skipped: true, spawnFailed: false` — "Nested reviewer spawn blocked inside pi worker session... the batch engine runs reviews after worker success (SP-195)" (artifact `.reviews/1-20260811T171844.md`). Engine review ABSENT in-worker by design; code + final reviews run on the engine after .DONE.
 - [x] Update STATUS.md before starting work
 - [x] WPF archaeology (window class, full bridge vocabulary, pass state machine, punch card, profiler, init provisions, serving origins)
 - [x] Design (Intake/ host, protocol, pass service, punch card, profiler, drafting sink, serving, loom-share)
@@ -20,10 +22,11 @@
 - [ ] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: host machinery + bridge + stores + profiler
-- [ ] Window class (surface, profile, autoplay, fullscreen persist, watchdog + relaunch-once, exit watchdog, ducking)
-- [ ] IntakeProtocol typed vocabulary (6 out / 12 in; ping + payload-state pinned/typed)
-- [ ] IntakePassService + IntakePunchCard + IntakeProfiler + drafting sink
-- [ ] Unit tests (bridge, pass-week, punch card, profiler matrix, stores, degraded typings)
+**Status:** complete (plan review SKIPPED — engine class, see Step 1 note)
+- [x] Window class (surface, profile, autoplay, fullscreen persist, watchdog + relaunch-once, exit watchdog, ducking)
+- [x] IntakeProtocol typed vocabulary (6 out / 12 in; ping + payload-state pinned/typed)
+- [x] IntakePassService + IntakePunchCard + IntakeProfiler + drafting sink
+- [x] Unit tests (bridge, pass-week, punch card, profiler matrix, stores, degraded typings)
 
 ### Step 3: serving + loom-share + headed evidence + pre-completion consult
 - [ ] Intake tree serving through the §4 contract class (audio borrow proven)

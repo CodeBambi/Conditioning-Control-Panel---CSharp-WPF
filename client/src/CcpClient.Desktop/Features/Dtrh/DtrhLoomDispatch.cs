@@ -39,15 +39,10 @@ public sealed class DtrhLoomDispatch
             {
                 // loom-save {name, gifBase64, params, overwrite} (loomStudio.js:251-259) →
                 // store validates + writes, page gets the verdict + a fresh list
-                // (DtrhHostService.cs:285-293).
-                string? gifBase64 = loomSave.Raw.TryGetProperty("gifBase64", out var b64) && b64.ValueKind == JsonValueKind.String
-                    ? b64.GetString()
-                    : null;
-                JsonElement? loomParams = loomSave.Raw.TryGetProperty("params", out var lp) && lp.ValueKind == JsonValueKind.Object
-                    ? lp.Clone()
-                    : null;
-                var saveResult = _loom.Save(loomSave.Name, gifBase64, loomParams, loomSave.Overwrite);
-                _send(DtrhProtocol.BuildLoomResult("save", saveResult.Ok, saveResult.Slug, saveResult.Error));
+                // (DtrhHostService.cs:285-293). The write path is the SHARED HandleSave
+                // overload (SP-054 one-write-path binding — the DTRH host adds PostList;
+                // the intake host's 6-out table has NO loom-list, so the overload never posts).
+                var saveResult = HandleSave(loomSave.Name, loomSave.Overwrite, loomSave.Raw);
                 if (saveResult.Ok) PostList();
                 return true;
             }
@@ -66,6 +61,24 @@ public sealed class DtrhLoomDispatch
             default:
                 return false;
         }
+    }
+
+    /// <summary>SP-054: the shared loom-SAVE write path (one write path for EVERY web
+    /// host — the SP-049 consult binding extended to the intake host, consult 7b). Sends
+    /// loom-result {op:"save"} and returns the store verdict; the CALLER owns any list
+    /// posting (the intake 6-out table has no loom-list, so this method never posts one).
+    /// </summary>
+    public DtrhLoom.Result HandleSave(string? name, bool overwrite, JsonElement raw)
+    {
+        string? gifBase64 = raw.TryGetProperty("gifBase64", out var b64) && b64.ValueKind == JsonValueKind.String
+            ? b64.GetString()
+            : null;
+        JsonElement? loomParams = raw.TryGetProperty("params", out var lp) && lp.ValueKind == JsonValueKind.Object
+            ? lp.Clone()
+            : null;
+        var saveResult = _loom.Save(name, gifBase64, loomParams, overwrite);
+        _send(DtrhProtocol.BuildLoomResult("save", saveResult.Ok, saveResult.Slug, saveResult.Error));
+        return saveResult;
     }
 
     /// <summary>PostLoomList (DtrhHostService.cs:327-343): the saved-spiral library —
