@@ -44,7 +44,7 @@ filed so nothing is silently left behind.
 | Change | Evidence | Impact on landed port code |
 |---|---|---|
 | **Asset deselection honored everywhere** (#762 #798 #619) | `Services/Chaos/DtrhAssetManifest.cs` (+126/−46: new `EnumerateActive()` as the single "active pool" definition, `ScanItem` skip semantics, `BuildDisabledSet()`), `Services/Quiz/IntakeHostService.cs` (+83: `IsAssetActive(disabled, root, fullPath)`, `TopMarksPercent = 90.0`) | The port's DTRH asset manifest and intake asset provisioning **predate this fix** — user deselection in the Assets tree is not honored, and chaos overlays / Graded Intake were the exact surfaces upstream had to fix. **P0 row filed.** |
-| **Graded Intake payload gained accents + AI rework** | `Resources/web/intake/core/accents.js` (**new, +350**), `Resources/web/intake/core/ai.js` (+79/−22) | SP-054 (in flight at merge time) is built against the v6.6.3 intake payload and the pre-merge `IntakeHostService`. Baseline is internally consistent — **delta row filed**, packet not retargeted mid-wave. |
+| **Graded Intake payload gained accents + AI rework** | `Resources/web/intake/core/accents.js` (**new, +350**), `Resources/web/intake/core/ai.js` (+79/−22) | SP-054 (in flight at merge time) was built against the v6.6.3 intake payload and the pre-merge `IntakeHostService`. Baseline is internally consistent — **delta row filed**, packet not retargeted mid-wave. **SERVING half landed at the SP-054 land (2026-08-11):** the payload glob copies the post-sync tree and the manifest now carries `payload/intake/core/accents.js` (count tripwire 3681 → 3682, bumped WITH the reason). **Provisioning half still open** under the delta row: nothing yet reads what `accents.js` needs, and `ai.js`'s rework is unported. |
 | **`ChaosWebViewHost` +19** | `Chaos/ChaosWebViewHost.cs` | The class the port's web-core hosts are modeled on; re-read before the next host slice. |
 | **Chaos overlays** | `Chaos/ChaosFlashOverlay.cs` (+17 — avoid-the-center exclusion box), `Chaos/ChaosGifCascadeOverlay.cs` (+72) | Flash exclusion box is a new user-facing knob on a ported surface. |
 | **Video engine now default (out-of-process)** | browser-video engine promoted to default; grace pause on first panic press for mandatory video | The port landed the browser-video handoff spike; the *default* + grace-pause semantics are new. |
@@ -72,6 +72,13 @@ filed so nothing is silently left behind.
   upstream payload tree (`web/goon/`, 184 files) produces **zero** test signal — the suite stayed
   683/683 green while an entire product surface appeared upstream. Coverage of "trees that exist
   upstream but not in the client manifest" is missing; folded into the backlog row.
+- **The sync's first casualty was a mid-flight packet's GENERATED manifest.** SP-054 enumerated the
+  intake tree into 2137 manifest entries while this sync added a 2138th file to that same tree —
+  each side's suite was green, the merged state was red (`unmanifested-copied-asset` +
+  the pinned copied-entry count). Caught only because the land ran the suite on `base + merge orch`
+  in a scratch worktree rather than trusting two green branches. Any in-flight packet that copies,
+  globs, or enumerates the WPF reference tree must be re-tested against the merged state before it
+  lands; the rule is now in the `wpf-upstream-sync` skill.
 - **First-attempt residue keeps manufacturing merge conflicts.** `CCP.Core/` (and the `CCP.Avalonia.*`
   projects) hold stale forks of WPF models, so upstream edits to `Models/*.cs` land as
   delete/modify conflicts forever. Resolution rule is in the skill; a cleanup is not port work.

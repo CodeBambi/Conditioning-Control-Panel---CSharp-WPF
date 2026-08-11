@@ -145,3 +145,10 @@ and the recurring procedure is the project skill `wpf-upstream-sync`.
   trees the client doesn't ship yet (a 184-file tree appeared, suite stayed green).
 - Merge-conflict rule: the WPF tree tracks `main` exactly (`--theirs`); `CCP.Core/` + `CCP.Avalonia.*`
   are abandoned first-attempt residue that manufacture delete/modify conflicts forever.
+
+## Wave 14 (2026-08-11, integrate `6ce1e2ae`; floor now 795/795 + 33/33)
+
+- **SP-054 Graded Intake web-core host LANDED** (row WIP): window + full typed bridge vocabulary (6 out / 12 in; `ping`/`payload-state` pinned never-emitted by refutation) + ISO-week pass machine + punch card (first hole free) + pure-function profiler + drafting sink (`runnable:false` per the degraded contract) + shared loom-save write path. Six headed runs incl. one added by its own consult to discharge the no-spend obligation literally (sha256 byte-identical before/after an abort on an EXISTING store). Privacy headed-verified (empty token → local stub, mic OFF, subject id local-only, media null).
+- **Cross-merge drift (the land's real finding):** the v6.7.4 sync added `intake/core/accents.js` while SP-054 was in flight → each side green alone, **merged state RED**. Fixed at land (manifest entry + count tripwire 3681→3682 with the reason). Rule folded into the `wpf-upstream-sync` skill: test `base + merge orch` in a scratch worktree before approving any land that overlaps a sync.
+- **Provider-500 recovery:** worker + watcher died in the same window (second occurrence of that pattern); Steps 1-2 were committed, so `salvageable:false` was a clean-worktree artifact. Read the lane BRANCH before trusting it.
+- Next: wave 15 = SP-055 (P0 one active-pool definition honoring asset deselection) + SP-056 (upstream payload-tree guard).

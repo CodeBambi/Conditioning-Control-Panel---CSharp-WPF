@@ -22,7 +22,25 @@ Use when upstream `main` (the live WPF product) has moved and the port branch ne
 11. Never retarget a mid-flight spine packet to the new baseline. Its archaeology, contract and tests are internally consistent against the old one; file the delta as a follow-up row naming the new baseline instead.
 12. Commit and push everything (merge + ledger + rows + memories), then report the delta to the owner in buckets, leading with anything that is a defect in already-landed port code.
 
+## In-flight batches (learned the hard way, 2026-08-11)
+
+If a spine batch is in flight during a sync, **the sync does not end at "client tests green on base"**.
+Any in-flight packet that copies, globs, or enumerates the WPF reference tree must be re-tested against
+the MERGED state before it lands — each side can be green alone and red together.
+
+- Test it in a scratch worktree: `git worktree add -b <tmp> .worktrees/t3-check feat/crossplatform`,
+  then `git merge orch/spine-<batch>` inside it, then build + run both suites there.
+- Fix at the land, not by retargeting the packet: its archaeology and contract are consistent against
+  the old baseline. File the remaining delta as a follow-up row.
+- Bump any pinned count **with the reason** (sync + merge SHA in the comment), never to silence a sweep.
+- Land the byte-identical bits you verified (copy the files from the scratch worktree or commit there
+  first — `git checkout <branch> -- <paths>` takes the branch's COMMITTED content, so uncommitted
+  scratch fixes silently no-op).
+- Keep integrate + fix + reconcile in ONE push so a red base never reaches the remote.
+
 ## Pitfalls
+- Generated manifests are stale the moment upstream adds a file to the tree they enumerate — SP-054's
+  2137-entry intake manifest went red against a 2138-file tree the same day it was written.
 - `git checkout main` mid-batch is destructive: `main` carries neither `.spine/` nor `client/`, so the running engine's journal and the entire port vanish from the working tree. Use `git fetch origin main:main` instead — same result, no checkout.
 - A green client test suite after the merge proves nothing about new upstream trees: the asset-manifest parity test only covers what the client already ships, so a brand-new 184-file payload tree can appear with zero test signal. Always diff the payload directories by hand.
 - Release notes describe the version they were written for; the in-tree `<Version>` can be ahead (notes stopped at v6.7.2 while the csproj said 6.7.4). Cite the csproj, not the notes.

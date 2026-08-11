@@ -54752,6 +54752,21 @@
       "trust": "full"
     },
     {
+      "id": "intake.payload/core/accents.js",
+      "source": "copied",
+      "path": "payload/intake/core/accents.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy intake payload tree ConditioningControlPanel/Resources/web/intake (the READ-ONLY trust anchor), copied unmodified at build via the SP-054 linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
       "id": "intake.payload/core/ai.js",
       "source": "copied",
       "path": "payload/intake/core/ai.js",
