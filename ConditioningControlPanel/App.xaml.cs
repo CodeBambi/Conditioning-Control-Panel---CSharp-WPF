@@ -2051,6 +2051,19 @@ namespace ConditioningControlPanel
                 catch (Exception ex) { Logger?.Error(ex, "Failed to open the Goon Game test cockpit"); }
             }
 
+            // `--shoot-doors [outDir]`: render every nav door to a PNG offscreen, then exit. Exists
+            // because screen capture returns a stale frame whenever the display is asleep or the
+            // session is locked, which is precisely when the owner is reviewing the UI remotely.
+            // See Services/Dev/DoorShooter.cs. Dead code in every normal launch.
+            if (e.Args.Contains("--shoot-doors"))
+            {
+                var idx = Array.IndexOf(e.Args, "--shoot-doors");
+                var outDir = idx >= 0 && idx + 1 < e.Args.Length && !e.Args[idx + 1].StartsWith("--")
+                    ? e.Args[idx + 1]
+                    : Path.Combine(AppContext.BaseDirectory, "logs", "door-shots");
+                Services.Dev.DoorShooter.Run(mainWindow, outDir);
+            }
+
             // `--overlay-host`: force the unified overlay host ON for this launch only (in-memory,
             // not persisted) so the compositor path can be A/B tested without editing settings.
             if (e.Args.Contains("--overlay-host"))

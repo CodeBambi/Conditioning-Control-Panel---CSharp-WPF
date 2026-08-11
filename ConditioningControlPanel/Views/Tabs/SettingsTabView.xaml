@@ -1459,7 +1459,178 @@
                                  Grid.Row="1" is deliberately left EMPTY rather than renumbered:
                                  BrowserContainer keeps Grid.Row="2", so the browser's layout slot
                                  (and therefore the native WebView2's window) does not move a pixel.
-                                 An Auto row with no child measures 0. -->
+                                 An Auto row with no child measures 0.
+
+                                 2026-08-11: the row is empty no longer. The owner missed having
+                                 audio on the dashboard ("was pretty handy to have it on screen"),
+                                 so the two dials that actually get touched mid-session - master
+                                 volume and ducking - come back HERE, in the slot their neighbours
+                                 vacated. Deliberately NOT a second AudioSettingsSection: that
+                                 control's children are re-published as AppSettingsTab.<Name> and
+                                 written directly by MainWindow, so a second instance would render
+                                 stale values and fight the canonical one. These two mirror the
+                                 canonical controls through MainWindow.HomeAudio.cs instead, which
+                                 is the same two-surface pattern SliderAudioSyncLatency already
+                                 uses with the Haptics panel. -->
+
+                            <Border Grid.Row="1" x:Name="HomeAudioCard" x:FieldModifier="internal"
+                                    CornerRadius="10" Padding="10,7" Margin="0,0,0,5"
+                                    Background="{DynamicResource ElevatedSurfaceBrush}"
+                                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                                <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str section_audio}"
+                                                            Foreground="{DynamicResource PinkBrush}"
+                                                            FontSize="12" FontWeight="Bold"
+                                                            VerticalAlignment="Center" Margin="0,0,10,0"/>
+
+                                    <Slider Grid.Column="1" x:Name="HomeSliderMaster" x:FieldModifier="internal"
+                                            Minimum="0" Maximum="100" VerticalAlignment="Center"
+                                            ValueChanged="HomeSliderMaster_Changed"
+                                            ToolTip="{loc:Str tooltip_master_volume_for_all_audio}"/>
+
+                                    <TextBlock Grid.Column="2" x:Name="HomeTxtMaster" x:FieldModifier="internal"
+                                               Text="50%" Foreground="{DynamicResource TextMutedBrush}"
+                                               FontSize="11" VerticalAlignment="Center"
+                                               Width="34" TextAlignment="Right" Margin="8,0,12,0"/>
+
+                                    <CheckBox Grid.Column="3" x:Name="HomeChkAudioDuck" x:FieldModifier="internal"
+                                              Content="{loc:Str label_duck}"
+                                              Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                              VerticalAlignment="Center" Cursor="Hand"
+                                              Checked="HomeChkAudioDuck_Changed"
+                                              Unchecked="HomeChkAudioDuck_Changed"
+                                              ToolTip="{loc:Str tooltip_automatically_reduce_other_app_volumes_during}"/>
+
+                                    <!-- The old dashboard's BtnAudioAdvanced disclosure, restored:
+                                         master + duck stay on the face, everything else is one
+                                         click away. Same rows, same order as before the
+                                         restructure. -->
+                                    <ToggleButton Grid.Column="4" x:Name="HomeBtnAudioAdvanced" x:FieldModifier="internal"
+                                                  Margin="10,0,0,0" VerticalAlignment="Center" Cursor="Hand"
+                                                  Checked="HomeBtnAudioAdvanced_Changed"
+                                                  Unchecked="HomeBtnAudioAdvanced_Changed"
+                                                  ToolTip="{loc:Str tooltip_show_advanced_audio_settings}">
+                                        <ToggleButton.Template>
+                                            <ControlTemplate TargetType="ToggleButton">
+                                                <Border Background="Transparent" Padding="4,0">
+                                                    <TextBlock x:Name="arrow" Text="&#x25BE;" FontSize="13"
+                                                               Foreground="{DynamicResource TextMutedBrush}"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsChecked" Value="True">
+                                                        <Setter TargetName="arrow" Property="Text" Value="&#x25B4;"/>
+                                                        <Setter TargetName="arrow" Property="Foreground"
+                                                                Value="{DynamicResource PinkBrush}"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="arrow" Property="Foreground"
+                                                                Value="{DynamicResource PinkBrush}"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </ToggleButton.Template>
+                                    </ToggleButton>
+                                    </Grid>
+
+                                    <!-- Advanced rows. Every control here MIRRORS its twin in
+                                         Settings · Audio (MainWindow.HomeAudio.cs) - none of them
+                                         owns state. -->
+                                    <StackPanel x:Name="HomeAudioAdvanced" x:FieldModifier="internal"
+                                                Visibility="Collapsed" Margin="0,8,0,0">
+
+                                        <Grid Margin="0,0,0,5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="70"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{loc:Str setting_video}" FontSize="11"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       VerticalAlignment="Center"
+                                                       ToolTip="{loc:Str tooltip_volume_for_mandatory_videos}"/>
+                                            <Slider Grid.Column="1" x:Name="HomeSliderVideoVolume" x:FieldModifier="internal"
+                                                    Minimum="0" Maximum="100" VerticalAlignment="Center"
+                                                    ValueChanged="HomeSliderVideoVolume_Changed"
+                                                    ToolTip="{loc:Str tooltip_separate_volume_control_for_videos}"/>
+                                            <TextBlock Grid.Column="2" x:Name="HomeTxtVideoVolume" x:FieldModifier="internal"
+                                                       Text="50%" FontSize="11" Width="34" TextAlignment="Right"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,0,0,5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="70"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{loc:Str label_duck}" FontSize="11"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       VerticalAlignment="Center"
+                                                       ToolTip="{loc:Str tooltip_how_much_to_reduce_other_audio}"/>
+                                            <Slider Grid.Column="1" x:Name="HomeSliderDuck" x:FieldModifier="internal"
+                                                    Minimum="0" Maximum="100" VerticalAlignment="Center"
+                                                    ValueChanged="HomeSliderDuck_Changed"
+                                                    ToolTip="{loc:Str tooltip_ducking_percentage_80_reduce_other_audio_to_2}"/>
+                                            <TextBlock Grid.Column="2" x:Name="HomeTxtDuck" x:FieldModifier="internal"
+                                                       Text="80%" FontSize="11" Width="34" TextAlignment="Right"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,0,0,5">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="70"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{loc:Str setting_output}" FontSize="11"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       VerticalAlignment="Center"
+                                                       ToolTip="{loc:Str tooltip_audio_output_device}"/>
+                                            <ComboBox Grid.Column="1" x:Name="HomeCmbAudioOutputDevice" x:FieldModifier="internal"
+                                                      FontSize="11" VerticalAlignment="Center"
+                                                      SelectionChanged="HomeCmbAudioOutputDevice_SelectionChanged"
+                                                      ToolTip="{loc:Str tooltip_audio_output_device}"/>
+                                            <Button Grid.Column="2" x:Name="HomeBtnAudioOutputRefresh" Content="↻"
+                                                    FontSize="11" Margin="6,0,0,0" Padding="8,2" Cursor="Hand"
+                                                    Style="{StaticResource SecondaryButton}"
+                                                    Click="HomeBtnAudioOutputRefresh_Click"
+                                                    ToolTip="{loc:Str set2_tooltip_audio_output_refresh}"/>
+                                        </Grid>
+
+                                        <CheckBox x:Name="HomeChkExcludeBambiCloudDucking" x:FieldModifier="internal"
+                                                  Content="{loc:Str setting_don_t_duck_browser}"
+                                                  Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                                  Cursor="Hand" Margin="0,0,0,6"
+                                                  Checked="HomeChkExcludeBambiCloudDucking_Changed"
+                                                  Unchecked="HomeChkExcludeBambiCloudDucking_Changed"
+                                                  ToolTip="{loc:Str tooltip_when_enabled_audio_from_the_integrated_bambic}"/>
+
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button x:Name="HomeBtnTestAudio" Content="{loc:Str set2_btn_test_audio}"
+                                                    FontSize="11" Margin="0,0,8,0" Cursor="Hand"
+                                                    Style="{StaticResource SecondaryButton}"
+                                                    Click="HomeBtnTestAudio_Click"
+                                                    ToolTip="{loc:Str set2_tooltip_test_audio}"/>
+                                            <Button x:Name="HomeBtnAudioLayers" Content="{loc:Str btn_audio_layers}"
+                                                    FontSize="11" Cursor="Hand"
+                                                    Style="{StaticResource SecondaryButton}"
+                                                    Click="HomeBtnAudioLayers_Click"
+                                                    ToolTip="{loc:Str tooltip_audio_layers}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
 
                             <Grid x:Name="BrowserContainer" x:FieldModifier="internal" Grid.Row="2">
                                 <!-- WebView2 will be added here programmatically -->

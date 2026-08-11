@@ -275,6 +275,9 @@ namespace ConditioningControlPanel
                 // drift, rail hover, browser frame. Same reason for being here, and it must
                 // follow InitializeChromeFx - it rides that file's loop funnel.
                 InitializeDashboardFx();
+                // Nav rail collapse/hover-expand. After the FX inits on purpose: it caches a
+                // visual-tree walk of the rail, so every templated row has to be real first.
+                InitializeNavRail();
             };
             Closing += (_, _) => Services.GlobalHotkeyService.UnregisterAll();
             // The title-bar X now MINIMIZES TO TRAY (see OnClosing) instead of quitting — users expect
@@ -1445,9 +1448,14 @@ namespace ConditioningControlPanel
                     res["AccentGradientBrush"] = new SolidColorBrush(accent);
 
                 // === TITLE BAR (most visible — direct assignment for immediate update) ===
+                // 2026-08-11: the mod accent lands on the UNDERLINE, not the fill. The bar used to
+                // be a full-width slab of the accent, which made chrome the loudest thing on every
+                // screen; it is a dark surface now (MainWindow.xaml) and the accent survives as the
+                // 2px rule beneath it, so a re-skinned mod still recolours the title bar.
+                // Lockdown still swaps Background outright - that one IS meant to shout.
                 var accentBrush = new SolidColorBrush(accent);
                 if (TitleBarBorder != null)
-                    TitleBarBorder.Background = accentBrush;
+                    TitleBarBorder.BorderBrush = accentBrush;
 
                 // === HEADER AREA ===
                 if (TxtPlayerTitle != null)

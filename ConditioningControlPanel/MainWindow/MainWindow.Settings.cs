@@ -138,6 +138,10 @@ namespace ConditioningControlPanel
             AppSettingsTab.SliderDuck.Value = s.DuckingLevel;
             AppSettingsTab.ChkExcludeBambiCloudDucking.IsChecked = s.ExcludeBambiCloudFromDucking;
             PopulateAudioOutputDevices();
+            // The dashboard mirrors master + duck (MainWindow.HomeAudio.cs). Seeded from the
+            // canonical controls right after they are, so a cloud restore - which re-runs
+            // LoadSettings against a swapped AppSettings instance - moves both surfaces.
+            MirrorAudioToHome();
 
             // PHASE 8: Spiral, Pink Filter, Bubble Pop, Lock Card, Bubble Count, Bouncing Text,
             // Mind Wipe and Brain Drain are NOT seeded here any more. Their editors are the Studio

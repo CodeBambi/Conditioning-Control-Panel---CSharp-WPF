@@ -335,6 +335,71 @@ namespace ConditioningControlPanel.Views.Tabs
                 mw.ShowTab("companion");
         }
 
+        // Home audio card. Pure forwarding, like every re-parented cell: the shell owns the
+        // canonical Settings/Audio controls and mirrors both ways. See MainWindow.HomeAudio.cs.
+        private void HomeSliderMaster_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.HomeSliderMaster_Changed(sender, e);
+        }
+
+        private void HomeChkAudioDuck_Changed(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.HomeChkAudioDuck_Changed(sender, e);
+        }
+
+        /// <summary>The advanced disclosure. Purely local - nothing below it owns state, so the
+        /// shell has no reason to know whether the drawer is open.</summary>
+        private void HomeBtnAudioAdvanced_Changed(object sender, RoutedEventArgs e)
+        {
+            if (HomeAudioAdvanced == null || HomeBtnAudioAdvanced == null) return;
+            HomeAudioAdvanced.Visibility = HomeBtnAudioAdvanced.IsChecked == true
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
+        private void HomeSliderVideoVolume_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.HomeSliderVideoVolume_Changed(sender, e);
+        }
+
+        private void HomeSliderDuck_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.HomeSliderDuck_Changed(sender, e);
+        }
+
+        private void HomeChkExcludeBambiCloudDucking_Changed(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.HomeChkExcludeBambiCloudDucking_Changed(sender, e);
+        }
+
+        private void HomeCmbAudioOutputDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.HomeCmbAudioOutputDevice_SelectionChanged(sender, e);
+        }
+
+        private void HomeBtnAudioOutputRefresh_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.BtnAudioOutputRefresh_Click(sender, e);
+        }
+
+        private void HomeBtnTestAudio_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.BtnTestAudio_Click(sender, e);
+        }
+
+        // Self-contained on the old dashboard too - it only opens a window.
+        private void HomeBtnAudioLayers_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                new LayeredAudioWindow { Owner = Window.GetWindow(this) }.Show();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Home/Audio: Audio Layers window launch failed");
+            }
+        }
+
         // Training Programs "Today" card (row 0). Loaded is the card's own first-paint hook so
         // the dashboard can show it without the user visiting the Programs tab first.
         private void ProgramTodayCard_Loaded(object sender, RoutedEventArgs e)

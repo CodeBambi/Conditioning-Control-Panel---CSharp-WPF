@@ -854,6 +854,9 @@ namespace ConditioningControlPanel
             var volume = (int)e.NewValue;
             App.Video?.UpdateMasterVolume(volume);
             App.BrainDrain?.UpdateMasterVolume(volume);
+
+            // Keep the dashboard's copy of this dial in step (MainWindow.HomeAudio.cs).
+            MirrorAudioToHome();
         }
 
         internal void SliderVideoVolume_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -862,6 +865,7 @@ namespace ConditioningControlPanel
             AppSettingsTab.TxtVideoVolume.Text = $"{(int)e.NewValue}%";
             App.Settings.Current.VideoVolume = (int)e.NewValue;
             App.Video?.UpdateVideoVolume((int)e.NewValue);
+            MirrorAudioToHome();
         }
 
         internal void SliderDuck_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -869,6 +873,7 @@ namespace ConditioningControlPanel
             if (_isLoading || AppSettingsTab.TxtDuck == null) return;
             AppSettingsTab.TxtDuck.Text = $"{(int)e.NewValue}%";
             ApplySettingsLive();
+            MirrorAudioToHome();
         }
 
         internal void ChkAudioDuck_Changed(object sender, RoutedEventArgs e)
@@ -882,12 +887,14 @@ namespace ConditioningControlPanel
             }
 
             ApplySettingsLive();
+            MirrorAudioToHome();
         }
 
         internal void ChkExcludeBambiCloudDucking_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
             ApplySettingsLive();
+            MirrorAudioToHome();
         }
 
         // Guards against a second click while the diagnostic is still running — the probe
@@ -963,6 +970,10 @@ namespace ConditioningControlPanel
             {
                 _populatingAudioOutputs = false;
             }
+
+            // The dashboard's copy shares this ItemsSource; re-point it after every enumeration
+            // or a device refresh leaves it holding a stale list.
+            MirrorAudioToHome();
         }
 
         internal void CmbAudioOutputDevice_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)

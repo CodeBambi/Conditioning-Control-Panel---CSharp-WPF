@@ -8,8 +8,8 @@
         xmlns:local="clr-namespace:ConditioningControlPanel"
         xmlns:views="clr-namespace:ConditioningControlPanel.Views.Tabs"
         Title="Conditioning Control Panel"
-        Height="943" Width="1656"
-        MinHeight="620" MinWidth="1198"
+        Height="943" Width="1524"
+        MinHeight="620" MinWidth="1102"
         Background="{DynamicResource DarkerBgBrush}"
         WindowStartupLocation="Manual"
         WindowStyle="None"
@@ -141,10 +141,19 @@
              190px nav-rail column on the left; column 1 is still exactly 1489 wide, so
              every tab layout keeps the width it was authored against (fx-inventory §12.8:
              they clip silently otherwise). The Window's default/min Width grew by the same
-             1.1276 factor so the Viewbox's Stretch="Fill" keeps the old aspect. -->
-        <Grid x:Name="DesignCanvas" Width="1679" Height="901">
+             1.1276 factor so the Viewbox's Stretch="Fill" keeps the old aspect.
+
+             2026-08-11: column 0 now reserves only the COLLAPSED rail (56px), so the canvas
+             is 1545 and the window shed the 132px the labels used to occupy. Column 1 is
+             still untouched at 1489 - the point of the exercise is to stop paying for the
+             labels, not to re-author every tab. The expanded rail overlays this column
+             instead of widening it; see MainWindow.NavRail.cs for why that is mandatory
+             rather than merely convenient. Window Width/MinWidth moved by the same 1545/1679
+             factor so Stretch="Fill" keeps the aspect it was tuned at (1656 -> 1524,
+             1198 -> 1102) - change one of these four numbers and you must change all four. -->
+        <Grid x:Name="DesignCanvas" Width="1545" Height="901">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="190"/>
+                <ColumnDefinition Width="56"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
@@ -159,7 +168,14 @@
         <!-- Custom Title Bar. Spans BOTH canvas columns: it is the window's own chrome,
              so the pink strip has to reach the left edge and the min/max/close cluster
              has to sit at the true top-right, above the nav rail rather than beside it. -->
-        <Border x:Name="TitleBarBorder" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Background="{DynamicResource PinkBrush}" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+        <!-- 2026-08-11: was a full-width slab of solid PinkBrush. At 1545px it out-weighed every
+             real control on the page and forced START, Save and the marquee to shout back just to
+             be seen. Accent survives as a 2px underline and in the glyph/title colour; the one
+             saturated pink mass on any screen is now the primary CTA. -->
+        <Border x:Name="TitleBarBorder" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
+                Background="{DynamicResource PanelBgBrush}"
+                BorderBrush="{DynamicResource PinkBrush}" BorderThickness="0,0,0,2"
+                MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -171,7 +187,7 @@
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
                     <Image Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center"
                            Source="{Binding Source='💗', Converter={StaticResource EmojiToImageSource}}"/>
-                    <TextBlock x:Name="TxtTitleBarVersion" Text="{loc:Str app_title}" Foreground="White" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TxtTitleBarVersion" Text="{loc:Str app_title}" Foreground="{DynamicResource TextLightBrush}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
                 </StackPanel>
 
                 <!-- Title-bar status pills (right-aligned, visible from every tab):
@@ -286,7 +302,13 @@
              entry of a shut door lands on one zero-height strip - so EventFx bursts and the
              first-visit pulses route through MainWindow.NavAnchorForTab, which hands back
              the DOOR HEADER while that door is shut. -->
-        <Border x:Name="NavSidebar" Grid.Row="1" Grid.RowSpan="5" Grid.Column="0"
+        <!-- ColumnSpan=2 + left alignment + a hard Width is what makes the open rail a flyout
+             OVER the page rather than a column that shoves it. ZIndex lifts it above the page
+             content; ClipToBounds keeps the labels inside the 56px strip while it is shut.
+             The Width here is the COLLAPSED width and is owned by MainWindow.NavRail.cs from
+             the first Loaded onwards. -->
+        <Border x:Name="NavSidebar" Grid.Row="1" Grid.RowSpan="5" Grid.Column="0" Grid.ColumnSpan="2"
+                HorizontalAlignment="Left" Width="56" Panel.ZIndex="60" ClipToBounds="True"
                 Background="{StaticResource PanelBgBrush}"
                 BorderBrush="#2A2A46" BorderThickness="0,0,1,0">
             <Grid Margin="0,10,0,10">
@@ -1640,24 +1662,41 @@
                     <TextBlock x:Name="TxtPauseIcon" Text="⏸" FontSize="20"/>
                 </Button>
 
-                <!-- Save (col 5) / Exit (col 6); col 4 is the gap -->
-                <Button Grid.Column="5" Content="{loc:Str btn_save_2}" Style="{StaticResource PinkButton}"
+                <!-- Save (col 5) / Exit (col 6); col 4 is the gap.
+                     2026-08-11: Save was PinkButton, i.e. the same saturated mass as START sitting
+                     right next to it, so the action bar had two primaries and no hierarchy. It is
+                     the house SecondaryButton now; START is the only filled pink on the bar. -->
+                <Button Grid.Column="5" Content="{loc:Str btn_save_2}" Style="{StaticResource SecondaryButton}"
                         Height="50" FontSize="16" Margin="0,0,10,0" Click="BtnSave_Click"
                         ToolTip="{loc:Str tooltip_save_all_settings_to_disk}"/>
+                <!-- 2026-08-11: Exit was a hand-rolled #FF6B6B slab as wide and loud as START -
+                     a coral that matched neither the Danger token nor the DangerButton style the
+                     rest of the app uses for destructive actions (PANIC STOP does use the real
+                     red). Quiet outline at rest, fills on hover: still findable, no longer
+                     competing with the primary action for the eye. -->
                 <Button Grid.Column="6" Content="{loc:Str btn_exit}" Height="50" FontSize="16" Click="BtnExit_Click"
                         ToolTip="{loc:Str tooltip_exit_the_application_completely}">
                     <Button.Style>
                         <Style TargetType="Button">
-                            <Setter Property="Background" Value="#FF6B6B"/>
-                            <Setter Property="Foreground" Value="White"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/>
                             <Setter Property="FontWeight" Value="Bold"/>
                             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                            <Setter Property="Cursor" Value="Hand"/>
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="Button">
-                                        <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="20,10">
+                                        <Border x:Name="b" Background="{TemplateBinding Background}"
+                                                BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1"
+                                                CornerRadius="6" Padding="20,10">
                                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="b" Property="Background" Value="{DynamicResource DangerBrush}"/>
+                                                <Setter Property="Foreground" Value="White"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </Setter.Value>
                             </Setter>

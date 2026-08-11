@@ -410,19 +410,25 @@
             <Setter Property="MinHeight" Value="30"/>
             <Setter Property="Template">
                 <Setter.Value>
+                    <!-- 2026-08-11: the thumb used to sit at PinkBrush/0.6 all the time, so on a
+                         page with two scroll regions (Studio) the loudest things after START were
+                         two scrollbars. Neutral at rest, pink only once the pointer is on it -
+                         one edit, every scrolling surface in the app. -->
                     <ControlTemplate TargetType="Thumb">
                         <Border x:Name="Bd"
                                 CornerRadius="4"
-                                Background="{DynamicResource PinkBrush}"
-                                Opacity="0.6"
+                                Background="{DynamicResource PanelAccentHoverBrush}"
+                                Opacity="0.9"
                                 HorizontalAlignment="Stretch"
                                 VerticalAlignment="Stretch"
                                 SnapsToDevicePixels="True"/>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PinkBrush}"/>
                                 <Setter TargetName="Bd" Property="Opacity" Value="0.85"/>
                             </Trigger>
                             <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PinkBrush}"/>
                                 <Setter TargetName="Bd" Property="Opacity" Value="1"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
