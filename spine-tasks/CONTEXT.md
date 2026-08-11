@@ -90,7 +90,13 @@ Greenfield Avalonia port (second attempt), zero product code under `client/` yet
 
 **Next claimable work:** SP-054 = **Graded Intake web-core host** (P1, size L — gets a wave to itself per the wave-12 land consult): the window class (ChaosWebViewHost parity) + the full bridge vocabulary (6 out / 12 in; ping/payload-state authoring obligation) + 3 stores + profiler + session drafting sink + loom-save against the shared b4 store; degraded-delivery contract verbatim in the row; privacy boundaries as listed. Next unused task ID: SP-054.
 
-### Phase 5 — DTRH admit + host slices, quips/sound, AI companion, tail (ACTIVE — wave 13 in flight)
+### Wave 14 (staged 2026-08-11)
+
+| Task | Summary | Status | Deps |
+|------|---------|--------|------|
+| SP-054-graded-intake-host | Row: Graded Intake web-core host (P1, size L — window class (ChaosWebViewHost parity) + full bridge vocabulary (6 out / 12 in; ping/payload-state obligation) + 3 stores + profiler + session drafting sink + loom-share; degraded-delivery contract verbatim; privacy boundaries; avalonia-live headed evidence) | Authored 2026-08-11 | SP-050 |
+
+### Phase 5 — DTRH admit + host slices, quips/sound, AI companion, tail (ACTIVE — wave 14 in flight)
 
 **WAVE-4 PARK LIFTED 2026-08-04 (~15:30 local, same day):** the anthropic-400 park was a pi request-shape defect, not account exhaustion — fixed by the `__PI_BILLING_HEADER_FIX__` local pi-ai patch (`x-anthropic-billing-header` system[0] per hermes-agent #48176; `pi -p` 200 on opus-5 AND fable-5). SP-037 landed earlier that day (floor restored). SP-035+SP-036 launch per plan. (The ~13:10 UTC park state is retained in the board's 2026-08-04 gate-history entry for the SP-037 substitution-land provenance.)
 
