@@ -316,7 +316,7 @@ public class OverlayService : IDisposable
 
                 if (configured != null) return configured;
 
-                return ModResourceResolver.ResolveUri("spiral.gif");
+                return ModResourceResolver.ResolveSpiralUri();
             }
 
             /// <summary>

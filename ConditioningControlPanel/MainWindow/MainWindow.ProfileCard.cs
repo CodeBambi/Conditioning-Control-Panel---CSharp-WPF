@@ -95,6 +95,63 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Debug("SetProfileViewingSelf: {E}", ex.Message); }
         }
 
+        // ============================== record stat badges ==============================
+
+        /// <summary>Whether the ModChanged repaint hook for the six Record badges is installed.</summary>
+        private bool _profileStatBadgesModHooked;
+
+        /// <summary>
+        /// Repaints the Record's six stat badges through <see cref="Services.ModResourceResolver"/>.
+        /// They borrow achievement art, and both shipped .ccpmod archives override all 58
+        /// achievement PNGs - but XAML can only name the embedded pack URI, so without this the
+        /// ledger stayed pink under every mod. Same contract as LoadFeatureImages: the resolver
+        /// falls back to the embedded art, and a null (art missing entirely) leaves the XAML source
+        /// alone rather than blanking the badge.
+        ///
+        /// Called from the tab's Loaded handler, which is the only guaranteed pass - and hooks
+        /// ModChanged once, because a mod switch from the top bar gives a user already sitting on
+        /// this tab no Loaded, no tab change and no visibility change. ModChanged (not
+        /// ApplyActiveModChange) is the app's authoritative signal and fires for every caller of
+        /// ModService.ActivateMod; the resource cache is cleared before it is raised, so the
+        /// re-resolve below sees the new mod's art.
+        /// </summary>
+        internal void RefreshProfileStatBadges()
+        {
+            try
+            {
+                var tab = DiscordTab;
+                if (tab == null) return;
+
+                var badgeMap = new (string resourcePath, Image? image)[]
+                {
+                    ("achievements/lv_10.png", tab.ImgStatXp),
+                    ("achievements/pop_the_Thought.png", tab.ImgStatBubbles),
+                    ("achievements/10_hours_pink.png", tab.ImgStatVideos),
+                    ("achievements/retinal_burn.png", tab.ImgStatGifs),
+                    ("achievements/total_lockdown.png", tab.ImgStatLockCards),
+                    ("achievements/spiral_eyes.png", tab.ImgStatAchievements),
+                };
+                foreach (var (path, image) in badgeMap)
+                {
+                    if (image == null) continue;
+                    var art = Services.ModResourceResolver.ResolveImage(path);
+                    if (art != null) image.Source = art;
+                }
+
+                if (!_profileStatBadgesModHooked && App.Mods != null)
+                {
+                    _profileStatBadgesModHooked = true;
+                    App.Mods.ModChanged += (_, _) =>
+                    {
+                        var d = Application.Current?.Dispatcher;
+                        if (d == null || d.HasShutdownStarted) return;
+                        d.BeginInvoke(new Action(RefreshProfileStatBadges));
+                    };
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("RefreshProfileStatBadges: {E}", ex.Message); }
+        }
+
         // ============================== hero XP meter ==============================
 
         /// <summary>

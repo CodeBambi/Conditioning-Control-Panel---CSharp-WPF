@@ -32,30 +32,20 @@ namespace ConditioningControlPanel
     {
         #region UI Updates
 
+        /// <summary>
+        /// One-shot label sync, called exactly once from the MainWindow constructor.
+        ///
+        /// <para>PHASE 8 reduced it to the two audio readouts. Everything else it wrote was a label
+        /// inside ProgressionTabView or LegacyDashboardHost, both of which were permanently
+        /// Collapsed and are now deleted; the Studio rack's panels write their own labels inside
+        /// <c>LoadFromSettings()</c>. <c>UpdateSliderTexts()</c> also seeds these two, so this is
+        /// belt-and-braces rather than load-bearing - kept because it costs nothing and the call
+        /// site is older than either mechanism.</para>
+        /// </summary>
         private void UpdateUI()
         {
-            // Update all value labels
-            SettingsTab.TxtPerMin.Text = ((int)SettingsTab.SliderPerMin.Value).ToString();
-            SettingsTab.TxtImages.Text = ((int)SettingsTab.SliderImages.Value).ToString();
-            SettingsTab.TxtMaxOnScreen.Text = ((int)SettingsTab.SliderMaxOnScreen.Value).ToString();
-            SettingsTab.TxtSize.Text = $"{(int)SettingsTab.SliderSize.Value}%";
-            SettingsTab.TxtOpacity.Text = $"{(int)SettingsTab.SliderOpacity.Value}%";
-            SettingsTab.TxtFade.Text = $"{(int)SettingsTab.SliderFade.Value}%";
-            SettingsTab.TxtPerHour.Text = ((int)SettingsTab.SliderPerHour.Value).ToString();
-            SettingsTab.TxtTargets.Text = ((int)SettingsTab.SliderTargets.Value).ToString();
-            SettingsTab.TxtDuration.Text = ((int)SettingsTab.SliderDuration.Value).ToString();
-            SettingsTab.TxtTargetSize.Text = ((int)SettingsTab.SliderTargetSize.Value).ToString();
-            SettingsTab.TxtSubPerMin.Text = ((int)SettingsTab.SliderSubPerMin.Value).ToString();
-            SettingsTab.TxtFrames.Text = ((int)SettingsTab.SliderFrames.Value).ToString();
-            SettingsTab.TxtSubOpacity.Text = $"{(int)SettingsTab.SliderSubOpacity.Value}%";
-            SettingsTab.TxtWhisperVol.Text = $"{(int)SettingsTab.SliderWhisperVol.Value}%";
-            SettingsTab.TxtMaster.Text = $"{(int)SettingsTab.SliderMaster.Value}%";
-            SettingsTab.TxtDuck.Text = $"{(int)SettingsTab.SliderDuck.Value}%";
-            ProgressionTab.TxtSpiralOpacity.Text = $"{(int)ProgressionTab.SliderSpiralOpacity.Value}%";
-            ProgressionTab.TxtPinkOpacity.Text = $"{(int)ProgressionTab.SliderPinkOpacity.Value}%";
-            ProgressionTab.TxtBubbleFreq.Text = ((int)ProgressionTab.SliderBubbleFreq.Value).ToString();
-            ProgressionTab.TxtRampDuration.Text = $"{(int)ProgressionTab.SliderRampDuration.Value} min";
-            ProgressionTab.TxtMultiplier.Text = $"{ProgressionTab.SliderMultiplier.Value:F1}x";
+            AppSettingsTab.TxtMaster.Text = $"{(int)AppSettingsTab.SliderMaster.Value}%";
+            AppSettingsTab.TxtDuck.Text = $"{(int)AppSettingsTab.SliderDuck.Value}%";
         }
 
         private void UpdateLevelDisplay()
@@ -105,48 +95,49 @@ namespace ConditioningControlPanel
             // If a mod is active, use mod-aware text; otherwise use localized text
             string ML(string englishText, string locKey) => ModAwareLabel(englishText, locKey);
 
-            // Dashboard cards draw their own icon, so their captions must not carry the
-            // leading emoji the shared section keys use — strip it off.
+            // Mod-aware AND de-emoji'd, for tiles that draw their own art: the shared section
+            // keys carry a leading emoji, and a caption using one would show two icons.
+            // (Resurrected 2026-08-11 with the FX wall - the 3x3 interlude had retired it.)
             string MLCard(string englishText, string locKey) => StripLeadingGlyph(ML(englishText, locKey));
 
-            // Velvet mosaic dashboard cards — the XAML Title="" literals are plain English
-            // design-time fallbacks, so this is the only place they get localized OR
-            // mod-renamed. Keys are the same ones the matching popup titles use.
+            // Velvet mosaic dashboard cards - the XAML Title="" literals are plain English
+            // design-time fallbacks, so this is the only place they get localized AND
+            // mod-renamed. Same keys as the matching Studio rack rows (RefreshRackLabels), so a
+            // mod that renames "Flash Images" renames the tile, the rack row and the panel title
+            // together. Just Drop stays a literal (placeholder); the ? box's title belongs to
+            // RefreshMysteryTile; the Vault's title uses the Exclusives tab's own key.
             if (SettingsTab.CardFlash != null) SettingsTab.CardFlash.Title = MLCard("Flash Images", "section_flash_images");
-            if (SettingsTab.CardVisuals != null) SettingsTab.CardVisuals.Title = MLCard("Visuals", "section_visuals");
-            if (SettingsTab.CardVideo != null) SettingsTab.CardVideo.Title = MLCard("Mandatory Video", "section_mandatory_video");
             if (SettingsTab.CardSubliminal != null) SettingsTab.CardSubliminal.Title = MLCard("Subliminals", "section_subliminals_2");
-            if (SettingsTab.CardSpiral != null) SettingsTab.CardSpiral.Title = MLCard("Spiral Overlay", "label_spiral_overlay");
-            if (SettingsTab.CardLockCard != null) SettingsTab.CardLockCard.Title = MLCard("Lock Card", "label_lock_card");
-            if (SettingsTab.CardPinkFilter != null) SettingsTab.CardPinkFilter.Title = MLCard("Pink Filter", "label_pink_filter");
-            if (SettingsTab.CardMindWipe != null) SettingsTab.CardMindWipe.Title = MLCard("Mind Wipe", "label_mind_wipe");
-            if (SettingsTab.CardBubblePop != null) SettingsTab.CardBubblePop.Title = MLCard("Bubble Pop", "label_bubble_pop");
             if (SettingsTab.CardBouncingText != null) SettingsTab.CardBouncingText.Title = MLCard("Bouncing Text", "label_bouncing_text");
-            if (SettingsTab.CardSystem != null) SettingsTab.CardSystem.Title = MLCard("System", "section_system");
-            if (SettingsTab.CardBubbleCount != null) SettingsTab.CardBubbleCount.Title = MLCard("Bubble Count", "label_bubble_count");
+            if (SettingsTab.CardBubblePop != null) SettingsTab.CardBubblePop.Title = MLCard("Bubble Pop", "label_bubble_pop");
+            if (SettingsTab.CardLockCard != null) SettingsTab.CardLockCard.Title = MLCard("Lock Card", "label_lock_card");
+            if (SettingsTab.CardVault != null) SettingsTab.CardVault.Title = MLCard("The Vault", "tab_exclusives");
+            if (SettingsTab.ComboVideoBubble != null)
+            {
+                SettingsTab.ComboVideoBubble.TitleA = MLCard("Mandatory Video", "section_mandatory_video");
+                SettingsTab.ComboVideoBubble.TitleB = MLCard("Bubble Count", "label_bubble_count");
+            }
+            if (SettingsTab.ComboSpiralPink != null)
+            {
+                SettingsTab.ComboSpiralPink.TitleA = MLCard("Spiral Overlay", "label_spiral_overlay");
+                SettingsTab.ComboSpiralPink.TitleB = MLCard("Pink Filter", "label_pink_filter");
+            }
+            if (SettingsTab.ComboMindDrain != null)
+            {
+                SettingsTab.ComboMindDrain.TitleA = MLCard("Mind Wipe", "label_mind_wipe");
+                SettingsTab.ComboMindDrain.TitleB = MLCard("Brain Drain", "label_brain_drain");
+            }
+            RefreshMysteryTile();
 
-            // Main section headers
-            if (SettingsTab.TxtFeatureFlash != null) SettingsTab.TxtFeatureFlash.Text = ML("⚡ Flash Images", "section_flash_images");
-            if (SettingsTab.TxtFeatureVideo != null) SettingsTab.TxtFeatureVideo.Text = ML("🎬 Mandatory Video", "section_mandatory_video");
-            if (SettingsTab.TxtFeatureSubliminal != null) SettingsTab.TxtFeatureSubliminal.Text = ML("💭 Subliminals", "section_subliminals");
-            if (SettingsTab.TxtFeatureWhispers != null) SettingsTab.TxtFeatureWhispers.Text = ML("📊 Audio Whispers", "label_audio_whispers");
+            // Phase 8: the four LegacyDashboardHost section headers (TxtFeatureFlash /
+            // TxtFeatureVideo / TxtFeatureSubliminal / TxtFeatureWhispers) went with the host. They
+            // carried the SAME loc keys as the mosaic card titles above and the Studio rack's row
+            // labels, so mod retitling of those sections is unchanged on every visible surface.
 
-            // Enhancement locked/unlocked pairs
-            if (ProgressionTab.TxtFeatureSpiralLocked != null) ProgressionTab.TxtFeatureSpiralLocked.Text = ML("🌀 Spiral Overlay", "label_spiral_overlay");
-            if (ProgressionTab.TxtFeatureSpiral != null) ProgressionTab.TxtFeatureSpiral.Text = ML("🌀 Spiral Overlay", "label_spiral_overlay");
-            if (ProgressionTab.TxtFeaturePinkFilterLocked != null) ProgressionTab.TxtFeaturePinkFilterLocked.Text = ML("💗 Pink Filter", "label_pink_filter");
-            if (ProgressionTab.TxtFeaturePinkFilter != null) ProgressionTab.TxtFeaturePinkFilter.Text = ML("💗 Pink Filter", "label_pink_filter");
-            if (ProgressionTab.TxtFeatureBubblePopLocked != null) ProgressionTab.TxtFeatureBubblePopLocked.Text = ML("🫧 Bubble Pop", "label_bubble_pop");
-            if (ProgressionTab.TxtFeatureBubblePop != null) ProgressionTab.TxtFeatureBubblePop.Text = ML("🫧 Bubble Pop", "label_bubble_pop");
-            if (ProgressionTab.TxtFeatureLockCardLocked != null) ProgressionTab.TxtFeatureLockCardLocked.Text = ML("📐 Lock Card", "label_lock_card");
-            if (ProgressionTab.TxtFeatureLockCard != null) ProgressionTab.TxtFeatureLockCard.Text = ML("📐 Lock Card", "label_lock_card");
-            if (ProgressionTab.TxtFeatureBubbleCountLocked != null) ProgressionTab.TxtFeatureBubbleCountLocked.Text = ML("🫧 Bubble Count", "label_bubble_count");
-            if (ProgressionTab.TxtFeatureBubbleCount != null) ProgressionTab.TxtFeatureBubbleCount.Text = ML("🫧 Bubble Count", "label_bubble_count");
-            if (ProgressionTab.TxtFeatureBouncingLocked != null) ProgressionTab.TxtFeatureBouncingLocked.Text = ML("📺 Bouncing Text", "label_bouncing_text");
-            if (ProgressionTab.TxtFeatureBouncing != null) ProgressionTab.TxtFeatureBouncing.Text = ML("📺 Bouncing Text", "label_bouncing_text");
-            if (ProgressionTab.TxtFeatureBrainDrain != null) ProgressionTab.TxtFeatureBrainDrain.Text = ML("💧 Brain Drain", "label_brain_drain");
-            if (ProgressionTab.TxtFeatureMindWipeLocked != null) ProgressionTab.TxtFeatureMindWipeLocked.Text = ML("🧠 Mind Wipe", "label_mind_wipe");
-            if (ProgressionTab.TxtFeatureMindWipe != null) ProgressionTab.TxtFeatureMindWipe.Text = ML("🧠 Mind Wipe", "label_mind_wipe");
+            // Phase 8: the 15 ProgressionTab locked/unlocked feature labels are gone with the view.
+            // Mod retitling of those eight features is unchanged - the SAME loc keys drive the
+            // mosaic card titles above and the Studio rack's row labels, so a mod that renames
+            // "Spiral Overlay" still renames every surface a user can actually see.
             if (PresetsTab.TxtFeatureCornerGif != null) PresetsTab.TxtFeatureCornerGif.Text = ML("🖼 Corner GIF", "label_corner_gif");
 
             // Preset/session detail labels
@@ -271,6 +262,95 @@ namespace ConditioningControlPanel
                     XPBarLoginOverlay.Visibility = Visibility.Visible;
                     XPBarContent.Opacity = 0.3;
                 }
+            }
+
+            // The header account chip paints the same login/tier truth, so it rides this
+            // method rather than owning a timer or a second TierChanged subscription. This
+            // is the choke point every auth change already runs through: UpdatePatreonUI
+            // calls it (and UpdatePatreonUI is what OnPatreonTierChanged, both SubscribeStar
+            // paths, ClearAccountData and every login/link flow call), plus UpdateLevelDisplay.
+            RefreshAccountChip();
+        }
+
+        // Tier colours for the account chip. Fixed brand values, not mod-owned: gold is the
+        // Tier-1 lock everywhere in the app, violet is the Tier-2 "Lab" flask.
+        private static SolidColorBrush AccountChipBrush(byte r, byte g, byte b)
+        {
+            var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+            brush.Freeze();
+            return brush;
+        }
+
+        private static readonly SolidColorBrush AccountChipTier1Brush = AccountChipBrush(0xFF, 0xD7, 0x00);
+        private static readonly SolidColorBrush AccountChipTier2Brush = AccountChipBrush(0xB4, 0x7B, 0xFF);
+        private static readonly SolidColorBrush AccountChipNeutralBrush = AccountChipBrush(0x3D, 0x3D, 0x60);
+
+        /// <summary>
+        /// Repaints the header account chip: signed-out CTA, or display name plus a tier
+        /// badge (gold lock = Tier 1, violet flask = Tier 2/whitelist).
+        /// </summary>
+        private void RefreshAccountChip()
+        {
+            // Reachable from UpdateLevelDisplay during early startup, before the chip's
+            // name-scope fields are populated.
+            if (BtnAccountChip == null || TxtAccountChipName == null || TxtAccountChipBadge == null) return;
+
+            try
+            {
+                if (!App.IsLoggedIn)
+                {
+                    TxtAccountChipName.Text = Loc.Get("account_chip_sign_in");
+                    TxtAccountChipBadge.Visibility = Visibility.Collapsed;
+                    // SetResourceReference, not a resolved brush: PinkBrush is the mod accent
+                    // and has to keep repainting when the active mod changes.
+                    BtnAccountChip.SetResourceReference(System.Windows.Controls.Control.BorderBrushProperty, "PinkBrush");
+                    return;
+                }
+
+                var name = App.UserDisplayName;
+                TxtAccountChipName.Text = string.IsNullOrWhiteSpace(name)
+                    ? Loc.Get("account_chip_signed_in")
+                    : name;
+
+                // HasLabAccess / HasPremiumAccess already fold in the whitelist, SubscribeStar
+                // and the offline grace, so the badge tells the same story the feature gates do.
+                if (App.Patreon?.HasLabAccess == true)
+                {
+                    TxtAccountChipBadge.Text = "🧪";
+                    TxtAccountChipBadge.Visibility = Visibility.Visible;
+                    BtnAccountChip.BorderBrush = AccountChipTier2Brush;
+                }
+                else if (App.Patreon?.HasPremiumAccess == true)
+                {
+                    TxtAccountChipBadge.Text = "🔒";
+                    TxtAccountChipBadge.Visibility = Visibility.Visible;
+                    BtnAccountChip.BorderBrush = AccountChipTier1Brush;
+                }
+                else
+                {
+                    TxtAccountChipBadge.Visibility = Visibility.Collapsed;
+                    BtnAccountChip.BorderBrush = AccountChipNeutralBrush;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("RefreshAccountChip failed: {E}", ex.Message);
+            }
+        }
+
+        private void BtnAccountChip_Click(object sender, RoutedEventArgs e)
+        {
+            // Phase 2: the account surface is a real page. The chip opens the Settings door and
+            // scrolls it to Account - no popup, no reparenting trick. FocusSection is deliberately
+            // called after ShowTab: the section can only be measured once the view is visible.
+            try
+            {
+                ShowTab("appsettings");
+                AppSettingsTab?.FocusSection("account");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("BtnAccountChip_Click: settings navigation failed: {E}", ex.Message);
             }
         }
 
@@ -641,61 +721,52 @@ namespace ConditioningControlPanel
         {
             try
             {
-                // Feature level gating has been removed — every feature is available from level 1.
-                // The legacy Locked/Unlocked panels below live inside the collapsed SettingsTab.LegacyDashboardHost,
-                // but we still flip them to the unlocked state so nothing appears locked if anything
-                // ever ends up rendering them.
-                if (ProgressionTab.SpiralLocked != null) ProgressionTab.SpiralLocked.Visibility = Visibility.Collapsed;
-                if (ProgressionTab.SpiralUnlocked != null) ProgressionTab.SpiralUnlocked.Visibility = Visibility.Visible;
-                if (ProgressionTab.PinkFilterLocked != null) ProgressionTab.PinkFilterLocked.Visibility = Visibility.Collapsed;
-                if (ProgressionTab.PinkFilterUnlocked != null) ProgressionTab.PinkFilterUnlocked.Visibility = Visibility.Visible;
-                if (ProgressionTab.SpiralFeatureImage != null) SetFeatureImageBlur(ProgressionTab.SpiralFeatureImage, false);
-                if (ProgressionTab.PinkFilterFeatureImage != null) SetFeatureImageBlur(ProgressionTab.PinkFilterFeatureImage, false);
+                // Feature level gating has been removed — every feature is available from level 1,
+                // which is why `level` is never read here (gap-report T-4). Phase 8 deleted the 24
+                // ProgressionTab Locked/Unlocked panel flips and the eight feature-art unblur
+                // calls that used to lead this method: they painted controls inside a view no
+                // ShowTab case ever revealed, and that view no longer exists.
+                //
+                // 2026-08-11: the seven "IsLocked = false" writes that stood here went with the FX
+                // mosaic. They were belt-and-braces against an XP gate that had already been
+                // removed - every card defaults IsLocked=false and nothing ever set it true. The
+                // 3x3 wall does not use IsLocked at all: a tier gate there is a TierBadge price
+                // tag (MainWindow.Presets.cs RefreshMosaicTierBadges), because the veil IsLocked
+                // draws would black out the very art those tiles exist to show.
 
-                if (ProgressionTab.BubblesLocked != null) ProgressionTab.BubblesLocked.Visibility = Visibility.Collapsed;
-                if (ProgressionTab.BubblesUnlocked != null) ProgressionTab.BubblesUnlocked.Visibility = Visibility.Visible;
-                if (ProgressionTab.BubblePopFeatureImage != null) SetFeatureImageBlur(ProgressionTab.BubblePopFeatureImage, false);
+                // Tier 2 entitlement. HasLabAccess is the single truth and already covers every
+                // entitlement source (live tier, whitelist, SubscribeStar T2, and the 14-day grace
+                // over a server-linked T2 login). It matters twice over here, because the one thing
+                // this flag still drives is DESTRUCTIVE (it force-clears AllowAiToControlEffects and
+                // SAVES), so a stale-negative would wipe a legit user's setting.
+                //
+                // TOMBSTONE (UX restructure, Phase 6): this used to also raise LabSmokescreen, the
+                // opaque overlay draped over the whole Lab tab. That overlay WAS the Tier 2 gate for
+                // DTRH, the Gaze minigame and Focus Gaze — geography standing in for a check, which
+                // is why the --dtrh/--goon/--fyp CLI switches walked straight past it. Phase 0 put
+                // real TierGate checks in the launch handlers themselves and Phase 6 gave the cards
+                // teaser lockbands (decoration; the handler still does the refusing), so the
+                // smokescreen was deleted with the Lab view. Do not reintroduce a whole-page
+                // curtain: the Play door mixes Free, T1 and T2 cards and there is nothing uniform
+                // left to drape.
+                var labUnlocked = App.Patreon?.HasLabAccess == true;
 
-                if (ProgressionTab.LockCardLocked != null) ProgressionTab.LockCardLocked.Visibility = Visibility.Collapsed;
-                if (ProgressionTab.LockCardUnlocked != null) ProgressionTab.LockCardUnlocked.Visibility = Visibility.Visible;
-                if (ProgressionTab.LockCardFeatureImage != null) SetFeatureImageBlur(ProgressionTab.LockCardFeatureImage, false);
-
-                if (ProgressionTab.Level50Locked != null) ProgressionTab.Level50Locked.Visibility = Visibility.Collapsed;
-                if (ProgressionTab.Level50Unlocked != null) ProgressionTab.Level50Unlocked.Visibility = Visibility.Visible;
-                if (ProgressionTab.BubbleCountFeatureImage != null) SetFeatureImageBlur(ProgressionTab.BubbleCountFeatureImage, false);
-
-                if (ProgressionTab.Level60Locked != null) ProgressionTab.Level60Locked.Visibility = Visibility.Collapsed;
-                if (ProgressionTab.Level60Unlocked != null) ProgressionTab.Level60Unlocked.Visibility = Visibility.Visible;
-                if (ProgressionTab.BouncingTextFeatureImage != null) SetFeatureImageBlur(ProgressionTab.BouncingTextFeatureImage, false);
-
-                if (ProgressionTab.MindWipeLocked != null) ProgressionTab.MindWipeLocked.Visibility = Visibility.Collapsed;
-                if (ProgressionTab.MindWipeUnlocked != null) ProgressionTab.MindWipeUnlocked.Visibility = Visibility.Visible;
-                if (ProgressionTab.MindWipeFeatureImage != null) SetFeatureImageBlur(ProgressionTab.MindWipeFeatureImage, false);
-
-                if (ProgressionTab.BrainDrainLocked != null) ProgressionTab.BrainDrainLocked.Visibility = Visibility.Collapsed;
-                if (ProgressionTab.BrainDrainUnlocked != null) ProgressionTab.BrainDrainUnlocked.Visibility = Visibility.Visible;
-                if (ProgressionTab.BrainDrainFeatureImage != null) SetFeatureImageBlur(ProgressionTab.BrainDrainFeatureImage, false);
-
-                // velvet-mosaic dashboard cards are never locked anymore.
-                if (SettingsTab.CardSpiral != null) SettingsTab.CardSpiral.IsLocked = false;
-                if (SettingsTab.CardPinkFilter != null) SettingsTab.CardPinkFilter.IsLocked = false;
-                if (SettingsTab.CardBubblePop != null) SettingsTab.CardBubblePop.IsLocked = false;
-                if (SettingsTab.CardLockCard != null) SettingsTab.CardLockCard.IsLocked = false;
-                if (SettingsTab.CardBubbleCount != null) SettingsTab.CardBubbleCount.IsLocked = false;
-                if (SettingsTab.CardBouncingText != null) SettingsTab.CardBouncingText.IsLocked = false;
-                if (SettingsTab.CardMindWipe != null) SettingsTab.CardMindWipe.IsLocked = false;
-
-                // Lab Tab: Requires Patreon T2 / whitelist. Cover every entitlement source —
-                // this gate is destructive below (force-clears AllowAiToControlEffects and
-                // SAVES), so a stale-negative here wipes a legit user's setting: live tier,
-                // server-linked tier (Discord login), whitelist, and SubscribeStar T2.
-                var labUnlocked = App.Patreon?.CurrentTier >= PatreonTier.Level2
-                    || (App.Settings?.Current?.PatreonTier ?? 0) >= 2
-                    || App.Patreon?.IsWhitelisted == true
-                    || App.SubscribeStar?.CurrentTier >= PatreonTier.Level2;
-                if (LabTab.LabSmokescreen != null) LabTab.LabSmokescreen.Visibility = labUnlocked ? Visibility.Collapsed : Visibility.Visible;
-
-                // AI effect control lives in the Lab — force-disable for non-T2 users so settings can't outlive the entitlement.
+                // AI effect control is Tier 2 wherever it is drawn. Since Phase 5 of the UX
+                // restructure the switch lives on the COMPANION door (Z7b, AiPermissionsGrid) — so
+                // this block is now only half the story:
+                //
+                //   * the REPAIR is here, and stays destructive on purpose: a setting must not
+                //     outlive the entitlement that allowed it, so a lapsed T2 has
+                //     AllowAiToControlEffects force-cleared and SAVED. HasLabAccess is the single
+                //     truth precisely because of that write (a stale negative would wipe a legit
+                //     user's setting);
+                //   * the GATE is on the card — TierGate.RequiresLab paints a lockband and
+                //     ChkCapEffects_Changed refuses the write. A repair is not a gate: without the
+                //     card's own check a Free account could tick the box and keep it until the next
+                //     refresh ran.
+                //
+                // ApplyTierGate is called for both verdicts, not just the locked one: this method is
+                // also how a freshly validated T2 account gets its lockband taken away.
                 if (!labUnlocked)
                 {
                     var cp = App.Settings?.Current?.CompanionPrompt;
@@ -704,11 +775,12 @@ namespace ConditioningControlPanel
                         cp.AllowAiToControlEffects = false;
                         App.Settings?.Save();
                     }
-                    if (LabTab.ChkCapEffects != null && LabTab.ChkCapEffects.IsChecked == true)
-                        LabTab.ChkCapEffects.IsChecked = false;
-                    if (LabTab.EffectPermsPanel != null)
-                        LabTab.EffectPermsPanel.Visibility = Visibility.Collapsed;
+                    if (CompanionTab.ChkCapEffects != null && CompanionTab.ChkCapEffects.IsChecked == true)
+                        CompanionTab.ChkCapEffects.IsChecked = false;
+                    if (CompanionTab.EffectPermsPanel != null)
+                        CompanionTab.EffectPermsPanel.Visibility = Visibility.Collapsed;
                 }
+                CompanionTab.AiPermissions?.ApplyTierGate();
 
                 // Bambi Takeover: Requires Patreon (any tier)
                 var autonomyUnlocked = App.Patreon?.HasPremiumAccess == true;
@@ -762,187 +834,51 @@ namespace ConditioningControlPanel
 
         #region Slider Events
 
-        internal void SliderPerMin_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || SettingsTab.TxtPerMin == null) return;
-            SettingsTab.TxtPerMin.Text = ((int)e.NewValue).ToString();
-            UpdateAudioLinkState();
-            ApplySettingsLive();
-        }
-
-        internal void SliderImages_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || SettingsTab.TxtImages == null) return;
-            SettingsTab.TxtImages.Text = ((int)e.NewValue).ToString();
-            ApplySettingsLive();
-        }
-
-        internal void SliderMaxOnScreen_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || SettingsTab.TxtMaxOnScreen == null) return;
-            SettingsTab.TxtMaxOnScreen.Text = ((int)e.NewValue).ToString();
-            ApplySettingsLive();
-        }
-
-        internal void SliderSize_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || SettingsTab.TxtSize == null) return;
-            SettingsTab.TxtSize.Text = $"{(int)e.NewValue}%";
-            ApplySettingsLive();
-        }
-
-        internal void SliderOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || SettingsTab.TxtOpacity == null) return;
-            SettingsTab.TxtOpacity.Text = $"{(int)e.NewValue}%";
-            ApplySettingsLive();
-        }
-
-        // #859: SliderCenterExclusion_Changed moved to Features/FlashFeatureControl.xaml.cs
-        // together with the control itself. It writes the setting directly, so there is no
-        // longer a MainWindow relay - and no SaveSettings mirror to clamp it.
-
-        internal void SliderFade_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || SettingsTab.TxtFade == null) return;
-            SettingsTab.TxtFade.Text = $"{(int)e.NewValue}%";
-            ApplySettingsLive();
-        }
-
-        internal void SliderFlashDuration_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || SettingsTab.TxtFlashDuration == null) return;
-            SettingsTab.TxtFlashDuration.Text = $"{(int)e.NewValue}s";
-            App.Settings.Current.FlashDuration = (int)e.NewValue;
-        }
-
-        internal void ChkFlashAudio_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            
-            var isEnabled = SettingsTab.ChkFlashAudio.IsChecked ?? true;
-            App.Settings.Current.FlashAudioEnabled = isEnabled;
-            
-            // Enable/disable duration slider based on audio link
-            SettingsTab.SliderFlashDuration.IsEnabled = !isEnabled;
-            SettingsTab.SliderFlashDuration.Opacity = isEnabled ? 0.5 : 1.0;
-            
-            // Show/hide warning
-            SettingsTab.TxtAudioWarning.Visibility = isEnabled ? Visibility.Collapsed : Visibility.Visible;
-        }
-
-        private void UpdateAudioLinkState()
-        {
-            if (_isLoading) return;
-            
-            var flashFreq = (int)SettingsTab.SliderPerMin.Value;
-            
-            // If flashes > 60, force audio OFF and disable checkbox
-            if (flashFreq > 60)
-            {
-                SettingsTab.ChkFlashAudio.IsChecked = false;
-                SettingsTab.ChkFlashAudio.IsEnabled = false;
-                App.Settings.Current.FlashAudioEnabled = false;
-                SettingsTab.SliderFlashDuration.IsEnabled = true;
-                SettingsTab.SliderFlashDuration.Opacity = 1.0;
-                SettingsTab.TxtAudioWarning.Visibility = Visibility.Visible;
-                SettingsTab.TxtAudioWarning.Text = Loc.Get("label_audio_off_60_h");
-            }
-            else
-            {
-                SettingsTab.ChkFlashAudio.IsEnabled = true;
-                SettingsTab.TxtAudioWarning.Text = Loc.Get("label_max_60_h");
-                SettingsTab.TxtAudioWarning.Visibility = (SettingsTab.ChkFlashAudio.IsChecked ?? true) ? Visibility.Collapsed : Visibility.Visible;
-            }
-        }
-
-        internal void SliderPerHour_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || SettingsTab.TxtPerHour == null) return;
-            SettingsTab.TxtPerHour.Text = ((int)e.NewValue).ToString();
-            ApplySettingsLive();
-        }
-
-        internal void SliderTargets_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || SettingsTab.TxtTargets == null) return;
-            SettingsTab.TxtTargets.Text = ((int)e.NewValue).ToString();
-            ApplySettingsLive();
-        }
-
-        internal void ChkRandomizeTargets_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            ApplySettingsLive();
-        }
-
-        internal void SliderDuration_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || SettingsTab.TxtDuration == null) return;
-            SettingsTab.TxtDuration.Text = ((int)e.NewValue).ToString();
-            ApplySettingsLive();
-        }
-
-        internal void SliderTargetSize_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || SettingsTab.TxtTargetSize == null) return;
-            SettingsTab.TxtTargetSize.Text = ((int)e.NewValue).ToString();
-            ApplySettingsLive();
-        }
-
-        internal void SliderSubPerMin_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || SettingsTab.TxtSubPerMin == null) return;
-            SettingsTab.TxtSubPerMin.Text = ((int)e.NewValue).ToString();
-            ApplySettingsLive();
-        }
-
-        internal void SliderFrames_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || SettingsTab.TxtFrames == null) return;
-            SettingsTab.TxtFrames.Text = ((int)e.NewValue).ToString();
-            ApplySettingsLive();
-        }
-
-        internal void SliderSubOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || SettingsTab.TxtSubOpacity == null) return;
-            SettingsTab.TxtSubOpacity.Text = $"{(int)e.NewValue}%";
-            ApplySettingsLive();
-        }
-
-        internal void SliderWhisperVol_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || SettingsTab.TxtWhisperVol == null) return;
-            SettingsTab.TxtWhisperVol.Text = $"{(int)e.NewValue}%";
-            ApplySettingsLive();
-        }
+        // PHASE 8 (demolition): the 22 LegacyDashboardHost dose handlers that lived here are gone
+        // with the host - SliderPerMin/Images/MaxOnScreen/Size/Opacity/Fade/FlashDuration,
+        // ChkFlashAudio + UpdateAudioLinkState, SliderPerHour/Targets/Duration/TargetSize,
+        // ChkRandomizeTargets, and SliderSubPerMin/Frames/SubOpacity/WhisperVol. Each dereferenced a
+        // control on the permanently-Collapsed LegacyDashboardHost and had exactly one binder: that
+        // host's markup. The live editors are the Studio rack's Features/*FeatureControl panels,
+        // which carry their own same-named PRIVATE handlers (different classes, not calls into
+        // MainWindow) and write App.Settings.Current directly.
+        //
+        // The >60/h "audio off" clamp that UpdateAudioLinkState enforced lives on with the control:
+        // Features/FlashFeatureControl.xaml.cs owns it now.
+        //
+        // #859: SliderCenterExclusion_Changed had already moved to
+        // Features/FlashFeatureControl.xaml.cs together with the control itself.
 
         internal void SliderMaster_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (_isLoading || SettingsTab.TxtMaster == null) return;
-            SettingsTab.TxtMaster.Text = $"{(int)e.NewValue}%";
+            if (_isLoading || AppSettingsTab.TxtMaster == null) return;
+            AppSettingsTab.TxtMaster.Text = $"{(int)e.NewValue}%";
             ApplySettingsLive();
 
             // Update volume on all currently playing audio
             var volume = (int)e.NewValue;
             App.Video?.UpdateMasterVolume(volume);
             App.BrainDrain?.UpdateMasterVolume(volume);
+
+            // Keep the dashboard's copy of this dial in step (MainWindow.HomeAudio.cs).
+            MirrorAudioToHome();
         }
 
         internal void SliderVideoVolume_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (_isLoading || SettingsTab.TxtVideoVolume == null) return;
-            SettingsTab.TxtVideoVolume.Text = $"{(int)e.NewValue}%";
+            if (_isLoading || AppSettingsTab.TxtVideoVolume == null) return;
+            AppSettingsTab.TxtVideoVolume.Text = $"{(int)e.NewValue}%";
             App.Settings.Current.VideoVolume = (int)e.NewValue;
             App.Video?.UpdateVideoVolume((int)e.NewValue);
+            MirrorAudioToHome();
         }
 
         internal void SliderDuck_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (_isLoading || SettingsTab.TxtDuck == null) return;
-            SettingsTab.TxtDuck.Text = $"{(int)e.NewValue}%";
+            if (_isLoading || AppSettingsTab.TxtDuck == null) return;
+            AppSettingsTab.TxtDuck.Text = $"{(int)e.NewValue}%";
             ApplySettingsLive();
+            MirrorAudioToHome();
         }
 
         internal void ChkAudioDuck_Changed(object sender, RoutedEventArgs e)
@@ -950,18 +886,20 @@ namespace ConditioningControlPanel
             if (_isLoading) return;
 
             // If ducking was just disabled, immediately restore audio for any ducked sessions
-            if (SettingsTab.ChkAudioDuck.IsChecked == false)
+            if (AppSettingsTab.ChkAudioDuck.IsChecked == false)
             {
                 App.Audio?.ForceUnduck();
             }
 
             ApplySettingsLive();
+            MirrorAudioToHome();
         }
 
         internal void ChkExcludeBambiCloudDucking_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
             ApplySettingsLive();
+            MirrorAudioToHome();
         }
 
         // Guards against a second click while the diagnostic is still running — the probe
@@ -1003,13 +941,13 @@ namespace ConditioningControlPanel
 
         private void PopulateAudioOutputDevices()
         {
-            if (SettingsTab.CmbAudioOutputDevice == null || App.Audio == null) return;
+            if (AppSettingsTab.CmbAudioOutputDevice == null || App.Audio == null) return;
             try
             {
                 _populatingAudioOutputs = true;
                 var devices = App.Audio.EnumerateOutputDevices();
-                SettingsTab.CmbAudioOutputDevice.ItemsSource = devices;
-                SettingsTab.CmbAudioOutputDevice.DisplayMemberPath = nameof(Services.AudioService.AudioOutputDevice.Name);
+                AppSettingsTab.CmbAudioOutputDevice.ItemsSource = devices;
+                AppSettingsTab.CmbAudioOutputDevice.DisplayMemberPath = nameof(Services.AudioService.AudioOutputDevice.Name);
 
                 // Restore persisted selection: prefer ID match, fall back to name (handles ID
                 // changes after driver reinstall / device reorder).
@@ -1027,7 +965,7 @@ namespace ConditioningControlPanel
                         if (string.Equals(d.Name, savedName, StringComparison.OrdinalIgnoreCase)) { pick = d; break; }
                     }
                 }
-                SettingsTab.CmbAudioOutputDevice.SelectedItem = pick ?? devices[0]; // index 0 = "System default"
+                AppSettingsTab.CmbAudioOutputDevice.SelectedItem = pick ?? devices[0]; // index 0 = "System default"
             }
             catch (Exception ex)
             {
@@ -1037,12 +975,16 @@ namespace ConditioningControlPanel
             {
                 _populatingAudioOutputs = false;
             }
+
+            // The dashboard's copy shares this ItemsSource; re-point it after every enumeration
+            // or a device refresh leaves it holding a stale list.
+            MirrorAudioToHome();
         }
 
         internal void CmbAudioOutputDevice_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
             if (_isLoading || _populatingAudioOutputs) return;
-            if (SettingsTab.CmbAudioOutputDevice?.SelectedItem is not Services.AudioService.AudioOutputDevice dev) return;
+            if (AppSettingsTab.CmbAudioOutputDevice?.SelectedItem is not Services.AudioService.AudioOutputDevice dev) return;
             if (App.Settings?.Current == null) return;
 
             App.Settings.Current.AudioOutputDeviceId = dev.Id ?? "";
@@ -1063,282 +1005,36 @@ namespace ConditioningControlPanel
             PopulateAudioOutputDevices();
         }
 
-        internal void SliderSpiralOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || ProgressionTab.TxtSpiralOpacity == null) return;
-            ProgressionTab.TxtSpiralOpacity.Text = $"{(int)e.NewValue}%";
-            ApplySettingsLive();
-        }
+        // PHASE 8: SliderSpiralOpacity_Changed, SliderPinkOpacity_Changed, SliderBubbleFreq_Changed,
+        // SliderBubbleVolume_Changed, ChkSpiralEnabled_Changed, ChkPinkFilterEnabled_Changed,
+        // ChkBubblesEnabled_Changed and ChkLockCardEnabled_Changed were deleted here. Their only
+        // binder was ProgressionTabView.xaml's delegation shim, and every one of them dereferenced
+        // a ProgressionTab control, so they could not survive the view. The live editors are
+        // Features/SpiralFeatureControl, PinkFilterFeatureControl, BubblePopFeatureControl and
+        // LockCardFeatureControl in the Studio rack, each of which carries its own same-named
+        // PRIVATE handler (different class - these were never called from there).
 
-        internal void SliderPinkOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || ProgressionTab.TxtPinkOpacity == null) return;
-            ProgressionTab.TxtPinkOpacity.Text = $"{(int)e.NewValue}%";
-            ApplySettingsLive();
-        }
+        // PHASE 8 (demolition): the nine LegacyDashboardHost master toggles that lived here are
+        // gone with the host - ChkFlashEnabled, ChkClickable, ChkCorruption, ChkFlashGlow,
+        // ChkHydraLinked, ChkVideoEnabled, ChkSubliminalEnabled, ChkAudioWhispers and
+        // ChkMiniGameEnabled. Each dereferenced a control on the permanently-Collapsed host and had
+        // exactly one binder: that host's markup. The live editors are the Studio rack's
+        // Features/FlashFeatureControl, VideoFeatureControl and SubliminalFeatureControl, which
+        // carry their own same-named PRIVATE handlers and do the same service start/stop
+        // (SubliminalFeatureControl still routes through App.Subliminal.SetEnabled, the single
+        // authority that keeps the flag and the service from churning against each other).
+        //
+        // #859: ChkFlashAvoidCenter_Changed had already moved to
+        // Features/FlashFeatureControl.xaml.cs together with the control itself.
 
-        internal void SliderBubbleFreq_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || ProgressionTab.TxtBubbleFreq == null) return;
-            ProgressionTab.TxtBubbleFreq.Text = ((int)e.NewValue).ToString();
-            App.Settings.Current.BubblesFrequency = (int)e.NewValue;
-
-            if (_isRunning)
-            {
-                App.Bubbles.RefreshFrequency();
-            }
-
-            App.Settings.Save();
-        }
-
-        internal void SliderBubbleVolume_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || ProgressionTab.TxtBubbleVolume == null) return;
-            ProgressionTab.TxtBubbleVolume.Text = $"{(int)e.NewValue}%";
-            App.Settings.Current.BubblesVolume = (int)e.NewValue;
-            App.Settings.Save();
-        }
-
-        internal void ChkSpiralEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            
-            var isEnabled = ProgressionTab.ChkSpiralEnabled.IsChecked ?? false;
-            App.Settings.Current.SpiralEnabled = isEnabled;
-            
-            // Immediately update overlay if engine is running
-            if (_isRunning)
-            {
-                App.Overlay.RefreshOverlays();
-                App.Logger?.Information("Spiral overlay toggled: {Enabled}", isEnabled);
-            }
-            
-            App.Settings.Save();
-        }
-
-        internal void ChkPinkFilterEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            
-            var isEnabled = ProgressionTab.ChkPinkFilterEnabled.IsChecked ?? false;
-            App.Settings.Current.PinkFilterEnabled = isEnabled;
-            
-            // Immediately update overlay if engine is running
-            if (_isRunning)
-            {
-                App.Overlay.RefreshOverlays();
-                App.Logger?.Information("Pink filter toggled: {Enabled}", isEnabled);
-            }
-            
-            App.Settings.Save();
-        }
-
-        internal void ChkBubblesEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            var isEnabled = ProgressionTab.ChkBubblesEnabled.IsChecked ?? false;
-            App.Settings.Current.BubblesEnabled = isEnabled;
-
-            // Immediately update bubbles if engine is running
-            if (_isRunning)
-            {
-                if (isEnabled)
-                {
-                    App.Bubbles.Start();
-                }
-                else
-                {
-                    App.Bubbles.Stop();
-                }
-                App.Logger?.Information("Bubbles toggled: {Enabled}", isEnabled);
-            }
-            
-            App.Settings.Save();
-        }
-
-        internal void ChkLockCardEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            
-            var isEnabled = ProgressionTab.ChkLockCardEnabled.IsChecked ?? false;
-            App.Settings.Current.LockCardEnabled = isEnabled;
-            
-            // Immediately update lock card service if engine is running
-            if (_isRunning)
-            {
-                if (isEnabled)
-                {
-                    App.LockCard.Start();
-                }
-                else
-                {
-                    App.LockCard.Stop();
-                }
-                App.Logger?.Information("Lock Card toggled: {Enabled}", isEnabled);
-            }
-            
-            App.Settings.Save();
-        }
-
-        internal void ChkFlashEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            var isEnabled = SettingsTab.ChkFlashEnabled.IsChecked ?? true;
-            App.Settings.Current.FlashEnabled = isEnabled;
-
-            // Immediately start/stop flash service if engine is running
-            if (_isRunning)
-            {
-                if (isEnabled)
-                {
-                    App.Flash.Start();
-                }
-                else
-                {
-                    App.Flash.Stop();
-                }
-                App.Logger?.Information("Flash images toggled: {Enabled}", isEnabled);
-            }
-
-            App.Settings.Save();
-        }
-
-        internal void ChkClickable_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            var isClickable = SettingsTab.ChkClickable.IsChecked ?? true;
-            App.Settings.Current.FlashClickable = isClickable;
-            App.Logger?.Information("Flash clickable toggled: {Enabled}", isClickable);
-            App.Settings.Save();
-        }
-
-        internal void ChkCorruption_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            var isEnabled = SettingsTab.ChkCorruption.IsChecked ?? false;
-            App.Settings.Current.CorruptionMode = isEnabled;
-            App.Logger?.Information("Hydra mode toggled: {Enabled}", isEnabled);
-            App.Settings.Save();
-        }
-
-        internal void ChkFlashGlow_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            var isEnabled = SettingsTab.ChkFlashGlow.IsChecked ?? true;
-            App.Settings.Current.FlashGlowEnabled = isEnabled;
-            App.Logger?.Information("Flash glow toggled: {Enabled}", isEnabled);
-            App.Settings.Save();
-        }
-
-        // #859: ChkFlashAvoidCenter_Changed moved to Features/FlashFeatureControl.xaml.cs
-        // together with the control itself.
-
-        /// <summary>
-        /// Toggles linked vs independent timing for hydra spawns~ 🔗✨
-        /// Linked = hydra children share the parent's remaining timer.
-        /// Independent = each hydra spawn gets a fresh full-duration lifetime.
-        /// </summary>
-        internal void ChkHydraLinked_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            var isLinked = SettingsTab.ChkHydraLinked.IsChecked ?? true;
-            App.Settings.Current.HydraLinkedTiming = isLinked;
-            App.Logger?.Information("Hydra linked timing toggled: {Linked}", isLinked);
-            App.Settings.Save();
-        }
-
-        internal void ChkVideoEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            var isEnabled = SettingsTab.ChkVideoEnabled.IsChecked ?? false;
-            App.Settings.Current.MandatoryVideosEnabled = isEnabled;
-
-            // Immediately start/stop video service if engine is running
-            if (_isRunning)
-            {
-                if (isEnabled)
-                {
-                    App.Video.Start();
-                }
-                else
-                {
-                    App.Video.Stop();
-                }
-                App.Logger?.Information("Mandatory videos toggled: {Enabled}", isEnabled);
-            }
-
-            App.Settings.Save();
-        }
-
-        internal void ChkSubliminalEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            // Single authority: persists the flag and live-applies start/stop (idempotently),
-            // so this checkbox and the feature popup can't churn the service between them.
-            App.Subliminal?.SetEnabled(SettingsTab.ChkSubliminalEnabled.IsChecked ?? false);
-        }
-
-        internal void ChkAudioWhispers_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            var isEnabled = SettingsTab.ChkAudioWhispers.IsChecked ?? false;
-            App.Settings.Current.SubAudioEnabled = isEnabled;
-            App.Logger?.Information("Audio whispers toggled: {Enabled}", isEnabled);
-            App.Settings.Save();
-        }
-
-        internal void ChkMiniGameEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            var isEnabled = SettingsTab.ChkMiniGameEnabled.IsChecked ?? false;
-            App.Settings.Current.AttentionChecksEnabled = isEnabled;
-            App.Logger?.Information("Attention checks toggled: {Enabled}", isEnabled);
-            App.Settings.Save();
-        }
-
-        internal void SliderLockCardFreq_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || ProgressionTab.TxtLockCardFreq == null) return;
-            ProgressionTab.TxtLockCardFreq.Text = ((int)e.NewValue).ToString();
-            App.Settings.Current.LockCardFrequency = (int)e.NewValue;
-            App.Settings.Save();
-        }
-
-        internal void SliderLockCardRepeats_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || ProgressionTab.TxtLockCardRepeats == null) return;
-            ProgressionTab.TxtLockCardRepeats.Text = $"{(int)e.NewValue}x";
-            App.Settings.Current.LockCardRepeats = (int)e.NewValue;
-            App.Settings.Save();
-        }
+        // PHASE 8: SliderLockCardFreq_Changed / SliderLockCardRepeats_Changed / SliderRampDuration_Changed
+        // / SliderMultiplier_Changed deleted with ProgressionTabView, their only binder. Live owners:
+        // Features/LockCardFeatureControl.xaml.cs and Features/IntensityRampFeatureControl.xaml.cs.
 
 
 
 
 
-
-        internal void SliderRampDuration_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || ProgressionTab.TxtRampDuration == null) return;
-            ProgressionTab.TxtRampDuration.Text = $"{(int)e.NewValue} min";
-            ApplySettingsLive();
-        }
-
-        internal void SliderMultiplier_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || ProgressionTab.TxtMultiplier == null) return;
-            ProgressionTab.TxtMultiplier.Text = $"{e.NewValue:F1}x";
-            ApplySettingsLive();
-        }
 
         #endregion
 
@@ -2106,68 +1802,10 @@ namespace ConditioningControlPanel
             easterEggWindow.ShowDialog();
         }
 
-        internal void BtnTestVideo_Click(object sender, RoutedEventArgs e)
-        {
-            try { App.Bark?.NotifyUiAction("test_video"); } catch { }
-            try
-            {
-                // Check if video is already playing - offer force reset if stuck
-                if (App.Video.IsPlaying)
-                {
-                    var result = MessageBox.Show(
-                        "A video appears to be playing.\n\nIf you don't see a video, it may be stuck. Click Yes to force reset and try again.",
-                        "Video Playing",
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Question);
-
-                    if (result == MessageBoxResult.Yes)
-                    {
-                        App.Logger?.Warning("User requested force reset of stuck video state");
-                        App.Video.ForceCleanup();
-                        // Also tear down any web-video takeover: ForceReset alone frees the
-                        // queue slot but leaves the browser video playing, and the test video
-                        // would then stack on top of it.
-                        App.Autonomy?.ForceEndWebVideoTakeover();
-                        App.InteractionQueue?.ForceReset();
-                        // Continue to trigger video below
-                    }
-                    else
-                    {
-                        return;
-                    }
-                }
-
-                // Check if another interaction is blocking - offer force reset if stuck
-                if (App.InteractionQueue != null && !App.InteractionQueue.CanStart)
-                {
-                    var result = MessageBox.Show(
-                        $"Another interaction is in progress ({App.InteractionQueue.CurrentInteraction}).\n\nIf this seems stuck, click Yes to force reset and try again.",
-                        "Please Wait",
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Question);
-
-                    if (result == MessageBoxResult.Yes)
-                    {
-                        App.Logger?.Warning("User requested force reset of stuck interaction queue");
-                        App.Video.ForceCleanup();
-                        App.Autonomy?.ForceEndWebVideoTakeover();
-                        App.InteractionQueue.ForceReset();
-                        // Continue to trigger video below
-                    }
-                    else
-                    {
-                        return;
-                    }
-                }
-
-                App.Video.TriggerVideo();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "Error in BtnTestVideo_Click");
-                MessageBox.Show($"Error triggering video: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
+        // PHASE 8 (demolition): BtnTestVideo_Click is gone with LegacyDashboardHost's BtnTestVideo,
+        // its only binder (verified: no programmatic caller anywhere in the repo). The live "Test"
+        // button is Features/VideoFeatureControl.xaml:206, whose own private BtnTestVideo_Click
+        // carries the same stuck-video / stuck-queue force-reset offers.
 
         private void TriggerStartupVideo()
         {
@@ -2199,7 +1837,7 @@ namespace ConditioningControlPanel
             if (dialog.ShowDialog() == true)
             {
                 App.Settings.Current.StartupVideoPath = dialog.FileName;
-                SettingsTab.TxtStartupVideo.Text = System.IO.Path.GetFileName(dialog.FileName);
+                AppSettingsTab.TxtStartupVideo.Text = System.IO.Path.GetFileName(dialog.FileName);
                 App.Settings.Save();
                 App.Logger?.Information("Startup video set to: {Path}", dialog.FileName);
             }
@@ -2208,7 +1846,7 @@ namespace ConditioningControlPanel
         internal void BtnClearStartupVideo_Click(object sender, RoutedEventArgs e)
         {
             App.Settings.Current.StartupVideoPath = null;
-            SettingsTab.TxtStartupVideo.Text = Loc.Get("label_random");
+            AppSettingsTab.TxtStartupVideo.Text = Loc.Get("label_random");
             App.Settings.Save();
             App.Logger?.Information("Startup video cleared - will use random");
         }
@@ -2284,103 +1922,12 @@ namespace ConditioningControlPanel
             }
         }
 
-        internal void BtnManageLockCardPhrases_Click(object sender, RoutedEventArgs e)
-        {
-            var dialog = new TextEditorDialog("Lock Card Phrases", App.Settings.Current.LockCardPhrases);
-            dialog.Owner = this;
-
-            if (dialog.ShowDialog() == true && dialog.ResultData != null)
-            {
-                App.Settings.Current.LockCardPhrases = dialog.ResultData;
-                App.Settings.Save();
-                App.Logger?.Information("Lock card phrases updated: {Count} items", dialog.ResultData.Count);
-            }
-        }
-
-        internal void BtnTestLockCard_Click(object sender, RoutedEventArgs e)
-        {
-            try { App.Bark?.NotifyUiAction("test_lockcard"); } catch { }
-            var phrases = App.Settings.Current.LockCardPhrases;
-            var enabledPhrases = phrases.Where(p => p.Value).Select(p => p.Key).ToList();
-            
-            if (enabledPhrases.Count == 0)
-            {
-                MessageBox.Show(Loc.Get("msg_no_phrases_enabled_add_some_phrases_first"), "No Phrases", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-            
-            // Show the actual lock card
-            App.LockCard.TestLockCard();
-        }
-
-        internal void BtnLockCardSettings_Click(object sender, RoutedEventArgs e)
-        {
-            var dialog = new LockCardColorDialog();
-            dialog.Owner = this;
-            dialog.ShowDialog();
-        }
-
-        internal void ChkLockCardStrict_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            var isEnabled = ProgressionTab.ChkLockCardStrict.IsChecked ?? false;
-
-            // Show warning when enabling strict mode
-            if (isEnabled)
-            {
-                var confirmed = WarningDialog.ShowDoubleWarning(this,
-                    "Strict Lock Card",
-                    "• You will NOT be able to escape lock cards with ESC\n" +
-                    "• You MUST type the phrase the required number of times\n" +
-                    "• This can be very restrictive!");
-
-                if (!confirmed)
-                {
-                    Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        _isLoading = true;
-                        ProgressionTab.ChkLockCardStrict.IsChecked = false;
-                        _isLoading = false;
-                    }));
-                    return;
-                }
-            }
-
-            App.Settings.Current.LockCardStrict = isEnabled;
-            App.Settings?.Save();
-        }
-
-        internal void BtnSelectSpiral_Click(object sender, RoutedEventArgs e)
-        {
-            var dialog = new Microsoft.Win32.OpenFileDialog
-            {
-                Filter = "GIF Files (*.gif)|*.gif|All Image Files|*.gif;*.png;*.jpg;*.jpeg",
-                Title = Loc.Get("title_select_spiral_gif")
-            };
-            
-            // Start in last used directory if available
-            var currentPath = App.Settings.Current.SpiralPath;
-            if (!string.IsNullOrEmpty(currentPath) && File.Exists(currentPath))
-            {
-                dialog.InitialDirectory = Path.GetDirectoryName(currentPath);
-            }
-
-            if (dialog.ShowDialog() == true)
-            {
-                App.Settings.Current.SpiralPath = dialog.FileName;
-                App.Settings.Save();
-                
-                // Refresh overlays if running
-                if (_isRunning)
-                {
-                    App.Overlay.RefreshOverlays();
-                }
-                
-                MessageBox.Show($"Selected: {Path.GetFileName(dialog.FileName)}", "Spiral Selected");
-            }
-        }
+        // PHASE 8: BtnManageLockCardPhrases_Click, BtnTestLockCard_Click, BtnLockCardSettings_Click,
+        // ChkLockCardStrict_Changed and BtnSelectSpiral_Click deleted with ProgressionTabView.
+        // Its delegation shim was their only binder in the whole repo. Every one of them has a
+        // live equivalent inside the Studio rack panels that owns the same dialogs and services:
+        // Features/LockCardFeatureControl.xaml.cs (phrases editor, test card, colour dialog,
+        // strict-mode double warning) and Features/SpiralFeatureControl.xaml.cs (spiral picker).
 
         private void BtnPrevImage_Click(object sender, RoutedEventArgs e)
         {
@@ -2676,45 +2223,18 @@ namespace ConditioningControlPanel
             UpdatePanicKeyButton();
         }
 
-        internal void ChkStrictLock_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            var isEnabled = SettingsTab.ChkStrictLock.IsChecked ?? false;
-
-            // Show warning when enabling strict mode
-            if (isEnabled)
-            {
-                var confirmed = WarningDialog.ShowDoubleWarning(this,
-                    "Strict Lock",
-                    "• You will NOT be able to skip or close videos\n" +
-                    "• Videos MUST be watched to completion\n" +
-                    "• The only way out is the panic key (if enabled)\n" +
-                    "• This can be very intense and restrictive");
-
-                if (!confirmed)
-                {
-                    // Defer revert so it runs after the dialog's event stack fully unwinds,
-                    // preventing WPF toggle animation from getting stuck in the ON position.
-                    Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        _isLoading = true;
-                        SettingsTab.ChkStrictLock.IsChecked = false;
-                        _isLoading = false;
-                    }));
-                    return;
-                }
-            }
-
-            App.Settings.Current.StrictLockEnabled = isEnabled;
-            App.Settings?.Save();
-        }
+        // PHASE 8 (demolition): ChkStrictLock_Changed is gone with LegacyDashboardHost's
+        // ChkStrictLock, its only binder. The live editor is
+        // Features/VideoFeatureControl.ChkStrict (Studio rack, StudioTab.PanelVideo), which carries
+        // the same double-warning + deferred-revert dance in its own ChkStrict_Changed.
+        // The lockdown grey-out that used to disable THIS checkbox now disables that one -
+        // see MainWindow.Lab.cs OnLockdownActivated / OnLockdownDeactivated.
 
         internal void ChkNoPanic_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
 
-            var isNoPanic = SettingsTab.ChkNoPanic.IsChecked ?? false;
+            var isNoPanic = AppSettingsTab.ChkNoPanic.IsChecked ?? false;
 
             // Show warning when enabling no-panic mode
             if (isNoPanic)
@@ -2733,7 +2253,7 @@ namespace ConditioningControlPanel
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
                         _isLoading = true;
-                        SettingsTab.ChkNoPanic.IsChecked = false;
+                        AppSettingsTab.ChkNoPanic.IsChecked = false;
                         _isLoading = false;
                     }));
                     return;
@@ -2757,24 +2277,39 @@ namespace ConditioningControlPanel
             }
         }
 
+        // UX restructure Phase 2: the four perf controls below now have TWO instances - the live
+        // editor in Settings ▸ Performance (Views/Controls/AppSettings/PerformanceSettingsSection)
+        // and the unreachable LegacyDashboardHost original.
+        // PHASE 8 deleted those twins, so four of these five have exactly one instance again. The
+        // exception is ChkVideoHwDecode: VideoForceHardwareDecoding also has a live editor in
+        // Features/SystemFeatureControl (ChkVideoGpuDecode, reachable from Home's System pill), which
+        // writes App.Settings.Current and saves. Because of that second instance, SaveSettings must
+        // NOT read the Settings-door checkbox back for this property - see the note in
+        // MainWindow.Settings.cs. The handlers still read the control that raised the event rather
+        // than a hard-coded field; the fallback is now AppSettingsTab, for a programmatic call with
+        // no sender.
         internal void ChkPerformanceMode_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            App.Settings.Current.PerformanceMode = SettingsTab.ChkPerformanceMode.IsChecked ?? false;
+            var chk = sender as CheckBox ?? AppSettingsTab?.ChkPerformanceMode;
+            if (chk == null) return;
+            App.Settings.Current.PerformanceMode = chk.IsChecked ?? false;
             App.Logger?.Information("Performance mode set to {Enabled}", App.Settings.Current.PerformanceMode);
         }
 
         internal void ChkAutoPerformance_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            App.Settings.Current.AutoPerformanceMode = SettingsTab.ChkAutoPerformance.IsChecked ?? true;
+            var chk = sender as CheckBox ?? AppSettingsTab?.ChkAutoPerformance;
+            if (chk == null) return;
+            App.Settings.Current.AutoPerformanceMode = chk.IsChecked ?? true;
             App.Logger?.Information("Auto performance mode set to {Enabled}", App.Settings.Current.AutoPerformanceMode);
         }
 
         internal void CmbMotionLevel_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_isLoading) return;
-            var index = SettingsTab.CmbMotionLevel?.SelectedIndex ?? 0;
+            var index = (sender as ComboBox ?? AppSettingsTab?.CmbMotionLevel)?.SelectedIndex ?? 0;
             var level = index switch
             {
                 1 => Models.MotionLevel.Reduced,
@@ -2790,6 +2325,7 @@ namespace ConditioningControlPanel
                 StopSeasonTitleShimmer();
                 StopSkillTreeAnimations();
                 StopProgramBannerFx();
+                StopLockdownPulse();
                 SwitchTabFx(string.Empty);
             }
             StartMarqueeAnimation();
@@ -2804,14 +2340,18 @@ namespace ConditioningControlPanel
         internal void ChkVideoHwDecode_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            App.Settings.Current.VideoForceHardwareDecoding = SettingsTab.ChkVideoHwDecode.IsChecked ?? false;
+            var chk = sender as CheckBox ?? AppSettingsTab?.ChkVideoHwDecode;
+            if (chk == null) return;
+            App.Settings.Current.VideoForceHardwareDecoding = chk.IsChecked ?? false;
             App.Logger?.Information("Force video hardware decoding set to {Enabled}", App.Settings.Current.VideoForceHardwareDecoding);
         }
 
         internal void ChkUnifiedOverlay_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            App.Settings.Current.UnifiedOverlayHost = SettingsTab.ChkUnifiedOverlay.IsChecked ?? true;
+            var chk = sender as CheckBox ?? AppSettingsTab?.ChkUnifiedOverlay;
+            if (chk == null) return;
+            App.Settings.Current.UnifiedOverlayHost = chk.IsChecked ?? true;
             App.Logger?.Information("Unified overlay renderer set to {Enabled}", App.Settings.Current.UnifiedOverlayHost);
         }
 
@@ -2819,7 +2359,7 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
 
-            var isEnabled = SettingsTab.ChkOfflineMode.IsChecked ?? false;
+            var isEnabled = AppSettingsTab.ChkOfflineMode.IsChecked ?? false;
 
             if (isEnabled)
             {
@@ -2836,7 +2376,7 @@ namespace ConditioningControlPanel
                     else
                     {
                         // User cancelled - revert checkbox
-                        SettingsTab.ChkOfflineMode.IsChecked = false;
+                        AppSettingsTab.ChkOfflineMode.IsChecked = false;
                         return;
                     }
                 }
@@ -2894,26 +2434,26 @@ namespace ConditioningControlPanel
             {
                 // === LOGIN BUTTONS (disable all of them) ===
 
-                // Patreon login button (in Patreon Exclusives tab)
-                if (PatreonTab.BtnPatreonLogin != null)
+                // Patreon login button (Settings · Account since Phase 2)
+                if (AppSettingsTab?.BtnPatreonLogin != null)
                 {
-                    PatreonTab.BtnPatreonLogin.IsEnabled = !isOffline;
-                    PatreonTab.BtnPatreonLogin.Opacity = isOffline ? 0.5 : 1.0;
+                    AppSettingsTab.BtnPatreonLogin.IsEnabled = !isOffline;
+                    AppSettingsTab.BtnPatreonLogin.Opacity = isOffline ? 0.5 : 1.0;
                     if (isOffline)
-                        PatreonTab.BtnPatreonLogin.ToolTip = Loc.Get("tooltip_disabled_in_offline_mode");
+                        AppSettingsTab.BtnPatreonLogin.ToolTip = Loc.Get("tooltip_disabled_in_offline_mode");
                     else
-                        PatreonTab.BtnPatreonLogin.ToolTip = null;
+                        AppSettingsTab.BtnPatreonLogin.ToolTip = null;
                 }
 
-                // Discord login button (in Patreon Exclusives tab)
-                if (PatreonTab.BtnDiscordLogin != null)
+                // Discord login button (Settings · Account since Phase 2)
+                if (AppSettingsTab?.BtnDiscordLogin != null)
                 {
-                    PatreonTab.BtnDiscordLogin.IsEnabled = !isOffline;
-                    PatreonTab.BtnDiscordLogin.Opacity = isOffline ? 0.5 : 1.0;
+                    AppSettingsTab.BtnDiscordLogin.IsEnabled = !isOffline;
+                    AppSettingsTab.BtnDiscordLogin.Opacity = isOffline ? 0.5 : 1.0;
                     if (isOffline)
-                        PatreonTab.BtnDiscordLogin.ToolTip = Loc.Get("tooltip_disabled_in_offline_mode");
+                        AppSettingsTab.BtnDiscordLogin.ToolTip = Loc.Get("tooltip_disabled_in_offline_mode");
                     else
-                        PatreonTab.BtnDiscordLogin.ToolTip = null;
+                        AppSettingsTab.BtnDiscordLogin.ToolTip = null;
                 }
 
                 // Unified login button (in main area)
@@ -3046,38 +2586,24 @@ namespace ConditioningControlPanel
             }
         }
 
-        internal void ChkDualMon_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            var isEnabled = SettingsTab.ChkDualMon.IsChecked ?? true;
-            App.Settings.Current.DualMonitorEnabled = isEnabled;
-
-            // Refresh all services if engine is running
-            if (_isRunning)
-            {
-                // Refresh overlays (pink filter, spiral, brain drain) - restart to add/remove monitor windows
-                App.Overlay.RefreshForDualMonitorChange();
-
-                // Bouncing text needs restart
-                App.BouncingText.Stop();
-                if (App.Settings.Current.BouncingTextEnabled)
-                {
-                    App.BouncingText.Start();
-                }
-
-                App.Logger?.Information("Dual monitor toggled: {Enabled} - services refreshed", isEnabled);
-            }
-
-            App.Settings.Save();
-        }
+        // PHASE 8 (demolition): ChkDualMon_Changed is gone with LegacyDashboardHost's ChkDualMon,
+        // its only binder. DualMonitorEnabled's live editor is
+        // Features/SystemFeatureControl.ChkMultiMon (reachable from the "System" quick-toggle pill).
+        //
+        // KNOWN GAP, PRE-EXISTING, NOT INTRODUCED HERE: this handler also refreshed services
+        // mid-session (App.Overlay.RefreshForDualMonitorChange + a BouncingText restart) so a
+        // monitor added or dropped while the engine ran took effect immediately.
+        // SystemFeatureControl.ChkMultiMon_Changed writes the setting and saves, and does not do
+        // that - but nobody could reach ChkDualMon since velvet-mosaic made this host Collapsed, so
+        // the refresh has been unreachable for just as long. If it is wanted back it belongs in
+        // Features/SystemFeatureControl.xaml.cs, next to the live toggle - not here.
 
         internal void ChkWinStart_Click(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
 
-            var isEnabled = SettingsTab.ChkWinStart.IsChecked ?? false;
-            var isHidden = SettingsTab.ChkStartHidden.IsChecked ?? false;
+            var isEnabled = AppSettingsTab.ChkWinStart.IsChecked ?? false;
+            var isHidden = AppSettingsTab.ChkStartHidden.IsChecked ?? false;
 
             if (isEnabled && isHidden)
             {
@@ -3090,7 +2616,7 @@ namespace ConditioningControlPanel
 
                 if (result != MessageBoxResult.Yes)
                 {
-                    SettingsTab.ChkWinStart.IsChecked = false;
+                    AppSettingsTab.ChkWinStart.IsChecked = false;
                     return;
                 }
             }
@@ -3103,8 +2629,8 @@ namespace ConditioningControlPanel
                     Loc.Get("title_startup_error"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
-                SettingsTab.ChkWinStart.IsChecked = StartupManager.IsRegistered();
-                App.Settings.Current.RunOnStartup = SettingsTab.ChkWinStart.IsChecked ?? false;
+                AppSettingsTab.ChkWinStart.IsChecked = StartupManager.IsRegistered();
+                App.Settings.Current.RunOnStartup = AppSettingsTab.ChkWinStart.IsChecked ?? false;
                 App.Settings.Save();
                 return;
             }
@@ -3119,8 +2645,8 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
 
-            var isStartup = SettingsTab.ChkWinStart.IsChecked ?? false;
-            var isHidden = SettingsTab.ChkStartHidden.IsChecked ?? false;
+            var isStartup = AppSettingsTab.ChkWinStart.IsChecked ?? false;
+            var isHidden = AppSettingsTab.ChkStartHidden.IsChecked ?? false;
 
             if (isStartup && isHidden)
             {
@@ -3133,7 +2659,7 @@ namespace ConditioningControlPanel
 
                 if (result != MessageBoxResult.Yes)
                 {
-                    SettingsTab.ChkStartHidden.IsChecked = false;
+                    AppSettingsTab.ChkStartHidden.IsChecked = false;
                 }
             }
         }

@@ -9,6 +9,11 @@
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
     <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
         <!-- Hidden container for named elements (used programmatically) -->
         <StackPanel Visibility="Collapsed">
             <TextBlock x:Name="TxtSkillPoints" x:FieldModifier="internal" Text="0"/>
@@ -19,7 +24,7 @@
             <Border x:Name="ActiveBonusesPanel" x:FieldModifier="internal"/>
         </StackPanel>
 
-        <Border x:Name="SkillTreeOuterBorder" x:FieldModifier="internal" Background="#151528" CornerRadius="12" Padding="5" Margin="20,5,20,20">
+        <Border x:Name="SkillTreeOuterBorder" x:FieldModifier="internal" Background="#151528" CornerRadius="12" Padding="5" Margin="20,5,20,10">
             <Grid ClipToBounds="True">
                 <!-- ============================================================ -->
                 <!-- The tab's one ambient particle loop, behind the tree.        -->
@@ -51,8 +56,44 @@
             </Grid>
         </Border>
 
+        <!-- ============================================================ -->
+        <!-- Secret skills rail.                                          -->
+        <!--                                                              -->
+        <!-- The three IsSecret nodes are deliberately kept OFF the tree  -->
+        <!-- canvas (DrawSkillTree filters them out): a secret that owns  -->
+        <!-- a visible slot between two ordinary nodes stops being one,   -->
+        <!-- and it has no prerequisite to hang a connection line off.    -->
+        <!-- They live here instead, filled by PopulateSecretSkills - one -->
+        <!-- card per secret, "???" until its requirement is met.         -->
+        <!--                                                              -->
+        <!-- HEIGHT IS BUDGETED. The tab is ~620dip tall and the tree     -->
+        <!-- above needs ~505 of it (460 canvas + 20 scrollbar + padding  -->
+        <!-- + margins) with no vertical scroll to fall back on, so this  -->
+        <!-- row must stay under ~90dip end to end. That is what sizes    -->
+        <!-- the cards (SecretCardHeight in MainWindow.Enhancements.cs)   -->
+        <!-- and why the section title sits beside them, not above.       -->
+        <!-- ============================================================ -->
+        <Border Grid.Row="1" Background="#151528" CornerRadius="12" Padding="14,6,14,8" Margin="20,0,20,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center" Margin="0,0,14,0">
+                    <helpers:EmojiTextBlock Text="{loc:Str label_secret_skills}"
+                                            Foreground="{DynamicResource PinkBrush}"
+                                            FontSize="12" FontWeight="Bold"/>
+                    <TextBlock Text="{loc:Str label_secret_skills_sub}"
+                               Foreground="#8A8AA0" FontSize="9" FontStyle="Italic"
+                               Margin="0,1,0,0"/>
+                </StackPanel>
+                <WrapPanel x:Name="SecretSkills" x:FieldModifier="internal" Grid.Column="1"
+                           Orientation="Horizontal" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
         <!-- Login Required Overlay -->
-        <Border x:Name="EnhancementsLoginOverlay" x:FieldModifier="internal" Background="#E6151528" CornerRadius="12" Visibility="Collapsed">
+        <Border x:Name="EnhancementsLoginOverlay" x:FieldModifier="internal" Grid.RowSpan="2" Background="#E6151528" CornerRadius="12" Visibility="Collapsed">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40">
                 <Image Width="52" Height="52" HorizontalAlignment="Center" Margin="0,0,0,15" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
                 <TextBlock Text="{loc:Str label_login_required}" Foreground="{DynamicResource PinkBrush}" FontSize="22" FontWeight="Bold"

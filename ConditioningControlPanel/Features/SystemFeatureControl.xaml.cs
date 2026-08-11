@@ -48,27 +48,29 @@ namespace ConditioningControlPanel.Features
                 ChkVideoGpuDecode.IsChecked = s.VideoForceHardwareDecoding;
                 ChkVideoBlurBg.IsChecked = s.VideoBlurredBackgroundEnabled;
                 ChkBrowserVideoEngine.IsChecked = s.BrowserVideoEngineEnabled;
-                ChkWinStart.IsChecked = Services.StartupManager.IsRegistered();
-                ChkVidLaunch.IsChecked = s.ForceVideoOnLaunch;
-                ChkAutoRun.IsChecked = s.AutoStartEngine;
-                ChkStartHidden.IsChecked = s.StartMinimized;
-                ChkNoPanic.IsChecked = !s.PanicKeyEnabled;
-                ChkOfflineMode.IsChecked = s.OfflineMode;
+                // Startup group + offline mode: read-only mirrors since Phase 2 of the UX
+                // restructure. Both were second live editors of settings whose real owner is the
+                // Settings door - the startup four because MainWindow addresses the dashboard copy
+                // by name, offline mode because its two-way sync had to be spelled twice. Painting
+                // is all that is left; the PropertyChanged subscription keeps it current while the
+                // popup is open.
+                TxtStartupGroupState.Text = DescribeStartupGroup(s);
+                TxtOfflineModeState.Text = Loc.Get(s.OfflineMode ? "set2_chip_on" : "set2_chip_off");
 
                 TxtStartupVideo.Text = string.IsNullOrEmpty(s.StartupVideoPath)
                     ? Loc.Get("label_random")
                     : Path.GetFileName(s.StartupVideoPath);
 
-                // Skip overwriting the button while we're showing the "Press any key..."
-                // prompt — LoadFromSettings runs on Loaded and on unrelated property changes,
-                // and we don't want it to clobber the in-progress capture state.
-                if (!_capturingPanicKey)
-                    BtnPanicKey.Content = $"🔑 {s.PanicKey}";
+                // Panic key: read-only mirrors since Phase 2 of the UX restructure. The toggle and
+                // the rebind button that used to live here were the second live editor of
+                // PanicKeyEnabled / PanicKey (the other is Settings -> Devices), which meant the
+                // double-confirm and the keyboard-hook start/stop were spelled twice. Painting is
+                // all that is left, and the PropertyChanged subscription above keeps it current.
+                TxtPanicKeyState.Text = $"🔑 {s.PanicKey}";
+                TxtNoPanicState.Text = Loc.Get(s.PanicKeyEnabled ? "set2_chip_off" : "set2_chip_on");
             }
             finally { _isLoading = false; }
         }
-
-        private bool _capturingPanicKey;
 
         private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
@@ -140,164 +142,49 @@ namespace ConditioningControlPanel.Features
             App.Logger?.Information("Browser video engine set to {Enabled} (System popup)", s.BrowserVideoEngineEnabled);
         }
 
-        private void ChkVidLaunch_Changed(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// One line summarising the four startup switches for the read-only row. Each is named only
+        /// when it is ON, so the common "nothing special" case reads as a single calm phrase instead
+        /// of four "Off"s.
+        /// </summary>
+        private static string DescribeStartupGroup(Models.AppSettings s)
         {
-            if (_isLoading) return;
-            var s = App.Settings?.Current;
-            if (s == null) return;
-            s.ForceVideoOnLaunch = ChkVidLaunch.IsChecked ?? false;
-            App.Settings?.Save();
+            var parts = new System.Collections.Generic.List<string>();
+            if (Services.StartupManager.IsRegistered()) parts.Add(Loc.Get("setting_win_start"));
+            if (s.StartMinimized) parts.Add(Loc.Get("setting_start_hidden"));
+            if (s.AutoStartEngine) parts.Add(Loc.Get("setting_auto_run"));
+            if (s.ForceVideoOnLaunch) parts.Add(Loc.Get("setting_vid_launch"));
+            return parts.Count == 0
+                ? Loc.Get("set2_startup_group_none")
+                : string.Join(" · ", parts);
         }
 
-        private void ChkAutoRun_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current;
-            if (s == null) return;
-            s.AutoStartEngine = ChkAutoRun.IsChecked ?? false;
-            App.Settings?.Save();
-        }
+        // ChkVidLaunch_Changed / ChkAutoRun_Changed / ChkStartHidden_Changed / ChkWinStart_Changed
+        // lived here. They were the second live editor of ForceVideoOnLaunch, AutoStartEngine,
+        // StartMinimized and RunOnStartup - the first being the dashboard copies that MainWindow
+        // addresses by x:Name. Phase 2 moved those copies into Settings -> General (one editor
+        // each) and left this popup with the read-out above.
+        // MainWindow.RequestToggleWindowsStartup survives: it is the safe way for any future
+        // non-UI caller to flip the OS shortcut and the checkbox together.
 
-        private void ChkStartHidden_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current;
-            if (s == null) return;
-            s.StartMinimized = ChkStartHidden.IsChecked ?? false;
-            App.Settings?.Save();
-        }
+        // ChkNoPanic_Changed lived here. It was a full second implementation of the panic-key
+        // kill switch - double-confirm dialog, deferred revert, then Main.SyncNoPanicState() - for a
+        // toggle that had a twin on the dashboard. Phase 2 gave PanicKeyEnabled one editor
+        // (Settings -> Devices) and this control keeps only the read-out.
 
-        // ---- Complex toggles delegated to MainWindow helpers ----
+        // ChkOfflineMode_Changed lived here: a second copy of the offline-mode flow, username
+        // prompt and all. Settings -> Data owns OfflineMode now (Phase 2); MainWindow's
+        // ApplyOfflineMode / SyncOfflineModeState still exist for non-UI callers.
 
-        private void ChkWinStart_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var enable = ChkWinStart.IsChecked ?? false;
-            var actual = Main?.RequestToggleWindowsStartup(enable) ?? enable;
-            if (actual != enable)
-            {
-                // Revert to reflect the authoritative StartupManager state.
-                _isLoading = true;
-                try { ChkWinStart.IsChecked = actual; }
-                finally { _isLoading = false; }
-            }
-        }
+        // BtnPanicKey_Click lived here: a second launcher for MainWindow's panic-key capture,
+        // with its own "Press any key..." state machine and a one-shot PropertyChanged listener to
+        // confirm the new binding. Both launchers had to agree on that state, which is exactly the
+        // kind of duplication Phase 2 removed - the rebind button is in Settings -> Devices.
+        private void BtnOpenDeviceSettings_Click(object sender, RoutedEventArgs e) => Main?.OpenDeviceSettings();
 
-        private void ChkNoPanic_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current;
-            if (s == null) return;
+        private void BtnOpenGeneralSettings_Click(object sender, RoutedEventArgs e) => Main?.OpenAppSettingsSection("general");
 
-            var disablePanic = ChkNoPanic.IsChecked ?? false;
-
-            if (disablePanic)
-            {
-                // Show confirmation dialog
-                var confirmed = WarningDialog.ShowDoubleWarning(
-                    Application.Current.MainWindow ?? Window.GetWindow(this),
-                    "Disable Panic Key",
-                    "• You will have NO emergency escape option\n" +
-                    "• The ONLY way to exit will be the Exit button\n" +
-                    "• Combined with Strict Lock, this is VERY restrictive\n" +
-                    "• Make sure you know what you're doing!");
-
-                if (!confirmed)
-                {
-                    Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        _isLoading = true;
-                        ChkNoPanic.IsChecked = false;
-                        _isLoading = false;
-                    }));
-                    return;
-                }
-            }
-
-            s.PanicKeyEnabled = !disablePanic;
-            App.Settings?.Save();
-
-            // Sync MainWindow keyboard hook + checkbox
-            Main?.SyncNoPanicState();
-        }
-
-        private void ChkOfflineMode_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current;
-            if (s == null) return;
-
-            var enable = ChkOfflineMode.IsChecked ?? false;
-
-            if (enable && string.IsNullOrWhiteSpace(s.OfflineUsername))
-            {
-                var dialog = new OfflineUsernameDialog();
-                dialog.Owner = Application.Current.MainWindow ?? Window.GetWindow(this);
-                dialog.Topmost = true;
-
-                if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.Username))
-                {
-                    s.OfflineUsername = dialog.Username;
-                }
-                else
-                {
-                    Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        _isLoading = true;
-                        ChkOfflineMode.IsChecked = false;
-                        _isLoading = false;
-                    }));
-                    return;
-                }
-            }
-
-            s.OfflineMode = enable;
-            App.Settings?.Save();
-
-            // Sync MainWindow UI (login buttons, browser, etc.) + checkbox
-            Main?.SyncOfflineModeState();
-        }
-
-        private void BtnPanicKey_Click(object sender, RoutedEventArgs e)
-        {
-            if (_capturingPanicKey) return;
-            _capturingPanicKey = true;
-            BtnPanicKey.Content = Loc.Get("msg_press_any_key_to_set_as_the_new_panic_key");
-            BtnPanicKey.IsEnabled = false;
-
-            // Subscribe to the next PanicKey change so we can confirm and re-enable.
-            // Use a one-shot handler so subsequent edits behave normally.
-            void OnPanicKeyChanged(object? s, PropertyChangedEventArgs ev)
-            {
-                if (ev.PropertyName != nameof(Models.AppSettings.PanicKey)) return;
-                if (App.Settings?.Current is INotifyPropertyChanged inpc)
-                    inpc.PropertyChanged -= OnPanicKeyChanged;
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    var newKey = App.Settings?.Current?.PanicKey ?? "?";
-                    _capturingPanicKey = false;
-                    BtnPanicKey.IsEnabled = true;
-                    // Brief confirmation, then settle into normal label.
-                    BtnPanicKey.Content = $"✓ {newKey}";
-                    var t = new System.Windows.Threading.DispatcherTimer
-                    {
-                        Interval = TimeSpan.FromMilliseconds(1200)
-                    };
-                    t.Tick += (_, __) =>
-                    {
-                        t.Stop();
-                        BtnPanicKey.Content = $"🔑 {newKey}";
-                    };
-                    t.Start();
-                }));
-            }
-            if (App.Settings?.Current is INotifyPropertyChanged inpc2)
-                inpc2.PropertyChanged += OnPanicKeyChanged;
-
-            Main?.RequestBeginPanicKeyCapture();
-        }
-
-        // ---- Asset folder / startup video ----
+        private void BtnOpenDataSettings_Click(object sender, RoutedEventArgs e) => Main?.OpenAppSettingsSection("data");
 
         private void BtnPickAssets_Click(object sender, RoutedEventArgs e)
         {
@@ -320,35 +207,8 @@ namespace ConditioningControlPanel.Features
             }
         }
 
-        private void BtnSelectStartupVideo_Click(object sender, RoutedEventArgs e)
-        {
-            var s = App.Settings?.Current;
-            if (s == null) return;
-
-            var dialog = new Microsoft.Win32.OpenFileDialog
-            {
-                Title = Loc.Get("title_select_startup_video"),
-                Filter = "Video Files|*.mp4;*.mov;*.avi;*.wmv;*.mkv;*.webm|All Files|*.*",
-                InitialDirectory = Path.Combine(App.EffectiveAssetsPath ?? "", "videos")
-            };
-
-            if (dialog.ShowDialog() == true)
-            {
-                s.StartupVideoPath = dialog.FileName;
-                TxtStartupVideo.Text = Path.GetFileName(dialog.FileName);
-                App.Settings?.Save();
-                App.Logger?.Information("Startup video set to: {Path}", dialog.FileName);
-            }
-        }
-
-        private void BtnClearStartupVideo_Click(object sender, RoutedEventArgs e)
-        {
-            var s = App.Settings?.Current;
-            if (s == null) return;
-            s.StartupVideoPath = null;
-            TxtStartupVideo.Text = Loc.Get("label_random");
-            App.Settings?.Save();
-            App.Logger?.Information("Startup video cleared - will use random");
-        }
+        // BtnSelectStartupVideo_Click / BtnClearStartupVideo_Click lived here and were the second
+        // editor of StartupVideoPath. The picker is in Settings -> General now (Phase 2); this
+        // popup shows the current pick and links there.
     }
 }

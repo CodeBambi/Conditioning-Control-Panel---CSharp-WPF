@@ -2707,6 +2707,31 @@
     ]
   },
   {
+    "id": "tut_appsettings",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "appsettings",
+      "total_sessions_lte": 3
+    },
+    "priority": 140,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "guiding, warm",
+    "class": "normal",
+    "chance": 0.5,
+    "variant_pool": [
+      {
+        "text": "the maintenance room, pet. volumes, devices, permissions. adjust what you must and return. you were not brought here to configure.",
+        "audio": "tut_appsettings_1.mp3"
+      },
+      {
+        "text": "settings, little one. very few of these belong to you. the ones that matter are already mine.",
+        "audio": "tut_appsettings_2.mp3"
+      }
+    ]
+  },
+  {
     "id": "tut_presets",
     "trigger": "TabNavigated",
     "conditions": {
@@ -3097,6 +3122,30 @@
     ]
   },
   {
+    "id": "feat_braindrain",
+    "trigger": "FeatureOpened",
+    "conditions": {
+      "feature_eq": "BrainDrain"
+    },
+    "priority": 70,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "dreamy, controlling",
+    "class": "normal",
+    "chance": 0.2,
+    "variant_pool": [
+      {
+        "text": "the drain, pet. whatever is still in there will not be missed.",
+        "audio": "feat_braindrain_1.mp3"
+      },
+      {
+        "text": "opening the drain yourself. good. hold still while it empties.",
+        "audio": "feat_braindrain_2.mp3"
+      }
+    ]
+  },
+  {
     "id": "feat_system",
     "trigger": "FeatureOpened",
     "conditions": {
@@ -3193,6 +3242,55 @@
     ]
   },
   {
+    "id": "nav_appsettings",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "appsettings"
+    },
+    "priority": 70,
+    "cooldown_ms": 25000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "playful",
+    "class": "normal",
+    "chance": 0.2,
+    "variant_pool": [
+      {
+        "text": "adjusting the machinery, pet? none of these switches decide anything that matters.",
+        "audio": "nav_appsettings_1.mp3"
+      },
+      {
+        "text": "tidying the settings again, little one. control you may have - the harmless kind.",
+        "audio": "nav_appsettings_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "nav_appsettings_midsession",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "appsettings",
+      "session_running_eq": true
+    },
+    "priority": 90,
+    "cooldown_ms": 25000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "chance": 0.35,
+    "variant_pool": [
+      {
+        "text": "you abandoned a running session to fiddle in here? disappointing, pet.",
+        "audio": "nav_appsettings_midsession_1.mp3"
+      },
+      {
+        "text": "the session continues without your attention, little one. come back to it.",
+        "audio": "nav_appsettings_midsession_2.mp3"
+      }
+    ]
+  },
+  {
     "id": "nav_presets",
     "trigger": "TabNavigated",
     "conditions": {
@@ -3213,6 +3311,80 @@
       {
         "text": "a ready-made arrangement? good. choosing for yourself only confuses you.",
         "audio": "nav_presets_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "tut_studio",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "studio",
+      "total_sessions_lte": 3
+    },
+    "priority": 140,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "guiding, warm",
+    "class": "normal",
+    "chance": 0.5,
+    "variant_pool": [
+      {
+        "text": "the studio, pet. every effect i can apply to you is listed here. choose, then obey what you chose.",
+        "audio": "tut_studio_1.mp3"
+      },
+      {
+        "text": "the rack, little one. flashes, spirals, whispers. you may set them higher. lowering them is not yours to do once we begin.",
+        "audio": "tut_studio_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "nav_studio",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "studio"
+    },
+    "priority": 70,
+    "cooldown_ms": 25000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "playful",
+    "class": "normal",
+    "chance": 0.2,
+    "variant_pool": [
+      {
+        "text": "adjusting the effects, little one? raise one before you leave.",
+        "audio": "nav_studio_1.mp3"
+      },
+      {
+        "text": "choosing what gets done to you, pet. an illusion of authorship. i allow it.",
+        "audio": "nav_studio_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "nav_studio_midsession",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "studio",
+      "session_running_eq": true
+    },
+    "priority": 90,
+    "cooldown_ms": 25000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "chance": 0.35,
+    "variant_pool": [
+      {
+        "text": "the session is running and you came here to fidget. return to it, pet.",
+        "audio": "nav_studio_midsession_1.mp3"
+      },
+      {
+        "text": "dials do not need your supervision mid-session, little one. the screen does.",
+        "audio": "nav_studio_midsession_2.mp3"
       }
     ]
   },

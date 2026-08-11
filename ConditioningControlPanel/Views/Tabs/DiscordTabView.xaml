@@ -440,7 +440,8 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <Border Grid.Column="0" Width="34" Height="34" CornerRadius="7" Background="{DynamicResource PanelAccentBrush}">
-                                        <Image x:Name="ImgStatXp" Source="pack://application:,,,/Resources/achievements/lv_10.png" Stretch="Uniform" Margin="2"/>
+                                        <Image x:Name="ImgStatXp" x:FieldModifier="internal"
+                                               Source="pack://application:,,,/Resources/achievements/lv_10.png" Stretch="Uniform" Margin="2"/>
                                     </Border>
                                     <TextBlock Grid.Column="1" Text="{loc:Str label_xp}" Foreground="#B8B1CC" FontSize="11"
                                                VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
@@ -457,7 +458,8 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <Border Grid.Column="0" Width="34" Height="34" CornerRadius="7" Background="{DynamicResource PanelAccentBrush}">
-                                        <Image x:Name="ImgStatBubbles" Source="pack://application:,,,/Resources/achievements/pop_the_Thought.png" Stretch="Uniform" Margin="2"/>
+                                        <Image x:Name="ImgStatBubbles" x:FieldModifier="internal"
+                                               Source="pack://application:,,,/Resources/achievements/pop_the_Thought.png" Stretch="Uniform" Margin="2"/>
                                     </Border>
                                     <TextBlock Grid.Column="1" Text="{loc:Str label_bubbles_2}" Foreground="#B8B1CC" FontSize="11"
                                                VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
@@ -474,7 +476,8 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <Border Grid.Column="0" Width="34" Height="34" CornerRadius="7" Background="{DynamicResource PanelAccentBrush}">
-                                        <Image x:Name="ImgStatVideos" Source="pack://application:,,,/Resources/achievements/10_hours_pink.png" Stretch="Uniform" Margin="2"/>
+                                        <Image x:Name="ImgStatVideos" x:FieldModifier="internal"
+                                               Source="pack://application:,,,/Resources/achievements/10_hours_pink.png" Stretch="Uniform" Margin="2"/>
                                     </Border>
                                     <TextBlock Grid.Column="1" Text="{loc:Str label_videos}" Foreground="#B8B1CC" FontSize="11"
                                                VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
@@ -491,7 +494,8 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <Border Grid.Column="0" Width="34" Height="34" CornerRadius="7" Background="{DynamicResource PanelAccentBrush}">
-                                        <Image x:Name="ImgStatGifs" Source="pack://application:,,,/Resources/achievements/retinal_burn.png" Stretch="Uniform" Margin="2"/>
+                                        <Image x:Name="ImgStatGifs" x:FieldModifier="internal"
+                                               Source="pack://application:,,,/Resources/achievements/retinal_burn.png" Stretch="Uniform" Margin="2"/>
                                     </Border>
                                     <TextBlock Grid.Column="1" Text="{loc:Str label_flashes}" Foreground="#B8B1CC" FontSize="11"
                                                VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
@@ -508,7 +512,8 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <Border Grid.Column="0" Width="34" Height="34" CornerRadius="7" Background="{DynamicResource PanelAccentBrush}">
-                                        <Image x:Name="ImgStatLockCards" Source="pack://application:,,,/Resources/achievements/total_lockdown.png" Stretch="Uniform" Margin="2"/>
+                                        <Image x:Name="ImgStatLockCards" x:FieldModifier="internal"
+                                               Source="pack://application:,,,/Resources/achievements/total_lockdown.png" Stretch="Uniform" Margin="2"/>
                                     </Border>
                                     <TextBlock Grid.Column="1" Text="{loc:Str label_lock_cards_2}" Foreground="#B8B1CC" FontSize="11"
                                                VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
@@ -525,7 +530,8 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <Border Grid.Column="0" Width="34" Height="34" CornerRadius="7" Background="{DynamicResource PanelAccentBrush}">
-                                        <Image x:Name="ImgStatAchievements" Source="pack://application:,,,/Resources/achievements/spiral_eyes.png" Stretch="Uniform" Margin="2"/>
+                                        <Image x:Name="ImgStatAchievements" x:FieldModifier="internal"
+                                               Source="pack://application:,,,/Resources/achievements/spiral_eyes.png" Stretch="Uniform" Margin="2"/>
                                     </Border>
                                     <TextBlock Grid.Column="1" Text="{loc:Str label_achievements}" Foreground="#B8B1CC" FontSize="11"
                                                VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>

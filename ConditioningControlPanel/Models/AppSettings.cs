@@ -1573,6 +1573,20 @@ namespace ConditioningControlPanel.Models
             set { _firstRunAssetsPromptShown = value; OnPropertyChanged(); }
         }
 
+        private string _dailyGiftLastRevealDate = "";
+        /// <summary>
+        /// Local date stamp ("yyyy-MM-dd") of the last day the Dashboard's ? box was opened -
+        /// i.e. the first time the user HOVERED the tile that day and turned it to the reveal
+        /// face. It is only ever written from that hover, and it is what the tile's gold breath
+        /// is gated on: unopened today = the badge and ring keep breathing, opened = they rest
+        /// until tomorrow. See MainWindow.DashboardFx.cs, region 2c (RequestMysteryFace).
+        /// </summary>
+        public string DailyGiftLastRevealDate
+        {
+            get => _dailyGiftLastRevealDate;
+            set { _dailyGiftLastRevealDate = value ?? ""; OnPropertyChanged(); }
+        }
+
         #region Active Assets
 
         private HashSet<string> _activeAssetPaths = new();
@@ -2239,6 +2253,27 @@ namespace ConditioningControlPanel.Models
         [Newtonsoft.Json.JsonIgnore]
         [System.Text.Json.Serialization.JsonIgnore]
         public bool HasCachedPremiumAccess => _patreonPremiumValidUntil.HasValue && DateTime.UtcNow < _patreonPremiumValidUntil.Value;
+
+        private DateTime? _patreonLabValidUntil = null;
+        /// <summary>
+        /// Tier-2 twin of <see cref="PatreonPremiumValidUntil"/>: stamped only when a validation
+        /// actually returned Level2, so the Lab grace can never be inferred from a tier number that
+        /// was cached once and then never expired. Same 14-day window as premium.
+        /// Absent from an older settings file → null → no grace (deliberate: no free Lab on upgrade).
+        /// </summary>
+        [JsonProperty("patreon_lab_valid_until")]
+        public DateTime? PatreonLabValidUntil
+        {
+            get => _patreonLabValidUntil;
+            set { _patreonLabValidUntil = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Check if cached Patreon Lab (tier 2) access is still valid (within the 2-week window)
+        /// </summary>
+        [Newtonsoft.Json.JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool HasCachedLabAccess => _patreonLabValidUntil.HasValue && DateTime.UtcNow < _patreonLabValidUntil.Value;
 
         #endregion
 

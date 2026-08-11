@@ -45,6 +45,27 @@ public class SkillDefinition
     /// <summary>Localized skill flavor text (falls back to hardcoded FlavorText)</summary>
     public string LocalizedFlavorText => Loc.Get($"skill_{Id}_flavor");
 
+    /// <summary>
+    /// Localized "how do I reveal this?" line for a secret skill. Three-step fallback, and the
+    /// order matters: the per-skill key, then <see cref="SecretRequirementDesc"/> (the English
+    /// source of truth), then the generic unknown-requirement string. Loc.Get echoes the key back
+    /// when nothing resolves, so the identity check is what stops a card from rendering the raw
+    /// key "rf_skill_night_shift_req" at a user - which is strictly worse than English prose.
+    /// </summary>
+    public string LocalizedSecretRequirementDesc
+    {
+        get
+        {
+            if (!IsSecret) return SecretRequirementDesc ?? string.Empty;
+
+            var key = $"rf_skill_{Id}_req";
+            var text = Loc.Get(key);
+            if (!string.IsNullOrEmpty(text) && text != key) return text;
+
+            return SecretRequirementDesc ?? Loc.Get("label_secret_skill_unknown_req");
+        }
+    }
+
     /// <summary>Ids of all permanent (season-persistent) skills.</summary>
     public static IReadOnlyList<string> PermanentIds { get; } =
         new List<string>

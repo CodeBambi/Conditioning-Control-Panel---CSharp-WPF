@@ -189,7 +189,13 @@ namespace ConditioningControlPanel.Services.Haptics.Core
             get
             {
                 if (!_settings.Enabled && Environment.TickCount64 > Interlocked.Read(ref _testGateUntil)) return false;
-                try { return App.Patreon?.HasPremiumAccess ?? false; }
+                // The ? box's free day opens this gate too, or the rail chip would flip the
+                // toggle while the mixer stayed silent (DailyFreeService).
+                try
+                {
+                    return (App.Patreon?.HasPremiumAccess ?? false)
+                           || App.DailyFree?.IsFreeToday("haptics") == true;
+                }
                 catch { return false; }
             }
         }

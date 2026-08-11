@@ -87,27 +87,34 @@ namespace ConditioningControlPanel
 
                 // Show unified DisplayName if available, otherwise Patreon display name
                 var nameToShow = unifiedDisplayName ?? patreonDisplayName;
-                PatreonTab.TxtPatreonStatus.Text = string.IsNullOrEmpty(nameToShow) ? "Connected to Patreon" : $"Welcome, {nameToShow}!";
-                PatreonTab.TxtPatreonTier.Text = tier switch
+                AppSettingsTab.TxtPatreonStatus.Text = string.IsNullOrEmpty(nameToShow) ? "Connected to Patreon" : $"Welcome, {nameToShow}!";
+                AppSettingsTab.TxtPatreonTier.Text = tier switch
                 {
                     PatreonTier.Level2 => Loc.Get("label_patreon_tier_level2"),
                     PatreonTier.Level1 => Loc.Get("label_patreon_tier_level1"),
                     _ when isWhitelisted => Loc.Get("label_patreon_tier_whitelisted"),
                     _ => Loc.Get(isActivePatron ? "label_patreon_tier_patron" : "label_patreon_tier_connected")
                 };
-                PatreonTab.BtnPatreonLogin.Content = Loc.Get("btn_logout");
+                AppSettingsTab.BtnPatreonLogin.Content = Loc.Get("btn_logout");
             }
             else
             {
                 // Check if user is logged in with another provider (has unified_id)
                 var hasUnifiedId = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
 
-                PatreonTab.TxtPatreonStatus.Text = Loc.Get("label_not_connected");
-                PatreonTab.TxtPatreonTier.Text = Loc.Get("label_login_to_unlock_exclusive_features");
+                AppSettingsTab.TxtPatreonStatus.Text = Loc.Get("label_not_connected");
+                AppSettingsTab.TxtPatreonTier.Text = Loc.Get("label_login_to_unlock_exclusive_features");
 
                 // Show "Link Patreon" if logged in via Discord, otherwise "Login"
-                PatreonTab.BtnPatreonLogin.Content = hasUnifiedId ? "Link Patreon" : "Login";
+                AppSettingsTab.BtnPatreonLogin.Content = hasUnifiedId ? "Link Patreon" : "Login";
             }
+
+            // Phase 2: the Settings/Account tier card rides this method for the same reason the
+            // header chip rides UpdateLevelDisplay - it is the choke point every auth change
+            // already runs through (TierChanged for both providers, ClearAccountData, every
+            // login/link flow). The section also repaints itself when it becomes visible, so a
+            // missed call here degrades to "stale until you leave and come back", never to wrong.
+            AppSettingsTab?.RefreshAccountTierBadge();
 
             // The page-wide AI lock veil is gone (design §6: superseded). Logged-out is an inline
             // row in the Engine Room and a teaser on the chat card, so the Companion page never
@@ -120,8 +127,9 @@ namespace ConditioningControlPanel
             var level1Unlocked = hasPremiumAccess;
             var level2Unlocked = hasPremiumAccess; // Same as Level 1 now - all features at Tier 1
 
-            // Master overlay for the entire features grid
-            PatreonTab.PatreonFeaturesOverlay.Visibility = hasPremiumAccess ? Visibility.Collapsed : Visibility.Visible;
+            // PHASE 8: PatreonFeaturesOverlay - the one big "become a patron" veil over the old
+            // Exclusives grid - went with PatreonTabView. The Play door's per-card lockbands
+            // (RefreshPlayCards, below) are the wall now, and they repaint on this same path.
 
             // Keep the patron-achievements section lock + counts in sync with entitlement.
             UpdateAchievementCount();
@@ -148,6 +156,10 @@ namespace ConditioningControlPanel
             RefreshPremiumGate(LockdownTab.LockdownGate);
             if (SheListeningTab != null) RefreshPremiumGate(SheListeningTab.SheListeningGate);
             if (GradedIntakeTab != null) RefreshGradedIntakeGate();
+            // PHASE 6: the Play door's wall is per-card lockbands, not one overlay, so entitlement
+            // arriving (or lapsing) has to repaint it the same way it repaints every gate above.
+            // This is also the path that covers the free-user logout, where no TierChanged fires.
+            RefreshPlayCards();
 
             // Weekly intake pass. It is a FREE-TIER amenity - patrons have the feature outright and
             // must never see pass UI - so every surface that paints off IntakePassService has to be
@@ -214,12 +226,13 @@ namespace ConditioningControlPanel
 
             // Re-evaluate keyword triggers access (may have been disabled before Patreon validated)
             var hasKeywordAccess = KeywordTriggerService.HasAccess();
-            if (PatreonTab.TxtKeywordTriggersLocked != null)
-                PatreonTab.TxtKeywordTriggersLocked.Visibility = hasKeywordAccess ? Visibility.Collapsed : Visibility.Visible;
-            if (PatreonTab.BtnKeywordTriggersStartStop != null)
-                PatreonTab.BtnKeywordTriggersStartStop.IsEnabled = hasKeywordAccess;
-            if (PatreonTab.ChkScreenOcrEnabled != null)
-                PatreonTab.ChkScreenOcrEnabled.IsEnabled = hasKeywordAccess;
+            // PHASE 5 (G3) + PHASE 8: the live editors are on the Awareness tab, and the OCR detail
+            // rows are hidden until access is confirmed - re-seed them with the fresh verdict.
+            // The three PatreonTab twins that used to be gated here (TxtKeywordTriggersLocked,
+            // BtnKeywordTriggersStartStop, ChkScreenOcrEnabled) died with PatreonTabView;
+            // SyncKeywordRescuePanelUi re-derives every one of those states from
+            // KeywordTriggerService.HasAccess() itself.
+            SyncKeywordRescuePanelUi();
 
             // If triggers were enabled in settings but couldn't start earlier (Patreon not validated yet),
             // start them now that access is confirmed
@@ -241,92 +254,14 @@ namespace ConditioningControlPanel
         }
 
         // ========================================================================
-        // Account sections reparenting (App Info & Data popup)
+        // Account sections reparenting — RETIRED in Phase 2 (gap-report R-2)
         // ========================================================================
-        // The Patreon login card, Discord login card, PatreonTab.AccountLinkingSection,
-        // PatreonTab.CloudSettingsBackupSection and PatreonTab.DataPrivacySection live physically inside
-        // PatreonTab's XAML tree (so their x:Name fields resolve for ~64 handler
-        // references across this file). When the dashboard's "App Info & Data"
-        // popup opens, we temporarily detach these Borders and attach them to the
-        // popup's host StackPanel so the user can manage their account/data from
-        // the dashboard. When the popup closes we put them back — the same element
-        // instances, so all handler refs remain valid.
-
-        private readonly System.Collections.Generic.List<System.Windows.FrameworkElement> _detachedAccountSections = new();
-
-        /// <summary>
-        /// Detaches the account/data sections from PatreonTab's content StackPanel
-        /// and attaches them to the provided target host (usually the AppInfoFeatureControl's
-        /// ExternalSectionsHost). Called when the App Info &amp; Data popup opens.
-        /// </summary>
-        internal void DetachAccountSectionsInto(System.Windows.Controls.Panel target)
-        {
-            if (target == null) return;
-            if (_detachedAccountSections.Count > 0) return; // already detached
-
-            // Order matters — this is the vertical order they'll appear in the popup.
-            var toMove = new System.Windows.FrameworkElement?[]
-            {
-                PatreonTab.PatreonLoginCard,
-                PatreonTab.SubscribeStarLoginCard,
-                PatreonTab.DiscordLoginCard,
-                PatreonTab.AccountLinkingSection,
-                PatreonTab.CloudSettingsBackupSection,
-                PatreonTab.DataPrivacySection,
-                PatreonTab.SupportDevelopmentCard,
-            };
-
-            foreach (var fe in toMove)
-            {
-                if (fe == null) continue;
-
-                // Detach from whichever parent it currently has (defensive:
-                // could be PatreonTab.PatreonTabContent on first open, or a stale popup
-                // host if a previous close didn't clean up).
-                if (fe.Parent is System.Windows.Controls.Panel currentParent)
-                {
-                    currentParent.Children.Remove(fe);
-                }
-                else if (fe.Parent is System.Windows.Controls.ContentControl cc)
-                {
-                    cc.Content = null;
-                }
-
-                try
-                {
-                    target.Children.Add(fe);
-                    _detachedAccountSections.Add(fe);
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Warning(ex, "DetachAccountSectionsInto: failed to attach {Name}", fe.Name);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Returns the detached account/data sections to PatreonTab so their
-        /// x:Name references stay valid and they can be borrowed again next time
-        /// the popup opens. Called when the App Info &amp; Data popup closes.
-        /// </summary>
-        internal void ReattachAccountSections()
-        {
-            if (_detachedAccountSections.Count == 0 || PatreonTab.PatreonTabContent == null) return;
-
-            // Insert right after the header Grid (index 0), preserving the original order.
-            int insertAt = 1;
-            foreach (var fe in _detachedAccountSections)
-            {
-                if (fe.Parent is System.Windows.Controls.Panel currentParent)
-                    currentParent.Children.Remove(fe);
-
-                if (insertAt > PatreonTab.PatreonTabContent.Children.Count)
-                    insertAt = PatreonTab.PatreonTabContent.Children.Count;
-                PatreonTab.PatreonTabContent.Children.Insert(insertAt, fe);
-                insertAt++;
-            }
-            _detachedAccountSections.Clear();
-        }
+        // The seven account/data cards used to live in PatreonTab's XAML tree and were
+        // borrowed at runtime (DetachAccountSectionsInto / ReattachAccountSections) so the
+        // dashboard's "App Info & Data" popup could show them. They now live in
+        // Views/Controls/AppSettings/AccountSettingsSection.xaml, mounted permanently on
+        // AppSettingsTab — same element names, same handlers, no reparenting. The writes
+        // below read AppSettingsTab.X. The popup keeps only its About/version content.
 
         internal async void BtnPatreonLogin_Click(object sender, RoutedEventArgs e)
         {
@@ -358,8 +293,8 @@ namespace ConditioningControlPanel
                 if (hasUnifiedId)
                 {
                     // Link Patreon to existing account
-                    PatreonTab.BtnPatreonLogin.IsEnabled = false;
-                    PatreonTab.BtnPatreonLogin.Content = Loc.Get("login_connecting");
+                    AppSettingsTab.BtnPatreonLogin.IsEnabled = false;
+                    AppSettingsTab.BtnPatreonLogin.Content = Loc.Get("login_connecting");
 
                     try
                     {
@@ -387,7 +322,7 @@ namespace ConditioningControlPanel
                     }
                     finally
                     {
-                        PatreonTab.BtnPatreonLogin.IsEnabled = true;
+                        AppSettingsTab.BtnPatreonLogin.IsEnabled = true;
                         UpdatePatreonUI();
                     }
                 }
@@ -428,8 +363,8 @@ namespace ConditioningControlPanel
                 if (hasUnifiedId)
                 {
                     // Link Discord to existing account
-                    PatreonTab.BtnDiscordLogin.IsEnabled = false;
-                    PatreonTab.BtnDiscordLogin.Content = Loc.Get("login_connecting");
+                    AppSettingsTab.BtnDiscordLogin.IsEnabled = false;
+                    AppSettingsTab.BtnDiscordLogin.Content = Loc.Get("login_connecting");
 
                     try
                     {
@@ -457,7 +392,7 @@ namespace ConditioningControlPanel
                     }
                     finally
                     {
-                        PatreonTab.BtnDiscordLogin.IsEnabled = true;
+                        AppSettingsTab.BtnDiscordLogin.IsEnabled = true;
                         UpdateDiscordUI();
                     }
                 }
@@ -475,20 +410,20 @@ namespace ConditioningControlPanel
             {
                 // Use unified display name first, then fall back to Discord-specific
                 var discordDisplayName = App.Settings?.Current?.UserDisplayName ?? App.Discord.DisplayName;
-                PatreonTab.TxtDiscordStatus.Text = $"Connected as {discordDisplayName}";
-                PatreonTab.TxtDiscordInfo.Text = $"@{App.Discord.Username}";
-                PatreonTab.BtnDiscordLogin.Content = Loc.Get("btn_logout");
+                AppSettingsTab.TxtDiscordStatus.Text = $"Connected as {discordDisplayName}";
+                AppSettingsTab.TxtDiscordInfo.Text = $"@{App.Discord.Username}";
+                AppSettingsTab.BtnDiscordLogin.Content = Loc.Get("btn_logout");
             }
             else
             {
                 // Check if user is logged in with another provider (has unified_id)
                 var hasUnifiedId = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
 
-                PatreonTab.TxtDiscordStatus.Text = Loc.Get("label_not_connected");
-                PatreonTab.TxtDiscordInfo.Text = Loc.Get("label_link_discord_for_community_features");
+                AppSettingsTab.TxtDiscordStatus.Text = Loc.Get("label_not_connected");
+                AppSettingsTab.TxtDiscordInfo.Text = Loc.Get("label_link_discord_for_community_features");
 
                 // Show "Link Discord" if logged in via Patreon, otherwise "Login"
-                PatreonTab.BtnDiscordLogin.Content = hasUnifiedId ? "Link Discord" : "Login";
+                AppSettingsTab.BtnDiscordLogin.Content = hasUnifiedId ? "Link Discord" : "Login";
             }
 
             // Update XP bar login state when Discord auth changes
@@ -507,15 +442,15 @@ namespace ConditioningControlPanel
 
             // Show section only if logged in and missing at least one provider
             bool showLinkingSection = hasUnifiedId && (!hasLinkedPatreon || !hasLinkedDiscord);
-            PatreonTab.AccountLinkingSection.Visibility = showLinkingSection ? Visibility.Visible : Visibility.Collapsed;
+            AppSettingsTab.AccountLinkingSection.Visibility = showLinkingSection ? Visibility.Visible : Visibility.Collapsed;
 
             // Show individual buttons for unlinked providers
-            PatreonTab.BtnLinkPatreon.Visibility = (hasUnifiedId && !hasLinkedPatreon) ? Visibility.Visible : Visibility.Collapsed;
-            PatreonTab.BtnLinkDiscord.Visibility = (hasUnifiedId && !hasLinkedDiscord) ? Visibility.Visible : Visibility.Collapsed;
+            AppSettingsTab.BtnLinkPatreon.Visibility = (hasUnifiedId && !hasLinkedPatreon) ? Visibility.Visible : Visibility.Collapsed;
+            AppSettingsTab.BtnLinkDiscord.Visibility = (hasUnifiedId && !hasLinkedDiscord) ? Visibility.Visible : Visibility.Collapsed;
 
             // Show cloud settings backup section if user has a cloud identity
-            PatreonTab.CloudSettingsBackupSection.Visibility = hasUnifiedId ? Visibility.Visible : Visibility.Collapsed;
-            PatreonTab.DataPrivacySection.Visibility = hasUnifiedId ? Visibility.Visible : Visibility.Collapsed;
+            AppSettingsTab.CloudSettingsBackupSection.Visibility = hasUnifiedId ? Visibility.Visible : Visibility.Collapsed;
+            AppSettingsTab.DataPrivacySection.Visibility = hasUnifiedId ? Visibility.Visible : Visibility.Collapsed;
             if (hasUnifiedId)
             {
                 _ = UpdateBackupStatus();
@@ -529,8 +464,8 @@ namespace ConditioningControlPanel
         {
             if (App.Patreon == null) return;
 
-            PatreonTab.BtnLinkPatreon.IsEnabled = false;
-            PatreonTab.BtnLinkPatreon.Content = Loc.Get("login_connecting");
+            AppSettingsTab.BtnLinkPatreon.IsEnabled = false;
+            AppSettingsTab.BtnLinkPatreon.Content = Loc.Get("login_connecting");
 
             try
             {
@@ -559,8 +494,8 @@ namespace ConditioningControlPanel
             }
             finally
             {
-                PatreonTab.BtnLinkPatreon.IsEnabled = true;
-                PatreonTab.BtnLinkPatreon.Content = Loc.Get("btn_link_patreon");
+                AppSettingsTab.BtnLinkPatreon.IsEnabled = true;
+                AppSettingsTab.BtnLinkPatreon.Content = Loc.Get("btn_link_patreon");
             }
         }
 
@@ -571,8 +506,8 @@ namespace ConditioningControlPanel
         {
             if (App.Discord == null) return;
 
-            PatreonTab.BtnLinkDiscord.IsEnabled = false;
-            PatreonTab.BtnLinkDiscord.Content = Loc.Get("login_connecting");
+            AppSettingsTab.BtnLinkDiscord.IsEnabled = false;
+            AppSettingsTab.BtnLinkDiscord.Content = Loc.Get("login_connecting");
 
             try
             {
@@ -602,8 +537,8 @@ namespace ConditioningControlPanel
             }
             finally
             {
-                PatreonTab.BtnLinkDiscord.IsEnabled = true;
-                PatreonTab.BtnLinkDiscord.Content = Loc.Get("btn_link_discord");
+                AppSettingsTab.BtnLinkDiscord.IsEnabled = true;
+                AppSettingsTab.BtnLinkDiscord.Content = Loc.Get("btn_link_discord");
             }
         }
 
@@ -1435,8 +1370,8 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
             var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null || LabTab.ChkChatMemoryEnabled == null) return;
-            var on = LabTab.ChkChatMemoryEnabled.IsChecked == true;
+            if (s == null || CompanionTab.ChkChatMemoryEnabled == null) return;
+            var on = CompanionTab.ChkChatMemoryEnabled.IsChecked == true;
             if (s.ChatMemoryEnabled == on) return;
             s.ChatMemoryEnabled = on;
             App.Settings?.Save();
@@ -1459,14 +1394,39 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// The master "she may drive effects" switch, on the Companion door's permissions card
+        /// since Phase 5 of the UX restructure.
+        ///
+        /// <para>It carries the tier check the move made necessary. On the Lab tab the switch was
+        /// gated by geography — the whole page sat under LabSmokescreen — and the only thing left
+        /// after it was the force-clear in UpdateUnlockablesVisibility, which is a REPAIR (it undoes
+        /// a setting that outlived its entitlement) and not a gate (a Free account could still tick
+        /// the box and have it stick until the next refresh). The Companion door is Free/Tier 1, so
+        /// the bar has to be here.</para>
+        ///
+        /// <para>Only turning it ON is gated: unticking must always work, whatever the account.</para>
+        /// </summary>
         internal void ChkCapEffects_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
             var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null || LabTab.ChkCapEffects == null) return;
-            var on = LabTab.ChkCapEffects.IsChecked == true;
+            if (s == null || CompanionTab.ChkCapEffects == null) return;
+            var on = CompanionTab.ChkCapEffects.IsChecked == true;
+
+            if (on && !TierGate.DemandLab(Loc.Get("lab_ai_effects_memory_title")))
+            {
+                // Put the switch back without re-entering this handler, and leave the setting
+                // untouched — a refusal must not write.
+                var wasLoading = _isLoading;
+                _isLoading = true;
+                try { CompanionTab.ChkCapEffects.IsChecked = false; }
+                finally { _isLoading = wasLoading; }
+                return;
+            }
+
             s.AllowAiToControlEffects = on;
-            if (LabTab.EffectPermsPanel != null) LabTab.EffectPermsPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            if (CompanionTab.EffectPermsPanel != null) CompanionTab.EffectPermsPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
             App.Settings.Save();
         }
 
@@ -1497,20 +1457,21 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
             var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null || LabTab.SliderMaxHapticIntensity == null) return;
-            s.MaxAiHapticIntensity = LabTab.SliderMaxHapticIntensity.Value;
-            if (LabTab.TxtMaxHapticIntensity != null)
-                LabTab.TxtMaxHapticIntensity.Text = $"{(int)(LabTab.SliderMaxHapticIntensity.Value * 100)}%";
+            if (s == null || CompanionTab.SliderMaxHapticIntensity == null) return;
+            s.MaxAiHapticIntensity = CompanionTab.SliderMaxHapticIntensity.Value;
+            if (CompanionTab.TxtMaxHapticIntensity != null)
+                CompanionTab.TxtMaxHapticIntensity.Text = $"{(int)(CompanionTab.SliderMaxHapticIntensity.Value * 100)}%";
             App.Settings.Save();
         }
 
         /// <summary>
-        /// The two hero pills, plus the Lab tab's "needs local" notice.
+        /// The two hero pills, plus the permissions card's "needs a local model" notice.
         ///
         /// <para>The pills are Z1's now and derive their own text from the same settings this used
         /// to format (design §6: "kept — Z1, become deep-link buttons"), and the live-actions feed's
-        /// visibility is the Engine Room's. Both come from one re-read. The Lab notice is a
-        /// different tab and still has to be written here.</para>
+        /// visibility is the Engine Room's. Both come from one re-read. The notice is Z7b's — same
+        /// Companion page since Phase 5, one card below the drawer it points at, which is why the
+        /// deep link behind its button can simply open that drawer.</para>
         /// </summary>
         private void UpdateAiBrainPills()
         {
@@ -1520,8 +1481,8 @@ namespace ConditioningControlPanel
             CompanionRoom?.SyncBrain();
 
             var effectsActive = s.AiChatEnabled && ProviderSupportsEffects(s.CompanionPrompt.AiProvider);
-            if (LabTab.LabEffectsNeedsLocalNotice != null)
-                LabTab.LabEffectsNeedsLocalNotice.Visibility = effectsActive ? Visibility.Collapsed : Visibility.Visible;
+            if (CompanionTab.LabEffectsNeedsLocalNotice != null)
+                CompanionTab.LabEffectsNeedsLocalNotice.Visibility = effectsActive ? Visibility.Collapsed : Visibility.Visible;
         }
 
         // Providers that parse the model's response for command output and run it
@@ -1539,11 +1500,20 @@ namespace ConditioningControlPanel
         private void UpdateLiveActionsPlaceholder() => CompanionRoom?.EngineVm.Sync();
 
         /// <summary>
-        /// Populate the Lab tab's AI effect-permission controls from settings. These
-        /// checkboxes live on the Lab tab but were only synced when the Companion tab
-        /// was visited, so after a restart the Lab tab showed XAML defaults while the
-        /// persisted AllowAi* values kept gating effects — videos fired that the UI
-        /// said were off (#512). Called from SyncAiBrainUI and on Lab tab open.
+        /// Populate the AI effect-permission controls from settings.
+        ///
+        /// <para>The name is a fossil: since Phase 5 of the UX restructure these controls are Z7b of
+        /// the Companion room, not the Lab tab. The method survives verbatim because the bug it was
+        /// written for survives the move — the grid was only ever synced when the Companion tab was
+        /// visited, so after a restart it showed XAML defaults while the persisted AllowAi* values
+        /// kept gating effects, and videos fired that the UI said were off (#512). Now that the grid
+        /// IS on the Companion tab there is exactly one caller (SyncAiBrainUI, from
+        /// SyncCompanionTabUI, from ShowTab("companion")), which is the point: the sync and the
+        /// surface can no longer be on different pages.</para>
+        ///
+        /// <para>Ends on the tier gate so the lockband and the values it covers are always painted
+        /// in the same pass — a grid showing a legit T2 user's ticked boxes under a lock, or a
+        /// lapsed one's under none, would be worse than either state alone.</para>
         /// </summary>
         internal void SyncLabEffectPermsUI()
         {
@@ -1554,35 +1524,37 @@ namespace ConditioningControlPanel
             _isLoading = true;
             try
             {
-                if (LabTab.ChkCapEffects != null)
-                    LabTab.ChkCapEffects.IsChecked = s.CompanionPrompt.AllowAiToControlEffects;
-                if (LabTab.EffectPermsPanel != null)
-                    LabTab.EffectPermsPanel.Visibility = s.CompanionPrompt.AllowAiToControlEffects
+                if (CompanionTab.ChkCapEffects != null)
+                    CompanionTab.ChkCapEffects.IsChecked = s.CompanionPrompt.AllowAiToControlEffects;
+                if (CompanionTab.EffectPermsPanel != null)
+                    CompanionTab.EffectPermsPanel.Visibility = s.CompanionPrompt.AllowAiToControlEffects
                         ? Visibility.Visible : Visibility.Collapsed;
 
                 // Effect permission grid
-                if (LabTab.ChkAllowFlash != null)       LabTab.ChkAllowFlash.IsChecked       = s.CompanionPrompt.AllowAiFlash;
-                if (LabTab.ChkAllowVideo != null)       LabTab.ChkAllowVideo.IsChecked       = s.CompanionPrompt.AllowAiVideo;
-                if (LabTab.ChkAllowAudio != null)       LabTab.ChkAllowAudio.IsChecked       = s.CompanionPrompt.AllowAiAudio;
-                if (LabTab.ChkAllowBubbles != null)     LabTab.ChkAllowBubbles.IsChecked     = s.CompanionPrompt.AllowAiBubbles;
-                if (LabTab.ChkAllowSubliminal != null)  LabTab.ChkAllowSubliminal.IsChecked  = s.CompanionPrompt.AllowAiSubliminal;
-                if (LabTab.ChkAllowOverlay != null)     LabTab.ChkAllowOverlay.IsChecked     = s.CompanionPrompt.AllowAiOverlay;
-                if (LabTab.ChkAllowLockCard != null)    LabTab.ChkAllowLockCard.IsChecked    = s.CompanionPrompt.AllowAiLockCard;
-                if (LabTab.ChkAllowBounce != null)      LabTab.ChkAllowBounce.IsChecked      = s.CompanionPrompt.AllowAiBounce;
-                if (LabTab.ChkAllowHaptic != null)      LabTab.ChkAllowHaptic.IsChecked      = s.CompanionPrompt.AllowAiHaptic;
-                if (LabTab.ChkAllowGetBackToMe != null) LabTab.ChkAllowGetBackToMe.IsChecked = s.CompanionPrompt.AllowAiGetBackToMe;
+                if (CompanionTab.ChkAllowFlash != null)       CompanionTab.ChkAllowFlash.IsChecked       = s.CompanionPrompt.AllowAiFlash;
+                if (CompanionTab.ChkAllowVideo != null)       CompanionTab.ChkAllowVideo.IsChecked       = s.CompanionPrompt.AllowAiVideo;
+                if (CompanionTab.ChkAllowAudio != null)       CompanionTab.ChkAllowAudio.IsChecked       = s.CompanionPrompt.AllowAiAudio;
+                if (CompanionTab.ChkAllowBubbles != null)     CompanionTab.ChkAllowBubbles.IsChecked     = s.CompanionPrompt.AllowAiBubbles;
+                if (CompanionTab.ChkAllowSubliminal != null)  CompanionTab.ChkAllowSubliminal.IsChecked  = s.CompanionPrompt.AllowAiSubliminal;
+                if (CompanionTab.ChkAllowOverlay != null)     CompanionTab.ChkAllowOverlay.IsChecked     = s.CompanionPrompt.AllowAiOverlay;
+                if (CompanionTab.ChkAllowLockCard != null)    CompanionTab.ChkAllowLockCard.IsChecked    = s.CompanionPrompt.AllowAiLockCard;
+                if (CompanionTab.ChkAllowBounce != null)      CompanionTab.ChkAllowBounce.IsChecked      = s.CompanionPrompt.AllowAiBounce;
+                if (CompanionTab.ChkAllowHaptic != null)      CompanionTab.ChkAllowHaptic.IsChecked      = s.CompanionPrompt.AllowAiHaptic;
+                if (CompanionTab.ChkAllowGetBackToMe != null) CompanionTab.ChkAllowGetBackToMe.IsChecked = s.CompanionPrompt.AllowAiGetBackToMe;
 
                 // Max haptic intensity
-                if (LabTab.SliderMaxHapticIntensity != null) LabTab.SliderMaxHapticIntensity.Value = s.CompanionPrompt.MaxAiHapticIntensity;
-                if (LabTab.TxtMaxHapticIntensity != null)    LabTab.TxtMaxHapticIntensity.Text    = $"{(int)(s.CompanionPrompt.MaxAiHapticIntensity * 100)}%";
+                if (CompanionTab.SliderMaxHapticIntensity != null) CompanionTab.SliderMaxHapticIntensity.Value = s.CompanionPrompt.MaxAiHapticIntensity;
+                if (CompanionTab.TxtMaxHapticIntensity != null)    CompanionTab.TxtMaxHapticIntensity.Text    = $"{(int)(s.CompanionPrompt.MaxAiHapticIntensity * 100)}%";
 
                 // Chat memory toggle
-                if (LabTab.ChkChatMemoryEnabled != null) LabTab.ChkChatMemoryEnabled.IsChecked = s.CompanionPrompt.ChatMemoryEnabled;
+                if (CompanionTab.ChkChatMemoryEnabled != null) CompanionTab.ChkChatMemoryEnabled.IsChecked = s.CompanionPrompt.ChatMemoryEnabled;
             }
             finally
             {
                 _isLoading = wasLoading;
             }
+
+            CompanionTab.AiPermissions?.ApplyTierGate();
         }
 
         /// <summary>
@@ -1719,8 +1691,11 @@ namespace ConditioningControlPanel
             _isLoading = true;
             try
             {
-                // Settings tab - SettingsTab.ChkAudioWhispers represents "whispers enabled"
-                SettingsTab.ChkAudioWhispers.IsChecked = enabled;
+                // PHASE 8: the SettingsTab.ChkAudioWhispers mirror is gone with
+                // LegacyDashboardHost. The whispers ENABLE is SubAudioEnabled, whose only live
+                // editor is Features/SubliminalFeatureControl - which re-reads it on
+                // AppSettings.PropertyChanged, so the caller's write to s.SubAudioEnabled
+                // (ApplyVoiceMute) already repaints it. Nothing to push by hand.
 
                 // The Companion tab's box is a MUTE and no longer mirrors the enable, so it is
                 // driven from SubAudioMuted rather than !enabled (AppSettings.SubAudioMuted).
@@ -1770,8 +1745,8 @@ namespace ConditioningControlPanel
                 _isLoading = true;
                 try
                 {
-                    SettingsTab.SliderMaster.Value = s.MasterVolume;
-                    if (SettingsTab.TxtMaster != null) SettingsTab.TxtMaster.Text = $"{s.MasterVolume}%";
+                    AppSettingsTab.SliderMaster.Value = s.MasterVolume;
+                    if (AppSettingsTab.TxtMaster != null) AppSettingsTab.TxtMaster.Text = $"{s.MasterVolume}%";
                 }
                 finally { _isLoading = false; }
 
@@ -1808,8 +1783,8 @@ namespace ConditioningControlPanel
                 _isLoading = true;
                 try
                 {
-                    SettingsTab.SliderMaster.Value = s.MasterVolume;
-                    if (SettingsTab.TxtMaster != null) SettingsTab.TxtMaster.Text = $"{s.MasterVolume}%";
+                    AppSettingsTab.SliderMaster.Value = s.MasterVolume;
+                    if (AppSettingsTab.TxtMaster != null) AppSettingsTab.TxtMaster.Text = $"{s.MasterVolume}%";
                 }
                 finally { _isLoading = false; }
                 App.Settings?.Save();

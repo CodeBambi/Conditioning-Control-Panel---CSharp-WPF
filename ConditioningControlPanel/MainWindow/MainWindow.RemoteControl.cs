@@ -39,6 +39,22 @@ namespace ConditioningControlPanel
 
             if (isEnabled)
             {
+                // Hard gate on the host side only. RefreshPremiumGate drapes a Border over this
+                // tab, which leaves the toggle reachable by keyboard focus and by automation - and
+                // this handler is the one that mints a session code for someone else to drive.
+                // Browsing Available Subjects (controller side) stays free by design.
+                var gate = TierGate.RequiresPremium(Loc.Get("tab_remote_control"), "remote");
+                if (!gate.Allowed)
+                {
+                    // Revert before telling: same order as the login check below, so the toggle's
+                    // animation is already settled when the refusal surface appears.
+                    _isLoading = true;
+                    RemoteControlTab.ChkRemoteControlEnabled.IsChecked = false;
+                    _isLoading = false;
+                    TierGate.ShowDenied(gate);
+                    return;
+                }
+
                 // Must have a cloud identity (unified ID from Patreon or Discord login)
                 if (string.IsNullOrEmpty(App.UnifiedUserId))
                 {
@@ -463,7 +479,10 @@ namespace ConditioningControlPanel
 
         private bool _availableSubjectsBound;
 
-        private void BtnAvailableSubjects_Click(object sender, RoutedEventArgs e)
+        // internal since Phase 6: the Play door's Available Subjects card forwards to this exact
+        // handler rather than calling ShowTab itself, so the polling lifecycle keeps exactly one
+        // caller shape (start lives in ShowTab's own case, never on a card).
+        internal void BtnAvailableSubjects_Click(object sender, RoutedEventArgs e)
         {
             ShowTab("availablesubjects");
         }

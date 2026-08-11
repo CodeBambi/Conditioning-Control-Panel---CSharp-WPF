@@ -85,127 +85,99 @@
                               Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
                               Checked="ChkBrowserVideoEngine_Changed" Unchecked="ChkBrowserVideoEngine_Changed"/>
                 </Grid>
+                <!-- Read-only since Phase 2 of the UX restructure. The startup group (launch with
+                     Windows / video on launch / auto-start engine / start minimized) had two live
+                     editors: this popup and the dashboard copy that MainWindow's LoadSettings,
+                     SaveSettings, ChkWinStart_Click and RequestToggleWindowsStartup addressed by
+                     name. Settings → General owns them now; this is a read-out that
+                     LoadFromSettings keeps painted, plus a way to get there. -->
                 <Grid Margin="0,4">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                        <TextBlock Text="{loc:Str setting_win_start}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
-                        <TextBlock Text="{loc:Str tooltip_launch_automatically_when_windows_starts}"
+                        <TextBlock Text="{loc:Str set2_general_startup_title}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="TxtStartupGroupState" Text=""
                                    Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                    TextWrapping="Wrap" Margin="0,2,0,0"/>
                     </StackPanel>
-                    <CheckBox Grid.Column="1" x:Name="ChkWinStart"
-                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                              Checked="ChkWinStart_Changed" Unchecked="ChkWinStart_Changed"/>
+                    <Button Grid.Column="1" x:Name="BtnOpenGeneralSettings"
+                            Style="{DynamicResource OutlineButton}" Padding="10,5" FontSize="11"
+                            VerticalAlignment="Center"
+                            Content="{loc:Str set2_configure_in_settings}"
+                            Click="BtnOpenGeneralSettings_Click"/>
                 </Grid>
                 <Grid Margin="0,4">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                        <TextBlock Text="{loc:Str setting_vid_launch}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
-                        <TextBlock Text="{loc:Str tooltip_play_a_mandatory_video_when_app_opens}"
-                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                                   TextWrapping="Wrap" Margin="0,2,0,0"/>
-                    </StackPanel>
-                    <CheckBox Grid.Column="1" x:Name="ChkVidLaunch"
-                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                              Checked="ChkVidLaunch_Changed" Unchecked="ChkVidLaunch_Changed"/>
-                </Grid>
-                <Grid Margin="0,4">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                        <TextBlock Text="{loc:Str setting_auto_run}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
-                        <TextBlock Text="{loc:Str tooltip_start_the_engine_automatically_on_launch}"
-                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                                   TextWrapping="Wrap" Margin="0,2,0,0"/>
-                    </StackPanel>
-                    <CheckBox Grid.Column="1" x:Name="ChkAutoRun"
-                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                              Checked="ChkAutoRun_Changed" Unchecked="ChkAutoRun_Changed"/>
-                </Grid>
-                <Grid Margin="0,4">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                        <TextBlock Text="{loc:Str setting_start_hidden}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
-                        <TextBlock Text="{loc:Str tooltip_start_minimized_to_system_tray}"
-                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                                   TextWrapping="Wrap" Margin="0,2,0,0"/>
-                    </StackPanel>
-                    <CheckBox Grid.Column="1" x:Name="ChkStartHidden"
-                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                              Checked="ChkStartHidden_Changed" Unchecked="ChkStartHidden_Changed"/>
-                </Grid>
-                <Grid Margin="0,4">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
+                    <!-- Read-only since Phase 2 of the UX restructure. Settings → Devices owns the
+                         panic key: there used to be two live toggles for PanicKeyEnabled (this one
+                         and the dashboard's), and the double-confirm plus the keyboard-hook
+                         start/stop had to be spelled twice to keep them honest. This is a mirror of
+                         the current state now — LoadFromSettings still paints it, and the settings
+                         PropertyChanged subscription still keeps it fresh while the popup is open. -->
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                         <helpers:EmojiTextBlock Text="{loc:Str setting_no_panic}" Foreground="#FF6B6B" FontSize="13" FontWeight="SemiBold"/>
-                        <TextBlock Text="{loc:Str tooltip_danger_completely_disables_panic_key_you_won}"
+                        <TextBlock x:Name="TxtNoPanicState"
+                                   Text="{loc:Str set2_chip_off}"
                                    Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                    TextWrapping="Wrap" Margin="0,2,0,0"/>
                     </StackPanel>
-                    <CheckBox Grid.Column="1" x:Name="ChkNoPanic"
-                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                              Checked="ChkNoPanic_Changed" Unchecked="ChkNoPanic_Changed"/>
+                    <Button Grid.Column="1" x:Name="BtnOpenDeviceSettingsNoPanic"
+                            Style="{DynamicResource OutlineButton}" Padding="10,5" FontSize="11"
+                            VerticalAlignment="Center"
+                            Content="{loc:Str set2_configure_in_settings}"
+                            Click="BtnOpenDeviceSettings_Click"/>
                 </Grid>
                 <Grid Margin="0,4">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
+                    <!-- Read-only since Phase 2. Settings → Data owns OfflineMode: three MainWindow
+                         methods drive that checkbox by name so the two-way sync (network
+                         disconnect, login greying, banner) runs exactly once, and a second live
+                         toggle here meant that flow was written twice. -->
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                         <TextBlock Text="{loc:Str setting_offline_mode}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
-                        <TextBlock Text="{loc:Str tooltip_disable_all_network_features_updates_ai_leade}"
+                        <TextBlock x:Name="TxtOfflineModeState" Text="{loc:Str set2_chip_off}"
                                    Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                    TextWrapping="Wrap" Margin="0,2,0,0"/>
                     </StackPanel>
-                    <CheckBox Grid.Column="1" x:Name="ChkOfflineMode"
-                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                              Checked="ChkOfflineMode_Changed" Unchecked="ChkOfflineMode_Changed"/>
+                    <Button Grid.Column="1" x:Name="BtnOpenDataSettings"
+                            Style="{DynamicResource OutlineButton}" Padding="10,5" FontSize="11"
+                            VerticalAlignment="Center"
+                            Content="{loc:Str set2_configure_in_settings}"
+                            Click="BtnOpenDataSettings_Click"/>
                 </Grid>
             </StackPanel>
         </Border>
 
-        <!-- Startup video picker -->
+        <!-- Startup video: read-only since Phase 2, picker lives in Settings → General. -->
         <Border Background="{DynamicResource SurfaceBgBrush}"
                 BorderBrush="{DynamicResource GlassBorderBrush}"
                 BorderThickness="1" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">
-            <StackPanel>
-                <TextBlock Text="{loc:Str label_startup_video}" Foreground="White" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" x:Name="TxtStartupVideo"
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="{loc:Str label_startup_video}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="TxtStartupVideo"
                                Text="{loc:Str label_random}"
                                Foreground="{DynamicResource PinkBrush}" FontSize="12"
-                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                    <Button Grid.Column="1" Content="📁" Width="36"
-                            Style="{DynamicResource OutlineButton}"
-                            Padding="6,4" Margin="6,0,0,0"
-                            Click="BtnSelectStartupVideo_Click"
-                            ToolTip="{loc:Str tooltip_browse_for_startup_video}"/>
-                    <Button Grid.Column="2" Content="✕" Width="36"
-                            Style="{DynamicResource OutlineButton}"
-                            Padding="6,4" Margin="4,0,0,0"
-                            Click="BtnClearStartupVideo_Click"
-                            ToolTip="{loc:Str tooltip_clear_selection_use_random}"/>
-                </Grid>
-            </StackPanel>
+                               TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                </StackPanel>
+                <Button Grid.Column="1" x:Name="BtnOpenGeneralSettingsVideo"
+                        Style="{DynamicResource OutlineButton}" Padding="10,5" FontSize="11"
+                        VerticalAlignment="Center"
+                        Content="{loc:Str set2_configure_in_settings}"
+                        Click="BtnOpenGeneralSettings_Click"/>
+            </Grid>
         </Border>
 
         <!-- Assets folder -->
@@ -238,15 +210,18 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
+                <!-- Read-only. The rebind lives in Settings → Devices (Phase 2): the capture ladder
+                     itself was always MainWindow's, but two buttons drove it and each carried its
+                     own "Press any key…" state machine. This one just shows the binding. -->
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
                     <helpers:EmojiTextBlock Text="{loc:Str btn_escape}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
-                    <TextBlock Text="{loc:Str tooltip_click_to_change_panic_key}"
+                    <TextBlock Text="{loc:Str set2_panic_change_in_settings}"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,2,0,0"/>
                 </StackPanel>
-                <Button Grid.Column="1" x:Name="BtnPanicKey"
-                        Style="{DynamicResource OutlineButton}"
-                        Padding="12,6" Click="BtnPanicKey_Click"/>
+                <TextBlock Grid.Column="1" x:Name="TxtPanicKeyState" Text="🔑 —"
+                           Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"
+                           VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </StackPanel>

@@ -1,0 +1,1231 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Tabs.PlayTabView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+             xmlns:fx="clr-namespace:ConditioningControlPanel.Controls"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:local="clr-namespace:ConditioningControlPanel"
+             mc:Ignorable="d"
+             d:DesignHeight="450" d:DesignWidth="800">
+    <!--
+        ============================ THE PLAY DOOR (tab key "play") ============================
+        Phase 6 of the UX restructure. The page frame, the zone rules, the one ambient loop, the
+        shared card/lockband style vocabulary, and one card per named Slot* Grid. It owns NO
+        feature logic: every click is a one-line shim in PlayTabView.Cards.cs, and everything live
+        on the wall (lockbands, the intake's four pass states, the Goon perk line, the Deeper
+        master switch, the Bureau account chip) is painted by MainWindow.PlayTab.cs.
+
+        The Slot* Grids stay: they are the seam a later card is added at, and the reason three
+        agents could build this door without ever sharing a file. Card markup goes inside the
+        matching <Grid x:Name="Slot*">, shims go in a partial of their own
+        (Views\Tabs\PlayTabView.<Area>.cs), never in PlayTabView.xaml.cs. Same convention as
+        AppSettingsTabView (Phase 2) and StudioTabView (Phase 4).
+
+        Launch parity is the whole point of the slots. A card's button calls the SAME MainWindow
+        handler the old Lab button called, through a one-line shim
+        (`if (Window.GetWindow(this) is MainWindow mw) mw.<Handler>(sender, e);`). Nothing on this
+        surface may re-implement a launch.
+
+        NO SMOKESCREEN. The Lab tab gated itself with one overlay over the whole page; this door
+        mixes free (Goon join, Deeper, Bureau, Mantra, Available Subjects, Showcase), Tier 1
+        (Lockdown, Blink Trainer, For You, Remote Control) and Tier 2 (Rabbit Hole, Gaze, Focus
+        Gaze) in one wall, so the gate is PER CARD: a lockband (below) over the art, and the real
+        refusal in the handler via TierGate. The band is decoration - IsHitTestVisible=False - so
+        a locked click still reaches the handler and still raises the "See tiers" toast.
+    -->
+    <Grid>
+        <Grid.Resources>
+            <!-- ==================================================================
+                 Card vocabulary. Mod-aware by construction: every colour is a
+                 DynamicResource theme key, so the whole wall recolours with the
+                 active mod (drone -> green, Bambi -> pink, ...). Carried over from
+                 the Lab's LabCard/LabZoneTag/LabCardTitle so a moved card keeps the
+                 exact metrics it was authored against - the 9px Margin in
+                 particular IS the hover headroom (fx-inventory §12.8: measure with
+                 UIA, never eyeball).
+                 ================================================================== -->
+            <Style x:Key="PlayCard" TargetType="Border">
+                <Setter Property="CornerRadius" Value="16"/>
+                <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Padding" Value="22"/>
+                <Setter Property="Margin" Value="9"/>
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentHoverBrush}"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            <Style x:Key="PlayZoneTag" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+                <Setter Property="FontFamily" Value="Consolas"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+                <Setter Property="FontSize" Value="12"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="Margin" Value="0,0,14,0"/>
+            </Style>
+            <!-- The hairline that trails off to the right of a zone tag. Geometry only: the
+                 gradient stays INLINE on each Border (the same markup the Lab tab used), because
+                 a Freezable carrying a DynamicResource is not a shape this codebase proves out
+                 inside a Style setter value. Five copies of four lines beats one clever one. -->
+            <Style x:Key="PlayZoneRule" TargetType="Border">
+                <Setter Property="Height" Value="1"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
+            <Style x:Key="PlayCardTitle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+                <Setter Property="FontSize" Value="18"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
+            <Style x:Key="PlayCardBlurb" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+                <Setter Property="FontSize" Value="12.5"/>
+                <Setter Property="TextWrapping" Value="Wrap"/>
+            </Style>
+            <!-- NEW / BETA / SOON chip. Mod-tinted, unlike the lock vocabulary below. -->
+            <Style x:Key="PlayBadgePill" TargetType="Border">
+                <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CornerRadius" Value="6"/>
+                <Setter Property="Padding" Value="6,2"/>
+                <Setter Property="Margin" Value="9,0,0,0"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
+            <Style x:Key="PlayBadgePillText" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+                <Setter Property="FontFamily" Value="Consolas"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+                <Setter Property="FontSize" Value="9.5"/>
+            </Style>
+
+            <!-- ==================================================================
+                 TIER VOCABULARY - deliberately CONSTANT across mods.
+                 gold 🔒 = Tier 1, violet 🧪 = Tier 2 (the "Lab" brand survives here,
+                 as the badge, and nowhere else). This is a price tag, not decor, so
+                 it does NOT take its colour from the mod chain the way the rest of
+                 this wall does.
+
+                 These six are a deliberate twin of the rail's RailLock* set
+                 (Views\Tabs\SettingsTabView.xaml:364-405), whose own comment says
+                 "local to the rail until the Play door adopts the same band, then
+                 they belong in the theme". Values are identical to the character.
+                 Promoting both sets into Resources\Theme\MainWindow.xaml and
+                 deleting the two local copies is a Phase 7/8 cleanup - it touches
+                 the rail, which Phase 6 does not own.
+
+                 Band contract, do not break it:
+                   * Visibility=Collapsed by default; the painter reveals it.
+                   * IsHitTestVisible=False. The card underneath stays live, the
+                     click reaches the real handler, and TierGate does the refusing.
+                     A band that swallowed the click would be a dead end.
+                   * No clock. A lockband is a static state; a Forever loop here
+                     would have to be threaded into the motion kill-switch.
+                 ================================================================== -->
+            <SolidColorBrush x:Key="PlayLockT1Brush" Color="#FFF0C24B"/>
+            <SolidColorBrush x:Key="PlayLockT2Brush" Color="#FFB47BFF"/>
+            <!-- A scrim, not a curtain: ~66% so the card art still reads through it.
+                 Seeing what you are missing is the entire job. -->
+            <SolidColorBrush x:Key="PlayLockScrimBrush" Color="#A8120A1E"/>
+            <!-- Gold band = Tier 1. CornerRadius matches PlayCard's 16 minus its
+                 1px border, so the scrim follows the same inner curve. -->
+            <Style x:Key="PlayLockBand" TargetType="Border">
+                <Setter Property="Visibility" Value="Collapsed"/>
+                <Setter Property="CornerRadius" Value="15"/>
+                <Setter Property="Background" Value="{StaticResource PlayLockScrimBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="BorderBrush" Value="{StaticResource PlayLockT1Brush}"/>
+                <Setter Property="IsHitTestVisible" Value="False"/>
+            </Style>
+            <!-- Violet band = Tier 2. Two attributes differ, exactly as on the rail. -->
+            <Style x:Key="PlayLockBandT2" TargetType="Border" BasedOn="{StaticResource PlayLockBand}">
+                <Setter Property="BorderBrush" Value="{StaticResource PlayLockT2Brush}"/>
+            </Style>
+            <!-- TargetType stays TextBlock so it also applies to helpers:EmojiTextBlock
+                 (a TextBlock subclass), which is what renders the padlock in colour. -->
+            <Style x:Key="PlayLockGlyph" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="20"/>
+                <Setter Property="HorizontalAlignment" Value="Center"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
+            <!-- One short line under the glyph. The pitch is the toast the click
+                 raises, which carries the "See tiers" button - not this. Trimmed
+                 rather than wrapped so a longer translation ends in an ellipsis
+                 instead of pushing the band's content out of the card. -->
+            <Style x:Key="PlayLockTeaser" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="11"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="Foreground" Value="{StaticResource PlayLockT1Brush}"/>
+                <Setter Property="TextAlignment" Value="Center"/>
+                <Setter Property="TextWrapping" Value="NoWrap"/>
+                <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                <Setter Property="HorizontalAlignment" Value="Center"/>
+                <Setter Property="Margin" Value="10,6,10,0"/>
+            </Style>
+            <Style x:Key="PlayLockTeaserT2" TargetType="TextBlock" BasedOn="{StaticResource PlayLockTeaser}">
+                <Setter Property="Foreground" Value="{StaticResource PlayLockT2Brush}"/>
+            </Style>
+        </Grid.Resources>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <!--
+                Entrance stagger note (MainWindow.ChromeFx.cs FindStaggerTargets): the helper
+                descends through single-child wrappers and staggers the first panel it finds with
+                more than one visible child - which is THIS StackPanel, capped at 6. So the header,
+                the hero and the first zone rows stagger in; the cards inside a UniformGrid do not.
+                That is the intended reading order. Wrapping a zone in an extra Grid would change
+                which elements stagger, so do not "tidy" this tree afterwards.
+            -->
+            <StackPanel Margin="20">
+
+                <!-- ============================== HEADER ============================== -->
+                <TextBlock Text="{loc:Str nav_door_play}" Foreground="White" FontSize="24" FontWeight="Bold"
+                           Margin="0,0,0,4">
+                    <TextBlock.Effect>
+                        <!-- Mod-chain colour. The Lab header hard-coded #00FF88 here, which was the
+                             one non-mod-aware literal on that page; it is not carried forward. -->
+                        <DropShadowEffect Color="{DynamicResource FxGlowColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
+                    </TextBlock.Effect>
+                </TextBlock>
+                <TextBlock Text="{loc:Str pl6_play_subtitle}" Foreground="{DynamicResource TextDimBrush}"
+                           FontSize="12" Margin="0,0,0,16"/>
+
+                <!-- ===================== HERO: DOWN THE RABBIT HOLE =====================
+                     The frame, the portal gradient and the ambient loop belong to the host; the
+                     title, blurb, FALL IN / Quick Drop buttons and the two Chaos checkboxes go in
+                     SlotDtrh. Splitting it that way is what lets the host own the one focal loop
+                     on this surface while the cards agent owns every launch.
+
+                     The three-stop gradient is a deliberate portal look, carried over verbatim
+                     from the retired LabTabView.xaml:57-61 (deleted in Phase 6; read it with
+                     `git show 48a093ebc:ConditioningControlPanel/Views/Tabs/LabTabView.xaml`).
+                     It is the one hard-coded palette on this page. -->
+                <Border CornerRadius="16" BorderThickness="1" BorderBrush="{DynamicResource PanelAccentBrush}"
+                        Margin="9,0,9,18" ClipToBounds="True" MinHeight="150">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#FF2A123A" Offset="0"/>
+                            <GradientStop Color="#FF14122A" Offset="0.55"/>
+                            <GradientStop Color="#FF3A1030" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <Grid>
+                        <!-- This door's ONE ambient loop: embers rising behind the portal card.
+                             Declared first so it paints under everything, spans the whole card
+                             (outside SlotDtrh's margin, so embers reach the card's edges), and is
+                             hit-test invisible by construction. Colour comes from FxTheme, so a
+                             green Dronification build gets green motes rather than an orange
+                             hard-coded into the Play door.
+
+                             Started and registered ONCE by PlayTabView.xaml.cs on first show, as
+                             RegisterTabFx("play", ...) - which is both the park/resume hook
+                             (SwitchTabFx, MainWindow.AmbientFx.cs) and the motion kill-switch's
+                             reach (CmbMotionLevel_SelectionChanged parks every registered canvas
+                             with SwitchTabFx("")). The key MUST stay the key ShowTab passes for
+                             this view or the canvas runs forever off-screen.
+
+                             No second AmbientFxCanvas may be added to this view: one focal
+                             ambient loop per surface (FX_OVERHAUL_PLAN). -->
+                        <fx:AmbientFxCanvas x:Name="RabbitHoleFx" x:FieldModifier="internal"/>
+
+                        <Grid x:Name="SlotDtrh" x:FieldModifier="internal" Margin="24,20,24,20">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- left: title + blurb. Literal English, carried over verbatim from
+                                     the retired LabTabView.xaml:79-93 (deleted in Phase 6; see
+                                     git 48a093ebc) - these cards were deliberately never localized
+                                     and the move is not the moment to change that. -->
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                        <TextBlock Text="🐇 DOWN THE RABBIT HOLE" Foreground="White" FontSize="24" FontWeight="Bold">
+                                            <TextBlock.Effect>
+                                                <DropShadowEffect Color="{DynamicResource FxGlowColor}" BlurRadius="22" ShadowDepth="0" Opacity="0.7"/>
+                                            </TextBlock.Effect>
+                                        </TextBlock>
+                                        <Border Style="{StaticResource PlayBadgePill}" Margin="12,2,0,0" Padding="7,2">
+                                            <TextBlock Text="NEW" Style="{StaticResource PlayBadgePillText}" FontSize="10"/>
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="it's right there. it's always been right there. bubbles drift up carrying flashes, videos, overlays. snap them in time or let them trigger you. stack streaks, accept mantras, sink deeper."
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="13" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left"/>
+                                </StackPanel>
+
+                                <!-- right: launch.
+                                     The collapsed Free Desktop / Story radio pair is NOT carried
+                                     over, and nothing replaced it. It was already
+                                     Visibility=Collapsed on the Lab card (the in-game main menu
+                                     owns mode selection), and the seeding its constructor did is
+                                     redundant twice over: ChaosModeService.SelectedPlayMode is a
+                                     static that already DEFAULTS to FreeDesktop, and StartRun
+                                     forces FreeDesktop outright while ChaosModeService
+                                     .StoryModeEnabled is false (Services\Chaos\ChaosModeService.cs
+                                     - the single reversible switch, false until story content
+                                     exists). So deleting LabTabView with its ctor changed nothing.
+                                     When Story ships, the picker belongs in ONE place - re-add it
+                                     here or leave it to the hub, never both: one setting, one
+                                     writer. -->
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="24,0,0,0">
+                                    <Button x:Name="BtnPlayFallIn" Content="▶ FALL IN" Cursor="Hand" ToolTip="you were always going to."
+                                            Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="Bold" FontSize="16"
+                                            BorderThickness="0" Padding="30,14" HorizontalAlignment="Right"
+                                            Click="BtnStartChaos_Click">
+                                        <Button.Effect>
+                                            <DropShadowEffect Color="{DynamicResource FxGlowColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
+                                        </Button.Effect>
+                                        <Button.Resources>
+                                            <Style TargetType="Border">
+                                                <Setter Property="CornerRadius" Value="14"/>
+                                            </Style>
+                                        </Button.Resources>
+                                    </Button>
+                                    <Button x:Name="BtnPlayQuickDrop" Content="💧 Quick Drop" Cursor="Hand"
+                                            Background="Transparent" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold" FontSize="12"
+                                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="14,6" Margin="0,8,0,0"
+                                            HorizontalAlignment="Right" ToolTip="skip the dollhouse. fall straight in with your saved settings"
+                                            Click="BtnQuickStartChaos_Click">
+                                        <Button.Resources>
+                                            <Style TargetType="Border">
+                                                <Setter Property="CornerRadius" Value="9"/>
+                                            </Style>
+                                        </Button.Resources>
+                                    </Button>
+                                    <!-- Pure XAML two-way bindings, portable verbatim: no handler,
+                                         no shim, nothing for the move to break.
+                                         They ARE named, though: the T2 lockband above is
+                                         IsHitTestVisible=False so the FALL IN / Quick Drop refusal
+                                         path keeps working, which means these two writers would
+                                         otherwise stay clickable straight through the padlock.
+                                         RefreshPlayCards disables them with the band. -->
+                                    <CheckBox x:Name="ChkPlayChaosAnnouncer" x:FieldModifier="internal"
+                                              Content="Announcements"
+                                              IsChecked="{Binding Source={x:Static local:App.Settings}, Path=Current.ChaosAnnouncerEnabled, Mode=TwoWay}"
+                                              Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Cursor="Hand"
+                                              HorizontalAlignment="Right" Margin="0,10,0,0"
+                                              ToolTip="Flash on-screen subtitle announcements (mantra, resistance, depth, streak) during a descent"/>
+                                    <CheckBox x:Name="ChkPlayChaosWebGame" x:FieldModifier="internal"
+                                              Content="3D game (recommended)"
+                                              IsChecked="{Binding Source={x:Static local:App.Settings}, Path=Current.ChaosWebGameEnabled, Mode=TwoWay}"
+                                              Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Cursor="Hand"
+                                              HorizontalAlignment="Right" Margin="0,6,0,0"
+                                              ToolTip="Play inside the 3D rabbit-hole tunnel (browser engine). Untick to use the classic desktop version - e.g. if the 3D one won't start on this machine."/>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- The negative margin cancels the slot's own 24,20 inset so the scrim
+                                 reaches the hero's edges; 15 is the hero Border's 16 minus its 1px
+                                 border, so it follows the same inner curve. Decoration only: the
+                                 buttons underneath stay live and TierGate.DemandLab in
+                                 BtnStartChaos_Click / BtnQuickStartChaos_Click does the refusing. -->
+                            <Border x:Name="PlayLockDtrh" x:FieldModifier="internal"
+                                    Style="{StaticResource PlayLockBandT2}" Margin="-24,-20,-24,-20">
+                                <StackPanel VerticalAlignment="Center">
+                                    <helpers:EmojiTextBlock Text="🧪" Style="{StaticResource PlayLockGlyph}" FontSize="26"/>
+                                    <TextBlock Text="{loc:Str hm3_rail_lock_t2}" Style="{StaticResource PlayLockTeaserT2}" FontSize="13"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <!-- ===================== ZONE: TOGETHER ===================== -->
+                <Grid Margin="2,4,2,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_together}" Style="{StaticResource PlayZoneTag}"/>
+                    <Border Grid.Column="1" Style="{StaticResource PlayZoneRule}">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <GradientStop Color="{DynamicResource PanelAccentHover}" Offset="0"/>
+                                <GradientStop Color="Transparent" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+                </Grid>
+                <!-- Column counts are FIXED on every zone, deliberately: a UniformGrid with an
+                     explicit Columns keeps each card the width it was authored at even while a
+                     neighbour is hidden (the Deeper card follows EnableDeeper). Collapsing to
+                     Columns="1" would stretch a 172px-hero card across the whole canvas. -->
+                <UniformGrid Rows="1" Columns="3">
+                    <!-- Goon Game: free to join by design. NO lockband here - the two paid rungs
+                         (🔒 send your own media = T1, 🧪 host a room = T2) are named in a sub-line,
+                         never a padlock over an open door. See GoonHostService.cs:882-913. -->
+                    <Grid x:Name="SlotGoon" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <StackPanel>
+                                <!-- The duel client's own square wordmark, cropped to the logo with the
+                                     ImageBrush Viewbox and laid on the logo's backdrop colour rather
+                                     than UniformToFill-cropped like the 16:9 heroes. Carried over
+                                     exactly from the retired LabTabView.xaml:198-217 (deleted in
+                                     Phase 6; see git 48a093ebc) - Stretch, Viewbox and the
+                                     #FF161622 plate are the reason it reads as a wordmark and not as
+                                     a smear. Art path never renamed. -->
+                                <Border CornerRadius="16,16,0,0" Height="132" Margin="-22,-22,-22,16"
+                                        ClipToBounds="True" Background="#FF161622">
+                                    <Grid>
+                                        <Border CornerRadius="16,16,0,0">
+                                            <Border.Background>
+                                                <ImageBrush x:Name="PlayGoonHeroBrush" x:FieldModifier="internal"
+                                                            ImageSource="pack://application:,,,/Resources/features/goon_game.png"
+                                                            Stretch="Uniform" Viewbox="0.03,0.22,0.94,0.68"/>
+                                            </Border.Background>
+                                        </Border>
+                                        <Border CornerRadius="16,16,0,0">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                                    <GradientStop Color="{DynamicResource SurfaceBg}" Offset="0"/>
+                                                    <GradientStop Color="Transparent" Offset="0.9"/>
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
+                                    <TextBlock Text="Goon Game" Style="{StaticResource PlayCardTitle}"/>
+                                    <Border Style="{StaticResource PlayBadgePill}">
+                                        <TextBlock Text="BETA" Style="{StaticResource PlayBadgePillText}"/>
+                                    </Border>
+                                </StackPanel>
+                                <TextBlock Text="a 1v1 endurance duel. trade flashes, videos and lock cards in real time. outlast them - or break first."
+                                           Style="{StaticResource PlayCardBlurb}" FontSize="12" Margin="0,0,0,14"/>
+
+                                <!-- NO LOCKBAND, on purpose. Joining is free and deliberately so
+                                     (MainWindow.Lab.cs:182-186, GoonHostService.cs:882-913); a padlock
+                                     over an open door would be false advertising. The two paid rungs
+                                     are NAMED instead, the way the lobby names its transfer perk
+                                     rather than greying it out in silence. RefreshPlayCards dims
+                                     whichever rung this account has not bought - it never disables
+                                     anything, because neither rung is enforced from this card. -->
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,16">
+                                    <TextBlock Text="{loc:Str pl6_goon_free_to_join}" Foreground="{DynamicResource TextMutedBrush}"
+                                               FontFamily="Consolas" FontSize="10.5" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="TxtPlayGoonPerkSend" x:FieldModifier="internal"
+                                               Text="{loc:Str pl6_goon_perk_send_t1}" FontFamily="Consolas" FontSize="10.5"
+                                               Foreground="{StaticResource PlayLockT1Brush}" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="TxtPlayGoonPerkHost" x:FieldModifier="internal"
+                                               Text="{loc:Str pl6_goon_perk_host_t2}" FontFamily="Consolas" FontSize="10.5"
+                                               Foreground="{StaticResource PlayLockT2Brush}" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+
+                                <Button x:Name="BtnPlayGoon" Content="Jump In !" Cursor="Hand"
+                                        Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="Bold" FontSize="14"
+                                        BorderThickness="0" Padding="30,10" HorizontalAlignment="Center"
+                                        ToolTip="go head to head - first to break loses."
+                                        Click="BtnStartGoon_Click">
+                                    <Button.Resources>
+                                        <Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style>
+                                    </Button.Resources>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <Grid x:Name="SlotRemoteControl" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <Grid>
+                                <StackPanel>
+                                    <Border CornerRadius="16,16,0,0" Height="132" Margin="-22,-22,-22,16" ClipToBounds="True">
+                                        <Grid>
+                                            <Border CornerRadius="16,16,0,0">
+                                                <Border.Background>
+                                                    <ImageBrush x:Name="PlayRemoteHeroBrush" x:FieldModifier="internal"
+                                                                ImageSource="pack://application:,,,/Resources/features/remote_control.png" Stretch="UniformToFill"/>
+                                                </Border.Background>
+                                            </Border>
+                                            <Border CornerRadius="16,16,0,0">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                                        <GradientStop Color="{DynamicResource SurfaceBg}" Offset="0"/>
+                                                        <GradientStop Color="Transparent" Offset="0.9"/>
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                    <TextBlock Text="{loc:Str tab_remote_control}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
+                                    <TextBlock Text="{loc:Str pl6_card_blurb_remote}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                    <!-- Navigation only. The waiver, the login check and the deferred
+                                         revert all live in ChkRemoteControlEnabled_Changed on that
+                                         page; a second enable path here would be a second gate. -->
+                                    <Button x:Name="BtnPlayRemoteControl" Content="{loc:Str btn_open}" Cursor="Hand"
+                                            HorizontalAlignment="Left" Padding="16,8"
+                                            Background="{DynamicResource AccentGradientBrush}" Foreground="White"
+                                            BorderThickness="0" FontWeight="Bold" FontSize="13"
+                                            Click="BtnPlayRemoteControl_Click">
+                                        <Button.Resources>
+                                            <Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style>
+                                        </Button.Resources>
+                                    </Button>
+                                </StackPanel>
+                                <Border x:Name="PlayLockRemote" x:FieldModifier="internal"
+                                        Style="{StaticResource PlayLockBand}" Margin="-22">
+                                    <StackPanel VerticalAlignment="Center">
+                                        <helpers:EmojiTextBlock Text="🔒" Style="{StaticResource PlayLockGlyph}"/>
+                                        <TextBlock Text="{loc:Str hm3_rail_lock_t1}" Style="{StaticResource PlayLockTeaser}"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    <!-- Free to browse, deliberately. The polling lifecycle lives in ShowTab
+                         ("availablesubjects"), NOT on this card: the card navigates, and nothing
+                         here may call StartPolling. -->
+                    <Grid x:Name="SlotAvailableSubjects" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <StackPanel>
+                                <!-- No art exists for this one and none is invented: a new filename
+                                     under Resources\features\ is a path every third-party .ccpmod
+                                     would have to guess at. A vector/emoji plate is a first-class
+                                     outcome (asset contract rule 6) and the Rabbit Hole hero already
+                                     ships as one. -->
+                                <Border Width="52" Height="52" CornerRadius="14" Margin="0,0,0,14" HorizontalAlignment="Left"
+                                        Background="{DynamicResource AccentTintedBgBrush}"
+                                        BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                                    <Image Width="26" Height="26" Source="{Binding Source='👥', Converter={StaticResource EmojiToImageSource}}"/>
+                                </Border>
+                                <TextBlock Text="{loc:Str tab_available_subjects}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
+                                <TextBlock Text="{loc:Str pl6_card_blurb_subjects}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                <!-- Free to browse, deliberately - no band. The polling lifecycle is
+                                     ShowTab's (StopPolling on every navigation, StartPolling only in
+                                     case "availablesubjects"); this card must never touch it. -->
+                                <Button x:Name="BtnPlayAvailableSubjects" Content="{loc:Str btn_open}" Cursor="Hand"
+                                        HorizontalAlignment="Left" Padding="16,8"
+                                        Background="{DynamicResource AccentGradientBrush}" Foreground="White"
+                                        BorderThickness="0" FontWeight="Bold" FontSize="13"
+                                        Click="BtnPlayAvailableSubjects_Click">
+                                    <Button.Resources>
+                                        <Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style>
+                                    </Button.Resources>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </UniformGrid>
+
+                <!-- ===================== ZONE: EYES ===================== -->
+                <Grid Margin="2,18,2,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_eyes}" Style="{StaticResource PlayZoneTag}"/>
+                    <Border Grid.Column="1" Style="{StaticResource PlayZoneRule}">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <GradientStop Color="{DynamicResource PanelAccentHover}" Offset="0"/>
+                                <GradientStop Color="Transparent" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+                </Grid>
+                <!-- Read-only webcam status chip. Settings → Devices has owned the camera since
+                     Phase 2; the Eyes cards dim against tracker state, so the state has to be
+                     visible here - but it is DISPLAY ONLY. Painted by UpdateWebcamStatusChips
+                     (MainWindow.LabTab.cs), which paints three surfaces from one method: whoever
+                     fills this slot must keep the chip's named parts resolvable or the Blink
+                     Trainer and Deeper chips break with it. -->
+                <Grid x:Name="SlotWebcamChip" x:FieldModifier="internal">
+                    <!-- Three named parts, painted by UpdateWebcamStatusChips (MainWindow.LabTab.cs),
+                         which paints THREE surfaces from one method - this chip, the Blink Trainer's
+                         and Deeper's. Rename any of these and the other two go with it. -->
+                    <Border x:Name="WebcamStatusChipPlay" x:FieldModifier="internal" CornerRadius="14" Margin="9,4,9,12" Padding="16,13"
+                            Background="{DynamicResource PanelBgBrush}" BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Ellipse Grid.Column="0" x:Name="WebcamStatusChipPlayDot" x:FieldModifier="internal" Width="9" Height="9"
+                                     Fill="{DynamicResource TextMutedBrush}" Margin="0,0,11,0" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="{loc:Str set2_webcam_chip_label}" Foreground="{DynamicResource TextLightBrush}"
+                                           FontWeight="Bold" FontSize="14"/>
+                                <TextBlock x:Name="TxtWebcamStatusChipPlay" x:FieldModifier="internal" Text="{loc:Str rf_webcam_stopped}"
+                                           Foreground="{DynamicResource TextMutedBrush}" FontFamily="Consolas" FontSize="11"/>
+                            </StackPanel>
+                            <Button Grid.Column="2" Content="{loc:Str set2_configure_in_settings}"
+                                    Padding="12,6" VerticalAlignment="Center" Cursor="Hand"
+                                    Background="Transparent" Foreground="{DynamicResource PinkBrush}"
+                                    BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" FontSize="11" FontWeight="SemiBold"
+                                    Click="BtnOpenDeviceSettings_Click">
+                                <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+                            </Button>
+                        </Grid>
+                    </Border>
+                </Grid>
+                <UniformGrid Rows="1" Columns="2">
+                    <Grid x:Name="SlotGaze" x:FieldModifier="internal">
+                        <!-- PlayGazeCard / PlayGazeNeedsTracker are written by UpdateLabTrackerUi
+                             (Opacity 1.0 / 0.62 + the "start tracking" band) off the tracker-state
+                             event. Tracker dimming and the tier band are two independent states and
+                             they stack: an unentitled account with the camera off sees both. -->
+                        <Border x:Name="PlayGazeCard" x:FieldModifier="internal" Style="{StaticResource PlayCard}">
+                            <Grid>
+                                <StackPanel>
+                                    <Border CornerRadius="16,16,0,0" Height="138" Margin="-22,-22,-22,16" ClipToBounds="True">
+                                        <Grid>
+                                            <Border CornerRadius="16,16,0,0">
+                                                <Border.Background>
+                                                    <ImageBrush x:Name="PlayGazeHeroBrush" x:FieldModifier="internal"
+                                                                ImageSource="pack://application:,,,/Resources/features/lab_gaze_hero.png" Stretch="UniformToFill"/>
+                                                </Border.Background>
+                                            </Border>
+                                            <Border CornerRadius="16,16,0,0">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                                        <GradientStop Color="{DynamicResource SurfaceBg}" Offset="0"/>
+                                                        <GradientStop Color="Transparent" Offset="0.9"/>
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,6">
+                                        <Border Width="34" Height="34" CornerRadius="10" Margin="0,0,11,0"
+                                                Background="{DynamicResource AccentTintedBgBrush}" BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                                            <Image Width="18" Height="18" Source="{Binding Source='🎯', Converter={StaticResource EmojiToImageSource}}"/>
+                                        </Border>
+                                        <TextBlock Text="{loc:Str label_gaze_minigame}" Style="{StaticResource PlayCardTitle}"/>
+                                        <Border Style="{StaticResource PlayBadgePill}">
+                                            <TextBlock Text="{loc:Str label_beta_2}" Style="{StaticResource PlayBadgePillText}"/>
+                                        </Border>
+                                        <!-- Same registry entry ("GazeMinigame"), same popover - only the
+                                             accessor path in MainWindow.Presets.cs changes. -->
+                                        <Button x:Name="HelpBtnPlayGazeMinigame" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}"
+                                                Tag="GazeMinigame" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{loc:Str label_gaze_minigame_description}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,14"/>
+                                    <Button x:Name="BtnPlayGazeMinigame" Content="{loc:Str btn_open}"
+                                            ToolTip="{loc:Str tooltip_gaze_minigame_open}" HorizontalAlignment="Left"
+                                            Padding="16,8" Background="{DynamicResource AccentGradientBrush}" Foreground="White"
+                                            BorderThickness="0" FontWeight="Bold" FontSize="13" Cursor="Hand"
+                                            Click="BtnGazeMinigame_Click">
+                                        <Button.Resources>
+                                            <Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style>
+                                        </Button.Resources>
+                                    </Button>
+                                    <Border x:Name="PlayGazeNeedsTracker" x:FieldModifier="internal" Visibility="Collapsed"
+                                            Background="{DynamicResource AccentTintedBgBrush}" BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
+                                            CornerRadius="8" Padding="10,7" Margin="0,12,0,0" HorizontalAlignment="Left">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Ellipse Width="7" Height="7" Fill="{DynamicResource TextMutedBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                            <TextBlock Text="Start tracking to play" Foreground="{DynamicResource TextMutedBrush}" FontFamily="Consolas" FontSize="11" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                                <Border x:Name="PlayLockGaze" x:FieldModifier="internal"
+                                        Style="{StaticResource PlayLockBandT2}" Margin="-22">
+                                    <StackPanel VerticalAlignment="Center">
+                                        <helpers:EmojiTextBlock Text="🧪" Style="{StaticResource PlayLockGlyph}"/>
+                                        <TextBlock Text="{loc:Str hm3_rail_lock_t2}" Style="{StaticResource PlayLockTeaserT2}"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    <!-- Focus Gaze is a separate card from the Gaze Minigame (separate handler,
+                         separate art, separate needs-tracker band). It is NOT part of SlotGaze. -->
+                    <Grid x:Name="SlotFocusGaze" x:FieldModifier="internal">
+                        <Border x:Name="PlayFocusCard" x:FieldModifier="internal" Style="{StaticResource PlayCard}">
+                            <Grid>
+                                <StackPanel>
+                                    <Border CornerRadius="16,16,0,0" Height="138" Margin="-22,-22,-22,16" ClipToBounds="True">
+                                        <Grid>
+                                            <Border CornerRadius="16,16,0,0">
+                                                <Border.Background>
+                                                    <ImageBrush x:Name="PlayFocusHeroBrush" x:FieldModifier="internal"
+                                                                ImageSource="pack://application:,,,/Resources/features/lab_focusgaze_hero.png" Stretch="UniformToFill"/>
+                                                </Border.Background>
+                                            </Border>
+                                            <Border CornerRadius="16,16,0,0">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                                        <GradientStop Color="{DynamicResource SurfaceBg}" Offset="0"/>
+                                                        <GradientStop Color="Transparent" Offset="0.9"/>
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,6">
+                                        <Border Width="34" Height="34" CornerRadius="10" Margin="0,0,11,0"
+                                                Background="{DynamicResource AccentTintedBgBrush}" BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                                            <Image Width="18" Height="18" Source="{Binding Source='✨', Converter={StaticResource EmojiToImageSource}}"/>
+                                        </Border>
+                                        <TextBlock Text="{loc:Str label_focus_gaze}" Style="{StaticResource PlayCardTitle}"/>
+                                        <Button x:Name="HelpBtnPlayFocusGaze" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}"
+                                                Tag="FocusGaze" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{loc:Str label_focus_gaze_description}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,12"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str btn_enable}" Foreground="{DynamicResource TextLightBrush}" FontSize="14" VerticalAlignment="Center"/>
+                                        <!-- The ONE Focus Gaze switch. ChkFocusGaze_Changed reads this
+                                             control and writes TxtPlayFocusGazeStatus below; the Lab
+                                             copies it used to read are dead with that view. -->
+                                        <CheckBox Grid.Column="1" x:Name="ChkPlayFocusGaze" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
+                                                  ToolTip="{loc:Str tooltip_focus_gaze_toggle}" VerticalAlignment="Center"
+                                                  Checked="ChkFocusGaze_Changed" Unchecked="ChkFocusGaze_Changed"/>
+                                    </Grid>
+                                    <TextBlock x:Name="TxtPlayFocusGazeStatus" x:FieldModifier="internal" Text=""
+                                               Foreground="{DynamicResource SuccessGreenBrush}" FontSize="11" Margin="0,6,0,0"
+                                               TextWrapping="Wrap"/>
+                                    <Border x:Name="PlayFocusNeedsTracker" x:FieldModifier="internal" Visibility="Collapsed"
+                                            Background="{DynamicResource AccentTintedBgBrush}" BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
+                                            CornerRadius="8" Padding="10,7" Margin="0,12,0,0" HorizontalAlignment="Left">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Ellipse Width="7" Height="7" Fill="{DynamicResource TextMutedBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                            <TextBlock Text="Start tracking to enable" Foreground="{DynamicResource TextMutedBrush}" FontFamily="Consolas" FontSize="11" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                                <Border x:Name="PlayLockFocusGaze" x:FieldModifier="internal"
+                                        Style="{StaticResource PlayLockBandT2}" Margin="-22">
+                                    <StackPanel VerticalAlignment="Center">
+                                        <helpers:EmojiTextBlock Text="🧪" Style="{StaticResource PlayLockGlyph}"/>
+                                        <TextBlock Text="{loc:Str hm3_rail_lock_t2}" Style="{StaticResource PlayLockTeaserT2}"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </UniformGrid>
+
+                <!-- ===================== ZONE: SESSIONS ===================== -->
+                <Grid Margin="2,18,2,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_sessions}" Style="{StaticResource PlayZoneTag}"/>
+                    <Border Grid.Column="1" Style="{StaticResource PlayZoneRule}">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <GradientStop Color="{DynamicResource PanelAccentHover}" Offset="0"/>
+                                <GradientStop Color="Transparent" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+                </Grid>
+                <UniformGrid Rows="1" Columns="3">
+                    <!-- Four gate states, not two (Premium / Available / Spent / NeedsLogin). The
+                         card carries the band; the PAGE keeps RefreshGradedIntakeGate and the
+                         launch. Every state navigates to ShowTab("gradedintake") - a Spent user
+                         has to be able to read why. -->
+                    <Grid x:Name="SlotGradedIntake" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <Grid>
+                                <StackPanel>
+                                    <Border CornerRadius="16,16,0,0" Height="132" Margin="-22,-22,-22,16" ClipToBounds="True">
+                                        <Grid>
+                                            <Border CornerRadius="16,16,0,0">
+                                                <Border.Background>
+                                                    <ImageBrush x:Name="PlayIntakeHeroBrush" x:FieldModifier="internal"
+                                                                ImageSource="pack://application:,,,/Resources/features/lab_quiz_hero.png" Stretch="UniformToFill"/>
+                                                </Border.Background>
+                                            </Border>
+                                            <Border CornerRadius="16,16,0,0">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                                        <GradientStop Color="{DynamicResource SurfaceBg}" Offset="0"/>
+                                                        <GradientStop Color="Transparent" Offset="0.9"/>
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                    <TextBlock Text="{loc:Str tab_gradedintake}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
+                                    <TextBlock Text="{loc:Str pl6_card_blurb_intake}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,10"/>
+                                    <!-- The state line: written by RefreshPlayCards from the SAME
+                                         IntakePassService.State that RefreshGradedIntakeGate reads, so
+                                         the card and the page can never disagree about the week.
+                                         Premium sees nothing here at all - patrons must never learn
+                                         the free weekly pass exists. -->
+                                    <TextBlock x:Name="TxtPlayIntakeState" x:FieldModifier="internal" Text=""
+                                               Foreground="{DynamicResource PinkBrush}" FontFamily="Consolas" FontSize="11"
+                                               TextWrapping="Wrap" Margin="0,0,0,12" Visibility="Collapsed"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <!-- Every state navigates. A Spent user has to be able to READ
+                                             why, and the page's four-state gate is the thing that says
+                                             it; refusing the click here would hide the explanation. -->
+                                        <Button x:Name="BtnPlayGradedIntake" Content="{loc:Str btn_open}" Cursor="Hand"
+                                                Padding="16,8" Background="{DynamicResource AccentGradientBrush}" Foreground="White"
+                                                BorderThickness="0" FontWeight="Bold" FontSize="13"
+                                                Click="BtnPlayGradedIntake_Click">
+                                            <Button.Resources>
+                                                <Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style>
+                                            </Button.Resources>
+                                        </Button>
+                                        <!-- The pass is handed out by the Home logo tile's flip
+                                             ceremony, so "where do I get one" has exactly one honest
+                                             answer: Home. Shown only in the Available state. -->
+                                        <Button x:Name="BtnPlayIntakePassHome" x:FieldModifier="internal"
+                                                Content="{loc:Str pl6_intake_pass_home}" Cursor="Hand" Visibility="Collapsed"
+                                                Margin="10,0,0,0" Padding="14,8" Background="Transparent"
+                                                Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource PinkBrush}"
+                                                BorderThickness="1" FontWeight="SemiBold" FontSize="12"
+                                                Click="BtnPlayIntakePassHome_Click">
+                                            <Button.Resources>
+                                                <Style TargetType="Border"><Setter Property="CornerRadius" Value="9"/></Style>
+                                            </Button.Resources>
+                                        </Button>
+                                    </StackPanel>
+                                </StackPanel>
+                                <!-- Gold, and the "Weekly pass" teaser rather than "Patron only":
+                                     this is not a tier question. A free account holding this week's
+                                     pass is entitled, and RefreshPlayCards reads the pass, not the
+                                     tier - exactly what the dashboard rail's LockBandIntake does. -->
+                                <Border x:Name="PlayLockIntake" x:FieldModifier="internal"
+                                        Style="{StaticResource PlayLockBand}" Margin="-22">
+                                    <StackPanel VerticalAlignment="Center">
+                                        <helpers:EmojiTextBlock Text="🔒" Style="{StaticResource PlayLockGlyph}"/>
+                                        <TextBlock Text="{loc:Str hm3_rail_lock_pass}" Style="{StaticResource PlayLockTeaser}"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    <Grid x:Name="SlotBlinkTrainer" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <Grid>
+                                <StackPanel>
+                                    <Border CornerRadius="16,16,0,0" Height="132" Margin="-22,-22,-22,16" ClipToBounds="True">
+                                        <Grid>
+                                            <Border CornerRadius="16,16,0,0">
+                                                <Border.Background>
+                                                    <ImageBrush x:Name="PlayBlinkHeroBrush" x:FieldModifier="internal"
+                                                                ImageSource="pack://application:,,,/Resources/features/blink_trainer.png" Stretch="UniformToFill"/>
+                                                </Border.Background>
+                                            </Border>
+                                            <Border CornerRadius="16,16,0,0">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                                        <GradientStop Color="{DynamicResource SurfaceBg}" Offset="0"/>
+                                                        <GradientStop Color="Transparent" Offset="0.9"/>
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                    <TextBlock Text="{loc:Str tab_blink_trainer}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
+                                    <TextBlock Text="{loc:Str pl6_card_blurb_blink}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                    <Button x:Name="BtnPlayBlinkTrainer" Content="{loc:Str btn_open}" Cursor="Hand"
+                                            HorizontalAlignment="Left" Padding="16,8"
+                                            Background="{DynamicResource AccentGradientBrush}" Foreground="White"
+                                            BorderThickness="0" FontWeight="Bold" FontSize="13"
+                                            Click="BtnLabBlinkTrainerOpenNew_Click">
+                                        <Button.Resources>
+                                            <Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style>
+                                        </Button.Resources>
+                                    </Button>
+                                </StackPanel>
+                                <Border x:Name="PlayLockBlink" x:FieldModifier="internal"
+                                        Style="{StaticResource PlayLockBand}" Margin="-22">
+                                    <StackPanel VerticalAlignment="Center">
+                                        <helpers:EmojiTextBlock Text="🔒" Style="{StaticResource PlayLockGlyph}"/>
+                                        <TextBlock Text="{loc:Str hm3_rail_lock_t1}" Style="{StaticResource PlayLockTeaser}"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    <!-- For You is a window, not a tab: the card must call ShowTab("fyp"), which
+                         ShowTab intercepts into OpenFypFeed (the shared, gated launch path).
+                         Never call FypHostService.Launch() from here. -->
+                    <Grid x:Name="SlotFyp" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <Grid>
+                                <StackPanel>
+                                    <Border CornerRadius="16,16,0,0" Height="132" Margin="-22,-22,-22,16" ClipToBounds="True">
+                                        <Grid>
+                                            <Border CornerRadius="16,16,0,0">
+                                                <Border.Background>
+                                                    <ImageBrush x:Name="PlayFypHeroBrush" x:FieldModifier="internal"
+                                                                ImageSource="pack://application:,,,/Resources/features/fyp.png" Stretch="UniformToFill"/>
+                                                </Border.Background>
+                                            </Border>
+                                            <Border CornerRadius="16,16,0,0">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                                        <GradientStop Color="{DynamicResource SurfaceBg}" Offset="0"/>
+                                                        <GradientStop Color="Transparent" Offset="0.9"/>
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                    <TextBlock Text="{loc:Str tab_fyp}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
+                                    <TextBlock Text="{loc:Str pl6_card_blurb_fyp}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                    <!-- ShowTab("fyp"), never FypHostService.Launch(): ShowTab
+                                         intercepts that key into OpenFypFeed, which owns the premium
+                                         gate and is the same launch path the dashboard chip uses. -->
+                                    <Button x:Name="BtnPlayFyp" Content="{loc:Str btn_open}" Cursor="Hand"
+                                            HorizontalAlignment="Left" Padding="16,8"
+                                            Background="{DynamicResource AccentGradientBrush}" Foreground="White"
+                                            BorderThickness="0" FontWeight="Bold" FontSize="13"
+                                            Click="BtnPlayFyp_Click">
+                                        <Button.Resources>
+                                            <Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style>
+                                        </Button.Resources>
+                                    </Button>
+                                </StackPanel>
+                                <Border x:Name="PlayLockFyp" x:FieldModifier="internal"
+                                        Style="{StaticResource PlayLockBand}" Margin="-22">
+                                    <StackPanel VerticalAlignment="Center">
+                                        <helpers:EmojiTextBlock Text="🔒" Style="{StaticResource PlayLockGlyph}"/>
+                                        <TextBlock Text="{loc:Str hm3_rail_lock_t1}" Style="{StaticResource PlayLockTeaser}"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </UniformGrid>
+
+                <!-- ===================== ZONE: RITUAL ===================== -->
+                <Grid Margin="2,18,2,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_ritual}" Style="{StaticResource PlayZoneTag}"/>
+                    <Border Grid.Column="1" Style="{StaticResource PlayZoneRule}">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <GradientStop Color="{DynamicResource PanelAccentHover}" Offset="0"/>
+                                <GradientStop Color="Transparent" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+                </Grid>
+                <UniformGrid Rows="1" Columns="3">
+                    <!-- Mantra (G11 rescue): MantraWindow has had zero constructors in the repo.
+                         Its Window_Loaded assumes App.Mantra.StartSession(n) has ALREADY been
+                         called, so the card owes a rep count. The window's anti-cheat -
+                         paste handler, IsUndoEnabled=false, the shared
+                         LockCardWindow.IsBlockedInputGesture guard on the TEXTBOX's
+                         PreviewKeyDown, ContextMenu={x:Null} - is untouched by this rescue. -->
+                    <Grid x:Name="SlotMantra" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <StackPanel>
+                                <Border Width="52" Height="52" CornerRadius="14" Margin="0,0,0,14" HorizontalAlignment="Left"
+                                        Background="{DynamicResource AccentTintedBgBrush}"
+                                        BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                                    <Image Width="26" Height="26" Source="{Binding Source='🌀', Converter={StaticResource EmojiToImageSource}}"/>
+                                </Border>
+                                <TextBlock Text="{loc:Str pl6_mantra_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
+                                <TextBlock Text="{loc:Str pl6_mantra_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,14"/>
+                                <!-- The rep count the card owes the window. MantraWindow.Window_Loaded
+                                     reads _service.CurrentMantra and _service.TargetCount, i.e. it
+                                     assumes StartSession(n) already ran; nothing in the repo ever
+                                     supplied an n, which is why the window had zero constructors.
+                                     MantraService clamps to 1..100, so these four are inside its
+                                     range by construction. Not persisted: this is a "how long do I
+                                     feel like going" dial, not a setting, and adding an AppSettings
+                                     property would be logic the restructure promised not to touch. -->
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,16" VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str pl6_mantra_reps_label}" Foreground="{DynamicResource TextMutedBrush}"
+                                               FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                    <ComboBox x:Name="CmbPlayMantraReps" x:FieldModifier="internal" Width="78" VerticalAlignment="Center"
+                                              SelectedIndex="1">
+                                        <ComboBoxItem Content="10" Tag="10"/>
+                                        <ComboBoxItem Content="25" Tag="25"/>
+                                        <ComboBoxItem Content="50" Tag="50"/>
+                                        <ComboBoxItem Content="100" Tag="100"/>
+                                    </ComboBox>
+                                </StackPanel>
+                                <!-- Free, no band. The window's anti-cheat (paste handler,
+                                     IsUndoEnabled=false, the shared LockCardWindow gesture guard on
+                                     the TEXTBOX's PreviewKeyDown, ContextMenu={x:Null}) is untouched
+                                     by this rescue - #734 lives entirely inside MantraWindow. -->
+                                <Button x:Name="BtnPlayMantra" Content="{loc:Str pl6_mantra_start}" Cursor="Hand"
+                                        HorizontalAlignment="Left" Padding="16,8"
+                                        Background="{DynamicResource AccentGradientBrush}" Foreground="White"
+                                        BorderThickness="0" FontWeight="Bold" FontSize="13"
+                                        Click="BtnPlayMantra_Click">
+                                    <Button.Resources>
+                                        <Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style>
+                                    </Button.Resources>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <!-- Navigates to ShowTab("lockdown"). The activation double-warning and
+                         App.Lockdown.Activate stay on that page; nothing here re-implements them.
+                         The lockdown pulse is that page's, and Phase 6 does not touch it. -->
+                    <Grid x:Name="SlotLockdown" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <Grid>
+                                <StackPanel>
+                                    <!-- lockdown_icon.png lives at the RESOURCE ROOT, not under
+                                         features/ - that is the path mods key against and it is
+                                         never "tidied" into the folder its neighbours use. -->
+                                    <Border CornerRadius="16,16,0,0" Height="132" Margin="-22,-22,-22,16" ClipToBounds="True">
+                                        <Grid>
+                                            <Border CornerRadius="16,16,0,0">
+                                                <Border.Background>
+                                                    <ImageBrush x:Name="PlayLockdownHeroBrush" x:FieldModifier="internal"
+                                                                ImageSource="pack://application:,,,/Resources/lockdown_icon.png" Stretch="UniformToFill"/>
+                                                </Border.Background>
+                                            </Border>
+                                            <Border CornerRadius="16,16,0,0">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                                        <GradientStop Color="{DynamicResource SurfaceBg}" Offset="0"/>
+                                                        <GradientStop Color="Transparent" Offset="0.9"/>
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                    <TextBlock Text="{loc:Str tab_lockdown_mode}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
+                                    <TextBlock Text="{loc:Str pl6_card_blurb_lockdown}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                    <!-- Navigation only. The duration dial, the double warning and
+                                         App.Lockdown.Activate stay on that page - this card must not
+                                         be a second way to take someone's keys away for an hour. -->
+                                    <Button x:Name="BtnPlayLockdown" Content="{loc:Str btn_open}" Cursor="Hand"
+                                            HorizontalAlignment="Left" Padding="16,8"
+                                            Background="{DynamicResource AccentGradientBrush}" Foreground="White"
+                                            BorderThickness="0" FontWeight="Bold" FontSize="13"
+                                            Click="BtnPlayLockdown_Click">
+                                        <Button.Resources>
+                                            <Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style>
+                                        </Button.Resources>
+                                    </Button>
+                                </StackPanel>
+                                <Border x:Name="PlayLockLockdown" x:FieldModifier="internal"
+                                        Style="{StaticResource PlayLockBand}" Margin="-22">
+                                    <StackPanel VerticalAlignment="Center">
+                                        <helpers:EmojiTextBlock Text="🔒" Style="{StaticResource PlayLockGlyph}"/>
+                                        <TextBlock Text="{loc:Str hm3_rail_lock_t1}" Style="{StaticResource PlayLockTeaser}"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    <!-- Deeper follows the EnableDeeper master switch (Settings → General), the
+                         same flag that drives BtnDeeper's visibility on the rail. Two entries,
+                         one flag - or this becomes a second, divergent door. -->
+                    <Grid x:Name="SlotDeeper" x:FieldModifier="internal">
+                        <!-- Hidden by RefreshPlayCards when AppSettings.EnableDeeper is off - the SAME
+                             flag that drives BtnDeeper's visibility on the rail (MainWindow.Settings.cs
+                             :153 / MainWindow.DeeperTab.cs:132). Two entries, one flag, or this becomes
+                             a second door that outlives the master switch. The zone keeps Columns="3"
+                             so the two survivors do not stretch when this one goes. -->
+                        <Border x:Name="PlayDeeperCard" x:FieldModifier="internal" Style="{StaticResource PlayCard}">
+                            <StackPanel>
+                                <!-- The Deeper tab is 100% emoji-typographic (asset audit §6) and has
+                                     no art of its own; nothing is invented for it here. -->
+                                <Border Width="52" Height="52" CornerRadius="14" Margin="0,0,0,14" HorizontalAlignment="Left"
+                                        Background="{DynamicResource AccentTintedBgBrush}"
+                                        BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                                    <Image Width="26" Height="26" Source="{Binding Source='🕳', Converter={StaticResource EmojiToImageSource}}"/>
+                                </Border>
+                                <TextBlock Text="{loc:Str tab_deeper}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
+                                <TextBlock Text="{loc:Str pl6_card_blurb_deeper}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                <!-- BtnDeeper_Click, not ShowTab("deeper"): the rail entry also clears
+                                     the first-visit pulse, saves HasSeenDeeperTab, refreshes the
+                                     welcome card and lazy-inits the hub. Re-implementing the
+                                     navigation would leave the pulse breathing forever. -->
+                                <Button x:Name="BtnPlayDeeper" Content="{loc:Str btn_open}" Cursor="Hand"
+                                        HorizontalAlignment="Left" Padding="16,8"
+                                        Background="{DynamicResource AccentGradientBrush}" Foreground="White"
+                                        BorderThickness="0" FontWeight="Bold" FontSize="13"
+                                        Click="BtnPlayDeeper_Click">
+                                    <Button.Resources>
+                                        <Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style>
+                                    </Button.Resources>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </UniformGrid>
+
+                <!-- ===================== ZONE: MORE ===================== -->
+                <Grid Margin="2,18,2,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_more}" Style="{StaticResource PlayZoneTag}"/>
+                    <Border Grid.Column="1" Style="{StaticResource PlayZoneRule}">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <GradientStop Color="{DynamicResource PanelAccentHover}" Offset="0"/>
+                                <GradientStop Color="Transparent" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+                </Grid>
+                <UniformGrid Rows="1" Columns="3">
+                    <!-- Bureau (G4 rescue): the card was deleted on 0804, the handler
+                         (BtnStartBureau_Click) never was. Restore the card's XAML from git history
+                         rather than rewriting it, and restore the PlayBureauStamp folder-art
+                         one-shot with it (MainWindow.TabFxTakeoverLabStatus.cs tombstone). No tier
+                         band: the page enforces its own clearance. -->
+                    <Grid x:Name="SlotBureau" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
+                                    <Border Width="34" Height="34" CornerRadius="10" Margin="0,0,11,0"
+                                            Background="{DynamicResource AccentTintedBgBrush}" BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                                        <Image Width="18" Height="18" Source="{Binding Source='📋', Converter={StaticResource EmojiToImageSource}}"/>
+                                    </Border>
+                                    <TextBlock Text="{loc:Str pl6_bureau_title}" Style="{StaticResource PlayCardTitle}"/>
+                                    <Border Style="{StaticResource PlayBadgePill}">
+                                        <TextBlock Text="BETA" Style="{StaticResource PlayBadgePillText}"/>
+                                    </Border>
+                                </StackPanel>
+                                <TextBlock Text="{loc:Str pl6_bureau_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,14"/>
+
+                                <!-- Restored from git history (LabTabView.xaml prior to e76328342)
+                                     rather than redrawn: the manila folder is traced from the game's
+                                     own CSS art (bureau.css:241-252) and shares its palette exactly -
+                                     paper #E9DFC6, paper-dark #D8CBA8, sheets #F4ECD8 on #C9BC9C
+                                     edges. Vectors, so it stays crisp at any DPI, and NOT a resource
+                                     path, so no mod contract rides on it. PlayBureauStamp
+                                     (MainWindow.PlayTab.cs) lands it with one thunk per session. -->
+                                <Viewbox x:Name="PlayBureauFolderArt" x:FieldModifier="internal" Width="118" Height="86"
+                                         HorizontalAlignment="Center" Margin="0,0,0,16" RenderTransformOrigin="0.5,0.5">
+                                    <Canvas Width="52" Height="38">
+                                        <!-- back panel -->
+                                        <Border Canvas.Left="0" Canvas.Top="10" Width="52" Height="28" CornerRadius="3" Background="#D8CBA8"/>
+                                        <!-- tab -->
+                                        <Border Canvas.Left="0" Canvas.Top="6" Width="22" Height="8" CornerRadius="3,3,0,0" Background="#D8CBA8"/>
+                                        <!-- sheets peeking out, slightly askew -->
+                                        <Border Canvas.Left="7" Canvas.Top="6" Width="38" Height="4" Background="#F4ECD8" BorderBrush="#C9BC9C" BorderThickness="1,1,1,0">
+                                            <Border.RenderTransform>
+                                                <RotateTransform Angle="-1.5"/>
+                                            </Border.RenderTransform>
+                                        </Border>
+                                        <Border Canvas.Left="10" Canvas.Top="8" Width="37" Height="4" Background="#F4ECD8" BorderBrush="#C9BC9C" BorderThickness="1,1,1,0">
+                                            <Border.RenderTransform>
+                                                <RotateTransform Angle="1"/>
+                                            </Border.RenderTransform>
+                                        </Border>
+                                        <!-- front panel -->
+                                        <Border Canvas.Left="0" Canvas.Top="10" Width="52" Height="28" CornerRadius="3">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                    <GradientStop Color="#E9DFC6" Offset="0"/>
+                                                    <GradientStop Color="#D8CBA8" Offset="1"/>
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                        </Border>
+                                    </Canvas>
+                                </Viewbox>
+
+                                <!-- No tier band, deliberately (gap-report T-3): the Bureau is not
+                                     tier-gated at all - the page enforces its own clearance. What it
+                                     DOES need is an account, so the chip below says so rather than
+                                     letting the click open a window that only shows a login wall. -->
+                                <Border x:Name="PlayBureauNeedsAccount" x:FieldModifier="internal" Visibility="Collapsed"
+                                        Background="{DynamicResource AccentTintedBgBrush}" BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
+                                        CornerRadius="8" Padding="10,7" Margin="0,0,0,12" HorizontalAlignment="Left">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Ellipse Width="7" Height="7" Fill="{DynamicResource TextMutedBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{loc:Str pl6_bureau_needs_account}" Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontFamily="Consolas" FontSize="11" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- The 🔍 stays OUTSIDE the string: the caption reuses the card's own
+                                     pl6_bureau_title, so the button and the title can never drift
+                                     apart and no translator has to carry a glyph. -->
+                                <Button x:Name="BtnPlayBureau" Cursor="Hand"
+                                        HorizontalAlignment="Left" Padding="14,8"
+                                        Background="Transparent" Foreground="{DynamicResource PinkBrush}"
+                                        BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" FontWeight="SemiBold" FontSize="12"
+                                        ToolTip="{loc:Str rf_play_bureau_tooltip}"
+                                        Click="BtnStartBureau_Click">
+                                    <Button.Resources>
+                                        <Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style>
+                                    </Button.Resources>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="🔍" Margin="0,0,6,0"/>
+                                        <TextBlock Text="{loc:Str pl6_bureau_title}"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <!-- Loom's only entry is BtnOpenLoom on the Spiral module of the STUDIO rack.
+                         This card therefore NAVIGATES there and does not launch: a second
+                         LoomHostService.Launch() button would be the duplicate-editor failure the
+                         restructure forbids. (Separately, and out of Phase 6's scope: that service
+                         has no tier check at all - worth a ledger row.) -->
+                    <Grid x:Name="SlotLoom" x:FieldModifier="internal">
+                        <!-- Loom NAVIGATES, it does not launch. Its only entry today is BtnOpenLoom on
+                             the Spiral module of the Studio rack (Features\SpiralFeatureControl.xaml
+                             :135), and a second Launch() button here would be the duplicate-editor
+                             failure the restructure forbids - the same rule that keeps Lockdown,
+                             Remote and Blink as navigation cards. So this card walks the user to the
+                             one editor: ShowTab("studio") + FocusRackEntry("spiral"), through
+                             OpenStudioModule, which is the path every dashboard mosaic tile uses. -->
+                        <Border Style="{StaticResource PlayCard}">
+                            <StackPanel>
+                                <Border Width="52" Height="52" CornerRadius="14" Margin="0,0,0,14" HorizontalAlignment="Left"
+                                        Background="{DynamicResource AccentTintedBgBrush}"
+                                        BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                                    <Image Width="26" Height="26" Source="{Binding Source='🧵', Converter={StaticResource EmojiToImageSource}}"/>
+                                </Border>
+                                <TextBlock Text="{loc:Str pl6_loom_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
+                                <TextBlock Text="{loc:Str pl6_loom_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                <Button x:Name="BtnPlayLoom" Content="{loc:Str pl6_open_in_studio}" Cursor="Hand"
+                                        HorizontalAlignment="Left" Padding="16,8"
+                                        Background="Transparent" Foreground="{DynamicResource PinkBrush}"
+                                        BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" FontWeight="SemiBold" FontSize="12"
+                                        Click="BtnPlayLoom_Click">
+                                    <Button.Resources>
+                                        <Style TargetType="Border"><Setter Property="CornerRadius" Value="9"/></Style>
+                                    </Button.Resources>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <!-- Showcase = the Velvet Vault shelf. It stays its own view and its own key:
+                         this card navigates to ShowTab("exclusives"). Never re-host the shelf. -->
+                    <Grid x:Name="SlotShowcase" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <StackPanel>
+                                <Border Width="52" Height="52" CornerRadius="14" Margin="0,0,0,14" HorizontalAlignment="Left"
+                                        Background="{DynamicResource AccentTintedBgBrush}"
+                                        BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                                    <Image Width="26" Height="26" Source="{Binding Source='💎', Converter={StaticResource EmojiToImageSource}}"/>
+                                </Border>
+                                <TextBlock Text="{loc:Str pl6_showcase_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
+                                <TextBlock Text="{loc:Str pl6_showcase_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                <!-- Free to browse, no band: the Velvet Vault IS the upsell, and a
+                                     padlock over the shop window would be an odd way to sell. The
+                                     shelf keeps its own view, its own key ("exclusives"), its own
+                                     ambient canvas and its own per-card veils - this card only
+                                     navigates, it never re-hosts ExclusiveFeature.All. -->
+                                <Button x:Name="BtnPlayShowcase" Content="{loc:Str btn_open}" Cursor="Hand"
+                                        HorizontalAlignment="Left" Padding="16,8"
+                                        Background="{DynamicResource AccentGradientBrush}" Foreground="White"
+                                        BorderThickness="0" FontWeight="Bold" FontSize="13"
+                                        Click="BtnPlayShowcase_Click">
+                                    <Button.Resources>
+                                        <Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style>
+                                    </Button.Resources>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </UniformGrid>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

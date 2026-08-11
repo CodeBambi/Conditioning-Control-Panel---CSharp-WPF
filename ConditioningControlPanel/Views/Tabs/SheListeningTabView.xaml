@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -87,26 +88,73 @@
                                 <TextBlock Text="Voice controls" Foreground="{DynamicResource PinkBrush}"
                                            FontSize="13" FontWeight="Bold" Margin="0,0,0,10"/>
 
-                                <!-- Microphone input device picker -->
-                                <Grid Margin="0,2" ToolTip="Choose which microphone she listens through. Pick your real mic if a virtual input (OBS, VB-Cable, etc.) got selected by mistake.">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
-                                        <TextBlock Text="🎚 Microphone" FontSize="12" Foreground="#CCC"/>
-                                        <TextBlock Text="Which input device she hears." FontSize="10" Foreground="#888"/>
+                                <!-- Hardware + voice-mode summary. These four rows used to be live
+                                     editors (device combo + refresh, wake-word toggle + phrases,
+                                     push-to-talk toggle + key, headphones switch) that mirrored onto
+                                     a Collapsed block on the Takeover tab. Phase 2 of the UX
+                                     restructure gave the microphone one owner - Settings → Devices -
+                                     so these are READ-ONLY now: display, no two-way binding, painted
+                                     by RefreshSheListeningDeviceChips. What stays live on this page
+                                     is what belongs to it: the master switch, sensitivity, spoken
+                                     mantras, wake calibration, the test and the consent card. -->
+                                <Border Background="{DynamicResource PanelBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
+                                        CornerRadius="8" Padding="14,11" Margin="0,2,0,4">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,8">
+                                            <!-- Same keys the Settings ▸ Devices page uses for the same
+                                                 four rows, so one microphone never reads in two
+                                                 languages on two pages. The glyphs stay OUTSIDE the
+                                                 strings - a translator should never have to carry an
+                                                 emoji through nine files. -->
+                                            <TextBlock Text="{loc:Str set2_devices_mic_title}" FontSize="11" FontWeight="Bold"
+                                                       Foreground="#9090A8" VerticalAlignment="Center"/>
+                                            <Button x:Name="BtnSL_OpenDeviceSettings" HorizontalAlignment="Right"
+                                                    Content="{loc:Str set2_configure_in_settings}"
+                                                    Padding="10,4" FontSize="10" Background="#3A2A4A" Foreground="#DDD"
+                                                    BorderThickness="0" Cursor="Hand"
+                                                    Click="BtnSL_OpenDeviceSettings_Click"/>
+                                        </Grid>
+
+                                        <Grid Margin="0,2">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="🎚" FontSize="11" Foreground="#999" Margin="0,0,5,0"/>
+                                                <TextBlock Text="{loc:Str set2_devices_mic_input}" FontSize="11" Foreground="#999"/>
+                                            </StackPanel>
+                                            <TextBlock x:Name="TxtSL_MicDeviceChip" x:FieldModifier="internal"
+                                                       HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                       Text="System default" FontSize="11" Foreground="#DDD"
+                                                       TextTrimming="CharacterEllipsis" MaxWidth="280"/>
+                                        </Grid>
+                                        <Grid Margin="0,2">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="👂" FontSize="11" Foreground="#999" Margin="0,0,5,0"/>
+                                                <TextBlock Text="{loc:Str rf_sl_chip_wake_word}" FontSize="11" Foreground="#999"/>
+                                            </StackPanel>
+                                            <TextBlock x:Name="TxtSL_WakeWordChip" x:FieldModifier="internal"
+                                                       HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                       Text="Off" FontSize="11" Foreground="#DDD"
+                                                       TextTrimming="CharacterEllipsis" MaxWidth="280"/>
+                                        </Grid>
+                                        <Grid Margin="0,2">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="🎙" FontSize="11" Foreground="#999" Margin="0,0,5,0"/>
+                                                <TextBlock Text="{loc:Str rf_sl_chip_ptt}" FontSize="11" Foreground="#999"/>
+                                            </StackPanel>
+                                            <TextBlock x:Name="TxtSL_PttChip" x:FieldModifier="internal"
+                                                       HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                       Text="Off" FontSize="11" Foreground="#DDD"/>
+                                        </Grid>
+                                        <Grid Margin="0,2">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="🎧" FontSize="11" Foreground="#999" Margin="0,0,5,0"/>
+                                                <TextBlock Text="{loc:Str rf_sl_chip_headphones}" FontSize="11" Foreground="#999"/>
+                                            </StackPanel>
+                                            <TextBlock x:Name="TxtSL_HeadphonesChip" x:FieldModifier="internal"
+                                                       HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                       Text="Off" FontSize="11" Foreground="#DDD"/>
+                                        </Grid>
                                     </StackPanel>
-                                    <ComboBox x:Name="CmbSL_MicDevice" x:FieldModifier="internal" Grid.Column="1" VerticalAlignment="Center"
-                                              Foreground="Black" Background="White" FontSize="11"
-                                              BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                                              SelectionChanged="CmbSL_MicDevice_SelectionChanged"/>
-                                    <Button x:Name="BtnSL_MicRefresh" Grid.Column="2" Content="↻" Margin="6,0,0,0" VerticalAlignment="Center"
-                                            Padding="9,3" Background="Transparent" Foreground="{DynamicResource PinkBrush}"
-                                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" FontSize="12" FontWeight="Bold" Cursor="Hand"
-                                            Click="BtnSL_MicRefresh_Click" ToolTip="Re-scan connected microphones."/>
-                                </Grid>
+                                </Border>
 
                                 <!-- Mic sensitivity (the loudness gate for commands & mantras; NOT the wake word) -->
                                 <Grid Margin="0,8,0,2" ToolTip="How softly you can speak and still be heard for voice COMMANDS and MANTRAS. Higher = picks up quieter speech (but may react more to background noise); lower = you must speak up. This does NOT affect the 'Hey Bambi' wake word — use Calibrate for that.">
@@ -139,25 +187,6 @@
 
                                 <Border Height="1" Background="#2E2E48" Margin="0,10"/>
 
-                                <!-- Wake word -->
-                                <Grid Margin="0,2" ToolTip="When on, she listens continuously for her name and prompts you when she hears it. The mic stays open (still fully offline). Needs mic consent.">
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="👂 Wake word — call her by name" FontSize="12" Foreground="#CCC"/>
-                                        <TextBlock Text="Always-on mic. Say it to summon her." FontSize="10" Foreground="#888"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="ChkSL_WakeWord" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkSL_WakeWord_Changed" Unchecked="ChkSL_WakeWord_Changed"/>
-                                </Grid>
-                                <Grid Margin="22,4,0,2">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="Phrases" FontSize="10" Foreground="#888" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBox x:Name="TxtSL_WakeWords" x:FieldModifier="internal" Grid.Column="1" FontSize="11" Foreground="#DDD" Background="#1A1A2E" BorderBrush="#2E2E48" BorderThickness="1" Padding="6,3"
-                                             Text="hey bambi" LostFocus="TxtSL_WakeWords_LostFocus"
-                                             ToolTip="Comma-separated wake phrases (e.g. hey bambi, hey bimbo). Short common-word phrases recognize best. Used by the built-in recognizer; the reliable wake engine below listens for the trained 'Hey Bambi' instead."/>
-                                </Grid>
-
                                 <!-- Reliable wake (sherpa-onnx KWS) — open-source, offline, no key; far better at the OOV name "Bambi" -->
                                 <Grid Margin="22,6,0,2" ToolTip="Optional but recommended. Drop the open-source sherpa-onnx keyword-spotting model into Resources\Models\sherpa-kws\ to use a purpose-built wake-word engine — much more reliable than the built-in recognizer for her name, fully offline, no account or key. Without it, the built-in recognizer is used. See the README in that folder.">
                                     <Grid>
@@ -180,38 +209,7 @@
                                     </Grid>
                                 </Grid>
 
-                                <Border Height="1" Background="#2E2E48" Margin="0,10"/>
 
-                                <!-- Push-to-talk -->
-                                <Grid Margin="0,2" ToolTip="When on, a key you choose summons a voice prompt on demand (works even when the app isn't focused).">
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="🎙 Push-to-talk — summon with a key" FontSize="12" Foreground="#CCC"/>
-                                        <TextBlock Text="Press your key to talk to her. No surprise mic." FontSize="10" Foreground="#888"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="ChkSL_PushToTalk" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkSL_PushToTalk_Changed" Unchecked="ChkSL_PushToTalk_Changed"/>
-                                </Grid>
-                                <Grid Margin="22,4,0,2">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="Key" FontSize="10" Foreground="#888" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBlock x:Name="TxtSL_PttKey" x:FieldModifier="internal" Grid.Column="1" Text="F8" FontSize="11" FontWeight="Bold" Foreground="#90EE90" VerticalAlignment="Center"/>
-                                    <Button x:Name="BtnSL_SetPttKey" Grid.Column="2" Content="Set key…" FontSize="11" Padding="10,3" Background="#3A2A4A" Foreground="#DDD" BorderThickness="0"
-                                            Click="BtnSL_SetPttKey_Click" ToolTip="Click, then press the key you want to use for push-to-talk."/>
-                                </Grid>
-
-                                <Border Height="1" Background="#2E2E48" Margin="0,10"/>
-
-                                <!-- Headphones / barge-in mode -->
-                                <Grid Margin="0,2" ToolTip="Turn on if you listen on headphones: she'll let you talk over her — the mic stays open even while she's speaking. Leave off for speakers so she never hears her own voice as a command.">
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="🎧 I use headphones — let me interrupt" FontSize="12" Foreground="#CCC"/>
-                                        <TextBlock Text="Talk over her any time. Off (speakers): she finishes, then listens." FontSize="10" Foreground="#888"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="ChkSL_Headphones" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkSL_Headphones_Changed" Unchecked="ChkSL_Headphones_Changed"/>
-                                </Grid>
                             </StackPanel>
                         </Border>
 

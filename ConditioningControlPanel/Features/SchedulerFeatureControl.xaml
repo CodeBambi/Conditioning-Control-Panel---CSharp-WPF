@@ -26,7 +26,7 @@
                 BorderBrush="{DynamicResource GlassBorderBrush}"
                 BorderThickness="1" CornerRadius="10" Padding="16,14" Margin="0,0,0,10">
             <StackPanel>
-                <TextBlock Text="Time Range" Foreground="White" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                <TextBlock Text="{loc:Str st4_scheduler_time_range}" Foreground="White" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -54,7 +54,7 @@
                 BorderBrush="{DynamicResource GlassBorderBrush}"
                 BorderThickness="1" CornerRadius="10" Padding="16,14">
             <StackPanel>
-                <TextBlock Text="Active Days" Foreground="White" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                <TextBlock Text="{loc:Str st4_scheduler_active_days}" Foreground="White" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,10"/>
                 <WrapPanel HorizontalAlignment="Center">
                     <CheckBox x:Name="DayMon" Content="M" Foreground="White" Margin="0,0,10,0" IsChecked="True"
                               FontSize="13" Checked="Day_Changed" Unchecked="Day_Changed"/>

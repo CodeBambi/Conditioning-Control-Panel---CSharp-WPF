@@ -28,6 +28,9 @@ namespace ConditioningControlPanel.Services
         private const int LocalCallbackPort = 47832;
         private const int CacheHours = 24;
         private const int OAuthTimeoutMinutes = 5;
+        // Offline grace window. ONE constant for both tiers on purpose: a Lab window that outlived
+        // the premium one would let a lapsed tier-2 keep the Lab after losing everything else.
+        private const int GraceDays = 14;
 
         // Server-side whitelist status (fetched from proxy)
         private bool _isWhitelisted;
@@ -132,6 +135,19 @@ namespace ConditioningControlPanel.Services
             || (App.SubscribeStar?.HasPremiumAccess == true);
 
         /// <summary>
+        /// The tier-2 half of the offline grace: its own 14-day stamp
+        /// (<see cref="Models.AppSettings.PatreonLabValidUntil"/>), written only by a validation
+        /// that actually returned Level2. A tier-1 patron therefore never falls through it.
+        ///
+        /// It used to be derived from the persisted PatreonTier AND'd with the premium window,
+        /// which sounded equivalent and was not: PatreonTier is written by the V2 sync, so a
+        /// Patreon-OAuth-only tier 2 (whose settings tier stays 0 until a sync that may never
+        /// happen) got no grace at all, while any path that wrote the tier once handed out Lab for
+        /// as long as premium held. One dedicated timestamp removes both halves of that.
+        /// </summary>
+        private static bool HasCachedLabAccess => App.Settings?.Current?.HasCachedLabAccess == true;
+
+        /// <summary>
         /// Whether the user has Lab access: Tier 2+ OR whitelisted.
         ///
         /// THIS IS THE GOON GAME **HOST** BAR, and it mirrors the server exactly:
@@ -143,15 +159,20 @@ namespace ConditioningControlPanel.Services
         /// Whitelist folds to permanent tier 2 on both sides (<see cref="SetWhitelistStatus"/>
         /// raises CurrentTier to Level2, computeEffectiveTier does the same server-side), so the
         /// OR is belt-and-braces rather than a second rule. SubscribeStar is OR'd in the same way
-        /// the server folds <c>substar_tier</c>. The 2-week grace cache is NOT: it caches a
-        /// tier-1 entitlement and would let a lapsed patron host.
+        /// the server folds <c>substar_tier</c>. The plain premium grace cache is still NOT OR'd
+        /// in - it caches a tier-1 entitlement - but <see cref="HasCachedLabAccess"/> gives the
+        /// same 14-day offline window to accounts whose last validated tier was 2, so a supporter
+        /// who goes offline (or logs in with Discord) keeps the Lab for a fortnight the way they
+        /// keep every premium feature. Owner decision, 2026-08-10.
         ///
         /// Advisory only — the server refuses on its own, and this exists so the UI can say so
-        /// before the round-trip instead of after it.
+        /// before the round-trip instead of after it. The grace can therefore say yes where the
+        /// server still says 403 <c>no_host_access</c>; that costs a round-trip, not a leak.
         /// </summary>
         public bool HasLabAccess => CurrentTier >= PatreonTier.Level2 || IsWhitelisted
             || (App.SubscribeStar?.CurrentTier ?? PatreonTier.None) >= PatreonTier.Level2
-            || (App.SubscribeStar?.IsWhitelisted == true);
+            || (App.SubscribeStar?.IsWhitelisted == true)
+            || HasCachedLabAccess;
 
         public PatreonService()
         {
@@ -193,12 +214,31 @@ namespace ConditioningControlPanel.Services
                 }
                 else
                 {
-                    // No valid tokens - ensure cached premium access is cleared
+                    // No valid tokens - ensure cached premium access is cleared.
                     if (App.Settings?.Current != null)
                     {
                         App.Settings.Current.PatreonTier = 0;
-                        App.Settings.Current.PatreonPremiumValidUntil = null;
-                        App.Logger?.Debug("No Patreon tokens found, cleared cached premium access");
+
+                        // ...but the offline grace stamps are NOT Patreon-OAuth-shaped. A
+                        // Discord-linked or SubscribeStar account has no local Patreon tokens by
+                        // construction, and V2AuthService/SubscribeStarService are the only writers
+                        // of its stamp - so nulling here would wipe the grace window on every
+                        // launch for exactly the population it exists for, synchronously, before
+                        // any of those paths can re-stamp. Leave the stamps to expire on their own
+                        // 14-day window, or to be overwritten by the server's answer; a real logout
+                        // still clears both explicitly.
+                        var hasUnifiedSession =
+                            !string.IsNullOrWhiteSpace(App.Settings.Current.UnifiedId) ||
+                            !string.IsNullOrWhiteSpace(App.Settings.Current.AuthToken);
+                        if (!hasUnifiedSession)
+                        {
+                            App.Settings.Current.PatreonPremiumValidUntil = null;
+                            App.Settings.Current.PatreonLabValidUntil = null;
+                        }
+
+                        App.Logger?.Debug(
+                            "No Patreon tokens found, cleared cached tier (grace stamps kept: {Kept})",
+                            hasUnifiedSession);
                     }
                 }
             }
@@ -627,8 +667,22 @@ namespace ConditioningControlPanel.Services
                 {
                     if (App.Settings?.Current != null)
                     {
-                        App.Settings.Current.PatreonPremiumValidUntil = DateTime.UtcNow.AddDays(14);
+                        App.Settings.Current.PatreonPremiumValidUntil = DateTime.UtcNow.AddDays(GraceDays);
                         App.Logger?.Information("Extended premium access grace period to {Date}", App.Settings.Current.PatreonPremiumValidUntil);
+
+                        // Tier-2 half of the same grace. Stamped from the tier this validation just
+                        // returned - never from the persisted PatreonTier, which is exactly the
+                        // never-expiring read HasCachedLabAccess was rewritten to stop trusting.
+                        // A tier-1 patron falls through to the else and any stale Lab window dies.
+                        if (newTier >= PatreonTier.Level2)
+                        {
+                            App.Settings.Current.PatreonLabValidUntil = DateTime.UtcNow.AddDays(GraceDays);
+                            App.Logger?.Information("Extended Lab (tier 2) grace period to {Date}", App.Settings.Current.PatreonLabValidUntil);
+                        }
+                        else
+                        {
+                            App.Settings.Current.PatreonLabValidUntil = null;
+                        }
                     }
                 }
 
@@ -925,6 +979,7 @@ namespace ConditioningControlPanel.Services
             if (App.Settings?.Current != null)
             {
                 App.Settings.Current.PatreonPremiumValidUntil = null;
+                App.Settings.Current.PatreonLabValidUntil = null;
                 App.Settings.Current.PatreonTier = 0; // Clear cached tier
                 App.Settings.Save(); // Force save immediately
             }

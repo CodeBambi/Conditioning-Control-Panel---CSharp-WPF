@@ -80,11 +80,6 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnDeeperWebcamQuickRecal_Click(sender, e);
         }
-        private void BtnDeeperWebcamRefresh_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnDeeperWebcamRefresh_Click(sender, e);
-        }
         private void BtnDeeperWebcamRevokeConsent_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -110,25 +105,12 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnDeeperWelcomeTour_Click(sender, e);
         }
-        private void ChkBlinkRecalShortcut_Changed(object sender, RoutedEventArgs e)
+        // Phase 2: blink-recal, the camera/monitor pickers and restrict-gaze moved to
+        // Settings → Devices (one editor per setting). Only the chip's link back is left.
+        private void BtnOpenDeviceSettings_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkBlinkRecalShortcut_Changed(sender, e);
-        }
-        private void ChkDeeperWebcamRestrictGazeToCalScreen_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkDeeperWebcamRestrictGazeToCalScreen_Changed(sender, e);
-        }
-        private void CmbDeeperWebcamDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CmbDeeperWebcamDevice_SelectionChanged(sender, e);
-        }
-        private void CmbDeeperWebcamMonitor_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CmbDeeperWebcamMonitor_SelectionChanged(sender, e);
+                mw.OpenDeviceSettings();
         }
         private void DeeperPillAll_Click(object sender, RoutedEventArgs e)
         {

@@ -680,15 +680,29 @@ namespace ConditioningControlPanel
             }
         }
 
-        /// <summary>Updates the hero pill text to match the saved shortcut.</summary>
+        /// <summary>
+        /// Updates every label that quotes the saved chat shortcut. Two surfaces launch the same
+        /// capture dialog since Phase 2 — the Companion Workshop pill and the Shortcuts row in
+        /// Settings → Devices — and the dialog remains the single editor, so both labels are
+        /// repainted from the same call. Each is guarded on its own: a Settings view that hasn't
+        /// been realized must not stop the Companion pill from updating (or vice versa), and the
+        /// old blanket catch would have swallowed the second write silently.
+        /// </summary>
         public void RefreshChatShortcutLabel()
         {
+            var text = AvatarTubeWindow.FormatChatShortcut();
             try
             {
-                if (CompanionTab.TxtChatShortcutLabel != null)
-                    CompanionTab.TxtChatShortcutLabel.Text = AvatarTubeWindow.FormatChatShortcut();
+                if (CompanionTab?.TxtChatShortcutLabel != null)
+                    CompanionTab.TxtChatShortcutLabel.Text = text;
             }
             catch { /* Tab not yet realized, fine */ }
+            try
+            {
+                if (AppSettingsTab?.TxtChatShortcutLabelDevices != null)
+                    AppSettingsTab.TxtChatShortcutLabelDevices.Text = text;
+            }
+            catch { /* Settings view not yet realized, fine */ }
         }
 
         // ---------------------------------------------------------------------
@@ -815,15 +829,22 @@ namespace ConditioningControlPanel
             return string.Join("+", parts);
         }
 
-        /// <summary>Updates the hero pill text to match the saved camera shortcut.</summary>
+        /// <summary>Updates both camera-shortcut labels (Companion pill + Settings → Devices row).</summary>
         public void RefreshCameraShortcutLabel()
         {
+            var text = FormatCameraShortcut();
             try
             {
-                if (CompanionTab.TxtCameraShortcutLabel != null)
-                    CompanionTab.TxtCameraShortcutLabel.Text = FormatCameraShortcut();
+                if (CompanionTab?.TxtCameraShortcutLabel != null)
+                    CompanionTab.TxtCameraShortcutLabel.Text = text;
             }
             catch { /* Tab not yet realized, fine */ }
+            try
+            {
+                if (AppSettingsTab?.TxtCameraShortcutLabelDevices != null)
+                    AppSettingsTab.TxtCameraShortcutLabelDevices.Text = text;
+            }
+            catch { /* Settings view not yet realized, fine */ }
         }
 
         /// <summary>

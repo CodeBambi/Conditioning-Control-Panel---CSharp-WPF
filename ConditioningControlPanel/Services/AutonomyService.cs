@@ -319,7 +319,8 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Warning("AutonomyService: Test failed - service not enabled. Enable Autonomy Mode first!");
 
-                var hasPatreon = App.Patreon?.HasPremiumAccess == true;
+                var hasPatreon = App.Patreon?.HasPremiumAccess == true
+                                 || App.DailyFree?.IsFreeToday("takeover") == true;
                 var reason = !hasPatreon
                     ? "Bambi Takeover requires Patreon access."
                     : "Click the green \"Start\" button to enable it, then press Test again.";
@@ -612,7 +613,11 @@ namespace ConditioningControlPanel.Services
             var settings = App.Settings?.Current;
             if (settings == null) return false;
 
-            var hasPatreon = App.Patreon?.HasPremiumAccess == true;
+            // Daily free day (the ? box) counts as access here too - the UI gate
+            // (TierGate keyed overload) and this engine gate must agree or the chip
+            // toggles a takeover that then refuses to start.
+            var hasPatreon = App.Patreon?.HasPremiumAccess == true
+                             || App.DailyFree?.IsFreeToday("takeover") == true;
             return settings.AutonomyModeEnabled &&
                    settings.AutonomyConsentGiven &&
                    hasPatreon;

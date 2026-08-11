@@ -5,10 +5,10 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using NAudio.Wave;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel
 {
@@ -16,11 +16,13 @@ namespace ConditioningControlPanel
     {
         private static readonly Random _random = new();
 
+        // Resource-relative paths - the mod compatibility surface. A mod's
+        // resources/Cards/<name>.png wins; never rename these strings.
         private static readonly string[] CardImages = new[]
         {
-            "pack://application:,,,/Resources/Cards/fireworks.png",
-            "pack://application:,,,/Resources/Cards/hearth.png",
-            "pack://application:,,,/Resources/Cards/spotlight.png"
+            "Cards/fireworks.png",
+            "Cards/hearth.png",
+            "Cards/spotlight.png"
         };
 
         public SessionCompleteWindow(SessionLog log, bool playSound = true)
@@ -114,8 +116,13 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var cardUri = CardImages[_random.Next(CardImages.Length)];
-                var bitmap = new BitmapImage(new Uri(cardUri, UriKind.Absolute));
+                var cardPath = CardImages[_random.Next(CardImages.Length)];
+                var bitmap = ModResourceResolver.ResolveImage(cardPath);
+                if (bitmap == null)
+                {
+                    CardBorder.Visibility = Visibility.Collapsed;
+                    return;
+                }
                 ImgCard.Source = bitmap;
             }
             catch (Exception ex)

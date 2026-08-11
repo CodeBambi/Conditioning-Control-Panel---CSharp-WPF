@@ -687,6 +687,15 @@ namespace ConditioningControlPanel.Services
                 var until = DateTime.UtcNow.AddDays(14);
                 if (settings.PatreonPremiumValidUntil == null || settings.PatreonPremiumValidUntil < until)
                     settings.PatreonPremiumValidUntil = until;
+
+                // Tier-2 half of the same grace. Until the Lab window became its own stamp,
+                // HasCachedLabAccess was (PatreonTier >= 2 && premium window), so a linked tier-2
+                // Discord user got Lab offline for free; without this line that user silently
+                // loses the Lab the moment they go offline. Gated on the tier the SERVER just
+                // returned, never on the persisted one - that is the read the stamp replaced.
+                if (user.PatreonTier >= 2 &&
+                    (settings.PatreonLabValidUntil == null || settings.PatreonLabValidUntil < until))
+                    settings.PatreonLabValidUntil = until;
             }
 
             // Store auth token if provided

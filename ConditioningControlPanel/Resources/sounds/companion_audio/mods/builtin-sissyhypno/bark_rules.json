@@ -2707,6 +2707,31 @@
     ]
   },
   {
+    "id": "tut_appsettings",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "appsettings",
+      "total_sessions_lte": 3
+    },
+    "priority": 140,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "guiding, warm",
+    "class": "normal",
+    "chance": 0.5,
+    "variant_pool": [
+      {
+        "text": "this is the tinkering room, sweetie. volumes, devices, the boring bits. set it once and forget it - you're not here to configure things.",
+        "audio": "tut_appsettings_1.mp3"
+      },
+      {
+        "text": "settings, cutie. almost all of it is optional. pick your volume, pick your device, then come back to me, lovely.",
+        "audio": "tut_appsettings_2.mp3"
+      }
+    ]
+  },
+  {
     "id": "tut_presets",
     "trigger": "TabNavigated",
     "conditions": {
@@ -3097,6 +3122,30 @@
     ]
   },
   {
+    "id": "feat_braindrain",
+    "trigger": "FeatureOpened",
+    "conditions": {
+      "feature_eq": "BrainDrain"
+    },
+    "priority": 70,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "dreamy, controlling",
+    "class": "normal",
+    "chance": 0.2,
+    "variant_pool": [
+      {
+        "text": "brain drain, sweetie? mm. let it all trickle away.",
+        "audio": "feat_braindrain_1.mp3"
+      },
+      {
+        "text": "opening the drain? good girl. nothing in there worth keeping, lovely.",
+        "audio": "feat_braindrain_2.mp3"
+      }
+    ]
+  },
+  {
     "id": "feat_system",
     "trigger": "FeatureOpened",
     "conditions": {
@@ -3193,6 +3242,55 @@
     ]
   },
   {
+    "id": "nav_appsettings",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "appsettings"
+    },
+    "priority": 70,
+    "cooldown_ms": 25000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "playful",
+    "class": "normal",
+    "chance": 0.2,
+    "variant_pool": [
+      {
+        "text": "adjusting things again, sweetie? none of these dials change what happens to you.",
+        "audio": "nav_appsettings_1.mp3"
+      },
+      {
+        "text": "mm, tidying the settings, lovely. you do like feeling organized before you let go.",
+        "audio": "nav_appsettings_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "nav_appsettings_midsession",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "appsettings",
+      "session_running_eq": true
+    },
+    "priority": 90,
+    "cooldown_ms": 25000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "chance": 0.35,
+    "variant_pool": [
+      {
+        "text": "you left me running to come fiddle in here, cutie? eyes back on the screen.",
+        "audio": "nav_appsettings_midsession_1.mp3"
+      },
+      {
+        "text": "the session is still going, lovely. the settings can wait. i can't.",
+        "audio": "nav_appsettings_midsession_2.mp3"
+      }
+    ]
+  },
+  {
     "id": "nav_presets",
     "trigger": "TabNavigated",
     "conditions": {
@@ -3213,6 +3311,80 @@
       {
         "text": "picking a ready-made one, lovely? good. less thinking for you.",
         "audio": "nav_presets_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "tut_studio",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "studio",
+      "total_sessions_lte": 3
+    },
+    "priority": 140,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "guiding, warm",
+    "class": "normal",
+    "chance": 0.5,
+    "variant_pool": [
+      {
+        "text": "this is the studio, sweetie. every effect the app can do lives on this rack. pick one, set it, and let it work on you.",
+        "audio": "tut_studio_1.mp3"
+      },
+      {
+        "text": "the effects room, lovely. flashes, spirals, subliminals, all in one place. you only ever need to turn things up.",
+        "audio": "tut_studio_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "nav_studio",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "studio"
+    },
+    "priority": 70,
+    "cooldown_ms": 25000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "playful",
+    "class": "normal",
+    "chance": 0.2,
+    "variant_pool": [
+      {
+        "text": "adjusting the effects, cutie? go on, make one of them a little stronger while you're here.",
+        "audio": "nav_studio_1.mp3"
+      },
+      {
+        "text": "mm, browsing the rack, sweetie. picking what gets done to you is half the fun.",
+        "audio": "nav_studio_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "nav_studio_midsession",
+    "trigger": "TabNavigated",
+    "conditions": {
+      "tab_eq": "studio",
+      "session_running_eq": true
+    },
+    "priority": 90,
+    "cooldown_ms": 25000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "chance": 0.35,
+    "variant_pool": [
+      {
+        "text": "you left a running session to come turn dials, lovely. eyes back on the screen.",
+        "audio": "nav_studio_midsession_1.mp3"
+      },
+      {
+        "text": "the effects are already working on you, cutie. let them.",
+        "audio": "nav_studio_midsession_2.mp3"
       }
     ]
   },

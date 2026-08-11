@@ -97,135 +97,17 @@
             </Setter>
         </Style>
 
-        <!-- v6 brand-anchor variant. Only the dashboard's primary nav tabs use this; quest sub-tabs
-             and roadmap track buttons keep TabButtonActive so they don't get pulled into the gradient.
-             On every non-CCP-Default mod AccentGradientBrush resolves to SolidColorBrush(accent), so
-             primary-nav active state renders byte-identical to today on Bambi / Sissy / Drone.
+        <!-- PHASE 8 (UX restructure) removed five dead tab-button styles from here:
+             TabButtonActivePrimary, TabButtonDeeper, TabButtonDeeperActive, TabButtonNeon and
+             TabButtonNeonActive. They served the retired two-row tab strip; Phase 1 replaced
+             per-tab style swapping with a real active indicator (a 3px accent bar + tinted row,
+             ApplyNavActiveGlow), so every rail entry keeps the one Style it was authored with and
+             the brand accents survive a tab switch instead of being reset and re-applied. All five
+             had zero usages repo-wide.
 
-             Template is overridden so hover applies a translucent white tint via an overlay Border
-             instead of swapping Background to PinkButtonHoveredBrush. The parent's swap-Background
-             trigger would flicker the gradient out to a solid pink on CCP Default hover; the overlay
-             pattern keeps the gradient intact and adds a gentle hover lift on top, which also reads
-             well on the solid-accent active state every other mod sees. -->
-        <Style x:Key="TabButtonActivePrimary" TargetType="Button" BasedOn="{StaticResource TabButtonActive}">
-            <Setter Property="Background" Value="{DynamicResource AccentGradientBrush}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="6" Padding="{TemplateBinding Padding}">
-                            <Grid>
-                                <Border x:Name="hoverOverlay" Background="Transparent" IsHitTestVisible="False"/>
-                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Grid>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="hoverOverlay" Property="Background" Value="#1AFFFFFF"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- Deeper Tab Button Styles — violet accent variant of TabButton/TabButtonActive
-             so the new Deeper tab carries a distinct visual identity in the tab strip. -->
-        <Style x:Key="TabButtonDeeper" TargetType="Button" BasedOn="{StaticResource TabButton}">
-            <Setter Property="Foreground" Value="{DynamicResource DeeperAccentBrush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentBrush}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="border" Background="Transparent"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="6" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{DynamicResource DeeperAccentTransparent20Brush}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="TabButtonDeeperActive" TargetType="Button" BasedOn="{StaticResource TabButtonActive}">
-            <Setter Property="Background" Value="{DynamicResource DeeperAccentBrush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentBrush}"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="bg" Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="6" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource DeeperAccentSoftBrush}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- SP5 layer 3: NeonPurple tab styles for the Available Subjects tab.
-             Mirror of TabButtonDeeper/Active but with #B47BFF accent — distinct
-             from the Deeper violet so the two purple-tinted tabs don't read as
-             the same family. -->
-        <Style x:Key="TabButtonNeon" TargetType="Button" BasedOn="{StaticResource TabButton}">
-            <Setter Property="Foreground" Value="{DynamicResource NeonPurpleBrush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource NeonPurpleBrush}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="border" Background="Transparent"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="6" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{DynamicResource NeonPurpleTransparent20Brush}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="TabButtonNeonActive" TargetType="Button" BasedOn="{StaticResource TabButtonActive}">
-            <Setter Property="Background" Value="{DynamicResource NeonPurpleBrush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource NeonPurpleBrush}"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="bg" Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="6" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource NeonPurpleSoftBrush}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+             TabButton and TabButtonActive above STAY: MainWindow.Roadmap.cs and
+             MainWindow.UiUpdates.cs resolve them with FindResource, and QuestsTabView.xaml uses
+             both for the quest sub-tabs and roadmap track buttons. -->
 
         <!-- Small Pink Button Style (for tutorial guide buttons) -->
         <Style x:Key="SmallPinkButton" TargetType="Button">
@@ -528,19 +410,25 @@
             <Setter Property="MinHeight" Value="30"/>
             <Setter Property="Template">
                 <Setter.Value>
+                    <!-- 2026-08-11: the thumb used to sit at PinkBrush/0.6 all the time, so on a
+                         page with two scroll regions (Studio) the loudest things after START were
+                         two scrollbars. Neutral at rest, pink only once the pointer is on it -
+                         one edit, every scrolling surface in the app. -->
                     <ControlTemplate TargetType="Thumb">
                         <Border x:Name="Bd"
                                 CornerRadius="4"
-                                Background="{DynamicResource PinkBrush}"
-                                Opacity="0.6"
+                                Background="{DynamicResource PanelAccentHoverBrush}"
+                                Opacity="0.9"
                                 HorizontalAlignment="Stretch"
                                 VerticalAlignment="Stretch"
                                 SnapsToDevicePixels="True"/>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PinkBrush}"/>
                                 <Setter TargetName="Bd" Property="Opacity" Value="0.85"/>
                             </Trigger>
                             <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PinkBrush}"/>
                                 <Setter TargetName="Bd" Property="Opacity" Value="1"/>
                             </Trigger>
                         </ControlTemplate.Triggers>

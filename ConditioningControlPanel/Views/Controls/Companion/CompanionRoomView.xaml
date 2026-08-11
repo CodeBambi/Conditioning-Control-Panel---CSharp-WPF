@@ -40,7 +40,13 @@
            Z5     AwarenessPrivacyView   what she can see     (right column)
            Z6     AttentionGaugeView     her attention        (right column)
            Z7     EngineRoomDrawer       the Engine Room      (full width)
+           Z7b    AiPermissionsGrid      what she's allowed   (full width)
            Z8     WorkshopAccordion      the Workshop         (full width)
+
+         Z7b is the one zone the design doc did not name: it arrived with
+         the UX restructure's Phase 5, which made this door the single
+         home for AI permissions. It is also the one zone that is not
+         MVVM-bound — see its own header.
 
          MOTION BUDGET (design §7.3 — ONE ambient loop per tab). The page
          adds none. The hero's portrait breathe is the tab's Forever clock
@@ -164,6 +170,24 @@
                     <local:EngineRoomDrawer x:Name="EngineZone"
                                             DataContext="{Binding Engine}"
                                             AutomationProperties.AutomationId="CompanionRoomEngine"/>
+
+                    <!-- ========== Z7b · WHAT SHE'S ALLOWED TO DO ==========
+                         The AI-effects permissions grid, moved off the Lab tab in Phase 5 of the
+                         UX restructure. It sits HERE, between the provider plumbing it depends on
+                         and the Workshop, because "may she fire a flash" is meaningless until
+                         "which brain is she running on" is answered — and the Engine Room's own
+                         "needs a local model" deep link lands one card above this one.
+
+                         It carries no DataContext: unlike every other zone this one is not
+                         MVVM-bound. Its sixteen named controls are written to directly by
+                         MainWindow.Patreon.cs, exactly as they were on the Lab tab, through the
+                         passthroughs in this page's code-behind. Inheriting the page's
+                         ICompanionRoomVm would only give it a binding source it never reads.
+
+                         Motion budget: zero. Nothing here for ParkClocks to reach. -->
+                    <local:AiPermissionsGrid x:Name="PermissionsZone"
+                                             AutomationProperties.AutomationId="CompanionRoomPermissions"/>
+
                     <local:WorkshopAccordion x:Name="WorkshopZone"
                                              DataContext="{Binding Workshop}"
                                              AutomationProperties.AutomationId="CompanionRoomWorkshop"/>

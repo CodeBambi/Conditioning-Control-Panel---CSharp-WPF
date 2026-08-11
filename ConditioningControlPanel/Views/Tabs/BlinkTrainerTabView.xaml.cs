@@ -82,30 +82,13 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnBlinkTrainerStartStopTracker_Click(sender, e);
         }
-        private void BtnBlinkTrainerWebcamRefresh_Click(object sender, RoutedEventArgs e)
+        // Phase 2: the camera/monitor pickers, the blink-recal toggle and the restrict-gaze
+        // checkbox moved to Settings → Devices (they were duplicate editors of one setting each),
+        // so their shims went with them. This is the read-only chip's link back.
+        private void BtnOpenDeviceSettings_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnBlinkTrainerWebcamRefresh_Click(sender, e);
-        }
-        private void ChkBlinkRecalShortcut_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkBlinkRecalShortcut_Changed(sender, e);
-        }
-        private void ChkBlinkTrainerRestrictGazeToCalScreen_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkBlinkTrainerRestrictGazeToCalScreen_Changed(sender, e);
-        }
-        private void CmbBlinkTrainerWebcamDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CmbBlinkTrainerWebcamDevice_SelectionChanged(sender, e);
-        }
-        private void CmbBlinkTrainerWebcamMonitor_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CmbBlinkTrainerWebcamMonitor_SelectionChanged(sender, e);
+                mw.OpenDeviceSettings();
         }
         private void SliderBlinkTrainerDurationNew_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {

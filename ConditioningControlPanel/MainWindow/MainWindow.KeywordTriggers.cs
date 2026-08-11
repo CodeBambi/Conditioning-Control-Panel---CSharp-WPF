@@ -32,76 +32,31 @@ namespace ConditioningControlPanel
     {
         #region Keyword Triggers Handlers
 
-        internal void BtnKeywordTriggersStartStop_Click(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            var isRunning = App.Settings.Current.KeywordTriggersEnabled;
-
-            if (!isRunning)
-            {
-                // Starting — check Patreon access
-                if (!KeywordTriggerService.HasAccess())
-                {
-                    MessageBox.Show(
-                        Loc.Get("msg_keyword_triggers_patreon_only"),
-                        Loc.Get("title_patreon_feature"),
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
-                    return;
-                }
-
-                App.Settings.Current.KeywordTriggersEnabled = true;
-                App.KeywordTriggers?.Start();
-                _keyboardHook?.Start();
-
-                if (App.Settings.Current.ScreenOcrEnabled)
-                    App.ScreenOcr?.Start();
-            }
-            else
-            {
-                // Stopping
-                App.Settings.Current.KeywordTriggersEnabled = false;
-                App.KeywordTriggers?.Stop();
-                App.ScreenOcr?.Stop();
-
-                // Only stop hook if panic key also disabled
-                if (App.Settings.Current.PanicKeyEnabled != true)
-                    _keyboardHook?.Stop();
-            }
-
-            UpdateKeywordTriggersButtonState();
-            App.Settings.Save();
-        }
-
-        private void UpdateKeywordTriggersButtonState()
-        {
-            if (PatreonTab.BtnKeywordTriggersStartStop == null) return;
-            var running = App.Settings?.Current?.KeywordTriggersEnabled == true;
-
-            PatreonTab.BtnKeywordTriggersStartStop.Content = running ? Loc.Get("btn_stop") : Loc.Get("btn_start");
-            PatreonTab.BtnKeywordTriggersStartStop.Background = running
-                ? new System.Windows.Media.SolidColorBrush(
-                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#555555"))
-                : new System.Windows.Media.SolidColorBrush(
-                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4"));
-        }
+        // PHASE 8 (demolition): BtnKeywordTriggersStartStop_Click and
+        // UpdateKeywordTriggersButtonState went with PatreonTabView, whose markup was their only
+        // binder. The live master is AwarenessTab.ChkAwarenessMaster
+        // (MainWindow.Awareness.cs ChkAwarenessMaster_Changed), which does everything this pair did
+        // and more: the same HasAccess gate and message box, the same KeywordTriggersEnabled write,
+        // the same App.KeywordTriggers / App.ScreenOcr / _keyboardHook start-stop with the same
+        // "only drop the hook if the panic key is off" condition - plus it keeps the sub-toggle and
+        // the status indicator in step, which the corpse's button never did.
 
         internal void SliderKeywordBufferTimeout_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (_isLoading || PatreonTab.TxtKeywordBufferTimeout == null) return;
-            var value = (int)PatreonTab.SliderKeywordBufferTimeout.Value;
-            PatreonTab.TxtKeywordBufferTimeout.Text = $"{value / 1000.0:F1}s";
-            App.Settings.Current.KeywordBufferTimeoutMs = value;
+            if (_isLoading || AwarenessTab.TxtKeywordBufferTimeout == null) return;
+            var value = (int)AwarenessTab.SliderKeywordBufferTimeout.Value;
+            AwarenessTab.TxtKeywordBufferTimeout.Text = $"{value / 1000.0:F1}s";
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.KeywordBufferTimeoutMs = value;
+                App.Settings.Save();
+            }
         }
 
-        internal void SliderKeywordGlobalCooldown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || PatreonTab.TxtKeywordGlobalCooldown == null) return;
-            var value = (int)PatreonTab.SliderKeywordGlobalCooldown.Value;
-            PatreonTab.TxtKeywordGlobalCooldown.Text = $"{value}s";
-            App.Settings.Current.KeywordGlobalCooldownSeconds = value;
-        }
+        // PHASE 8: SliderKeywordGlobalCooldown_ValueChanged went with PatreonTabView. Its slider
+        // clamped at 120 while the live one goes to 180, so it was also the clamp hazard the Phase 5
+        // note below describes. SliderAwarenessGlobalCooldown_ValueChanged is the only editor of
+        // KeywordGlobalCooldownSeconds now.
 
         internal void SliderAwarenessGlobalCooldown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
@@ -112,10 +67,11 @@ namespace ConditioningControlPanel
             {
                 App.Settings.Current.KeywordGlobalCooldownSeconds = value;
                 App.Settings.Save();
-                // Mirror into the Settings-tab slider so both controls stay in sync
-                // even if the Settings tab has already been bound this session.
-                if (PatreonTab.SliderKeywordGlobalCooldown != null && (int)PatreonTab.SliderKeywordGlobalCooldown.Value != value)
-                    PatreonTab.SliderKeywordGlobalCooldown.Value = value;
+                // PHASE 5 (G3): the mirror into PatreonTab.SliderKeywordGlobalCooldown is gone.
+                // That twin is on the permanently-Collapsed corpse tab, so nobody could see it -
+                // and it clamped at 120 while this slider goes to 180, so mirroring 150 wrote 120
+                // straight back into KeywordGlobalCooldownSeconds via its own ValueChanged.
+                // This slider is now the only editor for the property.
             }
         }
 
@@ -133,86 +89,76 @@ namespace ConditioningControlPanel
 
         internal void SliderKeywordSessionMultiplier_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (_isLoading || PatreonTab.TxtKeywordSessionMultiplier == null) return;
-            var value = PatreonTab.SliderKeywordSessionMultiplier.Value;
-            PatreonTab.TxtKeywordSessionMultiplier.Text = $"{value:F1}x";
-            App.Settings.Current.KeywordSessionMultiplier = value;
-        }
-
-        internal void ChkScreenOcrEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var isEnabled = PatreonTab.ChkScreenOcrEnabled.IsChecked == true;
-
-            if (isEnabled && !KeywordTriggerService.HasAccess())
+            if (_isLoading || AwarenessTab.TxtKeywordSessionMultiplier == null) return;
+            var value = AwarenessTab.SliderKeywordSessionMultiplier.Value;
+            AwarenessTab.TxtKeywordSessionMultiplier.Text = $"{value:F1}x";
+            if (App.Settings?.Current != null)
             {
-                PatreonTab.ChkScreenOcrEnabled.IsChecked = false;
-                MessageBox.Show(
-                    Loc.Get("msg_screen_ocr_patreon_only"),
-                    Loc.Get("title_patreon_feature"),
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-                return;
+                App.Settings.Current.KeywordSessionMultiplier = value;
+                App.Settings.Save();
             }
-
-            App.Settings.Current.ScreenOcrEnabled = isEnabled;
-
-            if (isEnabled)
-                App.ScreenOcr?.Start();
-            else
-                App.ScreenOcr?.Stop();
-
-            if (PatreonTab.ScreenOcrIntervalPanel != null)
-                PatreonTab.ScreenOcrIntervalPanel.Visibility = isEnabled ? Visibility.Visible : Visibility.Collapsed;
-
-            App.Settings.Save();
         }
+
+        // PHASE 8: ChkScreenOcrEnabled_Changed went with PatreonTabView. Its live replacement is
+        // AwarenessTab.ChkAwarenessOcr -> MainWindow.Awareness.cs ChkAwarenessOcr_Changed, a strict
+        // superset: same HasAccess gate and message box, same ScreenOcrEnabled write, same
+        // App.ScreenOcr start-stop (additionally conditioned on KeywordTriggersEnabled, which the
+        // corpse ignored), and SyncKeywordRescuePanelUi() for the detail-row visibility that
+        // ScreenOcrIntervalPanel used to get by hand.
 
         internal void SliderScreenOcrInterval_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (_isLoading || PatreonTab.TxtScreenOcrInterval == null) return;
-            var value = (int)PatreonTab.SliderScreenOcrInterval.Value;
-            PatreonTab.TxtScreenOcrInterval.Text = $"{value}s";
-            App.Settings.Current.ScreenOcrIntervalMs = value * 1000;
+            if (_isLoading || AwarenessTab.TxtScreenOcrInterval == null) return;
+            var value = (int)AwarenessTab.SliderScreenOcrInterval.Value;
+            AwarenessTab.TxtScreenOcrInterval.Text = $"{value}s";
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.ScreenOcrIntervalMs = value * 1000;
+                App.Settings.Save();
+            }
             App.ScreenOcr?.UpdateInterval(value * 1000);
         }
 
-        internal void ChkKeywordHighlightEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            App.Settings.Current.KeywordHighlightEnabled = PatreonTab.ChkKeywordHighlightEnabled.IsChecked == true;
-            if (PatreonTab.HighlightDurationPanel != null)
-                PatreonTab.HighlightDurationPanel.Visibility = PatreonTab.ChkKeywordHighlightEnabled.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
-        }
+        // PHASE 8: ChkKeywordHighlightEnabled_Changed went with PatreonTabView. Live replacement:
+        // AwarenessTab.ChkAwarenessHighlight -> MainWindow.Awareness.cs ChkAwarenessHighlight_Changed,
+        // which writes the same KeywordHighlightEnabled, saves, drives the same detail rows through
+        // SyncKeywordRescuePanelUi(), and additionally syncs the colour swatch.
 
         internal void SliderKeywordHighlightDuration_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (_isLoading) return;
-            var ms = (int)(PatreonTab.SliderKeywordHighlightDuration.Value * 1000);
-            PatreonTab.TxtKeywordHighlightDuration.Text = $"{PatreonTab.SliderKeywordHighlightDuration.Value:0.0}s";
-            App.Settings.Current.KeywordHighlightDurationMs = ms;
+            if (_isLoading || AwarenessTab.SliderKeywordHighlightDuration == null) return;
+            var ms = (int)(AwarenessTab.SliderKeywordHighlightDuration.Value * 1000);
+            AwarenessTab.TxtKeywordHighlightDuration.Text = $"{AwarenessTab.SliderKeywordHighlightDuration.Value:0.0}s";
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.KeywordHighlightDurationMs = ms;
+                App.Settings.Save();
+            }
         }
 
         internal void CmbOcrHighlightMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (_isLoading) return;
-            App.Settings.Current.OcrHighlightAll = PatreonTab.CmbOcrHighlightMode.SelectedIndex == 0;
+            if (_isLoading || AwarenessTab.CmbOcrHighlightMode == null) return;
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.OcrHighlightAll = AwarenessTab.CmbOcrHighlightMode.SelectedIndex == 0;
+                App.Settings.Save();
+            }
         }
 
         internal void CmbOcrConfirmation_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (_isLoading || PatreonTab.CmbOcrConfirmation == null) return;
+            if (_isLoading || AwarenessTab.CmbOcrConfirmation == null) return;
             // Index 0/1/2 → 1/2/3 consecutive scans required before a keyword fires.
-            App.Settings.Current.OcrConfirmationScans = PatreonTab.CmbOcrConfirmation.SelectedIndex + 1;
+            App.Settings.Current.OcrConfirmationScans = AwarenessTab.CmbOcrConfirmation.SelectedIndex + 1;
             App.Settings.Save();
         }
 
-        internal void ChkHighlightVisibleInCapture_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            App.Settings.Current.OcrHighlightVisibleInCapture = PatreonTab.ChkHighlightVisibleInCapture.IsChecked == true;
-            App.KeywordHighlight?.RefreshCaptureVisibility();
-        }
+        // PHASE 8: ChkHighlightVisibleInCapture_Changed went with PatreonTabView. Live replacement:
+        // AwarenessTab.ChkAwarenessHighlightVisibleInCapture -> MainWindow.Awareness.cs
+        // ChkAwarenessHighlightVisibleInCapture_Changed, which writes the same
+        // OcrHighlightVisibleInCapture, saves it (the corpse's copy did not), and makes the same
+        // App.KeywordHighlight.RefreshCaptureVisibility() call.
 
         internal void BtnAddKeywordTrigger_Click(object sender, RoutedEventArgs e)
         {
@@ -416,22 +362,74 @@ namespace ConditioningControlPanel
 
         private void RefreshKeywordTriggerList()
         {
-            if (PatreonTab.KeywordTriggerListPanel == null) return;
-            PatreonTab.KeywordTriggerListPanel.Children.Clear();
+            if (AwarenessTab.KeywordTriggerListPanel == null) return;
+            AwarenessTab.KeywordTriggerListPanel.Children.Clear();
 
             var triggers = App.Settings?.Current?.KeywordTriggers;
             if (triggers == null) return;
 
             // Filter out preset clones (Id prefix "preset:") — those are managed
-            // via their own preset detail dialogs on the Awareness tab. The
-            // Exclusives trigger list is for user-authored custom triggers only,
-            // so installing/uninstalling a preset pack never pollutes this list.
+            // via their own preset detail dialogs on the Awareness tab's PRESETS row.
+            // This list is for user-authored custom triggers only, so installing or
+            // uninstalling a preset pack never pollutes it.
             foreach (var trigger in triggers)
             {
                 if (trigger?.Id?.StartsWith("preset:", StringComparison.Ordinal) == true) continue;
                 var row = CreateKeywordTriggerRow(trigger);
-                PatreonTab.KeywordTriggerListPanel.Children.Add(row);
+                AwarenessTab.KeywordTriggerListPanel.Children.Add(row);
             }
+        }
+
+        /// <summary>
+        /// PHASE 5 (G3): seeds the rescued keyword/OCR panel on the Awareness tab from settings.
+        /// <para>
+        /// The detail blocks it owns (scan interval + confirmation, highlight mode + duration)
+        /// follow masters that live *above* them on the same page - <c>ChkAwarenessOcr</c> and
+        /// <c>ChkAwarenessHighlight</c> - so this is the one place that reconciles the two.
+        /// Called on tab open (<c>SyncAwarenessTabUI</c>), from those two masters' handlers, and
+        /// after <c>LoadSettings</c>. Manages <c>_isLoading</c> itself so seeding a Slider.Value
+        /// never re-enters the ValueChanged handlers.
+        /// </para>
+        /// </summary>
+        internal void SyncKeywordRescuePanelUi()
+        {
+            var s = App.Settings?.Current;
+            if (s == null || AwarenessTab?.KeywordPanel == null) return;
+
+            var hasAccess = KeywordTriggerService.HasAccess();
+            var wasLoading = _isLoading;
+            _isLoading = true;
+            try
+            {
+                AwarenessTab.SliderKeywordBufferTimeout.Value = Math.Clamp(s.KeywordBufferTimeoutMs, 1000, 10000);
+                AwarenessTab.TxtKeywordBufferTimeout.Text = $"{s.KeywordBufferTimeoutMs / 1000.0:F1}s";
+
+                AwarenessTab.SliderKeywordSessionMultiplier.Value = Math.Clamp(s.KeywordSessionMultiplier, 1.0, 3.0);
+                AwarenessTab.TxtKeywordSessionMultiplier.Text = $"{s.KeywordSessionMultiplier:F1}x";
+
+                // ---- Screen OCR detail: only meaningful while the OCR source is on ----
+                var ocrOn = s.ScreenOcrEnabled && hasAccess;
+                AwarenessTab.SliderScreenOcrInterval.Value = Math.Clamp(s.ScreenOcrIntervalMs / 1000.0, 2, 10);
+                AwarenessTab.TxtScreenOcrInterval.Text = $"{s.ScreenOcrIntervalMs / 1000}s";
+                AwarenessTab.CmbOcrConfirmation.SelectedIndex = Math.Clamp(s.OcrConfirmationScans - 1, 0, 2);
+                AwarenessTab.ScreenOcrIntervalPanel.Visibility = ocrOn ? Visibility.Visible : Visibility.Collapsed;
+                AwarenessTab.TxtScreenOcrOffHint.Visibility = ocrOn ? Visibility.Collapsed : Visibility.Visible;
+
+                // ---- Highlight detail: follows the SAFETY highlight toggle ----
+                var highlightOn = s.KeywordHighlightEnabled;
+                AwarenessTab.CmbOcrHighlightMode.SelectedIndex = s.OcrHighlightAll ? 0 : 1;
+                AwarenessTab.SliderKeywordHighlightDuration.Value = Math.Clamp(s.KeywordHighlightDurationMs / 1000.0, 0.3, 5.0);
+                AwarenessTab.TxtKeywordHighlightDuration.Text = $"{s.KeywordHighlightDurationMs / 1000.0:0.0}s";
+                AwarenessTab.HighlightDurationPanel.Visibility = highlightOn ? Visibility.Visible : Visibility.Collapsed;
+                AwarenessTab.TxtHighlightOffHint.Visibility = highlightOn ? Visibility.Collapsed : Visibility.Visible;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "SyncKeywordRescuePanelUi failed");
+            }
+            finally { _isLoading = wasLoading; }
+
+            RefreshKeywordTriggerList();
         }
 
         private Border CreateKeywordTriggerRow(KeywordTrigger trigger)

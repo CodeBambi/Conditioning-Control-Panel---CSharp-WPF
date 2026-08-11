@@ -24,15 +24,11 @@
             </StackPanel>
         </Border>
 
-        <!-- Host for reparented account sections (Patreon/Discord login, Cloud Backup, Data & Privacy).
-             These come from MainWindow's PatreonTab at popup-open time and are returned when the popup closes. -->
-        <StackPanel x:Name="ExternalSectionsHost" Margin="0,0,0,8"/>
-
-        <Button x:Name="BtnCheckUpdates" Content="{loc:Str btn_check_updates}"
-                Style="{DynamicResource OutlineButton}"
-                Padding="14,12" FontSize="14"
-                Click="BtnCheckUpdates_Click"
-                Margin="0,0,0,8"/>
+        <!-- Phase 2: this control is About + support only.
+             · The reparented account sections host (ExternalSectionsHost) is gone — the login /
+               linking / cloud-backup / privacy cards live permanently in Settings · Account.
+             · BtnCheckUpdates moved to Settings · Updates, which also shows the patch notes.
+             Everything below is unchanged and still self-contained. -->
 
         <Button x:Name="BtnReportBug" Content="{loc:Str btn_report_bug}"
                 Style="{DynamicResource OutlineButton}"

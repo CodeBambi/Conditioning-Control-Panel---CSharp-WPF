@@ -58,6 +58,13 @@ namespace ConditioningControlPanel.Views.Tabs
             }
         }
 
+        // PHASE 8 (demolition): 41 shims left this file with LegacyDashboardHost and the Collapsed
+        // CardSystem tile - the whole Flash/Visuals/Video/Subliminal dial set, the ChkDualMon and
+        // performance twins, and CardSystem_Click. Nothing they reached was lost: the dials live on
+        // the Studio rack's *FeatureControl panels, the performance switches on
+        // Views/Controls/AppSettings/PerformanceSettingsSection, ChkDualMon on
+        // Features/SystemFeatureControl.ChkMultiMon, and the System popup on VelvetBtnSystem_Click
+        // below - which is now the ONLY caller of MainWindow.CardSystem_Click.
         private void BrowserLoadingText_Click(object sender, MouseButtonEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -68,63 +75,14 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BrowserSiteToggle_Click(sender, e);
         }
-        private void BtnAttentionStyle_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnAttentionStyle_Click(sender, e);
-        }
-        private void BtnAudioOutputRefresh_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnAudioOutputRefresh_Click(sender, e);
-        }
-        // Suggestion #659 — open the Audio Layers config window (self-contained, no MainWindow dep).
-        private void BtnAudioLayers_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var win = new LayeredAudioWindow { Owner = Window.GetWindow(this) };
-                win.Show();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "Settings: Audio Layers window launch failed");
-            }
-        }
-        private void BtnClearStartupVideo_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnClearStartupVideo_Click(sender, e);
-        }
+        // Phase 2: BtnAudioOutputRefresh_Click / BtnAudioLayers_Click moved with the Audio
+        // section to Views/Controls/AppSettings/AudioSettingsSection.xaml.cs.
+        // Phase 2: BtnClearStartupVideo_Click / BtnSelectStartupVideo_Click moved with the startup
+        // group to Views/Controls/AppSettings/GeneralSettingsSection.xaml.cs.
         private void BtnDiscord_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnDiscord_Click(sender, e);
-        }
-        private void BtnManageAttention_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnManageAttention_Click(sender, e);
-        }
-        private void BtnManageMessages_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnManageMessages_Click(sender, e);
-        }
-        private void BtnOpenAssetsFolder_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnOpenAssetsFolder_Click(sender, e);
-        }
-        private void BtnPanicKey_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnPanicKey_Click(sender, e);
-        }
-        private void BtnPickAssetsFolder_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnPickAssetsFolder_Click(sender, e);
         }
         private void BtnPopOutBrowser_Click(object sender, RoutedEventArgs e)
         {
@@ -135,6 +93,13 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnMuteBrowser_Click(sender, e);
+        }
+        // Right-click anywhere in the chip stack: MainWindow works out which chip took the hit
+        // and turns that feature on/off. Left-click (the Chip*_Click shims below) opens it.
+        private void PremiumRailContent_RightClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.PremiumRail_RightClick(sender, e);
         }
         private void ChipTakeover_Click(object sender, RoutedEventArgs e)
         {
@@ -221,36 +186,8 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnReloadBrowser_Click(sender, e);
         }
-        private void BtnSelectStartupVideo_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnSelectStartupVideo_Click(sender, e);
-        }
-        private void BtnSubliminalSettings_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnSubliminalSettings_Click(sender, e);
-        }
-        private void BtnExportPhrases_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnExportPhrases_Click(sender, e);
-        }
-        private void BtnImportPhrases_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnImportPhrases_Click(sender, e);
-        }
-        private void BtnTestAudio_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnTestAudio_Click(sender, e);
-        }
-        private void BtnTestVideo_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BtnTestVideo_Click(sender, e);
-        }
+        // Phase 2: BtnExportPhrases_Click / BtnImportPhrases_Click moved with the phrase-backup
+        // card to Views/Controls/AppSettings/DataSettingsSection.xaml.cs.
         private void BtnUnifiedLogin_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -261,201 +198,133 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnWebcamTracking_Click(sender, e);
         }
-        private void CardBouncingText_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardBouncingText_Click(sender, e);
-        }
-        private void CardBubbleCount_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardBubbleCount_Click(sender, e);
-        }
-        private void CardBubblePop_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardBubblePop_Click(sender, e);
-        }
+        // ---- velvet mosaic (4x4 hybrid wall, 2026-08-11) ---------------------------------
+        // Third wall in two days; the seven destination shims (CardDtrh/CardGoon/CardFyp/
+        // CardIntake/CardRemote/CardLoom/CardDeeper) went with their tiles - those features
+        // kept their Play-door cards throughout, so nothing lost a home. The FX tiles are
+        // back, split into left-click-opens (Card*_Click -> OpenStudioModule) and
+        // right-click-toggles (Card*_Toggle -> ToggleWallFeature); the three diagonal combo
+        // tiles forward per-half. Same shape as ever: the view forwards, MainWindow decides.
         private void CardFlash_Click(object sender, RoutedEventArgs e)
         {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardFlash_Click(sender, e);
+            if (Window.GetWindow(this) is MainWindow mw) mw.CardFlash_Click(sender, e);
         }
-        private void CardLockCard_Click(object sender, RoutedEventArgs e)
+        private void CardFlash_Toggle(object sender, RoutedEventArgs e)
         {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardLockCard_Click(sender, e);
-        }
-        private void CardMindWipe_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardMindWipe_Click(sender, e);
-        }
-        private void CardPinkFilter_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardPinkFilter_Click(sender, e);
-        }
-        private void CardSpiral_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardSpiral_Click(sender, e);
+            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("flash");
         }
         private void CardSubliminal_Click(object sender, RoutedEventArgs e)
         {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardSubliminal_Click(sender, e);
+            if (Window.GetWindow(this) is MainWindow mw) mw.CardSubliminal_Click(sender, e);
         }
-        private void CardSystem_Click(object sender, RoutedEventArgs e)
+        private void CardSubliminal_Toggle(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("subliminal");
+        }
+        private void CardBouncingText_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.CardBouncingText_Click(sender, e);
+        }
+        private void CardBouncingText_Toggle(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("bouncingtext");
+        }
+        private void CardBubblePop_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.CardBubblePop_Click(sender, e);
+        }
+        private void CardBubblePop_Toggle(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("bubbles");
+        }
+        private void CardLockCard_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.CardLockCard_Click(sender, e);
+        }
+        private void CardLockCard_Toggle(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("lockcard");
+        }
+        // Diagonal combos: A = the top-left half, B = the bottom-right, as authored in XAML.
+        private void ComboVideoBubble_ClickA(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.OpenStudioModule("video");
+        }
+        private void ComboVideoBubble_ClickB(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.OpenStudioModule("bubblecount");
+        }
+        private void ComboVideoBubble_ToggleA(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("video");
+        }
+        private void ComboVideoBubble_ToggleB(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("bubblecount");
+        }
+        private void ComboSpiralPink_ClickA(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.OpenStudioModule("spiral");
+        }
+        private void ComboSpiralPink_ClickB(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.OpenStudioModule("pinkfilter");
+        }
+        private void ComboSpiralPink_ToggleA(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("spiral");
+        }
+        private void ComboSpiralPink_ToggleB(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("pinkfilter");
+        }
+        private void ComboMindDrain_ClickA(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.OpenStudioModule("mindwipe");
+        }
+        private void ComboMindDrain_ClickB(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.OpenStudioModule("braindrain");
+        }
+        private void ComboMindDrain_ToggleA(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("mindwipe");
+        }
+        private void ComboMindDrain_ToggleB(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.ToggleWallFeature("braindrain");
+        }
+        private void CardMystery_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.CardMystery_Click(sender, e);
+        }
+        /// <summary>Clicking the revealed face is clicking the box - one navigation, two faces.</summary>
+        private void MysteryRevealFace_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.CardMystery_Click(sender, e);
+        }
+        private void CardVault_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.CardVault_Click(sender, e);
+        }
+        private void CardJustDrop_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardSystem_Click(sender, e);
-        }
-        private void CardVideo_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardVideo_Click(sender, e);
-        }
-        private void CardVisuals_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardVisuals_Click(sender, e);
-        }
-        private void ChkAudioDuck_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkAudioDuck_Changed(sender, e);
-        }
-        private void ChkAudioWhispers_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkAudioWhispers_Changed(sender, e);
-        }
-        private void ChkAutoPerformance_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkAutoPerformance_Changed(sender, e);
-        }
-        private void ChkClickable_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkClickable_Changed(sender, e);
-        }
-        private void ChkCorruption_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkCorruption_Changed(sender, e);
+                mw.CardJustDrop_Click(sender, e);
         }
         private void ChkDiscordRichPresence_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkDiscordRichPresence_Changed(sender, e);
         }
-        private void ChkDualMon_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkDualMon_Changed(sender, e);
-        }
-        private void ChkEnableDeeper_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkEnableDeeper_Changed(sender, e);
-        }
-        private void ChkExcludeBambiCloudDucking_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkExcludeBambiCloudDucking_Changed(sender, e);
-        }
-        private void ChkFlashAudio_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkFlashAudio_Changed(sender, e);
-        }
-        private void ChkFlashEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkFlashEnabled_Changed(sender, e);
-        }
-        private void ChkFlashGlow_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkFlashGlow_Changed(sender, e);
-        }
-        private void ChkHydraLinked_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkHydraLinked_Changed(sender, e);
-        }
-        private void ChkMiniGameEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkMiniGameEnabled_Changed(sender, e);
-        }
-        private void ChkNoPanic_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkNoPanic_Changed(sender, e);
-        }
-        private void ChkOfflineMode_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkOfflineMode_Changed(sender, e);
-        }
-        private void ChkPerformanceMode_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkPerformanceMode_Changed(sender, e);
-        }
-        private void CmbMotionLevel_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CmbMotionLevel_SelectionChanged(sender, e);
-        }
-        private void ChkRandomizeTargets_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkRandomizeTargets_Changed(sender, e);
-        }
-        private void ChkStartHidden_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkStartHidden_Click(sender, e);
-        }
-        private void ChkStrictLock_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkStrictLock_Changed(sender, e);
-        }
-        private void ChkSubliminalEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkSubliminalEnabled_Changed(sender, e);
-        }
-        private void ChkVideoEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkVideoEnabled_Changed(sender, e);
-        }
-        private void ChkVideoHwDecode_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkVideoHwDecode_Changed(sender, e);
-        }
-        private void ChkUnifiedOverlay_Changed(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkUnifiedOverlay_Changed(sender, e);
-        }
-        private void ChkWinStart_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ChkWinStart_Click(sender, e);
-        }
-        private void CmbAudioOutputDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CmbAudioOutputDevice_SelectionChanged(sender, e);
-        }
+        // Phase 2: ChkEnableDeeper_Changed moved with the Deeper master switch to
+        // Views/Controls/AppSettings/GeneralSettingsSection.xaml.cs.
+        // BtnPanicKey_Click / ChkNoPanic_Changed left with their controls in Phase 2 — the panic
+        // key is rebound and disabled in Settings → Devices now.
+        // Phase 2: ChkOfflineMode_Changed moved with the offline toggle to
+        // Views/Controls/AppSettings/DataSettingsSection.xaml.cs.
+        // Phase 2: ChkStartHidden_Click / ChkWinStart_Click moved with the startup group to
+        // Views/Controls/AppSettings/GeneralSettingsSection.xaml.cs.
         private void ImgLogo_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -469,106 +338,8 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.IntakePassFace_MouseLeftButtonDown(sender, e);
         }
-        private void SliderAudioSyncIntensity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderAudioSyncIntensity_Changed(sender, e);
-        }
-        private void SliderAudioSyncLatency_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderAudioSyncLatency_Changed(sender, e);
-        }
-        private void SliderDuck_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderDuck_Changed(sender, e);
-        }
-        private void SliderDuration_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderDuration_Changed(sender, e);
-        }
-        private void SliderFade_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderFade_Changed(sender, e);
-        }
-        private void SliderFlashDuration_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderFlashDuration_Changed(sender, e);
-        }
-        private void SliderFrames_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderFrames_Changed(sender, e);
-        }
-        private void SliderImages_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderImages_Changed(sender, e);
-        }
-        private void SliderMaster_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderMaster_Changed(sender, e);
-        }
-        private void SliderMaxOnScreen_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderMaxOnScreen_Changed(sender, e);
-        }
-        private void SliderOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderOpacity_Changed(sender, e);
-        }
-        private void SliderPerHour_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderPerHour_Changed(sender, e);
-        }
-        private void SliderPerMin_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderPerMin_Changed(sender, e);
-        }
-        private void SliderSize_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderSize_Changed(sender, e);
-        }
-        private void SliderSubOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderSubOpacity_Changed(sender, e);
-        }
-        private void SliderSubPerMin_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderSubPerMin_Changed(sender, e);
-        }
-        private void SliderTargetSize_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderTargetSize_Changed(sender, e);
-        }
-        private void SliderTargets_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderTargets_Changed(sender, e);
-        }
-        private void SliderVideoVolume_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderVideoVolume_Changed(sender, e);
-        }
-        private void SliderWhisperVol_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.SliderWhisperVol_Changed(sender, e);
-        }
+        // Phase 3: SliderAudioSyncLatency_Changed / SliderAudioSyncIntensity_Changed moved with
+        // the audio-sync tuning panel to Views/Controls/AppSettings/AudioSettingsSection.xaml.cs.
         private void ToggleEnhanceIfPossible_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -598,6 +369,94 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnCatalogue_Click(sender, e);
+        }
+        /// <summary>
+        /// Quick-toggles row · "System". Phase 3 traded the ⚙ mosaic tile for the Brain Drain
+        /// rescue and moved its entry point here; the tile itself is still in the tree (Collapsed)
+        /// and both callers reach the SAME <c>MainWindow.CardSystem_Click</c>, so the popup, its
+        /// mod-aware title and its <c>NotifyFeatureOpened("System")</c> bark are byte-for-byte
+        /// what they were.
+        /// </summary>
+        private void VelvetBtnSystem_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.CardSystem_Click(sender, e);
+        }
+        /// <summary>
+        /// Home's companion strip. Pure navigation into the Companion door - the strip owns no
+        /// portrait and no clock, so there is nothing to start or stop here (see the XAML note:
+        /// CompanionTheme.xaml budgets ONE Forever storyboard for the companion app-wide, and
+        /// CompanionHeroCard already spends it).
+        /// </summary>
+        private void CompanionStrip_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.ShowTab("companion");
+        }
+
+        // Home audio card. Pure forwarding, like every re-parented cell: the shell owns the
+        // canonical Settings/Audio controls and mirrors both ways. See MainWindow.HomeAudio.cs.
+        private void HomeSliderMaster_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.HomeSliderMaster_Changed(sender, e);
+        }
+
+        private void HomeChkAudioDuck_Changed(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.HomeChkAudioDuck_Changed(sender, e);
+        }
+
+        /// <summary>The advanced disclosure. Purely local - nothing below it owns state, so the
+        /// shell has no reason to know whether the drawer is open.</summary>
+        private void HomeBtnAudioAdvanced_Changed(object sender, RoutedEventArgs e)
+        {
+            if (HomeAudioAdvanced == null || HomeBtnAudioAdvanced == null) return;
+            HomeAudioAdvanced.Visibility = HomeBtnAudioAdvanced.IsChecked == true
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
+        private void HomeSliderVideoVolume_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.HomeSliderVideoVolume_Changed(sender, e);
+        }
+
+        private void HomeSliderDuck_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.HomeSliderDuck_Changed(sender, e);
+        }
+
+        private void HomeChkExcludeBambiCloudDucking_Changed(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.HomeChkExcludeBambiCloudDucking_Changed(sender, e);
+        }
+
+        private void HomeCmbAudioOutputDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.HomeCmbAudioOutputDevice_SelectionChanged(sender, e);
+        }
+
+        private void HomeBtnAudioOutputRefresh_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.BtnAudioOutputRefresh_Click(sender, e);
+        }
+
+        private void HomeBtnTestAudio_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.BtnTestAudio_Click(sender, e);
+        }
+
+        // Self-contained on the old dashboard too - it only opens a window.
+        private void HomeBtnAudioLayers_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                new LayeredAudioWindow { Owner = Window.GetWindow(this) }.Show();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Home/Audio: Audio Layers window launch failed");
+            }
         }
 
         // Training Programs "Today" card (row 0). Loaded is the card's own first-paint hook so

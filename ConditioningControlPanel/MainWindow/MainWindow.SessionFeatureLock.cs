@@ -176,10 +176,11 @@ namespace ConditioningControlPanel
 
             var allOk = true;
             allOk &= PaintSection("ribbon", () => ApplySessionLockRibbon(locked, reason));
-            allOk &= PaintSection("cards", () => ApplySessionLockToFeatureCards(locked, reason));
-            allOk &= PaintSection("legacy", () => ApplySessionLockToLegacyDashboard(locked, reason));
+            // The "cards" section went with the FX mosaic (2026-08-11) - see below.
+            // PHASE 8: the "legacy" section is gone with LegacyDashboardHost - see below.
             allOk &= PaintSection("tabs", () => ApplySessionLockToTabs(locked, reason));
             allOk &= PaintSection("popup", () => ApplySessionLockToFeaturePopup(_activeFeaturePopupContent));
+            allOk &= PaintSection("studio", ApplySessionLockToStudioRack);
 
             // Only remember this paint if it fully succeeded, so the heartbeat retries a partial one.
             _sessionLockPainted = allOk ? locked : null;
@@ -225,78 +226,27 @@ namespace ConditioningControlPanel
             dash.ProgramFeatureLockRibbon.Visibility = Visibility.Visible;
         }
 
-        /// <summary>
-        /// Dashboard mosaic tiles. Left-click still opens the tile's popup; only the
-        /// right-click quick-toggle is refused (see OnFeatureCardToggleRequested). The
-        /// tooltip carries the reason so a refused right-click is never mysterious.
-        ///
-        /// FeatureCard.IsLocked is deliberately NOT used: it drops the tile to 35% opacity
-        /// and suppresses the pink "this feature is on" ring, which would hide exactly the
-        /// information the user needs during a session.
-        /// </summary>
-        private void ApplySessionLockToFeatureCards(bool locked, string? reason)
-        {
-            var dash = SettingsTab;
-            if (dash == null) return;
+        // RETIRED 2026-08-11 with the FX mosaic: ApplySessionLockToFeatureCards.
+        //
+        // It hung a "the program is running this" tooltip on the twelve dashboard FX tiles, so
+        // that the right-click quick-toggle refusing itself was never mysterious. Both halves of
+        // that sentence are gone: the tiles are eight destinations now (Down the Rabbit Hole, the
+        // Goon lobby, the feed - none of them prescribed dose), and there is no quick-toggle on
+        // the wall to refuse.
+        //
+        // NO ENFORCEMENT MOVED OR WEAKENED. The dose dials' real lock is
+        // ApplySessionLockToStudioRack + ApplySessionLockToFeaturePopup, which paint the Studio
+        // rack rows and the live panels - the surfaces that can actually change a dose - and
+        // RefuseIfSessionFeatureLocked still guards every write path. This method only ever wrote
+        // tooltips.
 
-            SetCardLockTooltip(dash.CardFlash, locked, reason);
-            SetCardLockTooltip(dash.CardVisuals, locked, reason);
-            SetCardLockTooltip(dash.CardVideo, locked, reason);
-            SetCardLockTooltip(dash.CardSubliminal, locked, reason);
-            SetCardLockTooltip(dash.CardSpiral, locked, reason);
-            SetCardLockTooltip(dash.CardPinkFilter, locked, reason);
-            SetCardLockTooltip(dash.CardBubblePop, locked, reason);
-            SetCardLockTooltip(dash.CardLockCard, locked, reason);
-            SetCardLockTooltip(dash.CardBubbleCount, locked, reason);
-            SetCardLockTooltip(dash.CardBouncingText, locked, reason);
-            SetCardLockTooltip(dash.CardMindWipe, locked, reason);
-            // CardSystem is intentionally absent: the System popup owns No-Panic, offline
-            // mode and the monitor layout - configuration, not the prescribed dose, and
-            // No-Panic is a safety control.
-        }
-
-        private static void SetCardLockTooltip(Features.FeatureCard? card, bool locked, string? reason)
-        {
-            if (card == null) return;
-            // Save/restore rather than a bare ClearValue - see SessionLock.ApplyLockToolTip.
-            Features.SessionLock.ApplyLockToolTip(card, locked, reason);
-        }
-
-        /// <summary>
-        /// The pre-mosaic dashboard checkboxes. They live inside the Collapsed
-        /// SettingsTab.LegacyDashboardHost and are not reachable today, but MainWindow still
-        /// reads and re-syncs them, so they are locked for consistency: if that host is ever
-        /// shown again it must not become a bypass.
-        ///
-        /// ChkHydraLinked, ChkClickable, ChkCorruption (hydra mode) and ChkFlashGlow (cosmetic)
-        /// are deliberately absent - comfort, not dosage (rule 4). The pre-mosaic version of
-        /// this list did lock the last two, which contradicted hydra-stays-editable; the mosaic
-        /// popups treat them as comfort, and these two paths must not disagree.
-        /// </summary>
-        private void ApplySessionLockToLegacyDashboard(bool locked, string? reason)
-        {
-            var dash = SettingsTab;
-            if (dash == null) return;
-
-            SetToggleLock(dash.ChkFlashEnabled, locked, reason);
-            SetToggleLock(dash.ChkVideoEnabled, locked, reason);
-            SetToggleLock(dash.ChkSubliminalEnabled, locked, reason);
-            SetToggleLock(dash.ChkMiniGameEnabled, locked, reason);
-            SetToggleLock(dash.ChkAudioWhispers, locked, reason);
-
-            // The dosage SLIDERS in the same collapsed host. Previously only the checkboxes above
-            // were painted, which left this method half-doing its stated job: if the legacy host
-            // is ever shown again, an unlocked rate slider is just as much a bypass as an
-            // unlocked enable.
-            SetToggleLock(dash.SliderPerMin, locked, reason);
-            SetToggleLock(dash.SliderImages, locked, reason);
-            SetToggleLock(dash.SliderSize, locked, reason);
-            SetToggleLock(dash.SliderOpacity, locked, reason);
-            SetToggleLock(dash.SliderPerHour, locked, reason);
-            SetToggleLock(dash.SliderSubPerMin, locked, reason);
-            SetToggleLock(dash.SliderFrames, locked, reason);
-            SetToggleLock(dash.SliderSubOpacity, locked, reason);
-        }
+        // PHASE 8 (demolition): ApplySessionLockToLegacyDashboard is gone with
+        // LegacyDashboardHost. It painted the pre-mosaic dashboard's five enables and eight dosage
+        // sliders - unreachable controls, locked purely so that un-collapsing that host could never
+        // become a session-lock bypass. The host is deleted, so the bypass cannot be reopened and
+        // there is nothing left to paint. The dose dials' real lock is
+        // ApplySessionLockToStudioRack (the Studio rack's *FeatureControl panels, marked
+        // features:SessionLock.Owned in XAML and found by the same sweep).
 
         /// <summary>
         /// Dials that live on ordinary TABS rather than in a dashboard feature popup.
@@ -318,12 +268,12 @@ namespace ConditioningControlPanel
         /// </summary>
         private void ApplySessionLockToTabs(bool locked, string? reason)
         {
-            // ProgressionTab is a complete second copy of the dose dials with live handlers,
-            // unreachable today only because MainWindow.xaml declares it Collapsed and no ShowTab
-            // case reveals it. Included so that un-collapsing it can never silently reopen the
-            // bypass - the markers and the sweep have to land together or they are both inert.
+            // ProgressionTab used to be swept here as well - it was a complete second copy of the
+            // dose dials with live handlers, and locking it kept un-collapsing it from silently
+            // reopening the bypass. Phase 8 deleted that view outright, so the second copy (and
+            // the bypass with it) is gone.
             foreach (var tab in new UserControl?[]
-                     { GradedIntakeTab, AwarenessTab, HapticsTab, ProgressionTab })
+                     { GradedIntakeTab, AwarenessTab, HapticsTab })
             {
                 if (tab == null) continue;
                 foreach (var owned in Features.SessionLock.FindOwnedControls(tab))
@@ -377,6 +327,42 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Warning(ex, "[SessionLock] Failed to apply lock to feature popup");
             }
+        }
+
+        /// <summary>
+        /// Phase 4: the Studio rack (<c>StudioTabView</c>) hosts the SAME
+        /// <c>Features/*FeatureControl</c> panels the dashboard popups host - the master enables
+        /// and every ramped dial - so it is a second door onto the prescribed dose and has to be
+        /// painted exactly like the first one.
+        ///
+        /// <para>WHY THIS IS NOT JUST "ADD StudioTab TO <see cref="ApplySessionLockToTabs"/>".
+        /// That sweep is attached-property only, and three panels - Flash, Spiral and PinkFilter -
+        /// leave their master <c>ChkEnable</c> UNMARKED and rely entirely on
+        /// <see cref="ApplySessionLockToFeaturePopup"/>'s belt-and-braces
+        /// <c>FindName("ChkEnable")</c>. A bare marker sweep would leave three master toggles live
+        /// for the whole session, which is precisely the bypass this file exists to close. Reusing
+        /// the popup painter gives the rack the identical treatment, banner included.</para>
+        ///
+        /// <para>The rack's panels are LONG-LIVED (built once with the view, toggled by
+        /// Visibility - ground rule §2.3), where a popup's were rebuilt on every open. That is
+        /// safe here: the painter is idempotent in both directions, the banner is found by Tag
+        /// before being inserted so it cannot stack across repaints, and its text is rewritten
+        /// from the freshly derived reason on every pass. It is also why this must run on session
+        /// START and END rather than on reveal - a rack panel that was on screen when the session
+        /// began is never re-created to pick the lock up.</para>
+        ///
+        /// <para>Haptics is deliberately NOT in <c>HostedFeaturePanels</c>: it is already swept by
+        /// name in <see cref="ApplySessionLockToTabs"/> (as <c>HapticsTab</c>, which is now a
+        /// passthrough into this same rack), and its Content is a ScrollViewer rather than a
+        /// Panel, so it could never take the banner anyway.</para>
+        /// </summary>
+        private void ApplySessionLockToStudioRack()
+        {
+            var rack = StudioTab;
+            if (rack == null) return;
+
+            foreach (var panel in rack.HostedFeaturePanels)
+                ApplySessionLockToFeaturePopup(panel);
         }
 
         private static Border? FindSessionLockBanner(Panel root)

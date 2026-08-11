@@ -224,7 +224,10 @@ public class AwarenessConsentTests
         foreach (var file in Directory.EnumerateFiles(SourceRoot(), "*.cs", SearchOption.AllDirectories))
         {
             if (file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar) ||
-                file.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar)) continue;
+                file.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar) ||
+                // Nested git worktrees (e.g. .claude/worktrees/*) are other branches' sources —
+                // scanning them reports their files as second doors that do not exist on this tree.
+                file.Contains(Path.DirectorySeparatorChar + ".claude" + Path.DirectorySeparatorChar)) continue;
 
             foreach (var line in File.ReadLines(file))
             {

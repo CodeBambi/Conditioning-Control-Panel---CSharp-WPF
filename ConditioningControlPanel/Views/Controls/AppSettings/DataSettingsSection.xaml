@@ -1,0 +1,148 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.AppSettingsSections.DataSettingsSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             mc:Ignorable="d" d:DesignWidth="620">
+
+    <!-- ================================================================
+         SETTINGS ▸ DATA  (UX restructure, Phase 2)
+
+         · OFFLINE MODE moved here from the Collapsed LegacyDashboardHost
+           (SettingsTabView.xaml:1327). That copy was the one live code drove
+           - RequestToggleOfflineMode, ApplyOfflineMode and SyncOfflineModeState
+           all set SettingsTab.ChkOfflineMode by name to run the two-way sync
+           exactly once - so it travelled with its x:Name and the MainWindow
+           partials were re-pointed to AppSettingsTab. The twin in
+           Features/SystemFeatureControl.xaml became a read-only mirror in the
+           same change; OfflineMode now has exactly one editor.
+
+         · PHRASE BACKUP moved from SettingsTabView.xaml:1403-1408. Those two
+           buttons are the ONLY call sites of BtnExportPhrases_Click /
+           BtnImportPhrases_Click (MainWindow.PresetIO.cs:62,93) in the whole
+           app, and they were unreachable - the feature shipped invisible.
+
+         · CLOUD BACKUP is NOT duplicated here. It lives on Settings ▸ Account
+           because it is a patron entitlement bound to the login cards; this is
+           a signpost to it, not a second copy.
+
+         · DANGER ZONE is net-new (gap-report G13: "factory reset: does not
+           exist"), explicitly granted for this phase. It is settings-only:
+           assets, content packs, mods, phrase pools on disk and the account
+           are all untouched. See the code-behind for the exact file list.
+
+         Quiet surface (PLAN §2.8): no storyboards, no ambient canvas. The
+         Danger Zone is loud in COLOUR, not in motion.
+         ================================================================ -->
+
+    <StackPanel>
+
+        <TextBlock Text="{loc:Str set2_section_data}" Style="{StaticResource SectionHeader}"/>
+
+        <!-- ============================ offline mode ========================== -->
+        <Border Style="{StaticResource SectionPanel}" Padding="15" Margin="0,0,0,12">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
+                           Source="{Binding Source='📴', Converter={StaticResource EmojiToImageSource}}"/>
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str set2_data_offline_title}"
+                               FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                </StackPanel>
+
+                <Grid ToolTip="{loc:Str tooltip_disable_all_network_features_updates_ai_leade}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_offline_mode}"/>
+                        <TextBlock Text="{loc:Str tooltip_disable_all_network_features_updates_ai_leade}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" x:Name="ChkOfflineMode" x:FieldModifier="internal"
+                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                              Checked="ChkOfflineMode_Changed" Unchecked="ChkOfflineMode_Changed"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- =========================== phrase backup ========================== -->
+        <Border Style="{StaticResource SectionPanel}" Padding="15" Margin="0,0,0,12">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
+                           Source="{Binding Source='📤', Converter={StaticResource EmojiToImageSource}}"/>
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str set2_data_phrase_backup_title}"
+                               FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                </StackPanel>
+                <TextBlock Text="{loc:Str set2_data_phrase_backup_hint}" TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,10"/>
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="BtnExportPhrases" x:FieldModifier="internal"
+                            Content="{loc:Str set2_btn_export_phrases}"
+                            Style="{StaticResource OutlineButton}" Padding="12,5" Margin="0,0,8,0"
+                            Click="BtnExportPhrases_Click"
+                            ToolTip="{loc:Str set2_tooltip_export_phrases}"/>
+                    <Button x:Name="BtnImportPhrases" x:FieldModifier="internal"
+                            Content="{loc:Str set2_btn_import_phrases}"
+                            Style="{StaticResource OutlineButton}" Padding="12,5"
+                            Click="BtnImportPhrases_Click"
+                            ToolTip="{loc:Str set2_tooltip_import_phrases}"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- ====================== cloud backup signpost ======================= -->
+        <Border Style="{StaticResource SectionPanel}" Padding="15" Margin="0,0,0,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str label_cloud_settings_backup}"/>
+                    <TextBlock Text="{loc:Str set2_data_cloud_signpost}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"/>
+                </StackPanel>
+                <Button Grid.Column="1" x:Name="BtnGoToAccountBackup"
+                        Content="{loc:Str set2_btn_open_account_section}"
+                        Style="{StaticResource OutlineButton}" Padding="12,5" VerticalAlignment="Center"
+                        Click="BtnGoToAccountBackup_Click"/>
+            </Grid>
+        </Border>
+
+        <!-- ============================ danger zone =========================== -->
+        <!-- Visually separated on purpose: a crimson border, its own heading, and the
+             button last. Everything above this line is reversible. -->
+        <Border x:Name="DangerZoneSection" x:FieldModifier="internal"
+                CornerRadius="12" Padding="15" Margin="0,10,0,12"
+                Background="{DynamicResource ElevatedSurfaceBrush}"
+                BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
+                           Source="{Binding Source='☠️', Converter={StaticResource EmojiToImageSource}}"/>
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str set2_data_danger_title}"
+                               Foreground="{DynamicResource DangerBrush}"
+                               FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                </StackPanel>
+
+                <TextBlock Text="{loc:Str set2_data_factory_reset_body}" TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextLightBrush}" FontSize="11" Margin="0,0,0,6"/>
+                <TextBlock Text="{loc:Str set2_data_factory_reset_keeps}" TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,0,0,12"/>
+
+                <Button x:Name="BtnFactoryReset" x:FieldModifier="internal"
+                        Content="{loc:Str set2_btn_factory_reset}"
+                        Style="{StaticResource OutlineButton}"
+                        Foreground="{DynamicResource DangerBrush}"
+                        BorderBrush="{DynamicResource DangerBrush}"
+                        Padding="14,6" HorizontalAlignment="Left"
+                        Click="BtnFactoryReset_Click"
+                        ToolTip="{loc:Str set2_tooltip_factory_reset}"/>
+            </StackPanel>
+        </Border>
+
+    </StackPanel>
+</UserControl>

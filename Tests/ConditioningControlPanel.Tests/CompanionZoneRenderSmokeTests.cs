@@ -28,20 +28,14 @@ public class CompanionZoneRenderSmokeTests
     /// Runs <paramref name="body"/> on a fresh STA thread and rethrows whatever it threw, so a
     /// resource failure surfaces as a normal test failure with its original stack.
     /// </summary>
-    private static void OnStaThread(Action body)
-    {
-        Exception? escaped = null;
-        var thread = new Thread(() =>
-        {
-            try { body(); }
-            catch (Exception ex) { escaped = ex; }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.IsBackground = true;
-        thread.Start();
-        Assert.True(thread.Join(TimeSpan.FromSeconds(30)), "STA render thread did not finish in time");
-        if (escaped != null) throw new Xunit.Sdk.XunitException(escaped.ToString());
-    }
+    // Every WPF render suite shares one STA thread, via WpfRenderHarness. WPF caches a
+    // ResourceDictionary per pack URI, so these suites and the Settings-section suites end
+    // up holding the SAME Brush and Style instances - and those take thread affinity from
+    // whichever thread realizes them first. Two threads means the second one dies with
+    // "The calling thread cannot access this object because a different thread owns it".
+    // The harness leaves Application.Resources empty outside its own bodies, so nothing
+    // here sees a theme it did not merge itself.
+    private static void OnStaThread(Action body) => WpfRenderHarness.OnStaThread(body);
 
     /// <summary>Builds the control, gives it the mock, and lays it out at a realistic width.</summary>
     private static void Realize(Func<UserControl> factory, object dataContext, double width)

@@ -17,7 +17,6 @@ namespace ConditioningControlPanel.Services
     /// that allows ambient motion. Every helper here no-ops (snapping to the end state) under
     /// Reduced/Off, and every helper animates via <c>element.BeginAnimation</c> — never
     /// Storyboard.SetTargetName, which silently no-ops across the tab-UserControl namescopes.
-    /// The XAML side of the library lives in Resources/Theme/Motion.xaml.
     /// </summary>
     public static class MotionFx
     {

@@ -472,6 +472,12 @@ namespace ConditioningControlPanel.Services
                 if ((newTier >= PatreonTier.Level1 || userIsWhitelisted) && App.Settings?.Current != null)
                 {
                     App.Settings.Current.PatreonPremiumValidUntil = DateTime.UtcNow.AddDays(14);
+
+                    // Tier-2 half of the same grace, so a SubscribeStar tier 2 (or a whitelisted
+                    // account, which resolves to Level2 everywhere else) keeps the Lab offline
+                    // exactly as long as it keeps premium.
+                    if (newTier >= PatreonTier.Level2 || userIsWhitelisted)
+                        App.Settings.Current.PatreonLabValidUntil = DateTime.UtcNow.AddDays(14);
                 }
 
                 App.Logger?.Information("SubscribeStar subscription validated: Tier={Tier}, Active={Active}, Whitelisted={Whitelisted}",

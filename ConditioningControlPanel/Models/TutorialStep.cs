@@ -33,6 +33,15 @@ namespace ConditioningControlPanel.Models
         public TutorialStepPosition TextPosition { get; set; } = TutorialStepPosition.Bottom;
         public Action? OnActivate { get; set; }
 
+        // Runs BEFORE the RequiresTab navigation, where OnActivate runs after it
+        // (TutorialService.ApplyCallbacksToSteps composes the three in that order).
+        // For steps whose destination has to be chosen before the page is shown:
+        // ShowTab("studio") re-asserts and RE-ANNOUNCES the rack's current selection
+        // on the way in, so a step that picks its module afterwards has already made
+        // the companion name the module the user was last looking at. Picking it here
+        // means the page opens on - and announces - the module the step is about.
+        public Action? OnBeforeTab { get; set; }
+
         // Invoked by TutorialOverlay.UpdateSpotlight just before it tries to
         // locate TargetElementName, so a step can guarantee its target is
         // measurable. The editor uses this to ExpandMetadataDrawer() before

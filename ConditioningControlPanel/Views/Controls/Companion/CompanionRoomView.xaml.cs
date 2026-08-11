@@ -127,6 +127,46 @@ namespace ConditioningControlPanel.Views.Controls.Companion
         /// </summary>
         internal Border PrgCompanion0FlashOverlay => HeroZone.PrgCompanion0FlashOverlay;
 
+        // -------------------------------------------------------------------------------------
+        //  Z7b · the AI permissions grid
+        //
+        //  Sixteen names that used to resolve through LabTab. They are re-exposed rather than
+        //  rewritten for the same reason as everything above: MainWindow.Patreon.cs owns the
+        //  behaviour and only the address changed. SyncLabEffectPermsUI writes all of them in one
+        //  pass, so a missing passthrough here is a control that silently keeps its XAML default
+        //  while the persisted setting keeps gating effects — bug #512, exactly.
+        //
+        //  BtnClearChatMemory and BtnLabEffectsSetupLocal are deliberately absent: nothing outside
+        //  their own Click handler has ever referenced them, and a passthrough for a control no
+        //  partial reads is just a wider surface.
+        // -------------------------------------------------------------------------------------
+
+        /// <summary>The card itself, for the tier gate — the one thing on it that is not a write.</summary>
+        internal AiPermissionsGrid AiPermissions => PermissionsZone;
+
+        internal System.Windows.Media.ImageBrush LabAiMemoryHeroBrush => PermissionsZone.LabAiMemoryHeroBrush;
+        internal Border LabEffectsNeedsLocalNotice => PermissionsZone.LabEffectsNeedsLocalNotice;
+
+        internal CheckBox ChkCapEffects => PermissionsZone.ChkCapEffects;
+        internal Border EffectPermsPanel => PermissionsZone.EffectPermsPanel;
+
+        internal Slider SliderMaxHapticIntensity => PermissionsZone.SliderMaxHapticIntensity;
+        internal TextBlock TxtMaxHapticIntensity => PermissionsZone.TxtMaxHapticIntensity;
+
+        internal CheckBox ChkAllowFlash => PermissionsZone.ChkAllowFlash;
+        internal CheckBox ChkAllowVideo => PermissionsZone.ChkAllowVideo;
+        internal CheckBox ChkAllowAudio => PermissionsZone.ChkAllowAudio;
+        internal CheckBox ChkAllowBubbles => PermissionsZone.ChkAllowBubbles;
+        internal CheckBox ChkAllowSubliminal => PermissionsZone.ChkAllowSubliminal;
+        internal CheckBox ChkAllowOverlay => PermissionsZone.ChkAllowOverlay;
+        internal CheckBox ChkAllowLockCard => PermissionsZone.ChkAllowLockCard;
+        internal CheckBox ChkAllowBounce => PermissionsZone.ChkAllowBounce;
+        internal CheckBox ChkAllowHaptic => PermissionsZone.ChkAllowHaptic;
+        internal CheckBox ChkAllowGetBackToMe => PermissionsZone.ChkAllowGetBackToMe;
+        internal Button HelpBtnGetBackToMe => PermissionsZone.HelpBtnGetBackToMe;
+
+        internal CheckBox ChkChatMemoryEnabled => PermissionsZone.ChkChatMemoryEnabled;
+
         // =====================================================================================
         //  clock parking
         // =====================================================================================

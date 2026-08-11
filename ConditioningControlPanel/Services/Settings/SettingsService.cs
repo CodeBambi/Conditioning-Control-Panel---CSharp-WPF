@@ -17,6 +17,9 @@ namespace ConditioningControlPanel.Services
         private System.Threading.Timer? _saveDebounceTimer;
         private volatile bool _savePending;
         private volatile bool _suppressCloudBackupPending;
+        // One-way kill switch, set by SealForReset() just before the factory reset moves
+        // settings.json aside. See that method for why nothing may write after it.
+        private volatile bool _sealed;
 
         // Serializes the rotate+write half of SaveImmediate. Without it two overlapping saves
         // (debounce timer thread + a direct UI-thread call) could File.Move each other's
@@ -657,6 +660,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void Save(bool suppressCloudBackup = false)
         {
+            if (_sealed) return;   // factory reset in progress — see SealForReset
             _savePending = true;
             if (suppressCloudBackup)
                 _suppressCloudBackupPending = true;
@@ -678,11 +682,53 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// One-way kill switch for the factory reset (Settings ▸ Data ▸ Danger Zone).
+        ///
+        /// <para>The reset moves <c>settings.json</c> aside and then hard-exits. Without this, the
+        /// debounce timer is a <see cref="System.Threading.Timer"/> on the THREAD POOL: anything
+        /// that called <see cref="Save"/> in the preceding 500 ms fires between the File.Move and
+        /// the exit and re-creates <c>settings.json</c> with the pre-reset content, so the reset
+        /// silently does nothing. Async continuations (profile sync, XP awards) can call Save after
+        /// the move for the same reason, which a flush alone would not cover.</para>
+        ///
+        /// <para>Disarms the pending debounce and makes every later <see cref="Save"/> /
+        /// <see cref="SaveImmediate"/> a no-op. On the happy path the only thing that runs after it
+        /// is <c>Environment.Exit</c>; the single way back is
+        /// <see cref="UnsealAfterFailedReset"/>, which the reset's own failure path calls so a
+        /// still-running app does not lose its saves for the rest of the session.</para>
+        /// </summary>
+        public void SealForReset()
+        {
+            _sealed = true;
+            _savePending = false;
+            _suppressCloudBackupPending = false;
+            lock (_timerLock)
+            {
+                _saveDebounceTimer?.Dispose();
+                _saveDebounceTimer = null;
+            }
+            App.Logger?.Warning("Settings sealed for factory reset — every further save is a no-op");
+        }
+
+        /// <summary>
+        /// Undoes <see cref="SealForReset"/>. The ONLY legitimate caller is the factory reset's own
+        /// failure path: if the file could not be moved aside the app keeps running, and a settings
+        /// service that silently never saves again would be a worse bug than the failed reset.
+        /// </summary>
+        public void UnsealAfterFailedReset()
+        {
+            _sealed = false;
+            App.Logger?.Warning("Settings unsealed — the factory reset did not complete");
+        }
+
+        /// <summary>
         /// Writes settings to disk immediately (no debounce). Called by the debounce timer,
         /// on shutdown, and from RestoreFrom/Reset where the write must happen now.
         /// </summary>
         public void SaveImmediate(bool suppressCloudBackup = false)
         {
+            if (_sealed) return;   // factory reset in progress — see SealForReset
+
             // Cancel any pending debounce — we're flushing now
             _savePending = false;
             _suppressCloudBackupPending = false;
