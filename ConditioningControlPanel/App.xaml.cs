@@ -350,6 +350,8 @@ namespace ConditioningControlPanel
         public static QuestService Quests { get; private set; } = null!;
         /// <summary>Weekly free-tier pass for the Graded Intake (see IntakePassService).</summary>
         public static IntakePassService IntakePass { get; private set; } = null!;
+        /// <summary>The ? box's daily free premium feature (see DailyFreeService).</summary>
+        public static DailyFreeService? DailyFree { get; private set; }
         /// <summary>Eight-hole intake punch card (see IntakePunchCardService).</summary>
         public static IntakePunchCardService IntakePunchCard { get; private set; } = null!;
         public static TutorialService Tutorial { get; private set; } = null!;
@@ -1563,6 +1565,11 @@ namespace ConditioningControlPanel
             // constructor - that service is not built until later in OnStartup.
             IntakePass = new IntakePassService();
             IntakePunchCard = new IntakePunchCardService();
+            // The ? box's rotation. Constructor is pure (no I/O); the server-override fetch is
+            // fire-and-forget and falls back to the date-seeded pick, so being offline - or the
+            // endpoint not existing yet - costs nothing but the override.
+            DailyFree = new DailyFreeService();
+            _ = DailyFree.RefreshAsync();
             Roadmap = new RoadmapService();
             // Needs Settings, Progression and Quests (all above); reads Patreon lazily, so it is
             // safe here even though Patreon is not constructed until later in OnStartup.
@@ -2145,7 +2152,7 @@ namespace ConditioningControlPanel
             {
                 // Same subject the Play door's band and the OpenFypFeed refusal name, from the same
                 // key - "The For You feed" here vs "For You" there was two names for one gate.
-                var fypGate = Services.TierGate.RequiresPremium(Loc.Get("tab_fyp"));
+                var fypGate = Services.TierGate.RequiresPremium(Loc.Get("tab_fyp"), "fyp");
                 if (fypGate.Allowed) Services.Fyp.FypHostService.Launch();
                 else Logger?.Information("--fyp ignored: {Reason}", fypGate.Reason);
             }

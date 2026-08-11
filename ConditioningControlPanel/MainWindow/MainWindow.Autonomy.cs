@@ -534,7 +534,7 @@ namespace ConditioningControlPanel
                 // (Settings → Devices) and turned the She's Listening row into a read-only chip, so
                 // without this line the gate would have silently disappeared. Turning the wake word
                 // OFF is never gated - a lapsed patron must always be able to close an open mic.
-                if (!Services.TierGate.DemandPremium(Loc.Get("tab_shelistening")))
+                if (!Services.TierGate.DemandPremium(Loc.Get("tab_shelistening"), "voice"))
                 {
                     RevertToggle(AppSettingsTab.ChkSpeechWakeWord);
                     return;
@@ -587,7 +587,7 @@ namespace ConditioningControlPanel
 
             // Same story as the wake word: the premium bar used to sit in SL_PushToTalk_Changed
             // and has to live here now that Settings → Devices owns the only toggle.
-            if (turningOn && !Services.TierGate.DemandPremium(Loc.Get("tab_shelistening")))
+            if (turningOn && !Services.TierGate.DemandPremium(Loc.Get("tab_shelistening"), "voice"))
             {
                 RevertToggle(AppSettingsTab.ChkSpeechPushToTalk);
                 return;

@@ -32,7 +32,9 @@ namespace ConditioningControlPanel
     {
         #region Account Shell
 
-        private void BtnPatreonExclusives_Click(object sender, RoutedEventArgs e)
+        // internal since the 4x4 wall (2026-08-11): the Vault tile routes through this same
+        // handler so the Exclusives tab keeps exactly one entry path.
+        internal void BtnPatreonExclusives_Click(object sender, RoutedEventArgs e)
         {
             // The launcher popup submenu was replaced by the Exclusives tab
             // ("the Velvet Vault") — the button is a plain tab button now.

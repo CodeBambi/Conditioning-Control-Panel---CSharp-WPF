@@ -57,6 +57,21 @@ namespace ConditioningControlPanel.Services
                 allowed ? string.Empty : Loc.GetF("tiergate_denied_premium", featureName));
         }
 
+        /// <summary>
+        /// Premium bar with the daily free feature OR'd in: on the day
+        /// <see cref="DailyFreeService"/> rotates <paramref name="dailyKey"/> in, the verdict
+        /// allows, so the lockband hides and the click just works - no call site special-cases
+        /// "free today". Only the six pool features pass a key; everything else keeps the plain
+        /// overload and is untouched by the rotation.
+        /// </summary>
+        public static TierVerdict RequiresPremium(string featureName, string dailyKey)
+        {
+            var allowed = App.Patreon?.HasPremiumAccess == true
+                          || App.DailyFree?.IsFreeToday(dailyKey) == true;
+            return new TierVerdict(allowed, featureName, PatreonTier.Level1,
+                allowed ? string.Empty : Loc.GetF("tiergate_denied_premium", featureName));
+        }
+
         /// <summary>Tier 2+ ("Lab"): the real T2 bar, whitelist folded in as permanent tier 2.</summary>
         public static TierVerdict RequiresLab(string featureName)
         {
@@ -70,6 +85,10 @@ namespace ConditioningControlPanel.Services
         /// why not. Callers return on false; nothing here throws.
         /// </summary>
         public static bool DemandPremium(string featureName) => Demand(RequiresPremium(featureName));
+
+        /// <inheritdoc cref="RequiresPremium(string, string)"/>
+        public static bool DemandPremium(string featureName, string dailyKey) =>
+            Demand(RequiresPremium(featureName, dailyKey));
 
         /// <inheritdoc cref="DemandPremium"/>
         public static bool DemandLab(string featureName) => Demand(RequiresLab(featureName));

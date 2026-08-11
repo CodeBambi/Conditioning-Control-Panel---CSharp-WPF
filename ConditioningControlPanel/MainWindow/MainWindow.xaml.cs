@@ -427,6 +427,19 @@ namespace ConditioningControlPanel
             if (App.Settings?.Current != null)
             {
                 App.Settings.Current.PropertyChanged += OnSettingsPropertyChangedForQuests;
+                // The 4x4 wall's active rings ride the same INPC (resurrected 2026-08-11 with
+                // the FX tiles themselves): any of the eleven *Enabled flags moving - from the
+                // rack panels, a session ramp, remote control or the wall's own right-click -
+                // repaints the rings, so the wall never shows yesterday's mix.
+                App.Settings.Current.PropertyChanged += OnSettingsPropertyChangedForWall;
+            }
+
+            // A landed server override for the ? box repaints the wall + rail + lockbands: the
+            // rail refresh is the one funnel that already fans out to all three.
+            if (App.DailyFree != null)
+            {
+                App.DailyFree.TodayChanged += () =>
+                    Dispatcher.BeginInvoke(new Action(RefreshPremiumRail));
             }
 
             // Subscribe to skill tree events
@@ -1610,32 +1623,56 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Resolves a wall tile's per-mod face: a .ccpmod override of the BASE path wins
+        /// outright (that is the contract every mod already relies on), then the app-shipped
+        /// themed variant for the active built-in mod (features/{name}_{suffix}.png - same
+        /// filename-fork mechanism as the takeover art), then the base art. Returns null only
+        /// when even the base fails to resolve, in which case the XAML pack-URI face stands.
+        /// </summary>
+        private static System.Windows.Media.ImageSource? ModTileVariant(string baseName)
+        {
+            var modOverride = ModResourceResolver.ResolveImage($"features/{baseName}.png");
+            // ResolveImage falls back to the app's own resource when the mod has no override,
+            // so "did the mod override it" needs the mod folder check to be meaningful only if
+            // the resolver distinguishes. It does not - so order the lookups by specificity
+            // instead: themed variant first (it only exists app-side), unless the active mod is
+            // a third-party one, whose base-path override must win.
+            var suffix = App.Mods?.ActiveModId switch
+            {
+                Models.BuiltInMods.BambiSleepId => "_bambi",
+                Models.BuiltInMods.SissyHypnoId => "_sissy",
+                Models.BuiltInMods.DronificationId => "_drone",
+                Models.BuiltInMods.LockedId => "_locked",
+                _ => null,
+            };
+            if (suffix == null) return modOverride;
+            return ModResourceResolver.ResolveImage($"features/{baseName}{suffix}.png") ?? modOverride;
+        }
+
+        /// <summary>
         /// Loads feature images from mod resources (if overrides exist) or embedded resources.
         /// </summary>
         private void LoadFeatureImages()
         {
             try
             {
-                // Dashboard feature cards (velvet mosaic, 3x3 destinations since 2026-08-11).
-                //
-                // All eight tiles have art now: dtrh/loom/deeper/justdrop.png landed later the
-                // same day (nano-banana batch), NEW paths added to the contract - mods may
-                // override them like any other features/* art.
-                //
-                // NO ART PATH WAS RENAMED by the rebuild. features/flash.png, spiral_overlay.png,
-                // Pink_filter.png and the rest are still resolved for the Studio rack's own
-                // surfaces, so every .ccpmod that overrides them keeps working untouched - mod
-                // contract rule 2.
+                // Dashboard feature cards (velvet mosaic, 4x4 hybrid wall since 2026-08-11).
+                // The FX tiles are back on their ORIGINAL art paths - the ones every .ccpmod
+                // override has always targeted - so the one-day 3x3 detour cost the contract
+                // nothing (its dtrh/loom/deeper rows shipped in no release). NO ART PATH WAS
+                // EVER RENAMED - mod contract rule 2.
                 var cardMap = new (string resourcePath, Features.FeatureCard? card)[]
                 {
-                    ("features/goon_game.png", SettingsTab.CardGoon),
-                    ("features/fyp.png", SettingsTab.CardFyp),
-                    ("features/lab_quiz_hero.png", SettingsTab.CardIntake),
-                    ("features/remote_control.png", SettingsTab.CardRemote),
-                    ("features/dtrh.png", SettingsTab.CardDtrh),
-                    ("features/loom.png", SettingsTab.CardLoom),
-                    ("features/deeper.png", SettingsTab.CardDeeper),
+                    ("features/flash.png", SettingsTab.CardFlash),
+                    ("features/subliminal.png", SettingsTab.CardSubliminal),
+                    ("features/bouncing_text.png", SettingsTab.CardBouncingText),
+                    ("features/Bubble_pop.png", SettingsTab.CardBubblePop),
+                    ("features/Phrase_Lock.png", SettingsTab.CardLockCard),
                     ("features/justdrop.png", SettingsTab.CardJustDrop),
+                    // The ? box and the Vault resolve through ModTileVariant below: built-in
+                    // mods get app-shipped themed faces (features/mysterybox_bambi.png, ...)
+                    // by filename convention - same mechanism as the takeover art fork - while
+                    // a .ccpmod that overrides the BASE path still wins outright.
                 };
                 foreach (var (path, card) in cardMap)
                 {
@@ -1645,9 +1682,44 @@ namespace ConditioningControlPanel
                         card.Icon = image;
                 }
 
+                if (SettingsTab.CardMystery != null)
+                {
+                    var img = ModTileVariant("mysterybox");
+                    if (img != null) SettingsTab.CardMystery.Icon = img;
+                }
+                if (SettingsTab.CardVault != null)
+                {
+                    var img = ModTileVariant("vault");
+                    if (img != null) SettingsTab.CardVault.Icon = img;
+                }
+
+                // The three diagonal tiles: per-half art through the resolver, so mods reskin
+                // each half exactly as they reskinned the old single tiles for these features.
+                if (SettingsTab.ComboVideoBubble != null)
+                {
+                    var a = ModResourceResolver.ResolveImage("features/mandatory_videos.png");
+                    var b = ModResourceResolver.ResolveImage("features/Bubble_count.png");
+                    if (a != null) SettingsTab.ComboVideoBubble.IconA = a;
+                    if (b != null) SettingsTab.ComboVideoBubble.IconB = b;
+                }
+                if (SettingsTab.ComboSpiralPink != null)
+                {
+                    var a = ModResourceResolver.ResolveImage("features/spiral_overlay.png");
+                    var b = ModResourceResolver.ResolveImage("features/Pink_filter.png");
+                    if (a != null) SettingsTab.ComboSpiralPink.IconA = a;
+                    if (b != null) SettingsTab.ComboSpiralPink.IconB = b;
+                }
+                if (SettingsTab.ComboMindDrain != null)
+                {
+                    var a = ModResourceResolver.ResolveImage("features/Mind_Wipers.png");
+                    var b = ModResourceResolver.ResolveImage("features/brain_drain.png");
+                    if (a != null) SettingsTab.ComboMindDrain.IconA = a;
+                    if (b != null) SettingsTab.ComboMindDrain.IconB = b;
+                }
+
                 // PHASE 8: the eight "legacy progression tab rectangles" rows are gone with
-                // ProgressionTabView. Mod art coverage is unchanged - cardMap above already
-                // carries all eight resource-relative paths, including features/brain_drain.png,
+                // ProgressionTabView. Mod art coverage is unchanged - the FX paths above are
+                // the same eight resource-relative paths, including features/brain_drain.png,
                 // so every one of those overrides still repaints on a mod switch. No art path was
                 // renamed or dropped (mod contract rule 2).
 

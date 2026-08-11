@@ -96,10 +96,10 @@ namespace ConditioningControlPanel
                     tab.ChkPlayChaosWebGame.IsEnabled = dtrhVerdict.Allowed;
                 SetLockband(tab.PlayLockGaze, TierGate.RequiresLab(Loc.Get("label_gaze_minigame")));
                 SetLockband(tab.PlayLockFocusGaze, TierGate.RequiresLab(Loc.Get("label_focus_gaze")));
-                SetLockband(tab.PlayLockRemote, TierGate.RequiresPremium(Loc.Get("tab_remote_control")));
+                SetLockband(tab.PlayLockRemote, TierGate.RequiresPremium(Loc.Get("tab_remote_control"), "remote"));
                 SetLockband(tab.PlayLockLockdown, TierGate.RequiresPremium(Loc.Get("tab_lockdown_mode")));
                 SetLockband(tab.PlayLockBlink, TierGate.RequiresPremium(Loc.Get("tab_blink_trainer")));
-                SetLockband(tab.PlayLockFyp, TierGate.RequiresPremium(Loc.Get("tab_fyp")));
+                SetLockband(tab.PlayLockFyp, TierGate.RequiresPremium(Loc.Get("tab_fyp"), "fyp"));
 
                 // --- Goon: name the rungs, gate nothing -------------------------------------
                 // Joining is free and stays free. The T1 send half and the T2 host half are the

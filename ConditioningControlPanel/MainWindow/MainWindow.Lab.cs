@@ -285,7 +285,7 @@ namespace ConditioningControlPanel
                 // Same feature name the card's own lockband paints, read from the same key
                 // (MainWindow.PlayTab.cs: RequiresPremium(Loc.Get("tab_fyp"))), so band and
                 // refusal cannot drift apart or disagree in a translated UI.
-                if (!TierGate.DemandPremium(Loc.Get("tab_fyp"))) return;
+                if (!TierGate.DemandPremium(Loc.Get("tab_fyp"), "fyp")) return;
 
                 Services.Fyp.FypHostService.Launch();
             }

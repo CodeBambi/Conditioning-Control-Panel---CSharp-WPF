@@ -95,30 +95,39 @@ namespace ConditioningControlPanel
             // If a mod is active, use mod-aware text; otherwise use localized text
             string ML(string englishText, string locKey) => ModAwareLabel(englishText, locKey);
 
-            // (MLCard retired 2026-08-11 with the FX mosaic — the only thing that needed
-            //  "mod-aware AND de-emoji'd" was a dashboard tile caption. StripLeadingGlyph is
-            //  still used directly below: the shared tab/section keys carry a leading emoji and
-            //  a FeatureCard draws its own icon, so a caption using one would show two.)
+            // Mod-aware AND de-emoji'd, for tiles that draw their own art: the shared section
+            // keys carry a leading emoji, and a caption using one would show two icons.
+            // (Resurrected 2026-08-11 with the FX wall - the 3x3 interlude had retired it.)
+            string MLCard(string englishText, string locKey) => StripLeadingGlyph(ML(englishText, locKey));
 
-            // Velvet mosaic dashboard cards — the XAML Title="" literals are plain English
-            // design-time fallbacks, so this is the only place they get localized.
-            //
-            // The eight destination tiles (2026-08-11) go through Loc.Get, NOT MLCard: these are
-            // app features and brands, not the conditioning effects a mod re-themes. "Flash
-            // Images" becoming a mod's own word for it is the whole point of ModAwareLabel; "For
-            // You" or "Deeper" becoming one would just rename the app's own furniture. The twelve
-            // FX titles that DID want mod-renaming still get it — the Studio rack's row captions
-            // run every one of those keys through the same ModAwareLabel (StudioTabView's
-            // RefreshRackLabels), which is now their only visible surface.
-            //
-            // Down the Rabbit Hole / Goon Game / Just Drop carry no key at all: two are brand
-            // names identical in all nine language files (the argument MainWindow.PlayTab.cs:84
-            // already makes for the Descent's lockband) and the third is a placeholder.
-            if (SettingsTab.CardFyp != null) SettingsTab.CardFyp.Title = StripLeadingGlyph(Loc.Get("tab_fyp"));
-            if (SettingsTab.CardIntake != null) SettingsTab.CardIntake.Title = StripLeadingGlyph(Loc.Get("tab_gradedintake"));
-            if (SettingsTab.CardRemote != null) SettingsTab.CardRemote.Title = StripLeadingGlyph(Loc.Get("tab_remote_control"));
-            if (SettingsTab.CardLoom != null) SettingsTab.CardLoom.Title = StripLeadingGlyph(Loc.Get("pl6_loom_title"));
-            if (SettingsTab.CardDeeper != null) SettingsTab.CardDeeper.Title = StripLeadingGlyph(Loc.Get("tab_deeper"));
+            // Velvet mosaic dashboard cards - the XAML Title="" literals are plain English
+            // design-time fallbacks, so this is the only place they get localized AND
+            // mod-renamed. Same keys as the matching Studio rack rows (RefreshRackLabels), so a
+            // mod that renames "Flash Images" renames the tile, the rack row and the panel title
+            // together. Just Drop stays a literal (placeholder); the ? box's title belongs to
+            // RefreshMysteryTile; the Vault's title uses the Exclusives tab's own key.
+            if (SettingsTab.CardFlash != null) SettingsTab.CardFlash.Title = MLCard("Flash Images", "section_flash_images");
+            if (SettingsTab.CardSubliminal != null) SettingsTab.CardSubliminal.Title = MLCard("Subliminals", "section_subliminals_2");
+            if (SettingsTab.CardBouncingText != null) SettingsTab.CardBouncingText.Title = MLCard("Bouncing Text", "label_bouncing_text");
+            if (SettingsTab.CardBubblePop != null) SettingsTab.CardBubblePop.Title = MLCard("Bubble Pop", "label_bubble_pop");
+            if (SettingsTab.CardLockCard != null) SettingsTab.CardLockCard.Title = MLCard("Lock Card", "label_lock_card");
+            if (SettingsTab.CardVault != null) SettingsTab.CardVault.Title = MLCard("The Vault", "tab_exclusives");
+            if (SettingsTab.ComboVideoBubble != null)
+            {
+                SettingsTab.ComboVideoBubble.TitleA = MLCard("Mandatory Video", "section_mandatory_video");
+                SettingsTab.ComboVideoBubble.TitleB = MLCard("Bubble Count", "label_bubble_count");
+            }
+            if (SettingsTab.ComboSpiralPink != null)
+            {
+                SettingsTab.ComboSpiralPink.TitleA = MLCard("Spiral Overlay", "label_spiral_overlay");
+                SettingsTab.ComboSpiralPink.TitleB = MLCard("Pink Filter", "label_pink_filter");
+            }
+            if (SettingsTab.ComboMindDrain != null)
+            {
+                SettingsTab.ComboMindDrain.TitleA = MLCard("Mind Wipe", "label_mind_wipe");
+                SettingsTab.ComboMindDrain.TitleB = MLCard("Brain Drain", "label_brain_drain");
+            }
+            RefreshMysteryTile();
 
             // Phase 8: the four LegacyDashboardHost section headers (TxtFeatureFlash /
             // TxtFeatureVideo / TxtFeatureSubliminal / TxtFeatureWhispers) went with the host. They

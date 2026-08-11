@@ -31,7 +31,7 @@ namespace ConditioningControlPanel
         /// a mic that is already open.
         /// </summary>
         private static bool DemandSheListeningPremium()
-            => Services.TierGate.DemandPremium(Localization.Loc.Get("tab_shelistening"));
+            => Services.TierGate.DemandPremium(Localization.Loc.Get("tab_shelistening"), "voice");
 
         // RevertCheck lived here: it un-ticked a She's-Listening toggle the premium bar had just
         // refused. The two toggles it guarded (wake word, push-to-talk) are read-only chips on this

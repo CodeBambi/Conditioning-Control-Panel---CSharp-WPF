@@ -695,40 +695,49 @@
         </Border>
 
         <!-- ============================================================ -->
-        <!-- VELVET MOSAIC DASHBOARD - 3x3 destination grid (col 1)        -->
+        <!-- VELVET MOSAIC DASHBOARD - 4x4 hybrid wall (col 1)             -->
         <!--                                                              -->
-        <!-- WAS a 4x4 of twelve FX tiles around a 2x2 logo. Every one of -->
-        <!-- those tiles left-click-navigated to a Studio rack module      -->
-        <!-- (Phase 3), so the app's best real estate held twelve          -->
-        <!-- shortcuts into a list the Studio door already shows in full,  -->
-        <!-- while DtRH, Goon, For You, the intake, Deeper and the Loom    -->
-        <!-- had no dashboard presence at all. Owner call, 2026-08-11:     -->
-        <!-- 3x3, logo in the middle, eight slots, four free and four      -->
-        <!-- paid, and the FX keep their one real home in the Studio rack. -->
+        <!-- Third shape in two days, all owner calls, each one learning   -->
+        <!-- from the last: the original 4x4 was twelve FX shortcuts (the  -->
+        <!-- Studio rack shows the same list better); the one-day 3x3 was  -->
+        <!-- eight destinations (which starved the wall of the quick        -->
+        <!-- toggles people actually flip mid-session). This wall is the   -->
+        <!-- synthesis, owner-designed 2026-08-11:                          -->
         <!--                                                              -->
-        <!-- The free/paid split is diagonal rather than blocked so the    -->
-        <!-- wall does not read as a paywall with a free corner:           -->
-        <!--   DtRH(T2)  Goon(free)  For You(T1)                           -->
-        <!--   Intake(*)  [ LOGO ]   Remote(T1)                            -->
-        <!--   Loom(free) Deeper(free) Just Drop(T1)                       -->
-        <!-- (*) the intake is free once a week - IntakePassService owns    -->
-        <!-- the four states, and the centre logo still flips to the PASS   -->
-        <!-- face when one is waiting.                                     -->
+        <!--   Flash      | Video/BubbleCount | Subliminals | BouncingText -->
+        <!--   Just Drop  | [ LOGO 2x2                    ] | Spiral/Pink  -->
+        <!--   ? BOX      | [                              ] | Wipe/Drain  -->
+        <!--   VAULT (2w) |                   | Bubble Pop  | Lock Card    -->
         <!--                                                              -->
-        <!-- Every tile NAVIGATES to the one existing entry for its         -->
-        <!-- feature; none of them launches anything itself. That is the    -->
-        <!-- same rule the Play door's cards follow (PlayTabView.xaml:1165) -->
-        <!-- and it is what keeps there being exactly one Loom editor, one  -->
-        <!-- FYP window and one Deeper hub no matter how many front doors   -->
-        <!-- point at them.                                                 -->
+        <!-- * The three DIAGONAL tiles carry two features each (the       -->
+        <!--   Features/SplitFeatureCard control). The owner named two      -->
+        <!--   merges (Video+BubbleCount, Spiral+PinkFilter); MindWipe+     -->
+        <!--   BrainDrain is the build's own third, because the toggleable  -->
+        <!--   FX count is 11, not the 10 the brief assumed, and the two    -->
+        <!--   immersion brain-effects are the pair the first two merges    -->
+        <!--   would have chosen. GESTURE: left-click on a half opens that  -->
+        <!--   half's Studio module, right-click toggles it - the same      -->
+        <!--   grammar as the rail chips and the single FX tiles.           -->
+        <!-- * ? BOX = the daily free feature (DailyFreeService): one       -->
+        <!--   premium feature, rotated per-day from a curated pool,        -->
+        <!--   server-overridable, genuinely usable free for that day.      -->
+        <!-- * VAULT = the Exclusives/Velvet Vault storefront, double-wide. -->
+        <!-- * The seven destination tiles of the 3x3 went back behind the  -->
+        <!--   Play door (their cards there never left); their art stays in -->
+        <!--   Resources/features for that door's own glow-up.              -->
+        <!-- Navigation tiles still navigate to the ONE existing entry per  -->
+        <!-- feature (PlayTabView.xaml:1165 rule); FX toggles mirror the    -->
+        <!-- popup side effects and respect the session dose lock.          -->
         <!-- ============================================================ -->
         <Grid Grid.Column="1" Grid.Row="1" x:Name="VelvetFeatureGrid" x:FieldModifier="internal" Margin="5">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="*"/>
@@ -751,57 +760,61 @@
             <!-- with RegisterTabFx so it parks on every tab switch.            -->
             <!-- ============================================================ -->
             <fx:AmbientFxCanvas x:Name="MosaicFx" x:FieldModifier="internal"
-                                Grid.Row="0" Grid.RowSpan="3"
-                                Grid.Column="0" Grid.ColumnSpan="3"/>
+                                Grid.Row="0" Grid.RowSpan="4"
+                                Grid.Column="0" Grid.ColumnSpan="4"/>
 
             <!-- The Title="" literals below are English design-time fallbacks only.
-                 At runtime MainWindow.ApplyModFeatureNames() overwrites every card title
-                 with the localized name. Two are deliberately NOT localized and not
-                 mod-renamed - "Down the Rabbit Hole" and "Goon Game" are brand names,
-                 identical in all nine language files, exactly as MainWindow.PlayTab.cs:84
-                 already argues for the Descent's lockband.
+                 At runtime MainWindow.ApplyModFeatureNames() overwrites every FX title
+                 with the mod-aware localized name (same keys as the Studio rack rows).
+                 "Just Drop" stays a literal (unbuilt placeholder), and the ? box's title
+                 is runtime-owned outright: RefreshMysteryTile() writes today's feature
+                 name over it on every repaint. -->
 
-                 A LEFT-click navigates to the feature's one existing entry. There is no
-                 right-click quick-toggle on this wall any more: these eight are
-                 destinations, not dose dials, and "turn Down the Rabbit Hole on" is not a
-                 thing you can do to it. The gesture moved to the premium rail, where the
-                 chips ARE toggles - see MainWindow.PremiumRail.cs. -->
+            <!-- Row 1: flash, the video pair, subliminals, bouncing text -->
+            <features:FeatureCard Grid.Row="0" Grid.Column="0" x:Name="CardFlash" x:FieldModifier="internal"
+                                  Title="Flash Images"
+                                  Icon="pack://application:,,,/Resources/features/flash.png"
+                                  HelpSectionId="FlashImages"
+                                  Click="CardFlash_Click"
+                                  ToggleRequested="CardFlash_Toggle"/>
+            <features:SplitFeatureCard Grid.Row="0" Grid.Column="1" x:Name="ComboVideoBubble" x:FieldModifier="internal"
+                                       TitleA="Mandatory Video" TitleB="Bubble Count"
+                                       IconA="pack://application:,,,/Resources/features/mandatory_videos.png"
+                                       IconB="pack://application:,,,/Resources/features/Bubble_count.png"
+                                       ClickA="ComboVideoBubble_ClickA" ClickB="ComboVideoBubble_ClickB"
+                                       ToggleA="ComboVideoBubble_ToggleA" ToggleB="ComboVideoBubble_ToggleB"/>
+            <features:FeatureCard Grid.Row="0" Grid.Column="2" x:Name="CardSubliminal" x:FieldModifier="internal"
+                                  Title="Subliminals"
+                                  Icon="pack://application:,,,/Resources/features/subliminal.png"
+                                  HelpSectionId="Subliminals"
+                                  Click="CardSubliminal_Click"
+                                  ToggleRequested="CardSubliminal_Toggle"/>
+            <features:FeatureCard Grid.Row="0" Grid.Column="3" x:Name="CardBouncingText" x:FieldModifier="internal"
+                                  Title="Bouncing Text"
+                                  Icon="pack://application:,,,/Resources/features/bouncing_text.png"
+                                  HelpSectionId="BouncingText"
+                                  Click="CardBouncingText_Click"
+                                  ToggleRequested="CardBouncingText_Toggle"/>
 
-            <!-- Row 1: the Descent, the lobby, the feed -->
-            <features:FeatureCard Grid.Row="0" Grid.Column="0" x:Name="CardDtrh" x:FieldModifier="internal"
-                                  Title="Down the Rabbit Hole"
-                                  Icon="pack://application:,,,/Resources/features/dtrh.png"
-                                  Glyph="🐇"
-                                  Click="CardDtrh_Click"/>
-            <features:FeatureCard Grid.Row="0" Grid.Column="1" x:Name="CardGoon" x:FieldModifier="internal"
-                                  Title="Goon Game"
-                                  Icon="pack://application:,,,/Resources/features/goon_game.png"
-                                  Click="CardGoon_Click"/>
-            <features:FeatureCard Grid.Row="0" Grid.Column="2" x:Name="CardFyp" x:FieldModifier="internal"
-                                  Title="For You"
-                                  Icon="pack://application:,,,/Resources/features/fyp.png"
-                                  Click="CardFyp_Click"/>
+            <!-- Row 2: Just Drop (far left, owner spec) + centre logo + spiral pair -->
+            <!-- Just Drop: the session maker, not built yet (owner, 2026-08-11 - "placeholder
+                 for now"). SOON badge + toast; wire the real launcher when feat/justdrop-door
+                 merges and delete the toast. Title stays an English literal on purpose. -->
+            <features:FeatureCard Grid.Row="1" Grid.Column="0" x:Name="CardJustDrop" x:FieldModifier="internal"
+                                  Title="Just Drop"
+                                  Icon="pack://application:,,,/Resources/features/justdrop.png"
+                                  Glyph="🎚"
+                                  Click="CardJustDrop_Click"/>
 
-            <!-- Row 2: left edge + centre logo + right edge -->
-            <features:FeatureCard Grid.Row="1" Grid.Column="0" x:Name="CardIntake" x:FieldModifier="internal"
-                                  Title="Graded Intake"
-                                  Icon="pack://application:,,,/Resources/features/lab_quiz_hero.png"
-                                  HelpSectionId="Quiz"
-                                  Click="CardIntake_Click"/>
-
-            <!-- Centre logo, now a single 1x1 cell (was 2x2 on the old 4x4 wall).
+            <!-- Centre logo, back at 2x2 (the 3x3 interlude had it 1x1).
                  Doubles as the weekly Graded Intake pass card: when a free account has an
                  unspent run waiting, MainWindow.RefreshIntakePassTile() flips this tile on its
                  Y axis and leaves the PASS face showing until the run is used or the week rolls.
                  The tile is NOT a cutscene - the card face is a standing affordance, so someone
-                 who was on another tab when the week rolled still finds it here.
-
-                 The 3x3 rebuild shrank this cell from ~1/2 of the mosaic's width to ~1/3, so the
-                 PASS face's type is stepped down to match below. The Graded Intake tile sits
-                 directly to its left, which is deliberate reinforcement rather than duplication:
-                 the tile is the standing door, the flip is the "there is one waiting" event. -->
+                 who was on another tab when the week rolled still finds it here. The PASS face
+                 type below is restored to its 4x4-era sizes now the cell is big again. -->
             <Border x:Name="LogoBrandFrame" x:FieldModifier="internal"
-                    Grid.Row="1" Grid.Column="1"
+                    Grid.Row="1" Grid.RowSpan="2" Grid.Column="1" Grid.ColumnSpan="2"
                     Background="#01000000" Margin="6"
                     Cursor="Hand" MouseLeftButtonDown="ImgLogo_MouseLeftButtonDown"
                     ToolTip="{loc:Str tooltip_click_me_rapidly}">
@@ -945,18 +958,15 @@
                             <!-- Headline. Always visible - it is the only thing naming the feature
                                  in art mode, and it sits on the art's dark top strip.
 
-                                 Type on this face is stepped down ~15% from the digits it carried
-                                 on the 4x4 wall: the 3x3 rebuild took the cell from ~1/2 the
-                                 mosaic's width to ~1/3, and these strings are translated into nine
-                                 languages, several of which run longer than the English. The old
-                                 sizes did not overflow - they wrapped to a third line and crowded
-                                 the CTA. -->
+                                 Type restored to the 4x4-era sizes (13/11/12/9): the 2x2 cell is
+                                 back, so the ~15% step-down the 3x3 interlude needed would now
+                                 just look timid. -->
                             <TextBlock x:Name="IntakePassHeadline" x:FieldModifier="internal"
                                        Text="{loc:Str intake_pass_card_headline}"
                                        VerticalAlignment="Top" HorizontalAlignment="Center"
-                                       Margin="10,7,10,0"
+                                       Margin="10,8,10,0"
                                        Foreground="{DynamicResource PinkBrush}"
-                                       FontSize="11" FontWeight="Bold"
+                                       FontSize="13" FontWeight="Bold"
                                        TextAlignment="Center" TextWrapping="Wrap"/>
 
                             <!-- Vector block: the pre-art card body. Collapsed whenever art is
@@ -977,14 +987,14 @@
                                 <TextBlock x:Name="IntakePassBody" x:FieldModifier="internal"
                                            Text="{loc:Str intake_pass_card_body}"
                                            Foreground="{DynamicResource TextMutedBrush}"
-                                           FontSize="9.5" LineHeight="13"
+                                           FontSize="11" LineHeight="15"
                                            TextAlignment="Center" TextWrapping="Wrap"/>
 
                                 <TextBlock Text="{loc:Str intake_pass_card_footnote}"
                                            Foreground="{DynamicResource TextMutedBrush}"
-                                           FontSize="8" Opacity="0.75"
+                                           FontSize="9" Opacity="0.75"
                                            TextAlignment="Center" TextWrapping="Wrap"
-                                           Margin="0,5,0,0"/>
+                                           Margin="0,6,0,0"/>
                             </StackPanel>
 
                             <!-- Bottom bar: the pulsing call to action plus the "(?)" explainer.
@@ -1009,7 +1019,7 @@
                                 <TextBlock x:Name="IntakePassCta" x:FieldModifier="internal"
                                            Grid.Column="1"
                                            Text="{loc:Str intake_pass_card_cta}"
-                                           Foreground="White" FontSize="10.5" FontWeight="Bold"
+                                           Foreground="White" FontSize="12" FontWeight="Bold"
                                            VerticalAlignment="Center"
                                            TextAlignment="Center" TextWrapping="Wrap"
                                            RenderTransformOrigin="0.5,0.5">
@@ -1033,41 +1043,75 @@
                 </Grid>
             </Border>
     
-            <features:FeatureCard Grid.Row="1" Grid.Column="2" x:Name="CardRemote" x:FieldModifier="internal"
-                                  Title="Remote Control"
-                                  Icon="pack://application:,,,/Resources/features/remote_control.png"
-                                  HelpSectionId="RemoteControl"
-                                  Click="CardRemote_Click"/>
+            <features:SplitFeatureCard Grid.Row="1" Grid.Column="3" x:Name="ComboSpiralPink" x:FieldModifier="internal"
+                                       TitleA="Spiral Overlay" TitleB="Pink Filter"
+                                       IconA="pack://application:,,,/Resources/features/spiral_overlay.png"
+                                       IconB="pack://application:,,,/Resources/features/Pink_filter.png"
+                                       ClickA="ComboSpiralPink_ClickA" ClickB="ComboSpiralPink_ClickB"
+                                       ToggleA="ComboSpiralPink_ToggleA" ToggleB="ComboSpiralPink_ToggleB"/>
 
-            <!-- Row 3: the two makers and the placeholder -->
-            <!-- Loom and Deeper have no art of their own anywhere in the app (asset audit §6 -
-                 the Deeper tab is 100% emoji-typographic), so they carry the SAME glyphs their
-                 Play door cards carry: 🧵 and 🕳. Inventing art for them here would put two
-                 different faces on one feature. -->
-            <features:FeatureCard Grid.Row="2" Grid.Column="0" x:Name="CardLoom" x:FieldModifier="internal"
-                                  Title="The Loom"
-                                  Icon="pack://application:,,,/Resources/features/loom.png"
-                                  Glyph="🧵"
-                                  Click="CardLoom_Click"/>
-            <features:FeatureCard Grid.Row="2" Grid.Column="1" x:Name="CardDeeper" x:FieldModifier="internal"
-                                  Title="Deeper"
-                                  Icon="pack://application:,,,/Resources/features/deeper.png"
-                                  Glyph="🕳"
-                                  Click="CardDeeper_Click"/>
-            <!-- Just Drop: the session maker, not built yet (owner, 2026-08-11 - "placeholder for
-                 now"). The tile ships locked with a SOON band rather than hidden, because the
-                 point of putting it on the wall is to say it is coming. CardJustDrop_Click is
-                 deliberately a toast and nothing else: there is no window to open, and a tile
-                 that silently does nothing reads as broken. Wire it to the real launcher when
-                 the feature lands and delete the toast - nothing else on this wall changes.
-                 Placeholder name is a literal on purpose: naming it in nine language files
-                 before the feature exists would be nine rows to re-translate when it is named
-                 for real. -->
-            <features:FeatureCard Grid.Row="2" Grid.Column="2" x:Name="CardJustDrop" x:FieldModifier="internal"
-                                  Title="Just Drop"
-                                  Icon="pack://application:,,,/Resources/features/justdrop.png"
-                                  Glyph="🎚"
-                                  Click="CardJustDrop_Click"/>
+            <!-- Row 3: the ? box + the immersion pair -->
+            <!-- The ? BOX: today's premium feature, free for the day (DailyFreeService).
+                 Title and the FREE TODAY badge are painted by MainWindow.RefreshMysteryTile()
+                 on every rail repaint; the literals below are design-time fallbacks. Click
+                 navigates to today's feature - the tile never launches anything itself. -->
+            <features:FeatureCard Grid.Row="2" Grid.Column="0" x:Name="CardMystery" x:FieldModifier="internal"
+                                  Title="Daily Gift"
+                                  Icon="pack://application:,,,/Resources/features/mysterybox.png"
+                                  Click="CardMystery_Click"/>
+            <features:SplitFeatureCard Grid.Row="2" Grid.Column="3" x:Name="ComboMindDrain" x:FieldModifier="internal"
+                                       TitleA="Mind Wipe" TitleB="Brain Drain"
+                                       IconA="pack://application:,,,/Resources/features/Mind_Wipers.png"
+                                       IconB="pack://application:,,,/Resources/features/brain_drain.png"
+                                       ClickA="ComboMindDrain_ClickA" ClickB="ComboMindDrain_ClickB"
+                                       ToggleA="ComboMindDrain_ToggleA" ToggleB="ComboMindDrain_ToggleB"/>
+
+            <!-- Row 4: the vault (double-wide) + the two games -->
+            <!-- THE VAULT: the Exclusives storefront (Velvet Vault + the premium T2 shelf).
+                 Double-wide because it is a billboard as much as a door. Navigates to the
+                 Exclusives tab through the SAME handler the rail's Patreon row uses. -->
+            <features:FeatureCard Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" x:Name="CardVault" x:FieldModifier="internal"
+                                  Title="The Vault"
+                                  Icon="pack://application:,,,/Resources/features/vault.png"
+                                  Click="CardVault_Click"/>
+            <!-- The vault's animated CTA (owner spec 2026-08-11): big, slightly diagonal,
+                 breathing. Overlaid on the CELL rather than inside FeatureCard so the card
+                 control stays generic. IsHitTestVisible=False - clicks land on the card.
+                 The breath (VaultCtaScale) is driven from MainWindow.DashboardFx under the
+                 same MotionFx gates as the intake CTA pulse (IntakePassCtaScale precedent:
+                 a Storyboard would no-op across the UserControl namescope). Glow colour is
+                 FxGlowBrush, so a mod switch re-themes the CTA with zero code. -->
+            <TextBlock x:Name="VaultCta" x:FieldModifier="internal"
+                       Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+                       Text="{loc:Str mosaic_vault_cta}"
+                       IsHitTestVisible="False" Panel.ZIndex="12"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       TextAlignment="Center" TextWrapping="Wrap" MaxWidth="330"
+                       Foreground="White" FontSize="17" FontWeight="Black"
+                       RenderTransformOrigin="0.5,0.5">
+                <TextBlock.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform x:Name="VaultCtaScale" ScaleX="1" ScaleY="1"/>
+                        <RotateTransform Angle="-7"/>
+                    </TransformGroup>
+                </TextBlock.RenderTransform>
+                <TextBlock.Effect>
+                    <DropShadowEffect Color="{DynamicResource FxGlowColor}"
+                                      BlurRadius="14" ShadowDepth="0" Opacity="0.95"/>
+                </TextBlock.Effect>
+            </TextBlock>
+            <features:FeatureCard Grid.Row="3" Grid.Column="2" x:Name="CardBubblePop" x:FieldModifier="internal"
+                                  Title="Bubble Pop"
+                                  Icon="pack://application:,,,/Resources/features/Bubble_pop.png"
+                                  HelpSectionId="BubblePop"
+                                  Click="CardBubblePop_Click"
+                                  ToggleRequested="CardBubblePop_Toggle"/>
+            <features:FeatureCard Grid.Row="3" Grid.Column="3" x:Name="CardLockCard" x:FieldModifier="internal"
+                                  Title="Lock Card"
+                                  Icon="pack://application:,,,/Resources/features/Phrase_Lock.png"
+                                  HelpSectionId="LockCard"
+                                  Click="CardLockCard_Click"
+                                  ToggleRequested="CardLockCard_Toggle"/>
 
             <!-- ============================================================ -->
             <!-- PROGRAM FEATURE LOCK - the "why" pill. Shown only while a     -->
@@ -1088,7 +1132,7 @@
             <!-- The refusal happens in code, not by swallowing clicks.          -->
             <!-- ============================================================ -->
             <Border x:Name="ProgramFeatureLockRibbon" x:FieldModifier="internal"
-                    Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Grid.ColumnSpan="3"
+                    Grid.Row="0" Grid.RowSpan="4" Grid.Column="0" Grid.ColumnSpan="4"
                     Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="30"
                     VerticalAlignment="Top" HorizontalAlignment="Center"
                     MaxWidth="620" Margin="0,14,0,0" Padding="13,6,13,6"

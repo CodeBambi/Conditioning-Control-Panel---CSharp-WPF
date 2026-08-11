@@ -95,15 +95,28 @@ namespace ConditioningControlPanel
             {
                 var tab = SettingsTab;
                 if (tab == null) return Enumerable.Empty<FeatureCard>();
-                // The 3x3 destination wall (2026-08-11). Every tile on the mosaic belongs here or
-                // it silently keeps its motion running after a MotionLevel change - the same
-                // omission family as ChipFyp missing from PremiumRailItems, noted just below.
+                // The 4x4 hybrid wall (2026-08-11, redesign #2). Every SINGLE tile on the mosaic
+                // belongs here or it silently keeps its motion running after a MotionLevel
+                // change - the same omission family as ChipFyp missing from PremiumRailItems.
+                // The three diagonal tiles are DashboardSplitCards, just below.
                 var all = new[]
                 {
-                    tab.CardDtrh, tab.CardGoon, tab.CardFyp,
-                    tab.CardIntake, tab.CardRemote,
-                    tab.CardLoom, tab.CardDeeper, tab.CardJustDrop,
+                    tab.CardFlash, tab.CardSubliminal, tab.CardBouncingText,
+                    tab.CardBubblePop, tab.CardLockCard,
+                    tab.CardJustDrop, tab.CardMystery, tab.CardVault,
                 };
+                return all.Where(c => c != null)!;
+            }
+        }
+
+        /// <summary>The three diagonal tiles - same motion contract as the singles above.</summary>
+        private IEnumerable<SplitFeatureCard> DashboardSplitCards
+        {
+            get
+            {
+                var tab = SettingsTab;
+                if (tab == null) return Enumerable.Empty<SplitFeatureCard>();
+                var all = new[] { tab.ComboVideoBubble, tab.ComboSpiralPink, tab.ComboMindDrain };
                 return all.Where(c => c != null)!;
             }
         }
@@ -204,6 +217,8 @@ namespace ConditioningControlPanel
                     tab.MosaicFx.Resume();
 
                 foreach (var card in DashboardFeatureCards) card.RefreshFx();
+                foreach (var combo in DashboardSplitCards) combo.RefreshFx();
+                ApplyVaultCtaBreath();
 
                 ApplyLogoDrift();
                 ApplyLogoSheenTimer();
@@ -212,6 +227,45 @@ namespace ConditioningControlPanel
                 foreach (var dot in _pulsingRailDots.ToList()) ApplyRailDotPulse(dot, true, force: true);
             }
             catch (Exception ex) { App.Logger?.Debug("ApplyDashboardFxLoops: {E}", ex.Message); }
+        }
+
+        // ============================== 2b. the vault CTA ==============================
+
+        private const double VaultCtaBreathTo = 1.07;
+        private const double VaultCtaBreathSeconds = 2.2;
+
+        /// <summary>
+        /// The vault tile's "Check out all the other premium features!" stamp (owner spec):
+        /// a slow scale breath on the slanted text. Driven here and not by a XAML Storyboard for
+        /// the same namescope reason as the intake CTA pulse; parks at 1.0 when ambient motion is
+        /// off, so reduced-motion users get a static slanted stamp - which still reads.
+        /// </summary>
+        private void ApplyVaultCtaBreath()
+        {
+            try
+            {
+                var scale = SettingsTab?.VaultCtaScale;
+                if (scale == null || scale.IsFrozen) return;
+
+                if (!ChromeAmbientAllowed)
+                {
+                    scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                    scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                    scale.ScaleX = scale.ScaleY = 1.0;
+                    return;
+                }
+
+                var breath = new DoubleAnimation(1.0, VaultCtaBreathTo, TimeSpan.FromSeconds(VaultCtaBreathSeconds))
+                {
+                    AutoReverse = true,
+                    RepeatBehavior = RepeatBehavior.Forever,
+                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+                };
+                Timeline.SetDesiredFrameRate(breath, AmbientFrameRate);
+                scale.BeginAnimation(ScaleTransform.ScaleXProperty, breath);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, breath);
+            }
+            catch (Exception ex) { App.Logger?.Debug("ApplyVaultCtaBreath: {E}", ex.Message); }
         }
 
         // ============================== 3. centre logo ==============================

@@ -191,7 +191,7 @@ namespace ConditioningControlPanel
             // write a listing message and tag it, only to be told no by ChkRemoteControlEnabled's
             // own gate at the end, is the worst version of this. Turning Remote OFF above stays
             // free for the same reason stopping Blink does.
-            if (!TierGate.DemandPremium(RailFeatureName(PremiumFeature.Remote))) return;
+            if (!TierGate.DemandPremium(RailFeatureName(PremiumFeature.Remote), "remote")) return;
             if (SettingsTab?.RemoteFlyout != null) SettingsTab.RemoteFlyout.IsOpen = true;
         }
 
@@ -373,7 +373,9 @@ namespace ConditioningControlPanel
                 case PremiumFeature.Takeover:
                 case PremiumFeature.Awareness:
                 case PremiumFeature.Haptics:
-                    if (!TierGate.DemandPremium(RailFeatureName(feature))) return;
+                    // Keyed overload: on the day the ? box rotates this feature in, the demand
+                    // passes for free accounts too (DailyFreeService).
+                    if (!TierGate.DemandPremium(RailFeatureName(feature), RailDailyKey(feature)!)) return;
                     if (RefuseIfSessionFeatureLocked($"chip:{feature}")) return;
                     break;
             }
@@ -528,6 +530,22 @@ namespace ConditioningControlPanel
         });
 
         /// <summary>
+        /// The rail feature's <see cref="Services.DailyFreeService"/> pool key, or null for the
+        /// entries the daily rotation never touches (Lockdown, Blink, GradedIntake). These keys
+        /// are API shared with the server override - never rename one side alone.
+        /// </summary>
+        private static string? RailDailyKey(PremiumFeature feature) => feature switch
+        {
+            PremiumFeature.Takeover => "takeover",
+            PremiumFeature.Awareness => "awareness",
+            PremiumFeature.Haptics => "haptics",
+            PremiumFeature.Voice => "voice",
+            PremiumFeature.Fyp => "fyp",
+            PremiumFeature.Remote => "remote",
+            _ => null,
+        };
+
+        /// <summary>
         /// Paints the per-card lockbands: one <see cref="TierVerdict"/> per rail entry, so the band
         /// on the card, the refusal the click produces and the copy in the toast cannot drift apart
         /// the way the Lab smokescreen and the launch handlers once did.
@@ -548,14 +566,16 @@ namespace ConditioningControlPanel
             if (tab == null) return;
             try
             {
-                SetLockband(tab.LockBandTakeover, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Takeover)));
-                SetLockband(tab.LockBandAwareness, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Awareness)));
-                SetLockband(tab.LockBandHaptics, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Haptics)));
-                SetLockband(tab.LockBandVoice, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Voice)));
-                SetLockband(tab.LockBandFyp, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Fyp)));
+                // Keyed overloads for the six pool features: on their free day the band hides,
+                // which is the ? box's promise made visible everywhere at once.
+                SetLockband(tab.LockBandTakeover, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Takeover), "takeover"));
+                SetLockband(tab.LockBandAwareness, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Awareness), "awareness"));
+                SetLockband(tab.LockBandHaptics, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Haptics), "haptics"));
+                SetLockband(tab.LockBandVoice, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Voice), "voice"));
+                SetLockband(tab.LockBandFyp, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Fyp), "fyp"));
                 SetLockband(tab.LockBandLockdown, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Lockdown)));
                 SetLockband(tab.LockBandBlink, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Blink)));
-                SetLockband(tab.LockBandRemote, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Remote)));
+                SetLockband(tab.LockBandRemote, TierGate.RequiresPremium(RailFeatureName(PremiumFeature.Remote), "remote"));
 
                 // Graded Intake is the one entry that is not a straight tier question: a free
                 // account holding this week's pass may take it, and the pass is exactly what the
