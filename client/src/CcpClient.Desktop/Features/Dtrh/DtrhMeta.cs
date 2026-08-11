@@ -875,12 +875,24 @@ public sealed class DtrhMeta
 
             if (setup.TryGetProperty("durationSec", out _))
             {
-                idx.DurationSec = Math.Clamp(GetInt(setup, "durationSec") ?? 960, 60, 1200);
+                // The Hourglass unlock lifts the ceiling to 2h; without it the preset
+                // ceiling holds (DtrhHostService.cs:474-475). Ownership = the active
+                // slot's PurchasedUpgrades (IsOwned, ChaosUpgrades.cs:323).
+                var durMax = S.PurchasedUpgrades.Contains("custom_duration") ? 7200 : 1200;
+                idx.DurationSec = Math.Clamp(GetInt(setup, "durationSec") ?? 960, 60, durMax);
             }
 
             if (setup.TryGetProperty("waveCount", out _))
             {
                 idx.WaveCount = Math.Clamp(GetInt(setup, "waveCount") ?? 5, 1, 12);
+            }
+
+            // The Bottomless Fall: the endless toggle only sticks for owners (a stale page
+            // can't arm it without the unlock, DtrhHostService.cs:478-480); FromSetup
+            // re-checks ownership at deal time (ChaosModels.cs:206).
+            if (setup.TryGetProperty("endless", out _))
+            {
+                idx.Endless = (GetBool(setup, "endless") ?? false) && S.PurchasedUpgrades.Contains("endless_mode");
             }
 
             if (setup.TryGetProperty("motion", out var motion) && motion.ValueKind == JsonValueKind.String)
@@ -919,7 +931,7 @@ public sealed class DtrhMeta
     /// <summary>The init-carried saved setup (BuildRunSetup :447-478 — raw values, NOT the
     /// clamped run values; the hub applies its own gating visually).</summary>
     public static DtrhProtocol.DtrhRunSetup BuildRunSetupPayload(DtrhSlotIndex idx) =>
-        new(idx.Difficulty, idx.DurationSec, idx.WaveCount, idx.Motion, idx.EnabledVariants,
+        new(idx.Difficulty, idx.DurationSec, idx.Endless, idx.WaveCount, idx.Motion, idx.EnabledVariants,
             idx.EffectIntensity, idx.ColorFlashes, idx.BoonDraftEnabled, idx.AllowCurses,
             idx.DartersEnabled, idx.Key1, idx.Key2);
 

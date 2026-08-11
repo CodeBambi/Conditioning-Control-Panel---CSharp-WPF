@@ -120,7 +120,10 @@ Applied: the Step-2 test plan below folds in all four additions + the rename.
 
 ### Engine plan-review presence (T-2 heading format)
 
-(pending — recorded per `spine_review_step` call)
+- Step 1 (`spine_review_step --step 1 --type plan`): **engine review ABSENT** — nested
+  reviewer spawn blocked inside pi worker session (SP-195); engine runs reviews after
+  `.DONE`. `spawnFailed=false` (not a fail-closed case). Artifact:
+  `.reviews/1-20260811T141523.md`.
 
 ### Pre-completion solo consult (Step 3)
 

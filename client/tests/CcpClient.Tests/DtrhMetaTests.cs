@@ -531,20 +531,27 @@ public class DtrhMetaTests
     }
 
     [Fact]
-    public void RequestRun_PersistsSetup_ToIndexDoc_WithClamps_AndInitRoundTrips()
+    public void RequestRun_NonOwner_PersistsSetup_ClampsToPresetCeiling_AndInitRoundTrips()
     {
+        // SP-052: this b4 test asserted the UNCONDITIONAL 1200 clamp (the defect). Updated,
+        // not weakened: the harness owns nothing, so 1200 is now the NON-OWNER ceiling —
+        // the exact main line it matches is cited per assertion; the owner branch has its
+        // own test below (RequestRun_Owner_PersistsSetup_HourglassCeiling_RoundTrips).
         using var h = new Harness();
         h.Seed(d => d.RunsCompleted = 5); // past the scripted classroom
         var setup = Raw(
             "{\"difficulty\":\"Hard\",\"durationSec\":99999,\"waveCount\":0,\"motion\":\"RainDown\","
             + "\"effectIntensity\":9.0,\"colorFlashes\":false,\"boonDraftEnabled\":false,"
             + "\"allowCurses\":false,\"dartersEnabled\":false,\"key1\":\"A\",\"key2\":\"S\","
-            + "\"enabledVariants\":[\"flash\",\"gif\"]}");
+            + "\"enabledVariants\":[\"flash\",\"gif\"],\"endless\":true}");
         h.Meta.OnRequestRun(setup);
         var idx = h.Slots.IndexStore.Current;
         Assert.Equal("Hard", idx.Difficulty);
-        Assert.Equal(1200, idx.DurationSec);   // clamp (:426)
-        Assert.Equal(1, idx.WaveCount);        // clamp (:427)
+        // Non-owner branch of the ownership-gated ceiling (DtrhHostService.cs:474-475).
+        Assert.Equal(1200, idx.DurationSec);
+        Assert.Equal(1, idx.WaveCount);        // clamp (:476)
+        // Stale-page refusal: endless never sticks for a non-owner (DtrhHostService.cs:478-480).
+        Assert.False(idx.Endless);
         Assert.Equal("RainDown", idx.Motion);
         Assert.Equal(1.5, idx.EffectIntensity); // clamp (:435)
         Assert.False(idx.ColorFlashes);
@@ -559,6 +566,7 @@ public class DtrhMetaTests
         var initSetup = DtrhMeta.BuildRunSetupPayload(idx);
         Assert.Equal("Hard", initSetup.Difficulty);
         Assert.Equal(1200, initSetup.DurationSec);
+        Assert.False(initSetup.Endless); // init carries the saved toggle (DtrhHostService.cs:509)
         Assert.Equal("RainDown", initSetup.Motion);
         Assert.Equal("A", initSetup.Key1);
         Assert.Equal(["flash", "gif"], initSetup.EnabledVariants!.ToArray());
@@ -568,9 +576,107 @@ public class DtrhMetaTests
         Assert.Equal("Hard", cfg.GetProperty("difficulty").GetString());
         Assert.Equal(1.7, cfg.GetProperty("difficultyMult").GetDouble());
         Assert.Equal("RainDown", cfg.GetProperty("motionOverride").GetString());
+        // Non-owner deal branch of the ownership-gated ceiling (ChaosModels.cs:203-204).
+        Assert.Equal(1200, cfg.GetProperty("durationSec").GetInt32());
+        // Deal-time ownership re-check: no endless without endless_mode (ChaosModels.cs:206).
+        Assert.False(cfg.GetProperty("endless").GetBoolean());
         Assert.False(cfg.GetProperty("scriptedFirstRun").GetBoolean());
         // Sin ramp at 5 runs: 0.25 + (0.25 * 3/8) (ChaosModels.cs:226-237).
         Assert.Equal(0.34375, cfg.GetProperty("sinChance").GetDouble(), 5);
+    }
+
+    [Fact]
+    public void RequestRun_Owner_PersistsSetup_HourglassCeiling_RoundTrips()
+    {
+        // The Hourglass: a custom_duration owner's ceiling is 2h at BOTH host points
+        // (persist DtrhHostService.cs:474-475; deal ChaosModels.cs:203-204).
+        using var h = new Harness();
+        h.Seed(d => { d.RunsCompleted = 5; d.PurchasedUpgrades.Add("custom_duration"); });
+
+        // Owner boundary matrix at persist: 1201 survives, 7200 survives, 7201 clamps 7200.
+        h.Meta.OnRequestRun(Raw("{\"durationSec\":1201}"));
+        Assert.Equal(1201, h.Slots.IndexStore.Current.DurationSec);
+        h.Meta.OnRequestRun(Raw("{\"durationSec\":7200}"));
+        Assert.Equal(7200, h.Slots.IndexStore.Current.DurationSec);
+        h.Meta.OnRequestRun(Raw("{\"durationSec\":7201}"));
+        Assert.Equal(7200, h.Slots.IndexStore.Current.DurationSec);
+        h.Meta.OnRequestRun(Raw("{\"durationSec\":99999}"));
+        Assert.Equal(7200, h.Slots.IndexStore.Current.DurationSec);
+
+        // The lower bound is unchanged by the unlock (60 both branches, :475).
+        h.Meta.OnRequestRun(Raw("{\"durationSec\":10}"));
+        Assert.Equal(60, h.Slots.IndexStore.Current.DurationSec);
+
+        // A >20min owner value round-trips RAW through init's runSetup (:447-478, :509).
+        h.Meta.OnRequestRun(Raw("{\"durationSec\":1500}"));
+        Assert.Equal(1500, DtrhMeta.BuildRunSetupPayload(h.Slots.IndexStore.Current).DurationSec);
+
+        // ... and deals >=1201s in the run-config (owner deal branch, ChaosModels.cs:203-204).
+        var cfg = JsonSerializer.SerializeToElement(h.Meta.OnRequestRun(null));
+        Assert.Equal(1500, cfg.GetProperty("durationSec").GetInt32());
+    }
+
+    [Fact]
+    public void RequestRun_DealTime_RechecksOwnership_AgainstStaleIndex()
+    {
+        // The cross-slot shape (pre-approach consult addition 1): the index doc is
+        // app-global, ownership is per-slot — an owner persists 7200 / endless, then the
+        // CURRENT owner lacks the unlocks (modeled by removal; the deal gate reads the
+        // current doc's PurchasedUpgrades either way). Deal re-clamps both (ChaosModels.cs:203-206).
+        using var h = new Harness();
+        h.Seed(d =>
+        {
+            d.RunsCompleted = 5;
+            d.PurchasedUpgrades.Add("custom_duration");
+            d.PurchasedUpgrades.Add("endless_mode");
+        });
+        h.Meta.OnRequestRun(Raw("{\"durationSec\":7200,\"endless\":true}"));
+        Assert.Equal(7200, h.Slots.IndexStore.Current.DurationSec);
+        Assert.True(h.Slots.IndexStore.Current.Endless);
+
+        h.Seed(d => { d.PurchasedUpgrades.Remove("custom_duration"); d.PurchasedUpgrades.Remove("endless_mode"); });
+        var cfg = JsonSerializer.SerializeToElement(h.Meta.OnRequestRun(null));
+        Assert.Equal(1200, cfg.GetProperty("durationSec").GetInt32()); // deal re-clamp (:203-204)
+        Assert.False(cfg.GetProperty("endless").GetBoolean());         // deal re-check (:206)
+    }
+
+    [Fact]
+    public void RequestRun_Endless_OwnedToggle_RoundTrips_AndStaysOffHabitRail()
+    {
+        // The Bottomless Fall end-to-end (SP-052 defect 2): gated persist
+        // (DtrhHostService.cs:478-480), init carry (:509), run-config carry (:1043),
+        // deal re-check (ChaosModels.cs:206), habit-rail exclusion (:1073-1074).
+        using var h = new Harness();
+        h.Seed(d =>
+        {
+            d.RunsCompleted = 5;
+            d.PurchasedUpgrades.Add("endless_mode");
+            d.PurchasedUpgrades.Add("custom_duration");
+            d.PurchasedUpgrades.Add("slow_fuses");
+        });
+
+        h.Meta.OnRequestRun(Raw("{\"endless\":true}"));
+        Assert.True(h.Slots.IndexStore.Current.Endless);
+
+        // init's runSetup carries the saved toggle (:509).
+        Assert.True(DtrhMeta.BuildRunSetupPayload(h.Slots.IndexStore.Current).Endless);
+
+        // The dealt run-config carries rc.endless (:1043) for the owner.
+        var cfg = JsonSerializer.SerializeToElement(h.Meta.OnRequestRun(null));
+        Assert.True(cfg.GetProperty("endless").GetBoolean());
+
+        // Setup-shape unlocks stay off the HUD rail (:1073-1074): only slow_fuses lists.
+        var habits = cfg.GetProperty("ownedHabitIds").EnumerateArray().Select(v => v.GetString()!).ToArray();
+        Assert.Equal(["slow_fuses"], habits);
+
+        // Absent-key discipline: a setup WITHOUT "endless" never clears the saved toggle
+        // (main mutates only when setup["endless"] != null, :480).
+        h.Meta.OnRequestRun(Raw("{\"difficulty\":\"Medium\"}"));
+        Assert.True(h.Slots.IndexStore.Current.Endless);
+
+        // An explicit false clears it for the owner (false && owned = false, :480).
+        h.Meta.OnRequestRun(Raw("{\"endless\":false}"));
+        Assert.False(h.Slots.IndexStore.Current.Endless);
     }
 
     [Fact]
