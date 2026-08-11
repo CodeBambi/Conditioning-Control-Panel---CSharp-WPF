@@ -584,7 +584,9 @@ public partial class IntakeHostWindow : Window
             _host.LogDiagnostic($"intake: niche bank file missing for '{seamNiche}' — clamped to {niche} (bank clamp, :674-702)");
         }
         var media = IntakeMediaManifest.Build(
-            _context.Participant.UserMediaRoot, _context.Participant.Server.MediaOrigin, _host.LogDiagnostic);
+            _context.Participant.UserMediaRoot, _context.Participant.Server.MediaOrigin, _host.LogDiagnostic,
+            disabled: DtrhUserMedia.BuildDisabledSet(_context.AssetSelectionStore.Current.DisabledAssetPaths),
+            useWhitelist: _context.AssetSelectionStore.Current.UseAssetWhitelist);
         var config = new
         {
             niche,

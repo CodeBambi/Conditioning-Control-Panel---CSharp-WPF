@@ -15,10 +15,14 @@ public static class IntakeMediaManifest
     /// <summary>Per-kind sample ceiling (:724-832).</summary>
     public const int MaxPerKind = 18;
 
-    /// <summary>Sample the pool. Returns null on an empty pool (media:null on init).</summary>
-    public static object? Build(string userMediaRoot, string mediaOrigin, Action<string> log, Random? rng = null)
+    /// <summary>Sample the pool. Returns null on an empty pool (media:null on init).
+    /// SP-055: <paramref name="disabled"/>/<paramref name="useWhitelist"/> pass through to
+    /// the ONE active-pool definition in <c>DtrhUserMedia</c> — never a second scan that
+    /// can disagree (IntakeHostService.cs:776-790 parity; #762/#798/#619 contract).</summary>
+    public static object? Build(string userMediaRoot, string mediaOrigin, Action<string> log, Random? rng = null,
+        HashSet<string>? disabled = null, bool useWhitelist = false)
     {
-        var manifest = DtrhUserMedia.Build(userMediaRoot, mediaOrigin, log);
+        var manifest = DtrhUserMedia.Build(userMediaRoot, mediaOrigin, log, disabled, useWhitelist);
         if (manifest.Images.Count == 0)
         {
             return null;

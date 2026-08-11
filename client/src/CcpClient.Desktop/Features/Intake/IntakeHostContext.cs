@@ -18,6 +18,7 @@ public sealed class IntakeHostContext : IDisposable
         IntakeParticipant participant,
         PersistenceStore<IntakeSettingsDocument> settingsStore,
         PersistenceStore<IntakePunchCardDocument> punchStore,
+        PersistenceStore<AssetSelectionDocument> assetSelectionStore,
         IntakePassService pass,
         IntakePunchCard punchCard,
         DtrhLoom loom,
@@ -29,6 +30,7 @@ public sealed class IntakeHostContext : IDisposable
         Participant = participant;
         SettingsStore = settingsStore;
         PunchStore = punchStore;
+        AssetSelectionStore = assetSelectionStore;
         Pass = pass;
         PunchCard = punchCard;
         Loom = loom;
@@ -43,6 +45,10 @@ public sealed class IntakeHostContext : IDisposable
     public PersistenceStore<IntakeSettingsDocument> SettingsStore { get; }
 
     public PersistenceStore<IntakePunchCardDocument> PunchStore { get; }
+
+    /// <summary>SP-055: the persisted asset selection (read-only this row — the
+    /// Assets-tree row owns the write path) feeding the ONE active-pool definition.</summary>
+    public PersistenceStore<AssetSelectionDocument> AssetSelectionStore { get; }
 
     public IntakePassService Pass { get; }
 
@@ -98,6 +104,10 @@ public sealed class IntakeHostContext : IDisposable
             host.LogDiagnostic("intake: punch-card load repairs applied — file heals on this save");
         }
 
+        // SP-055: the asset-selection store beside the other two (same shared <dataDir> —
+        // one asset_selection.json per install; the DTRH host opens its own reader).
+        var assetSelectionStore = Persistence.AssetSelectionStore.Start(host, dataDir, "IntakeAssetSelection");
+
         var pass = new IntakePassService(settingsStore, entitlement, null, host.LogDiagnostic);
         var punchCard = new IntakePunchCard(punchStore, null, host.LogDiagnostic);
         var loom = new DtrhLoom(participant.SpiralsRoot, host.LogDiagnostic);
@@ -106,7 +116,7 @@ public sealed class IntakeHostContext : IDisposable
         var subjectId = IntakeSubjectId.LoadOrMint(Path.Combine(dataDir, "intake_subject.txt"), host.LogDiagnostic);
 
         return new IntakeHostContext(
-            participant, settingsStore, punchStore, pass, punchCard, loom, draftSink, saveImageSink,
+            participant, settingsStore, punchStore, assetSelectionStore, pass, punchCard, loom, draftSink, saveImageSink,
             subjectId, probe);
     }
 
@@ -117,6 +127,7 @@ public sealed class IntakeHostContext : IDisposable
         try { PunchStore.FlushAsync(TimeSpan.FromSeconds(2)).Wait(TimeSpan.FromSeconds(3)); } catch { /* best-effort */ }
         try { SettingsStore.StopAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
         try { PunchStore.StopAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
+        try { AssetSelectionStore.StopAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
         try { Participant.Dispose(); } catch { /* best-effort */ }
     }
 
