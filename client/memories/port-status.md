@@ -124,3 +124,24 @@ only with RATIFIED decree citation placed in evidence cells. Never flip without 
 - **SP-053 (reduced-motion probe): VERDICT = INHERITANCE HOLDS on Windows WebView2 151.0.4129.72** (engine-version-scoped; honoring mechanism not built; re-check = runtime version change). Row DONE-with-named-limits. Linux unproven.
 - **OWNER INCIDENT: Run A wrote the real %APPDATA%/CcpClient profile** (APPDATA= doesn't redirect .NET GetFolderPath) — slot-1 index restored to WPF fallback defaults, purchases to []; post-run file showed the slot was unused (0 runs/0 sparks). P1 isolation row filed (real seam or backup/restore + m2test declared-fixture discipline); interim rule = backup-before-run.
 - Next: SP-054 = Graded Intake web-core host (L, wave to itself).
+
+## UPSTREAM BASELINE MOVED: v6.6.3 → v6.7.4 (2026-08-11, merge `42286638`)
+
+The WPF reference tree on `feat/crossplatform` is no longer v6.6.3. 403 upstream commits merged
+(938 files, +221k/−13k); client build 0W/0E and 683/683 green after the merge; `client/**` untouched.
+**Everything about the delta is in `client/docs/upstream-sync.md`** (per-item obligations + evidence),
+and the recurring procedure is the project skill `wpf-upstream-sync`.
+
+- **New product surfaces (own rows):** Goon Game 1v1 duels (`Services/GoonGame/` + 184-file `web/goon/`
+  payload), FYP desktop feed + ghost mode, Her Room companion redesign + Awareness (RECONCILE against
+  the port's own c1–c7 companion), Trainer Card profile + wardrobe, Haptics v2 (SET-not-choice provider
+  flags + schema-3 migration).
+- **P0 parity drift on LANDED port code:** upstream now honors Assets-tree **deselection** in DTRH
+  pools (`DtrhAssetManifest.EnumerateActive()`) and Graded Intake (`IntakeHostService.IsAssetActive`);
+  the port's pools predate it (#762 #798 #619).
+- **SP-054 was in flight at merge time and was NOT retargeted** — its v6.6.3 baseline stays internally
+  consistent; the v6.7.x intake delta (new `intake/core/accents.js` +350, `ai.js` +79) is a follow-up row.
+- **Guard gap found:** the client asset-manifest parity test gives ZERO signal for upstream payload
+  trees the client doesn't ship yet (a 184-file tree appeared, suite stayed green).
+- Merge-conflict rule: the WPF tree tracks `main` exactly (`--theirs`); `CCP.Core/` + `CCP.Avalonia.*`
+  are abandoned first-attempt residue that manufacture delete/modify conflicts forever.
