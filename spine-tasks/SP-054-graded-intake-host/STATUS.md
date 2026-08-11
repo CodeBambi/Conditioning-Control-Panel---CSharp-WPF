@@ -1,10 +1,20 @@
 ## STATUS: SP-054 — Graded Intake web-core host
 **Current Step:** Step 1 — archaeology + host design + pre-approach consult
-**Last Updated:** 2026-08-11 (authored)
+**Last Updated:** 2026-08-11 (Step 1 complete pending plan review)
 **Blockers:** none
 
 ### Step 1: archaeology + design + pre-approach consult
-- [ ] Update STATUS.md before starting work
+**Status:** complete (plan review pending)
+- [x] Update STATUS.md before starting work
+- [x] WPF archaeology (window class, full bridge vocabulary, pass state machine, punch card, profiler, init provisions, serving origins)
+- [x] Design (Intake/ host, protocol, pass service, punch card, profiler, drafting sink, serving, loom-share)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
+
+### Discoveries
+- D1: ping/payload-state C# emit sites REFUTED for intake (grep-verified by archaeology: emits exist only in DtrhHostService/DtrhHostOrchestrator). Authoring obligation resolves as TYPED (page-attested, never-emitted vocabulary) — consult item.
+- D2: intake tree is NOT copied to output (csproj glob covers web/dtrh only; csproj out of File Scope). Design: serving root probe (output payload/intake → legacy source tree walk-up → typed Missing). Consult item.
+- D3: launch/evidence glue (Program.cs/App.axaml.cs --intake-demo demonstrator) is outside the listed File Scope but has the SP-049 --loom-demo precedent (a42ebdf4 landed with those edits). Consult item; flagged for orchestrator.
+- D4: settings keys home — DemoSettings declares itself "NOT a feature model" and Persistence/ is out of scope; design uses a dedicated PersistenceStore<IntakeSettingsDocument> (intake_settings.json). Consult item.
 - [ ] WPF archaeology (window class, full bridge vocabulary, pass state machine, punch card, profiler, init provisions, serving origins)
 - [ ] Design (Intake/ host, protocol, pass service, punch card, profiler, drafting sink, serving, loom-share)
 - [ ] Pre-approach solo consult (verdict + actual model in record.md)
