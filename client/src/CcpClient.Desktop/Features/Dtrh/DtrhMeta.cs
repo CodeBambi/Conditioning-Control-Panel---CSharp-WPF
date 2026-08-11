@@ -849,7 +849,7 @@ public sealed class DtrhMeta
                 Rebroadcast();
             }
 
-            _log($"dtrh-meta: dealt run config (diff={cfg.Difficulty}, scripted={scripted})");
+            _log($"dtrh-meta: dealt run config (diff={cfg.Difficulty}, dur={cfg.DurationSec}s, endless={cfg.Endless}, scripted={scripted})");
             return DtrhRunConfig.BuildRunConfigPayload(cfg, S, DtrhRanks.For(S.RunsCompleted));
         }
         catch (Exception ex)

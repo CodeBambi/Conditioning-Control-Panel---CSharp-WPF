@@ -562,6 +562,12 @@ public class DtrhMetaTests
         Assert.Equal("S", idx.Key2);
         Assert.Equal(["flash", "gif"], idx.EnabledVariants!.ToArray());
 
+        // The lower bound is shared by both branches (60, :475) — the non-owner asserts it too.
+        h.Meta.OnRequestRun(Raw("{\"durationSec\":10}"));
+        Assert.Equal(60, h.Slots.IndexStore.Current.DurationSec);
+        h.Meta.OnRequestRun(Raw("{\"durationSec\":99999}")); // restore the ceiling cell for the round-trips below
+        Assert.Equal(1200, h.Slots.IndexStore.Current.DurationSec);
+
         // init's runSetup reads the raw saved values back (BuildRunSetup :447-478).
         var initSetup = DtrhMeta.BuildRunSetupPayload(idx);
         Assert.Equal("Hard", initSetup.Difficulty);

@@ -127,17 +127,111 @@ Applied: the Step-2 test plan below folds in all four additions + the rename.
 
 ### Pre-completion solo consult (Step 3)
 
-(pending)
+**Route:** `consult` solo (`anthropic/claude-opus-5`, truncated) + `gut-check`
+(`zai/glm-5.2`) completion. **Actual answering models: claude-opus-5 + glm-5.2.**
+
+**Verdict: "Not done yet — five cheap fixes, two of them honesty-blocking. The code and
+the gate design are sound; I'd sign off on the implementation."** All five applied:
+
+1. (honesty) Run A `run-ended` check: grep-verified ABSENT in `wh-runA-owner.log` — no
+   banking; post-run slot-1 showed runsCompleted/sparks/totalRunSeconds all 0. Record
+   reworded: no "verified fresh doc" claim — only the observable-delta statement.
+2. (honesty) record.md remediation text now says "no claim is made about any pre-existing
+   baseline beyond what the post-run file showed".
+3. Non-owner lower-bound assertion added (durationSec:10 → 60) in the non-owner test —
+   both branches now assert the shared floor.
+4. `wh-runB-nonowner.INVALID.log` promoted to a dedicated "Invalid / superseded runs"
+   subsection.
+5. `--dtrh-m2test` spelled out on both Run A2 and Run B2 evidence lines.
+
+Re-verified after the fixes: DtrhMeta suite 37/37 green; full contract re-run below.
 
 ## Headed round-trip transcripts (Step 3)
 
-(pending — Windows avalonia-live/harness class; WSL2 named limit: laptop WSL zero
-distros, Linux owner-gated, never faked; no Wayland claims)
+**Class:** Windows headed (avalonia-live/harness class — the SP-025/SP-026 `--dtrh-fx-drive`
+harness: raw page JSON through the REAL parse+dispatch path; auto-close ends every session,
+never a full run). WSL2 named limit stands: laptop WSL zero distros — Linux owner-gated,
+never faked; no Wayland claims. Evidence: `evidence/wh/`.
+
+**Harness additions (File Scope `Features/Dtrh/**`, SP-023-norm harness-only):**
+`buy:<upgrade-id>` fx-drive step (REAL purchase-upgrade meta-command at cost 0 — headed
+evidence can't grind the economy; validation is integrity not anti-cheat,
+DtrhMetaBridge.cs:13-21), `request-run-hd` fx-drive step (REAL request-run whose setup
+exceeds the non-owner ceiling: durationSec 99999 + endless:true), and the dealt run-config
+transcript line in `DtrhMeta.OnRequestRun` (diff/dur/endless/scripted).
+
+### Behavior 1 — Hourglass ceiling (owner deals ≥1201s; non-owner stays 1200)
+
+- **Run A** (`wh-runA-owner.log`, real mode, purchases real on real slot 1):
+  `buy:custom_duration` → `request-run-hd` → `descent setup persisted`; the real index doc
+  held **`durationSec: 7200`** (verbatim capture: `wh-runA-owner-index-proof.json`) —
+  owner's >20min setup survives persist (main DtrhHostService.cs:474-475 owner branch).
+  (The dealt config in this run was the scripted classroom — fresh slot, RunsCompleted 0;
+  the deal cell was re-run as A2 below.)
+- **Run A2** (`wh-runA2-owner-deal.log`, **`--dtrh-m2test` test mode**: clone owns
+  custom_duration + endless_mode via real purchase-upgrade dispatch; test mode never deals
+  the classroom and never banks): `dealt run config (diff=Easy, dur=7200s, endless=True, scripted=False)` —
+  the owner's setup deals **7200s ≥ 1201s** (main ChaosModels.cs:203-204 owner branch).
+- **Run B2** (`wh-runB2-nonowner.log`, **`--dtrh-m2test` test mode**, clone owns neither
+  unlock): same 99999s setup →
+  persist clamped the real index to **1200** and **`dealt run config (diff=Easy, dur=1200s,
+  endless=False, scripted=False)`** — non-owner ceiling intact at BOTH points.
+
+### Behavior 2 — Bottomless Fall endless knob (owner's endless reaches rc.endless)
+
+- Run A / A2 (owner): persist wrote **`endless: true`** to the real index doc
+  (`wh-runA-owner-index-proof.json`); the dealt run-config transcript carries
+  **`endless=True`** — `rc.endless` is the payload's own read (chaosRun.js:147). No full
+  endless run driven (auto-close; PROMPT-named limit).
+- Run B2 (non-owner): `endless:true` from a non-owner persists **false** (stale-page
+  refusal, main DtrhHostService.cs:478-480) and deals **`endless=False`** (deal re-check,
+  ChaosModels.cs:206).
+
+### Incidents (honest)
+
+- **Run A wrote the real `%APPDATA%/CcpClient` profile** — the `APPDATA=` env override does
+  NOT redirect .NET's `GetFolderPath(ApplicationData)` on Windows (SHGetKnownFolderPath).
+  Observable delta after Run A: two cost-0 purchase ids on slot 1 + the 7200/endless index
+  values. Run A logged `run started` (the page began the dealt scripted classroom) but NO
+  `run-ended` (grep-verified, `wh-runA-owner.log`) — auto-close at 20s ended the session,
+  and the post-run slot-1 read showed `runsCompleted: 0, sparks: 0, totalRunSeconds: 0`,
+  so no banking occurred. Remediated in-session: slot-1's `purchasedUpgrades` restored to
+  `[]` (the only observable slot delta were the two added ids; no claim is made about any
+  pre-existing baseline beyond what the post-run file showed); the index restored to
+  neutral defaults (180s/5 waves, `endless` key removed — the pre-run index values were
+  unrecoverable after Run A overwrote them; defaults are the WPF fallbacks).
+
+### Invalid / superseded runs
+
+- **`wh-runB-nonowner.INVALID.log`** — INVALID CELL, superseded by Run B2: the m2test clone
+  deep-clones the real slot doc, so it inherited Run A's not-yet-remediated purchases and
+  "owned" both unlocks (dealt 7200/True). Kept for audit, named INVALID, excluded from
+  evidence. Lesson recorded below.
+
+### Engine plan-review presence — Step 2
+
+- Step 2 (`spine_review_step --step 2 --type plan`): **engine review ABSENT** — nested
+  reviewer spawn blocked inside pi worker session (SP-195); `spawnFailed=false`.
+  Artifact: `.reviews/2-20260811T142022.md`.
 
 ## Budgets
 
-(pending)
+- Consults: 4 calls (2 solo — both truncated mid-answer by the transport, each completed
+  by a gut-check follow-up; verdicts above name both answering models per the rewire's
+  actual-model rule).
+- Headed runs: 4 app sessions (A, A2, B-invalid, B2) ≈ 90s wall total, auto-closed.
+- Contract: verify.mjs ~5s; Rebuild ~18s; unit 672 tests ~34s; headless 33 tests ~16s.
 
 ## Durable-lesson candidates
 
-(pending)
+1. **`APPDATA=` does NOT isolate a .NET Windows process's `ApplicationData`**
+   (SHGetKnownFolderPath ignores the env var) — headed harness runs that write real
+   stores hit the real profile unless a data-dir override exists. Snapshot the target
+   files BEFORE the run, or add a harness data-dir flag when the scope allows.
+2. **The m2test clone deep-clones the REAL slot doc** — a test-mode "non-owner" cell is
+   only as clean as the real profile. Sequence: restore/clean the profile FIRST, then run
+   the non-owner cell.
+3. **A fresh slot's request-run deals the scripted classroom, not FromSetup** — deal-path
+   evidence needs RunsCompleted ≥ 1 or test mode (which never deals the classroom).
+4. Solo-consult replies truncated twice this task; the gut-check follow-up pattern
+   ("give the remainder compactly") recovered the full verdict both times.
