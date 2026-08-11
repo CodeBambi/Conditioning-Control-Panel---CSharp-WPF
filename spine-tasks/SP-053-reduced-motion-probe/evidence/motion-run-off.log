@@ -1,0 +1,52 @@
+dtrh: payload root 'C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260805T102230\lane-1\client\src\CcpClient.Desktop\bin\Debug\net10.0\payload\dtrh' -> Present (1542 files)
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)
+layout-probe: card 488.0x77.1 DIP @ scale 1.75 @ screen 216,310
+dtrh: quick start — reusing slot 1 (picker skipped by design)
+dtrh-slots: live save is now slot 1
+dtrh: descending into slot 1
+dtrh: host window opening on slot 1
+dtrh: meta engine bound to slot 1
+dtrh-audio: 1 render endpoint(s): Speakers (Realtek(R) Audio) (default)
+dtrh-audio: playback device up (requested default)
+dtrh: native effects up (SFX pool 8/drop, voice, vmem video, freeze)
+sound: 1 render endpoint(s): Speakers (Realtek(R) Audio)
+sound: playback device up (requested default)
+dtrh: bark arbitration device init ? Ready (typed)
+bark: manifest loaded (8 rule(s))
+dtrh: bark pipeline up (8 rule(s); voice assets = named limit)
+dtrh: WebView2 UserDataFolder set; autoplay-policy=no-user-gesture-required
+dtrh: navigating embedded surface (page probe.html)
+dtrh: auto-close armed at 15s
+dtrh: AdapterCreated info='DetailedWebViewAdapterInfo { Type = WebView2, Engine = Blink, Version = 151.0.4129.72, IsSupported = True, IsInstalled = True, UnavailableReason = , SupportedScenarios = NativeControlHost }'
+dtrh: native ProcessFailed signal ATTACHED (W17 immediate route, WebView2 slot-25 subscription)
+dtrh-loopback: GET /dtrh/probe.html/… -> 200 (page:overlay)
+dtrh: NavigationCompleted success=True (surface embedded)
+dtrh-motion: host OS ClientAreaAnimation=False source=SystemParametersInfo(GET)
+dtrh-loopback: GET /dtrh/bridge.js/… -> 200 (page:overlay)
+dtrh-loopback: GET /favicon.ico/ -> 404
+dtrh page log: probe: bridge.js imported (product derivative, blob 13af3f4d + §3.1 diff); isHosted=true
+dtrh: {"type":"probe-p2h-native","note":"native window.chrome.webview.postMessage"}
+dtrh page log: probe: sent probe-p2h-native
+dtrh: {"type":"probe-p2h-ica","note":"invokeCSharpAction path"}
+dtrh page log: probe: sent probe-p2h-ica
+dtrh page log: probe: bridge.on(probe-h2p) registered; awaiting host send
+dtrh page log: probe: probe module complete
+dtrh: {"type":"probe-motion","phase":"initial","query":"(prefers-reduced-motion: reduce)","reduced":true}
+dtrh-motion: verdict=Holds phase=initial osAnimation=False engineReduced=True query=(prefers-reduced-motion: reduce)
+dtrh page log: probe: probe-motion initial: matchMedia (prefers-reduced-motion: reduce) -> reduced=true
+dtrh page log: probe: check3 host->page DELIVERED via bridge.on: {"type":"probe-h2p","via":"synthetic-dispatch"}
+dtrh-media: manifest — 0 image(s), 0 video(s), 0 skipped
+dtrh: probe-img sent (1 served url(s) — loom + user media, HARNESS-ONLY)
+dtrh page log: probe: probe-img rendered image (51-char url)
+dtrh-loopback: GET /spirals/loom_proof-weave.gif/… -> 200 (spirals)
+dtrh page log: probe: preBuffer REPLAY delivered on late registration: {"type":"probe-buffered","via":"pre-handler-send"}
+dtrh page log: probe: late handler registered for probe-buffered (after host send)
+dtrh: auto-close firing
+sound: panic-reset — stopped 0 player(s), cleared 0 queued line(s), ducks force-released
+dtrh-fx: teardown complete
+dtrh: flow ended — shutting down the lifetime
+app: Exit — teardown begin
+dtrh: participant stop begin
+dtrh: participant stop end
+app: teardown end
+[0812/003309.044:ERROR:ui\gfx\win\window_impl.cc:172] Failed to unregister class Chrome_WidgetWin_0. Error = 1412

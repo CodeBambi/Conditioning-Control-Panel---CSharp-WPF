@@ -48,6 +48,9 @@ public static class DtrhRunConfig
         public string Difficulty { get; set; } = "Easy";
         public double DifficultyMult { get; set; } = 1.0;
         public int DurationSec { get; set; } = 180;
+        /// <summary>The Bottomless Fall unlock: this descent ignores the clock — regions loop
+        /// and deepen until the player wakes. Gated on owning endless_mode (ChaosModels.cs:134-135).</summary>
+        public bool Endless { get; set; }
         public int WaveCount { get; set; } = 5;
         public string? MotionOverride { get; set; }
         public List<string>? EnabledVariants { get; set; }
@@ -92,10 +95,16 @@ public static class DtrhRunConfig
     /// upgrade shapes the run. SinChance is the happy-path ramp (never a saved value).</summary>
     public static Values FromSetup(DtrhSlotIndex setup, DtrhSlotDocument meta)
     {
+        // The Hourglass unlock widens the ceiling from 20 min to 2 hours; without it the old
+        // preset ceiling still holds — a stale page can never write itself a longer fall
+        // (ChaosModels.cs:203-204; ownership = IsOwned, ChaosUpgrades.cs:323).
+        var durMax = meta.PurchasedUpgrades.Contains("custom_duration") ? 7200 : 1200;
         var cfg = new Values
         {
             Difficulty = IsKnownDifficulty(setup.Difficulty) ? setup.Difficulty : "Easy",
-            DurationSec = Math.Clamp(setup.DurationSec, 60, 1200),
+            DurationSec = Math.Clamp(setup.DurationSec, 60, durMax),
+            // Deal-time ownership re-check (ChaosModels.cs:206).
+            Endless = setup.Endless && meta.PurchasedUpgrades.Contains("endless_mode"),
             WaveCount = Math.Clamp(setup.WaveCount, 1, 12),
             MotionOverride = setup.Motion is "FloatUp" or "RainDown" or "RoamBounce" or "SideDrift"
                 ? setup.Motion
@@ -158,6 +167,7 @@ public static class DtrhRunConfig
             difficultyMult = cfg.DifficultyMult,
             durationSec = cfg.DurationSec,
             waveCount = cfg.WaveCount,
+            endless = cfg.Endless,   // The Bottomless Fall: no clock; regions loop + deepen until wake (DtrhHostService.cs:1043)
             effectIntensity = cfg.EffectIntensity,
             enabledVariants = cfg.EnabledVariants,
             motionOverride = cfg.MotionOverride,
@@ -179,7 +189,11 @@ public static class DtrhRunConfig
             popupHeartEnabled = cfg.PopupHeartEnabled,
             pendulumSwing = cfg.PendulumSwing,
             ownedHabitIds = meta.PurchasedUpgrades
-                .Where(id => !meta.DisabledUpgrades.Contains(id) && id != "extreme_tier" && IsCatalogUpgrade(id))
+                .Where(id => !meta.DisabledUpgrades.Contains(id)
+                             && id != "extreme_tier"
+                             && id != "custom_duration"   // setup-shape unlocks, no in-run
+                             && id != "endless_mode"      // effect -> keep them off the HUD rail (DtrhHostService.cs:1073-1074)
+                             && IsCatalogUpgrade(id))
                 .ToList(),
             rankIndex,
             runsCompleted = meta.RunsCompleted,

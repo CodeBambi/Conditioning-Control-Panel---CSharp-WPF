@@ -69,4 +69,32 @@ if (bridge) {
   }, 4000);
 }
 rec('probe module complete');
+
+// SP-053 reduced-motion inheritance probe: evaluate the EXACT query the page's own
+// capability probe uses (payload shared/capability.js:35 — READ-ONLY) inside whichever
+// engine hosts this page, and report page->host as typed probe-motion messages (the
+// host logs probe-* UnknownTypes verbatim AND re-reads the OS state at each arrival to
+// pair the verdict). phase 'initial' at module eval; a MediaQueryList 'change' listener
+// re-posts phase 'change' so a live OS toggle is captured if the engine tracks it
+// (absence of a live flip proves nothing — two-run protocol is the primary evidence).
+(function () {
+  const QUERY = '(prefers-reduced-motion: reduce)';
+  const report = (phase, mql) => {
+    const reduced = !!(mql && mql.matches);
+    const msg = { type: 'probe-motion', phase, query: QUERY, reduced };
+    if (window.chrome && window.chrome.webview) {
+      window.chrome.webview.postMessage(msg);
+    } else if (typeof window.invokeCSharpAction === 'function') {
+      window.invokeCSharpAction(JSON.stringify(msg));
+    }
+    rec('probe-motion ' + phase + ': matchMedia ' + QUERY + ' -> reduced=' + reduced);
+  };
+  if (!window.matchMedia) {
+    rec('probe-motion UNAVAILABLE: window.matchMedia absent');
+    return;
+  }
+  const mql = window.matchMedia(QUERY);
+  report('initial', mql);
+  mql.addEventListener('change', (e) => report('change', e));
+})();
 </script>

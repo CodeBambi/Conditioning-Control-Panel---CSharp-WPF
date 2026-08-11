@@ -379,7 +379,9 @@ public partial class DtrhHostWindow : Window
     /// the page cannot originate these messages in-slice): a timed script of RAW page
     /// JSON fed through the REAL parse+dispatch path (pre-approach consult item 7).
     /// Steps: <code>sfx:name[:scale]@t; payload:video|audio@t; freeze:on|off@t;
-    /// vn:on|off@t; run-started@t; run-ended@t</code> (@t seconds, default spacing 4s).</summary>
+    /// vn:on|off@t; run-started@t; run-ended@t; buy:<upgrade-id>@t; request-run-hd@t</code>
+    /// (@t seconds, default spacing 4s). buy:/request-run-hd are SP-052's ownership-gate
+    /// round-trip drivers (HARNESS-ONLY, harness-seeded ownership at cost 0).</summary>
     private void ScheduleFxDrive()
     {
         if (string.IsNullOrWhiteSpace(_fxDrive)) return;
@@ -515,9 +517,21 @@ public partial class DtrhHostWindow : Window
         // SP-026 b4: a deterministic full-field run-ended for the payout banking proof
         // (the page's own run-ended is the gameplay path; this pins the math evidence).
         "run-ended-full" => "{\"type\":\"run-ended\",\"score\":5200,\"durationSec\":180,\"elapsedSec\":172,\"difficulty\":\"Gentle\",\"difficultyMult\":1.0,\"sparkGainMult\":1.0,\"bestCombo\":11,\"defused\":7,\"trickleDrops\":3,\"dripFeedMaxed\":false,\"sessionStats\":{\"bubblesPopped\":57}}",
+        // SP-052: HARNESS-ONLY ownership-gate round-trip driver — a REAL request-run whose
+        // setup exceeds the non-owner ceiling (99999s) AND arms the endless toggle, so the
+        // dealt run-config transcript proves both ownership gates (dur 7200 vs 1200,
+        // endless true vs false) with no gameplay claims (auto-close ends the session).
+        "request-run-hd" => "{\"type\":\"request-run\",\"setup\":{\"difficulty\":\"Easy\",\"durationSec\":99999,\"waveCount\":4,\"endless\":true,\"motion\":\"Mixed\",\"effectIntensity\":0.85,\"colorFlashes\":true,\"boonDraftEnabled\":true,\"allowCurses\":true,\"dartersEnabled\":true,\"key1\":\"Q\",\"key2\":\"E\",\"enabledVariants\":null}}",
+        // SP-052: HARNESS-ONLY ownership seed — a REAL purchase-upgrade meta-command through
+        // the real dispatch path. cost:0 because headed evidence can't grind the economy;
+        // validation is integrity, not anti-cheat (DtrhMetaBridge.cs:13-21).
+        _ when step.StartsWith("buy:", StringComparison.Ordinal) => BuyDriveJson(step[4..]),
         _ when step.StartsWith("sfx:", StringComparison.Ordinal) => SfxDriveJson(step[4..]),
         _ => null,
     };
+
+    private static string BuyDriveJson(string id) =>
+        "{\"type\":\"meta-command\",\"op\":\"purchase-upgrade\",\"id\":" + JsonSerializer.Serialize(id) + ",\"cost\":0}";
 
     private static string SfxDriveJson(string rest)
     {
@@ -651,6 +665,13 @@ public partial class DtrhHostWindow : Window
         {
             return;
         }
+
+        // SP-053: host-side OS read at probe start — the exact API WPF's OS cap wraps
+        // (SystemParametersInfo GET; null = named limit / GET failure, never defaulted).
+        // Paired with the engine's probe-motion messages (re-read at each arrival below).
+        var osAtNav = DtrhMotionPreference.ReadOsClientAreaAnimation();
+        _host.LogDiagnostic($"dtrh-motion: host OS ClientAreaAnimation={(osAtNav?.ToString() ?? "null")} " +
+            $"source={(OperatingSystem.IsWindows() ? "SystemParametersInfo(GET)" : "named-limit")}");
 
         // Ported spike probe sequence (SP-011 W4/W6), driven identically on both surfaces:
         // probe-h2p AFTER the page's module registered its handler; probe-buffered BEFORE
@@ -883,6 +904,10 @@ public partial class DtrhHostWindow : Window
                 if (unknown.Type.StartsWith("probe-", StringComparison.Ordinal))
                 {
                     _host.LogDiagnostic($"dtrh: {body}");
+                    if (unknown.Type == "probe-motion")
+                    {
+                        LogMotionPairing(body);
+                    }
                 }
                 else
                 {
@@ -898,6 +923,40 @@ public partial class DtrhHostWindow : Window
                 _host.LogDiagnostic($"dtrh: malformed page message ({malformed.Reason}) — tolerated");
                 return;
         }
+    }
+
+    /// <summary>SP-053: pair the engine's probe-motion answer with a FRESH host-side OS
+    /// read at message arrival (OS state verified immediately before the engine reading
+    /// is interpreted) and log the typed verdict. Tolerant parse — a malformed motion
+    /// frame degrades to Unknown, never crashes the probe run.</summary>
+    private void LogMotionPairing(string body)
+    {
+        bool? engineReduced = null;
+        string phase = "?";
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("reduced", out var r) &&
+                (r.ValueKind == JsonValueKind.True || r.ValueKind == JsonValueKind.False))
+            {
+                engineReduced = r.GetBoolean();
+            }
+
+            if (doc.RootElement.TryGetProperty("phase", out var p) && p.ValueKind == JsonValueKind.String)
+            {
+                phase = p.GetString() ?? "?";
+            }
+        }
+        catch (JsonException)
+        {
+            // degraded to Unknown below
+        }
+
+        var osNow = DtrhMotionPreference.ReadOsClientAreaAnimation();
+        var verdict = DtrhMotionPreference.Evaluate(osNow, engineReduced);
+        _host.LogDiagnostic($"dtrh-motion: verdict={verdict} phase={phase} " +
+            $"osAnimation={(osNow?.ToString() ?? "null")} engineReduced={(engineReduced?.ToString() ?? "null")} " +
+            $"query={DtrhMotionPreference.ProbeQuery}");
     }
 
     private void DispatchPageMessage(DtrhProtocol.DtrhPageMessage message)
