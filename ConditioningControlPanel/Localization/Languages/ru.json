@@ -4266,5 +4266,15 @@
   "rf_palette_startup_video": "Стартовое видео",
   "rf_palette_panic_key": "Тревожная кнопка",
   "rf_palette_no_panic": "Отключить тревожную кнопку",
-  "rf_palette_motion_level": "Уровень движения"
+  "rf_palette_motion_level": "Уровень движения",
+  "_comment_justdrop": "JustDrop door (2026-08-11): the web session shop, hosted in a WebView2 door",
+  "jd_door_title": "Just Drop",
+  "jd_door_tip": "Магазин сессий - выбери дроп и вперёд",
+  "jd_door_subtitle": "Выбери дроп, оформи заказ и запусти. Твой журнал заказов тоже здесь.",
+  "jd_reload": "Обновить",
+  "jd_reload_tip": "Обновить магазин",
+  "jd_loading": "Открываем магазин...",
+  "jd_error_title": "Магазин недоступен",
+  "jd_error_body": "Just Drop живёт онлайн. Проверь соединение и попробуй снова.",
+  "jd_toast_session_complete": "Дроп завершён. +{0} XP"
 }

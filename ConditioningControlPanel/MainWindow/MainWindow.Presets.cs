@@ -966,16 +966,28 @@ namespace ConditioningControlPanel
         internal void CardDeeper_Click(object sender, RoutedEventArgs e) => BtnDeeper_Click(sender, e);
 
         /// <summary>
-        /// Just Drop: the session maker, not built yet (owner, 2026-08-11 — placeholder tile).
+        /// Just Drop: the session shop. Two behaviours, decided by the same flag the rail door
+        /// reads (<c>JustDropService.DoorAvailable</c>) so the tile and the rail can never
+        /// disagree about whether the feature exists.
         ///
-        /// <para>A toast and nothing else, on purpose. The tile is on the wall to announce the
-        /// feature, and there is no window to open; a tile that silently does nothing when
-        /// clicked reads as a bug, and this app has shipped that bug before. When the real
-        /// launcher lands, replace this body with it and drop the SOON badge in
-        /// <see cref="RefreshMosaicTierBadges"/> — nothing else on the wall changes.</para>
+        /// <para><b>Door open:</b> navigate to it, exactly as CardDeeper_Click hands off to the
+        /// rail entry rather than re-implementing the destination.</para>
+        ///
+        /// <para><b>Door withheld:</b> the original placeholder toast, unchanged. A tile that
+        /// silently does nothing when clicked reads as a bug, and this app has shipped that bug
+        /// before. The tile stays on the wall in both states on purpose - it is there to announce
+        /// the feature - which is the one place the withheld door is allowed to be visible at all.
+        /// Drop this branch, and the SOON badge in <see cref="RefreshMosaicTierBadges"/>, when the
+        /// feature is no longer being withheld from anyone.</para>
         /// </summary>
         internal void CardJustDrop_Click(object sender, RoutedEventArgs e)
         {
+            if (Services.JustDrop.JustDropService.DoorAvailable)
+            {
+                ShowTab("justdrop");
+                return;
+            }
+
             // Literal copy, like the tile's own title: naming a placeholder in nine language
             // files buys nine rows to re-translate the day it gets its real name.
             App.Notifications?.Show("Just Drop is on the way — the session maker lands in a "
@@ -1021,9 +1033,11 @@ namespace ConditioningControlPanel
                                  ?? (App.Patreon?.HasPremiumAccess == true);
                 SetTierBadge(dash.CardIntake, intakeOpen, Loc.Get("hm3_rail_lock_pass"));
 
-                // Nobody has Just Drop, including the owner, so this one never clears. Literal,
-                // like the tile's title - see CardJustDrop_Click.
-                SetTierBadge(dash.CardJustDrop, false, "SOON");
+                // Just Drop wears SOON for exactly as long as its door is withheld. Same flag the
+                // rail door and the tile's own click read, so the badge cannot promise "coming"
+                // while the door is already open (or vice versa). Literal, like the tile's title -
+                // see CardJustDrop_Click.
+                SetTierBadge(dash.CardJustDrop, Services.JustDrop.JustDropService.DoorAvailable, "SOON");
 
                 // Goon, the Loom and Deeper are deliberately absent: joining a Goon lobby is free
                 // by design (only send/host are paid, and the Play card names those rungs in a

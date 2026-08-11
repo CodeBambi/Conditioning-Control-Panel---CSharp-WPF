@@ -58,6 +58,34 @@ namespace ConditioningControlPanel.Services
         /// <summary>Untranslated search-only synonyms. Never displayed.</summary>
         public string Aliases { get; init; } = string.Empty;
 
+        /// <summary>
+        /// Live availability test, evaluated on every <see cref="SettingsPaletteIndex.Search"/>.
+        /// Null - the default, and the case for all but one row - means "always listed".
+        ///
+        /// <para>This exists for WITHHELD rooms: a door the server has not opened for this account
+        /// must not be findable in the search box either, or the palette becomes the one place the
+        /// app leaks a feature the rail is deliberately hiding. It is a predicate rather than a
+        /// bool because the answer changes mid-session (the flag lands ~9s after launch) and the
+        /// index is a static array built once.</para>
+        ///
+        /// <para>Rows stay in <see cref="SettingsPaletteIndex.All"/> either way. That list is the
+        /// registry - what the app CAN reach - and the door/tab parity tests read it; Search is
+        /// the view of it this account is allowed to see.</para>
+        /// </summary>
+        public Func<bool>? IsAvailable { get; init; }
+
+        /// <summary>Never throws: a predicate that blows up hides its row rather than taking the
+        /// palette down, which is the same fail-closed rule ExclusiveFeature.Gate follows.</summary>
+        public bool Available
+        {
+            get
+            {
+                if (IsAvailable == null) return true;
+                try { return IsAvailable(); }
+                catch { return false; }
+            }
+        }
+
         // ---- display-time resolution (deliberately not cached) ----
 
         public string Label => Loc.Get(LabelKey);
@@ -109,11 +137,14 @@ namespace ConditioningControlPanel.Services
             if (max <= 0) return Array.Empty<SettingsPaletteEntry>();
 
             var q = (query ?? string.Empty).Trim();
-            if (q.Length == 0) return _all.Take(max).ToList();
+            // Availability is checked on BOTH paths, empty query included: the withheld door must
+            // not appear in the opening list any more than it appears in a search result.
+            if (q.Length == 0) return _all.Where(e => e.Available).Take(max).ToList();
 
             var scored = new List<(int Score, int Order, SettingsPaletteEntry Entry)>();
             for (int i = 0; i < _all.Length; i++)
             {
+                if (!_all[i].Available) continue;
                 var score = Score(_all[i], q);
                 if (score > 0) scored.Add((score, i, _all[i]));
             }
@@ -190,6 +221,25 @@ namespace ConditioningControlPanel.Services
             Door("play", "nav_door_play", "🎮", "play", "play games lab");
             Door("you", "nav_door_you", "👤", "discord", "you profile progress");
             Door("library", "nav_door_library", "📚", "assets", "library assets media");
+            // The withheld Just Drop door. Declared in rail order (below Library, above the pinned
+            // Settings door) and carrying the ONLY IsAvailable predicate in this index: the row is
+            // in All - so the door/tab parity tests still see it, and so the day the server opens
+            // the door there is nothing left to remember - but Search skips it while
+            // JustDropService.DoorAvailable is false. Without that, Ctrl+K would be the one place
+            // in the app that admits to a door the rail is deliberately hiding.
+            //
+            // No matching Tab() row, deliberately: this door has exactly one entry and it is the
+            // door, so a tab row would be a second row to the same place.
+            list.Add(new SettingsPaletteEntry
+            {
+                Id = "door.justdrop",
+                LabelKey = "jd_door_title",
+                Glyph = "🎚",
+                TabKey = "justdrop",
+                ContextKeys = new[] { GroupDoors },
+                Aliases = "just drop shop session order drop express",
+                IsAvailable = () => JustDrop.JustDropService.DoorAvailable,
+            });
             Door("settings", "nav_door_settings", "⚙️", "appsettings", "settings options preferences config");
 
             // ---- tabs (every live ShowTab key) -----------------------------------------

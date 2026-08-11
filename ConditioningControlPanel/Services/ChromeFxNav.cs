@@ -35,6 +35,12 @@ namespace ConditioningControlPanel.Services
             "discord", "quests", "achievements", "enhancements",
             "programs", "leaderboard",                                         // You
             "assets",                                                          // Library
+            // The withheld Just Drop door sits at the FOOT of the scrolling rail, below Library
+            // and above the pinned Settings door - so its key goes HERE rather than appended past
+            // "appsettings", because this list is the visual order and the slide direction is read
+            // straight off it. Inserting shifted "appsettings" from 23 to 24 and
+            // ChromeFxNavTests asserts that index by number, so its InlineData row moved with it.
+            "justdrop",                                                        // Just Drop (withheld)
             "appsettings",                                                     // Settings (pinned last)
         };
 
@@ -44,8 +50,11 @@ namespace ConditioningControlPanel.Services
         /// would tear the browser away from its card for the length of the transition. They get
         /// the crossfade only.
         /// </summary>
+        /// <remarks>"justdrop" is the whole door rather than a card on it - the web surface fills
+        /// the page - so sliding it would drag an empty frame across the screen with the browser
+        /// standing still inside it.</remarks>
         private static readonly HashSet<string> Airspace =
-            new(StringComparer.OrdinalIgnoreCase) { "settings", "progression", "gradedintake" };
+            new(StringComparer.OrdinalIgnoreCase) { "settings", "progression", "gradedintake", "justdrop" };
 
         public static bool IsAirspaceTab(string? tab) =>
             !string.IsNullOrEmpty(tab) && Airspace.Contains(tab);

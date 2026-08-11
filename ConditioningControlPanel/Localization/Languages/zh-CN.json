@@ -4726,5 +4726,15 @@
   "rf_palette_startup_video": "启动视频",
   "rf_palette_panic_key": "紧急键",
   "rf_palette_no_panic": "禁用紧急键",
-  "rf_palette_motion_level": "动效强度"
+  "rf_palette_motion_level": "动效强度",
+  "_comment_justdrop": "JustDrop door (2026-08-11): the web session shop, hosted in a WebView2 door",
+  "jd_door_title": "Just Drop",
+  "jd_door_tip": "会话商店 - 挑一个 drop 就开始",
+  "jd_door_subtitle": "挑一个 drop，下单，播放。你的订单簿也在这里。",
+  "jd_reload": "重新加载",
+  "jd_reload_tip": "重新加载商店",
+  "jd_loading": "正在打开商店...",
+  "jd_error_title": "无法连接商店",
+  "jd_error_body": "Just Drop 需要联网。请检查网络后重试。",
+  "jd_toast_session_complete": "Drop 完成。+{0} XP"
 }

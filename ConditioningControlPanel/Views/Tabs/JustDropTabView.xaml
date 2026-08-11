@@ -1,0 +1,143 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Tabs.JustDropTabView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             mc:Ignorable="d"
+             FontFamily="Segoe UI"
+             TextOptions.TextFormattingMode="Ideal"
+             d:DesignHeight="600" d:DesignWidth="1240">
+
+    <!-- ===================================================================
+         JUST DROP - the session shop, hosted rather than ported.
+
+         Architecture doctrine (owner, 2026-08-11): the shop, its order book,
+         its share/delete/replay actions and every effect it plays are the WEB
+         app at cclabs.app/dashboard/express. This door is a THIN WebView2 host
+         of that page and nothing else - there is deliberately no desktop order
+         list, no desktop share dialog and no WPF re-implementation of any
+         effect. Duplicating any of it here is how the two surfaces drift.
+
+         AIRSPACE. The WebView2 below is a native HWND (an HwndHost): nothing
+         WPF draws can ever appear ON TOP of it, and it does not follow a
+         RenderTransform. Two consequences are baked into this layout:
+           * the loading and error panels are siblings of the browser box, and
+             the browser box is COLLAPSED whenever either of them is showing -
+             overlaying them would put them behind the web surface;
+           * "justdrop" is registered in ChromeFxNav.Airspace so the tab
+             transition crossfades instead of sliding this page.
+         =================================================================== -->
+
+    <Grid Margin="0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- ============================ header ============================ -->
+        <Grid Grid.Row="0" Margin="4,0,4,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- Same glyph the dashboard mosaic's Just Drop tile carries
+                     (SettingsTabView.xaml, CardJustDrop). One feature, one face.
+                     No PNG exists for it anywhere in the app yet - see the report's
+                     art TODO. -->
+                <TextBlock Text="🎚" FontSize="20" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{loc:Str jd_door_title}" Foreground="White"
+                               FontSize="17" FontWeight="Bold"/>
+                    <TextBlock Text="{loc:Str jd_door_subtitle}" Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="11.5" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Reload is the only chrome this door owns. Everything else the user
+                 can do lives inside the page. -->
+            <Button x:Name="BtnJustDropReload" Grid.Column="1" Cursor="Hand"
+                    Content="{loc:Str jd_reload}"
+                    ToolTip="{loc:Str jd_reload_tip}"
+                    Background="{DynamicResource ElevatedSurfaceBrush}" Foreground="White"
+                    FontSize="11.5" BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}"
+                    Padding="12,6" VerticalAlignment="Center"
+                    Click="BtnJustDropReload_Click">
+                <Button.Resources>
+                    <Style TargetType="Border">
+                        <Setter Property="CornerRadius" Value="8"/>
+                    </Style>
+                </Button.Resources>
+            </Button>
+        </Grid>
+
+        <!-- ============================= body ============================= -->
+        <!-- ClipToBounds is a backstop, not a fix: WPF's layout clip does not
+             reliably clip a native child. It is here so a mis-measured web
+             surface stops at this card's edge instead of painting over the
+             bottom bar. -->
+        <Border Grid.Row="1" CornerRadius="12" Padding="1" ClipToBounds="True"
+                Background="{DynamicResource ElevatedSurfaceBrush}"
+                BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}">
+            <Grid>
+                <!-- The WebView2 is created in code-behind on the FIRST show of this
+                     door (JustDropTabView.EnsureWebViewAsync) and added here. It is
+                     never built at startup: a second Chromium environment costs real
+                     memory and this door may never be opened in a session. -->
+                <Grid x:Name="WebHost" Visibility="Collapsed"/>
+
+                <!-- Loading. Sibling, not overlay - see the airspace note above. -->
+                <StackPanel x:Name="LoadingPanel" VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock Text="🎚" FontSize="34" HorizontalAlignment="Center" Opacity="0.75"/>
+                    <TextBlock x:Name="TxtJustDropLoading" Text="{loc:Str jd_loading}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
+                               HorizontalAlignment="Center" Margin="0,12,0,0"/>
+                </StackPanel>
+
+                <!-- Offline / navigation failure. Same scrim-less centred card the
+                     premium gates use, minus the padlock: this is a retry, not a
+                     refusal. -->
+                <Border x:Name="ErrorPanel" Visibility="Collapsed"
+                        CornerRadius="16" MaxWidth="460" Padding="34,30"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Background="{DynamicResource PanelBgBrush}"
+                        BorderThickness="2">
+                    <Border.BorderBrush>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                            <GradientStop Color="{DynamicResource NeonPurpleColor}" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.BorderBrush>
+                    <Border.Effect>
+                        <DropShadowEffect Color="{DynamicResource PinkColor}"
+                                          BlurRadius="34" ShadowDepth="0" Opacity="0.35"/>
+                    </Border.Effect>
+                    <StackPanel>
+                        <TextBlock Text="{loc:Str jd_error_title}" Foreground="White"
+                                   FontSize="16" FontWeight="Bold" TextWrapping="Wrap"
+                                   HorizontalAlignment="Center" TextAlignment="Center"/>
+                        <TextBlock Text="{loc:Str jd_error_body}" Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="12" TextWrapping="Wrap" Margin="0,10,0,0"
+                                   HorizontalAlignment="Center" TextAlignment="Center"/>
+                        <!-- btn_retry is an existing key present in all nine language
+                             files; a jd_-prefixed twin would be nine rows saying the
+                             same word. -->
+                        <Button x:Name="BtnJustDropRetry" Content="{loc:Str btn_retry}" Cursor="Hand"
+                                Background="{DynamicResource SecondaryBrush}" Foreground="White"
+                                FontWeight="Bold" FontSize="12.5" BorderThickness="0"
+                                Padding="20,9" Margin="0,18,0,0" HorizontalAlignment="Center"
+                                Click="BtnJustDropRetry_Click">
+                            <Button.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="8"/>
+                                </Style>
+                            </Button.Resources>
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

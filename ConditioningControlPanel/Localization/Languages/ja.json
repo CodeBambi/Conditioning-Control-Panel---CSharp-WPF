@@ -4259,5 +4259,15 @@
   "rf_palette_startup_video": "起動時動画",
   "rf_palette_panic_key": "パニックキー",
   "rf_palette_no_panic": "パニックキーを無効化",
-  "rf_palette_motion_level": "モーションレベル"
+  "rf_palette_motion_level": "モーションレベル",
+  "_comment_justdrop": "JustDrop door (2026-08-11): the web session shop, hosted in a WebView2 door",
+  "jd_door_title": "Just Drop",
+  "jd_door_tip": "セッションショップ - ドロップを選んですぐプレイ",
+  "jd_door_subtitle": "ドロップを選んで、注文して、再生。注文履歴もここにあります。",
+  "jd_reload": "再読み込み",
+  "jd_reload_tip": "ショップを再読み込み",
+  "jd_loading": "ショップを開いています...",
+  "jd_error_title": "ショップに接続できません",
+  "jd_error_body": "Just Drop はオンライン専用です。接続を確認してもう一度お試しください。",
+  "jd_toast_session_complete": "ドロップ完了。+{0} XP"
 }

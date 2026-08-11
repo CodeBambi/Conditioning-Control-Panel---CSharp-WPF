@@ -29,7 +29,8 @@ public class ChromeFxNavTests
     [InlineData("presets", 2)]      // Studio
     [InlineData("lab", 8)]          // Play, first entry
     [InlineData("assets", 22)]      // Library, last row on the rail
-    [InlineData("appsettings", 23)] // Settings, pinned below everything
+    [InlineData("justdrop", 23)]    // Just Drop, withheld door at the foot of the scrolling rail
+    [InlineData("appsettings", 24)] // Settings, pinned below everything
     public void IndexOf_FollowsTheNavStrip(string tab, int expected)
         => Assert.Equal(expected, ChromeFxNav.IndexOf(tab));
 

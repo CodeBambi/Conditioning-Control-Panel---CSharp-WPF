@@ -677,6 +677,42 @@
                                 </Button>
                             </StackPanel>
                         </Border>
+
+                        <!-- ===== JUST DROP (default: justdrop) =====
+                             WITHHELD BY DEFAULT. Both the header and its panel ship Collapsed and
+                             are revealed only by MainWindow.JustDrop.cs when
+                             JustDropService.DoorAvailable turns true - which needs a server flag
+                             that defaults to false and is never persisted. On a machine the server
+                             has not opened this for, the rail below Library simply ends: no greyed
+                             row and no "coming soon" tease, because the Play door's lockbands are
+                             for things you could buy and this is a thing that does not exist for
+                             you yet.
+
+                             The glyph is the one the dashboard mosaic's Just Drop tile already
+                             carries (SettingsTabView.xaml, CardJustDrop). No PNG exists for this
+                             feature anywhere in the app - real art is a separate pipeline. -->
+                        <Button x:Name="DoorJustDrop" Tag="justdrop" Style="{StaticResource NavDoorButton}"
+                                Visibility="Collapsed"
+                                Click="NavDoor_Click" ToolTip="{loc:Str jd_door_tip}">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"
+                                       Source="{Binding Source='🎚', Converter={StaticResource EmojiToImageSource}}"/>
+                                <TextBlock Text="{loc:Str jd_door_title}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <Border x:Name="DoorPanelJustDrop" ClipToBounds="True" Height="0" IsHitTestVisible="False"
+                                Visibility="Collapsed">
+                            <StackPanel x:Name="DoorEntriesJustDrop">
+                                <Button x:Name="BtnNavJustDrop" Tag="JustDrop" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavJustDrop_Click" ToolTip="{loc:Str jd_door_tip}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🎚', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str jd_door_title}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
 
@@ -1534,6 +1570,18 @@
              FeaturePopupWindow path keeps building its own separate instances and keeps working.
              Hosts the Haptics page as its "haptics" module. -->
         <views:StudioTabView x:Name="StudioTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
+
+
+        <!-- Just Drop Tab ("justdrop") — a thin WebView2 host of the web session shop at
+             app.cclabs.app/dashboard/express. The shop, its order book and its share/delete/replay
+             actions are the PAGE's; nothing here duplicates them, by doctrine. The control is
+             constructed with the window like every other tab, but its WebView2 is not built until
+             the door is first opened (JustDropTabView.OnTabShown), so a user who never opens it
+             never pays for a second Chromium.
+
+             Reachable only while JustDropService.DoorAvailable is true — the rail rows above are
+             Collapsed until the server flag says otherwise. -->
+        <views:JustDropTabView x:Name="JustDropTab" Grid.Row="4" Grid.Column="1" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
 

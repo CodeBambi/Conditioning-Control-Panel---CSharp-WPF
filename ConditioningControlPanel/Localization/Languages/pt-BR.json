@@ -4267,5 +4267,15 @@
   "rf_palette_startup_video": "Vídeo de abertura",
   "rf_palette_panic_key": "Tecla de pânico",
   "rf_palette_no_panic": "Desativar a tecla de pânico",
-  "rf_palette_motion_level": "Nível de movimento"
+  "rf_palette_motion_level": "Nível de movimento",
+  "_comment_justdrop": "JustDrop door (2026-08-11): the web session shop, hosted in a WebView2 door",
+  "jd_door_title": "Just Drop",
+  "jd_door_tip": "A loja de sessões - escolha um drop e vá",
+  "jd_door_subtitle": "Escolha um drop, faça o pedido e toque. Seu livro de pedidos também fica aqui.",
+  "jd_reload": "Recarregar",
+  "jd_reload_tip": "Recarregar a loja",
+  "jd_loading": "Abrindo a loja...",
+  "jd_error_title": "Não dá para acessar a loja",
+  "jd_error_body": "O Just Drop vive online. Verifique sua conexão e tente de novo.",
+  "jd_toast_session_complete": "Drop concluído. +{0} XP"
 }

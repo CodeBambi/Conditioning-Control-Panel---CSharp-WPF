@@ -2504,6 +2504,11 @@ namespace ConditioningControlPanel
             // Initialize scrolling marquee banner
             InitializeMarqueeBanner();
 
+            // Ask the server whether this account has a Just Drop door. Staggered behind the
+            // marquee's three checks for the same reason they are staggered behind each other -
+            // see MainWindow.JustDrop.cs.
+            InitializeJustDropDoor();
+
             // Deeper tab first-launch pulse — draw the eye to the new tab once,
             // unless the user has already opened it (HasSeenDeeperTab) or disabled it.
             var deeperSettings = App.Settings?.Current;
