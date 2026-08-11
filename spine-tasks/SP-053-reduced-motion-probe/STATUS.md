@@ -9,7 +9,7 @@
 - [x] Failure-contingent mechanism sketch (built only if inheritance fails)
 - [x] Pre-approach solo consult (verdict + actual model in record.md)
 
-### Step 2: the probe + measurement
+### Step 2: the probe + measurement — COMPLETE (plan review: skipped-by-design SP-195)
 - [x] Probe seam (unit-testable; asserts the measurement PATH)
 - [x] Headed measurement run: engine matchMedia vs OS setting OFF and ON (transcripts)
 

@@ -157,4 +157,6 @@ first, restored after, re-verified).
 its baseline.** No `phase:'change'` messages in either run (each run launched after the state settled — the
 live-tracking bonus question is outside the two-run protocol; absence recorded, nothing claimed).
 
-**Engine-review presence (Step 2):** plan review requested after the step commit — recorded there.
+**Engine-review presence (Step 2):** plan review requested via `spine_review_step` (type=plan) after commit 4261c9b6 ->
+verdict null, SKIPPED by design (SP-195 — the batch engine runs reviews after worker success; artifact
+`.reviews/2-20260811T153450.md`; spawnFailed=false).
