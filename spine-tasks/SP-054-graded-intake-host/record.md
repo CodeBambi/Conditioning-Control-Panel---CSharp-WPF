@@ -221,4 +221,15 @@ Step-3 plan review call → `skipped: true, spawnFailed: false` (artifact `.revi
 
 ## Step 4 — testing & verification
 
-(results recorded below)
+- `node .spine/patches/verify.mjs` → **exit 0** (8 project + 5 engine patches applied).
+- `dotnet build client/CcpClient.sln -c Debug --nologo -t:Rebuild` → **Build succeeded, 0 Warning(s), 0 Error(s)** (warnings measured on the full Rebuild per the packet).
+- `dotnet test CcpClient.Tests` → **795/795 green** (floor 683), TRX `sp054-final-unit.trx` attached. `dotnet test CcpClient.HeadlessTests` → **33/33 green** (floor 33), TRX `sp054-final-headless.trx` attached.
+- `git diff --check` → **clean (exit 0)**.
+- `git status --short` → **empty** (every change committed at step boundaries). Committed diff vs the pre-task commit (a3907fa0): zero hits on the fileScopeMustNotChange paths (grep-verified: no `ConditioningControlPanel/**`, `client/CcpClient.sln`, `client/spikes/**`, `.spine/**`, `client/docs/task-board.md`, `client/docs/port-lessons.md`, `client/src/CcpClient.Desktop/Ai/**`, `client/src/CcpClient.Desktop/Features/Companion/**`). fileScopeMustChange satisfied (`Features/Intake/**` = 18 new files). The out-of-listed-scope hunks are EXACTLY the flagged launch+serving glue bundle (csproj intake glob, Program.cs/App.axaml.cs demonstrator flags, assets.manifest.json 2137 entries, AssetManifestTests count pin 1544→3681) — consult ruling 3 pre-approved, consciously deviated-by-name, orchestrator reconciles at land.
+- `grep -c "Review Level" PROMPT.md` = 3 (≥2 authoring rule, SP-034).
+
+**Budgets (T-11):** each headed step well under 2h (runs 1-6 ≈ 5-50s each; capture loop ≈ 15min incl. the EnumWindows/visibility surprise); the 4h export was never approached.
+
+**Surprises (Step 3):** (1) the Keincheck MCP seat binds ~10s into the run and drops with the app — reconnect per run; the run-2 connect attempt raced the bind. (2) `screenshot_window` handle-drop quirk bit LIVE (handle=ctl-2 silently rendered the 520x680 dashboard) — rejected for evidence per the SP-036 usage-log discipline. (3) EnumWindows reported the live intake window `vis=False` while avalonia-live showed it active with real bounds — the capture script restores+raises before capture; painted pixels are ground truth (pre-completion consult truncated tail, discharged in-record). (4) The bundled intake tree ships 1988 VO mp3s — the "VO absent" degraded clause is the pack-skipped WPF scenario, NOT this build (framing corrected per consult discharge 3).
+
+**Durable-lesson candidates (orchestrator harvest):** (a) consult verdict truncation is recurring (SP-027 class ×2 this packet) — the retry-with-terse-completion pattern works but the record must mark the cut; (b) obligation wording with "file content before AND after" is unsatisfiable by an absent-file proof — author obligations to name the existing-store case or accept absent/absent; (c) the avalonia-live screenshot handle-drop quirk is not theoretical — always validate capture dimensions against the axaml size BEFORE the evidence pass (the windowId quirk rule, re-confirmed); (d) harness staged-file conventions (payload-overlay/loom/) keep the READ-ONLY payload discipline intact through headed drives.

@@ -1,6 +1,6 @@
 ## STATUS: SP-054 — Graded Intake web-core host
-**Current Step:** Step 4 — Testing & Verification
-**Last Updated:** 2026-08-11 (Step 3 complete — 6 headed runs, consult discharges executed, 795/795 + 33/33 green)
+**Current Step:** complete — all 4 steps done; .DONE follows
+**Last Updated:** 2026-08-11 (Step 4 contract green — verify.mjs 0, Rebuild 0W/0E, 795/795 + 33/33, diff-check clean)
 **Blockers:** none
 
 ### Step 1: archaeology + design + pre-approach consult
@@ -38,6 +38,7 @@
 - [x] STATUS.md accurate before .DONE
 
 ### Step 4: Testing & Verification
-- [ ] Contract testCommand passes (verify.mjs + build 0W/0E + ≥683/33 floor; TRX logger)
-- [ ] git diff --check clean
-- [ ] git status --short shows only File Scope paths
+**Status:** complete
+- [x] Contract testCommand passes (verify.mjs exit 0 + Rebuild 0W/0E + 795/795 + 33/33 ≥ 683/33 floor; TRX loggers attached)
+- [x] git diff --check clean
+- [x] git status --short shows only File Scope paths (empty — all committed; zero forbidden-path hits grep-verified vs a3907fa0; glue-bundle deviation recorded)
