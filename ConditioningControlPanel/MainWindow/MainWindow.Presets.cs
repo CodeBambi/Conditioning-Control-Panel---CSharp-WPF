@@ -964,6 +964,10 @@ namespace ConditioningControlPanel
                 "voice" => "shelistening",
                 "fyp" => "fyp",
                 "remote" => "remotecontrol",
+                // Drop days navigate to the Play door, where DtRH's hero card (and its now-open
+                // gate) lives - same destination the old DtRH mosaic tile used. Navigate, never
+                // launch: the wall's own rule.
+                "dtrh" => "play",
                 _ => null,
             };
             if (tab != null) ShowTab(tab);
@@ -1071,6 +1075,9 @@ namespace ConditioningControlPanel
             "voice" => Loc.Get("tab_shelistening"),
             "fyp" => Loc.Get("tab_fyp"),
             "remote" => Loc.Get("tab_remote_control"),
+            // Brand name, identical in all nine languages - a loc key would only add a row
+            // nobody translates (same call as the Play door's lockband).
+            "dtrh" => "Down the Rabbit Hole",
             _ => null,
         };
 
@@ -1086,6 +1093,7 @@ namespace ConditioningControlPanel
             "haptics" => "features/vibe.png",
             "fyp" => "features/fyp.png",
             "remote" => "features/remote_control.png",
+            "dtrh" => "features/dtrh.png",
             _ => "features/mysterybox.png",
         };
 

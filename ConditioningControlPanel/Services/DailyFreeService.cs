@@ -39,11 +39,13 @@ namespace ConditioningControlPanel.Services
         public static readonly string[] Pool = { "takeover", "awareness", "fyp", "remote" };
 
         /// <summary>
-        /// What the SERVER may name, which is wider than what the wheel spins: the live pool plus
-        /// the two benched features whose unlock plumbing remains in place. Off-pool content keys
-        /// (dtrh) still need real client work before they can join - see RefreshAsync.
+        /// What the SERVER may name, which is wider than what the wheel spins: the live pool,
+        /// the two benched features whose unlock plumbing remains in place, and "dtrh" - the
+        /// off-pool T2 drop (owner, 2026-08-11: promo Saturdays). DtRH is wired through
+        /// TierGate's keyed Lab overloads at all four gate sites, but the WHEEL never lands on
+        /// it: T2 content is only ever given away on a day the owner explicitly names.
         /// </summary>
-        private static readonly string[] OverridableKeys = { "takeover", "awareness", "fyp", "remote", "haptics", "voice" };
+        private static readonly string[] OverridableKeys = { "takeover", "awareness", "fyp", "remote", "haptics", "voice", "dtrh" };
 
         private const string OverrideEndpoint = "https://codebambi-proxy.vercel.app/config/daily-feature";
         private static readonly TimeSpan RefetchEvery = TimeSpan.FromHours(6);
@@ -84,24 +86,30 @@ namespace ConditioningControlPanel.Services
 
         private readonly object _chainLock = new();
         private DateTime _chainDate = DateTime.MinValue;
-        private string? _chainKey;
+        private string? _chainKey;       // the pick for _chainDate
+        private string? _chainPrevKey;   // the pick for the day before _chainDate
 
         /// <summary>
-        /// Deterministic pick for a date, with NO BACK-TO-BACK REPEATS (owner, 2026-08-11:
-        /// "never have the same back to back"). Each day's hash chooses a STEP of 1..N-1 around
-        /// the pool wheel from yesterday's key - a step of 0 is unrepresentable, so a repeat is
-        /// structurally impossible rather than re-rolled. That makes the pick a chain, so it is
-        /// walked from <see cref="ChainEpoch"/> instead of computed point-wise; the walk is a few
-        /// hundred FNV hashes at worst and the (date, key) memo below makes the per-gate-check
-        /// cost zero. The memo also walks FORWARD from its last answer, so the midnight rollover
-        /// costs one step, not a re-walk.
+        /// Deterministic pick for a date, with a THREE-DAY SPACING RULE (owner, 2026-08-11:
+        /// "never have the same back to back", then "space out so we dont get the same feat in
+        /// 3 days"): each day's hash picks from the pool MINUS the previous two days' picks, so
+        /// a feature can never appear twice inside any 3-day window - structurally, not by
+        /// re-roll. With the 4-feature pool that is a choice of 2 each day. NOTE: shrinking the
+        /// pool below 3 would leave zero candidates; the exclusion window must stay at most
+        /// Pool.Length - 1 wide.
+        ///
+        /// <para>The exclusion makes the pick a chain, so it is walked from
+        /// <see cref="ChainEpoch"/> instead of computed point-wise; the walk is a few hundred
+        /// FNV hashes at worst, the (date, key, prevKey) memo makes the per-gate-check cost
+        /// zero, and the memo walks FORWARD from its last answer so the midnight rollover costs
+        /// one step, not a re-walk.</para>
         ///
         /// <para>FNV-1a over the stamp, NOT string.GetHashCode - that one is randomized per
         /// process since .NET Core, which would hand every install (and every app restart) a
         /// different "today".</para>
         ///
         /// <para>A server override does not enter the chain: the seeded wheel ignores overrides,
-        /// so the day after an override CAN seed the same key the override named. Accepted - the
+        /// so the days around an override CAN seed the key the override named. Accepted - the
         /// owner is looking at the calendar when they place one.</para>
         /// </summary>
         private string SeededPick(DateTime date)
@@ -113,24 +121,37 @@ namespace ConditioningControlPanel.Services
 
                 // Resume from the memo when it is behind us but on the chain; otherwise restart
                 // at the epoch (first call, or a clock rolled backwards).
-                var cursor = ChainEpoch;
-                var key = Pool[Fnv1a(DateStamp(ChainEpoch)) % (uint)Pool.Length];
+                DateTime cursor;
+                string key;
+                string? prev;
                 if (_chainKey != null && _chainDate > ChainEpoch && _chainDate < date)
                 {
                     cursor = _chainDate;
                     key = _chainKey;
+                    prev = _chainPrevKey;
+                }
+                else
+                {
+                    cursor = ChainEpoch;
+                    key = Pool[Fnv1a(DateStamp(ChainEpoch)) % (uint)Pool.Length];
+                    prev = null;   // the epoch's first day only excludes itself
                 }
 
                 for (var d = cursor.AddDays(1); d <= date; d = d.AddDays(1))
                 {
-                    var step = 1 + (int)(Fnv1a(DateStamp(d)) % (uint)(Pool.Length - 1));
-                    key = Pool[(Array.IndexOf(Pool, key) + step) % Pool.Length];
+                    // Pool order minus the last two picks keeps the candidate list stable, so
+                    // appending to the pool stays calendar-safe for all dates before the append.
+                    var candidates = Pool.Where(k => k != key && k != prev).ToArray();
+                    var next = candidates[Fnv1a(DateStamp(d)) % (uint)candidates.Length];
+                    prev = key;
+                    key = next;
                 }
 
                 // A pre-epoch date (clock rolled way back) walks zero steps and returns the epoch
                 // key - deterministic and harmless, so it is not special-cased.
                 _chainDate = date;
                 _chainKey = key;
+                _chainPrevKey = prev;
                 return key;
             }
         }
@@ -174,10 +195,11 @@ namespace ConditioningControlPanel.Services
                 if (string.IsNullOrWhiteSpace(key)) return;
                 key = key.Trim().ToLowerInvariant();
 
-                // The server may name anything - including off-pool drops like "dtrh" - but a
-                // typo must not brick the box, so unknown keys are logged and ignored. Extend
-                // OverridableKeys (and the ShowTab map in CardMystery_Click) to enable off-pool
-                // drops. Benched pool members (haptics, voice) stay overridable on purpose.
+                // The server may name anything, but a typo must not brick the box, so unknown
+                // keys are logged and ignored. A NEW off-pool drop needs: its key here in
+                // OverridableKeys, a keyed TierGate overload at every gate site, and rows in
+                // CardMystery_Click / MysteryFeatureName / MysteryFeatureArtPath. "dtrh" and the
+                // benched pool members (haptics, voice) are already wired.
                 if (!OverridableKeys.Contains(key))
                 {
                     App.Logger?.Warning("DailyFree: server override '{Key}' not in pool, ignoring", key);

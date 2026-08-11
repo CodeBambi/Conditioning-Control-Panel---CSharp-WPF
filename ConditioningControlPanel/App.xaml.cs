@@ -2117,7 +2117,7 @@ namespace ConditioningControlPanel
                 Services.Chaos.DtrhHostService.Launch(testMode: true);
             else if (e.Args.Contains("--dtrh"))
             {
-                var dtrhGate = Services.TierGate.RequiresLab("Down the Rabbit Hole");
+                var dtrhGate = Services.TierGate.RequiresLab("Down the Rabbit Hole", "dtrh");
                 if (dtrhGate.Allowed) Services.Chaos.DtrhHostService.Launch();
                 else Logger?.Information("--dtrh ignored: {Reason}", dtrhGate.Reason);
             }

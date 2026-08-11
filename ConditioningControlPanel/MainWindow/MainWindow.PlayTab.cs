@@ -83,7 +83,7 @@ namespace ConditioningControlPanel
                 // a Japanese user no longer reads a Japanese refusal about an English subject.
                 // "Down the Rabbit Hole" stays a literal: it is the brand name, identical in all
                 // nine files, so a key would only add a row nobody translates.
-                var dtrhVerdict = TierGate.RequiresLab("Down the Rabbit Hole");
+                var dtrhVerdict = TierGate.RequiresLab("Down the Rabbit Hole", "dtrh");
                 SetLockband(tab.PlayLockDtrh, dtrhVerdict);
                 // The DTRH band is hit-test invisible on purpose (FALL IN / Quick Drop refuse in
                 // their handlers), but the card's two settings checkboxes write

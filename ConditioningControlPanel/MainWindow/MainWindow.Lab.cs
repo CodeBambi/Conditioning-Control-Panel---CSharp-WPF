@@ -221,8 +221,10 @@ namespace ConditioningControlPanel
             {
                 // Tier 2 door, checked here rather than left to the Lab smokescreen: the overlay
                 // covers one tab, and the descent is reachable from the hero card, Quick Start and
-                // (Phase 6) a Play card that will not have an overlay at all.
-                if (!TierGate.DemandLab("Down the Rabbit Hole")) return;
+                // (Phase 6) a Play card that will not have an overlay at all. Keyed: on a
+                // server-declared DtRH drop day (DailyFreeService, off-pool override) the door
+                // opens for everyone.
+                if (!TierGate.DemandLab("Down the Rabbit Hole", "dtrh")) return;
 
                 // DtRH browser game (default ON since M6): the whole experience lives in the web
                 // page — hub, run and all. The legacy WPF path below stays for the Lab toggle and
@@ -307,7 +309,7 @@ namespace ConditioningControlPanel
             try
             {
                 // Same tier-2 door as the hero card - Quick Start skips the picker, not the gate.
-                if (!TierGate.DemandLab("Down the Rabbit Hole")) return;
+                if (!TierGate.DemandLab("Down the Rabbit Hole", "dtrh")) return;
 
                 // DtRH browser game: same surface as the hero card — see BtnStartChaos_Click.
                 // Quick Start skips the save picker by design (that's the "quick" part) and reuses

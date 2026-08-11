@@ -81,6 +81,19 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Lab bar with the daily free feature OR'd in - the off-pool drop path. The rotation
+        /// wheel never lands on T2 content; this only opens when the SERVER names the key for
+        /// the day (DtRH drop days). Same shape as the keyed premium overload above.
+        /// </summary>
+        public static TierVerdict RequiresLab(string featureName, string dailyKey)
+        {
+            var allowed = App.Patreon?.HasLabAccess == true
+                          || App.DailyFree?.IsFreeToday(dailyKey) == true;
+            return new TierVerdict(allowed, featureName, PatreonTier.Level2,
+                allowed ? string.Empty : Loc.GetF("tiergate_denied_lab", featureName));
+        }
+
+        /// <summary>
         /// Gate-and-tell for a click handler: true to proceed, false after the user has been told
         /// why not. Callers return on false; nothing here throws.
         /// </summary>
@@ -92,6 +105,10 @@ namespace ConditioningControlPanel.Services
 
         /// <inheritdoc cref="DemandPremium"/>
         public static bool DemandLab(string featureName) => Demand(RequiresLab(featureName));
+
+        /// <inheritdoc cref="RequiresLab(string, string)"/>
+        public static bool DemandLab(string featureName, string dailyKey) =>
+            Demand(RequiresLab(featureName, dailyKey));
 
         private static bool Demand(in TierVerdict verdict)
         {
