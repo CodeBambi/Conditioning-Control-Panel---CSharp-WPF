@@ -5,9 +5,9 @@
 
 ### Step 1: drift verification + design + pre-approach consult (IN PROGRESS)
 - [x] Update STATUS.md before starting work
-- [ ] Re-verify every drift line against git main (clamp sites, endless points, habit exclusion)
-- [ ] Design (ownership-gated ceiling both points; Endless additive member + five-point carry)
-- [ ] Pre-approach solo consult (verdict + actual model in record.md)
+- [x] Re-verify every drift line against git main (clamp sites, endless points, habit exclusion)
+- [x] Design (ownership-gated ceiling both points; Endless additive member + five-point carry)
+- [x] Pre-approach solo consult (verdict + actual model in record.md)
 
 ### Step 2: the two gates + tests
 - [ ] Hourglass ownership-gated ceiling (persist + deal)
