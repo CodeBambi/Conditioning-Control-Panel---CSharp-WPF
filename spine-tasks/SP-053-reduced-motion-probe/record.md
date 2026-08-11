@@ -160,3 +160,78 @@ live-tracking bonus question is outside the two-run protocol; absence recorded, 
 **Engine-review presence (Step 2):** plan review requested via `spine_review_step` (type=plan) after commit 4261c9b6 ->
 verdict null, SKIPPED by design (SP-195 â€” the batch engine runs reviews after worker success; artifact
 `.reviews/2-20260811T153450.md`; spawnFailed=false).
+
+## Step 3 â€” verdict + mechanism + evidence + pre-completion consult
+
+### Verdict (probe-first â€” the answer is what the embedded engine reported)
+
+**INHERITANCE HOLDS on Windows WebView2 (runtime 151.0.4129.72, engine-version-scoped).** Per-OS-state table
+(consult correction 1 â€” consequence column; only OS-OFF + engine `reduce=false` would be the betrayal):
+
+| OS ClientAreaAnimation | engine `(prefers-reduced-motion: reduce)` | class | consequence |
+|---|---|---|---|
+| OFF (False) | reduce=true | **Holds** | a reduced-motion user's page goes 2D as its own probe intends (`capability.js:57`) |
+| ON (True) | reduce=false | **Holds** | full motion for users who did not ask for reduction |
+
+Confounder discipline (consult correction 1): no `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` in this environment (grep,
+Step 1); the product never sets browser arguments; no `--force-prefers-reduced-motion` anywhere in the client tree;
+no DevTools emulation in the harness run. The Holds claim is attributable to OS inheritance. The engine read
+`SPI_GETCLIENTAREAANIMATION` at browser-process start in BOTH runs; live WM_SETTINGCHANGE tracking was not exercised
+(two-run protocol is the primary evidence; the `change` listener fired in neither run â€” nothing claimed either way).
+
+**Both runs measured the Windows WebView2 surface** (load-bearing quote, `grep -n "surface" evidence/motion-run-*.log`):
+`dtrh: NavigationCompleted success=True (surface embedded)` — baseline log :24, off log :23. No dialog/unsupported
+fallback was in play. Harness/product equivalence: the probe ran in the SAME `DtrhHostWindow` the product flow uses —
+same surface selection, same environment-creation path; only the `page` ctor argument differs (`_dtrh.PageUrl(_page)`) —
+so the probe measured the product's engine, not a different host (consult fix 3).
+
+**The page consumes the query exactly ONCE, at boot** (payload call-site grep, consult fix 2iii): `detectMode` is
+imported and called at `boot.js:19,77` ONLY — a boot-time decision. State-at-page-load is therefore the only thing
+the page can consume, which makes the two-run protocol provably sufficient and retires the live-`change` question as
+IRRELEVANT (not merely unmeasured): no run observed a `phase:'change'` message and none was needed.
+
+**User-observable consequence: none.** The pre-existing obligation is DISCHARGED for WebView2 151.0.4129.72 on Windows:
+the embedded engine inherits the OS/user motion preference, so the page's own probe (`capability.js:35`) is never
+silently betrayed. A WebView2 runtime regression re-opens the row; Linux (WebKitGTK) stays unproven — WSL
+zero-distros named limit (never faked). The verbatim probe-motion bodies carry only a boolean, a phase string and a
+fixed query literal — no user content, §4.8-safe.
+
+### Mechanism: NOT BUILT (contingent on a Fails verdict)
+
+The failure-contingent honoring mechanism (Step 1 sketch: Chromium-native `--force-prefers-reduced-motion` via the
+12.0.1-binary-verified `AdditionalBrowserArguments` environment seam, applied only when the host-read OS state says
+animations off; document-start `matchMedia`-wrap as fallback) was designed and its seams verified, but the verdict is
+Holds â€” building it would be speculative code against a non-defect. The sketch + seam evidence stay in this record as
+the ready shape if a future engine regression flips the verdict.
+
+### Linux half â€” named limit (recorded, never faked)
+
+Unproven: WSL zero-distros on this laptop; WebKitGTK's `prefers-reduced-motion` inheritance unknown. WPF's own OS cap
+is Windows-only (`SystemParameters.ClientAreaAnimation`, MotionFx.cs:37-54), so the Windows-first probe is honest
+parity work. No Wayland claims.
+
+### Pre-completion solo consult
+
+**Mode:** solo (T-7; PROMPT Do-NOT). **Requested route:** Opus 5 main (2026-08-04 rewire). **Actual answering model:**
+NOT surfaced by the consult tool response (recorded honestly, same discipline as Step 1). **Two calls:** the first
+verdict TRUNCATED mid-(b) (the Step-1 truncation class); the second (terse-completion request) delivered the remainder
+in full.
+
+**Verdict: the work is sound and the Holds call is right — do NOT build the mechanism. Four concrete fixes before
+`.DONE`, then run the contract properly.** (a) the record's "engine read SPI at browser-process start" was an
+unmeasured claim (fix 1); run B reporting the CHANGED value after the flip empirically rules out caching (fix 2i);
+quote the `surface embedded` NavigationCompleted line from BOTH transcripts (fix 2ii); grep the payload's detectMode
+call sites — boot-time-only consumption makes the two-run protocol provably sufficient (fix 2iii); state the
+harness/product window equivalence in one line (fix 3). (b) diff scope clean; one convention gap —
+`[SupportedOSPlatform("windows")]` on the extern matching `DtrhCapabilityProbes.cs` (fix 4); logging §4.8-safe.
+(c) mechanism-not-built CONFIRMED: Holds in the only direction that matters; any mechanism would be unfalsifiable
+code (the engine already honors — nothing could prove the mechanism does anything); the Step-1 sketch + binary
+evidence is the correct deliverable. Contract discipline: exact testCommand, warnings measured on `-t:Rebuild`, TRX
+loggers landed under evidence/, counts vs the >=669/33 floor, `git diff --check`, File-Scope-only `git status`, final
+`-Get` proof the box is not left reduced.
+
+**Fix application:** fixes 1-4 applied in this record and the code (extern annotated); contract run per the consult's
+concrete list in Step 4 below.
+
+**Engine-review presence (Step 3):** plan review requested via `spine_review_step` after the step commit — recorded
+in Step 4's summary line (same SP-195 skip class as Steps 1-2 if skipped).

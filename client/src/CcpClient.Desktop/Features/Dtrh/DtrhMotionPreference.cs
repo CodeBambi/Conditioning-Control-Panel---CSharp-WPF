@@ -94,5 +94,6 @@ public static class DtrhMotionPreference
     // under spine-tasks/SP-053-reduced-motion-probe/evidence/ — never in product code.
     [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     private static extern bool SystemParametersInfoGet(uint uiAction, uint uiParam, out int pvParam, uint fWinIni);
 }
