@@ -1,5 +1,7 @@
 using System;
 using System.Windows;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using ConditioningControlPanel.Services;
@@ -300,11 +302,53 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Quick-toggle handler for the simple on/off premium chips. Each mirrors its
-        /// tab checkbox so the existing consent / patreon-gating / service-start logic
-        /// runs unchanged — we just flip it and read the result back into the dots.
+        /// LEFT-click: open the chip's feature where it actually lives.
+        ///
+        /// <para><b>This inverted on 2026-08-11 (owner call).</b> Left-click used to flip the
+        /// feature on or off, which left the rail with no route to any of these pages at all —
+        /// you armed Awareness or the mic blind and then went hunting through the doors for its
+        /// settings. The two navigation chips (the intake and For You) already behaved this way,
+        /// so the rail was also inconsistent with itself. Now every chip reads the same:
+        /// <b>left opens, right turns on</b> — which is also the mirror of the contract the
+        /// dashboard mosaic taught, where a tile's left-click has always been navigation.</para>
+        ///
+        /// <para>Navigation is never tier-gated, deliberately. Reading a page is not using the
+        /// feature, the destination pages carry their own upsell, and a padlock between someone
+        /// and the description of a thing they might buy is a strange way to sell it — the same
+        /// argument the Play door's hit-test-invisible lockbands make. The refusal lives on the
+        /// toggle half, in <see cref="PremiumChip_Toggle"/>.</para>
         /// </summary>
         internal void PremiumChip_Click(PremiumFeature feature)
+        {
+            switch (feature)
+            {
+                // Each of these is the SAME key its door uses, so the arrival is byte-for-byte
+                // what a click through the sidebar produces - including the per-tab bark that
+                // ShowTab fires from NotifyTabNavigated and the first-visit intro cards. Calling
+                // a view method directly here would land on the right panel and say nothing.
+                case PremiumFeature.Takeover: ShowTab("bambitakeover"); break;
+                case PremiumFeature.Awareness: ShowTab("awareness"); break;
+                case PremiumFeature.Haptics: ShowTab("haptics"); break;
+                case PremiumFeature.Voice: ShowTab("shelistening"); break;
+                case PremiumFeature.GradedIntake: ShowTab("gradedintake"); break;
+                // ShowTab intercepts "fyp" and calls OpenFypFeed, which owns the premium gate.
+                case PremiumFeature.Fyp: ShowTab("fyp"); break;
+            }
+            RefreshPremiumRail();
+        }
+
+        /// <summary>
+        /// RIGHT-click: turn the chip's feature on or off with whatever settings it already
+        /// carries — the quick-toggle that used to be left-click, unchanged in every respect
+        /// that matters (same tier bar, same session-lock refusal, same write through the tab's
+        /// own checkbox so its consent and service-start logic runs).
+        ///
+        /// <para>The intake and For You fall through to <see cref="PremiumChip_Click"/>: they are
+        /// destinations, not switches, and there is no "on" to turn them to. Opening them is the
+        /// nearest honest thing a right-click can mean, and it beats a gesture that silently does
+        /// nothing on two of the eight chips.</para>
+        /// </summary>
+        internal void PremiumChip_Toggle(PremiumFeature feature)
         {
             // The tier bar comes FIRST, and it is a real check now. Until Phase 3 the gate was
             // PremiumRailContent.IsEnabled = false under a blanket overlay: nothing here refused
@@ -351,18 +395,48 @@ namespace ConditioningControlPanel
                     ToggleVoiceMic();
                     break;
                 case PremiumFeature.GradedIntake:
-                    // Navigation shortcut, not a toggle — the intake starts from its own page.
-                    ShowTab("gradedintake");
-                    break;
                 case PremiumFeature.Fyp:
-                    // Navigation shortcut too, but the destination is a window rather than a tab:
-                    // ShowTab intercepts "fyp" and calls OpenFypFeed, which owns the premium gate.
-                    // Routed through ShowTab on purpose so the dashboard chip and the Exclusives
-                    // spotlight card share one launch path.
-                    ShowTab("fyp");
-                    break;
+                    // Not switches. Open them instead - see the summary above.
+                    PremiumChip_Click(feature);
+                    return;
             }
             RefreshPremiumRail();
+        }
+
+        /// <summary>
+        /// The rail's right-click router. One handler on the chip stack rather than a
+        /// MouseRightButtonUp on each of the six buttons: right-button events bubble, and six
+        /// XAML attributes plus six forwarding shims is six chances to add a chip and forget one.
+        ///
+        /// <para>Chips are matched by reference against the named controls, the same idiom the
+        /// dashboard's quick-toggle used. Anything that is not one of the six — the Lockdown and
+        /// Blink launcher cards, the "PREMIUM" caption, the gaps — falls through unmatched and
+        /// the right-click does nothing, which is correct: those two are launchers with their own
+        /// +/- controls and a Lock In button, not switches.</para>
+        /// </summary>
+        internal void PremiumRail_RightClick(object sender, MouseButtonEventArgs e)
+        {
+            var dash = SettingsTab;
+            if (dash == null || e.OriginalSource is not DependencyObject src) return;
+
+            // Walk up from whatever glyph or caption took the hit to the chip that owns it.
+            var node = src;
+            while (node != null && node is not ButtonBase)
+                node = VisualTreeHelper.GetParent(node);
+            if (node is not ButtonBase chip) return;
+
+            PremiumFeature? feature =
+                chip == dash.ChipTakeover ? PremiumFeature.Takeover :
+                chip == dash.ChipAwareness ? PremiumFeature.Awareness :
+                chip == dash.ChipHaptics ? PremiumFeature.Haptics :
+                chip == dash.ChipVoice ? PremiumFeature.Voice :
+                chip == dash.ChipGradedIntake ? PremiumFeature.GradedIntake :
+                chip == dash.ChipFyp ? PremiumFeature.Fyp :
+                null;
+            if (feature == null) return;
+
+            PremiumChip_Toggle(feature.Value);
+            e.Handled = true;
         }
 
         private static void ToggleTabCheckBox(System.Windows.Controls.CheckBox? cb)
@@ -378,6 +452,11 @@ namespace ConditioningControlPanel
 
             EnsureIntakePassRailHooked();
             RefreshRailLockbands();
+            // The mosaic's price tags ride along: they answer the same three questions this
+            // method already gets woken for (patron status changed, the Home door was shown, the
+            // weekly intake pass moved) and reading them from a second set of hooks is how one
+            // surface ends up a release out of date. See MainWindow.Presets.cs.
+            RefreshMosaicTierBadges();
 
             // Tombstone. The rail used to be gated by ONE blanket: PremiumRailLock draped over
             // everything with PremiumRailContent.IsEnabled = false underneath it. That answered

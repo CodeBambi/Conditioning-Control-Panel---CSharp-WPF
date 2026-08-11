@@ -95,12 +95,14 @@ namespace ConditioningControlPanel
             {
                 var tab = SettingsTab;
                 if (tab == null) return Enumerable.Empty<FeatureCard>();
+                // The 3x3 destination wall (2026-08-11). Every tile on the mosaic belongs here or
+                // it silently keeps its motion running after a MotionLevel change - the same
+                // omission family as ChipFyp missing from PremiumRailItems, noted just below.
                 var all = new[]
                 {
-                    tab.CardFlash, tab.CardVisuals, tab.CardVideo, tab.CardSubliminal,
-                    tab.CardSpiral, tab.CardLockCard, tab.CardPinkFilter, tab.CardMindWipe,
-                    tab.CardBubblePop, tab.CardBouncingText, tab.CardBubbleCount,
-                    tab.CardBrainDrain,
+                    tab.CardDtrh, tab.CardGoon, tab.CardFyp,
+                    tab.CardIntake, tab.CardRemote,
+                    tab.CardLoom, tab.CardDeeper, tab.CardJustDrop,
                 };
                 return all.Where(c => c != null)!;
             }

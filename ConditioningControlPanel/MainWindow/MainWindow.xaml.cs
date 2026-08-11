@@ -644,16 +644,16 @@ namespace ConditioningControlPanel
             // handlers were removed when the launcher became a real tab — see
             // MainWindow.Exclusives.cs.)
 
-            // velvet-mosaic: highlight dashboard cards whose feature is enabled, and
-            // keep them in sync when settings change anywhere else.
-            Loaded += (_, __) => RefreshFeatureCardActiveStates();
-            if (App.Settings?.Current is System.ComponentModel.INotifyPropertyChanged settingsInpc)
-            {
-                settingsInpc.PropertyChanged += OnSettingsPropertyChangedForCards;
-            }
-            // velvet-mosaic: right-clicking a card quick-toggles its feature on/off.
-            SettingsTab.VelvetFeatureGrid.AddHandler(Features.FeatureCard.ToggleRequestedEvent,
-                new RoutedEventHandler(OnFeatureCardToggleRequested));
+            // velvet-mosaic (2026-08-11 rebuild): the active-state INPC subscription and the
+            // ToggleRequested handler that used to be registered here are gone with the twelve FX
+            // tiles they served. The wall is eight destinations now — "on" is not a state Down the
+            // Rabbit Hole has — so there is nothing to highlight and nothing to quick-toggle. The
+            // gesture moved to the premium rail, where the chips genuinely are toggles, and the
+            // per-feature state dots live in the Studio rack beside the dials.
+            //
+            // The mosaic's own repaint (tier price tags) hangs off RefreshPremiumRail instead,
+            // which already carries the three triggers it needs: patron status arriving or being
+            // lost, the Home door being shown, and the weekly intake pass changing.
         }
 
         private void OnXPChanged(object? sender, double xp)
@@ -1616,22 +1616,24 @@ namespace ConditioningControlPanel
         {
             try
             {
-                // Dashboard feature cards (velvet mosaic)
+                // Dashboard feature cards (velvet mosaic, 3x3 destinations since 2026-08-11).
+                //
+                // Only the four tiles that HAVE art are here. Down the Rabbit Hole, the Loom,
+                // Deeper and Just Drop render a glyph instead - there is no PNG for any of them
+                // anywhere in the app (asset audit §6) - and a cardMap row pointing at a file
+                // that does not exist would resolve to null every time, which is a silent no-op
+                // today and a confusing dead row for whoever adds the art later.
+                //
+                // NO ART PATH WAS RENAMED by the rebuild. features/flash.png, spiral_overlay.png,
+                // Pink_filter.png and the rest are still resolved for the Studio rack's own
+                // surfaces, so every .ccpmod that overrides them keeps working untouched - mod
+                // contract rule 2.
                 var cardMap = new (string resourcePath, Features.FeatureCard? card)[]
                 {
-                    ("features/flash.png", SettingsTab.CardFlash),
-                    ("features/mandatory_videos.png", SettingsTab.CardVideo),
-                    ("features/subliminal.png", SettingsTab.CardSubliminal),
-                    ("features/spiral_overlay.png", SettingsTab.CardSpiral),
-                    ("features/Pink_filter.png", SettingsTab.CardPinkFilter),
-                    ("features/Bubble_pop.png", SettingsTab.CardBubblePop),
-                    ("features/Phrase_Lock.png", SettingsTab.CardLockCard),
-                    ("features/bouncing_text.png", SettingsTab.CardBouncingText),
-                    ("features/Mind_Wipers.png", SettingsTab.CardMindWipe),
-                    ("features/Bubble_count.png", SettingsTab.CardBubbleCount),
-                    // Phase 3: the Brain Drain tile. Without this row the tile would keep base art
-                    // after a mod switch forever, which is exactly how ArtFyp got stranded.
-                    ("features/brain_drain.png", SettingsTab.CardBrainDrain),
+                    ("features/goon_game.png", SettingsTab.CardGoon),
+                    ("features/fyp.png", SettingsTab.CardFyp),
+                    ("features/lab_quiz_hero.png", SettingsTab.CardIntake),
+                    ("features/remote_control.png", SettingsTab.CardRemote),
                 };
                 foreach (var (path, card) in cardMap)
                 {

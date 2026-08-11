@@ -1,4 +1,4 @@
-<UserControl x:Class="ConditioningControlPanel.Views.Tabs.SettingsTabView"
+﻿<UserControl x:Class="ConditioningControlPanel.Views.Tabs.SettingsTabView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -418,13 +418,18 @@
                      - 8 stack margin), and it is exactly what the 92px column leaves once
                      the theme's 8px scrollbar takes its share. If the rail column width
                      changes, change this too. -->
+                <!-- MouseRightButtonUp on the STACK, not on each chip: right-button events bubble,
+                     so one router (MainWindow.PremiumRail_RightClick) covers every chip and cannot
+                     be forgotten when a chip is added. Left = open the feature's page, right =
+                     turn it on with its existing settings. -->
                 <StackPanel x:Name="PremiumRailContent" x:FieldModifier="internal" Margin="4,6,4,6"
+                            MouseRightButtonUp="PremiumRailContent_RightClick"
                             Width="69" HorizontalAlignment="Center">
                     <TextBlock Text="PREMIUM" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource SecondaryBrush}"
                                TextAlignment="Center" Margin="0,0,0,6"/>
                     <Button x:Name="ChipTakeover" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
                             Background="{StaticResource ArtTakeover}"
-                            Click="ChipTakeover_Click" ToolTip="Takeover — the companion triggers effects on her own">
+                            Click="ChipTakeover_Click" ToolTip="Takeover — the companion triggers effects on her own · left-click opens it, right-click turns it on">
                         <Grid>
                             <Ellipse x:Name="DotTakeover" x:FieldModifier="internal" Style="{StaticResource ChipDot}"/>
                             <TextBlock Text="Takeover" Style="{StaticResource ChipCaption}"/>
@@ -439,7 +444,7 @@
                     </Button>
                     <Button x:Name="ChipAwareness" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
                             Background="{StaticResource ArtAwareness}"
-                            Click="ChipAwareness_Click" ToolTip="Awareness — reacts to what's on your screen">
+                            Click="ChipAwareness_Click" ToolTip="Awareness — reacts to what's on your screen · left-click opens it, right-click turns it on">
                         <Grid>
                             <Ellipse x:Name="DotAwareness" x:FieldModifier="internal" Style="{StaticResource ChipDot}"/>
                             <TextBlock Text="Awareness" Style="{StaticResource ChipCaption}"/>
@@ -453,7 +458,7 @@
                     </Button>
                     <Button x:Name="ChipHaptics" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
                             Background="{StaticResource ArtHaptics}"
-                            Click="ChipHaptics_Click" ToolTip="Haptics — connect a toy">
+                            Click="ChipHaptics_Click" ToolTip="Haptics — connect a toy · left-click opens it, right-click turns it on">
                         <Grid>
                             <Ellipse x:Name="DotHaptics" x:FieldModifier="internal" Style="{StaticResource ChipDot}"/>
                             <TextBlock Text="Haptics" Style="{StaticResource ChipCaption}"/>
@@ -470,7 +475,7 @@
                          (hence no state dot). -->
                     <Button x:Name="ChipGradedIntake" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
                             Background="{StaticResource ArtIntake}"
-                            Click="ChipGradedIntake_Click" ToolTip="Graded Intake — open the intake page">
+                            Click="ChipGradedIntake_Click" ToolTip="Graded Intake — open the intake page · left- or right-click opens it">
                         <Grid>
                             <TextBlock Text="Intake" Style="{StaticResource ChipCaption}"/>
                             <!-- The one band that is not a tier question: a FREE account holding
@@ -488,7 +493,7 @@
                     </Button>
                     <Button x:Name="ChipVoice" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
                             Background="{StaticResource ArtVoice}"
-                            Click="ChipVoice_Click" ToolTip="She's Listening — turn on voice control (&quot;Hey Bambi&quot;) and the mic">
+                            Click="ChipVoice_Click" ToolTip="She's Listening — voice control (&quot;Hey Bambi&quot;) and the mic · left-click opens it, right-click turns it on">
                         <Grid>
                             <!-- No art file for this one - the glyph stays centred, lifted clear
                                  of the caption band at the foot of the chip. -->
@@ -511,7 +516,7 @@
                          No state dot for the same reason Intake has none. -->
                     <Button x:Name="ChipFyp" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
                             Background="{StaticResource ArtFyp}"
-                            Click="ChipFyp_Click" ToolTip="For You — an endless feed cut from your own library">
+                            Click="ChipFyp_Click" ToolTip="For You — an endless feed cut from your own library · left- or right-click opens it">
                         <Grid>
                             <TextBlock Text="{loc:Str tab_fyp}" Style="{StaticResource ChipCaption}"/>
                             <!-- Band on, click still through: OpenFypFeed owns this gate and
@@ -690,17 +695,40 @@
         </Border>
 
         <!-- ============================================================ -->
-        <!-- VELVET MOSAIC DASHBOARD - 4x4 feature card grid (col 0)       -->
+        <!-- VELVET MOSAIC DASHBOARD - 3x3 destination grid (col 1)        -->
+        <!--                                                              -->
+        <!-- WAS a 4x4 of twelve FX tiles around a 2x2 logo. Every one of -->
+        <!-- those tiles left-click-navigated to a Studio rack module      -->
+        <!-- (Phase 3), so the app's best real estate held twelve          -->
+        <!-- shortcuts into a list the Studio door already shows in full,  -->
+        <!-- while DtRH, Goon, For You, the intake, Deeper and the Loom    -->
+        <!-- had no dashboard presence at all. Owner call, 2026-08-11:     -->
+        <!-- 3x3, logo in the middle, eight slots, four free and four      -->
+        <!-- paid, and the FX keep their one real home in the Studio rack. -->
+        <!--                                                              -->
+        <!-- The free/paid split is diagonal rather than blocked so the    -->
+        <!-- wall does not read as a paywall with a free corner:           -->
+        <!--   DtRH(T2)  Goon(free)  For You(T1)                           -->
+        <!--   Intake(*)  [ LOGO ]   Remote(T1)                            -->
+        <!--   Loom(free) Deeper(free) Just Drop(T1)                       -->
+        <!-- (*) the intake is free once a week - IntakePassService owns    -->
+        <!-- the four states, and the centre logo still flips to the PASS   -->
+        <!-- face when one is waiting.                                     -->
+        <!--                                                              -->
+        <!-- Every tile NAVIGATES to the one existing entry for its         -->
+        <!-- feature; none of them launches anything itself. That is the    -->
+        <!-- same rule the Play door's cards follow (PlayTabView.xaml:1165) -->
+        <!-- and it is what keeps there being exactly one Loom editor, one  -->
+        <!-- FYP window and one Deeper hub no matter how many front doors   -->
+        <!-- point at them.                                                 -->
         <!-- ============================================================ -->
         <Grid Grid.Column="1" Grid.Row="1" x:Name="VelvetFeatureGrid" x:FieldModifier="internal" Margin="5">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
-                <RowDefinition Height="*"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="*"/>
@@ -723,59 +751,56 @@
             <!-- with RegisterTabFx so it parks on every tab switch.            -->
             <!-- ============================================================ -->
             <fx:AmbientFxCanvas x:Name="MosaicFx" x:FieldModifier="internal"
-                                Grid.Row="0" Grid.RowSpan="4"
-                                Grid.Column="0" Grid.ColumnSpan="4"/>
+                                Grid.Row="0" Grid.RowSpan="3"
+                                Grid.Column="0" Grid.ColumnSpan="3"/>
 
             <!-- The Title="" literals below are English design-time fallbacks only.
-                 At runtime MainWindow.ApplyModFeatureNames() overwrites every card
-                 title with the localized (and mod-text-replaced) name.
+                 At runtime MainWindow.ApplyModFeatureNames() overwrites every card title
+                 with the localized name. Two are deliberately NOT localized and not
+                 mod-renamed - "Down the Rabbit Hole" and "Goon Game" are brand names,
+                 identical in all nine language files, exactly as MainWindow.PlayTab.cs:84
+                 already argues for the Descent's lockband.
 
-                 Phase 3: a LEFT-click on a tile is now navigation, not a popup. Each
-                 Card*_Click selects the matching Studio rack entry and shows the Studio
-                 door (MainWindow.Presets.cs) instead of opening a FeaturePopupWindow -
-                 the dials are the same instances, re-hosted by Phase 4, so nothing is
-                 lost and the FeatureOpened bark still fires (from the rack, once).
-                 RIGHT-click is unchanged: it still quick-toggles the feature, and the
-                 handler is attached to VelvetFeatureGrid by name in
-                 MainWindow.xaml.cs:642 - every tile must stay a descendant of it. -->
+                 A LEFT-click navigates to the feature's one existing entry. There is no
+                 right-click quick-toggle on this wall any more: these eight are
+                 destinations, not dose dials, and "turn Down the Rabbit Hole on" is not a
+                 thing you can do to it. The gesture moved to the premium rail, where the
+                 chips ARE toggles - see MainWindow.PremiumRail.cs. -->
 
-            <!-- Row 1: Dashboard features -->
-            <features:FeatureCard Grid.Row="0" Grid.Column="0" x:Name="CardFlash" x:FieldModifier="internal"
-                                  Title="Flash Images"
-                                  Icon="pack://application:,,,/Resources/features/flash.png"
-                                  HelpSectionId="FlashImages"
-                                  Click="CardFlash_Click"/>
-            <features:FeatureCard Grid.Row="0" Grid.Column="1" x:Name="CardVisuals" x:FieldModifier="internal"
-                                  Title="Visuals"
-                                  Glyph="👁"
-                                  HelpSectionId="Visuals"
-                                  Click="CardVisuals_Click"/>
-            <features:FeatureCard Grid.Row="0" Grid.Column="2" x:Name="CardVideo" x:FieldModifier="internal"
-                                  Title="Mandatory Video"
-                                  Icon="pack://application:,,,/Resources/features/mandatory_videos.png"
-                                  HelpSectionId="Video"
-                                  Click="CardVideo_Click"/>
-            <features:FeatureCard Grid.Row="0" Grid.Column="3" x:Name="CardSubliminal" x:FieldModifier="internal"
-                                  Title="Subliminals"
-                                  Icon="pack://application:,,,/Resources/features/subliminal.png"
-                                  HelpSectionId="Subliminals"
-                                  Click="CardSubliminal_Click"/>
-    
-            <!-- Row 2: Left edge + center logo start + right edge -->
-            <features:FeatureCard Grid.Row="1" Grid.Column="0" x:Name="CardSpiral" x:FieldModifier="internal"
-                                  Title="Spiral Overlay"
-                                  Icon="pack://application:,,,/Resources/features/spiral_overlay.png"
-                                  HelpSectionId="SpiralOverlay"
-                                  Click="CardSpiral_Click"/>
-    
-            <!-- Center logo (2x2) spanning rows 1-2, cols 1-2.
+            <!-- Row 1: the Descent, the lobby, the feed -->
+            <features:FeatureCard Grid.Row="0" Grid.Column="0" x:Name="CardDtrh" x:FieldModifier="internal"
+                                  Title="Down the Rabbit Hole"
+                                  Glyph="🐇"
+                                  Click="CardDtrh_Click"/>
+            <features:FeatureCard Grid.Row="0" Grid.Column="1" x:Name="CardGoon" x:FieldModifier="internal"
+                                  Title="Goon Game"
+                                  Icon="pack://application:,,,/Resources/features/goon_game.png"
+                                  Click="CardGoon_Click"/>
+            <features:FeatureCard Grid.Row="0" Grid.Column="2" x:Name="CardFyp" x:FieldModifier="internal"
+                                  Title="For You"
+                                  Icon="pack://application:,,,/Resources/features/fyp.png"
+                                  Click="CardFyp_Click"/>
+
+            <!-- Row 2: left edge + centre logo + right edge -->
+            <features:FeatureCard Grid.Row="1" Grid.Column="0" x:Name="CardIntake" x:FieldModifier="internal"
+                                  Title="Graded Intake"
+                                  Icon="pack://application:,,,/Resources/features/lab_quiz_hero.png"
+                                  HelpSectionId="Quiz"
+                                  Click="CardIntake_Click"/>
+
+            <!-- Centre logo, now a single 1x1 cell (was 2x2 on the old 4x4 wall).
                  Doubles as the weekly Graded Intake pass card: when a free account has an
                  unspent run waiting, MainWindow.RefreshIntakePassTile() flips this tile on its
                  Y axis and leaves the PASS face showing until the run is used or the week rolls.
                  The tile is NOT a cutscene - the card face is a standing affordance, so someone
-                 who was on another tab when the week rolled still finds it here. -->
+                 who was on another tab when the week rolled still finds it here.
+
+                 The 3x3 rebuild shrank this cell from ~1/2 of the mosaic's width to ~1/3, so the
+                 PASS face's type is stepped down to match below. The Graded Intake tile sits
+                 directly to its left, which is deliberate reinforcement rather than duplication:
+                 the tile is the standing door, the flip is the "there is one waiting" event. -->
             <Border x:Name="LogoBrandFrame" x:FieldModifier="internal"
-                    Grid.Row="1" Grid.RowSpan="2" Grid.Column="1" Grid.ColumnSpan="2"
+                    Grid.Row="1" Grid.Column="1"
                     Background="#01000000" Margin="6"
                     Cursor="Hand" MouseLeftButtonDown="ImgLogo_MouseLeftButtonDown"
                     ToolTip="{loc:Str tooltip_click_me_rapidly}">
@@ -917,13 +942,20 @@
                             </Border>
 
                             <!-- Headline. Always visible - it is the only thing naming the feature
-                                 in art mode, and it sits on the art's dark top strip. -->
+                                 in art mode, and it sits on the art's dark top strip.
+
+                                 Type on this face is stepped down ~15% from the digits it carried
+                                 on the 4x4 wall: the 3x3 rebuild took the cell from ~1/2 the
+                                 mosaic's width to ~1/3, and these strings are translated into nine
+                                 languages, several of which run longer than the English. The old
+                                 sizes did not overflow - they wrapped to a third line and crowded
+                                 the CTA. -->
                             <TextBlock x:Name="IntakePassHeadline" x:FieldModifier="internal"
                                        Text="{loc:Str intake_pass_card_headline}"
                                        VerticalAlignment="Top" HorizontalAlignment="Center"
-                                       Margin="14,9,14,0"
+                                       Margin="10,7,10,0"
                                        Foreground="{DynamicResource PinkBrush}"
-                                       FontSize="13" FontWeight="Bold"
+                                       FontSize="11" FontWeight="Bold"
                                        TextAlignment="Center" TextWrapping="Wrap"/>
 
                             <!-- Vector block: the pre-art card body. Collapsed whenever art is
@@ -931,27 +963,27 @@
                                  PassCardImage() returned null, which is the documented fallback. -->
                             <StackPanel x:Name="IntakePassVectorBody" x:FieldModifier="internal"
                                         VerticalAlignment="Center" HorizontalAlignment="Center"
-                                        Margin="14,26,14,34">
+                                        Margin="10,20,10,28">
                                 <!-- WPF cannot draw COLR/CPAL color-emoji fonts, so every emoji in
                                      this app is an Image routed through EmojiToImageSource. -->
-                                <Image Width="26" Height="26" HorizontalAlignment="Center"
+                                <Image Width="21" Height="21" HorizontalAlignment="Center"
                                        RenderOptions.BitmapScalingMode="HighQuality"
                                        Source="{Binding Source='✨', Converter={StaticResource EmojiToImageSource}}"/>
 
-                                <Border Height="1" Margin="24,9"
+                                <Border Height="1" Margin="16,7"
                                         Background="{DynamicResource GlassBorderBrush}"/>
 
                                 <TextBlock x:Name="IntakePassBody" x:FieldModifier="internal"
                                            Text="{loc:Str intake_pass_card_body}"
                                            Foreground="{DynamicResource TextMutedBrush}"
-                                           FontSize="11" LineHeight="15"
+                                           FontSize="9.5" LineHeight="13"
                                            TextAlignment="Center" TextWrapping="Wrap"/>
 
                                 <TextBlock Text="{loc:Str intake_pass_card_footnote}"
                                            Foreground="{DynamicResource TextMutedBrush}"
-                                           FontSize="9" Opacity="0.75"
+                                           FontSize="8" Opacity="0.75"
                                            TextAlignment="Center" TextWrapping="Wrap"
-                                           Margin="0,7,0,0"/>
+                                           Margin="0,5,0,0"/>
                             </StackPanel>
 
                             <!-- Bottom bar: the pulsing call to action plus the "(?)" explainer.
@@ -966,7 +998,7 @@
                                  wrap and get clipped off BOTH edges of the card. The 26px spacer
                                  column mirrors the "(?)" (18px button + 8px gutter) so the text
                                  still lands optically centred. -->
-                            <Grid VerticalAlignment="Bottom" Margin="10,0,10,11">
+                            <Grid VerticalAlignment="Bottom" Margin="8,0,8,9">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="26"/>
                                     <ColumnDefinition Width="*"/>
@@ -976,7 +1008,7 @@
                                 <TextBlock x:Name="IntakePassCta" x:FieldModifier="internal"
                                            Grid.Column="1"
                                            Text="{loc:Str intake_pass_card_cta}"
-                                           Foreground="White" FontSize="12" FontWeight="Bold"
+                                           Foreground="White" FontSize="10.5" FontWeight="Bold"
                                            VerticalAlignment="Center"
                                            TextAlignment="Center" TextWrapping="Wrap"
                                            RenderTransformOrigin="0.5,0.5">
@@ -1000,63 +1032,38 @@
                 </Grid>
             </Border>
     
-            <features:FeatureCard Grid.Row="1" Grid.Column="3" x:Name="CardLockCard" x:FieldModifier="internal"
-                                  Title="Lock Card"
-                                  Icon="pack://application:,,,/Resources/features/Phrase_Lock.png"
-                                  HelpSectionId="LockCard"
-                                  Click="CardLockCard_Click"/>
-    
-            <!-- Row 3: Left edge + center logo continued + right edge -->
-            <features:FeatureCard Grid.Row="2" Grid.Column="0" x:Name="CardPinkFilter" x:FieldModifier="internal"
-                                  Title="Pink Filter"
-                                  Icon="pack://application:,,,/Resources/features/Pink_filter.png"
-                                  HelpSectionId="PinkFilter"
-                                  Click="CardPinkFilter_Click"/>
-            <features:FeatureCard Grid.Row="2" Grid.Column="3" x:Name="CardMindWipe" x:FieldModifier="internal"
-                                  Title="Mind Wipe"
-                                  Icon="pack://application:,,,/Resources/features/Mind_Wipers.png"
-                                  HelpSectionId="MindWipe"
-                                  Click="CardMindWipe_Click"/>
-    
-            <!-- Row 4: Bottom row -->
-            <features:FeatureCard Grid.Row="3" Grid.Column="0" x:Name="CardBubblePop" x:FieldModifier="internal"
-                                  Title="Bubble Pop"
-                                  Icon="pack://application:,,,/Resources/features/Bubble_pop.png"
-                                  HelpSectionId="BubblePop"
-                                  Click="CardBubblePop_Click"/>
-            <features:FeatureCard Grid.Row="3" Grid.Column="1" x:Name="CardBouncingText" x:FieldModifier="internal"
-                                  Title="Bouncing Text"
-                                  Icon="pack://application:,,,/Resources/features/bouncing_text.png"
-                                  HelpSectionId="BouncingText"
-                                  Click="CardBouncingText_Click"/>
-            <!-- Brain Drain (Phase 3 rescue). Its only UI used to be the dead ProgressionTab
-                 rectangle; Phase 4 gave it a real panel (Studio rack key "braindrain") and this
-                 tile is its front door. Five registrations keep it honest and all of them are
-                 additive - drop any one and the tile is half-alive:
-                   1. cardMap row              MainWindow.xaml.cs (LoadFeatureImages)  - mod art
-                   2. DashboardFeatureCards    MainWindow.DashboardFx.cs               - RefreshFx
-                   3. ApplyModFeatureNames     MainWindow.UiUpdates.cs                 - title
-                   4. RefreshFeatureCardActiveStates + the INPC filter, MainWindow.Presets.cs
-                   5. OnFeatureCardToggleRequested branch, MainWindow.Presets.cs       - right-click
-                 No HelpSectionId: HelpContentService has no "BrainDrain" entry, and FeatureCard
-                 hides the "?" for unknown ids rather than showing a dead button. -->
-            <features:FeatureCard Grid.Row="3" Grid.Column="2" x:Name="CardBrainDrain" x:FieldModifier="internal"
-                                  Title="Brain Drain"
-                                  Icon="pack://application:,,,/Resources/features/brain_drain.png"
-                                  Click="CardBrainDrain_Click"/>
+            <features:FeatureCard Grid.Row="1" Grid.Column="2" x:Name="CardRemote" x:FieldModifier="internal"
+                                  Title="Remote Control"
+                                  Icon="pack://application:,,,/Resources/features/remote_control.png"
+                                  HelpSectionId="RemoteControl"
+                                  Click="CardRemote_Click"/>
 
-            <!-- CardSystem: DEMOLISHED (UX restructure, Phase 8). Phase 3 traded the ⚙ mosaic
-                 tile for the Brain Drain rescue and left the tile in the tree Collapsed only
-                 because three code sites still dereferenced it by name (DashboardFeatureCards,
-                 ApplyModFeatureNames, and this Click binding). All three died with it. The
-                 entry point is unchanged: the "System" pill in VelvetHelperButtonRow below
-                 calls the SAME MainWindow.CardSystem_Click, so the popup, its mod-aware title
-                 and its NotifyFeatureOpened("System") bark are byte-for-byte what they were. -->
-            <features:FeatureCard Grid.Row="3" Grid.Column="3" x:Name="CardBubbleCount" x:FieldModifier="internal"
-                                  Title="Bubble Count"
-                                  Icon="pack://application:,,,/Resources/features/Bubble_count.png"
-                                  HelpSectionId="BubbleCount"
-                                  Click="CardBubbleCount_Click"/>
+            <!-- Row 3: the two makers and the placeholder -->
+            <!-- Loom and Deeper have no art of their own anywhere in the app (asset audit §6 -
+                 the Deeper tab is 100% emoji-typographic), so they carry the SAME glyphs their
+                 Play door cards carry: 🧵 and 🕳. Inventing art for them here would put two
+                 different faces on one feature. -->
+            <features:FeatureCard Grid.Row="2" Grid.Column="0" x:Name="CardLoom" x:FieldModifier="internal"
+                                  Title="The Loom"
+                                  Glyph="🧵"
+                                  Click="CardLoom_Click"/>
+            <features:FeatureCard Grid.Row="2" Grid.Column="1" x:Name="CardDeeper" x:FieldModifier="internal"
+                                  Title="Deeper"
+                                  Glyph="🕳"
+                                  Click="CardDeeper_Click"/>
+            <!-- Just Drop: the session maker, not built yet (owner, 2026-08-11 - "placeholder for
+                 now"). The tile ships locked with a SOON band rather than hidden, because the
+                 point of putting it on the wall is to say it is coming. CardJustDrop_Click is
+                 deliberately a toast and nothing else: there is no window to open, and a tile
+                 that silently does nothing reads as broken. Wire it to the real launcher when
+                 the feature lands and delete the toast - nothing else on this wall changes.
+                 Placeholder name is a literal on purpose: naming it in nine language files
+                 before the feature exists would be nine rows to re-translate when it is named
+                 for real. -->
+            <features:FeatureCard Grid.Row="2" Grid.Column="2" x:Name="CardJustDrop" x:FieldModifier="internal"
+                                  Title="Just Drop"
+                                  Glyph="🎚"
+                                  Click="CardJustDrop_Click"/>
 
             <!-- ============================================================ -->
             <!-- PROGRAM FEATURE LOCK - the "why" pill. Shown only while a     -->
@@ -1077,7 +1084,7 @@
             <!-- The refusal happens in code, not by swallowing clicks.          -->
             <!-- ============================================================ -->
             <Border x:Name="ProgramFeatureLockRibbon" x:FieldModifier="internal"
-                    Grid.Row="0" Grid.RowSpan="4" Grid.Column="0" Grid.ColumnSpan="4"
+                    Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Grid.ColumnSpan="3"
                     Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="30"
                     VerticalAlignment="Top" HorizontalAlignment="Center"
                     MaxWidth="620" Margin="0,14,0,0" Padding="13,6,13,6"

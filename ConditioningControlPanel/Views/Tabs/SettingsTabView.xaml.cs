@@ -94,6 +94,13 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnMuteBrowser_Click(sender, e);
         }
+        // Right-click anywhere in the chip stack: MainWindow works out which chip took the hit
+        // and turns that feature on/off. Left-click (the Chip*_Click shims below) opens it.
+        private void PremiumRailContent_RightClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.PremiumRail_RightClick(sender, e);
+        }
         private void ChipTakeover_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
@@ -191,67 +198,51 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnWebcamTracking_Click(sender, e);
         }
-        private void CardBouncingText_Click(object sender, RoutedEventArgs e)
+        // ---- velvet mosaic (3x3 destinations, 2026-08-11) --------------------------------
+        // The twelve FX shims that used to live here (CardFlash / CardSpiral / CardPinkFilter
+        // / ...) went with their tiles. Nothing they reached was lost: every one of them
+        // called MainWindow.OpenStudioModule(key), and the Studio door's rack still lists all
+        // sixteen modules by name. These eight replace them and follow the same shape - the
+        // view forwards, MainWindow decides.
+        private void CardDtrh_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardBouncingText_Click(sender, e);
+                mw.CardDtrh_Click(sender, e);
         }
-        private void CardBubbleCount_Click(object sender, RoutedEventArgs e)
+        private void CardGoon_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardBubbleCount_Click(sender, e);
+                mw.CardGoon_Click(sender, e);
         }
-        private void CardBubblePop_Click(object sender, RoutedEventArgs e)
+        private void CardFyp_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardBubblePop_Click(sender, e);
+                mw.CardFyp_Click(sender, e);
         }
-        // Phase 3 rescue: Brain Drain's front door. Its panel is the Studio rack's
-        // "braindrain" entry (Phase 4); before that it had no reachable UI at all.
-        private void CardBrainDrain_Click(object sender, RoutedEventArgs e)
+        private void CardIntake_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardBrainDrain_Click(sender, e);
+                mw.CardIntake_Click(sender, e);
         }
-        private void CardFlash_Click(object sender, RoutedEventArgs e)
+        private void CardRemote_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardFlash_Click(sender, e);
+                mw.CardRemote_Click(sender, e);
         }
-        private void CardLockCard_Click(object sender, RoutedEventArgs e)
+        private void CardLoom_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardLockCard_Click(sender, e);
+                mw.CardLoom_Click(sender, e);
         }
-        private void CardMindWipe_Click(object sender, RoutedEventArgs e)
+        private void CardDeeper_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardMindWipe_Click(sender, e);
+                mw.CardDeeper_Click(sender, e);
         }
-        private void CardPinkFilter_Click(object sender, RoutedEventArgs e)
+        private void CardJustDrop_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardPinkFilter_Click(sender, e);
-        }
-        private void CardSpiral_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardSpiral_Click(sender, e);
-        }
-        private void CardSubliminal_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardSubliminal_Click(sender, e);
-        }
-        private void CardVideo_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardVideo_Click(sender, e);
-        }
-        private void CardVisuals_Click(object sender, RoutedEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.CardVisuals_Click(sender, e);
+                mw.CardJustDrop_Click(sender, e);
         }
         private void ChkDiscordRichPresence_Changed(object sender, RoutedEventArgs e)
         {

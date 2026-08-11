@@ -176,7 +176,7 @@ namespace ConditioningControlPanel
 
             var allOk = true;
             allOk &= PaintSection("ribbon", () => ApplySessionLockRibbon(locked, reason));
-            allOk &= PaintSection("cards", () => ApplySessionLockToFeatureCards(locked, reason));
+            // The "cards" section went with the FX mosaic (2026-08-11) - see below.
             // PHASE 8: the "legacy" section is gone with LegacyDashboardHost - see below.
             allOk &= PaintSection("tabs", () => ApplySessionLockToTabs(locked, reason));
             allOk &= PaintSection("popup", () => ApplySessionLockToFeaturePopup(_activeFeaturePopupContent));
@@ -226,51 +226,19 @@ namespace ConditioningControlPanel
             dash.ProgramFeatureLockRibbon.Visibility = Visibility.Visible;
         }
 
-        /// <summary>
-        /// Dashboard mosaic tiles. Left-click is navigation into the Studio rack since Phase 3
-        /// (it used to open the tile's popup) and stays allowed either way - reading the dose is
-        /// never refused, and the rack paints its own lock on arrival. Only the right-click
-        /// quick-toggle is refused (see OnFeatureCardToggleRequested). The tooltip carries the
-        /// reason so a refused right-click is never mysterious.
-        ///
-        /// FeatureCard.IsLocked is deliberately NOT used: it drops the tile to 35% opacity
-        /// and suppresses the pink "this feature is on" ring, which would hide exactly the
-        /// information the user needs during a session.
-        /// </summary>
-        private void ApplySessionLockToFeatureCards(bool locked, string? reason)
-        {
-            var dash = SettingsTab;
-            if (dash == null) return;
-
-            SetCardLockTooltip(dash.CardFlash, locked, reason);
-            SetCardLockTooltip(dash.CardVisuals, locked, reason);
-            SetCardLockTooltip(dash.CardVideo, locked, reason);
-            SetCardLockTooltip(dash.CardSubliminal, locked, reason);
-            SetCardLockTooltip(dash.CardSpiral, locked, reason);
-            SetCardLockTooltip(dash.CardPinkFilter, locked, reason);
-            SetCardLockTooltip(dash.CardBubblePop, locked, reason);
-            SetCardLockTooltip(dash.CardLockCard, locked, reason);
-            SetCardLockTooltip(dash.CardBubbleCount, locked, reason);
-            SetCardLockTooltip(dash.CardBouncingText, locked, reason);
-            SetCardLockTooltip(dash.CardMindWipe, locked, reason);
-            // Phase 3: Brain Drain got a mosaic tile, so it needs the same explanation its
-            // siblings carry. It IS prescribed dose - a Session carries BrainDrainEnabled plus
-            // its start minute and its intensity ramp (Models/Session.cs:926-929) - and its
-            // Studio panel is already swept by ApplySessionLockToFeaturePopup, so leaving the
-            // tile out would refuse the right-click here and never say why.
-            SetCardLockTooltip(dash.CardBrainDrain, locked, reason);
-            // System is intentionally absent: its popup owns No-Panic, offline mode and the
-            // monitor layout - configuration, not the prescribed dose, and No-Panic is a safety
-            // control. (Phase 8 deleted the Collapsed CardSystem tile; the pill that replaced it
-            // is not a FeatureCard and was never in this sweep.)
-        }
-
-        private static void SetCardLockTooltip(Features.FeatureCard? card, bool locked, string? reason)
-        {
-            if (card == null) return;
-            // Save/restore rather than a bare ClearValue - see SessionLock.ApplyLockToolTip.
-            Features.SessionLock.ApplyLockToolTip(card, locked, reason);
-        }
+        // RETIRED 2026-08-11 with the FX mosaic: ApplySessionLockToFeatureCards.
+        //
+        // It hung a "the program is running this" tooltip on the twelve dashboard FX tiles, so
+        // that the right-click quick-toggle refusing itself was never mysterious. Both halves of
+        // that sentence are gone: the tiles are eight destinations now (Down the Rabbit Hole, the
+        // Goon lobby, the feed - none of them prescribed dose), and there is no quick-toggle on
+        // the wall to refuse.
+        //
+        // NO ENFORCEMENT MOVED OR WEAKENED. The dose dials' real lock is
+        // ApplySessionLockToStudioRack + ApplySessionLockToFeaturePopup, which paint the Studio
+        // rack rows and the live panels - the surfaces that can actually change a dose - and
+        // RefuseIfSessionFeatureLocked still guards every write path. This method only ever wrote
+        // tooltips.
 
         // PHASE 8 (demolition): ApplySessionLockToLegacyDashboard is gone with
         // LegacyDashboardHost. It painted the pre-mosaic dashboard's five enables and eight dosage

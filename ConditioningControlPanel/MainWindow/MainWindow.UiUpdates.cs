@@ -95,31 +95,30 @@ namespace ConditioningControlPanel
             // If a mod is active, use mod-aware text; otherwise use localized text
             string ML(string englishText, string locKey) => ModAwareLabel(englishText, locKey);
 
-            // Dashboard cards draw their own icon, so their captions must not carry the
-            // leading emoji the shared section keys use — strip it off.
-            string MLCard(string englishText, string locKey) => StripLeadingGlyph(ML(englishText, locKey));
+            // (MLCard retired 2026-08-11 with the FX mosaic — the only thing that needed
+            //  "mod-aware AND de-emoji'd" was a dashboard tile caption. StripLeadingGlyph is
+            //  still used directly below: the shared tab/section keys carry a leading emoji and
+            //  a FeatureCard draws its own icon, so a caption using one would show two.)
 
             // Velvet mosaic dashboard cards — the XAML Title="" literals are plain English
-            // design-time fallbacks, so this is the only place they get localized OR
-            // mod-renamed. Keys are the same ones the matching popup titles use.
-            if (SettingsTab.CardFlash != null) SettingsTab.CardFlash.Title = MLCard("Flash Images", "section_flash_images");
-            if (SettingsTab.CardVisuals != null) SettingsTab.CardVisuals.Title = MLCard("Visuals", "section_visuals");
-            if (SettingsTab.CardVideo != null) SettingsTab.CardVideo.Title = MLCard("Mandatory Video", "section_mandatory_video");
-            if (SettingsTab.CardSubliminal != null) SettingsTab.CardSubliminal.Title = MLCard("Subliminals", "section_subliminals_2");
-            if (SettingsTab.CardSpiral != null) SettingsTab.CardSpiral.Title = MLCard("Spiral Overlay", "label_spiral_overlay");
-            if (SettingsTab.CardLockCard != null) SettingsTab.CardLockCard.Title = MLCard("Lock Card", "label_lock_card");
-            if (SettingsTab.CardPinkFilter != null) SettingsTab.CardPinkFilter.Title = MLCard("Pink Filter", "label_pink_filter");
-            if (SettingsTab.CardMindWipe != null) SettingsTab.CardMindWipe.Title = MLCard("Mind Wipe", "label_mind_wipe");
-            if (SettingsTab.CardBubblePop != null) SettingsTab.CardBubblePop.Title = MLCard("Bubble Pop", "label_bubble_pop");
-            if (SettingsTab.CardBouncingText != null) SettingsTab.CardBouncingText.Title = MLCard("Bouncing Text", "label_bouncing_text");
-            // Phase 8: the Collapsed CardSystem tile is gone. "System" is not a feature and has no
-            // mosaic slot; its one surface is the "System" quick-toggle pill, whose popup title
-            // goes through ModAwareLabel in MainWindow.Presets.cs CardSystem_Click - so a mod that
-            // renames the section still renames the only thing the user can see.
-            if (SettingsTab.CardBubbleCount != null) SettingsTab.CardBubbleCount.Title = MLCard("Bubble Count", "label_bubble_count");
-            // Phase 3: the Brain Drain tile. Same key the Studio rack row uses, so a mod that
-            // renames the feature renames both surfaces.
-            if (SettingsTab.CardBrainDrain != null) SettingsTab.CardBrainDrain.Title = MLCard("Brain Drain", "label_brain_drain");
+            // design-time fallbacks, so this is the only place they get localized.
+            //
+            // The eight destination tiles (2026-08-11) go through Loc.Get, NOT MLCard: these are
+            // app features and brands, not the conditioning effects a mod re-themes. "Flash
+            // Images" becoming a mod's own word for it is the whole point of ModAwareLabel; "For
+            // You" or "Deeper" becoming one would just rename the app's own furniture. The twelve
+            // FX titles that DID want mod-renaming still get it — the Studio rack's row captions
+            // run every one of those keys through the same ModAwareLabel (StudioTabView's
+            // RefreshRackLabels), which is now their only visible surface.
+            //
+            // Down the Rabbit Hole / Goon Game / Just Drop carry no key at all: two are brand
+            // names identical in all nine language files (the argument MainWindow.PlayTab.cs:84
+            // already makes for the Descent's lockband) and the third is a placeholder.
+            if (SettingsTab.CardFyp != null) SettingsTab.CardFyp.Title = StripLeadingGlyph(Loc.Get("tab_fyp"));
+            if (SettingsTab.CardIntake != null) SettingsTab.CardIntake.Title = StripLeadingGlyph(Loc.Get("tab_gradedintake"));
+            if (SettingsTab.CardRemote != null) SettingsTab.CardRemote.Title = StripLeadingGlyph(Loc.Get("tab_remote_control"));
+            if (SettingsTab.CardLoom != null) SettingsTab.CardLoom.Title = StripLeadingGlyph(Loc.Get("pl6_loom_title"));
+            if (SettingsTab.CardDeeper != null) SettingsTab.CardDeeper.Title = StripLeadingGlyph(Loc.Get("tab_deeper"));
 
             // Phase 8: the four LegacyDashboardHost section headers (TxtFeatureFlash /
             // TxtFeatureVideo / TxtFeatureSubliminal / TxtFeatureWhispers) went with the host. They
@@ -717,17 +716,14 @@ namespace ConditioningControlPanel
                 // which is why `level` is never read here (gap-report T-4). Phase 8 deleted the 24
                 // ProgressionTab Locked/Unlocked panel flips and the eight feature-art unblur
                 // calls that used to lead this method: they painted controls inside a view no
-                // ShowTab case ever revealed, and that view no longer exists. The mosaic cards
-                // below are the only unlock state left, and they are unconditional too.
-
-                // velvet-mosaic dashboard cards are never locked anymore.
-                if (SettingsTab.CardSpiral != null) SettingsTab.CardSpiral.IsLocked = false;
-                if (SettingsTab.CardPinkFilter != null) SettingsTab.CardPinkFilter.IsLocked = false;
-                if (SettingsTab.CardBubblePop != null) SettingsTab.CardBubblePop.IsLocked = false;
-                if (SettingsTab.CardLockCard != null) SettingsTab.CardLockCard.IsLocked = false;
-                if (SettingsTab.CardBubbleCount != null) SettingsTab.CardBubbleCount.IsLocked = false;
-                if (SettingsTab.CardBouncingText != null) SettingsTab.CardBouncingText.IsLocked = false;
-                if (SettingsTab.CardMindWipe != null) SettingsTab.CardMindWipe.IsLocked = false;
+                // ShowTab case ever revealed, and that view no longer exists.
+                //
+                // 2026-08-11: the seven "IsLocked = false" writes that stood here went with the FX
+                // mosaic. They were belt-and-braces against an XP gate that had already been
+                // removed - every card defaults IsLocked=false and nothing ever set it true. The
+                // 3x3 wall does not use IsLocked at all: a tier gate there is a TierBadge price
+                // tag (MainWindow.Presets.cs RefreshMosaicTierBadges), because the veil IsLocked
+                // draws would black out the very art those tiles exist to show.
 
                 // Tier 2 entitlement. HasLabAccess is the single truth and already covers every
                 // entitlement source (live tier, whitelist, SubscribeStar T2, and the 14-day grace

@@ -799,85 +799,19 @@ namespace ConditioningControlPanel
 
         // --- velvet-mosaic: highlight feature cards whose feature is enabled ---
 
-        private void RefreshFeatureCardActiveStates()
-        {
-            var s = App.Settings?.Current;
-            if (s == null) return;
-            if (SettingsTab.CardFlash != null) SettingsTab.CardFlash.IsActive = s.FlashEnabled;
-            if (SettingsTab.CardVideo != null) SettingsTab.CardVideo.IsActive = s.MandatoryVideosEnabled;
-            if (SettingsTab.CardSubliminal != null) SettingsTab.CardSubliminal.IsActive = s.SubliminalEnabled;
-            if (SettingsTab.CardSpiral != null) SettingsTab.CardSpiral.IsActive = s.SpiralEnabled;
-            if (SettingsTab.CardPinkFilter != null) SettingsTab.CardPinkFilter.IsActive = s.PinkFilterEnabled;
-            if (SettingsTab.CardBubblePop != null) SettingsTab.CardBubblePop.IsActive = s.BubblesEnabled;
-            if (SettingsTab.CardLockCard != null) SettingsTab.CardLockCard.IsActive = s.LockCardEnabled;
-            if (SettingsTab.CardBubbleCount != null) SettingsTab.CardBubbleCount.IsActive = s.BubbleCountEnabled;
-            if (SettingsTab.CardBouncingText != null) SettingsTab.CardBouncingText.IsActive = s.BouncingTextEnabled;
-            if (SettingsTab.CardMindWipe != null) SettingsTab.CardMindWipe.IsActive = s.MindWipeEnabled;
-            if (SettingsTab.CardBrainDrain != null) SettingsTab.CardBrainDrain.IsActive = s.BrainDrainEnabled;
-            // Visuals and System cards have no single "enabled" toggle; they stay neutral.
-        }
-
-        // Quick-toggle: right-clicking a card flips its feature on/off. Mirrors the
-        // per-feature toggle side effects in the FeatureControl popups so the running
-        // effect actually starts/stops, not just the persisted flag.
-        private void OnFeatureCardToggleRequested(object sender, RoutedEventArgs e)
-        {
-            if (e.OriginalSource is not Features.FeatureCard card) return;
-            var s = App.Settings?.Current;
-            if (s == null) return;
-            // A running session owns the prescribed dose - see MainWindow.SessionFeatureLock.cs.
-            // Derived from live engine state on every click, so there is nothing to un-stick.
-            if (RefuseIfSessionFeatureLocked($"card:{card.Title}")) return;
-            var running = App.IsEngineRunning;
-            try
-            {
-                if (card == SettingsTab.CardFlash) { var on = s.FlashEnabled = !s.FlashEnabled; if (running) { if (on) App.Flash?.Start(); else App.Flash?.Stop(); } }
-                else if (card == SettingsTab.CardVideo) { var on = s.MandatoryVideosEnabled = !s.MandatoryVideosEnabled; if (running) { if (on) App.Video?.Start(); else App.Video?.Stop(); } }
-                else if (card == SettingsTab.CardSubliminal) { var on = s.SubliminalEnabled = !s.SubliminalEnabled; if (running) { if (on) App.Subliminal?.Start(); else App.Subliminal?.Stop(); } }
-                else if (card == SettingsTab.CardSpiral) { s.SpiralEnabled = !s.SpiralEnabled; App.Overlay?.RefreshOverlays(); }
-                else if (card == SettingsTab.CardPinkFilter) { s.PinkFilterEnabled = !s.PinkFilterEnabled; App.Overlay?.RefreshOverlays(); }
-                else if (card == SettingsTab.CardBubblePop) { var on = s.BubblesEnabled = !s.BubblesEnabled; if (running) { if (on) App.Bubbles?.Start(); else App.Bubbles?.Stop(); } }
-                else if (card == SettingsTab.CardLockCard) { var on = s.LockCardEnabled = !s.LockCardEnabled; if (running) { if (on) App.LockCard?.Start(); else App.LockCard?.Stop(); } }
-                else if (card == SettingsTab.CardBubbleCount) { var on = s.BubbleCountEnabled = !s.BubbleCountEnabled; if (running) { if (on) App.BubbleCount?.Start(); else App.BubbleCount?.Stop(); } }
-                else if (card == SettingsTab.CardBouncingText) { var on = s.BouncingTextEnabled = !s.BouncingTextEnabled; if (running) { if (on) App.BouncingText?.Start(); else App.BouncingText?.Stop(); } }
-                else if (card == SettingsTab.CardMindWipe) { s.MindWipeEnabled = !s.MindWipeEnabled; }
-                else if (card == SettingsTab.CardBrainDrain)
-                {
-                    // Mirrors BrainDrainFeatureControl.ChkEnable_Changed. The legacy write-back
-                    // into the ghost checkbox died in Phase 8 along with SaveSettings' read of it;
-                    // the panel now repaints off AppSettings.PropertyChanged like every sibling.
-                    var on = s.BrainDrainEnabled = !s.BrainDrainEnabled;
-                    if (running) { if (on) App.BrainDrain?.Start(); else App.BrainDrain?.Stop(); }
-                }
-                else return; // Visuals / System cards have no single on/off toggle.
-                App.Settings?.Save();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "Feature card quick-toggle failed for {Card}", card.Title);
-            }
-            // Flipping the flag fires OnSettingsPropertyChangedForCards which updates the
-            // highlight; refresh explicitly too in case INPC didn't surface the change.
-            RefreshFeatureCardActiveStates();
-        }
-
-        private void OnSettingsPropertyChangedForCards(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-        {
-            if (e.PropertyName == nameof(Models.AppSettings.FlashEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.MandatoryVideosEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.SubliminalEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.SpiralEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.PinkFilterEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.BubblesEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.LockCardEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.BubbleCountEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.BouncingTextEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.MindWipeEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.BrainDrainEnabled))
-            {
-                Dispatcher.BeginInvoke(new Action(RefreshFeatureCardActiveStates));
-            }
-        }
+        // RETIRED with the FX mosaic (2026-08-11): RefreshFeatureCardActiveStates,
+        // OnFeatureCardToggleRequested and OnSettingsPropertyChangedForCards.
+        //
+        // All three existed to serve twelve FX tiles that no longer exist. The pink "this
+        // feature is on" ring and the right-click quick-toggle they drove live on where the
+        // dials do — the Studio rack paints a state dot per module from the same AppSettings
+        // flags (StudioTabView.xaml.cs, the Dot column), and the premium rail now carries the
+        // quick-toggle gesture for the features that ARE toggles.
+        //
+        // Nothing else referenced them: their only callers were each other plus the two
+        // registrations in MainWindow.xaml.cs, which went at the same time. FeatureCard keeps
+        // IsActive and still raises ToggleRequested — both are part of the control's contract
+        // and cost nothing unhandled — so a future toggleable tile needs no surgery here.
 
         // --- velvet-mosaic: dashboard feature card click dispatcher ----------
 
@@ -984,33 +918,126 @@ namespace ConditioningControlPanel
             ShowTab("studio");
         }
 
-        internal void CardFlash_Click(object sender, RoutedEventArgs e) => OpenStudioModule("flash");
+        // =====================================================================================
+        //  VELVET MOSAIC - the 3x3 destination wall (owner rebuild, 2026-08-11)
+        // =====================================================================================
+        //
+        // The twelve FX handlers that used to sit here (CardFlash_Click ... CardBrainDrain_Click)
+        // are gone with their tiles. Every one of them was a one-liner onto OpenStudioModule, and
+        // the Studio door's rack still lists all sixteen modules by name and by mod-aware caption,
+        // so no feature lost a door - the dashboard just stopped holding twelve shortcuts into a
+        // list that was already one click away, and spent the room on eight features that had no
+        // dashboard presence at all.
+        //
+        // THE RULE FOR EVERY HANDLER BELOW: navigate to the ONE existing entry, never launch.
+        // That is the same rule the Play door's cards follow, and the reason is written up at
+        // PlayTabView.xaml:1163-1167 - a second LoomHostService.Launch() button is a second Loom
+        // editor, and two editors over one store is a corruption bug waiting for a slow disk.
+        // Each of these calls the very handler the Play card / rail chip calls, so the count of
+        // launchers per feature stays at exactly one no matter how many front doors point at it.
 
-        internal void CardVisuals_Click(object sender, RoutedEventArgs e) => OpenStudioModule("visuals");
+        internal void CardDtrh_Click(object sender, RoutedEventArgs e) => ShowTab("play");
 
-        internal void CardVideo_Click(object sender, RoutedEventArgs e) => OpenStudioModule("video");
-
-        internal void CardSubliminal_Click(object sender, RoutedEventArgs e) => OpenStudioModule("subliminal");
-
-        internal void CardSpiral_Click(object sender, RoutedEventArgs e) => OpenStudioModule("spiral");
-
-        internal void CardPinkFilter_Click(object sender, RoutedEventArgs e) => OpenStudioModule("pinkfilter");
-
-        internal void CardBubblePop_Click(object sender, RoutedEventArgs e) => OpenStudioModule("bubbles");
-
-        internal void CardLockCard_Click(object sender, RoutedEventArgs e) => OpenStudioModule("lockcard");
-
-        internal void CardBubbleCount_Click(object sender, RoutedEventArgs e) => OpenStudioModule("bubblecount");
-
-        internal void CardBouncingText_Click(object sender, RoutedEventArgs e) => OpenStudioModule("bouncingtext");
-
-        internal void CardMindWipe_Click(object sender, RoutedEventArgs e) => OpenStudioModule("mindwipe");
+        internal void CardGoon_Click(object sender, RoutedEventArgs e) => ShowTab("play");
 
         /// <summary>
-        /// Phase 3 rescue: Brain Drain's front door. Its panel was rebuilt in Phase 4 from the dead
-        /// ProgressionTab markup; before that the feature had no reachable UI at all.
+        /// ShowTab intercepts "fyp" and calls OpenFypFeed, which owns the premium gate. Routed
+        /// through ShowTab rather than calling OpenFypFeed directly so this tile, the rail's For
+        /// You chip and the Exclusives spotlight card all share one launch path.
         /// </summary>
-        internal void CardBrainDrain_Click(object sender, RoutedEventArgs e) => OpenStudioModule("braindrain");
+        internal void CardFyp_Click(object sender, RoutedEventArgs e) => ShowTab("fyp");
+
+        internal void CardIntake_Click(object sender, RoutedEventArgs e) => ShowTab("gradedintake");
+
+        internal void CardRemote_Click(object sender, RoutedEventArgs e) => ShowTab("remotecontrol");
+
+        /// <summary>
+        /// The Loom's only entry is BtnOpenLoom on the Spiral module of the Studio rack
+        /// (Features\SpiralFeatureControl.xaml:135). This walks the user to it — same route the
+        /// Play door's Loom card takes.
+        /// </summary>
+        internal void CardLoom_Click(object sender, RoutedEventArgs e) => OpenStudioModule("spiral");
+
+        /// <summary>
+        /// BtnDeeper_Click rather than ShowTab("deeper"): the rail entry also clears the
+        /// first-visit pulse, saves HasSeenDeeperTab, refreshes the welcome card and lazy-inits
+        /// the hub. Re-implementing the navigation would leave that pulse breathing forever.
+        /// </summary>
+        internal void CardDeeper_Click(object sender, RoutedEventArgs e) => BtnDeeper_Click(sender, e);
+
+        /// <summary>
+        /// Just Drop: the session maker, not built yet (owner, 2026-08-11 — placeholder tile).
+        ///
+        /// <para>A toast and nothing else, on purpose. The tile is on the wall to announce the
+        /// feature, and there is no window to open; a tile that silently does nothing when
+        /// clicked reads as a bug, and this app has shipped that bug before. When the real
+        /// launcher lands, replace this body with it and drop the SOON badge in
+        /// <see cref="RefreshMosaicTierBadges"/> — nothing else on the wall changes.</para>
+        /// </summary>
+        internal void CardJustDrop_Click(object sender, RoutedEventArgs e)
+        {
+            // Literal copy, like the tile's own title: naming a placeholder in nine language
+            // files buys nine rows to re-translate the day it gets its real name.
+            App.Notifications?.Show("Just Drop is on the way — the session maker lands in a "
+                                    + "future update.", NotificationType.Info, TimeSpan.FromSeconds(6));
+        }
+
+        /// <summary>
+        /// Paints the mosaic's price tags. Badge shown only when the account cannot use the
+        /// feature — once you own a thing the tag is noise, which is exactly how the Play door's
+        /// lockbands and the rail's behave (<c>SetLockband</c> hides on <c>verdict.Allowed</c>).
+        ///
+        /// <para>Every verdict comes from <see cref="TierGate"/>, the same call the click handler
+        /// makes on its way in, so the tag on the tile and the refusal the click produces cannot
+        /// disagree. The four free tiles (Goon, the Loom, Deeper, and the intake once its pass is
+        /// in hand) carry no tag at all: absence is how this wall says "free", and it keeps the
+        /// only badges on screen the ones that cost something.</para>
+        ///
+        /// <para>Called from <c>RefreshPremiumRail</c>, which already carries the three triggers
+        /// this needs — patron status landing or being lost, the Home door being shown, and the
+        /// weekly intake pass changing under <c>EnsureIntakePassRailHooked</c>.</para>
+        /// </summary>
+        internal void RefreshMosaicTierBadges()
+        {
+            var dash = SettingsTab;
+            if (dash == null) return;
+
+            try
+            {
+                // "Down the Rabbit Hole" stays a literal here for the same reason it is one in
+                // MainWindow.PlayTab.cs:84 — it is the brand name, identical in all nine files.
+                SetTierBadge(dash.CardDtrh, TierGate.RequiresLab("Down the Rabbit Hole").Allowed,
+                             Loc.Get("hm3_rail_lock_t2"));
+                SetTierBadge(dash.CardFyp, TierGate.RequiresPremium(Loc.Get("tab_fyp")).Allowed,
+                             Loc.Get("hm3_rail_lock_t1"));
+                SetTierBadge(dash.CardRemote,
+                             TierGate.RequiresPremium(Loc.Get("tab_remote_control")).Allowed,
+                             Loc.Get("hm3_rail_lock_t1"));
+
+                // The intake is the one tile whose tag is not a tier question. Same rule the rail
+                // band uses (MainWindow.PremiumRail.cs:487): the service is the truth, and on a
+                // missing service premium keeps its open tile and everyone else sees the tag.
+                var intakeOpen = App.IntakePass?.CanStartIntake
+                                 ?? (App.Patreon?.HasPremiumAccess == true);
+                SetTierBadge(dash.CardIntake, intakeOpen, Loc.Get("hm3_rail_lock_pass"));
+
+                // Nobody has Just Drop, including the owner, so this one never clears. Literal,
+                // like the tile's title - see CardJustDrop_Click.
+                SetTierBadge(dash.CardJustDrop, false, "SOON");
+
+                // Goon, the Loom and Deeper are deliberately absent: joining a Goon lobby is free
+                // by design (only send/host are paid, and the Play card names those rungs in a
+                // sub-line rather than hiding them behind a padlock), and the other two are free
+                // outright.
+            }
+            catch (Exception ex) { App.Logger?.Debug("RefreshMosaicTierBadges: {E}", ex.Message); }
+        }
+
+        private static void SetTierBadge(Features.FeatureCard? card, bool allowed, string badge)
+        {
+            if (card == null) return;
+            card.TierBadge = allowed ? null : badge;
+        }
 
         /// <summary>
         /// The System popup. Still a <see cref="Features.FeaturePopupWindow"/> because System has
