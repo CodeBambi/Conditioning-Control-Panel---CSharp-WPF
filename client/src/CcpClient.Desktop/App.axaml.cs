@@ -27,6 +27,10 @@ public partial class App : Application
     private readonly bool _loomDemo;
     private readonly string? _loomDrive;
     private readonly int _loomAutoCloseSeconds;
+    private readonly bool _intakeDemo;
+    private readonly string? _intakeDrive;
+    private readonly bool _intakeKillRenderers;
+    private readonly int _intakeAutoCloseSeconds;
     private StreamWriter? _avatarTraceWriter;
 
     public App(ApplicationHost host, bool popupDemo = false,
@@ -34,7 +38,9 @@ public partial class App : Application
         bool avatarAnimate = false, bool dtrhDemo = false, string dtrhPage = "index.html",
         int dtrhAutoCloseSeconds = 0, bool dtrhQuick = false, int dtrhPickerTimeoutSeconds = 0,
         string? dtrhFxDrive = null, bool dtrhM2Test = false, bool dtrhKillRenderers = false,
-        bool loomDemo = false, string? loomDrive = null, int loomAutoCloseSeconds = 0)
+        bool loomDemo = false, string? loomDrive = null, int loomAutoCloseSeconds = 0,
+        bool intakeDemo = false, string? intakeDrive = null, bool intakeKillRenderers = false,
+        int intakeAutoCloseSeconds = 0)
     {
         _host = host;
         _popupDemo = popupDemo;
@@ -53,6 +59,10 @@ public partial class App : Application
         _loomDemo = loomDemo;
         _loomDrive = loomDrive;
         _loomAutoCloseSeconds = loomAutoCloseSeconds;
+        _intakeDemo = intakeDemo;
+        _intakeDrive = intakeDrive;
+        _intakeKillRenderers = intakeKillRenderers;
+        _intakeAutoCloseSeconds = intakeAutoCloseSeconds;
     }
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
@@ -229,6 +239,41 @@ public partial class App : Application
                             }), TaskScheduler.Default);
                     }
                 };
+            }
+            // SP-054 Graded Intake DEMONSTRATOR (--intake-demo): the host flow at startup
+            // (the --loom-demo demonstrator class; the dashboard flip-tile/nudge is the
+            // BLOCKED inventory's item — flagged glue, SP-054 record.md). The flow ending
+            // (window closed for real / watchdog exhaustion) ends the app (exit-0 evidence).
+            if (_intakeDemo)
+            {
+                var intakeCoordinator = new Features.Intake.IntakeLaunchCoordinator(
+                    _host, dashboard, _intakeDrive, _intakeKillRenderers);
+                intakeCoordinator.FlowEnded += () =>
+                {
+                    _host.LogDiagnostic("intake: flow ended — shutting down the lifetime");
+                    desktop.Shutdown();
+                };
+                intakeCoordinator.HostOpened += () =>
+                {
+                    if (_intakeAutoCloseSeconds <= 0)
+                    {
+                        return;
+                    }
+
+                    // SP-008 no-input exit evidence: the timed close exercises the same
+                    // graceful teardown path (end-run + bounded exit-done wait).
+                    _host.LogDiagnostic($"intake: auto-close armed at {_intakeAutoCloseSeconds}s");
+                    _ = Task.Delay(TimeSpan.FromSeconds(_intakeAutoCloseSeconds)).ContinueWith(
+                        _ => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        {
+                            _host.LogDiagnostic("intake: auto-close firing");
+                            if (intakeCoordinator.HostWindow?.IsVisible == true)
+                            {
+                                intakeCoordinator.HostWindow.Close();
+                            }
+                        }), TaskScheduler.Default);
+                };
+                dashboard.Opened += (_, _) => intakeCoordinator.Launch();
             }
         }
 

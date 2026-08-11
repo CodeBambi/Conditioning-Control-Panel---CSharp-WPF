@@ -180,12 +180,27 @@ public static class Program
             ? loomCloseSeconds
             : 0;
 
+        // SP-054 Graded Intake host (--intake-demo): the demonstrator class (the
+        // --loom-demo precedent; the dashboard flip-tile/nudge is the BLOCKED inventory's
+        // item — flagged scope expansion, record.md glue bundle). --intake-drive "<steps>"
+        // is HARNESS-ONLY (raw page JSON through the real dispatch path: quiz-result /
+        // intake-close / fullscreen-set / exit / loom-file). --intake-kill-renderers arms
+        // the W17 watchdog-relaunch injection on the intake profile. --intake-auto-close
+        // <seconds> closes on a timer (SP-008 no-input exit evidence).
+        var intakeDemo = args.Contains("--intake-demo", StringComparer.Ordinal);
+        var intakeDrive = ArgValue(args, "--intake-drive");
+        var intakeKillRenderers = args.Contains("--intake-kill-renderers", StringComparer.Ordinal);
+        var intakeAutoClose = int.TryParse(ArgValue(args, "--intake-auto-close"), out var intakeCloseSeconds)
+            ? intakeCloseSeconds
+            : 0;
+
         try
         {
             // Phase 4 (UserInterface): the Avalonia lifetime itself.
             return BuildAvaloniaApp(host!, popupDemo, avatarDemo, avatarCorrupt, avatarTrace, avatarAnimate,
                 dtrhDemo, dtrhPage, dtrhAutoClose, dtrhQuick, dtrhPickerTimeout, dtrhFxDrive, dtrhM2Test,
-                dtrhKillRenderers, loomDemo, loomDrive, loomAutoClose).StartWithClassicDesktopLifetime(args);
+                dtrhKillRenderers, loomDemo, loomDrive, loomAutoClose,
+                intakeDemo, intakeDrive, intakeKillRenderers, intakeAutoClose).StartWithClassicDesktopLifetime(args);
         }
         catch (Exception ex)
         {
@@ -255,12 +270,15 @@ public static class Program
         bool avatarAnimate = false, bool dtrhDemo = false, string dtrhPage = "index.html",
         int dtrhAutoCloseSeconds = 0, bool dtrhQuick = false, int dtrhPickerTimeoutSeconds = 0,
         string? dtrhFxDrive = null, bool dtrhM2Test = false, bool dtrhKillRenderers = false,
-        bool loomDemo = false, string? loomDrive = null, int loomAutoCloseSeconds = 0)
+        bool loomDemo = false, string? loomDrive = null, int loomAutoCloseSeconds = 0,
+        bool intakeDemo = false, string? intakeDrive = null, bool intakeKillRenderers = false,
+        int intakeAutoCloseSeconds = 0)
     {
         var builder = AppBuilder
             .Configure<App>(() => new App(host, popupDemo, avatarDemo, avatarCorrupt, avatarTracePath, avatarAnimate,
                 dtrhDemo, dtrhPage, dtrhAutoCloseSeconds, dtrhQuick, dtrhPickerTimeoutSeconds, dtrhFxDrive, dtrhM2Test,
-                dtrhKillRenderers, loomDemo, loomDrive, loomAutoCloseSeconds))
+                dtrhKillRenderers, loomDemo, loomDrive, loomAutoCloseSeconds,
+                intakeDemo, intakeDrive, intakeKillRenderers, intakeAutoCloseSeconds))
             .UsePlatformDetect();
         // Live-UI MCP seat (avalonia-live, Keincheck embedded server on http://127.0.0.1:3001).
         // Opt-in per run (CCP_MCP=1) so tests and normal runs never bind the port.

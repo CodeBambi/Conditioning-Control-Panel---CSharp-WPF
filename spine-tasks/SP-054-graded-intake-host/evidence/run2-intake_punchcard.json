@@ -1,0 +1,17 @@
+{
+  "cardStartedUtc": "2026-08-11T22:12:36.0667151\u002B00:00",
+  "punchedCount": 1,
+  "punchedUtc": [
+    "2026-08-11T22:12:36.0667151\u002B00:00"
+  ],
+  "pendingDrafts": [
+    {
+      "sessionId": "076fbdd0-9b58-41c0-a5de-248949c8ef4d",
+      "draftedUtc": "2026-08-11T22:12:36.068909\u002B00:00"
+    }
+  ],
+  "completedUtc": null,
+  "prizeClaimedUtc": null,
+  "schemaVersion": 1,
+  "migrationJournal": []
+}

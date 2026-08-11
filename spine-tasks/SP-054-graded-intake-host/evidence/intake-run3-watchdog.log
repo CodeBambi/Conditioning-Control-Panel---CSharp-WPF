@@ -1,0 +1,142 @@
+dtrh: payload root 'C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260811T164933\lane-1\client\src\CcpClient.Desktop\bin\Debug\net10.0\payload\dtrh' -> Present (1542 files)
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)
+layout-probe: card 488.0x77.1 DIP @ scale 1.75 @ screen 348,442
+intake: payload root 'C:\Code\Conditioning-Control-Panel---CSharp-WPF\.worktrees\spine-20260811T164933\lane-1\client\src\CcpClient.Desktop\bin\Debug\net10.0\payload\intake' -> Present (2137 files)
+dtrh-loopback: page+media origins bound on 127.0.0.1 (ephemeral)
+intake: dashboard ducked (minimized; prior state recorded)
+intake: WebView2 UserDataFolder set (browser_data_intake parity); autoplay-policy=no-user-gesture-required
+intake: navigating embedded surface
+intake: auto-close armed at 90s
+intake: AdapterCreated info='DetailedWebViewAdapterInfo { Type = WebView2, Engine = Blink, Version = 151.0.4129.72, IsSupported = True, IsInstalled = True, UnavailableReason = , SupportedScenarios = NativeControlHost }'
+intake: native ProcessFailed signal ATTACHED (W17 immediate route)
+dtrh-loopback: GET /dtrh/index.html/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/styles.css/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/boot.js/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/web-shim.js/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/core/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/core/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/core/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/core/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/core/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/ui/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/core/… -> 200 (page:overlay)
+intake: ready received — flushing init
+dtrh-loopback: GET /favicon.ico/ -> 404
+dtrh-media: manifest — 0 image(s), 0 video(s), 0 skipped
+intake: init sent (niche bambi [seam default + bank clamp]; mic consent-gated OFF; ai EMPTY-token local stub [WPF logged-out parity]; media null (empty pool); subject id local-only)
+intake: HARNESS kill-renderers armed at +12s (first kill — relaunch-once expected)
+intake page log: boot: ready posted
+intake page log: boot: niche=bambi hosted=true endless=false
+dtrh-loopback: GET /dtrh/core/… -> 200 (page:overlay)
+intake: NavigationCompleted success=True (surface embedded)
+dtrh-loopback: GET /dtrh/core/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/ui/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/core/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/banks/… -> 200 (page:overlay)
+intake page log: bank bambi: 650 prompts, 5 archetypes
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/ui/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/ui/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/ui/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/ui/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/ui/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/assets/… -> 206 (page:overlay)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/assets/… -> 206 (page:overlay)
+intake: heartbeat #1
+intake: HARNESS kill-renderers FIRING (killing profile-matched msedgewebview2 children — W17 injection)
+intake: native ProcessFailed — BrowserProcessExited (immediate detection)
+intake: watchdog demands RELAUNCH (process-failed:BrowserProcessExited) — generation 1
+intake: recovery (process-failed:BrowserProcessExited) — relaunching ONCE windowed (generation 1)
+intake: dashboard restored (Normal)
+intake: HARNESS kill-renderers outcome: Recovered { KilledCount = 4 }
+intake: relaunch-path stale-profile recovery: NothingToKill { }
+intake: dashboard ducked (minimized; prior state recorded)
+intake: WebView2 UserDataFolder set (browser_data_intake parity); autoplay-policy=no-user-gesture-required
+intake: navigating embedded surface
+intake: auto-close armed at 90s
+intake: AdapterCreated info='DetailedWebViewAdapterInfo { Type = WebView2, Engine = Blink, Version = 151.0.4129.72, IsSupported = True, IsInstalled = True, UnavailableReason = , SupportedScenarios = NativeControlHost }'
+intake: native ProcessFailed signal ATTACHED (W17 immediate route)
+dtrh-loopback: GET /dtrh/index.html/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/styles.css/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/boot.js/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/web-shim.js/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/core/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/core/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/core/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/core/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/core/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/ui/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/core/… -> 200 (page:overlay)
+intake: ready received — flushing init
+dtrh-loopback: GET /favicon.ico/ -> 404
+dtrh-media: manifest — 0 image(s), 0 video(s), 0 skipped
+intake: init sent (niche bambi [seam default + bank clamp]; mic consent-gated OFF; ai EMPTY-token local stub [WPF logged-out parity]; media null (empty pool); subject id local-only)
+intake: HARNESS kill-renderers armed at +8s (SECOND kill — exhaustion expected)
+intake page log: boot: ready posted
+intake: NavigationCompleted success=True (surface embedded)
+intake page log: boot: niche=bambi hosted=true endless=false
+dtrh-loopback: GET /dtrh/core/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/core/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/core/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/ui/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/game/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/banks/… -> 200 (page:overlay)
+intake page log: bank bambi: 650 prompts, 5 archetypes
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/vendor/… -> 200 (page:payload)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/ui/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/ui/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/ui/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/ui/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/ui/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/render/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/assets/… -> 206 (page:overlay)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/assets/… -> 200 (page:overlay)
+dtrh-loopback: GET /dtrh/assets/… -> 206 (page:overlay)
+intake: heartbeat #1
+intake: HARNESS kill-renderers FIRING (killing profile-matched msedgewebview2 children — W17 injection)
+intake: native ProcessFailed — BrowserProcessExited (immediate detection)
+intake: watchdog demands EXHAUSTED close (process-failed:BrowserProcessExited) — never a restart loop
+intake: recovery (process-failed:BrowserProcessExited) — relaunch already spent; honest close (WPF 'giving up' parity)
+intake: dashboard restored (Normal)
+intake: participant stop
+intake: flow ended — shutting down the lifetime
+intake: HARNESS kill-renderers outcome: Recovered { KilledCount = 5 }
+app: Exit — teardown begin
+dtrh: participant stop begin
+dtrh: participant stop end
+app: teardown end

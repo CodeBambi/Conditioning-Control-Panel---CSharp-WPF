@@ -1,0 +1,33 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="CcpClient.Desktop.Features.Intake.IntakeHostWindow"
+        Title="Graded Intake"
+        Width="1280" Height="800"
+        WindowStartupLocation="CenterScreen"
+        Background="#0b0b16">
+  <!--
+    SP-054 Graded Intake host shell (ChaosWebViewHost parity, the landed b-series
+    pattern): the embedded NativeWebView is the WINDOWS surface (WebView2). The Linux
+    NativeWebDialog path is NOT ADMITTED for intake this packet — the page's web-shim
+    has no §3.3 inbox transport (WebView2 chrome.webview only, web-shim.js:28-52), so a
+    dialog would run the page STANDALONE and silently lose quiz results. Where the
+    embedded capability is not Available the honest surface shows — typed, never a
+    silent substitute (Linux = the named limit, WSL zero distros, never faked).
+  -->
+  <DockPanel>
+    <TextBlock x:Name="Status" DockPanel.Dock="Bottom"
+               Foreground="#ff9ad5" Background="#141422" Padding="6"
+               FontFamily="Consolas" FontSize="12"
+               Text="intake host booting" />
+    <Panel>
+      <StackPanel x:Name="UnsupportedPanel" IsVisible="False" Margin="24" Spacing="8">
+        <TextBlock Foreground="#ff9ad5" FontSize="18" FontWeight="Bold"
+                   Text="Graded Intake: honest unsupported" />
+        <TextBlock x:Name="UnsupportedDetail" Foreground="#c8c8dd" TextWrapping="Wrap" />
+      </StackPanel>
+      <!-- NativeWebView is created PROGRAMMATICALLY on the embedded path only (the
+           SP-011 L4 lesson: in the tree it starts its adapter whenever the window shows). -->
+      <Panel x:Name="WebHost" />
+    </Panel>
+  </DockPanel>
+</Window>

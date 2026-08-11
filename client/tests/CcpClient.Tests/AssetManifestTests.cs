@@ -126,15 +126,18 @@ public class AssetManifestTests
     public void CopiedDirection_RealManifest_AllCopiedEntriesPresentCaseExact_SweepClean()
     {
         // SP-023 (first copied consumer — the documented extension of the assert-empty
-        // direction): 1544 copied entries (1542 DTRH payload + 2 product overlay) verified
-        // against the REAL output directory — existence, ordinal case-exactness, sweep.
+        // direction): 3681 copied entries (1542 DTRH payload + 2 product overlay + 2137
+        // intake payload, SP-054's flagged glue bundle) verified against the REAL output
+        // directory — existence, ordinal case-exactness, sweep.
         var entries = LoadRealManifest();
         var copied = entries.Where(e => e.Source == AssetSource.Copied).ToArray();
-        Assert.Equal(1544, copied.Length);
+        Assert.Equal(3681, copied.Length);
         Assert.Contains(copied, e => e.Id == "dtrh.payload/bridge.js"
             && e.Path == "payload/dtrh/bridge.js" && e.Required && e.Trust == "full");
         Assert.Contains(copied, e => e.Id == "dtrh.overlay/bridge.js"
             && e.Path == "payload-overlay/bridge.js");
+        Assert.Contains(copied, e => e.Id == "intake.payload/web-shim.js"
+            && e.Path == "payload/intake/web-shim.js" && e.Required && e.Trust == "full");
         var outputRoot = Path.GetDirectoryName(DesktopAssembly.Location)!;
         var failures = AssetVerifier.VerifyCopied(entries, outputRoot);
         Assert.Empty(failures);
