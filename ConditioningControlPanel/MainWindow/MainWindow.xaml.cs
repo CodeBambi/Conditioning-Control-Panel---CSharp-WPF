@@ -1618,11 +1618,9 @@ namespace ConditioningControlPanel
             {
                 // Dashboard feature cards (velvet mosaic, 3x3 destinations since 2026-08-11).
                 //
-                // Only the four tiles that HAVE art are here. Down the Rabbit Hole, the Loom,
-                // Deeper and Just Drop render a glyph instead - there is no PNG for any of them
-                // anywhere in the app (asset audit §6) - and a cardMap row pointing at a file
-                // that does not exist would resolve to null every time, which is a silent no-op
-                // today and a confusing dead row for whoever adds the art later.
+                // All eight tiles have art now: dtrh/loom/deeper/justdrop.png landed later the
+                // same day (nano-banana batch), NEW paths added to the contract - mods may
+                // override them like any other features/* art.
                 //
                 // NO ART PATH WAS RENAMED by the rebuild. features/flash.png, spiral_overlay.png,
                 // Pink_filter.png and the rest are still resolved for the Studio rack's own
@@ -1634,6 +1632,10 @@ namespace ConditioningControlPanel
                     ("features/fyp.png", SettingsTab.CardFyp),
                     ("features/lab_quiz_hero.png", SettingsTab.CardIntake),
                     ("features/remote_control.png", SettingsTab.CardRemote),
+                    ("features/dtrh.png", SettingsTab.CardDtrh),
+                    ("features/loom.png", SettingsTab.CardLoom),
+                    ("features/deeper.png", SettingsTab.CardDeeper),
+                    ("features/justdrop.png", SettingsTab.CardJustDrop),
                 };
                 foreach (var (path, card) in cardMap)
                 {

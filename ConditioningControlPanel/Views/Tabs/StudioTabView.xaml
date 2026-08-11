@@ -114,7 +114,12 @@
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Image Grid.Column="0" Width="30" Height="30" Margin="0,0,12,0" VerticalAlignment="Center"
-                   Source="{Binding Source='🎛️', Converter={StaticResource EmojiToImageSource}}"/>
+                   RenderOptions.BitmapScalingMode="HighQuality"
+                   Source="pack://application:,,,/Resources/nav/door_studio.png">
+                <Image.Clip>
+                    <RectangleGeometry Rect="0,0,30,30" RadiusX="8" RadiusY="8"/>
+                </Image.Clip>
+            </Image>
             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                 <TextBlock x:Name="TxtStudioTitle" Text="{loc:Str st4_studio_title}"
                            Foreground="White" FontSize="21" FontWeight="Bold"/>

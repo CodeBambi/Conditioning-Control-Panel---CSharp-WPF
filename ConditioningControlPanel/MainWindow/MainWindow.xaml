@@ -69,7 +69,8 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Height" Value="30"/>
             <Setter Property="Margin" Value="0,1"/>
-            <Setter Property="Padding" Value="18,0,8,0"/>
+            <!-- 21 centers a 14px entry icon in the 56px collapsed strip (21+14+21). -->
+            <Setter Property="Padding" Value="21,0,8,0"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -94,13 +95,18 @@
             </Setter>
         </Style>
 
-        <!-- Door header: taller, bolder, not indented. -->
+        <!-- Door header: taller, bolder, not indented. 2026-08-11 emoji purge: door icons are
+             now painted art thumbnails (Resources/nav/door_*.png, 22px, rounded clip), so the
+             label steps back to TextLight - art carries the accent, the old all-pink column was
+             the "generic" read the owner flagged. Padding 17 centers a 22px icon in the 56px
+             collapsed strip (17 + 22 + 17 = 56). -->
         <Style x:Key="NavDoorButton" TargetType="Button" BasedOn="{StaticResource NavRailButton}">
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
             <Setter Property="Height" Value="40"/>
             <Setter Property="Margin" Value="0,2"/>
-            <Setter Property="Padding" Value="10,0,8,0"/>
+            <Setter Property="Padding" Value="17,0,8,0"/>
         </Style>
 
         <Style x:Key="NavEntryButton" TargetType="Button" BasedOn="{StaticResource NavRailButton}"/>
@@ -309,8 +315,17 @@
              the first Loaded onwards. -->
         <Border x:Name="NavSidebar" Grid.Row="1" Grid.RowSpan="5" Grid.Column="0" Grid.ColumnSpan="2"
                 HorizontalAlignment="Left" Width="56" Panel.ZIndex="60" ClipToBounds="True"
-                Background="{StaticResource PanelBgBrush}"
                 BorderBrush="#2A2A46" BorderThickness="0,0,1,0">
+            <!-- Static depth gradient (was flat PanelBgBrush): top matches the panel tone the
+                 title bar hands off, sinking slightly by the bottom so the rail reads as its own
+                 column instead of a stripe of the same slab every panel uses. Not animated. -->
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Color="#262649" Offset="0"/>
+                    <GradientStop Color="#222240" Offset="0.55"/>
+                    <GradientStop Color="#1C1C36" Offset="1"/>
+                </LinearGradientBrush>
+            </Border.Background>
             <Grid Margin="0,10,0,10">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*"/>
@@ -325,8 +340,17 @@
                         <Button x:Name="DoorHome" Tag="home" Style="{StaticResource NavDoorButton}"
                                 Click="NavDoor_Click" ToolTip="{loc:Str nav_door_home}">
                             <StackPanel Orientation="Horizontal">
-                                <Image Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"
-                                       Source="{Binding Source='🏠', Converter={StaticResource EmojiToImageSource}}"/>
+                                <!-- Door icons are nano-banana art (2026-08-11), NOT Twemoji: an
+                                     Image (not a rounded Border+ImageBrush) because NudgeNavIcon
+                                     finds "Image or Viewbox" inside the content Panel - the clip
+                                     supplies the rounding instead. -->
+                                <Image Width="22" Height="22" Margin="0,0,9,0" VerticalAlignment="Center"
+                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                       Source="pack://application:,,,/Resources/nav/door_home.png">
+                                    <Image.Clip>
+                                        <RectangleGeometry Rect="0,0,22,22" RadiusX="6" RadiusY="6"/>
+                                    </Image.Clip>
+                                </Image>
                                 <TextBlock Text="{loc:Str nav_door_home}" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
@@ -348,8 +372,13 @@
                         <Button x:Name="DoorStudio" Tag="studio" Style="{StaticResource NavDoorButton}"
                                 Click="NavDoor_Click" ToolTip="{loc:Str nav_door_studio}">
                             <StackPanel Orientation="Horizontal">
-                                <Image Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"
-                                       Source="{Binding Source='🎛️', Converter={StaticResource EmojiToImageSource}}"/>
+                                <Image Width="22" Height="22" Margin="0,0,9,0" VerticalAlignment="Center"
+                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                       Source="pack://application:,,,/Resources/nav/door_studio.png">
+                                    <Image.Clip>
+                                        <RectangleGeometry Rect="0,0,22,22" RadiusX="6" RadiusY="6"/>
+                                    </Image.Clip>
+                                </Image>
                                 <TextBlock Text="{loc:Str nav_door_studio}" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
@@ -388,8 +417,13 @@
                         <Button x:Name="DoorCompanion" Tag="companion" Style="{StaticResource NavDoorButton}"
                                 Click="NavDoor_Click" ToolTip="{loc:Str nav_door_companion}">
                             <StackPanel Orientation="Horizontal">
-                                <Image Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"
-                                       Source="{Binding Source='🤖', Converter={StaticResource EmojiToImageSource}}"/>
+                                <Image Width="22" Height="22" Margin="0,0,9,0" VerticalAlignment="Center"
+                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                       Source="pack://application:,,,/Resources/nav/door_companion.png">
+                                    <Image.Clip>
+                                        <RectangleGeometry Rect="0,0,22,22" RadiusX="6" RadiusY="6"/>
+                                    </Image.Clip>
+                                </Image>
                                 <TextBlock Text="{loc:Str nav_door_companion}" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
@@ -436,8 +470,13 @@
                         <Button x:Name="DoorPlay" Tag="play" Style="{StaticResource NavDoorButton}"
                                 Click="NavDoor_Click" ToolTip="{loc:Str nav_door_play}">
                             <StackPanel Orientation="Horizontal">
-                                <Image Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"
-                                       Source="{Binding Source='🎮', Converter={StaticResource EmojiToImageSource}}"/>
+                                <Image Width="22" Height="22" Margin="0,0,9,0" VerticalAlignment="Center"
+                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                       Source="pack://application:,,,/Resources/nav/door_play.png">
+                                    <Image.Clip>
+                                        <RectangleGeometry Rect="0,0,22,22" RadiusX="6" RadiusY="6"/>
+                                    </Image.Clip>
+                                </Image>
                                 <TextBlock Text="{loc:Str nav_door_play}" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
@@ -527,8 +566,13 @@
                         <Button x:Name="DoorYou" Tag="you" Style="{StaticResource NavDoorButton}"
                                 Click="NavDoor_Click" ToolTip="{loc:Str nav_door_you}">
                             <StackPanel Orientation="Horizontal">
-                                <Image Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"
-                                       Source="{Binding Source='👤', Converter={StaticResource EmojiToImageSource}}"/>
+                                <Image Width="22" Height="22" Margin="0,0,9,0" VerticalAlignment="Center"
+                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                       Source="pack://application:,,,/Resources/nav/door_you.png">
+                                    <Image.Clip>
+                                        <RectangleGeometry Rect="0,0,22,22" RadiusX="6" RadiusY="6"/>
+                                    </Image.Clip>
+                                </Image>
                                 <TextBlock Text="{loc:Str nav_door_you}" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
@@ -602,8 +646,13 @@
                         <Button x:Name="DoorLibrary" Tag="library" Style="{StaticResource NavDoorButton}"
                                 Click="NavDoor_Click" ToolTip="{loc:Str nav_door_library}">
                             <StackPanel Orientation="Horizontal">
-                                <Image Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"
-                                       Source="{Binding Source='📚', Converter={StaticResource EmojiToImageSource}}"/>
+                                <Image Width="22" Height="22" Margin="0,0,9,0" VerticalAlignment="Center"
+                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                       Source="pack://application:,,,/Resources/nav/door_library.png">
+                                    <Image.Clip>
+                                        <RectangleGeometry Rect="0,0,22,22" RadiusX="6" RadiusY="6"/>
+                                    </Image.Clip>
+                                </Image>
                                 <TextBlock Text="{loc:Str nav_door_library}" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
@@ -687,8 +736,13 @@
                     <Button x:Name="DoorSettings" Tag="appsettings" Style="{StaticResource NavDoorButton}"
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_door_settings}">
                         <StackPanel Orientation="Horizontal">
-                            <Image Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"
-                                   Source="{Binding Source='⚙️', Converter={StaticResource EmojiToImageSource}}"/>
+                            <Image Width="22" Height="22" Margin="0,0,9,0" VerticalAlignment="Center"
+                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                   Source="pack://application:,,,/Resources/nav/door_settings.png">
+                                <Image.Clip>
+                                    <RectangleGeometry Rect="0,0,22,22" RadiusX="6" RadiusY="6"/>
+                                </Image.Clip>
+                            </Image>
                             <TextBlock Text="{loc:Str nav_door_settings}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>

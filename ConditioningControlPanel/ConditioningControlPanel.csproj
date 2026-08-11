@@ -361,6 +361,9 @@
   <ItemGroup>
     <!-- Feature images - embedded as Resource for pack:// URIs to work -->
     <Resource Include="Resources\features\*.png" />
+    <!-- Nav rail door art (2026-08-11 emoji purge): one emblem per door, referenced by
+         MainWindow.xaml pack URIs - a missing file here crashes InitializeComponent. -->
+    <Resource Include="Resources\nav\*.png" />
 
     <!-- Training Programs art: day mood plates and program sigils.
          SINGLE LEVEL on purpose - a Resources\programs\<sub>\ folder would compile fine and then

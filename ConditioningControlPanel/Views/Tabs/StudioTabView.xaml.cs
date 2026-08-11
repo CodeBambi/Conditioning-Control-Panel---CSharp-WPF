@@ -282,9 +282,14 @@ namespace ConditioningControlPanel.Views.Tabs
             {
                 if (item is string headerKey)
                 {
+                    // caption | hairline rule fading right - the rule is what keeps the group
+                    // breaks legible now that the rows carry icon chips of their own.
+                    var capRow = new Grid { Margin = new Thickness(13, 9, 10, 4) };
+                    capRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                    capRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
                     var caption = new TextBlock
                     {
-                        Margin = new Thickness(13, 8, 10, 4),
                         FontSize = 10,
                         FontWeight = FontWeights.Bold,
                         Opacity = 0.85,
@@ -302,7 +307,22 @@ namespace ConditioningControlPanel.Views.Tabs
                             Source = LocalizationManager.Instance,
                             Mode = System.Windows.Data.BindingMode.OneWay,
                         });
-                    RackList.Children.Add(caption);
+                    capRow.Children.Add(caption);
+
+                    var rule = new Border
+                    {
+                        Height = 1,
+                        Margin = new Thickness(8, 1, 2, 0),
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Background = new LinearGradientBrush(
+                            Color.FromArgb(0x55, 0xFF, 0x69, 0xB4),
+                            Color.FromArgb(0x00, 0xFF, 0x69, 0xB4),
+                            0),
+                    };
+                    Grid.SetColumn(rule, 1);
+                    capRow.Children.Add(rule);
+
+                    RackList.Children.Add(capRow);
                     continue;
                 }
 
@@ -314,15 +334,29 @@ namespace ConditioningControlPanel.Views.Tabs
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-                var icon = new EmojiTextBlock
+                // The glyph sits inside a 20x20 rounded chip: raw emoji floating beside text is
+                // the stock-toolkit look; contained, every icon takes the same visual weight and
+                // the column reads as a designed rack instead of a bullet list.
+                var iconChip = new Border
                 {
-                    Text = e.Glyph,
-                    FontSize = 12,
+                    Width = 20,
+                    Height = 20,
+                    CornerRadius = new CornerRadius(6),
+                    Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x4A)),
+                    BorderBrush = new SolidColorBrush(Color.FromRgb(0x39, 0x39, 0x63)),
+                    BorderThickness = new Thickness(1),
                     VerticalAlignment = VerticalAlignment.Center,
                     Margin = new Thickness(0, 0, 8, 0),
+                    Child = new EmojiTextBlock
+                    {
+                        Text = e.Glyph,
+                        FontSize = 11,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center,
+                    },
                 };
-                Grid.SetColumn(icon, 0);
-                grid.Children.Add(icon);
+                Grid.SetColumn(iconChip, 0);
+                grid.Children.Add(iconChip);
 
                 e.Label = new TextBlock
                 {
@@ -532,6 +566,17 @@ namespace ConditioningControlPanel.Views.Tabs
                 bool lit = state == true;
                 e.DotShape.Fill = lit ? on : off;
                 e.DotShape.Opacity = lit ? 1.0 : 0.35;
+                // Static halo on a lit dot - an Effect swap is not an animation, so there is
+                // still nothing here for the motion kill-switch to reach.
+                e.DotShape.Effect = lit
+                    ? new System.Windows.Media.Effects.DropShadowEffect
+                    {
+                        Color = Color.FromRgb(0xFF, 0x69, 0xB4),
+                        BlurRadius = 7,
+                        ShadowDepth = 0,
+                        Opacity = 0.85,
+                    }
+                    : null;
                 e.DotShape.ToolTip = Loc.Get(lit ? "st4_studio_dot_on" : "st4_studio_dot_off");
             }
         }

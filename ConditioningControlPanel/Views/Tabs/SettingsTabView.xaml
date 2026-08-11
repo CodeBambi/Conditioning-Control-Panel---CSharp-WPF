@@ -770,6 +770,7 @@
             <!-- Row 1: the Descent, the lobby, the feed -->
             <features:FeatureCard Grid.Row="0" Grid.Column="0" x:Name="CardDtrh" x:FieldModifier="internal"
                                   Title="Down the Rabbit Hole"
+                                  Icon="pack://application:,,,/Resources/features/dtrh.png"
                                   Glyph="🐇"
                                   Click="CardDtrh_Click"/>
             <features:FeatureCard Grid.Row="0" Grid.Column="1" x:Name="CardGoon" x:FieldModifier="internal"
@@ -1045,10 +1046,12 @@
                  different faces on one feature. -->
             <features:FeatureCard Grid.Row="2" Grid.Column="0" x:Name="CardLoom" x:FieldModifier="internal"
                                   Title="The Loom"
+                                  Icon="pack://application:,,,/Resources/features/loom.png"
                                   Glyph="🧵"
                                   Click="CardLoom_Click"/>
             <features:FeatureCard Grid.Row="2" Grid.Column="1" x:Name="CardDeeper" x:FieldModifier="internal"
                                   Title="Deeper"
+                                  Icon="pack://application:,,,/Resources/features/deeper.png"
                                   Glyph="🕳"
                                   Click="CardDeeper_Click"/>
             <!-- Just Drop: the session maker, not built yet (owner, 2026-08-11 - "placeholder for
@@ -1062,6 +1065,7 @@
                  for real. -->
             <features:FeatureCard Grid.Row="2" Grid.Column="2" x:Name="CardJustDrop" x:FieldModifier="internal"
                                   Title="Just Drop"
+                                  Icon="pack://application:,,,/Resources/features/justdrop.png"
                                   Glyph="🎚"
                                   Click="CardJustDrop_Click"/>
 
