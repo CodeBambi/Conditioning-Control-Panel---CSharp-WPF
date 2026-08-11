@@ -196,6 +196,23 @@ internal static class DoorShooter
             var rtb = new RenderTargetBitmap((int)Math.Ceiling(size.Width),
                                              (int)Math.Ceiling(size.Height),
                                              96, 96, PixelFormats.Pbgra32);
+
+            // The window's Background paints BEHIND Content and is not part of Content's visual,
+            // so rendering Content alone leaves every element that declares no background of its
+            // own fully transparent. That is not a cosmetic difference: a PNG viewer shows alpha-0
+            // as WHITE, so white-on-dark text renders as white-on-white and reads in the shot as
+            // a missing control. Cost a false "four doors have no title" bug report on 2026-08-11.
+            // Compose the window background first, then the content over it.
+            // Two Render calls, not a VisualBrush: RenderTargetBitmap composites rather than
+            // clearing, so the backdrop goes down first and the live visual paints over it at its
+            // own coordinates. A VisualBrush would re-origin the content on its DESCENDANT bounds,
+            // and the avatar tube hangs off the left at x=-154 - which silently shifted every shot
+            // 154px right when this was first written that way.
+            var backdrop = new DrawingVisual();
+            using (var dc = backdrop.RenderOpen())
+                dc.DrawRectangle(window.Background ?? Brushes.Black, null,
+                                 new Rect(0, 0, size.Width, size.Height));
+            rtb.Render(backdrop);
             rtb.Render(source);
 
             var encoder = new PngBitmapEncoder();
